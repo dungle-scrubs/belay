@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SessionEvent } from "@trevor/richter";
 import { useLocalStorageState } from "ahooks";
-import { type FormEvent, useState } from "react";
+import { type SubmitEvent, useState } from "react";
 import { ensureSession } from "./richter/client";
 import { useRichterSession } from "./richter/use-richter-session";
 
@@ -120,7 +120,7 @@ export function App() {
       ? "pnpm --filter @trevor/agent-host start"
       : `SESSION_ID=${target} pnpm --filter @trevor/agent-host start`;
 
-  const onSubmit = async (event: FormEvent) => {
+  const onSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = draft.trim();
     if (!text) {
