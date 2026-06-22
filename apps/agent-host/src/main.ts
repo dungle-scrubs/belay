@@ -6,7 +6,7 @@ import { buildProviders, type ChatMessage, DEFAULT_PROVIDER, type Provider } fro
 /**
  * Trevor host: a Richter participant that runs an agent loop (model <-> tools) for
  * each new user.message over the full conversation, via a per-message-selectable
- * Provider (local qwen with tool-calling, or GPT-5.x text-only over Codex OAuth).
+ * Provider (local qwen, or GPT-5.x over Codex OAuth) - both with tool calling.
  * It builds history from the event log, gates on replay, answers the latest pending
  * prompt on go-live, and reports cold/warm readiness. Defaults to a shared session
  * ("trevor-local") so host and browser auto-attach; override with SESSION_ID.

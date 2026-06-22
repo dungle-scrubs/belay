@@ -28,7 +28,10 @@ const done = new Promise((resolve, reject) => {
   resolveDone = resolve;
   rejectDone = reject;
 });
-const timeout = setTimeout(() => rejectDone(new Error("timeout waiting for assistant.completed")), 180000);
+const timeout = setTimeout(
+  () => rejectDone(new Error("timeout waiting for assistant.completed")),
+  180000,
+);
 
 ws.addEventListener("error", (error) => rejectDone(error));
 ws.addEventListener("message", (message) => {
@@ -52,8 +55,12 @@ ws.addEventListener("message", (message) => {
 
 await new Promise((resolve) => ws.addEventListener("open", resolve));
 await new Promise((resolve, reject) => {
-  const onlineTimeout = setTimeout(() => reject(new Error("timeout waiting for host.online")), 60000);
-  const check = () => (hostOnline ? (clearTimeout(onlineTimeout), resolve()) : setTimeout(check, 100));
+  const onlineTimeout = setTimeout(
+    () => reject(new Error("timeout waiting for host.online")),
+    60000,
+  );
+  const check = () =>
+    hostOnline ? (clearTimeout(onlineTimeout), resolve()) : setTimeout(check, 100);
   check();
 });
 
@@ -74,11 +81,15 @@ afterSeq = (await response.json()).event.seq;
 const payload = await done;
 ws.close();
 const text = String(payload.text ?? "");
-console.log(`tools: ${tools.map((t) => `${t.name}(${String(t.args).slice(0, 40)})`).join(", ") || "none"}`);
+console.log(
+  `tools: ${tools.map((t) => `${t.name}(${String(t.args).slice(0, 40)})`).join(", ") || "none"}`,
+);
 console.log(`final: "${text.trim().slice(0, 100)}"`);
 if (tools.length > 0 && text.includes("trevor-agent-ok")) {
   console.log(`PASS [${PROVIDER}]: agent called a tool and used its result`);
 } else {
-  console.error(`FAIL [${PROVIDER}]: tools=${tools.length}, marker=${text.includes("trevor-agent-ok")}`);
+  console.error(
+    `FAIL [${PROVIDER}]: tools=${tools.length}, marker=${text.includes("trevor-agent-ok")}`,
+  );
   process.exit(1);
 }
