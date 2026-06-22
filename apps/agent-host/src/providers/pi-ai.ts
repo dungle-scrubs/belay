@@ -7,6 +7,7 @@ import {
   type ThinkingLevel,
   type TSchema,
 } from "@mariozechner/pi-ai";
+import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderEvent, ToolDef } from "./types";
 
 function parseArgs(raw: string): Record<string, unknown> {
@@ -83,6 +84,7 @@ export async function* streamPiAi<TApi extends Api>(
   },
 ): AsyncIterable<ProviderEvent> {
   const context: Context = {
+    systemPrompt: buildSystemPrompt(tools),
     messages: toPiAiMessages(messages),
     ...(tools.length > 0 ? { tools: toPiAiTools(tools) } : {}),
   };
