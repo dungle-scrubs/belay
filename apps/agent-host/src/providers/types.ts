@@ -4,23 +4,43 @@ export interface Readiness {
   readonly warm: boolean;
 }
 
-/** One turn in the conversation passed to a provider. */
+/** A tool exposed to the model (OpenAI-style JSON-schema parameters). */
+export interface ToolDef {
+  readonly name: string;
+  readonly description: string;
+  readonly parameters: Record<string, unknown>;
+}
+
+/** A tool call the model requested (arguments are a raw JSON string). */
+export interface ToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly arguments: string;
+}
+
+/** One streamed event from a provider: assistant text or a requested tool call. */
+export type ProviderEvent =
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "tool_call"; readonly call: ToolCall };
+
+/** One message in the conversation (user, assistant, or a tool result). */
 export interface ChatMessage {
-  readonly role: "user" | "assistant";
+  readonly role: "user" | "assistant" | "tool";
   readonly content: string;
+  readonly toolCalls?: readonly ToolCall[]; // assistant turn that requested tools
+  readonly toolCallId?: string; // tool result: the call it answers
+  readonly name?: string; // tool result: the tool name
 }
 
 /**
- * A model provider the host streams completions from. Readiness is per-adapter:
- * local providers report real load state; cloud providers are always warm.
+ * A model provider the host streams completions from. Readiness is per-adapter
+ * (local providers report real load state; cloud is always warm). stream() runs
+ * one model step over the conversation, emitting text and any tool calls.
  */
 export interface Provider {
   readonly id: string;
   readonly model: string;
-  /** Whether the provider is reachable and the model is loaded (warm) vs cold. */
   readiness(): Promise<Readiness>;
-  /** Loads a cold local model; a no-op when already warm or cloud-hosted. */
   warm(): Promise<void>;
-  /** Streams text chunks for a completion over the full conversation. */
-  stream(messages: readonly ChatMessage[]): AsyncIterable<string>;
+  stream(messages: readonly ChatMessage[], tools: readonly ToolDef[]): AsyncIterable<ProviderEvent>;
 }

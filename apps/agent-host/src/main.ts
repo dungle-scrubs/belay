@@ -1,14 +1,15 @@
 import { decodeServerEnvelope, type SessionEvent } from "@trevor/richter";
 import { Either } from "effect";
+import { runAgent } from "./agent/loop";
 import { buildProviders, type ChatMessage, DEFAULT_PROVIDER, type Provider } from "./providers";
 
 /**
- * Trevor host: a Richter participant that, for each new user.message, streams a
- * real completion over the FULL conversation via a per-message-selectable Provider
- * (local qwen or GPT-5.x over Codex OAuth). It builds conversation history from the
- * event log, gates on replay, answers the latest pending prompt on go-live, and
- * reports cold/warm readiness. Defaults to a shared session ("trevor-local") so the
- * host and browser auto-attach with no manual wiring; override with SESSION_ID.
+ * Trevor host: a Richter participant that runs an agent loop (model <-> tools) for
+ * each new user.message over the full conversation, via a per-message-selectable
+ * Provider (local qwen with tool-calling, or GPT-5.x text-only over Codex OAuth).
+ * It builds history from the event log, gates on replay, answers the latest pending
+ * prompt on go-live, and reports cold/warm readiness. Defaults to a shared session
+ * ("trevor-local") so host and browser auto-attach; override with SESSION_ID.
  */
 
 const SERVICE_URL = process.env.RICHTER_URL ?? "http://localhost:3025";
@@ -67,11 +68,11 @@ async function publish(
   }
 }
 
-/** Streams a provider completion as assistant.started -> delta* -> completed. */
-async function streamCompletion(
+/** Runs the agent loop for one turn, publishing text deltas and tool events. */
+async function runTurn(
   sessionId: string,
-  messages: readonly ChatMessage[],
   provider: Provider,
+  history: readonly ChatMessage[],
 ): Promise<void> {
   const runId = crypto.randomUUID();
   const { warm } = await provider.readiness();
@@ -93,11 +94,28 @@ async function streamCompletion(
   };
 
   try {
-    for await (const chunk of provider.stream(messages)) {
-      pending += chunk;
-      full += chunk;
-      if (pending.length >= DELTA_FLUSH_CHARS) {
+    for await (const event of runAgent(provider, history)) {
+      if (event.type === "text") {
+        pending += event.text;
+        full += event.text;
+        if (pending.length >= DELTA_FLUSH_CHARS) {
+          await flush();
+        }
+      } else if (event.type === "tool_start") {
         await flush();
+        await publish(sessionId, "tool.started", {
+          runId,
+          callId: event.call.id,
+          name: event.call.name,
+          arguments: event.call.arguments,
+        });
+      } else {
+        await publish(sessionId, "tool.completed", {
+          runId,
+          callId: event.call.id,
+          name: event.call.name,
+          result: event.result.slice(0, 4000),
+        });
       }
     }
   } catch (error) {
@@ -113,13 +131,13 @@ async function streamCompletion(
   await publish(sessionId, "assistant.completed", { runId, text: full });
 }
 
-/** Responds to a user.message (not our own) on its chosen provider, with history. */
+/** Runs a turn for a user.message (not our own) on its chosen provider, with history. */
 function respondTo(sessionId: string, event: SessionEvent, history: readonly ChatMessage[]): void {
   if (event.type !== "user.message" || event.producerId === PRODUCER_ID) {
     return;
   }
-  streamCompletion(sessionId, history, pickProvider(event.payload.provider)).catch((error) =>
-    console.error("completion error:", error),
+  runTurn(sessionId, pickProvider(event.payload.provider), history).catch((error) =>
+    console.error("turn error:", error),
   );
 }
 

@@ -49,7 +49,11 @@ async function ask(text) {
   const response = await fetch(`${BASE}/sessions/${SID}/events`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ type: "user.message", producerId: "verify", payload: { text, provider: PROVIDER } }),
+    body: JSON.stringify({
+      type: "user.message",
+      producerId: "verify",
+      payload: { text, provider: PROVIDER },
+    }),
   });
   turnAfterSeq = (await response.json()).event.seq;
   return new Promise((resolve, reject) => {

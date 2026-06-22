@@ -19,15 +19,14 @@ type AssistantMessage = {
   warm: boolean;
   model: string;
 };
-type Message =
-  | { kind: "user"; id: string; text: string }
-  | AssistantMessage
-  | { kind: "note"; id: string; text: string };
+type ToolMessage = { kind: "tool"; id: string; name: string; args: string; done: boolean };
+type Message = { kind: "user"; id: string; text: string } | AssistantMessage | ToolMessage;
 
-/** Coalesces the raw event log into a transcript; assistant.* grouped by runId. */
+/** Coalesces the raw event log into a transcript; assistant/tool grouped by run. */
 function toTranscript(events: readonly SessionEvent[]): Message[] {
   const messages: Message[] = [];
   const assistantByRun = new Map<string, AssistantMessage>();
+  const toolByCall = new Map<string, ToolMessage>();
   const ensureAssistant = (runId: string, payload: Record<string, unknown>): AssistantMessage => {
     let message = assistantByRun.get(runId);
     if (!message) {
@@ -59,6 +58,22 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
       message.done = true;
       if (!message.text) {
         message.text = String(payload.text ?? "");
+      }
+    } else if (event.type === "tool.started") {
+      const callId = String(payload.callId ?? event.eventId);
+      const message: ToolMessage = {
+        kind: "tool",
+        id: callId,
+        name: String(payload.name ?? "tool"),
+        args: String(payload.arguments ?? ""),
+        done: false,
+      };
+      toolByCall.set(callId, message);
+      messages.push(message);
+    } else if (event.type === "tool.completed") {
+      const message = toolByCall.get(String(payload.callId ?? event.eventId));
+      if (message) {
+        message.done = true;
       }
     }
   }
@@ -130,14 +145,20 @@ export function App() {
 
       <div>
         {transcript.map((message) => {
-          if (message.kind === "note") {
+          if (message.kind === "tool") {
+            const args = message.args.length > 60 ? `${message.args.slice(0, 60)}…` : message.args;
             return (
-              <p
+              <div
                 key={message.id}
-                style={{ color: "#999", fontSize: "0.8rem", fontStyle: "italic" }}
+                style={{
+                  margin: "0.4rem 0",
+                  fontSize: "0.78rem",
+                  color: "#777",
+                  fontFamily: "ui-monospace, monospace",
+                }}
               >
-                {message.text}
-              </p>
+                🔧 {message.name}({args}) {message.done ? "✓" : "…"}
+              </div>
             );
           }
           if (message.kind === "assistant" && !message.text && !message.done) {

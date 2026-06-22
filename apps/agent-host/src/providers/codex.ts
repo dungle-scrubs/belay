@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { type Context, getModel, streamSimple } from "@mariozechner/pi-ai";
-import type { ChatMessage, Provider, Readiness } from "./types";
+import type { ChatMessage, Provider, ProviderEvent, Readiness, ToolDef } from "./types";
 
 const AUTH_PATH = `${homedir()}/.pi/auth.json`;
 const CODEX = "openai-codex";
@@ -11,22 +11,24 @@ export interface CodexConfig {
   readonly model: string;
 }
 
-/** Converts the host's history to pi-ai messages (assistant input is a text block). */
+/** Converts the host history to pi-ai messages (text only; tool turns are skipped). */
 function toPiAiMessages(messages: readonly ChatMessage[]): Context["messages"] {
-  return messages.map((message) =>
-    message.role === "user"
-      ? { role: "user", content: message.content, timestamp: Date.now() }
-      : {
-          role: "assistant",
-          content: [{ type: "text", text: message.content }],
-          timestamp: Date.now(),
-        },
-  ) as Context["messages"];
+  return messages
+    .filter((message) => message.role !== "tool")
+    .map((message) =>
+      message.role === "user"
+        ? { role: "user", content: message.content, timestamp: Date.now() }
+        : {
+            role: "assistant",
+            content: [{ type: "text", text: message.content }],
+            timestamp: Date.now(),
+          },
+    ) as Context["messages"];
 }
 
 /**
  * GPT-5.x via the OpenAI Codex OAuth in ~/.pi/auth.json, through pi-ai. Cloud, so
- * always warm; pi-ai's getOAuthApiKey refreshes the token as needed.
+ * always warm. Tool calling for this provider is a follow-up; v1 streams text only.
  */
 export class CodexProvider implements Provider {
   readonly id = "codex";
@@ -45,7 +47,10 @@ export class CodexProvider implements Provider {
     // Cloud-hosted: nothing to load.
   }
 
-  async *stream(messages: readonly ChatMessage[]): AsyncIterable<string> {
+  async *stream(
+    messages: readonly ChatMessage[],
+    _tools: readonly ToolDef[],
+  ): AsyncIterable<ProviderEvent> {
     const apiKey = await this.resolveApiKey();
     // The model id is configurable at runtime; pi-ai validates it against its
     // registry, so the literal cast only satisfies its strict getModel typing.
@@ -53,7 +58,7 @@ export class CodexProvider implements Provider {
     const context: Context = { messages: toPiAiMessages(messages) };
     for await (const event of streamSimple(model, context, { apiKey })) {
       if (event.type === "text_delta") {
-        yield event.delta;
+        yield { type: "text", text: event.delta };
       }
     }
   }
