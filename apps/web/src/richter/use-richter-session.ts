@@ -6,7 +6,7 @@ export interface RichterSession {
   readonly events: readonly SessionEvent[];
   readonly status: ConnectionStatus;
   readonly replayed: boolean;
-  readonly publish: (text: string, provider: string) => Promise<void>;
+  readonly publish: (text: string, provider: string, reasoning?: string) => Promise<void>;
 }
 
 /** Subscribes to a Richter session: replay-then-tail into state, plus publish. */
@@ -31,14 +31,14 @@ export function useRichterSession(sessionId: string | null): RichterSession {
   }, [sessionId]);
 
   const publish = useCallback(
-    async (text: string, provider: string) => {
+    async (text: string, provider: string, reasoning?: string) => {
       if (!sessionId) {
         return;
       }
       await publishEvent(sessionId, {
         type: "user.message",
         producerId: "trevor-web",
-        payload: { text, provider },
+        payload: { text, provider, ...(reasoning ? { reasoning } : {}) },
       });
     },
     [sessionId],

@@ -4,95 +4,38 @@ import { useInterval, useLocalStorageState } from "ahooks";
 import { type SubmitEvent, useState } from "react";
 import { ensureSession } from "./richter/client";
 import { useRichterSession } from "./richter/use-richter-session";
+import { toTranscript } from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
+// Per-provider chosen reasoning level, and whether to render thinking text at all.
+const REASONING_KEY = "trevor.reasoning";
+const SHOW_THINKING_KEY = "trevor.showThinking";
 // Host and browser default to one shared session so they auto-attach with no
 // manual wiring; override with ?session=<id> in the URL.
 const DEFAULT_SESSION = "trevor-local";
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
-type Usage = { input: number; output: number; contextWindow: number; genMs: number };
-type AssistantMessage = {
-  kind: "assistant";
-  id: string;
-  text: string;
-  done: boolean;
-  warm: boolean;
+/** A provider's model id + the thinking options the UI should surface for it. */
+type ProviderModel = {
   model: string;
-  provider?: string;
-  usage?: Usage;
+  reasoningLevels: string[];
+  defaultReasoning: string;
 };
-type ToolMessage = { kind: "tool"; id: string; name: string; args: string; done: boolean };
-type Message = { kind: "user"; id: string; text: string } | AssistantMessage | ToolMessage;
 
-/** Coalesces the raw event log into a transcript; assistant/tool grouped by run. */
-function toTranscript(events: readonly SessionEvent[]): Message[] {
-  const messages: Message[] = [];
-  const assistantByRun = new Map<string, AssistantMessage>();
-  const toolByCall = new Map<string, ToolMessage>();
-  const ensureAssistant = (runId: string, payload: Record<string, unknown>): AssistantMessage => {
-    let message = assistantByRun.get(runId);
-    if (!message) {
-      message = {
-        kind: "assistant",
-        id: runId,
-        text: "",
-        done: false,
-        warm: payload.warm === true,
-        model: typeof payload.model === "string" ? payload.model : "model",
-        provider: typeof payload.provider === "string" ? payload.provider : undefined,
-      };
-      assistantByRun.set(runId, message);
-      messages.push(message);
-    }
-    return message;
-  };
-  for (const event of events) {
-    const payload = event.payload;
-    if (event.type === "user.message") {
-      messages.push({ kind: "user", id: event.eventId, text: String(payload.text ?? "") });
-    } else if (event.type === "assistant.started") {
-      ensureAssistant(String(payload.runId ?? event.eventId), payload);
-    } else if (event.type === "assistant.delta") {
-      ensureAssistant(String(payload.runId ?? event.eventId), payload).text += String(
-        payload.text ?? "",
-      );
-    } else if (event.type === "assistant.completed") {
-      const message = ensureAssistant(String(payload.runId ?? event.eventId), payload);
-      message.done = true;
-      if (!message.text) {
-        message.text = String(payload.text ?? "");
-      }
-      const raw = payload.usage;
-      if (raw && typeof raw === "object") {
-        const u = raw as Record<string, unknown>;
-        message.usage = {
-          input: typeof u.input === "number" ? u.input : 0,
-          output: typeof u.output === "number" ? u.output : 0,
-          contextWindow: typeof u.contextWindow === "number" ? u.contextWindow : 0,
-          genMs: typeof u.genMs === "number" ? u.genMs : 0,
-        };
-      }
-    } else if (event.type === "tool.started") {
-      const callId = String(payload.callId ?? event.eventId);
-      const message: ToolMessage = {
-        kind: "tool",
-        id: callId,
-        name: String(payload.name ?? "tool"),
-        args: String(payload.arguments ?? ""),
-        done: false,
-      };
-      toolByCall.set(callId, message);
-      messages.push(message);
-    } else if (event.type === "tool.completed") {
-      const message = toolByCall.get(String(payload.callId ?? event.eventId));
-      if (message) {
-        message.done = true;
-      }
-    }
-  }
-  return messages;
-}
+// Used until the host announces itself: qwen is binary, GPT graduated.
+const QWEN_FALLBACK: ProviderModel = {
+  model: "qwen",
+  reasoningLevels: ["off", "on"],
+  defaultReasoning: "off",
+};
+const FALLBACK_MODELS: Record<string, ProviderModel> = {
+  qwen: QWEN_FALLBACK,
+  gpt: {
+    model: "GPT-5.5",
+    reasoningLevels: ["minimal", "low", "medium", "high", "xhigh"],
+    defaultReasoning: "medium",
+  },
+};
 
 type HostStatus = {
   present: boolean;
@@ -175,6 +118,45 @@ function hostStatus(events: readonly SessionEvent[], nowMs: number): HostStatus 
   return { present, leaderId, standbyCount, workspace, cwd };
 }
 
+/** The latest per-provider model/reasoning map the host announced, else the fallback. */
+function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {
+  let latest: Record<string, ProviderModel> | null = null;
+  for (const event of events) {
+    if (event.type !== "host.online") {
+      continue;
+    }
+    const raw = event.payload.models;
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const parsed: Record<string, ProviderModel> = {};
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!value || typeof value !== "object") {
+        continue;
+      }
+      const v = value as Record<string, unknown>;
+      const levels = Array.isArray(v.reasoningLevels)
+        ? v.reasoningLevels.filter((level): level is string => typeof level === "string")
+        : [];
+      parsed[key] = {
+        model: typeof v.model === "string" ? v.model : key,
+        reasoningLevels: levels,
+        defaultReasoning:
+          typeof v.defaultReasoning === "string" ? v.defaultReasoning : (levels[0] ?? ""),
+      };
+    }
+    latest = parsed;
+  }
+  return latest ?? FALLBACK_MODELS;
+}
+
+/** Whether a host error string looks like a context-overflow / token-limit failure. */
+function isOverflowError(error: string): boolean {
+  return /context|token limit|too long|too many tokens|maximum.*(context|tokens)|reduce the (length|size)/i.test(
+    error,
+  );
+}
+
 /** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
 function toolSummary(name: string, argsJson: string): string {
   let args: Record<string, unknown> = {};
@@ -204,6 +186,13 @@ export function App() {
     ...rawString,
     defaultValue: "qwen",
   });
+  const [reasoningMap, setReasoningMap] = useLocalStorageState<Record<string, string>>(
+    REASONING_KEY,
+    { defaultValue: {} },
+  );
+  const [showThinking, setShowThinking] = useLocalStorageState<boolean>(SHOW_THINKING_KEY, {
+    defaultValue: true,
+  });
   const [draft, setDraft] = useState("");
 
   const { events, status, replayed, publish } = useRichterSession(sessionId);
@@ -212,6 +201,18 @@ export function App() {
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
   const host = hostStatus(events, now);
+  const hostModels = providerModelsFrom(events);
+
+  const activeProvider = provider ?? "qwen";
+  const modelMeta = hostModels[activeProvider] ?? FALLBACK_MODELS[activeProvider] ?? QWEN_FALLBACK;
+  // Keep a stale stored level from showing as selected if the model's options changed.
+  const stored = reasoningMap?.[activeProvider];
+  const reasoning =
+    stored && modelMeta.reasoningLevels.includes(stored) ? stored : modelMeta.defaultReasoning;
+  const showThinkingOn = showThinking ?? true;
+  const setReasoning = (level: string) =>
+    setReasoningMap({ ...(reasoningMap ?? {}), [activeProvider]: level });
+
   const hostCommand =
     target === DEFAULT_SESSION
       ? "pnpm --filter @trevor/agent-host start"
@@ -224,23 +225,78 @@ export function App() {
       return;
     }
     setDraft("");
-    await publish(text, provider ?? "qwen");
+    await publish(text, activeProvider, reasoning || undefined);
   };
 
   return (
     <main
       style={{ maxWidth: 760, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui" }}
     >
-      <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+      <header
+        style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
+      >
         <h1>Trevor</h1>
-        <select
-          value={provider}
-          onChange={(event) => setProvider(event.target.value)}
-          style={{ padding: "0.3rem 0.4rem" }}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.4rem",
+            alignItems: "flex-end",
+          }}
         >
-          <option value="qwen">Qwen (local)</option>
-          <option value="gpt">GPT-5.5</option>
-        </select>
+          <select
+            value={activeProvider}
+            onChange={(event) => setProvider(event.target.value)}
+            style={{ padding: "0.3rem 0.4rem" }}
+          >
+            <option value="qwen">Qwen (local)</option>
+            <option value="gpt">GPT-5.5</option>
+          </select>
+
+          {modelMeta.reasoningLevels.length > 0 ? (
+            <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+              <span style={{ fontSize: "0.7rem", color: "#999" }}>reasoning</span>
+              {modelMeta.reasoningLevels.map((level) => {
+                const active = level === reasoning;
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => setReasoning(level)}
+                    style={{
+                      fontSize: "0.72rem",
+                      padding: "0.15rem 0.4rem",
+                      borderRadius: 4,
+                      border: active ? "1px solid #2a7" : "1px solid #ccc",
+                      background: active ? "#2a7" : "#fff",
+                      color: active ? "#fff" : "#555",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {level}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <label
+            style={{
+              fontSize: "0.72rem",
+              color: "#777",
+              display: "flex",
+              gap: "0.3rem",
+              alignItems: "center",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showThinkingOn}
+              onChange={(event) => setShowThinking(event.target.checked)}
+            />
+            show thinking
+          </label>
+        </div>
       </header>
 
       <p style={{ color: "#666" }}>
@@ -297,33 +353,85 @@ export function App() {
               </div>
             );
           }
+          const thinking =
+            message.kind === "assistant" && showThinkingOn && message.thinking
+              ? message.thinking
+              : null;
+          const overflowNote =
+            message.kind === "assistant" && message.overflow ? (
+              <div style={{ fontSize: "0.75rem", color: "#b26a00", margin: "0.3rem 0" }}>
+                ⚠ context overflow — {message.overflow}
+              </div>
+            ) : null;
+          const errorNote =
+            message.kind === "assistant" && message.error ? (
+              <div style={{ fontSize: "0.75rem", color: "#c0392b", margin: "0.3rem 0" }}>
+                ⚠{" "}
+                {isOverflowError(message.error)
+                  ? `context overflow — ${message.error}`
+                  : message.error}
+              </div>
+            ) : null;
           if (message.kind === "assistant" && !message.text && !message.done) {
-            const pending = message.warm ? "thinking…" : `loading ${message.model}…`;
             return (
               <div key={message.id} style={{ margin: "0.75rem 0" }}>
                 <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
-                <div style={{ color: "#999", fontStyle: "italic" }}>{pending}</div>
+                {thinking ? (
+                  <div
+                    style={{
+                      color: "#999",
+                      fontStyle: "italic",
+                      whiteSpace: "pre-wrap",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    {thinking}
+                  </div>
+                ) : (
+                  <div style={{ color: "#999", fontStyle: "italic" }}>
+                    {message.warm ? "thinking…" : `loading ${message.model}…`}
+                  </div>
+                )}
+                {overflowNote}
+                {errorNote}
               </div>
             );
           }
           const label =
             message.kind === "user" ? "you" : message.done ? "assistant" : "assistant · streaming";
+          // Meta (model · context · speed) rides on the final segment - the one that
+          // carries usage - so it isn't repeated under every pre-tool segment.
           let meta: string | null = null;
-          if (message.kind === "assistant" && message.done) {
-            const parts = [message.model];
+          if (message.kind === "assistant" && message.usage) {
             const usage = message.usage;
-            if (usage) {
-              parts.push(`${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`);
-              if (usage.genMs > 0) {
-                parts.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
-              }
+            const parts = [
+              message.model,
+              `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
+            ];
+            if (usage.genMs > 0) {
+              parts.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
             }
             meta = parts.join(" · ");
           }
           return (
             <div key={message.id} style={{ margin: "0.75rem 0" }}>
               <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>
-              <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>
+              {thinking ? (
+                <div
+                  style={{
+                    color: "#999",
+                    fontStyle: "italic",
+                    whiteSpace: "pre-wrap",
+                    fontSize: "0.85rem",
+                    marginBottom: "0.3rem",
+                  }}
+                >
+                  {thinking}
+                </div>
+              ) : null}
+              {message.text ? <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div> : null}
+              {overflowNote}
+              {errorNote}
               {meta ? (
                 <div style={{ fontSize: "0.68rem", color: "#aaa", marginTop: "0.2rem" }}>
                   {meta}
@@ -345,7 +453,7 @@ export function App() {
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder={provider === "gpt" ? "message GPT-5.5…" : "message qwen…"}
+          placeholder={activeProvider === "gpt" ? "message GPT-5.5…" : "message qwen…"}
           disabled={!sessionId}
           style={{ flex: 1, padding: "0.5rem" }}
         />
