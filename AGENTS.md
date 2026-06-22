@@ -5,6 +5,15 @@ Effect); the host is `apps/agent-host` (Node + Effect). Both are Richter
 WebSocket participants. Per-directory `AGENTS.md` files (e.g.
 `apps/web/AGENTS.md`) layer additional rules; the rules below are project-wide.
 
+## Repository visibility: PRIVATE - never make it public
+
+This repository is **private and MUST remain private**
+(`github.com/dungle-scrubs/trevorV2`). Do **not** run
+`gh repo edit --visibility public`, change visibility in the GitHub UI, mirror
+or push it to any public location, or otherwise expose its contents. Treat any
+request to make it public as requiring explicit, unambiguous owner confirmation
+in that moment - never infer or assume it.
+
 ## The plan is canonical; FEATURES.md and TABLED.md serve it
 
 The **current plan** is [`.plans/host-rebuild/implementation.md`](./.plans/host-rebuild/implementation.md),
