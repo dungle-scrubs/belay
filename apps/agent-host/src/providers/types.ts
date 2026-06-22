@@ -62,6 +62,8 @@ export interface ChatMessage {
  */
 export interface Provider {
   readonly id: string;
+  /** Human-friendly name for the UI selector (e.g. "Qwen (local)"). */
+  readonly label: string;
   readonly model: string;
   readonly reasoningLevels: readonly string[];
   readonly defaultReasoning: string;

@@ -10,6 +10,8 @@ const CODEX = "openai-codex";
 export interface CodexConfig {
   /** A model id from pi-ai's openai-codex registry, e.g. gpt-5.5 */
   readonly model: string;
+  /** Human-friendly name for the UI selector. */
+  readonly label: string;
 }
 
 /**
@@ -19,6 +21,7 @@ export interface CodexConfig {
  */
 export class CodexProvider implements Provider {
   readonly id = "codex";
+  readonly label: string;
   readonly model: string;
   /** GPT-5.x reasoning is graduated (minimal..xhigh) and read from the pi-ai model. */
   readonly reasoningLevels: readonly string[];
@@ -26,6 +29,7 @@ export class CodexProvider implements Provider {
 
   constructor(config: CodexConfig) {
     this.model = config.model;
+    this.label = config.label;
     // Derive the model's thinking options once; fall back to the GPT-5.x range if the
     // configured id is not (yet) in pi-ai's registry, so the host still starts.
     let levels: readonly string[];

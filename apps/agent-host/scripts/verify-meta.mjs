@@ -26,7 +26,10 @@ const done = new Promise((resolve, reject) => {
   resolveDone = resolve;
   rejectDone = reject;
 });
-const timeout = setTimeout(() => rejectDone(new Error("timeout waiting for assistant.completed")), 120000);
+const timeout = setTimeout(
+  () => rejectDone(new Error("timeout waiting for assistant.completed")),
+  120000,
+);
 
 ws.addEventListener("message", (message) => {
   const envelope = JSON.parse(String(message.data));
@@ -50,7 +53,9 @@ await new Promise((resolve, reject) => {
   check();
 });
 
-console.log(`host.online -> workspace: ${JSON.stringify(online.workspace)}, cwd: ${JSON.stringify(online.cwd)}`);
+console.log(
+  `host.online -> workspace: ${JSON.stringify(online.workspace)}, cwd: ${JSON.stringify(online.cwd)}`,
+);
 
 const response = await fetch(`${BASE}/sessions/${SID}/events`, {
   method: "POST",
@@ -73,9 +78,12 @@ console.log(`assistant.completed -> usage: ${JSON.stringify(completed.usage)}`);
 const usage = completed.usage;
 const tokps = usage && usage.genMs > 0 ? Math.round(usage.output / (usage.genMs / 1000)) : 0;
 const okWorkspace = typeof online.workspace === "string" && online.workspace.length > 0;
-const okUsage = usage && typeof usage.input === "number" && usage.contextWindow > 0 && usage.genMs > 0;
+const okUsage =
+  usage && typeof usage.input === "number" && usage.contextWindow > 0 && usage.genMs > 0;
 if (okWorkspace && okUsage) {
-  console.log(`META PASS [${PROVIDER}]: workspace + usage ${usage.input}/${usage.contextWindow} ctx + ${tokps} tok/s`);
+  console.log(
+    `META PASS [${PROVIDER}]: workspace + usage ${usage.input}/${usage.contextWindow} ctx + ${tokps} tok/s`,
+  );
 } else {
   console.error(`META FAIL: workspace=${okWorkspace}, usage=${okUsage} (genMs=${usage?.genMs})`);
   process.exit(1);

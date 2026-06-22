@@ -6,6 +6,8 @@ export interface LmStudioConfig {
   /** OpenAI-compatible base URL, e.g. http://localhost:1234/v1 */
   readonly url: string;
   readonly model: string;
+  /** Human-friendly name for the UI selector. */
+  readonly label: string;
 }
 
 /** Context window assumed before the running model reports its own (tokens). */
@@ -19,6 +21,7 @@ const DEFAULT_CONTEXT_WINDOW = 8192;
  */
 export class LmStudioProvider implements Provider {
   readonly id = "lmstudio";
+  readonly label: string;
   readonly model: string;
   /** Local qwen thinking is binary (enable_thinking on/off); "off" = no reasoning. */
   readonly reasoningLevels = ["off", "on"] as const;
@@ -31,6 +34,7 @@ export class LmStudioProvider implements Provider {
   constructor(config: LmStudioConfig) {
     this.url = config.url;
     this.model = config.model;
+    this.label = config.label;
     this.native = new URL("/api/v0", config.url).toString();
   }
 
