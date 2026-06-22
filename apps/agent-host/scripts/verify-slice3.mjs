@@ -29,7 +29,10 @@ const completed = new Promise((resolve, reject) => {
   resolveCompleted = resolve;
   rejectCompleted = reject;
 });
-const timeout = setTimeout(() => rejectCompleted(new Error("timeout waiting for assistant.completed")), 180000);
+const timeout = setTimeout(
+  () => rejectCompleted(new Error("timeout waiting for assistant.completed")),
+  180000,
+);
 
 ws.addEventListener("error", (error) => rejectCompleted(error));
 ws.addEventListener("message", (message) => {
@@ -53,8 +56,12 @@ ws.addEventListener("message", (message) => {
 
 await new Promise((resolve) => ws.addEventListener("open", resolve));
 await new Promise((resolve, reject) => {
-  const onlineTimeout = setTimeout(() => reject(new Error("timeout waiting for host.online")), 60000);
-  const check = () => (hostOnline ? (clearTimeout(onlineTimeout), resolve()) : setTimeout(check, 100));
+  const onlineTimeout = setTimeout(
+    () => reject(new Error("timeout waiting for host.online")),
+    60000,
+  );
+  const check = () =>
+    hostOnline ? (clearTimeout(onlineTimeout), resolve()) : setTimeout(check, 100);
   check();
 });
 

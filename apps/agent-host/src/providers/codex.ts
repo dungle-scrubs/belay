@@ -1,8 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { getModel, streamSimple } from "@mariozechner/pi-ai";
-import { getOAuthApiKey } from "@mariozechner/pi-ai/oauth";
-import type { Provider, Readiness } from "./types";
+import { type Context, getModel, streamSimple } from "@mariozechner/pi-ai";
+import type { ChatMessage, Provider, Readiness } from "./types";
 
 const AUTH_PATH = `${homedir()}/.pi/auth.json`;
 const CODEX = "openai-codex";
@@ -10,6 +9,19 @@ const CODEX = "openai-codex";
 export interface CodexConfig {
   /** A model id from pi-ai's openai-codex registry, e.g. gpt-5.5 */
   readonly model: string;
+}
+
+/** Converts the host's history to pi-ai messages (assistant input is a text block). */
+function toPiAiMessages(messages: readonly ChatMessage[]): Context["messages"] {
+  return messages.map((message) =>
+    message.role === "user"
+      ? { role: "user", content: message.content, timestamp: Date.now() }
+      : {
+          role: "assistant",
+          content: [{ type: "text", text: message.content }],
+          timestamp: Date.now(),
+        },
+  ) as Context["messages"];
 }
 
 /**
@@ -33,14 +45,12 @@ export class CodexProvider implements Provider {
     // Cloud-hosted: nothing to load.
   }
 
-  async *stream(prompt: string): AsyncIterable<string> {
+  async *stream(messages: readonly ChatMessage[]): AsyncIterable<string> {
     const apiKey = await this.resolveApiKey();
     // The model id is configurable at runtime; pi-ai validates it against its
     // registry, so the literal cast only satisfies its strict getModel typing.
     const model = getModel(CODEX, this.model as "gpt-5.5");
-    const context = {
-      messages: [{ role: "user" as const, content: prompt, timestamp: Date.now() }],
-    };
+    const context: Context = { messages: toPiAiMessages(messages) };
     for await (const event of streamSimple(model, context, { apiKey })) {
       if (event.type === "text_delta") {
         yield event.delta;
@@ -54,6 +64,7 @@ export class CodexProvider implements Provider {
     if (!credentials) {
       throw new Error(`no ${CODEX} entry in ${AUTH_PATH}`);
     }
+    const { getOAuthApiKey } = await import("@mariozechner/pi-ai/oauth");
     // biome-ignore lint/suspicious/noExplicitAny: pi-ai OAuth credential shape is internal.
     const resolved = await getOAuthApiKey(CODEX as any, { [CODEX]: credentials } as any);
     if (!resolved) {

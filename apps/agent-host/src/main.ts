@@ -1,35 +1,41 @@
 import { decodeServerEnvelope, type SessionEvent } from "@trevor/richter";
 import { Either } from "effect";
-import { buildProviders, DEFAULT_PROVIDER, type Provider } from "./providers";
+import { buildProviders, type ChatMessage, DEFAULT_PROVIDER, type Provider } from "./providers";
 
 /**
- * Trevor host (Slice 3): a Richter participant that streams real completions for
- * each new user.message via a per-message-selectable Provider - local LM Studio
- * (qwen) or GPT-5.x over Codex OAuth (gpt), chosen by the browser dropdown and
- * carried on user.message.payload.provider. It gates on replay, answers the latest
- * pending prompt on go-live, and reports model readiness (cold vs warm) per turn.
+ * Trevor host: a Richter participant that, for each new user.message, streams a
+ * real completion over the FULL conversation via a per-message-selectable Provider
+ * (local qwen or GPT-5.x over Codex OAuth). It builds conversation history from the
+ * event log, gates on replay, answers the latest pending prompt on go-live, and
+ * reports cold/warm readiness. Defaults to a shared session ("trevor-local") so the
+ * host and browser auto-attach with no manual wiring; override with SESSION_ID.
  */
 
 const SERVICE_URL = process.env.RICHTER_URL ?? "http://localhost:3025";
-const SESSION_ID = process.env.SESSION_ID;
+const SESSION_ID = process.env.SESSION_ID ?? "trevor-local";
 const PRODUCER_ID = "trevor-host";
 const DELTA_FLUSH_CHARS = 40;
 const providers = buildProviders();
 
 interface ConnectionState {
   live: boolean;
+  history: ChatMessage[];
   lastUserEvent: SessionEvent | null;
   lastAnswerSeq: number;
-}
-
-if (!SESSION_ID) {
-  console.error("set SESSION_ID to the Richter session to join");
-  process.exit(1);
 }
 
 /** Resolves the provider key the browser chose to a concrete provider. */
 function pickProvider(key: unknown): Provider {
   return key === "gpt" ? providers.gpt : providers.qwen;
+}
+
+/** Ensures the session exists (idempotent) so host and browser share a default. */
+async function ensureSession(sessionId: string): Promise<void> {
+  await fetch(`${SERVICE_URL}/sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId }),
+  });
 }
 
 /** Builds the participant stream URL, mirroring Richter's query-param contract. */
@@ -64,11 +70,10 @@ async function publish(
 /** Streams a provider completion as assistant.started -> delta* -> completed. */
 async function streamCompletion(
   sessionId: string,
-  prompt: string,
-  providerKey: unknown,
+  messages: readonly ChatMessage[],
+  provider: Provider,
 ): Promise<void> {
   const runId = crypto.randomUUID();
-  const provider = pickProvider(providerKey);
   const { warm } = await provider.readiness();
   await publish(sessionId, "assistant.started", {
     runId,
@@ -88,7 +93,7 @@ async function streamCompletion(
   };
 
   try {
-    for await (const chunk of provider.stream(prompt)) {
+    for await (const chunk of provider.stream(messages)) {
       pending += chunk;
       full += chunk;
       if (pending.length >= DELTA_FLUSH_CHARS) {
@@ -108,13 +113,12 @@ async function streamCompletion(
   await publish(sessionId, "assistant.completed", { runId, text: full });
 }
 
-/** Streams a completion for a user.message (not our own), on its chosen provider. */
-function respondTo(sessionId: string, event: SessionEvent): void {
+/** Responds to a user.message (not our own) on its chosen provider, with history. */
+function respondTo(sessionId: string, event: SessionEvent, history: readonly ChatMessage[]): void {
   if (event.type !== "user.message" || event.producerId === PRODUCER_ID) {
     return;
   }
-  const prompt = typeof event.payload.text === "string" ? event.payload.text : "";
-  streamCompletion(sessionId, prompt, event.payload.provider).catch((error) =>
+  streamCompletion(sessionId, history, pickProvider(event.payload.provider)).catch((error) =>
     console.error("completion error:", error),
   );
 }
@@ -127,7 +131,7 @@ async function goLive(sessionId: string, state: ConnectionState): Promise<void> 
     default: DEFAULT_PROVIDER,
   });
   if (state.lastUserEvent && state.lastUserEvent.seq > state.lastAnswerSeq) {
-    respondTo(sessionId, state.lastUserEvent); // answer a prompt sent before we joined
+    respondTo(sessionId, state.lastUserEvent, state.history.slice()); // catch up a pending prompt
     return;
   }
   const { warm } = await providers.qwen.readiness();
@@ -139,7 +143,12 @@ async function goLive(sessionId: string, state: ConnectionState): Promise<void> 
 /** Connects to the session stream (replay-then-tail) with simple reconnect. */
 function connect(sessionId: string): void {
   const socket = new WebSocket(streamUrl(sessionId, 0));
-  const state: ConnectionState = { live: false, lastUserEvent: null, lastAnswerSeq: -1 };
+  const state: ConnectionState = {
+    live: false,
+    history: [],
+    lastUserEvent: null,
+    lastAnswerSeq: -1,
+  };
   socket.addEventListener("open", () => console.log(`host joined session ${sessionId}`));
   socket.addEventListener("close", () => {
     console.log("socket closed; reconnecting in 1s");
@@ -166,18 +175,29 @@ function connect(sessionId: string): void {
       return;
     }
     const message = envelope.event;
-    if (state.live) {
-      respondTo(sessionId, message);
-      return;
-    }
-    // During replay, track the latest prompt + answer to decide catch-up on go-live.
     if (message.type === "user.message" && message.producerId !== PRODUCER_ID) {
+      const text = typeof message.payload.text === "string" ? message.payload.text : "";
+      state.history.push({ role: "user", content: text });
       state.lastUserEvent = message;
+      if (state.live) {
+        respondTo(sessionId, message, state.history.slice());
+      }
     } else if (message.type === "assistant.completed") {
+      const text = typeof message.payload.text === "string" ? message.payload.text : "";
+      if (text) {
+        state.history.push({ role: "assistant", content: text });
+      }
       state.lastAnswerSeq = Math.max(state.lastAnswerSeq, message.seq);
     }
   });
 }
 
-connect(SESSION_ID);
-console.log(`trevor-host up; providers=qwen,gpt default=${DEFAULT_PROVIDER}`);
+console.log(
+  `trevor-host starting; session=${SESSION_ID} providers=qwen,gpt default=${DEFAULT_PROVIDER}`,
+);
+ensureSession(SESSION_ID)
+  .then(() => connect(SESSION_ID))
+  .catch((error) => {
+    console.error("startup failed:", error);
+    process.exit(1);
+  });

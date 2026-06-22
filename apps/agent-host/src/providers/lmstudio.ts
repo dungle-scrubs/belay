@@ -1,4 +1,4 @@
-import type { Provider, Readiness } from "./types";
+import type { ChatMessage, Provider, Readiness } from "./types";
 
 export interface LmStudioConfig {
   /** OpenAI-compatible base URL, e.g. http://localhost:1234/v1 */
@@ -44,15 +44,11 @@ export class LmStudioProvider implements Provider {
     });
   }
 
-  async *stream(prompt: string): AsyncIterable<string> {
+  async *stream(messages: readonly ChatMessage[]): AsyncIterable<string> {
     const response = await fetch(`${this.url}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: this.model,
-        stream: true,
-        messages: [{ role: "user", content: prompt }],
-      }),
+      body: JSON.stringify({ model: this.model, stream: true, messages }),
     });
     if (!response.ok || !response.body) {
       throw new Error(`LM Studio HTTP ${response.status}`);

@@ -1,12 +1,14 @@
-import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { SessionEvent } from "@trevor/richter";
-import { useLocalStorageState, useMount } from "ahooks";
+import { useLocalStorageState } from "ahooks";
 import { type FormEvent, useState } from "react";
-import { createSession } from "./richter/client";
+import { ensureSession } from "./richter/client";
 import { useRichterSession } from "./richter/use-richter-session";
 
-const SESSION_KEY = "trevor.sessionId";
 const PROVIDER_KEY = "trevor.provider";
+// Host and browser default to one shared session so they auto-attach with no
+// manual wiring; override with ?session=<id> in the URL.
+const DEFAULT_SESSION = "trevor-local";
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
 type AssistantMessage = {
@@ -58,36 +60,36 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
       if (!message.text) {
         message.text = String(payload.text ?? "");
       }
-    } else if (event.type === "host.online") {
-      messages.push({ kind: "note", id: event.eventId, text: "host online" });
     }
   }
   return messages;
 }
 
 export function App() {
-  const [storedId, setStoredId] = useLocalStorageState<string>(SESSION_KEY, rawString);
+  const target = new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
+  const sessionQuery = useQuery({
+    queryKey: ["richter-session", target],
+    queryFn: async () => {
+      await ensureSession(target);
+      return target;
+    },
+  });
+  const sessionId = sessionQuery.data ?? null;
+
   const [provider, setProvider] = useLocalStorageState<string>(PROVIDER_KEY, {
     ...rawString,
     defaultValue: "qwen",
   });
   const [draft, setDraft] = useState("");
 
-  const createSessionMutation = useMutation({
-    mutationFn: createSession,
-    onSuccess: (id) => setStoredId(id),
-  });
-  useMount(() => {
-    if (!storedId) {
-      createSessionMutation.mutate();
-    }
-  });
-  const sessionId = storedId ?? null;
-
   const { events, status, replayed, publish } = useRichterSession(sessionId);
   const transcript = toTranscript(events);
   const awaitingResponse = transcript.at(-1)?.kind === "user";
   const hostSeen = events.some((event) => event.type === "host.online");
+  const hostCommand =
+    target === DEFAULT_SESSION
+      ? "pnpm --filter @trevor/agent-host start"
+      : `SESSION_ID=${target} pnpm --filter @trevor/agent-host start`;
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -116,14 +118,13 @@ export function App() {
       </header>
 
       <p style={{ color: "#666" }}>
-        session <code>{sessionId ?? "creating…"}</code> · {status}
+        session <code>{target}</code> · {status}
         {replayed ? " · replayed" : ""} · {events.length} events
       </p>
 
       {sessionId && !hostSeen ? (
         <p style={{ color: "#a60", fontSize: "0.8rem" }}>
-          No host on this session yet. Start one:{" "}
-          <code>SESSION_ID={sessionId} pnpm --filter @trevor/agent-host start</code>
+          No host on this session yet. Start one: <code>{hostCommand}</code>
         </p>
       ) : null}
 

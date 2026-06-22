@@ -88,15 +88,15 @@ export async function publishEvent(sessionId: string, input: PublishInput): Prom
   }
 }
 
-/** Creates a new Richter session and returns its id. */
-export async function createSession(): Promise<string> {
+/** Ensures a Richter session with the given id exists (idempotent) and returns it. */
+export async function ensureSession(sessionId: string): Promise<string> {
   const response = await fetch(`${SERVICE_URL}/sessions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: "{}",
+    body: JSON.stringify({ sessionId }),
   });
   if (!response.ok) {
-    throw new Error(`create session failed: HTTP ${response.status}`);
+    throw new Error(`ensure session failed: HTTP ${response.status}`);
   }
   const body = (await response.json()) as { session: { sessionId: string } };
   return body.session.sessionId;

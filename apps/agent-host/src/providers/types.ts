@@ -4,6 +4,12 @@ export interface Readiness {
   readonly warm: boolean;
 }
 
+/** One turn in the conversation passed to a provider. */
+export interface ChatMessage {
+  readonly role: "user" | "assistant";
+  readonly content: string;
+}
+
 /**
  * A model provider the host streams completions from. Readiness is per-adapter:
  * local providers report real load state; cloud providers are always warm.
@@ -15,6 +21,6 @@ export interface Provider {
   readiness(): Promise<Readiness>;
   /** Loads a cold local model; a no-op when already warm or cloud-hosted. */
   warm(): Promise<void>;
-  /** Streams text chunks for one completion. */
-  stream(prompt: string): AsyncIterable<string>;
+  /** Streams text chunks for a completion over the full conversation. */
+  stream(messages: readonly ChatMessage[]): AsyncIterable<string>;
 }
