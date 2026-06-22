@@ -58,7 +58,10 @@ const response = await fetch(`${BASE}/sessions/${SID}/events`, {
   body: JSON.stringify({
     type: "user.message",
     producerId: "verify",
-    payload: { text: "Reply with exactly one word: hi", provider: PROVIDER },
+    payload: {
+      text: process.env.PROMPT ?? "Reply with exactly one word: hi",
+      provider: PROVIDER,
+    },
   }),
 });
 afterSeq = (await response.json()).event.seq;
@@ -68,11 +71,12 @@ ws.close();
 console.log(`assistant.completed -> usage: ${JSON.stringify(completed.usage)}`);
 
 const usage = completed.usage;
+const tokps = usage && usage.genMs > 0 ? Math.round(usage.output / (usage.genMs / 1000)) : 0;
 const okWorkspace = typeof online.workspace === "string" && online.workspace.length > 0;
-const okUsage = usage && typeof usage.input === "number" && usage.contextWindow > 0;
+const okUsage = usage && typeof usage.input === "number" && usage.contextWindow > 0 && usage.genMs > 0;
 if (okWorkspace && okUsage) {
-  console.log(`META PASS [${PROVIDER}]: workspace exposed + usage ${usage.input}/${usage.contextWindow} ctx`);
+  console.log(`META PASS [${PROVIDER}]: workspace + usage ${usage.input}/${usage.contextWindow} ctx + ${tokps} tok/s`);
 } else {
-  console.error(`META FAIL: workspace=${okWorkspace}, usage=${okUsage}`);
+  console.error(`META FAIL: workspace=${okWorkspace}, usage=${okUsage} (genMs=${usage?.genMs})`);
   process.exit(1);
 }

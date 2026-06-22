@@ -102,7 +102,11 @@ export class CodexProvider implements Provider {
       messages: toPiAiMessages(messages),
       ...(tools.length > 0 ? { tools: toPiAiTools(tools) } : {}),
     };
+    let firstTokenAt = 0;
     for await (const event of streamSimple(model, context, { apiKey })) {
+      if (firstTokenAt === 0 && (event.type === "text_delta" || event.type === "toolcall_start")) {
+        firstTokenAt = Date.now();
+      }
       if (event.type === "text_delta") {
         yield { type: "text", text: event.delta };
       } else if (event.type === "toolcall_end") {
@@ -121,6 +125,7 @@ export class CodexProvider implements Provider {
             input: event.message.usage.input,
             output: event.message.usage.output,
             contextWindow: model.contextWindow,
+            genMs: firstTokenAt ? Date.now() - firstTokenAt : 0,
           },
         };
       }

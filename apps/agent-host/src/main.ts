@@ -167,6 +167,7 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
           input: event.usage.input,
           output: (usage?.output ?? 0) + event.usage.output,
           contextWindow: event.usage.contextWindow,
+          genMs: (usage?.genMs ?? 0) + event.usage.genMs,
         };
       }
     }

@@ -23,6 +23,8 @@ export interface Usage {
   readonly input: number;
   readonly output: number;
   readonly contextWindow: number;
+  /** Generation wall-time for this step (first token -> end), ms; for tokens/sec. */
+  readonly genMs: number;
 }
 
 /** One streamed event from a provider: assistant text, a tool call, or token usage. */

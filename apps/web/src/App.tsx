@@ -11,7 +11,7 @@ const PROVIDER_KEY = "trevor.provider";
 const DEFAULT_SESSION = "trevor-local";
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
-type Usage = { input: number; output: number; contextWindow: number };
+type Usage = { input: number; output: number; contextWindow: number; genMs: number };
 type AssistantMessage = {
   kind: "assistant";
   id: string;
@@ -70,6 +70,7 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
           input: typeof u.input === "number" ? u.input : 0,
           output: typeof u.output === "number" ? u.output : 0,
           contextWindow: typeof u.contextWindow === "number" ? u.contextWindow : 0,
+          genMs: typeof u.genMs === "number" ? u.genMs : 0,
         };
       }
     } else if (event.type === "tool.started") {
@@ -307,14 +308,18 @@ export function App() {
           }
           const label =
             message.kind === "user" ? "you" : message.done ? "assistant" : "assistant · streaming";
-          const meta =
-            message.kind === "assistant" && message.done
-              ? `${message.model}${
-                  message.usage
-                    ? ` · ${fmtTokens(message.usage.input)}/${fmtCtx(message.usage.contextWindow)} ctx`
-                    : ""
-                }`
-              : null;
+          let meta: string | null = null;
+          if (message.kind === "assistant" && message.done) {
+            const parts = [message.model];
+            const usage = message.usage;
+            if (usage) {
+              parts.push(`${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`);
+              if (usage.genMs > 0) {
+                parts.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
+              }
+            }
+            meta = parts.join(" · ");
+          }
           return (
             <div key={message.id} style={{ margin: "0.75rem 0" }}>
               <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>

@@ -117,6 +117,7 @@ export class LmStudioProvider implements Provider {
     const decoder = new TextDecoder();
     let buffer = "";
     let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
+    let firstTokenAt = 0;
     const calls = new Map<number, { id: string; name: string; args: string }>();
     for (;;) {
       const { done, value } = await reader.read();
@@ -141,6 +142,9 @@ export class LmStudioProvider implements Provider {
             usage = chunk.usage;
           }
           const delta = chunk.choices?.[0]?.delta;
+          if (firstTokenAt === 0 && (delta?.content || delta?.tool_calls?.length)) {
+            firstTokenAt = Date.now();
+          }
           if (delta?.content) {
             yield { type: "text", text: delta.content };
           }
@@ -175,6 +179,7 @@ export class LmStudioProvider implements Provider {
           input: usage.prompt_tokens ?? 0,
           output: usage.completion_tokens ?? 0,
           contextWindow: await this.ensureContextWindow(),
+          genMs: firstTokenAt ? Date.now() - firstTokenAt : 0,
         },
       };
     }
