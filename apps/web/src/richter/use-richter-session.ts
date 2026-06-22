@@ -1,4 +1,4 @@
-import type { SessionEvent } from "@trevor/richter";
+import { events as richterEvents, type SessionEvent } from "@trevor/richter";
 import { useCallback, useEffect, useState } from "react";
 import { type ConnectionStatus, connect, publishEvent } from "./client";
 
@@ -36,9 +36,8 @@ export function useRichterSession(sessionId: string | null): RichterSession {
         return;
       }
       await publishEvent(sessionId, {
-        type: "user.message",
         producerId: "trevor-web",
-        payload: { text, provider, ...(reasoning ? { reasoning } : {}) },
+        ...richterEvents.userMessage({ text, provider, reasoning }),
       });
     },
     [sessionId],

@@ -1,7 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import type { SessionEvent } from "@trevor/richter";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { type SubmitEvent, useMemo, useState } from "react";
+import {
+  FALLBACK_MODELS,
+  fmtCtx,
+  fmtTokens,
+  hostStatus,
+  isOverflowError,
+  providerModelsFrom,
+  QWEN_FALLBACK,
+  toolSummary,
+} from "./derive";
+import { Markdown } from "./markdown";
 import { ensureSession } from "./richter/client";
 import { useRichterSession } from "./richter/use-richter-session";
 import { toTranscript } from "./transcript";
@@ -14,162 +24,6 @@ const SHOW_THINKING_KEY = "trevor.showThinking";
 // manual wiring; override with ?session=<id> in the URL.
 const DEFAULT_SESSION = "trevor-local";
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
-
-/** A provider's model id + the thinking options the UI should surface for it. */
-type ProviderModel = {
-  model: string;
-  reasoningLevels: string[];
-  defaultReasoning: string;
-};
-
-// Used until the host announces itself: qwen is binary, GPT graduated.
-const QWEN_FALLBACK: ProviderModel = {
-  model: "qwen",
-  reasoningLevels: ["off", "on"],
-  defaultReasoning: "off",
-};
-const FALLBACK_MODELS: Record<string, ProviderModel> = {
-  qwen: QWEN_FALLBACK,
-  gpt: {
-    model: "GPT-5.5",
-    reasoningLevels: ["minimal", "low", "medium", "high", "xhigh"],
-    defaultReasoning: "medium",
-  },
-};
-
-type HostStatus = {
-  present: boolean;
-  leaderId: string | null;
-  standbyCount: number;
-  workspace: string | null;
-  cwd: string | null;
-};
-
-/** Compact token count: 6100 -> "6.1k", 812 -> "812". */
-function fmtTokens(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
-/** Compact context window: 8192 -> "8k", 0/unknown -> "?". */
-function fmtCtx(n: number): string {
-  if (n <= 0) {
-    return "?";
-  }
-  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
-}
-
-/** A standby pings continuously, so it counts as present only if seen this recently. */
-const HOST_RECENT_MS = 15000;
-
-/**
- * Derives host presence from the lease's host.* events. The current leader is the
- * host whose latest role is "leader" - shown as last-known, since a lone leader
- * goes silent. A standby pings every heartbeat, so live standbys are those seen
- * within HOST_RECENT_MS (excluding the leader); stale ids from dead hosts drop off.
- */
-function hostStatus(events: readonly SessionEvent[], nowMs: number): HostStatus {
-  let present = false;
-  let workspace: string | null = null;
-  let cwd: string | null = null;
-  const role = new Map<string, string>();
-  const lastSeen = new Map<string, number>();
-  for (const event of events) {
-    if (event.type === "host.online") {
-      present = true;
-      if (typeof event.payload.workspace === "string") {
-        workspace = event.payload.workspace;
-      }
-      if (typeof event.payload.cwd === "string") {
-        cwd = event.payload.cwd;
-      }
-    }
-    if (
-      event.type === "host.online" ||
-      event.type === "host.hello" ||
-      event.type === "host.beat" ||
-      event.type === "host.role"
-    ) {
-      const id = event.payload.instanceId;
-      if (typeof id !== "string") {
-        continue;
-      }
-      const at = Date.parse(event.createdAt);
-      lastSeen.set(id, Number.isNaN(at) ? nowMs : at);
-      if (event.type === "host.role" && typeof event.payload.role === "string") {
-        role.set(id, event.payload.role);
-      }
-    }
-  }
-  let leaderId: string | null = null;
-  let leaderSeen = Number.NEGATIVE_INFINITY;
-  for (const [id, value] of role) {
-    const seen = lastSeen.get(id) ?? Number.NEGATIVE_INFINITY;
-    if (value === "leader" && seen >= leaderSeen) {
-      leaderSeen = seen;
-      leaderId = id;
-    }
-  }
-  let standbyCount = 0;
-  for (const [id, at] of lastSeen) {
-    if (id !== leaderId && nowMs - at < HOST_RECENT_MS) {
-      standbyCount += 1;
-    }
-  }
-  return { present, leaderId, standbyCount, workspace, cwd };
-}
-
-/** The latest per-provider model/reasoning map the host announced, else the fallback. */
-function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {
-  let latest: Record<string, ProviderModel> | null = null;
-  for (const event of events) {
-    if (event.type !== "host.online") {
-      continue;
-    }
-    const raw = event.payload.models;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      continue;
-    }
-    const parsed: Record<string, ProviderModel> = {};
-    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-      if (!value || typeof value !== "object") {
-        continue;
-      }
-      const v = value as Record<string, unknown>;
-      const levels = Array.isArray(v.reasoningLevels)
-        ? v.reasoningLevels.filter((level): level is string => typeof level === "string")
-        : [];
-      parsed[key] = {
-        model: typeof v.model === "string" ? v.model : key,
-        reasoningLevels: levels,
-        defaultReasoning:
-          typeof v.defaultReasoning === "string" ? v.defaultReasoning : (levels[0] ?? ""),
-      };
-    }
-    latest = parsed;
-  }
-  return latest ?? FALLBACK_MODELS;
-}
-
-/** Whether a host error string looks like a context-overflow / token-limit failure. */
-function isOverflowError(error: string): boolean {
-  return /context|token limit|too long|too many tokens|maximum.*(context|tokens)|reduce the (length|size)/i.test(
-    error,
-  );
-}
-
-/** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
-function toolSummary(name: string, argsJson: string): string {
-  let args: Record<string, unknown> = {};
-  try {
-    args = JSON.parse(argsJson || "{}") as Record<string, unknown>;
-  } catch {
-    return "";
-  }
-  const primary =
-    name === "bash" ? args.command : name === "grep" || name === "glob" ? args.pattern : args.path;
-  const text = typeof primary === "string" ? primary : argsJson;
-  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
-}
 
 export function App() {
   const target = new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
@@ -252,8 +106,13 @@ export function App() {
             onChange={(event) => setProvider(event.target.value)}
             style={{ padding: "0.3rem 0.4rem" }}
           >
-            <option value="qwen">Qwen (local)</option>
-            <option value="gpt">GPT-5.5</option>
+            {/* Options come from the host's announced providers, so adding one host-side
+                surfaces here with no UI edit; the fallback covers the pre-announce window. */}
+            {Object.entries(hostModels).map(([key, meta]) => (
+              <option key={key} value={key}>
+                {meta.label}
+              </option>
+            ))}
           </select>
 
           {modelMeta.reasoningLevels.length > 0 ? (
@@ -380,16 +239,7 @@ export function App() {
               <div key={message.id} style={{ margin: "0.75rem 0" }}>
                 <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
                 {thinking ? (
-                  <div
-                    style={{
-                      color: "#999",
-                      fontStyle: "italic",
-                      whiteSpace: "pre-wrap",
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    {thinking}
-                  </div>
+                  <Markdown text={thinking} muted />
                 ) : (
                   <div style={{ color: "#999", fontStyle: "italic" }}>
                     {message.warm ? "thinking…" : `loading ${message.model}…`}
@@ -419,20 +269,8 @@ export function App() {
           return (
             <div key={message.id} style={{ margin: "0.75rem 0" }}>
               <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>
-              {thinking ? (
-                <div
-                  style={{
-                    color: "#999",
-                    fontStyle: "italic",
-                    whiteSpace: "pre-wrap",
-                    fontSize: "0.85rem",
-                    marginBottom: "0.3rem",
-                  }}
-                >
-                  {thinking}
-                </div>
-              ) : null}
-              {message.text ? <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div> : null}
+              {thinking ? <Markdown text={thinking} muted /> : null}
+              {message.text ? <Markdown text={message.text} /> : null}
               {overflowNote}
               {errorNote}
               {meta ? (
@@ -456,7 +294,7 @@ export function App() {
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder={activeProvider === "gpt" ? "message GPT-5.5…" : "message qwen…"}
+          placeholder={`message ${modelMeta.label}…`}
           disabled={!sessionId}
           style={{ flex: 1, padding: "0.5rem" }}
         />
