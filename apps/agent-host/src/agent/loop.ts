@@ -1,13 +1,14 @@
-import type { ChatMessage, Provider, ToolCall } from "../providers";
+import type { ChatMessage, Provider, ToolCall, Usage } from "../providers";
 import { executeTool, TOOL_DEFS } from "../tools";
 
 const MAX_STEPS = 8;
 
-/** One event from the agent loop: streamed text, or a tool call starting/finishing. */
+/** One event from the agent loop: streamed text, a tool call, or per-step usage. */
 export type AgentEvent =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "tool_start"; readonly call: ToolCall }
-  | { readonly type: "tool_end"; readonly call: ToolCall; readonly result: string };
+  | { readonly type: "tool_end"; readonly call: ToolCall; readonly result: string }
+  | { readonly type: "usage"; readonly usage: Usage };
 
 /**
  * Runs the model<->tools loop: stream a model step; if it requested tools, execute
@@ -26,6 +27,8 @@ export async function* runAgent(
       if (event.type === "text") {
         assistantText += event.text;
         yield { type: "text", text: event.text };
+      } else if (event.type === "usage") {
+        yield { type: "usage", usage: event.usage };
       } else {
         toolCalls.push(event.call);
       }

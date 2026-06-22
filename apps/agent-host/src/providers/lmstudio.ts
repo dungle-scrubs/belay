@@ -36,6 +36,7 @@ interface OpenAiStreamChunk {
       }[];
     };
   }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
 /** Local LM Studio provider with OpenAI-compatible streaming + tool calling. */
@@ -44,6 +45,8 @@ export class LmStudioProvider implements Provider {
   readonly model: string;
   private readonly url: string;
   private readonly native: string;
+  /** Effective context window of the loaded model (tokens); learned from model info. */
+  private contextWindow = 0;
 
   constructor(config: LmStudioConfig) {
     this.url = config.url;
@@ -57,11 +60,25 @@ export class LmStudioProvider implements Provider {
       if (!response.ok) {
         return { ready: false, warm: false };
       }
-      const body = (await response.json()) as { state?: string };
+      const body = (await response.json()) as {
+        state?: string;
+        loaded_context_length?: number;
+        max_context_length?: number;
+      };
+      this.contextWindow =
+        body.loaded_context_length ?? body.max_context_length ?? this.contextWindow;
       return { ready: true, warm: body.state === "loaded" };
     } catch {
       return { ready: false, warm: false };
     }
+  }
+
+  /** The loaded context window, fetching model info once if not yet known. */
+  private async ensureContextWindow(): Promise<number> {
+    if (this.contextWindow === 0) {
+      await this.readiness();
+    }
+    return this.contextWindow;
   }
 
   async warm(): Promise<void> {
@@ -86,6 +103,7 @@ export class LmStudioProvider implements Provider {
       body: JSON.stringify({
         model: this.model,
         stream: true,
+        stream_options: { include_usage: true },
         messages: messages.map(toOpenAiMessage),
         ...(tools.length > 0
           ? { tools: tools.map((tool) => ({ type: "function", function: tool })) }
@@ -98,6 +116,7 @@ export class LmStudioProvider implements Provider {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
     const calls = new Map<number, { id: string; name: string; args: string }>();
     for (;;) {
       const { done, value } = await reader.read();
@@ -117,7 +136,11 @@ export class LmStudioProvider implements Provider {
           continue;
         }
         try {
-          const delta = (JSON.parse(data) as OpenAiStreamChunk).choices?.[0]?.delta;
+          const chunk = JSON.parse(data) as OpenAiStreamChunk;
+          if (chunk.usage) {
+            usage = chunk.usage;
+          }
+          const delta = chunk.choices?.[0]?.delta;
           if (delta?.content) {
             yield { type: "text", text: delta.content };
           }
@@ -143,6 +166,16 @@ export class LmStudioProvider implements Provider {
       yield {
         type: "tool_call",
         call: { id: entry.id || crypto.randomUUID(), name: entry.name, arguments: entry.args },
+      };
+    }
+    if (usage) {
+      yield {
+        type: "usage",
+        usage: {
+          input: usage.prompt_tokens ?? 0,
+          output: usage.completion_tokens ?? 0,
+          contextWindow: await this.ensureContextWindow(),
+        },
       };
     }
   }

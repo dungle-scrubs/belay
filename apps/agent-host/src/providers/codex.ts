@@ -114,6 +114,15 @@ export class CodexProvider implements Provider {
             arguments: JSON.stringify(event.toolCall.arguments ?? {}),
           },
         };
+      } else if (event.type === "done") {
+        yield {
+          type: "usage",
+          usage: {
+            input: event.message.usage.input,
+            output: event.message.usage.output,
+            contextWindow: model.contextWindow,
+          },
+        };
       }
     }
   }

@@ -1,8 +1,16 @@
+import { homedir } from "node:os";
 import { decodeServerEnvelope, type SessionEvent } from "@trevor/richter";
 import { Either } from "effect";
 import { runAgent } from "./agent/loop";
 import { Lease } from "./lease";
-import { buildProviders, type ChatMessage, DEFAULT_PROVIDER, type Provider } from "./providers";
+import {
+  buildProviders,
+  type ChatMessage,
+  DEFAULT_PROVIDER,
+  type Provider,
+  type Usage,
+} from "./providers";
+import { WORKSPACE_ROOT } from "./tools/workspace";
 
 /**
  * Trevor host: a Richter participant that runs an agent loop (model <-> tools) for
@@ -70,6 +78,15 @@ function pickProvider(key: unknown): Provider {
   return key === "gpt" ? providers.gpt : providers.qwen;
 }
 
+/** Abbreviates the user's home directory to ~ for display. */
+function abbrevPath(absolute: string): string {
+  const home = homedir();
+  if (absolute === home) {
+    return "~";
+  }
+  return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
+}
+
 /** Ensures the session exists (idempotent) so host and browser share a default. */
 async function ensureSession(): Promise<void> {
   await fetch(`${SERVICE_URL}/sessions`, {
@@ -112,6 +129,7 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
 
   let pending = "";
   let full = "";
+  let usage: Usage | undefined;
   const flush = async (): Promise<void> => {
     if (pending) {
       const text = pending;
@@ -136,13 +154,20 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
           name: event.call.name,
           arguments: event.call.arguments,
         });
-      } else {
+      } else if (event.type === "tool_end") {
         await publish("tool.completed", {
           runId,
           callId: event.call.id,
           name: event.call.name,
           result: event.result.slice(0, 4000),
         });
+      } else {
+        // input is the prompt size of the latest step (current context); output sums.
+        usage = {
+          input: event.usage.input,
+          output: (usage?.output ?? 0) + event.usage.output,
+          contextWindow: event.usage.contextWindow,
+        };
       }
     }
   } catch (error) {
@@ -150,12 +175,13 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
     await publish("assistant.completed", {
       runId,
       text: full,
+      ...(usage ? { usage } : {}),
       error: error instanceof Error ? error.message : String(error),
     });
     return;
   }
   await flush();
-  await publish("assistant.completed", { runId, text: full });
+  await publish("assistant.completed", { runId, text: full, ...(usage ? { usage } : {}) });
 }
 
 /** Answers a user.message - but only when this host holds the lease. */
@@ -197,6 +223,8 @@ function goLive(): void {
     providers: ["qwen", "gpt"],
     default: DEFAULT_PROVIDER,
     instanceId: INSTANCE_ID,
+    cwd: abbrevPath(process.cwd()),
+    workspace: abbrevPath(WORKSPACE_ROOT),
   }).catch(() => {});
 }
 

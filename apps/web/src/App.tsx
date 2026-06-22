@@ -11,6 +11,7 @@ const PROVIDER_KEY = "trevor.provider";
 const DEFAULT_SESSION = "trevor-local";
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
+type Usage = { input: number; output: number; contextWindow: number };
 type AssistantMessage = {
   kind: "assistant";
   id: string;
@@ -18,6 +19,8 @@ type AssistantMessage = {
   done: boolean;
   warm: boolean;
   model: string;
+  provider?: string;
+  usage?: Usage;
 };
 type ToolMessage = { kind: "tool"; id: string; name: string; args: string; done: boolean };
 type Message = { kind: "user"; id: string; text: string } | AssistantMessage | ToolMessage;
@@ -37,6 +40,7 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
         done: false,
         warm: payload.warm === true,
         model: typeof payload.model === "string" ? payload.model : "model",
+        provider: typeof payload.provider === "string" ? payload.provider : undefined,
       };
       assistantByRun.set(runId, message);
       messages.push(message);
@@ -59,6 +63,15 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
       if (!message.text) {
         message.text = String(payload.text ?? "");
       }
+      const raw = payload.usage;
+      if (raw && typeof raw === "object") {
+        const u = raw as Record<string, unknown>;
+        message.usage = {
+          input: typeof u.input === "number" ? u.input : 0,
+          output: typeof u.output === "number" ? u.output : 0,
+          contextWindow: typeof u.contextWindow === "number" ? u.contextWindow : 0,
+        };
+      }
     } else if (event.type === "tool.started") {
       const callId = String(payload.callId ?? event.eventId);
       const message: ToolMessage = {
@@ -80,7 +93,26 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
   return messages;
 }
 
-type HostStatus = { present: boolean; leaderId: string | null; standbyCount: number };
+type HostStatus = {
+  present: boolean;
+  leaderId: string | null;
+  standbyCount: number;
+  workspace: string | null;
+  cwd: string | null;
+};
+
+/** Compact token count: 6100 -> "6.1k", 812 -> "812". */
+function fmtTokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+/** Compact context window: 8192 -> "8k", 0/unknown -> "?". */
+function fmtCtx(n: number): string {
+  if (n <= 0) {
+    return "?";
+  }
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+}
 
 /** A standby pings continuously, so it counts as present only if seen this recently. */
 const HOST_RECENT_MS = 15000;
@@ -93,11 +125,19 @@ const HOST_RECENT_MS = 15000;
  */
 function hostStatus(events: readonly SessionEvent[], nowMs: number): HostStatus {
   let present = false;
+  let workspace: string | null = null;
+  let cwd: string | null = null;
   const role = new Map<string, string>();
   const lastSeen = new Map<string, number>();
   for (const event of events) {
     if (event.type === "host.online") {
       present = true;
+      if (typeof event.payload.workspace === "string") {
+        workspace = event.payload.workspace;
+      }
+      if (typeof event.payload.cwd === "string") {
+        cwd = event.payload.cwd;
+      }
     }
     if (
       event.type === "host.online" ||
@@ -131,7 +171,7 @@ function hostStatus(events: readonly SessionEvent[], nowMs: number): HostStatus 
       standbyCount += 1;
     }
   }
-  return { present, leaderId, standbyCount };
+  return { present, leaderId, standbyCount, workspace, cwd };
 }
 
 /** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
@@ -226,6 +266,18 @@ export function App() {
         </p>
       ) : null}
 
+      {host.workspace ? (
+        <p style={{ color: "#888", fontSize: "0.78rem", margin: "0.2rem 0" }}>
+          workspace <code>{host.workspace}</code>
+          {host.cwd && host.cwd !== host.workspace ? (
+            <>
+              {" · cwd "}
+              <code>{host.cwd}</code>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
       <div>
         {transcript.map((message) => {
           if (message.kind === "tool") {
@@ -255,10 +307,23 @@ export function App() {
           }
           const label =
             message.kind === "user" ? "you" : message.done ? "assistant" : "assistant · streaming";
+          const meta =
+            message.kind === "assistant" && message.done
+              ? `${message.model}${
+                  message.usage
+                    ? ` · ${fmtTokens(message.usage.input)}/${fmtCtx(message.usage.contextWindow)} ctx`
+                    : ""
+                }`
+              : null;
           return (
             <div key={message.id} style={{ margin: "0.75rem 0" }}>
               <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>
               <div style={{ whiteSpace: "pre-wrap" }}>{message.text}</div>
+              {meta ? (
+                <div style={{ fontSize: "0.68rem", color: "#aaa", marginTop: "0.2rem" }}>
+                  {meta}
+                </div>
+              ) : null}
             </div>
           );
         })}

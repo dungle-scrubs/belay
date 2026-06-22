@@ -18,10 +18,18 @@ export interface ToolCall {
   readonly arguments: string;
 }
 
-/** One streamed event from a provider: assistant text or a requested tool call. */
+/** Token usage for one model step: prompt (context used) + generated, vs the window. */
+export interface Usage {
+  readonly input: number;
+  readonly output: number;
+  readonly contextWindow: number;
+}
+
+/** One streamed event from a provider: assistant text, a tool call, or token usage. */
 export type ProviderEvent =
   | { readonly type: "text"; readonly text: string }
-  | { readonly type: "tool_call"; readonly call: ToolCall };
+  | { readonly type: "tool_call"; readonly call: ToolCall }
+  | { readonly type: "usage"; readonly usage: Usage };
 
 /** One message in the conversation (user, assistant, or a tool result). */
 export interface ChatMessage {

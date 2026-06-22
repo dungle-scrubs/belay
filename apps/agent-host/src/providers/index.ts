@@ -2,7 +2,15 @@ import { CodexProvider } from "./codex";
 import { LmStudioProvider } from "./lmstudio";
 import type { Provider } from "./types";
 
-export type { ChatMessage, Provider, ProviderEvent, Readiness, ToolCall, ToolDef } from "./types";
+export type {
+  ChatMessage,
+  Provider,
+  ProviderEvent,
+  Readiness,
+  ToolCall,
+  ToolDef,
+  Usage,
+} from "./types";
 
 /** Provider keys the browser switches between (user.message.payload.provider). */
 export interface Providers {
