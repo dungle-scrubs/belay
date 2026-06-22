@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SessionEvent } from "@trevor/richter";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { type SubmitEvent, useState } from "react";
+import { type SubmitEvent, useMemo, useState } from "react";
 import { ensureSession } from "./richter/client";
 import { useRichterSession } from "./richter/use-richter-session";
 import { toTranscript } from "./transcript";
@@ -126,7 +126,7 @@ function providerModelsFrom(events: readonly SessionEvent[]): Record<string, Pro
       continue;
     }
     const raw = event.payload.models;
-    if (!raw || typeof raw !== "object") {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       continue;
     }
     const parsed: Record<string, ProviderModel> = {};
@@ -196,12 +196,15 @@ export function App() {
   const [draft, setDraft] = useState("");
 
   const { events, status, replayed, publish } = useRichterSession(sessionId);
-  const transcript = toTranscript(events);
+  // These scan the whole event log; without memoizing, every keystroke in the draft
+  // input (and the 4s clock tick) would rebuild them. host depends on now; the others
+  // only on events, so they skip the tick.
+  const transcript = useMemo(() => toTranscript(events), [events]);
   const awaitingResponse = transcript.at(-1)?.kind === "user";
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
-  const host = hostStatus(events, now);
-  const hostModels = providerModelsFrom(events);
+  const host = useMemo(() => hostStatus(events, now), [events, now]);
+  const hostModels = useMemo(() => providerModelsFrom(events), [events]);
 
   const activeProvider = provider ?? "qwen";
   const modelMeta = hostModels[activeProvider] ?? FALLBACK_MODELS[activeProvider] ?? QWEN_FALLBACK;
