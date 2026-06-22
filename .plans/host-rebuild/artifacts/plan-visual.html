@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trevor V2 - Host Rebuild Plan</title>
+<style>
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
+:root{
+  --ink-900:#131210;--ink-850:#17150f;--ink-800:#1b1813;--ink-700:#232019;--ink-600:#2d2920;--ink-500:#393327;--ink-400:#4b4334;
+  --cream-50:#faf6ec;--cream-100:#f2ecdc;--cream-200:#e6dbc3;--cream-300:#d3c5a7;
+  --brass-300:#d9bd7a;--brass-400:#cba85a;--brass-500:#bd9a4e;--brass-600:#9f8038;--brass-700:#7b6228;
+  --sage-300:#b4c0a2;--sage-400:#97a67e;--sage-500:#7d8e63;--sage-600:#61714b;
+  --amber-300:#efc684;--amber-400:#e2a541;--amber-500:#c8862a;
+  --rust-300:#d68a6b;--rust-400:#c0613f;--rust-500:#a4502f;
+  --steel-300:#9aa3b0;--steel-400:#7b8593;--steel-500:#5e6773;--steel-600:#454d58;
+  --bg:var(--ink-900);--bg-raised:var(--ink-800);--bg-overlay:var(--ink-700);--bg-inset:#0e0d0b;
+  --fg:var(--cream-100);--fg-strong:var(--cream-50);--fg-muted:var(--steel-400);--fg-faint:var(--steel-500);
+  --border:rgba(242,236,220,0.1);--border-strong:rgba(242,236,220,0.17);
+  --accent:var(--brass-500);--accent-bright:var(--brass-400);--on-accent:#1a1610;
+  --agent:var(--sage-400);--agent-fill:rgba(125,142,99,0.16);
+  --user:var(--amber-400);--user-fill:rgba(226,165,65,0.16);
+  --danger:var(--rust-400);--danger-fill:rgba(192,97,63,0.16);
+  --font-serif:"EB Garamond",Georgia,serif;--font-sans:"Geist",system-ui,sans-serif;--font-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+  --tracking-caps:0.085em;
+  --radius-sm:4px;--radius-md:7px;--radius-lg:12px;--radius-pill:999px;
+  --shadow-floating:0 14px 38px -14px rgba(0,0,0,0.62),0 3px 8px rgba(0,0,0,0.34);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;padding:48px 28px 80px}
+.wrap{max-width:1080px;margin:0 auto}
+
+/* ---- header ---- */
+.eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+h1{font-family:var(--font-serif);font-weight:600;font-size:42px;line-height:1.12;letter-spacing:-0.012em;color:var(--fg-strong);margin-bottom:14px}
+.lede{font-family:var(--font-serif);font-size:18px;line-height:1.6;color:var(--cream-200);max-width:760px}
+.lede b{color:var(--fg-strong);font-weight:600}
+.statusbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.pill{font-family:var(--font-mono);font-size:11.5px;padding:5px 11px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);color:var(--fg-muted);background:var(--bg-raised)}
+.pill b{color:var(--fg-strong);font-weight:500}
+.pill.stage{border-color:var(--amber-500);color:var(--amber-300);background:var(--user-fill)}
+
+hr.rule{border:0;border-top:1px solid var(--border);margin:40px 0}
+
+.sec-label{font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--fg-muted);margin-bottom:18px}
+
+/* ---- legend ---- */
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);margin-bottom:28px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,0.3)}
+.dot.done{background:var(--sage-400)}
+.dot.prog{background:var(--amber-400)}
+.dot.todo{background:transparent;border:1px solid var(--steel-500)}
+.dot.defer{background:var(--steel-600)}
+
+/* ---- pipeline ---- */
+.pipeline{display:flex;flex-direction:column;gap:0}
+.phase{position:relative;border:1px solid var(--border);border-left:3px solid var(--steel-600);border-radius:var(--radius-lg);background:var(--bg-raised);padding:20px 22px}
+.phase.defer{opacity:0.72;border-left-color:var(--steel-600);border-left-style:dashed}
+.phase-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.phase-title{font-family:var(--font-sans);font-weight:600;font-size:18px;color:var(--fg-strong)}
+.phase-title .pno{font-family:var(--font-mono);color:var(--accent);font-weight:500;margin-right:9px}
+.phase-tag{font-family:var(--font-mono);font-size:11px;color:var(--fg-faint)}
+.phase-goal{font-family:var(--font-serif);font-size:15.5px;font-style:italic;color:var(--cream-200);margin-bottom:14px;max-width:820px}
+.miles{display:flex;flex-direction:column;gap:7px}
+.mile{display:grid;grid-template-columns:14px 86px 1fr;gap:11px;align-items:start;padding:7px 10px;border-radius:var(--radius-sm)}
+.mile:hover{background:var(--bg-overlay)}
+.mile .mdot{margin-top:5px}
+.mcode{font-family:var(--font-mono);font-size:12px;color:var(--accent-bright);font-weight:500}
+.mbody{font-size:13.5px;color:var(--fg)}
+.mbody .mt{color:var(--fg-strong);font-weight:500}
+.mbody .feat{font-family:var(--font-mono);font-size:11px;color:var(--fg-faint);display:block;margin-top:2px}
+.eff{font-family:var(--font-mono);font-size:10px;color:var(--fg-faint);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 5px;margin-left:6px}
+
+/* ---- gate ---- */
+.gate{align-self:center;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 0}
+.gate-arrow{color:var(--steel-500);font-size:15px;line-height:1}
+.gate-chip{font-family:var(--font-mono);font-size:11px;color:var(--brass-300);background:var(--bg-inset);border:1px solid var(--brass-700);border-radius:var(--radius-pill);padding:5px 14px;text-align:center}
+.gate-cond{font-family:var(--font-mono);font-size:10.5px;color:var(--fg-faint);max-width:640px;text-align:center;margin-top:3px;line-height:1.45}
+
+/* ---- two-column blocks ---- */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:780px){.cols{grid-template-columns:1fr}.mile{grid-template-columns:14px 78px 1fr}}
+.card{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-raised);padding:20px 22px}
+.card h3{font-family:var(--font-sans);font-weight:600;font-size:15px;color:var(--fg-strong);margin-bottom:14px;display:flex;align-items:center;gap:9px}
+.card h3 .k{font-family:var(--font-mono);font-size:11px;color:var(--fg-faint);font-weight:400}
+
+/* kill gate rows */
+.kg{display:flex;gap:12px;padding:11px 12px;border-radius:var(--radius-md);border:1px solid var(--border);margin-bottom:9px;background:var(--bg-inset)}
+.kg:last-child{margin-bottom:0}
+.kg .kdot{margin-top:4px;flex:0 0 auto}
+.kg-main{flex:1}
+.kg-code{font-family:var(--font-mono);font-size:12px;color:var(--accent-bright);font-weight:500}
+.kg-stat{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--amber-300);border:1px solid var(--amber-500);border-radius:var(--radius-pill);padding:1px 8px;margin-left:8px}
+.kg-stat.gating{color:var(--rust-300);border-color:var(--rust-500)}
+.kg-claim{font-size:13px;color:var(--fg);margin-top:5px;line-height:1.45}
+.kg-fail{font-family:var(--font-mono);font-size:11px;color:var(--rust-300);margin-top:6px;line-height:1.4}
+.kg-fail b{color:var(--rust-400);font-weight:500}
+
+/* decisions */
+.dec-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+@media(max-width:780px){.dec-grid{grid-template-columns:1fr}}
+.dec{padding:11px 13px;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--bg-inset)}
+.dec-top{display:flex;align-items:baseline;gap:9px;margin-bottom:3px}
+.dec-code{font-family:var(--font-mono);font-size:11.5px;color:var(--sage-300);font-weight:500}
+.dec-topic{font-size:12px;color:var(--fg-strong);font-weight:500}
+.dec-body{font-size:12.5px;color:var(--fg-muted);line-height:1.45}
+.dec.drop{border-left:2px solid var(--rust-500)}
+.dec.table{border-left:2px solid var(--steel-500)}
+.dec.new{border-left:2px solid var(--sage-500)}
+
+/* arch diagram - real HTML structure, no ASCII */
+.arch{display:flex;flex-direction:column;align-items:stretch}
+.host{border:1px solid var(--border-strong);border-radius:var(--radius-lg);background:var(--bg-inset);overflow:hidden}
+.host-bar{display:flex;align-items:baseline;gap:11px;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--bg-raised)}
+.host-bar .ht{font-family:var(--font-mono);font-size:11px;letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--brass-300);font-weight:500}
+.host-bar .hsub{font-family:var(--font-mono);font-size:11px;color:var(--fg-faint)}
+.host-body{padding:16px 18px}
+.lane{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-raised)}
+.lane .lname{font-family:var(--font-mono);font-size:12.5px;color:var(--sage-300);font-weight:500;white-space:nowrap}
+.lane .ldesc{font-size:13px;color:var(--fg);line-height:1.45}
+.lane .ldesc code{font-family:var(--font-mono);font-size:11.5px;color:var(--cream-200);background:var(--bg-inset);padding:1px 5px;border-radius:var(--radius-sm)}
+.lane .spacer{flex:1}
+.vdown{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--steel-500);font-size:13px;padding:6px 0}
+.vdown .vlabel{font-family:var(--font-mono);font-size:10.5px;color:var(--fg-faint)}
+.io-chip{font-family:var(--font-mono);font-size:11px;color:var(--amber-300);background:var(--user-fill);border:1px solid var(--amber-500);border-radius:var(--radius-pill);padding:4px 11px;white-space:nowrap;flex:0 0 auto}
+.layers-chips{display:flex;flex-wrap:wrap;gap:6px}
+.lchip{font-family:var(--font-mono);font-size:11px;color:var(--fg);background:var(--bg-inset);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:3px 8px;white-space:nowrap}
+.lane-cap{font-family:var(--font-mono);font-size:10.5px;color:var(--fg-faint);padding:5px 14px 0;line-height:1.4}
+.host-foot{display:flex;flex-direction:column;align-items:center;gap:5px;padding-top:14px}
+.up-arrow{color:var(--steel-400);font-size:15px;line-height:1}
+.wire-label{font-family:var(--font-mono);font-size:11px;color:var(--fg-muted);text-align:center}
+.tui-box{font-family:var(--font-mono);font-size:12.5px;color:var(--cream-50);background:var(--bg-overlay);border:1px solid var(--brass-700);border-radius:var(--radius-md);padding:10px 20px;letter-spacing:0.03em;font-weight:500}
+
+.foot{margin-top:40px;font-family:var(--font-mono);font-size:11px;color:var(--fg-faint);line-height:1.6}
+</style>
+</head>
+<body class="lucid-base">
+<div class="wrap">
+
+  <header data-lucid-id="header">
+    <div class="eyebrow">Implementation Plan / .plans/host-rebuild</div>
+    <h1>Trevor V2 - Host Rebuild on Effect</h1>
+    <p class="lede">Rewrite the agent host in <b>TypeScript + Effect v3</b>, compiled to a binary via <b>bun&nbsp;--compile</b>, spawned by the <b>unchanged Rust TUI</b> over JSONL-over-stdio. The host reproduces the wire protocol exactly - the TUI cannot tell it was rewritten.</p>
+    <div class="statusbar">
+      <span class="pill stage">stage&nbsp; <b>SPIKE</b></span>
+      <span class="pill">decisions&nbsp; <b>12 / 12 locked</b></span>
+      <span class="pill">kill-gates&nbsp; <b>0 / 4 tested</b></span>
+      <span class="pill">phases&nbsp; <b>6</b></span>
+      <span class="pill">milestones&nbsp; <b>18</b></span>
+    </div>
+  </header>
+
+  <hr class="rule">
+
+  <div class="sec-label">Architecture - control plane in Effect, leaf I/O wrapped at the edges</div>
+  <div class="arch" data-lucid-id="arch">
+    <div class="host">
+      <div class="host-bar">
+        <span class="ht">V2 Host</span>
+        <span class="hsub">Effect v3 &middot; bun --compile &middot; the only thing being rebuilt</span>
+      </div>
+      <div class="host-body">
+
+        <div class="lane" data-lucid-id="lane-transport">
+          <span class="io-chip">stdin &middot; JSONL &#9658;</span>
+          <span class="lname">Transport</span>
+          <span class="ldesc">readline &rarr; decode + validate <code>ClientCommand</code> &rarr; lift into Effect</span>
+        </div>
+
+        <div class="vdown"><span class="vlabel">fork fiber</span><span>&#9660;</span></div>
+
+        <div class="lane" data-lucid-id="lane-runtime">
+          <span class="lname">Command loop / dispatch</span>
+          <span class="ldesc">&#9658; Run / Turn / Submission lifecycle &mdash; structured concurrency; cancel = fiber interrupt</span>
+        </div>
+
+        <div class="vdown"><span class="vlabel">resolved via</span><span>&#9660;</span></div>
+
+        <div class="lane" data-lucid-id="lane-layers">
+          <span class="lname">Layers &middot; DI</span>
+          <span class="layers-chips">
+            <span class="lchip">Protocol</span>
+            <span class="lchip">Provider (pi-ai)</span>
+            <span class="lchip">Persistence (sqlite)</span>
+            <span class="lchip">Tools</span>
+            <span class="lchip">Routing</span>
+            <span class="lchip">Observability (withSpan)</span>
+          </span>
+        </div>
+
+        <div class="vdown"><span class="vlabel">single choke point</span><span>&#9660;</span></div>
+
+        <div class="lane" data-lucid-id="lane-emit">
+          <span class="lname">emitServerEvent</span>
+          <span class="ldesc">the only code that writes the wire &mdash; every ServerEvent passes through here</span>
+          <span class="spacer"></span>
+          <span class="io-chip">&#9668; stdout &middot; JSONL</span>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="host-foot" data-lucid-id="tui">
+      <span class="up-arrow">&#9650;</span>
+      <span class="wire-label">wire reproduced semantically byte-for-byte (D-002) &mdash; the TUI cannot tell the host was rewritten</span>
+      <span class="tui-box">Rust TUI &nbsp;&middot;&nbsp; REUSED UNCHANGED</span>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <div class="sec-label">Phase pipeline &mdash; each gate is a hard merge barrier</div>
+  <div class="legend" data-lucid-id="legend">
+    <span><i class="dot done"></i> done</span>
+    <span><i class="dot prog"></i> in-progress</span>
+    <span><i class="dot todo"></i> not started</span>
+    <span><i class="dot defer"></i> deferred</span>
+  </div>
+
+  <div class="pipeline">
+
+    <!-- PHASE 0 -->
+    <section class="phase" data-lucid-id="phase-0">
+      <div class="phase-head">
+        <div class="phase-title"><span class="pno">PHASE 0</span>Foundations &amp; kill-gates</div>
+        <div class="phase-tag">no upstream gate</div>
+      </div>
+      <div class="phase-goal">Prove the runtime, distribution, and "reuse-unchanged" premises empirically before any host feature is written.</div>
+      <div class="miles">
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M0.1</span><span class="mbody"><span class="mt">A-001 &mdash; Effect under bun --compile</span><span class="eff">S</span><span class="feat">fork fiber &rarr; interrupt &rarr; assert finalizer runs; same in compiled binary</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M0.2</span><span class="mbody"><span class="mt">A-003 &mdash; copied TUI builds unchanged</span><span class="eff">S</span><span class="feat">cargo build the copied tui against copied protocol + embedded artifacts</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M0.3</span><span class="mbody"><span class="mt">A-002 &mdash; v3 entry posture (non-gating)</span><span class="eff">S</span><span class="feat">record v3&rarr;v4 upgrade cost + entry decision</span></span></div>
+      </div>
+    </section>
+
+    <div class="gate" data-lucid-id="gate-01">
+      <div class="gate-arrow">&#9660;</div>
+      <div class="gate-chip">GATE 0 &rarr; 1</div>
+      <div class="gate-cond">A-001 pass (or Escape Hatch 1) &middot; A-003 pass &middot; A-002 recorded</div>
+    </div>
+
+    <!-- PHASE 1 -->
+    <section class="phase" data-lucid-id="phase-1">
+      <div class="phase-head">
+        <div class="phase-title"><span class="pno">PHASE 1</span>Conformance oracle &mdash; the safety spine</div>
+        <div class="phase-tag">gate 0&rarr;1</div>
+      </div>
+      <div class="phase-goal">A harness that records (ClientCommand &rarr; ServerPayload) transcripts from the old host and asserts the V2 host reproduces them under normalized semantic equality (D-008).</div>
+      <div class="miles">
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M1.1</span><span class="mbody"><span class="mt">Transcript recorder</span><span class="eff">M</span><span class="feat">drive OLD host headless; capture stdout JSONL + record provider calls for replay</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M1.2</span><span class="mbody"><span class="mt">Normalizer + semantic comparator</span><span class="eff">M</span><span class="feat">ignore volatile fields; rename/missing &amp; session.start correlationId &rarr; UNEQUAL</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M1.3</span><span class="mbody"><span class="mt">Replay runner / merge gate</span><span class="eff">M</span><span class="feat">replay input against a target host binary; emit diff report; per-slice gate cmd</span></span></div>
+      </div>
+    </section>
+
+    <div class="gate" data-lucid-id="gate-12">
+      <div class="gate-arrow">&#9660;</div>
+      <div class="gate-chip">GATE 1 &rarr; 2</div>
+      <div class="gate-cond">oracle self-check green (old transcript replays equal vs old host) &middot; normalizer catches renames + correlationId</div>
+    </div>
+
+    <!-- PHASE 2 -->
+    <section class="phase" data-lucid-id="phase-2">
+      <div class="phase-head">
+        <div class="phase-title"><span class="pno">PHASE 2</span>Core &mdash; "demonstrably alive"</div>
+        <div class="phase-tag">slices S0&ndash;S2 &middot; gate 1&rarr;2</div>
+      </div>
+      <div class="phase-goal">The unchanged TUI connects to the V2 host, holds a streamed conversation, and runs tools.</div>
+      <div class="miles">
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S0</span><span class="mbody"><span class="mt">Transport &amp; handshake</span><span class="eff">M</span><span class="feat">session.start&rarr;started&rarr;contract.current&rarr;pong + accept-and-ignore dropped cmds &middot; H-001..003,017,150</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S1</span><span class="mbody"><span class="mt">One-shot turn (incl. A-004)</span><span class="eff">L</span><span class="feat">prompt.submit&rarr;delta*&rarr;completed&rarr;metrics &middot; cancel = NO late delta &middot; H-005,040-044,048,050/051,060,063/064</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S2</span><span class="mbody"><span class="mt">Tools</span><span class="eff">L</span><span class="feat">read/edit/write/glob/rg/bash(+safety)/web_search/web_fetch + identity &middot; H-100..110,113</span></span></div>
+      </div>
+    </section>
+
+    <div class="gate" data-lucid-id="gate-23">
+      <div class="gate-arrow">&#9660;</div>
+      <div class="gate-chip">GATE 2 &rarr; 3</div>
+      <div class="gate-cond">A-004 pass (or Escape Hatch 2) &middot; oracle green S0&ndash;S2 &middot; live TUI smoke (subset) green &middot; FEATURES rows &rarr; done</div>
+    </div>
+
+    <!-- PHASE 3 -->
+    <section class="phase" data-lucid-id="phase-3">
+      <div class="phase-head">
+        <div class="phase-title"><span class="pno">PHASE 3</span>Depth &mdash; persistence, settings, lifecycle</div>
+        <div class="phase-tag">slices S3&ndash;S5 &middot; gate 2&rarr;3</div>
+      </div>
+      <div class="phase-goal">Sessions persist and resume; settings/read-models drive the TUI; cancel / retry / watchdog / errors are correct.</div>
+      <div class="miles">
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S3</span><span class="mbody"><span class="mt">Persistence &amp; resume</span><span class="eff">L</span><span class="feat">sqlite app-db (no owner/lease cols), transcript + blob store, resume hydration &middot; H-130-132,136,004</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S4</span><span class="mbody"><span class="mt">Settings &amp; read-models</span><span class="eff">M</span><span class="feat">settings.get/update&rarr;current, metrics, usage, progress, output-style registry &middot; H-015,031,032,034,164</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S5</span><span class="mbody"><span class="mt">Lifecycle depth</span><span class="eff">L</span><span class="feat">input.cancel, turn.resume/retry, follow-up queue, watchdog, TaggedError&rarr;wire (41 codes) &middot; H-007-012,027,028,055,058</span></span></div>
+      </div>
+    </section>
+
+    <div class="gate" data-lucid-id="gate-34">
+      <div class="gate-arrow">&#9660;</div>
+      <div class="gate-chip">GATE 3 &rarr; 4</div>
+      <div class="gate-cond">resume restores a session &middot; error taxonomy compiler-proven 1:1 to wire &middot; oracle green S3&ndash;S5</div>
+    </div>
+
+    <!-- PHASE 4 -->
+    <section class="phase" data-lucid-id="phase-4">
+      <div class="phase-head">
+        <div class="phase-title"><span class="pno">PHASE 4</span>Intelligence &amp; surface</div>
+        <div class="phase-tag">slices S6&ndash;S9 &middot; gate 3&rarr;4</div>
+      </div>
+      <div class="phase-goal">Deterministic routing, auth/login + offline, prompt-production discovery, workspace, and shell interpolation.</div>
+      <div class="miles">
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S6</span><span class="mbody"><span class="mt">Routing (deterministic)</span><span class="eff">L</span><span class="feat">roles = main + ghost (bg&equiv;main), offline&rarr;local fallback, no model-led classifier &middot; H-080-084,087-096</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S7</span><span class="mbody"><span class="mt">Auth/login &amp; offline</span><span class="eff">M</span><span class="feat">OAuth onboarding, auth store (0600/0700, atomic), connectivity probe &middot; depends M-S6 &middot; H-019,026,093,154,155</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S8</span><span class="mbody"><span class="mt">Prompt production</span><span class="eff">M</span><span class="feat">agent/skill/command discovery + slash routing + doctor &middot; depends M-S6 &middot; H-016,163,165-168</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S9</span><span class="mbody"><span class="mt">Workspace</span><span class="eff">M</span><span class="feat">workspace.current/list/switch/create (no acquire) + fingerprints &middot; depends M-S6 &middot; H-020,141</span></span></div>
+        <div class="mile"><i class="dot todo mdot"></i><span class="mcode">M-S8b</span><span class="mbody"><span class="mt">Shell interp in skills/cmds (NEW, wire-invisible)</span><span class="eff">M</span><span class="feat">!line &amp; ```! fenced; runs only when flag-on AND file-trusted; safety floor &middot; D-012 &middot; H-175</span></span></div>
+      </div>
+    </section>
+
+    <div class="gate" data-lucid-id="gate-45">
+      <div class="gate-arrow">&#9660;</div>
+      <div class="gate-chip">GATE 4 &rarr; 5</div>
+      <div class="gate-cond">/login /agents /skills /doctor + workspace switch work &middot; ! interp gated by trust + safety floor &middot; FULL TUI smoke (serial) green</div>
+    </div>
+
+    <!-- PHASE 5 -->
+    <section class="phase defer" data-lucid-id="phase-5">
+      <div class="phase-head">
+        <div class="phase-title"><span class="pno">PHASE 5</span>Long tail &mdash; DEFER</div>
+        <div class="phase-tag">slices S10+ &middot; gate 4&rarr;5</div>
+      </div>
+      <div class="phase-goal">Extend the surface opportunistically once the core is stable. Each item is its own vertical slice with its own conformance test when picked up.</div>
+      <div class="miles">
+        <div class="mile"><i class="dot defer mdot"></i><span class="mcode">M-S10</span><span class="mbody"><span class="mt">Deferred subsystems</span><span class="eff">XL</span><span class="feat">tangents &middot; loops &middot; LSP &middot; MCP &middot; hooks &middot; retrieval &middot; bounded-child/takeover &middot; local admission &middot; H-022,024/025,029,030,036,057,112,116,119,138/139,160-162,169</span></span></div>
+      </div>
+    </section>
+
+  </div>
+
+  <hr class="rule">
+
+  <div class="cols">
+    <!-- KILL GATES -->
+    <div class="card" data-lucid-id="killgates">
+      <h3>The 4 kill-gate assumptions <span class="k">all untested &middot; gate Phase 0</span></h3>
+
+      <div class="kg" data-lucid-id="a-001">
+        <i class="dot todo kdot"></i>
+        <div class="kg-main">
+          <span class="kg-code">A-001</span><span class="kg-stat gating">gating</span>
+          <div class="kg-claim">Effect v3 (with fiber interruption) runs under <b>bun test</b> AND a <b>bun build --compile</b> binary.</div>
+          <div class="kg-fail"><b>if false:</b> distribution model breaks &rarr; fall back to interpreted bun run via TREVOR_HOST_CMD (Hatch 1)</div>
+        </div>
+      </div>
+
+      <div class="kg" data-lucid-id="a-003">
+        <i class="dot todo kdot"></i>
+        <div class="kg-main">
+          <span class="kg-code">A-003</span><span class="kg-stat gating">gating</span>
+          <div class="kg-claim">The copied trevorV2/tui compiles (<b>cargo build</b>) against the copied protocol + embedded artifacts.</div>
+          <div class="kg-fail"><b>if false:</b> "reuse unchanged" premise is wrong &rarr; reconcile embedded-artifact paths before any host work</div>
+        </div>
+      </div>
+
+      <div class="kg" data-lucid-id="a-004">
+        <i class="dot todo kdot"></i>
+        <div class="kg-main">
+          <span class="kg-code">A-004</span><span class="kg-stat gating">gating @ S1</span>
+          <div class="kg-claim">Interrupting an Effect fiber actually tears down the underlying pi-ai stream (no post-cancel assistant.delta).</div>
+          <div class="kg-fail"><b>if false:</b> port race-and-abandon + per-runId delta suppression; accept upstreamStopCertainty=local_abort_only (Hatch 2)</div>
+        </div>
+      </div>
+
+      <div class="kg" data-lucid-id="a-002">
+        <i class="dot todo kdot"></i>
+        <div class="kg-main">
+          <span class="kg-code">A-002</span><span class="kg-stat">non-gating</span>
+          <div class="kg-claim">Effect v3 is viable for the project horizon; v3&rarr;v4 upgrade cost is acceptable.</div>
+          <div class="kg-fail"><b>if false:</b> re-evaluate entry version; non-gating</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DECISIONS -->
+    <div class="card" data-lucid-id="decisions">
+      <h3>12 locked decisions <span class="k">D-001 &ndash; D-012</span></h3>
+      <div class="dec-grid">
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-001</span><span class="dec-topic">Runtime library</span></div><div class="dec-body">Effect v3 stable as I/O + control plane; keep pi-ai.</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-002</span><span class="dec-topic">TUI reuse</span></div><div class="dec-body">Reuse Rust TUI unchanged; copied into trevorV2/tui.</div></div>
+        <div class="dec drop"><div class="dec-top"><span class="dec-code">D-003</span><span class="dec-topic">Multi-user</span></div><div class="dec-body">DROP all multi-user / control-lease / collaboration.</div></div>
+        <div class="dec table"><div class="dec-top"><span class="dec-code">D-004</span><span class="dec-topic">Routing class.</span></div><div class="dec-body">TABLE model-led classification (T-1); ship heuristic.</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-005</span><span class="dec-topic">Build cadence</span></div><div class="dec-body">Rebuild one feature at a time as vertical slices.</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-006</span><span class="dec-topic">Toolchain</span></div><div class="dec-body">Bun, distributed as a compiled binary (--compile).</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-007</span><span class="dec-topic">Routing roles</span></div><div class="dec-body">Fixed posture; roles = main + ghost (bg &equiv; main).</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-008</span><span class="dec-topic">Oracle design</span></div><div class="dec-body">Normalized SEMANTIC comparator over RECORDED calls.</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-009</span><span class="dec-topic">A-001 order</span></div><div class="dec-body">Run A-001 first; runtime fallback via TREVOR_HOST_CMD.</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-010</span><span class="dec-topic">pi-ai interrupt</span></div><div class="dec-body">Abort unreliable &rarr; race-and-abandon + delta suppress.</div></div>
+        <div class="dec"><div class="dec-top"><span class="dec-code">D-011</span><span class="dec-topic">Drop tolerance</span></div><div class="dec-body">TUI still SENDS dropped cmds &rarr; accept-and-ignore.</div></div>
+        <div class="dec new"><div class="dec-top"><span class="dec-code">D-012</span><span class="dec-topic">Shell interp</span></div><div class="dec-body">NEW: skill/command files may embed !-lines / ```! blocks.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Source: .plans/host-rebuild/ &mdash; RFC-01, implementation.md, plan.db (stage=spike).<br>
+    Escape hatches: (1) interpreted bun run via TREVOR_HOST_CMD &middot; (2) race-and-abandon + per-runId delta suppression &middot; (3) per-event golden fixtures if full-transcript replay too noisy &middot; (4) revert branch + point TUI back at old host = zero-cost rollback.
+  </div>
+
+</div>
+</body>
+</html>

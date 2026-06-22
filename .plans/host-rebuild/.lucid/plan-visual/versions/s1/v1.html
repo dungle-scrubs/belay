@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Trevor V2 Host Rebuild - Plan</title>
+<style>
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
+
+:root {
+  --ink-900:#131210; --ink-850:#17150f; --ink-800:#1b1813; --ink-700:#232019;
+  --ink-600:#2d2920; --ink-500:#393327; --ink-400:#4b4334;
+  --cream-50:#faf6ec; --cream-100:#f2ecdc; --cream-200:#e6dbc3; --cream-300:#d3c5a7;
+  --brass-300:#d9bd7a; --brass-400:#cba85a; --brass-500:#bd9a4e; --brass-600:#9f8038; --brass-700:#7b6228;
+  --sage-300:#b4c0a2; --sage-400:#97a67e; --sage-500:#7d8e63; --sage-600:#61714b;
+  --amber-300:#efc684; --amber-400:#e2a541; --amber-500:#c8862a;
+  --rust-300:#d68a6b; --rust-400:#c0613f; --rust-500:#a4502f;
+  --steel-300:#9aa3b0; --steel-400:#7b8593; --steel-500:#5e6773; --steel-600:#454d58;
+
+  --bg:var(--ink-900); --bg-raised:var(--ink-800); --bg-overlay:var(--ink-700); --bg-inset:#0e0d0b;
+  --fg:var(--cream-100); --fg-strong:var(--cream-50); --fg-muted:var(--steel-400); --fg-faint:var(--steel-500);
+  --border:rgba(242,236,220,0.1); --border-strong:rgba(242,236,220,0.17); --border-inset:rgba(0,0,0,0.4);
+  --accent:var(--brass-500); --accent-bright:var(--brass-400); --on-accent:#1a1610;
+  --agent:var(--sage-400); --agent-fill:rgba(125,142,99,0.16);
+  --user:var(--amber-400); --user-fill:rgba(226,165,65,0.16);
+  --danger:var(--rust-400); --danger-fill:rgba(192,97,63,0.16);
+
+  --font-serif:"EB Garamond",Georgia,serif;
+  --font-sans:"Geist",system-ui,sans-serif;
+  --font-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+
+  --radius-sm:4px; --radius-md:7px; --radius-lg:12px; --radius-pill:999px;
+  --shadow-floating:0 14px 38px -14px rgba(0,0,0,0.62),0 3px 8px rgba(0,0,0,0.34);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--font-sans); font-size:0.9375rem; line-height:1.5;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding: 64px 28px 120px; }
+
+/* ---- Hero ---- */
+.hero { margin-bottom: 56px; }
+.eyebrow {
+  font-size:0.75rem; letter-spacing:0.085em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; margin:0 0 14px;
+}
+h1 {
+  font-family:var(--font-serif); font-weight:600; font-size:2.625rem;
+  line-height:1.15; letter-spacing:-0.012em; color:var(--fg-strong); margin:0 0 18px;
+}
+.lede {
+  font-family:var(--font-serif); font-size:1.0625rem; line-height:1.62;
+  color:var(--cream-200); max-width:68ch; margin:0;
+}
+.pivot {
+  margin-top:22px; padding:16px 20px; border-left:2px solid var(--accent);
+  background:var(--bg-raised); border-radius:0 var(--radius-md) var(--radius-md) 0;
+  font-size:0.875rem; color:var(--fg-muted); max-width:72ch;
+}
+.pivot strong { color:var(--cream-200); }
+
+/* ---- Section scaffolding ---- */
+section { margin-bottom:52px; padding:20px; border-radius:var(--radius-lg); }
+section:hover { background:rgba(242,236,220,0.012); }
+.sec-head {
+  display:flex; align-items:baseline; gap:14px; margin:0 0 22px;
+  padding-bottom:12px; border-bottom:1px solid var(--border);
+}
+.sec-num {
+  font-family:var(--font-mono); font-size:0.8125rem; color:var(--accent);
+  letter-spacing:0.04em;
+}
+h2 {
+  font-family:var(--font-serif); font-weight:600; font-size:1.625rem;
+  color:var(--fg-strong); margin:0; letter-spacing:-0.01em;
+}
+
+/* ---- Topology diagram ---- */
+.topo {
+  display:grid; grid-template-columns:1fr 1fr; gap:18px 56px;
+  align-items:stretch; position:relative; margin:8px 0 22px;
+}
+.node {
+  padding:18px 20px; border-radius:var(--radius-md); border:1px solid var(--border-strong);
+  background:var(--bg-raised);
+}
+.node.web { border-color:rgba(226,165,65,0.4); }
+.node.host { border-color:rgba(125,142,99,0.4); }
+.node.richter {
+  grid-column:1 / -1; text-align:center; border-color:var(--accent);
+  background:linear-gradient(180deg, rgba(189,154,78,0.08), var(--bg-raised));
+}
+.node h4 {
+  margin:0 0 6px; font-family:var(--font-mono); font-size:0.8125rem;
+  font-weight:500; color:var(--fg-strong); letter-spacing:0.02em;
+}
+.node.web h4 { color:var(--amber-300); }
+.node.host h4 { color:var(--sage-300); }
+.node.richter h4 { color:var(--brass-300); font-size:0.9375rem; }
+.node p { margin:0; font-size:0.8125rem; color:var(--fg-muted); line-height:1.45; }
+.wsline {
+  text-align:center; font-family:var(--font-mono); font-size:0.6875rem;
+  color:var(--steel-400); letter-spacing:0.04em; grid-column:1 / -1;
+  display:flex; align-items:center; justify-content:center; gap:10px; margin:-4px 0;
+}
+.wsline::before, .wsline::after {
+  content:""; height:1px; flex:1; max-width:120px;
+  background:linear-gradient(90deg,transparent,var(--border-strong),transparent);
+}
+.substrate {
+  text-align:center; font-family:var(--font-mono); font-size:0.6875rem;
+  color:var(--steel-500); letter-spacing:0.03em; margin-top:6px;
+}
+.tag-host { font-size:0.625rem; color:var(--sage-400); font-family:var(--font-sans); letter-spacing:0.06em; text-transform:uppercase; }
+
+/* ---- Pillars ---- */
+.pillars { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+.pillar {
+  padding:16px 18px; border-radius:var(--radius-md); background:var(--bg-raised);
+  border:1px solid var(--border);
+}
+.pillar h4 {
+  margin:0 0 7px; font-size:0.8125rem; letter-spacing:0.06em; text-transform:uppercase;
+  color:var(--accent); font-weight:600;
+}
+.pillar p { margin:0; font-size:0.875rem; color:var(--fg); line-height:1.5; }
+.pillar code { font-family:var(--font-mono); font-size:0.78em; color:var(--cream-300); }
+
+/* ---- Phase timeline ---- */
+.phase {
+  position:relative; padding:18px 20px 18px 22px; margin-bottom:14px;
+  border-radius:var(--radius-md); background:var(--bg-raised);
+  border:1px solid var(--border); border-left:3px solid var(--steel-600);
+}
+.phase.done { border-left-color:var(--sage-500); }
+.phase.active { border-left-color:var(--accent); background:linear-gradient(90deg,rgba(189,154,78,0.06),var(--bg-raised)); }
+.phase.future { border-left-color:var(--steel-600); opacity:0.92; }
+.phase-head { display:flex; align-items:center; gap:12px; margin-bottom:8px; flex-wrap:wrap; }
+.phase-head h3 {
+  margin:0; font-family:var(--font-serif); font-size:1.25rem; font-weight:600;
+  color:var(--fg-strong);
+}
+.phase p { margin:0; font-size:0.875rem; color:var(--fg-muted); line-height:1.5; }
+.badge {
+  font-size:0.6875rem; font-weight:600; letter-spacing:0.07em; text-transform:uppercase;
+  padding:3px 9px; border-radius:var(--radius-pill); font-family:var(--font-sans);
+}
+.badge.done { background:var(--agent-fill); color:var(--sage-300); border:1px solid rgba(125,142,99,0.35); }
+.badge.active { background:rgba(189,154,78,0.16); color:var(--brass-300); border:1px solid rgba(189,154,78,0.4); }
+.badge.future { background:rgba(94,103,115,0.14); color:var(--steel-300); border:1px solid var(--steel-600); }
+
+/* ---- Slices ---- */
+.slices { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-top:6px; }
+.slice {
+  padding:16px 18px; border-radius:var(--radius-md); background:var(--bg-inset);
+  border:1px solid var(--border);
+}
+.slice.active { border-color:rgba(189,154,78,0.4); }
+.slice-id {
+  font-family:var(--font-mono); font-size:0.75rem; color:var(--accent); font-weight:500;
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+}
+.slice-id .mini {
+  font-size:0.625rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--brass-300);
+  background:rgba(189,154,78,0.14); padding:2px 7px; border-radius:var(--radius-pill);
+}
+.slice h4 { margin:0 0 6px; font-size:0.9375rem; color:var(--fg-strong); font-weight:600; }
+.slice p { margin:0; font-size:0.8125rem; color:var(--fg-muted); line-height:1.5; }
+
+/* ---- Tables ---- */
+table { width:100%; border-collapse:collapse; font-size:0.8125rem; }
+thead th {
+  text-align:left; font-size:0.6875rem; letter-spacing:0.07em; text-transform:uppercase;
+  color:var(--fg-faint); font-weight:600; padding:0 14px 10px; border-bottom:1px solid var(--border-strong);
+}
+tbody td { padding:12px 14px; border-bottom:1px solid var(--border); color:var(--fg); vertical-align:top; line-height:1.45; }
+tbody tr:hover { background:rgba(242,236,220,0.02); }
+td.k { font-family:var(--font-mono); font-size:0.75rem; color:var(--brass-300); white-space:nowrap; }
+.dnote { font-family:var(--font-mono); font-size:0.6875rem; color:var(--steel-500); }
+
+/* ---- Risks ---- */
+.risks { display:grid; gap:12px; }
+.risk {
+  padding:16px 18px; border-radius:var(--radius-md); background:var(--bg-raised);
+  border:1px solid var(--border); border-left:3px solid var(--rust-500);
+}
+.risk h4 { margin:0 0 6px; font-size:0.9375rem; color:var(--rust-300); font-weight:600; }
+.risk p { margin:0; font-size:0.875rem; color:var(--fg-muted); line-height:1.5; }
+
+.foot {
+  margin-top:60px; padding-top:20px; border-top:1px solid var(--border);
+  font-size:0.75rem; color:var(--fg-faint); font-family:var(--font-mono); letter-spacing:0.02em;
+}
+
+@media (max-width:720px){
+  .pillars,.slices,.topo { grid-template-columns:1fr; }
+  h1 { font-size:2rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero" data-lucid-id="hero">
+    <p class="eyebrow">Implementation Plan</p>
+    <h1>Trevor V2 - Host Rebuild on Effect</h1>
+    <p class="lede">A browser-only frontend and an Effect host that are <strong>both Richter participants</strong>, communicating only through Richter's durable, ordered event log. No Rust TUI, no stdio, no direct host-web boundary.</p>
+    <div class="pivot" data-lucid-id="pivot-note">
+      <strong>2026-06-22 pivot.</strong> Re-pointed from the original Rust-TUI / stdio architecture to browser + Richter-participant. The RFC, spike-guide, and FEATURES.md retain the original design as historical context; this plan supersedes it.
+    </div>
+  </header>
+
+  <section data-lucid-id="sec-architecture">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Architecture</h2></div>
+
+    <div class="topo" data-lucid-id="topology">
+      <div class="node web" data-lucid-id="node-web">
+        <h4>apps/web</h4>
+        <p>React 19 + Vite + Effect. The renderer; owns presentation. WS participant.</p>
+      </div>
+      <div class="node host" data-lucid-id="node-host">
+        <h4>apps/agent-host <span class="tag-host">Slice 1+</span></h4>
+        <p>Node + Effect. Agent loop, provider adapters, tools. WS participant.</p>
+      </div>
+      <div class="wsline">WebSocket &nbsp;/sessions/&#123;id&#125;/stream &nbsp;-&nbsp; replay-then-tail</div>
+      <div class="node richter" data-lucid-id="node-richter">
+        <h4>Richter</h4>
+        <p>Durable session service. Generic, unmodified - trevor attaches as a participant. REST /sessions, /sessions/&#123;id&#125;/events.</p>
+      </div>
+      <div class="substrate">durable substrate (Postgres) &nbsp;|&nbsp; local Docker :3025 &nbsp;|&nbsp; prod mac-mini over Tailscale</div>
+    </div>
+
+    <div class="pillars">
+      <div class="pillar" data-lucid-id="pillar-transport">
+        <h4>Transport - D-014</h4>
+        <p>Replay-then-tail over WS; publish via REST <code>POST /events</code> (S0), then the WS <code>publish</code> command. Host drains <code>user.message</code> events, publishes assistant/tool events.</p>
+      </div>
+      <div class="pillar" data-lucid-id="pillar-protocol">
+        <h4>Protocol - D-017</h4>
+        <p>Re-owned in Effect <code>Schema</code>, grown one event at a time. Trevor's semantic events ride as <strong>opaque payloads</strong> inside Richter <code>sessionEvents</code>; Richter stays generic.</p>
+      </div>
+      <div class="pillar" data-lucid-id="pillar-participants">
+        <h4>Participants - D-019</h4>
+        <p>Capability-scoped. Exactly one filesystem-authority runtime per session (lightweight control lease). Browser clients and future observers are first-class, lease-free.</p>
+      </div>
+      <div class="pillar" data-lucid-id="pillar-stack">
+        <h4>Stack - D-001 / D-018</h4>
+        <p>Effect v3 for the control plane and decode boundary. <code>pnpm + Node/tsx</code> workspace (Biome, Lefthook, tsc, Vite). Greenfield, not a port - no conformance oracle.</p>
+      </div>
+    </div>
+  </section>
+
+  <section data-lucid-id="sec-phases">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Phases</h2></div>
+
+    <div class="phase done" data-lucid-id="phase-0">
+      <div class="phase-head"><h3>Phase 0 - Foundations</h3><span class="badge done">Done</span></div>
+      <p>pnpm workspace (Biome, Lefthook, tsc, Vite, React 19, Effect 3); <code>tsc --noEmit</code> clean, <code>vite build</code> green. Richter substrate running in Docker on :3025; schema migrated; durable event round-trip verified.</p>
+    </div>
+
+    <div class="phase active" data-lucid-id="phase-1">
+      <div class="phase-head"><h3>Phase 1 - Browser-first slices</h3><span class="badge active">In progress</span></div>
+      <p>Four vertical slices that walk from a pure browser durability proof up to a real multi-provider turn. Each adds exactly one capability.</p>
+      <div class="slices">
+        <div class="slice active" data-lucid-id="slice-s0">
+          <div class="slice-id">S0 - browser &harr; Richter <span class="mini">In progress</span></div>
+          <h4>Durability proof</h4>
+          <p>apps/web connects to a session, replay-then-tail, renders the event log, publishes a <code>user.message</code>. Reload reconnects and replays. No host, no model.</p>
+        </div>
+        <div class="slice" data-lucid-id="slice-s1">
+          <div class="slice-id">S1 - host &harr; Richter echo</div>
+          <h4>Host joins as participant</h4>
+          <p>Minimal agent-host joins the same session; on each <code>user.message</code> it publishes a canned <code>agent.output</code>. Establishes the emit -&gt; appendEvent choke point and participant identity/lease.</p>
+        </div>
+        <div class="slice" data-lucid-id="slice-s2">
+          <div class="slice-id">S2 - real turn via LM Studio</div>
+          <h4>First real completion</h4>
+          <p>Echo becomes a real completion against LM Studio qwen3.6-27B, streamed as <code>assistant.delta* -&gt; assistant.completed</code>. Validates A-004 (fiber interrupt tears down the stream).</p>
+        </div>
+        <div class="slice" data-lucid-id="slice-s3">
+          <div class="slice-id">S3 - pi-ai + provider switch</div>
+          <h4>Multi-provider main role</h4>
+          <p>Add the pi-ai adapter -&gt; GPT-5.5 and a provider setting. Main role = ordered array [local qwen, GPT-5.5], offline -&gt; local fallback.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase future" data-lucid-id="phase-2">
+      <div class="phase-head"><h3>Phase 2+ - Host feature backlog</h3><span class="badge future">Backlog</span></div>
+      <p>FEATURES.md section 4 (H-001…H-174: session/run/turn lifecycle, agent loop, tools, routing, persistence-in-Richter, settings, auth, prompt-production, doctor, workspace, shell interpolation H-175) remains valid as the post-S3 backlog, re-sequenced onto the Richter transport. Multi-user features stay dropped; the capability-scoped filesystem lease (D-019) is the only authority mechanism.</p>
+    </div>
+  </section>
+
+  <section data-lucid-id="sec-constraints">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Key Constraints</h2></div>
+    <table>
+      <thead><tr><th style="width:30%">Constraint</th><th>Impact</th></tr></thead>
+      <tbody>
+        <tr data-lucid-id="c-d013"><td class="k">D-013 Browser-only</td><td>No TUI; apps/web is the renderer and owns presentation.</td></tr>
+        <tr data-lucid-id="c-d014"><td class="k">D-014 WS transport</td><td>Host + web both connect to Richter; no stdio; no host-web boundary.</td></tr>
+        <tr data-lucid-id="c-d015"><td class="k">D-015 Richter substrate</td><td>Sessions/events/participants persist in Richter; local Docker :3025.</td></tr>
+        <tr data-lucid-id="c-d017"><td class="k">D-017 Protocol in Schema</td><td>Grown per slice; trevor events ride as payloads in Richter events.</td></tr>
+        <tr data-lucid-id="c-d016"><td class="k">D-016 No oracle</td><td>Per-slice tests; not byte-compatible with the old host.</td></tr>
+        <tr data-lucid-id="c-d019"><td class="k">D-019 Capability scope</td><td>One filesystem-authority runtime/session; observers/clients lease-free.</td></tr>
+        <tr data-lucid-id="c-d004"><td class="k">D-004 Routing tabled</td><td>Deterministic heuristic / fixed routing only.</td></tr>
+        <tr data-lucid-id="c-d007"><td class="k">D-007 Roles</td><td>main + ghost, each an ordered model array (offline -&gt; local fallback).</td></tr>
+        <tr data-lucid-id="c-d010"><td class="k">D-010 Abort unreliable</td><td>Race-and-abandon + per-runId post-cancel delta suppression (S2).</td></tr>
+        <tr data-lucid-id="c-d012"><td class="k">D-012 Shell interp</td><td>New host capability H-175, gated; later slice.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section data-lucid-id="sec-assumptions">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Assumptions</h2></div>
+    <table>
+      <thead><tr><th style="width:12%">Code</th><th>Assumption</th><th style="width:28%">Status</th></tr></thead>
+      <tbody>
+        <tr data-lucid-id="a-002"><td class="k">A-002</td><td>Effect v3 viable for the project horizon.</td><td>Recorded <span class="dnote">(D-001)</span></td></tr>
+        <tr data-lucid-id="a-004"><td class="k">A-004</td><td>Interrupting an Effect fiber tears down the pi-ai stream.</td><td>Untested; validated at S2</td></tr>
+        <tr data-lucid-id="a-001"><td class="k">A-001</td><td><s>Effect under bun --compile</s></td><td>Retired - no Bun binary <span class="dnote">(D-018)</span></td></tr>
+        <tr data-lucid-id="a-003"><td class="k">A-003</td><td><s>Copied Rust TUI builds unchanged</s></td><td>Retired - no TUI <span class="dnote">(D-013)</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section data-lucid-id="sec-risks">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Risks</h2></div>
+    <div class="risks">
+      <div class="risk" data-lucid-id="risk-coupling">
+        <h4>Richter coupling</h4>
+        <p>Trevor depends on a running Richter. Mitigated by Docker-local dev and Richter being generic - no trevor-specific changes, it attaches as a participant.</p>
+      </div>
+      <div class="risk" data-lucid-id="risk-leak">
+        <h4>pi-ai interruption leak - D-010</h4>
+        <p>Validated at S2; fallback is race-and-abandon + per-runId post-cancel delta suppression.</p>
+      </div>
+      <div class="risk" data-lucid-id="risk-drift">
+        <h4>Effect-dialect drift</h4>
+        <p>Keep Effect to justified boundaries (Schema decode, host control plane); plain React/TS elsewhere so the Effect island does not fight React.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Source: .plans/host-rebuild/implementation.md &nbsp;|&nbsp; Last re-pointed 2026-06-22 (browser/Richter pivot, D-013…D-020)</p>
+
+</div>
+</body>
+</html>
