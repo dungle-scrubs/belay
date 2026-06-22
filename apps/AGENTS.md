@@ -1,13 +1,57 @@
-# apps/web - Agent Instructions
+# apps - Agent Instructions
 
-`apps/web` is the Trevor V2 browser frontend: React 19 + Vite + Effect, a
-Richter WebSocket participant. These instructions govern how hooks are written
-here.
+`apps/` holds every Trevor V2 application, and these rules cover all of them:
 
-## Use ahooks proactively and generously
+- **`apps/web`** - the browser frontend: React 19 + Vite + Effect, a Richter
+  WebSocket participant.
+- **`apps/agent-host`** - the host: Node + Effect, also a Richter participant,
+  running the agent loop (model <-> tools) for each turn.
 
-[ahooks](https://ahooks.js.org/) is the default for hook-shaped logic in this
-app. Reach for it not only before writing a custom hook, but in place of raw
+These layer on the project-wide rules in the repo-root
+[`AGENTS.md`](../AGENTS.md). Each section below states its **scope**: Effect
+applies to every app here; ahooks and TanStack are React-only and apply to the
+frontend (`apps/web`), never to the Node host.
+
+## Effect - all apps
+
+Scope: every app under `apps/`. Both `apps/web` and `apps/agent-host` depend on
+the stable v3 `effect` core.
+
+Follow the house policy in the `effect-standards` skill: **adopt Effect only
+where it buys a measurable benefit over plain TypeScript** - typed error
+propagation across many call sites, structured concurrency (racing, bounded
+parallelism, cancellation, retry with backoff), resource safety (`Scope` /
+`acquireRelease`), dependency injection via `Layer` / `Context.Tag`, or
+`Schema`-driven validation at a trust boundary. Effect is **not** the default
+style for every file. A leaf utility, a thin adapter, or a lone `tryCatch` /
+single `Promise.all` stays plain TypeScript per `typescript-standards` (Result
+types, discriminated unions, typed error classes) - do not pull in Effect just
+to get those.
+
+- **Stable core only.** Target the semver-stable v3 `effect` core - no
+  `alpha` / `beta` / `rc` / `next` dist-tags, the same discipline as TanStack
+  below. Ecosystem packages (`@effect/platform` and other not-yet-stable
+  modules) are less settled; prefer the stable core, and where a needed piece
+  exists only pre-stable, surface that gap rather than silently depending on a
+  pre-release.
+- **Keep islands clean to their boundary.** Where a call graph is Effect, keep
+  it Effect to its edge, then convert to a plain Promise / Result there
+  (`Effect.runPromise` / `Effect.runPromiseExit`). Do not half-adopt inside one
+  module, and do not let an isolated Effect island fight a surrounding sea of
+  plain Promises.
+- **Schema / decode at trust boundaries.** Decoding wire data (e.g. Richter
+  envelopes via `@trevor/richter`) returns an `Either`; branch on it explicitly
+  (`Either.isLeft`, as in `apps/agent-host/src/main.ts`) rather than trusting
+  the shape. One schema is the source of truth for parse, decode, and typed
+  error.
+
+## ahooks - React apps only
+
+Scope: React frontend apps (currently `apps/web`). Does **not** apply to the
+Node host - ahooks is a React hook library with no place in `apps/agent-host`.
+
+[ahooks](https://ahooks.js.org/) is the default for hook-shaped logic in React
+code. Reach for it not only before writing a custom hook, but in place of raw
 `useState` / `useEffect` / `useRef` whenever an ahooks hook covers the case.
 Treat a raw hook that maps cleanly onto an ahooks hook as a smell to replace,
 not merely tolerate - including when you are already editing nearby lines.
@@ -63,7 +107,10 @@ Apply ahooks to new code by default, and swap out raw-hook usages you are
 already touching. Do not open large standalone refactor diffs across untouched
 files unless asked.
 
-## TanStack for data, tables, and forms
+## TanStack for data, tables, and forms - React apps only
+
+Scope: React frontend apps (currently `apps/web`). Does **not** apply to the
+Node host.
 
 Use the TanStack family (stable releases only) for these three concerns. They
 are the default; reach for them rather than hand-rolling fetch/cache, table, or
@@ -94,4 +141,3 @@ it data from a TanStack Query result rather than ad hoc state.
 Use `@tanstack/react-form` for forms with validation, field-level state, or
 submit handling. Drive submission through a `useMutation` rather than a manual
 async handler. A single uncontrolled input with no validation does not need it.
-

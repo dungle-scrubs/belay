@@ -3,7 +3,7 @@
 Trevor V2 is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite +
 Effect); the host is `apps/agent-host` (Node + Effect). Both are Richter
 WebSocket participants. Per-directory `AGENTS.md` files (e.g.
-`apps/web/AGENTS.md`) layer additional rules; the rules below are project-wide.
+`apps/AGENTS.md`) layer additional rules; the rules below are project-wide.
 
 ## Repository visibility: PRIVATE - never make it public
 
