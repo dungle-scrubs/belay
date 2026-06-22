@@ -1,3 +1,5 @@
+import type { Model } from "@mariozechner/pi-ai";
+import { streamPiAi } from "./pi-ai";
 import type { ChatMessage, Provider, ProviderEvent, Readiness, ToolDef } from "./types";
 
 export interface LmStudioConfig {
@@ -6,43 +8,21 @@ export interface LmStudioConfig {
   readonly model: string;
 }
 
-/** Converts a host ChatMessage to the OpenAI chat-completions message shape. */
-function toOpenAiMessage(message: ChatMessage): Record<string, unknown> {
-  if (message.role === "tool") {
-    return { role: "tool", tool_call_id: message.toolCallId, content: message.content };
-  }
-  if (message.role === "assistant" && message.toolCalls?.length) {
-    return {
-      role: "assistant",
-      content: message.content || null,
-      tool_calls: message.toolCalls.map((call) => ({
-        id: call.id,
-        type: "function",
-        function: { name: call.name, arguments: call.arguments },
-      })),
-    };
-  }
-  return { role: message.role, content: message.content };
-}
+/** Context window assumed before the running model reports its own (tokens). */
+const DEFAULT_CONTEXT_WINDOW = 8192;
 
-interface OpenAiStreamChunk {
-  choices?: {
-    delta?: {
-      content?: string;
-      tool_calls?: {
-        index: number;
-        id?: string;
-        function?: { name?: string; arguments?: string };
-      }[];
-    };
-  }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-}
-
-/** Local LM Studio provider with OpenAI-compatible streaming + tool calling. */
+/**
+ * Local LM Studio provider. Streaming and tool calling go through pi-ai's
+ * openai-completions adapter (LM Studio speaks the OpenAI chat API). Load state
+ * (readiness/warm) and the real context window come from LM Studio's native
+ * /api/v0 endpoint, which pi-ai does not model.
+ */
 export class LmStudioProvider implements Provider {
   readonly id = "lmstudio";
   readonly model: string;
+  /** Local qwen thinking is binary (enable_thinking on/off); "off" = no reasoning. */
+  readonly reasoningLevels = ["off", "on"] as const;
+  readonly defaultReasoning = "off";
   private readonly url: string;
   private readonly native: string;
   /** Effective context window of the loaded model (tokens); learned from model info. */
@@ -65,6 +45,10 @@ export class LmStudioProvider implements Provider {
         loaded_context_length?: number;
         max_context_length?: number;
       };
+      // Report the *loaded* context - the window LM Studio actually serves - so the
+      // usage display and overflow detection match reality. To use the model's full
+      // ceiling, load qwen at that context in LM Studio (lms load -c <tokens>); this
+      // value, and max_completion_tokens with it, then follow automatically.
       this.contextWindow =
         body.loaded_context_length ?? body.max_context_length ?? this.contextWindow;
       return { ready: true, warm: body.state === "loaded" };
@@ -96,92 +80,35 @@ export class LmStudioProvider implements Provider {
   async *stream(
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
+    reasoning?: string,
   ): AsyncIterable<ProviderEvent> {
-    const response = await fetch(`${this.url}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: this.model,
-        stream: true,
-        stream_options: { include_usage: true },
-        messages: messages.map(toOpenAiMessage),
-        ...(tools.length > 0
-          ? { tools: tools.map((tool) => ({ type: "function", function: tool })) }
-          : {}),
-      }),
+    const contextWindow = (await this.ensureContextWindow()) || DEFAULT_CONTEXT_WINDOW;
+    // qwen is binary. The qwen thinking format sends `enable_thinking` derived from
+    // the reasoning level, so we always declare reasoning + that format and let the
+    // level decide: "off" -> enable_thinking:false (qwen thinks by default otherwise),
+    // anything else -> enable_thinking:true. thinkingFormat must be explicit since a
+    // localhost baseUrl gives pi-ai nothing to auto-detect from.
+    const thinking = reasoning !== undefined && reasoning !== "off";
+    const model: Model<"openai-completions"> = {
+      id: this.model,
+      name: this.model,
+      api: "openai-completions",
+      provider: "lmstudio",
+      baseUrl: this.url,
+      reasoning: true,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow,
+      maxTokens: contextWindow,
+      compat: { thinkingFormat: "qwen" },
+    };
+    // LM Studio ignores the key, but pi-ai requires a non-empty one. With the qwen
+    // format + model.reasoning, omitting the level (undefined) sends enable_thinking:
+    // false; "high" sends true. "off" isn't a pi-ai ThinkingLevel, so undefined is it.
+    yield* streamPiAi(model, messages, tools, {
+      apiKey: "lm-studio",
+      contextWindow,
+      reasoning: thinking ? "high" : undefined,
     });
-    if (!response.ok || !response.body) {
-      throw new Error(`LM Studio HTTP ${response.status}`);
-    }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
-    let firstTokenAt = 0;
-    const calls = new Map<number, { id: string; name: string; args: string }>();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) {
-          continue;
-        }
-        const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") {
-          continue;
-        }
-        try {
-          const chunk = JSON.parse(data) as OpenAiStreamChunk;
-          if (chunk.usage) {
-            usage = chunk.usage;
-          }
-          const delta = chunk.choices?.[0]?.delta;
-          if (firstTokenAt === 0 && (delta?.content || delta?.tool_calls?.length)) {
-            firstTokenAt = Date.now();
-          }
-          if (delta?.content) {
-            yield { type: "text", text: delta.content };
-          }
-          for (const toolCall of delta?.tool_calls ?? []) {
-            const entry = calls.get(toolCall.index) ?? { id: "", name: "", args: "" };
-            if (toolCall.id) {
-              entry.id = toolCall.id;
-            }
-            if (toolCall.function?.name) {
-              entry.name = toolCall.function.name;
-            }
-            if (toolCall.function?.arguments) {
-              entry.args += toolCall.function.arguments;
-            }
-            calls.set(toolCall.index, entry);
-          }
-        } catch {
-          // ignore partial or non-JSON SSE lines
-        }
-      }
-    }
-    for (const entry of calls.values()) {
-      yield {
-        type: "tool_call",
-        call: { id: entry.id || crypto.randomUUID(), name: entry.name, arguments: entry.args },
-      };
-    }
-    if (usage) {
-      yield {
-        type: "usage",
-        usage: {
-          input: usage.prompt_tokens ?? 0,
-          output: usage.completion_tokens ?? 0,
-          contextWindow: await this.ensureContextWindow(),
-          genMs: firstTokenAt ? Date.now() - firstTokenAt : 0,
-        },
-      };
-    }
   }
 }

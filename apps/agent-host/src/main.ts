@@ -121,14 +121,19 @@ async function publish(type: string, payload: Record<string, unknown>): Promise<
   }
 }
 
-/** Runs the agent loop for one turn, publishing text deltas and tool events. */
-async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]): Promise<void> {
+/** Runs the agent loop for one turn, publishing text/thinking deltas and tool events. */
+async function runTurn(
+  provider: Provider,
+  turnHistory: readonly ChatMessage[],
+  reasoning?: string,
+): Promise<void> {
   const runId = crypto.randomUUID();
   const { warm } = await provider.readiness();
   await publish("assistant.started", { runId, warm, model: provider.model, provider: provider.id });
 
   let pending = "";
   let full = "";
+  let pendingThinking = "";
   let usage: Usage | undefined;
   const flush = async (): Promise<void> => {
     if (pending) {
@@ -137,17 +142,31 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
       await publish("assistant.delta", { runId, text });
     }
   };
+  // Reasoning text rides its own event channel so the browser can show or hide it.
+  const flushThinking = async (): Promise<void> => {
+    if (pendingThinking) {
+      const text = pendingThinking;
+      pendingThinking = "";
+      await publish("assistant.thinking", { runId, text });
+    }
+  };
 
   try {
-    for await (const event of runAgent(provider, turnHistory)) {
+    for await (const event of runAgent(provider, turnHistory, reasoning)) {
       if (event.type === "text") {
         pending += event.text;
         full += event.text;
         if (pending.length >= DELTA_FLUSH_CHARS) {
           await flush();
         }
+      } else if (event.type === "thinking") {
+        pendingThinking += event.text;
+        if (pendingThinking.length >= DELTA_FLUSH_CHARS) {
+          await flushThinking();
+        }
       } else if (event.type === "tool_start") {
         await flush();
+        await flushThinking();
         await publish("tool.started", {
           runId,
           callId: event.call.id,
@@ -161,6 +180,12 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
           name: event.call.name,
           result: event.result.slice(0, 4000),
         });
+      } else if (event.type === "overflow") {
+        // Surface the overflow so the user sees why a turn was cut short. Graceful
+        // auto-recovery (compact/adjust and continue) is planned separately.
+        await flush();
+        await flushThinking();
+        await publish("assistant.overflow", { runId, reason: event.reason });
       } else {
         // input is the prompt size of the latest step (current context); output sums.
         usage = {
@@ -173,6 +198,7 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
     }
   } catch (error) {
     await flush();
+    await flushThinking();
     await publish("assistant.completed", {
       runId,
       text: full,
@@ -182,6 +208,7 @@ async function runTurn(provider: Provider, turnHistory: readonly ChatMessage[]):
     return;
   }
   await flush();
+  await flushThinking();
   await publish("assistant.completed", { runId, text: full, ...(usage ? { usage } : {}) });
 }
 
@@ -190,7 +217,9 @@ function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): vo
   if (event.type !== "user.message" || event.producerId === PRODUCER_ID || !lease.isLeader()) {
     return;
   }
-  runTurn(pickProvider(event.payload.provider), turnHistory).catch((error) =>
+  const reasoning =
+    typeof event.payload.reasoning === "string" ? event.payload.reasoning : undefined;
+  runTurn(pickProvider(event.payload.provider), turnHistory, reasoning).catch((error) =>
     console.error("turn error:", error),
   );
 }
@@ -223,10 +252,23 @@ function goLive(): void {
   publish("host.online", {
     providers: ["qwen", "gpt"],
     default: DEFAULT_PROVIDER,
+    // Per-provider model id + thinking options so the browser can render the right
+    // reasoning control (none / binary / graduated) for whichever model is chosen.
+    models: providerModels(),
     instanceId: INSTANCE_ID,
     cwd: abbrevPath(process.cwd()),
     workspace: abbrevPath(WORKSPACE_ROOT),
   }).catch(() => {});
+}
+
+/** Describes each selectable provider's model + reasoning options for the browser. */
+function providerModels(): Record<string, unknown> {
+  const describe = (provider: Provider) => ({
+    model: provider.model,
+    reasoningLevels: provider.reasoningLevels,
+    defaultReasoning: provider.defaultReasoning,
+  });
+  return { qwen: describe(providers.qwen), gpt: describe(providers.gpt) };
 }
 
 /** Connects to the session stream (replay-then-tail) with simple reconnect. */
@@ -266,7 +308,16 @@ function connect(): void {
     const message = envelope.event;
     if (message.type === "user.message" && message.producerId !== PRODUCER_ID) {
       const text = typeof message.payload.text === "string" ? message.payload.text : "";
-      history.push({ role: "user", content: text });
+      // Collapse consecutive user turns. Two user messages with no assistant turn
+      // between them means the earlier turn was abandoned/failed (it left no
+      // assistant entry), so it's stale - drop it and answer the latest prompt
+      // rather than feeding the model a pile of unanswered messages at once.
+      const last = history[history.length - 1];
+      if (last?.role === "user") {
+        history[history.length - 1] = { role: "user", content: text };
+      } else {
+        history.push({ role: "user", content: text });
+      }
       lastUserEvent = message;
       if (live) {
         respondTo(message, history.slice());

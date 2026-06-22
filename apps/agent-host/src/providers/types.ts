@@ -27,11 +27,17 @@ export interface Usage {
   readonly genMs: number;
 }
 
-/** One streamed event from a provider: assistant text, a tool call, or token usage. */
+/**
+ * One streamed event from a provider: assistant text, reasoning ("thinking") text,
+ * a tool call, or token usage. Thinking is the model's reasoning trace - kept on its
+ * own channel so callers can render or hide it without polluting the answer.
+ */
 export type ProviderEvent =
   | { readonly type: "text"; readonly text: string }
+  | { readonly type: "thinking"; readonly text: string }
   | { readonly type: "tool_call"; readonly call: ToolCall }
-  | { readonly type: "usage"; readonly usage: Usage };
+  | { readonly type: "usage"; readonly usage: Usage }
+  | { readonly type: "overflow"; readonly reason: string };
 
 /** One message in the conversation (user, assistant, or a tool result). */
 export interface ChatMessage {
@@ -45,12 +51,25 @@ export interface ChatMessage {
 /**
  * A model provider the host streams completions from. Readiness is per-adapter
  * (local providers report real load state; cloud is always warm). stream() runs
- * one model step over the conversation, emitting text and any tool calls.
+ * one model step over the conversation, emitting text, thinking, and any tool calls.
+ *
+ * `reasoningLevels` advertises the model's available thinking options, lowest to
+ * highest, for the UI to surface - which can be:
+ *   - non-existent (`[]`)            the model has no thinking; no control is shown
+ *   - binary       (`["off","on"]`)  on/off thinking (e.g. local qwen enable_thinking)
+ *   - graduated    (`["minimal",…]`) effort levels (e.g. GPT-5.x; "off" if disableable)
+ * The `reasoning` arg to stream() is one of those values; "off"/absent means none.
  */
 export interface Provider {
   readonly id: string;
   readonly model: string;
+  readonly reasoningLevels: readonly string[];
+  readonly defaultReasoning: string;
   readiness(): Promise<Readiness>;
   warm(): Promise<void>;
-  stream(messages: readonly ChatMessage[], tools: readonly ToolDef[]): AsyncIterable<ProviderEvent>;
+  stream(
+    messages: readonly ChatMessage[],
+    tools: readonly ToolDef[],
+    reasoning?: string,
+  ): AsyncIterable<ProviderEvent>;
 }
