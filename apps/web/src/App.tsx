@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SessionEvent } from "@trevor/richter";
-import { useLocalStorageState } from "ahooks";
+import { useInterval, useLocalStorageState } from "ahooks";
 import { type SubmitEvent, useState } from "react";
 import { ensureSession } from "./richter/client";
 import { useRichterSession } from "./richter/use-richter-session";
@@ -80,6 +80,60 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
   return messages;
 }
 
+type HostStatus = { present: boolean; leaderId: string | null; standbyCount: number };
+
+/** A standby pings continuously, so it counts as present only if seen this recently. */
+const HOST_RECENT_MS = 15000;
+
+/**
+ * Derives host presence from the lease's host.* events. The current leader is the
+ * host whose latest role is "leader" - shown as last-known, since a lone leader
+ * goes silent. A standby pings every heartbeat, so live standbys are those seen
+ * within HOST_RECENT_MS (excluding the leader); stale ids from dead hosts drop off.
+ */
+function hostStatus(events: readonly SessionEvent[], nowMs: number): HostStatus {
+  let present = false;
+  const role = new Map<string, string>();
+  const lastSeen = new Map<string, number>();
+  for (const event of events) {
+    if (event.type === "host.online") {
+      present = true;
+    }
+    if (
+      event.type === "host.online" ||
+      event.type === "host.hello" ||
+      event.type === "host.beat" ||
+      event.type === "host.role"
+    ) {
+      const id = event.payload.instanceId;
+      if (typeof id !== "string") {
+        continue;
+      }
+      const at = Date.parse(event.createdAt);
+      lastSeen.set(id, Number.isNaN(at) ? nowMs : at);
+      if (event.type === "host.role" && typeof event.payload.role === "string") {
+        role.set(id, event.payload.role);
+      }
+    }
+  }
+  let leaderId: string | null = null;
+  let leaderSeen = Number.NEGATIVE_INFINITY;
+  for (const [id, value] of role) {
+    const seen = lastSeen.get(id) ?? Number.NEGATIVE_INFINITY;
+    if (value === "leader" && seen >= leaderSeen) {
+      leaderSeen = seen;
+      leaderId = id;
+    }
+  }
+  let standbyCount = 0;
+  for (const [id, at] of lastSeen) {
+    if (id !== leaderId && nowMs - at < HOST_RECENT_MS) {
+      standbyCount += 1;
+    }
+  }
+  return { present, leaderId, standbyCount };
+}
+
 /** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
 function toolSummary(name: string, argsJson: string): string {
   let args: Record<string, unknown> = {};
@@ -114,7 +168,9 @@ export function App() {
   const { events, status, replayed, publish } = useRichterSession(sessionId);
   const transcript = toTranscript(events);
   const awaitingResponse = transcript.at(-1)?.kind === "user";
-  const hostSeen = events.some((event) => event.type === "host.online");
+  const [now, setNow] = useState(() => Date.now());
+  useInterval(() => setNow(Date.now()), 4000);
+  const host = hostStatus(events, now);
   const hostCommand =
     target === DEFAULT_SESSION
       ? "pnpm --filter @trevor/agent-host start"
@@ -151,9 +207,22 @@ export function App() {
         {replayed ? " · replayed" : ""} · {events.length} events
       </p>
 
-      {sessionId && !hostSeen ? (
-        <p style={{ color: "#a60", fontSize: "0.8rem" }}>
-          No host on this session yet. Start one: <code>{hostCommand}</code>
+      {sessionId ? (
+        <p style={{ fontSize: "0.8rem", margin: "0.2rem 0" }}>
+          {host.leaderId ? (
+            <span style={{ color: "#2a7" }}>
+              ● host active
+              {host.standbyCount > 0
+                ? ` (${host.leaderId.slice(0, 8)}) · ${host.standbyCount} standby`
+                : ""}
+            </span>
+          ) : host.present ? (
+            <span style={{ color: "#a60" }}>● host starting…</span>
+          ) : (
+            <span style={{ color: "#a60" }}>
+              ● no host on this session — start one: <code>{hostCommand}</code>
+            </span>
+          )}
         </p>
       ) : null}
 
