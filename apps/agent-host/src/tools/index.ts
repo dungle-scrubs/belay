@@ -1,6 +1,7 @@
 import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { classifyAlwaysPreventedBashCommand } from "./bash-safety";
 
 const execAsync = promisify(exec);
 const MAX_OUTPUT = 8000;
@@ -46,6 +47,10 @@ const bashTool: Tool = {
   },
   async execute(args) {
     const command = String(args.command ?? "");
+    const blocked = classifyAlwaysPreventedBashCommand(command, { workspaceRoot: process.cwd() });
+    if (blocked) {
+      return `refused: ${blocked}`;
+    }
     try {
       const { stdout, stderr } = await execAsync(command, {
         timeout: 30_000,
