@@ -18,7 +18,9 @@ in that moment - never infer or assume it.
 
 The **current plan** is [`.plans/host-rebuild/implementation.md`](./.plans/host-rebuild/implementation.md),
 with canonical decisions recorded in `.plans/host-rebuild/plan.db` (D-001 to
-D-020). When the plan and any other document disagree, **the plan wins** - the
+D-024; the 2026-06-22 desktop-shell addition - Phase 3: Tauri self-contained
+app, per-cwd host supervisor - is D-021 to D-024). When the plan and any other
+document disagree, **the plan wins** - the
 2026-06-22 browser/Richter pivot superseded the original Rust-TUI / stdio
 design, and much of the older material is historical context behind a
 superseding header.

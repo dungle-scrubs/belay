@@ -70,6 +70,7 @@ through Richter's durable, ordered event log. Nothing spawns the host; there is 
 |---|---|---|
 | A-002 | Effect v3 viable for the project horizon | recorded (D-001) |
 | A-004 | Interrupting an Effect fiber tears down the pi-ai stream | untested; validated at Slice 2 |
+| A-005 | Node+Effect host packages as a spawnable artifact (compiled binary or bundled Node) for a Tauri sidecar | untested; validated at Phase 3 (re-opens A-001) |
 | ~~A-001~~ | ~~Effect under `bun --compile`~~ | retired - no Bun binary (D-018) |
 | ~~A-003~~ | ~~copied Rust TUI builds unchanged~~ | retired - no TUI (D-013) |
 
@@ -100,6 +101,33 @@ interpolation H-175) remains valid as the post-S3 backlog, re-sequenced onto the
 <!-- D-003 --> Multi-user features (`controlLease.*`, teams, `workspace.acquire`, multi-client identity)
 stay dropped; the capability-scoped filesystem lease (D-019) is the only authority mechanism.
 
+### Phase 3 - Desktop shell (later) <!-- D-021 -->
+Later phase, after the Phase 2+ host backlog. Captured here as architecture + decisions; **not milestone-
+decomposed yet** - decompose at phase entry. Package `apps/web` as a **self-contained desktop app**: one
+window managing many sessions (sidebar/tabs), each session bound to a cwd like a single-process Claude Code
+harness; different views/devices may subscribe to the same session (lease-free Richter clients).
+
+- <!-- D-021 --> **Shell = Tauri v2.** The OS webview renders `apps/web`; the Tauri (Rust) core is the
+  **host supervisor**. Electron (built-in Node) was considered and rejected for heft/coupling.
+- <!-- D-022 --> **One host runtime per session/cwd.** The supervisor spawns / restarts / tears down one host
+  process per open session; a single multiplexing host service is rejected. Clean 1:1 with the D-019
+  per-session filesystem-authority lease. Multi-view fan-out is unaffected - extra views are lease-free
+  Richter clients on the same `/sessions/{id}/stream`.
+- <!-- D-023 --> **Supervision is not communication (D-014 amended).** The Tauri core MAY spawn hosts, but the
+  web/UI client still talks only to Richter. Spawning is a lifecycle concern; no direct host-web
+  *communication* boundary is introduced, so D-014's decoupling holds.
+- <!-- D-024 --> **Spawnable host artifact required.** Tauri spawns the host as a sidecar (`externalBin`), so
+  the Node+Effect host must ship as a standalone binary or with a bundled Node. This **elevates the D-018
+  compiled-host from optional to a dependency of this phase**; the mechanism (bun --compile / Node SEA / pkg
+  vs bundled Node) is open and decided at phase entry (A-005, re-opening retired A-001).
+
+**Packaging deltas in `apps/web`** (apply at phase entry, not now):
+- The dev-only Vite proxy (`/sessions` -> `localhost:3025`, `ws: true`) disappears in a packaged app. The
+  Richter client must target an **absolute, runtime-configurable Richter URL** (local Docker vs mac-mini over
+  Tailscale), injected by the shell rather than baked at build.
+- The webview **CSP / Tauri capability allowlist** must permit the Richter REST + WS origin.
+- Set Vite `base: './'` (or use the Tauri asset protocol) so the built bundle loads outside an HTTP dev server.
+
 ## Risks
 - **Richter coupling.** Trevor depends on a running Richter; mitigated by Docker-local dev and Richter being
   generic (no trevor-specific changes - it attaches as a participant).
@@ -107,6 +135,11 @@ stay dropped; the capability-scoped filesystem lease (D-019) is the only authori
   post-cancel delta suppression.
 - **Effect-dialect drift.** Keep Effect to justified boundaries (Schema decode, host control plane); plain
   React/TS elsewhere so an Effect island does not fight React.
+- **Same-cwd contention (Phase 3, D-022).** "Multiple versions of the same cwd" lets two sessions hold
+  filesystem authority over one directory at once (two harnesses, like two Claude Code instances in one repo,
+  can stomp each other). The D-019 lease is per-session, not per-cwd, so it does not arbitrate cwd-level
+  contention. Accepted as a deliberate user action; revisit with a cwd-level advisory lock if it bites.
 
 ---
 _Last re-pointed 2026-06-22 (browser/Richter pivot, D-013…D-020). Supersedes the original Rust-TUI/stdio plan._
+_Desktop-shell Phase 3 added 2026-06-22 (Tauri self-contained app, per-cwd host supervisor, D-021…D-024 / A-005)._
