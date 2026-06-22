@@ -80,6 +80,20 @@ function toTranscript(events: readonly SessionEvent[]): Message[] {
   return messages;
 }
 
+/** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
+function toolSummary(name: string, argsJson: string): string {
+  let args: Record<string, unknown> = {};
+  try {
+    args = JSON.parse(argsJson || "{}") as Record<string, unknown>;
+  } catch {
+    return "";
+  }
+  const primary =
+    name === "bash" ? args.command : name === "grep" || name === "glob" ? args.pattern : args.path;
+  const text = typeof primary === "string" ? primary : argsJson;
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+}
+
 export function App() {
   const target = new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
   const sessionQuery = useQuery({
@@ -146,7 +160,7 @@ export function App() {
       <div>
         {transcript.map((message) => {
           if (message.kind === "tool") {
-            const args = message.args.length > 60 ? `${message.args.slice(0, 60)}…` : message.args;
+            const args = toolSummary(message.name, message.args);
             return (
               <div
                 key={message.id}
