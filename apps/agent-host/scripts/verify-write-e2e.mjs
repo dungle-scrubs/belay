@@ -33,7 +33,10 @@ const done = new Promise((resolve, reject) => {
   resolveDone = resolve;
   rejectDone = reject;
 });
-const timeout = setTimeout(() => rejectDone(new Error("timeout waiting for assistant.completed")), 180000);
+const timeout = setTimeout(
+  () => rejectDone(new Error("timeout waiting for assistant.completed")),
+  180000,
+);
 
 ws.addEventListener("error", (error) => rejectDone(error));
 ws.addEventListener("message", (message) => {
@@ -57,8 +60,12 @@ ws.addEventListener("message", (message) => {
 
 await new Promise((resolve) => ws.addEventListener("open", resolve));
 await new Promise((resolve, reject) => {
-  const onlineTimeout = setTimeout(() => reject(new Error("timeout waiting for host.online")), 60000);
-  const check = () => (hostOnline ? (clearTimeout(onlineTimeout), resolve()) : setTimeout(check, 100));
+  const onlineTimeout = setTimeout(
+    () => reject(new Error("timeout waiting for host.online")),
+    60000,
+  );
+  const check = () =>
+    hostOnline ? (clearTimeout(onlineTimeout), resolve()) : setTimeout(check, 100);
   check();
 });
 
@@ -90,6 +97,8 @@ console.log(`file contents: ${JSON.stringify(onDisk.trim())}`);
 if (tools.includes("write") && onDisk.includes("trevor-write-ok")) {
   console.log(`PASS [${PROVIDER}]: model wrote the file via the write tool`);
 } else {
-  console.error(`FAIL [${PROVIDER}]: write used=${tools.includes("write")}, marker=${onDisk.includes("trevor-write-ok")}`);
+  console.error(
+    `FAIL [${PROVIDER}]: write used=${tools.includes("write")}, marker=${onDisk.includes("trevor-write-ok")}`,
+  );
   process.exit(1);
 }
