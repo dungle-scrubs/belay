@@ -51,6 +51,8 @@ through Richter's durable, ordered event log. Nothing spawns the host; there is 
 | <!-- D-007 --> Roles = main + ghost | Each an ordered model array (offline -> local fallback) |
 | <!-- D-010 --> Provider abort unreliable | Race-and-abandon + per-runId post-cancel delta suppression (Slice 2) |
 | <!-- D-012 --> Shell interpolation in skills/commands | New host capability H-175, gated; later slice |
+| <!-- D-025 --> Durable sessions are linear; branch = fork to new session | No in-log conversation tree; "go back" forks a new linear session seeded from a prefix |
+| <!-- D-028 --> Artifacts in a content-addressed blob store beside Richter | Events carry `{ kind, mimeType, size, hash }` refs, never bytes; Richter never stores blobs |
 
 ### Module boundaries
 
@@ -63,6 +65,37 @@ through Richter's durable, ordered event log. Nothing spawns the host; there is 
 - **Legacy (superseded):** `packages/protocol` (old host-TUI wire), `packages/agent-host` (TUI-embedded
   JSON), `FEATURES.md` sections 1/5/6/7 are superseded; the TUI-era packages have been removed. The host FEATURE inventory `FEATURES.md`
   section 4 (H-001…H-174) remains the backlog.
+
+### Branching model and artifacts <!-- D-025 -->
+
+<!-- D-025 --> **Durable sessions are linear.** A Richter session is one append-only timeline every
+participant replays and agrees on. "Branch / go back and try again" is **not** an in-log conversation
+tree - it is a **fork to a new session**: a child seeded from the parent's events up to a chosen point,
+continued linearly. An in-log tree would retroactively invalidate timeline slices that side-effecting
+participants already acted on (a memory agent's DB writes, a sent email), and an append-only log cannot
+undo external side effects; forking keeps every session a complete, never-mutated reality, so no
+participant reconciles or retracts.
+
+- <!-- D-026 --> **Lineage is a Trevor event, not Richter.** The child's genesis carries
+  `session.forkedFrom { parentSessionId, atSeq }`. Richter gains no `parentSessionId` column, no fork
+  endpoint, no lineage fields (D-015/D-017 hold); the fork tree is derivable from `forkedFrom` events.
+- <!-- D-027 --> **Fork copies the prefix, not references it.** Forking at seq N re-appends the parent
+  events <= N into the child, each tagged `origin { sessionId, eventId, seq }`, then writes a
+  `forkReady` marker (readers ignore the child until they see it). Copy makes the child self-contained,
+  so naive/unknown participants treat it as an ordinary linear session; origin tags let smart
+  cross-session participants dedupe; reference-only would force every reader to be fork-aware.
+- <!-- D-028 --> **Artifacts live in a content-addressed blob store beside Richter.** Images/docs/binary
+  artifacts are stored by content hash in a blob store co-located with the durable Richter (mac-mini over
+  Tailscale, same durability/reach); events carry `{ kind, mimeType, size, hash }` references, never
+  bytes. Richter never sees blobs. Content-addressing dedupes identical bytes once, so forks copy only
+  references and share blobs for free; co-location preserves multi-device replay. Tiny artifacts may ride
+  inline.
+- <!-- D-029 --> **Participant fork-awareness is opt-in.** Stateless providers (LM Studio, pi-ai) get the
+  active linear history and need no fork awareness. Stateful participants wanting cross-fork continuity
+  (memory agent, tree navigator) implement an inheritance contract: read `forkedFrom`, walk lineage,
+  inherit ancestor state up to each fork seq, dedupe by origin/id, never retract. Non-opting participants
+  treat each session as an independent linear log - correct with zero changes, since no session is ever
+  retroactively changed.
 
 ## Assumptions
 
@@ -138,6 +171,30 @@ harness; different views/devices may subscribe to the same session (lease-free R
 - The webview **CSP / Tauri capability allowlist** must permit the Richter REST + WS origin.
 - Set Vite `base: './'` (or use the Tauri asset protocol) so the built bundle loads outside an HTTP dev server.
 
+### Phase 4 - Artifacts, then forkable sessions (later) <!-- D-030 -->
+Post-S3 backlog; **not milestone-decomposed yet** - decompose at phase entry. <!-- D-030 --> Sequenced
+**blobs before forking**: the artifact pipeline is self-contained, independently useful (the agent can
+consume images/docs with no forking), and is the content-addressed dedup foundation that later makes
+fork-copy cheap.
+
+1. **Artifacts / blob store.** <!-- D-028 --> New content-addressed blob store deployed beside Richter
+   (PUT bytes -> hash, GET hash -> bytes), reachable over Tailscale with the same durability as the log.
+   Host gains a blob client (write bytes + emit a `{ kind, mimeType, size, hash }` reference; fetch bytes
+   when the agent consumes one) and provider artifact plumbing (resolve references into image/file parts
+   for LM Studio / pi-ai). Web gains upload (drop -> PUT -> reference in `user.message`) and
+   render-by-hash. Protocol grows the artifact reference shape.
+2. **Forkable sessions.** Built on top. The **host message-identity refactor is the load-bearing piece** -
+   stable per-message ids and a clean "build a fresh linear session from a prefix" path are the
+   prerequisite for fork-at-a-point (touches the linear-history assumptions in the loop/transcript).
+   Then: the <!-- D-026 --> `session.forkedFrom` + <!-- D-027 --> `forkReady` events and `origin` tags
+   (protocol), the host fork operation (create session, copy prefix with origin tags, mark ready), a web
+   "branch from here" affordance, and a session/tree navigator built from `forkedFrom` events (dovetails
+   with the Phase 3 desktop shell's one-window-many-sessions view). Stateful participants adopt the
+   <!-- D-029 --> inheritance contract.
+3. **Richter (optional, generic only).** No required change; everything uses existing primitives (create
+   session, append events, replay). Add a generic **batch-append** endpoint only if prefix-copy latency
+   demands atomic/fast copy - never a `parentSessionId` column or a fork/blob feature in Richter.
+
 ## Risks
 - **Richter coupling.** Trevor depends on a running Richter; mitigated by Docker-local dev and Richter being
   generic (no trevor-specific changes - it attaches as a participant).
@@ -155,3 +212,4 @@ harness; different views/devices may subscribe to the same session (lease-free R
 ---
 _Last re-pointed 2026-06-22 (browser/Richter pivot, D-013…D-020). Supersedes the original Rust-TUI/stdio plan._
 _Desktop-shell Phase 3 added 2026-06-22 (Tauri self-contained app, per-cwd host supervisor, D-021…D-024 / A-005)._
+_Pass 4 added 2026-06-23 (forkable durable sessions + content-addressed artifacts, D-025…D-030)._
