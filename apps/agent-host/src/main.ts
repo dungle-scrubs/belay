@@ -18,6 +18,7 @@ import {
   describeProviders,
   pickProvider,
 } from "./providers";
+import { taskRegistry } from "./tasks";
 import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
 
@@ -70,6 +71,12 @@ let deferredUserEvents: SessionEvent[] = [];
 function emit(event: TrevorEventInput): Promise<void> {
   return publishEvent(SERVICE_URL, SESSION_ID, { ...event, producerId: PRODUCER_ID });
 }
+
+// Every task_create/task_update mutates the shared registry; publish the new
+// checklist so the UI updates and any replay/standby can restore from it.
+taskRegistry.onChange(() => {
+  emit(events.tasksCurrent({ tasks: taskRegistry.snapshot() })).catch(() => {});
+});
 
 /** Lease timings are overridable via env so tests can run fast. */
 function leaseOptions() {
@@ -278,6 +285,13 @@ function handleEvent(message: SessionEvent): void {
       const { command, args } = decoded;
       console.log(`command: ${command}${args ? ` ${args}` : ""}`);
       runCommand(command, args).catch((error) => console.error("command error:", error));
+    }
+  } else if (decoded.type === "tasks.current") {
+    // Restore the checklist from the log on replay, and keep standbys in sync for
+    // failover. The live leader owns the registry (it mutates it directly), so it
+    // ignores the read-back of its own snapshot to avoid clobbering newer edits.
+    if (!live || !lease.isLeader()) {
+      taskRegistry.load(decoded.tasks);
     }
   } else if (live && (decoded.type === "host.beat" || decoded.type === "host.hello")) {
     if (decoded.instanceId) {

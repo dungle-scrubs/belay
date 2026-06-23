@@ -1,5 +1,6 @@
 import { buildProcessTool } from "../processes";
 import { buildSkillTool, discoverSkills } from "../skills";
+import { buildTaskTools } from "../tasks";
 import { bashTool } from "./bash";
 import { editTool } from "./edit";
 import { globTool } from "./glob";
@@ -16,6 +17,7 @@ const FILE_TOOLS: readonly Tool[] = [
   globTool,
   grepTool,
   buildProcessTool(),
+  ...buildTaskTools(),
 ];
 
 // The skill tool is added only when the library is non-empty, so an empty skills

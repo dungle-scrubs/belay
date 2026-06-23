@@ -1,3 +1,4 @@
+import { taskRegistry } from "../tasks";
 import { WORKSPACE_ROOT } from "../tools/workspace";
 import type { ToolDef } from "./types";
 
@@ -26,6 +27,15 @@ const TOOL_SELECTION_GUIDANCE = [
   "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
   "edit, glob, and grep are scoped to the workspace root; use paths relative to it. read, write, and bash use the host working directory and accept absolute paths.",
   "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
+] as const;
+
+/** How to maintain the working checklist (ported from V1's task guidance). */
+const TASK_GUIDANCE = [
+  "For multi-step work, track it as a checklist with task_create and task_update; skip the checklist for trivial single-step requests.",
+  "Mark a task in_progress when you start it and completed the moment it is done; keep exactly one task in_progress at a time.",
+  "Retire tasks that are no longer relevant or were superseded with task_update status deleted; on a new topic, delete stale tasks and start a fresh list rather than extending a finished one.",
+  "Completing the final open task clears the checklist automatically - do not try to clear it by hand.",
+  "Never create fake or demo tasks; if asked for an example task list, render it as ordinary text instead of real task records.",
 ] as const;
 
 /** Guardrails that keep tool calls grounded in real paths instead of placeholders. */
@@ -100,11 +110,19 @@ export function buildSystemPrompt(
   const guidance = [
     ...CODING_GUIDANCE,
     ...TOOL_SELECTION_GUIDANCE,
+    ...TASK_GUIDANCE,
     ...REPO_GUARDRAILS,
     ...RESPONSE_CALIBRATION_GUIDANCE,
   ].join("\n");
 
-  return [IDENTITY, executionContext(workspaceRoot, cwd), toolInventory(tools), guidance].join(
-    "\n\n",
-  );
+  // The live checklist is re-rendered every turn, so the model's plan survives
+  // history compaction instead of living only in the (compactable) transcript.
+  const checklist = taskRegistry.renderForPrompt();
+  return [
+    IDENTITY,
+    executionContext(workspaceRoot, cwd),
+    toolInventory(tools),
+    guidance,
+    ...(checklist ? [checklist] : []),
+  ].join("\n\n");
 }
