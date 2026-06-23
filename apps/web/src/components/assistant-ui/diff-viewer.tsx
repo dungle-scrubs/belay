@@ -183,7 +183,7 @@ const diffLineTextVariants = cva("", {
     type: {
       add: "text-smui-green",
       del: "text-smui-red",
-      normal: "",
+      normal: "text-muted-foreground",
       empty: "",
     },
   },
@@ -440,6 +440,7 @@ export type DiffViewerProps = Partial<SyntaxHighlighterProps> &
     showLineNumbers?: boolean;
     showIcon?: boolean;
     showStats?: boolean;
+    showHeader?: boolean;
     className?: string;
   };
 
@@ -452,6 +453,7 @@ function DiffViewer({
   showLineNumbers = true,
   showIcon = true,
   showStats = true,
+  showHeader = true,
   variant,
   size,
   className,
@@ -501,14 +503,16 @@ function DiffViewer({
     >
       {parsedFiles.map((file, fileIndex) => (
         <div key={fileIndex} data-slot="diff-viewer-file">
-          <DiffViewerHeader
-            oldName={file.oldName}
-            newName={file.newName}
-            additions={file.additions}
-            deletions={file.deletions}
-            showIcon={showIcon}
-            showStats={showStats}
-          />
+          {showHeader ? (
+            <DiffViewerHeader
+              oldName={file.oldName}
+              newName={file.newName}
+              additions={file.additions}
+              deletions={file.deletions}
+              showIcon={showIcon}
+              showStats={showStats}
+            />
+          ) : null}
           <div data-slot="diff-viewer-content" className="overflow-x-auto">
             {viewMode === "split"
               ? pairLinesForSplit(file.lines).map((pair, pairIndex) => (

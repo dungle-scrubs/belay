@@ -22,6 +22,7 @@ import {
   ToolCall,
   WorkingIndicator,
 } from "@/components/chat/message";
+import { ToolDiff } from "@/components/chat/tool-diff";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -83,6 +84,16 @@ function Md({ text, muted = false }: { text: string; muted?: boolean }) {
       <Markdown text={text} muted={muted} />
     </div>
   );
+}
+
+// Tool-call arguments arrive as a JSON string; parse defensively (a streaming or
+// malformed call yields {}).
+function parseToolArgs(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 export function App() {
@@ -390,6 +401,37 @@ export function App() {
         {replayed ? (
           <div className="flex flex-col gap-8 fade-in animate-in duration-150">
             {transcript.map((message) => {
+              // write/edit render as a code diff (up to 3 lines of subdued context).
+              if (
+                message.kind === "tool" &&
+                (message.name === "write" || message.name === "edit")
+              ) {
+                const a = parseToolArgs(message.args);
+                const path = typeof a.path === "string" ? a.path : "";
+                if (path) {
+                  const status = message.done ? "done" : "running";
+                  return message.name === "write" ? (
+                    <ToolDiff
+                      key={message.id}
+                      className="pl-3.5"
+                      tool="write"
+                      path={path}
+                      newText={typeof a.content === "string" ? a.content : ""}
+                      status={status}
+                    />
+                  ) : (
+                    <ToolDiff
+                      key={message.id}
+                      className="pl-3.5"
+                      tool="edit"
+                      path={path}
+                      oldText={typeof a.old === "string" ? a.old : ""}
+                      newText={typeof a.new === "string" ? a.new : ""}
+                      status={status}
+                    />
+                  );
+                }
+              }
               if (message.kind === "tool") {
                 return (
                   <ToolCall
