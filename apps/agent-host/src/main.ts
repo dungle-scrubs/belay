@@ -10,6 +10,7 @@ import {
 } from "@trevor/richter";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
+import { supervisor } from "./processes";
 import {
   buildProviders,
   type ChatMessage,
@@ -321,6 +322,15 @@ function connect(): void {
         setTimeout(connect, 1000);
       }
     },
+  });
+}
+
+// Background processes are children of this host; SIGTERM them on shutdown so a
+// Ctrl-C doesn't leave dev servers or watchers orphaned.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    supervisor.killAll();
+    process.exit(0);
   });
 }
 
