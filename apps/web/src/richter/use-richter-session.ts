@@ -8,6 +8,7 @@ export interface RichterSession {
   readonly replayed: boolean;
   readonly publish: (text: string, provider: string, reasoning?: string) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
+  readonly command: (command: string, args: string) => Promise<void>;
 }
 
 /** Subscribes to a Richter session: replay-then-tail into state, plus publish. */
@@ -59,5 +60,19 @@ export function useRichterSession(sessionId: string | null): RichterSession {
     [sessionId],
   );
 
-  return { events, status, replayed, publish, cancel };
+  // Immediate command lane: route a slash command to the host instead of the model.
+  const command = useCallback(
+    async (command: string, args: string) => {
+      if (!sessionId) {
+        return;
+      }
+      await publishEvent(sessionId, {
+        producerId: "trevor-web",
+        ...richterEvents.userCommand({ command, args }),
+      });
+    },
+    [sessionId],
+  );
+
+  return { events, status, replayed, publish, cancel, command };
 }

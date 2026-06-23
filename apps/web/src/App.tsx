@@ -1,13 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { type SubmitEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type SubmitEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   activeRunId,
+  commandsFrom,
   FALLBACK_MODELS,
   fmtCtx,
   fmtTokens,
   hostStatus,
   isOverflowError,
+  parseCommand,
   providerModelsFrom,
   QWEN_FALLBACK,
   toolSummary,
@@ -61,7 +70,7 @@ export function App() {
   });
   const [draft, setDraft] = useState("");
 
-  const { events, status, replayed, publish, cancel } = useRichterSession(sessionId);
+  const { events, status, replayed, publish, cancel, command } = useRichterSession(sessionId);
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
@@ -72,6 +81,29 @@ export function App() {
   const host = useMemo(() => hostStatus(events, now), [events, now]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
   const active = useMemo(() => activeRunId(events), [events]);
+
+  // Immediate host commands the host announced, plus the set of names used to tell a
+  // command from an ordinary prompt at submit time.
+  const commands = useMemo(() => commandsFrom(events), [events]);
+  const commandNames = useMemo(() => new Set(commands.map((c) => c.name)), [commands]);
+  // Slash menu: open while the draft is a bare "/token" (no space yet) with matches,
+  // unless Esc dismissed it for exactly this text. menuIndex is the highlighted row.
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [menuDismissedFor, setMenuDismissedFor] = useState<string | null>(null);
+  const slashQuery = draft.startsWith("/") && !draft.includes(" ") ? draft : null;
+  const menuMatches = useMemo(
+    () => (slashQuery ? commands.filter((c) => c.name.startsWith(slashQuery)) : []),
+    [slashQuery, commands],
+  );
+  const menuOpen = menuMatches.length > 0 && slashQuery !== null && draft !== menuDismissedFor;
+  const menuIdx = Math.min(menuIndex, menuMatches.length - 1);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset highlight when the filter changes.
+  useEffect(() => setMenuIndex(0), [slashQuery]);
+  const acceptCommand = (name: string) => {
+    setDraft(`${name} `);
+    inputRef.current?.focus();
+  };
 
   // Local send queue: a prompt submitted while a turn is in flight waits here and is
   // published only once the session is idle, so the host never receives two prompts
@@ -100,12 +132,19 @@ export function App() {
       ? "pnpm --filter @trevor/agent-host start"
       : `SESSION_ID=${target} pnpm --filter @trevor/agent-host start`;
 
-  // Submitting always enqueues; the drain effect publishes when idle. This is what
-  // makes a second prompt during a turn wait its turn instead of firing immediately.
+  // A known slash command routes to the immediate host lane (runs now, bypassing the
+  // model and the queue). Everything else enqueues; the drain effect publishes when
+  // idle, so a second prompt during a turn waits its turn instead of firing at once.
   const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = draft.trim();
     if (!text) {
+      return;
+    }
+    const cmd = parseCommand(text, commandNames);
+    if (cmd) {
+      setDraft("");
+      void command(cmd.command, cmd.args);
       return;
     }
     setDraft("");
@@ -118,6 +157,36 @@ export function App() {
         reasoning: reasoning || undefined,
       },
     ]);
+  };
+
+  // Slash-menu key handling on the composer, active only while the menu is open:
+  // arrows move the highlight, Tab/Enter complete it, Esc dismisses (and is swallowed
+  // so the window ESC cancel/steer handler doesn't also fire). An exact match + Enter
+  // falls through to submit, so a fully-typed command runs on one Enter.
+  const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    const selected = menuOpen ? menuMatches[menuIdx] : undefined;
+    if (!selected) {
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setMenuIndex((i) => (i + 1) % menuMatches.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setMenuIndex((i) => (i - 1 + menuMatches.length) % menuMatches.length);
+    } else if (event.key === "Tab") {
+      event.preventDefault();
+      acceptCommand(selected.name);
+    } else if (event.key === "Enter") {
+      if (selected.name !== draft) {
+        event.preventDefault();
+        acceptCommand(selected.name);
+      }
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuDismissedFor(draft);
+    }
   };
 
   // Release the in-flight latch when a turn ends (busy goes high then low), so the
@@ -197,255 +266,377 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The composer is pinned to the bottom and the log scrolls above it. Auto-stick to
+  // the newest line as content grows, unless the user has scrolled up to read back.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [stickToBottom, setStickToBottom] = useState(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-pin on each new event/queue entry.
+  useEffect(() => {
+    if (stickToBottom && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [events, queue, stickToBottom]);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (el) {
+      setStickToBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
+    }
+  };
+
   return (
     <main
-      style={{ maxWidth: 760, margin: "2rem auto", padding: "0 1rem", fontFamily: "system-ui" }}
+      style={{
+        maxWidth: 760,
+        margin: "0 auto",
+        padding: "0 1rem",
+        fontFamily: "system-ui",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
-      <header
-        style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
-      >
-        <h1>Trevor</h1>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.4rem",
-            alignItems: "flex-end",
-          }}
+      <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: "auto" }}>
+        <header
+          style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
         >
-          <select
-            value={activeProvider}
-            onChange={(event) => setProvider(event.target.value)}
-            style={{ padding: "0.3rem 0.4rem" }}
-          >
-            {/* Options come from the host's announced providers, so adding one host-side
-                surfaces here with no UI edit; the fallback covers the pre-announce window. */}
-            {Object.entries(hostModels).map(([key, meta]) => (
-              <option key={key} value={key}>
-                {meta.label}
-              </option>
-            ))}
-          </select>
-
-          {modelMeta.reasoningLevels.length > 0 ? (
-            <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-              <span style={{ fontSize: "0.7rem", color: "#999" }}>reasoning</span>
-              {modelMeta.reasoningLevels.map((level) => {
-                const active = level === reasoning;
-                return (
-                  <button
-                    key={level}
-                    type="button"
-                    onClick={() => setReasoning(level)}
-                    style={{
-                      fontSize: "0.72rem",
-                      padding: "0.15rem 0.4rem",
-                      borderRadius: 4,
-                      border: active ? "1px solid #2a7" : "1px solid #ccc",
-                      background: active ? "#2a7" : "#fff",
-                      color: active ? "#fff" : "#555",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {level}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          <label
+          <h1>Trevor</h1>
+          <div
             style={{
-              fontSize: "0.72rem",
-              color: "#777",
               display: "flex",
-              gap: "0.3rem",
-              alignItems: "center",
+              flexDirection: "column",
+              gap: "0.4rem",
+              alignItems: "flex-end",
             }}
           >
-            <input
-              type="checkbox"
-              checked={showThinkingOn}
-              onChange={(event) => setShowThinking(event.target.checked)}
-            />
-            show thinking
-          </label>
-        </div>
-      </header>
+            <select
+              value={activeProvider}
+              onChange={(event) => setProvider(event.target.value)}
+              style={{ padding: "0.3rem 0.4rem" }}
+            >
+              {/* Options come from the host's announced providers, so adding one host-side
+                surfaces here with no UI edit; the fallback covers the pre-announce window. */}
+              {Object.entries(hostModels).map(([key, meta]) => (
+                <option key={key} value={key}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
 
-      <p style={{ color: "#666" }}>
-        session <code>{target}</code> · {status}
-        {replayed ? " · replayed" : ""} · {events.length} events
-      </p>
+            {modelMeta.reasoningLevels.length > 0 ? (
+              <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+                <span style={{ fontSize: "0.7rem", color: "#999" }}>reasoning</span>
+                {modelMeta.reasoningLevels.map((level) => {
+                  const active = level === reasoning;
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setReasoning(level)}
+                      style={{
+                        fontSize: "0.72rem",
+                        padding: "0.15rem 0.4rem",
+                        borderRadius: 4,
+                        border: active ? "1px solid #2a7" : "1px solid #ccc",
+                        background: active ? "#2a7" : "#fff",
+                        color: active ? "#fff" : "#555",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {level}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
 
-      {sessionId ? (
-        <p style={{ fontSize: "0.8rem", margin: "0.2rem 0" }}>
-          {host.leaderId ? (
-            <span style={{ color: "#2a7" }}>
-              ● host active
-              {host.standbyCount > 0
-                ? ` (${host.leaderId.slice(0, 8)}) · ${host.standbyCount} standby`
-                : ""}
-            </span>
-          ) : host.present ? (
-            <span style={{ color: "#a60" }}>● host starting…</span>
-          ) : (
-            <span style={{ color: "#a60" }}>
-              ● no host on this session — start one: <code>{hostCommand}</code>
-            </span>
-          )}
+            <label
+              style={{
+                fontSize: "0.72rem",
+                color: "#777",
+                display: "flex",
+                gap: "0.3rem",
+                alignItems: "center",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showThinkingOn}
+                onChange={(event) => setShowThinking(event.target.checked)}
+              />
+              show thinking
+            </label>
+          </div>
+        </header>
+
+        <p style={{ color: "#666" }}>
+          session <code>{target}</code> · {status}
+          {replayed ? " · replayed" : ""} · {events.length} events
         </p>
-      ) : null}
 
-      {host.workspace ? (
-        <p style={{ color: "#888", fontSize: "0.78rem", margin: "0.2rem 0" }}>
-          workspace <code>{host.workspace}</code>
-          {host.cwd && host.cwd !== host.workspace ? (
-            <>
-              {" · cwd "}
-              <code>{host.cwd}</code>
-            </>
-          ) : null}
-        </p>
-      ) : null}
+        {sessionId ? (
+          <p style={{ fontSize: "0.8rem", margin: "0.2rem 0" }}>
+            {host.leaderId ? (
+              <span style={{ color: "#2a7" }}>
+                ● host active
+                {host.standbyCount > 0
+                  ? ` (${host.leaderId.slice(0, 8)}) · ${host.standbyCount} standby`
+                  : ""}
+              </span>
+            ) : host.present ? (
+              <span style={{ color: "#a60" }}>● host starting…</span>
+            ) : (
+              <span style={{ color: "#a60" }}>
+                ● no host on this session — start one: <code>{hostCommand}</code>
+              </span>
+            )}
+          </p>
+        ) : null}
 
-      <div>
-        {transcript.map((message) => {
-          if (message.kind === "tool") {
-            const args = toolSummary(message.name, message.args);
-            return (
-              <div
-                key={message.id}
-                style={{
-                  margin: "0.4rem 0",
-                  fontSize: "0.78rem",
-                  color: "#777",
-                  fontFamily: "ui-monospace, monospace",
-                }}
-              >
-                🔧 {message.name}({args}) {message.done ? "✓" : "…"}
-              </div>
-            );
-          }
-          const thinking =
-            message.kind === "assistant" && showThinkingOn && message.thinking
-              ? message.thinking
-              : null;
-          const overflowNote =
-            message.kind === "assistant" && message.overflow ? (
-              <div style={{ fontSize: "0.75rem", color: "#b26a00", margin: "0.3rem 0" }}>
-                ⚠ context overflow — {message.overflow}
-              </div>
-            ) : null;
-          const errorNote =
-            message.kind === "assistant" && message.error ? (
-              <div style={{ fontSize: "0.75rem", color: "#c0392b", margin: "0.3rem 0" }}>
-                ⚠{" "}
-                {isOverflowError(message.error)
-                  ? `context overflow — ${message.error}`
-                  : message.error}
-              </div>
-            ) : null;
-          const cancelledNote =
-            message.kind === "assistant" && message.cancelled ? (
-              <div style={{ fontSize: "0.75rem", color: "#888", margin: "0.3rem 0" }}>
-                ⊘ cancelled
-              </div>
-            ) : null;
-          if (message.kind === "assistant" && !message.text && !message.done) {
+        {host.workspace ? (
+          <p style={{ color: "#888", fontSize: "0.78rem", margin: "0.2rem 0" }}>
+            workspace <code>{host.workspace}</code>
+            {host.cwd && host.cwd !== host.workspace ? (
+              <>
+                {" · cwd "}
+                <code>{host.cwd}</code>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+
+        <div>
+          {transcript.map((message) => {
+            if (message.kind === "tool") {
+              const args = toolSummary(message.name, message.args);
+              return (
+                <div
+                  key={message.id}
+                  style={{
+                    margin: "0.4rem 0",
+                    fontSize: "0.78rem",
+                    color: "#777",
+                    fontFamily: "ui-monospace, monospace",
+                  }}
+                >
+                  🔧 {message.name}({args}) {message.done ? "✓" : "…"}
+                </div>
+              );
+            }
+            if (message.kind === "command") {
+              return (
+                <div key={message.id} style={{ margin: "0.75rem 0" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#999" }}>you</div>
+                  <code style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.85rem" }}>
+                    {message.args ? `${message.command} ${message.args}` : message.command}
+                  </code>
+                </div>
+              );
+            }
+            if (message.kind === "result") {
+              return (
+                <div key={message.id} style={{ margin: "0.75rem 0" }}>
+                  <div style={{ fontSize: "0.72rem", color: message.ok ? "#999" : "#c0392b" }}>
+                    {message.command}
+                    {message.ok ? "" : " · failed"}
+                  </div>
+                  <pre
+                    style={{
+                      margin: "0.2rem 0",
+                      padding: "0.5rem 0.7rem",
+                      background: "#f6f6f6",
+                      border: "1px solid #eee",
+                      borderRadius: 6,
+                      fontSize: "0.8rem",
+                      whiteSpace: "pre-wrap",
+                      overflowX: "auto",
+                      fontFamily: "ui-monospace, monospace",
+                    }}
+                  >
+                    {message.text}
+                  </pre>
+                </div>
+              );
+            }
+            const thinking =
+              message.kind === "assistant" && showThinkingOn && message.thinking
+                ? message.thinking
+                : null;
+
+            const overflowNote =
+              message.kind === "assistant" && message.overflow ? (
+                <div style={{ fontSize: "0.75rem", color: "#b26a00", margin: "0.3rem 0" }}>
+                  ⚠ context overflow — {message.overflow}
+                </div>
+              ) : null;
+
+            const errorNote =
+              message.kind === "assistant" && message.error ? (
+                <div style={{ fontSize: "0.75rem", color: "#c0392b", margin: "0.3rem 0" }}>
+                  ⚠{" "}
+                  {isOverflowError(message.error)
+                    ? `context overflow — ${message.error}`
+                    : message.error}
+                </div>
+              ) : null;
+
+            const cancelledNote =
+              message.kind === "assistant" && message.cancelled ? (
+                <div style={{ fontSize: "0.75rem", color: "#888", margin: "0.3rem 0" }}>
+                  ⊘ cancelled
+                </div>
+              ) : null;
+
+            if (message.kind === "assistant" && !message.text && !message.done) {
+              return (
+                <div key={message.id} style={{ margin: "0.75rem 0" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
+                  {thinking ? (
+                    <Markdown text={thinking} muted />
+                  ) : (
+                    <div style={{ color: "#999", fontStyle: "italic" }}>
+                      {message.warm ? "thinking…" : `loading ${message.model}…`}
+                    </div>
+                  )}
+                  {overflowNote}
+                  {errorNote}
+                </div>
+              );
+            }
+
+            const label =
+              message.kind === "user"
+                ? "you"
+                : message.done
+                  ? "assistant"
+                  : "assistant · streaming";
+            // Meta (model · context · speed) rides on the final segment - the one that
+            // carries usage - so it isn't repeated under every pre-tool segment.
+            let meta: string | null = null;
+            if (message.kind === "assistant" && message.usage) {
+              const usage = message.usage;
+              const parts = [
+                message.model,
+                `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
+              ];
+              if (usage.genMs > 0) {
+                parts.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
+              }
+              meta = parts.join(" · ");
+            }
+
             return (
               <div key={message.id} style={{ margin: "0.75rem 0" }}>
-                <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
-                {thinking ? (
-                  <Markdown text={thinking} muted />
-                ) : (
-                  <div style={{ color: "#999", fontStyle: "italic" }}>
-                    {message.warm ? "thinking…" : `loading ${message.model}…`}
-                  </div>
-                )}
+                <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>
+                {thinking ? <Markdown text={thinking} muted /> : null}
+                {message.text ? <Markdown text={message.text} /> : null}
                 {overflowNote}
                 {errorNote}
+                {cancelledNote}
+                {meta ? (
+                  <div style={{ fontSize: "0.68rem", color: "#aaa", marginTop: "0.2rem" }}>
+                    {meta}
+                  </div>
+                ) : null}
               </div>
             );
-          }
-          const label =
-            message.kind === "user" ? "you" : message.done ? "assistant" : "assistant · streaming";
-          // Meta (model · context · speed) rides on the final segment - the one that
-          // carries usage - so it isn't repeated under every pre-tool segment.
-          let meta: string | null = null;
-          if (message.kind === "assistant" && message.usage) {
-            const usage = message.usage;
-            const parts = [
-              message.model,
-              `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
-            ];
-            if (usage.genMs > 0) {
-              parts.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
-            }
-            meta = parts.join(" · ");
-          }
-          return (
-            <div key={message.id} style={{ margin: "0.75rem 0" }}>
-              <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>
-              {thinking ? <Markdown text={thinking} muted /> : null}
-              {message.text ? <Markdown text={message.text} /> : null}
-              {overflowNote}
-              {errorNote}
-              {cancelledNote}
-              {meta ? (
-                <div style={{ fontSize: "0.68rem", color: "#aaa", marginTop: "0.2rem" }}>
-                  {meta}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+          })}
 
-        {awaitingResponse ? (
-          <div style={{ margin: "0.75rem 0" }}>
-            <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
-            <div style={{ color: "#999", fontStyle: "italic" }}>thinking…</div>
+          {awaitingResponse ? (
+            <div style={{ margin: "0.75rem 0" }}>
+              <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
+              <div style={{ color: "#999", fontStyle: "italic" }}>thinking…</div>
+            </div>
+          ) : null}
+
+          {/* Prompts held in the local queue: shown muted as "queued" so they read as
+            waiting, not sent, until the current turn frees up and they publish. */}
+          {queue.map((q) => (
+            <div key={q.id} style={{ margin: "0.75rem 0", opacity: 0.5 }}>
+              <div style={{ fontSize: "0.72rem", color: "#999" }}>you · queued</div>
+              <Markdown text={q.text} muted />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pinned composer: the input bar stays at the bottom; the log above scrolls. */}
+      <div
+        style={{ flexShrink: 0, paddingTop: "0.5rem", paddingBottom: "1rem", background: "#fff" }}
+      >
+        {/* Slash menu: filters the host's announced command inventory as you type a
+            leading "/". Arrows/Tab/Enter pick a row (handled on the input); a row click
+            fills the composer. onMouseDown (not onClick) so the input keeps focus. */}
+        {menuOpen ? (
+          <div
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              marginTop: "0.75rem",
+              overflow: "hidden",
+            }}
+          >
+            {menuMatches.map((c, i) => (
+              <button
+                key={c.name}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  acceptCommand(c.name);
+                }}
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  gap: "0.6rem",
+                  alignItems: "baseline",
+                  padding: "0.35rem 0.6rem",
+                  border: "none",
+                  textAlign: "left",
+                  font: "inherit",
+                  background: i === menuIdx ? "#eef3ff" : "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                <code style={{ fontWeight: 600, fontSize: "0.82rem" }}>{c.usage ?? c.name}</code>
+                <span style={{ color: "#888", fontSize: "0.78rem" }}>{c.summary}</span>
+              </button>
+            ))}
           </div>
         ) : null}
 
-        {/* Prompts held in the local queue: shown muted as "queued" so they read as
-            waiting, not sent, until the current turn frees up and they publish. */}
-        {queue.map((q) => (
-          <div key={q.id} style={{ margin: "0.75rem 0", opacity: 0.5 }}>
-            <div style={{ fontSize: "0.72rem", color: "#999" }}>you · queued</div>
-            <Markdown text={q.text} muted />
-          </div>
-        ))}
-      </div>
-
-      <form onSubmit={onSubmit} style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-        {/* Hard-steer control, left of the composer: aborts the active turn and folds
-            any queued prompts + draft into one steering message. Mirrors ESC. */}
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={!canCancel}
-          title="Cancel the active turn (folds queued prompts + draft into one steering message)"
-          style={{
-            padding: "0.5rem 0.7rem",
-            color: canCancel ? "#c0392b" : "#bbb",
-            borderColor: canCancel ? "#c0392b" : "#ddd",
-            cursor: canCancel ? "pointer" : "default",
-          }}
+        <form
+          onSubmit={onSubmit}
+          style={{ display: "flex", gap: "0.5rem", marginTop: menuOpen ? "0.4rem" : 0 }}
         >
-          ⊘ Cancel
-        </button>
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={`message ${modelMeta.label}…`}
-          disabled={!sessionId}
-          style={{ flex: 1, padding: "0.5rem" }}
-        />
-        <button type="submit" disabled={!sessionId}>
-          Send
-        </button>
-      </form>
+          {/* Hard-steer control, left of the composer: aborts the active turn and folds
+            any queued prompts + draft into one steering message. Mirrors ESC. */}
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={!canCancel}
+            title="Cancel the active turn (folds queued prompts + draft into one steering message)"
+            style={{
+              padding: "0.5rem 0.7rem",
+              color: canCancel ? "#c0392b" : "#bbb",
+              borderColor: canCancel ? "#c0392b" : "#ddd",
+              cursor: canCancel ? "pointer" : "default",
+            }}
+          >
+            ⊘ Cancel
+          </button>
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onInputKeyDown}
+            placeholder={`message ${modelMeta.label}… (/ for commands)`}
+            disabled={!sessionId}
+            style={{ flex: 1, padding: "0.5rem" }}
+          />
+          <button type="submit" disabled={!sessionId}>
+            Send
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

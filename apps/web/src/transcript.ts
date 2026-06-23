@@ -20,7 +20,22 @@ export type AssistantMessage = {
   cancelled?: boolean;
 };
 export type ToolMessage = { kind: "tool"; id: string; name: string; args: string; done: boolean };
-export type Message = { kind: "user"; id: string; text: string } | AssistantMessage | ToolMessage;
+// An immediate slash command and the host's result for it (the command lane - these
+// never go to the model, so they render as their own pair, not assistant turns).
+export type CommandMessage = { kind: "command"; id: string; command: string; args: string };
+export type CommandResultMessage = {
+  kind: "result";
+  id: string;
+  command: string;
+  text: string;
+  ok: boolean;
+};
+export type Message =
+  | { kind: "user"; id: string; text: string }
+  | AssistantMessage
+  | ToolMessage
+  | CommandMessage
+  | CommandResultMessage;
 
 /**
  * Coalesces the raw event log into a transcript in arrival order. An assistant turn
@@ -66,6 +81,23 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
     switch (decoded.type) {
       case "user.message":
         messages.push({ kind: "user", id: event.eventId, text: decoded.text });
+        break;
+      case "user.command":
+        messages.push({
+          kind: "command",
+          id: event.eventId,
+          command: decoded.command,
+          args: decoded.args,
+        });
+        break;
+      case "command.result":
+        messages.push({
+          kind: "result",
+          id: event.eventId,
+          command: decoded.command,
+          text: decoded.text,
+          ok: decoded.ok,
+        });
         break;
       case "assistant.started":
         runMeta.set(decoded.runId, {

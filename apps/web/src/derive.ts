@@ -1,4 +1,9 @@
-import { decodeTrevorEvent, type ProviderModel, type SessionEvent } from "@trevor/richter";
+import {
+  type CommandSpec,
+  decodeTrevorEvent,
+  type ProviderModel,
+  type SessionEvent,
+} from "@trevor/richter";
 
 /**
  * Pure view-model derivations over the Richter event log, kept out of App.tsx so
@@ -163,4 +168,36 @@ export function providerModelsFrom(events: readonly SessionEvent[]): Record<stri
     }
   }
   return latest ?? FALLBACK_MODELS;
+}
+
+/** The immediate-command inventory the host last announced (empty until one is online). */
+export function commandsFrom(events: readonly SessionEvent[]): CommandSpec[] {
+  let latest: CommandSpec[] = [];
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "host.online") {
+      latest = [...decoded.commands];
+    }
+  }
+  return latest;
+}
+
+/**
+ * Parses composer text into an immediate command, or null for an ordinary prompt.
+ * A leading slash whose first token is a known command name routes to the command
+ * lane; anything else (including an unknown /slash) is a normal model prompt.
+ */
+export function parseCommand(
+  text: string,
+  known: ReadonlySet<string>,
+): { command: string; args: string } | null {
+  if (!text.startsWith("/")) {
+    return null;
+  }
+  const space = text.indexOf(" ");
+  const command = space === -1 ? text : text.slice(0, space);
+  if (!known.has(command)) {
+    return null;
+  }
+  return { command, args: space === -1 ? "" : text.slice(space + 1).trim() };
 }
