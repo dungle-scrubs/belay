@@ -15,6 +15,13 @@ interface ToolDiffProps {
 }
 
 /**
+ * A diff over a bare snippet has no trailing newline, so `createTwoFilesPatch`
+ * appends a "\ No newline at end of file" marker that renders as noise. Padding
+ * both sides with a newline keeps the patch clean.
+ */
+const withNewline = (text: string) => (text === "" || text.endsWith("\n") ? text : `${text}\n`);
+
+/**
  * Renders a write/edit tool call as a code diff: the ToolCall row plus a unified
  * diff with up to 3 lines of subdued, unchanged context around each change.
  */
@@ -26,9 +33,15 @@ export function ToolDiff({
   status = "done",
   className,
 }: ToolDiffProps) {
-  const patch = createTwoFilesPatch(path, path, oldText, newText, undefined, undefined, {
-    context: 3,
-  });
+  const patch = createTwoFilesPatch(
+    path,
+    path,
+    withNewline(oldText),
+    withNewline(newText),
+    undefined,
+    undefined,
+    { context: 3 },
+  );
   return (
     <ToolCall name={tool} args={path} status={status} className={className}>
       <DiffViewer patch={patch} variant="ghost" showHeader={false} />

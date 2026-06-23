@@ -31,9 +31,16 @@ function countChanges(oldText: string, newText: string): { added: number; remove
 }
 
 /**
+ * A diff over a bare snippet has no trailing newline, so `createTwoFilesPatch`
+ * appends a "\ No newline at end of file" marker that renders as noise. Padding
+ * both sides with a newline keeps the patch clean.
+ */
+const withNewline = (text: string) => (text.endsWith("\n") ? text : `${text}\n`);
+
+/**
  * Renders a multi_edit tool call: a single atomic operation made of several edits,
  * grouped by file. Each file is a collapsible section with its own +/- counts; each
- * edit shows up to 3 lines of subdued context.
+ * edit shows up to 2 lines of subdued surrounding context.
  */
 export function MultiEditDiff({ edits, status = "done", className }: MultiEditDiffProps) {
   // Group by file, preserving first-seen order.
@@ -93,11 +100,11 @@ export function MultiEditDiff({ edits, status = "done", className }: MultiEditDi
                     patch={createTwoFilesPatch(
                       group.path,
                       group.path,
-                      edit.old,
-                      edit.new,
+                      withNewline(edit.old),
+                      withNewline(edit.new),
                       undefined,
                       undefined,
-                      { context: 3 },
+                      { context: 2 },
                     )}
                     variant="ghost"
                     showHeader={false}

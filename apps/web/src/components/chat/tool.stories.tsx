@@ -104,7 +104,8 @@ export const Edit: Story = {
   ),
 };
 
-// multi_edit, several edits to a single file (one atomic operation).
+// multi_edit, several edits to a single file (one atomic operation). Each edit
+// carries surrounding lines, so the diff shows up to 2 lines of subdued context.
 export const MultiEditSameFile: Story = {
   render: () => (
     <Frame>
@@ -112,13 +113,27 @@ export const MultiEditSameFile: Story = {
         edits={[
           {
             path: "apps/web/src/greet.ts",
-            old: "export function greet(name) {",
-            new: "export function greet(name: string) {",
+            old: `import { trim } from "./util";
+
+export function greet(name) {
+  const greeting = "hi " + name;
+  return greeting;`,
+            new: `import { trim } from "./util";
+
+export function greet(name: string) {
+  const greeting = "hi " + name;
+  return greeting;`,
           },
           {
             path: "apps/web/src/greet.ts",
-            old: '  const greeting = "hi " + name;',
-            new: "  const greeting = `hello, ${name}`;",
+            old: `export function greet(name: string) {
+  const greeting = "hi " + name;
+  return greeting;
+}`,
+            new: `export function greet(name: string) {
+  const greeting = \`hello, \${name}\`;
+  return greeting;
+}`,
           },
         ]}
       />
@@ -126,7 +141,7 @@ export const MultiEditSameFile: Story = {
   ),
 };
 
-// multi_edit across several files, each a collapsible section.
+// multi_edit across several files, each a collapsible section with its own context.
 export const MultiEditMultiFile: Story = {
   render: () => (
     <Frame>
@@ -134,18 +149,34 @@ export const MultiEditMultiFile: Story = {
         edits={[
           {
             path: "apps/web/src/greet.ts",
-            old: 'const DEFAULT = "world";',
-            new: 'const DEFAULT = "friend";',
+            old: `  return greeting;
+}
+
+export const DEFAULT_NAME = "world";`,
+            new: `  return greeting;
+}
+
+export const DEFAULT_NAME = "friend";`,
           },
           {
             path: "apps/web/src/router.ts",
-            old: 'register("/old", handler);',
-            new: 'register("/new", handler);',
+            old: `const router = createRouter();
+
+register("/old", handler);
+router.start();`,
+            new: `const router = createRouter();
+
+register("/new", handler);
+router.start();`,
           },
           {
             path: "apps/web/src/types.ts",
-            old: "export type Id = number;",
-            new: "export type Id = string;",
+            old: `// Identifiers are opaque.
+export type Id = number;
+export type Name = string;`,
+            new: `// Identifiers are opaque.
+export type Id = string;
+export type Name = string;`,
           },
         ]}
       />
