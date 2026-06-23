@@ -40,6 +40,7 @@ const REPO_GUARDRAILS = [
  * Trevor host; these are model-conduct rules and apply regardless of tools.
  */
 const RESPONSE_CALIBRATION_GUIDANCE = [
+  "Never use the em dash",
   "Resist sycophancy. User pushback is a signal to re-check reasoning, not to reverse position.",
   "Do not agree with the user merely because they propose an alternative or challenge your prior answer. Treat disagreement as a request to re-evaluate, not as evidence that the user is right.",
   "When the user challenges a recommendation, re-state the decision criteria, compare the options against those criteria, and say clearly whether your original answer changes.",
