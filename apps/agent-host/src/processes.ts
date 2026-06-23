@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { invariant } from "./log";
 import { classifyAlwaysPreventedBashCommand } from "./tools/bash-safety";
 import { cap, msg, num } from "./tools/shared";
 import type { Tool } from "./tools/types";
@@ -37,6 +38,13 @@ class Ring {
       this.buffer = this.buffer.slice(dropped);
       this.start += dropped;
     }
+    // The window is the most recent RING_LIMIT chars of a `total`-long stream: its first
+    // retained char can't precede the stream and the buffer can't exceed the cap. If
+    // either breaks the cursor math below would silently hand out wrong slices.
+    invariant(
+      this.start >= 0 && this.start <= this.total && this.buffer.length <= RING_LIMIT,
+      `Ring corrupt: start=${this.start} total=${this.total} len=${this.buffer.length}`,
+    );
   }
 
   /** Returns output from `cursor` onward and the new cursor (the logical end). */

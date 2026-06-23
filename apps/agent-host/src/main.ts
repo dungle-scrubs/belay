@@ -10,6 +10,7 @@ import {
 } from "@trevor/richter";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
+import { log, warn } from "./log";
 import { supervisor } from "./processes";
 import {
   buildProviders,
@@ -19,6 +20,7 @@ import {
   pickProvider,
 } from "./providers";
 import { taskRegistry } from "./tasks";
+import { msg } from "./tools/shared";
 import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
 
@@ -72,6 +74,29 @@ function emit(event: TrevorEventInput): Promise<void> {
   return publishEvent(SERVICE_URL, SESSION_ID, { ...event, producerId: PRODUCER_ID });
 }
 
+/** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
+function hostState(): Record<string, unknown> {
+  return {
+    live,
+    activeRun: activeRun ? activeRun.runId.slice(0, 8) : null,
+    queued: deferredUserEvents.length,
+    history: history.length,
+    lastAnswerSeq,
+  };
+}
+
+/**
+ * Loudly flags a broken turn-machine rule without throwing. These are self-imposed
+ * invariants the comments promise (one turn at a time; history stays strictly paired
+ * user/assistant), but the host is a daemon that must stay up - so a violation is
+ * surfaced and self-healed at the call site rather than crashing the only leader.
+ */
+function checkTurn(rule: boolean, message: string, fields?: Record<string, unknown>): void {
+  if (!rule) {
+    warn("host", `invariant: ${message}`, fields);
+  }
+}
+
 // Every task_create/task_update mutates the shared registry; publish the new
 // checklist so the UI updates and any replay/standby can restore from it.
 taskRegistry.onChange(() => {
@@ -99,7 +124,7 @@ const lease = new Lease(
       emit(events.hostHello({ instanceId: INSTANCE_ID })).catch(() => {});
     },
     onRoleChange: (role) => {
-      console.log(`lease: ${role} (instance ${INSTANCE_ID.slice(0, 8)})`);
+      log("lease", "role", { role, instance: INSTANCE_ID.slice(0, 8) });
       emit(events.hostRole({ instanceId: INSTANCE_ID, role })).catch(() => {});
       if (role === "leader") {
         onBecomeLeader();
@@ -127,6 +152,12 @@ function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): vo
   if (decoded?.type !== "user.message") {
     return;
   }
+  // Invariant: only one turn runs at a time. Callers gate on activeRun, so reaching here
+  // with one set is a dispatch bug - drop the new turn rather than stream two at once.
+  if (activeRun) {
+    checkTurn(false, "respondTo while a turn is active", { active: activeRun.runId.slice(0, 8) });
+    return;
+  }
   // One controller per turn: a user.cancel for this runId (ESC in the browser)
   // aborts it, which unwinds the agent loop and the in-flight provider stream.
   const runId = crypto.randomUUID();
@@ -137,7 +168,7 @@ function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): vo
     reasoning: decoded.reasoning,
     signal: controller.signal,
   })
-    .catch((error) => console.error("turn error:", error))
+    .catch((error) => warn("host", "turn failed", { run: runId.slice(0, 8), error: msg(error) }))
     .finally(() => {
       if (activeRun?.runId === runId) {
         activeRun = null;
@@ -159,7 +190,7 @@ function onBecomeLeader(): void {
     .readiness()
     .then(({ warm }) => {
       if (!warm) {
-        local.warm().catch((error) => console.error("warm error:", error));
+        local.warm().catch((error) => warn("host", "warm failed", { error: msg(error) }));
       }
     })
     .catch(() => {});
@@ -167,7 +198,7 @@ function onBecomeLeader(): void {
 
 /** On go-live: start the lease (once), announce presence, and report online. */
 function goLive(): void {
-  console.log("replay complete; live");
+  log("host", "replay complete; live");
   if (!leaseRunning) {
     leaseRunning = true;
     lease.start(Date.now());
@@ -203,6 +234,8 @@ async function runCommand(name: string, args: string): Promise<void> {
     workspace: abbrevPath(WORKSPACE_ROOT),
     instanceId: INSTANCE_ID.slice(0, 8),
     role: lease.isLeader() ? "leader" : "standby",
+    host: hostState(),
+    lease: lease.debugInfo(Date.now()),
   });
   await emit(events.commandResult({ command: name, text, ok }));
 }
@@ -259,6 +292,13 @@ function handleEvent(message: SessionEvent): void {
     handleUserMessage(message, decoded.text);
   } else if (decoded.type === "assistant.completed") {
     if (decoded.text) {
+      // Invariant: history stays strictly paired - an assistant reply lands only on top
+      // of the user turn it answers. A different role on top means the pairing the loop
+      // depends on has drifted (e.g. a missed/duplicated turn).
+      const last = history[history.length - 1];
+      checkTurn(last?.role === "user", "assistant reply with no preceding user turn", {
+        last: last?.role ?? "none",
+      });
       history.push({ role: "assistant", content: decoded.text });
     }
     lastAnswerSeq = Math.max(lastAnswerSeq, message.seq);
@@ -275,7 +315,7 @@ function handleEvent(message: SessionEvent): void {
     // Abort the active turn if the cancel targets it, or if the browser asked to
     // cancel "whatever is active" (empty runId, sent before assistant.started lands).
     if (activeRun && (decoded.runId === activeRun.runId || decoded.runId === "")) {
-      console.log(`cancel: aborting run ${activeRun.runId.slice(0, 8)}`);
+      log("host", "cancel: aborting run", { run: activeRun.runId.slice(0, 8) });
       activeRun.controller.abort();
     }
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
@@ -283,8 +323,10 @@ function handleEvent(message: SessionEvent): void {
     // are actions, not state to rebuild on replay).
     if (live && lease.isLeader()) {
       const { command, args } = decoded;
-      console.log(`command: ${command}${args ? ` ${args}` : ""}`);
-      runCommand(command, args).catch((error) => console.error("command error:", error));
+      log("host", "command", { command, args: args || undefined });
+      runCommand(command, args).catch((error) =>
+        warn("host", "command failed", { command, error: msg(error) }),
+      );
     }
   } else if (decoded.type === "tasks.current") {
     // Restore the checklist from the log on replay, and keep standbys in sync for
@@ -330,9 +372,9 @@ function connect(): void {
     },
     onStatus: (status) => {
       if (status === "open") {
-        console.log(`host ${PARTICIPANT_ID} joined session ${SESSION_ID}`);
+        log("host", "joined session", { participant: PARTICIPANT_ID, session: SESSION_ID });
       } else if (status === "closed") {
-        console.log("socket closed; reconnecting in 1s");
+        log("host", "socket closed; reconnecting", { ms: 1000 });
         setTimeout(connect, 1000);
       }
     },
@@ -348,14 +390,15 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-console.log(
-  `trevor-host ${PARTICIPANT_ID} starting; session=${SESSION_ID} providers=${Object.keys(
-    providers,
-  ).join(",")} default=${DEFAULT_PROVIDER}`,
-);
+log("host", "starting", {
+  participant: PARTICIPANT_ID,
+  session: SESSION_ID,
+  providers: Object.keys(providers).join(","),
+  default: DEFAULT_PROVIDER,
+});
 ensureSession(SERVICE_URL, SESSION_ID)
   .then(() => connect())
   .catch((error) => {
-    console.error("startup failed:", error);
+    warn("host", "startup failed", { error: msg(error) });
     process.exit(1);
   });

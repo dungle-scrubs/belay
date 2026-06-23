@@ -1,4 +1,5 @@
 import type { CommandSpec } from "@trevor/richter";
+import { fmtFields } from "./log";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
 import { discoverSkills, SKILLS_DIR } from "./skills";
@@ -25,6 +26,10 @@ export interface CommandContext {
   readonly workspace: string;
   readonly instanceId: string;
   readonly role: string;
+  /** Live turn-machine snapshot (host orchestrator state), for /doctor. */
+  readonly host?: Record<string, unknown>;
+  /** Election internals (lease.debugInfo), for /doctor. */
+  readonly lease?: Record<string, unknown>;
 }
 
 interface Command {
@@ -47,7 +52,11 @@ async function providerStatus(key: string, provider: ProviderRegistry[string]): 
   } catch {
     status = "unreachable";
   }
-  return `  ${key} - ${provider.label} (${provider.model}) - ${status}`;
+  // Adapters that expose inspectable state (e.g. LM Studio's served context / last load
+  // error) get an indented detail line; cloud providers with nothing to add stay terse.
+  const info = provider.debugInfo?.();
+  const detail = info ? `\n      ${fmtFields(info)}` : "";
+  return `  ${key} - ${provider.label} (${provider.model}) - ${status}${detail}`;
 }
 
 export function buildCommandRegistry(): CommandRegistry {
@@ -68,7 +77,14 @@ export function buildCommandRegistry(): CommandRegistry {
       if (ctx.cwd !== ctx.workspace) {
         lines.push(`cwd: ${ctx.cwd}`);
       }
-      lines.push(`host: ${ctx.instanceId} (${ctx.role})`, "", "providers:");
+      lines.push(`host: ${ctx.instanceId} (${ctx.role})`);
+      if (ctx.host) {
+        lines.push(`turn: ${fmtFields(ctx.host)}`);
+      }
+      if (ctx.lease) {
+        lines.push(`lease: ${fmtFields(ctx.lease)}`);
+      }
+      lines.push("", "providers:");
       // Probe every provider's readiness concurrently - they're independent.
       const statuses = await Promise.all(
         Object.entries(ctx.providers).map(([key, provider]) => providerStatus(key, provider)),

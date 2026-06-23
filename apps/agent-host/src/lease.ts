@@ -23,6 +23,8 @@
  * Date.now(); no internal clock, so the state machine is unit-testable.
  */
 
+import { debug } from "./log";
+
 export type LeaseRole = "probing" | "leader" | "standby";
 export type HostSignal = "hello" | "beat";
 
@@ -79,6 +81,21 @@ export class Lease {
     return this.role === "leader";
   }
 
+  /**
+   * A snapshot of the election internals for /doctor: the role plus the timing deltas
+   * that actually decide leadership (how long since any other host was seen, time since
+   * our last emit, and - when leader - whether we currently consider ourselves contended).
+   */
+  debugInfo(now: number): Record<string, unknown> {
+    return {
+      role: this.role,
+      started: this.started,
+      msSinceOther: this.lastOther === Number.NEGATIVE_INFINITY ? null : now - this.lastOther,
+      msSinceEmit: this.started ? now - this.lastEmit : null,
+      contended: this.role === "leader" ? now - this.lastOther < this.ttlMs : null,
+    };
+  }
+
   /** Begin probing. Idempotent across reconnects - only the first call starts the clock. */
   start(now: number): void {
     if (this.started) {
@@ -102,6 +119,7 @@ export class Lease {
         now - this.claimedAt < this.settleMs &&
         senderInstanceId < this.instanceId
       ) {
+        debug("lease", "stepping down for smaller id", { other: senderInstanceId.slice(0, 8) });
         this.setRole("standby", now);
         return;
       }
@@ -142,6 +160,7 @@ export class Lease {
       this.cb.emitHello();
     }
     if (now - this.lastOther >= this.ttlMs) {
+      debug("lease", "leader went quiet, re-probing", { quietMs: now - this.lastOther });
       this.role = "probing";
       this.probeStart = now;
     }
