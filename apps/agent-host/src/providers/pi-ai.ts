@@ -7,6 +7,7 @@ import {
   type ThinkingLevel,
   type TSchema,
 } from "@mariozechner/pi-ai";
+import { debug } from "../log";
 import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderEvent, ToolDef } from "./types";
 
@@ -107,7 +108,15 @@ export async function* streamPiAi<TApi extends Api>(
     ...(options.reasoning ? { reasoning: options.reasoning } : {}),
     ...(options.signal ? { signal: options.signal } : {}),
   };
+  debug("pi-ai", "stream", {
+    model: model.id,
+    messages: messages.length,
+    tools: tools.length,
+    reasoning: options.reasoning,
+    contextWindow: options.contextWindow,
+  });
   for await (const event of streamSimple(model, context, streamOptions)) {
+    debug("pi-ai", event.type);
     if (
       event.type === "text_delta" ||
       event.type === "thinking_start" ||
@@ -133,6 +142,11 @@ export async function* streamPiAi<TApi extends Api>(
       // usage is initialized by pi-ai, but guard anyway: a missing one must never
       // crash the turn (that surfaced as a silent empty answer).
       const usage = event.message?.usage;
+      debug("pi-ai", "done", {
+        stopReason: event.message?.stopReason,
+        input: usage?.input,
+        output: usage?.output,
+      });
       yield {
         type: "usage",
         usage: {

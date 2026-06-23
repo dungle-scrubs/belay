@@ -1,6 +1,9 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Model } from "@mariozechner/pi-ai";
+import { debug, log, warn } from "../log";
+import { msg } from "../tools/shared";
+import { ModelLoadError, ProviderUnavailable } from "./errors";
 import { streamPiAi } from "./pi-ai";
 import type { ChatMessage, Provider, ProviderEvent, Readiness, ToolDef } from "./types";
 
@@ -47,6 +50,10 @@ export class LmStudioProvider implements Provider {
   private readonly contextCap: number;
   /** In-flight ensureMaxContext, so concurrent turns share one (re)load. */
   private ensuring: Promise<number> | null = null;
+  /** Wall-time of the last successful (re)load, ms; surfaced via debugInfo. */
+  private lastReloadMs: number | null = null;
+  /** Why the model isn't at max context (unreachable / lms load failed), or null if it is. */
+  private lastError: Error | null = null;
 
   constructor(config: LmStudioConfig) {
     this.url = config.url;
@@ -60,8 +67,15 @@ export class LmStudioProvider implements Provider {
   private async fetchModelInfo(): Promise<ModelInfo | null> {
     try {
       const response = await fetch(`${this.native}/models/${encodeURIComponent(this.model)}`);
-      return response.ok ? ((await response.json()) as ModelInfo) : null;
-    } catch {
+      if (!response.ok) {
+        // Reachable but no usable answer (model id unknown / server error) - distinct from
+        // the network failure below, and worth seeing under TREVOR_DEBUG=lmstudio.
+        debug("lmstudio", "model info not ok", { model: this.model, status: response.status });
+        return null;
+      }
+      return (await response.json()) as ModelInfo;
+    } catch (cause) {
+      debug("lmstudio", "model info unreachable", { model: this.model, error: msg(cause) });
       return null;
     }
   }
@@ -93,13 +107,33 @@ export class LmStudioProvider implements Provider {
       const info = await this.fetchModelInfo();
       const max = info?.max_context_length;
       if (!max) {
-        return this.contextWindow || DEFAULT_CONTEXT_WINDOW;
+        // Unreachable, or the model reports no ceiling: leave the load alone and serve
+        // whatever we last knew. Record why so /doctor and the next turn can see it.
+        const served = this.contextWindow || DEFAULT_CONTEXT_WINDOW;
+        this.lastError = new ProviderUnavailable(
+          this.id,
+          info ? "model reported no max_context_length" : "LM Studio not reachable",
+        );
+        warn("lmstudio", "cannot size context, serving fallback", {
+          model: this.model,
+          served,
+          reason: this.lastError.message,
+        });
+        return served;
       }
       const target = Math.min(max, this.contextCap);
       if (info.state === "loaded" && info.loaded_context_length === target) {
+        this.lastError = null;
         this.contextWindow = target;
         return target;
       }
+      const startedAt = Date.now();
+      log("lmstudio", "loading model at max context", {
+        model: this.model,
+        target,
+        from: info.loaded_context_length ?? "unloaded",
+        reload: info.state === "loaded",
+      });
       try {
         const key = JSON.stringify(this.model);
         if (info.state === "loaded") {
@@ -107,8 +141,25 @@ export class LmStudioProvider implements Provider {
         }
         await execAsync(`${LMS_BIN} load ${key} -c ${target} -y`, { timeout: 300_000 });
         this.contextWindow = target;
-      } catch {
+        this.lastError = null;
+        this.lastReloadMs = Date.now() - startedAt;
+        log("lmstudio", "model loaded", {
+          model: this.model,
+          context: target,
+          ms: this.lastReloadMs,
+        });
+      } catch (cause) {
+        // Best-effort: lms is missing or the load failed. Keep serving the current load
+        // (often the 8k JIT default) and record the typed reason rather than swallowing it -
+        // this is exactly the silent fallback that surfaces later as a thinking overflow.
+        this.lastError = new ModelLoadError(this.id, msg(cause), { cause });
         this.contextWindow = info.loaded_context_length ?? this.contextWindow;
+        warn("lmstudio", "load failed, keeping current context", {
+          model: this.model,
+          served: this.contextWindow || DEFAULT_CONTEXT_WINDOW,
+          target,
+          error: msg(cause),
+        });
       }
       return this.contextWindow || DEFAULT_CONTEXT_WINDOW;
     })();
@@ -122,6 +173,17 @@ export class LmStudioProvider implements Provider {
   /** Pre-load the model at its max context so the first turn doesn't pay for it. */
   async warm(): Promise<void> {
     await this.ensureMaxContext();
+  }
+
+  /** Load/context state for /doctor: what we serve, the cap, and why if not at max. */
+  debugInfo(): Record<string, unknown> {
+    return {
+      served: this.contextWindow || null,
+      cap: Number.isFinite(this.contextCap) ? this.contextCap : "model-max",
+      reloading: this.ensuring !== null,
+      lastReloadMs: this.lastReloadMs,
+      lastError: this.lastError ? this.lastError.message : null,
+    };
   }
 
   async *stream(

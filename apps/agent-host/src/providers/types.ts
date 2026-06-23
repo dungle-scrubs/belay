@@ -75,4 +75,9 @@ export interface Provider {
     reasoning?: string,
     signal?: AbortSignal,
   ): AsyncIterable<ProviderEvent>;
+  /**
+   * Optional inspectable internal state for /doctor: load/context details, last error,
+   * whatever the adapter hides that an operator would otherwise have to read source for.
+   */
+  debugInfo?(): Record<string, unknown>;
 }

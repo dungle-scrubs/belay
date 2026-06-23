@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { getModel, getSupportedThinkingLevels, type ThinkingLevel } from "@mariozechner/pi-ai";
+import { ProviderAuthError } from "./errors";
 import { streamPiAi } from "./pi-ai";
 import type { ChatMessage, Provider, ProviderEvent, Readiness, ToolDef } from "./types";
 
@@ -73,16 +74,23 @@ export class CodexProvider implements Provider {
   }
 
   private async resolveApiKey(): Promise<string> {
-    const auth = JSON.parse(await readFile(AUTH_PATH, "utf8")) as Record<string, unknown>;
+    let auth: Record<string, unknown>;
+    try {
+      auth = JSON.parse(await readFile(AUTH_PATH, "utf8")) as Record<string, unknown>;
+    } catch (cause) {
+      throw new ProviderAuthError(this.id, `cannot read ${AUTH_PATH} (log in with the pi CLI)`, {
+        cause,
+      });
+    }
     const credentials = auth[CODEX];
     if (!credentials) {
-      throw new Error(`no ${CODEX} entry in ${AUTH_PATH}`);
+      throw new ProviderAuthError(this.id, `no ${CODEX} entry in ${AUTH_PATH}`);
     }
     const { getOAuthApiKey } = await import("@mariozechner/pi-ai/oauth");
     // biome-ignore lint/suspicious/noExplicitAny: pi-ai OAuth credential shape is internal.
     const resolved = await getOAuthApiKey(CODEX as any, { [CODEX]: credentials } as any);
     if (!resolved) {
-      throw new Error(`${CODEX} OAuth failed (re-login with the pi CLI)`);
+      throw new ProviderAuthError(this.id, "OAuth refresh failed (re-login with the pi CLI)");
     }
     return resolved.apiKey;
   }
