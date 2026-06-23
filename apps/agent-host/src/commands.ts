@@ -1,6 +1,9 @@
 import type { CommandSpec } from "@trevor/richter";
+import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
-import { executeTool, TOOL_DEFS } from "./tools";
+import { discoverSkills, SKILLS_DIR } from "./skills";
+import { TOOL_DEFS } from "./tools";
+import { runShell } from "./tools/run-shell";
 
 /**
  * Immediate host commands (slash commands): the host runs these directly and
@@ -78,9 +81,49 @@ export function buildCommandRegistry(): CommandRegistry {
       if (!command) {
         return "usage: /shell <command>";
       }
-      // Reuse the bash tool so /shell inherits its safety classifier, timeout, and
-      // output cap rather than spawning a second, unguarded execution path.
-      return executeTool("bash", JSON.stringify({ command }));
+      // Shared runShell carries the safety classifier, timeout, and output cap.
+      return runShell(command);
+    },
+  });
+
+  commands.push({
+    spec: { name: "/skills", summary: "List discovered skills" },
+    run: () => {
+      const skills = discoverSkills();
+      if (!skills.length) {
+        return `No skills found in ${SKILLS_DIR}.`;
+      }
+      return skills
+        .map((s) => `${s.icon ? `${s.icon} ` : ""}${s.id} - ${s.description}`)
+        .join("\n");
+    },
+  });
+
+  commands.push({
+    spec: { name: "/jobs", summary: "List background processes" },
+    run: () => {
+      const jobs = supervisor.list();
+      if (!jobs.length) {
+        return "No background processes.";
+      }
+      return jobs
+        .map((j) => {
+          const exit = j.exitCode != null ? ` (exit ${j.exitCode})` : "";
+          return `${j.id}  ${j.status}${exit}  ${Math.round(j.ageMs / 1000)}s  ${j.command}`;
+        })
+        .join("\n");
+    },
+  });
+
+  commands.push({
+    spec: { name: "/jobs-stop", summary: "Stop a background process", usage: "/jobs-stop <id>" },
+    run: (args) => {
+      const id = args.trim();
+      if (!id) {
+        return "usage: /jobs-stop <id>";
+      }
+      const result = supervisor.kill(id);
+      return "error" in result ? result.error : `${result.id} -> ${result.status}`;
     },
   });
 

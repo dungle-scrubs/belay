@@ -1,3 +1,5 @@
+import { buildProcessTool } from "../processes";
+import { buildSkillTool, discoverSkills } from "../skills";
 import { bashTool } from "./bash";
 import { editTool } from "./edit";
 import { globTool } from "./glob";
@@ -6,7 +8,23 @@ import { readTool } from "./read";
 import type { Tool } from "./types";
 import { writeTool } from "./write";
 
-const TOOLS: readonly Tool[] = [readTool, bashTool, writeTool, editTool, globTool, grepTool];
+const FILE_TOOLS: readonly Tool[] = [
+  readTool,
+  bashTool,
+  writeTool,
+  editTool,
+  globTool,
+  grepTool,
+  buildProcessTool(),
+];
+
+// The skill tool is added only when the library is non-empty, so an empty skills
+// dir advertises nothing. Its description carries the skill inventory (level-1
+// progressive disclosure); skill(name) loads one body on demand (level 2).
+const discoveredSkills = discoverSkills();
+const TOOLS: readonly Tool[] = discoveredSkills.length
+  ? [...FILE_TOOLS, buildSkillTool(discoveredSkills)]
+  : FILE_TOOLS;
 
 /** Tool definitions advertised to the model. */
 export const TOOL_DEFS = TOOLS.map(({ name, description, parameters }) => ({
