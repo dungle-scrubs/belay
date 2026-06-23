@@ -52,6 +52,16 @@ let history: ChatMessage[] = [];
 let lastUserEvent: SessionEvent | null = null;
 let lastAnswerSeq = -1;
 let leaseRunning = false;
+/** The turn currently being answered, if any - its controller aborts on ESC/cancel. */
+let activeRun: { readonly runId: string; readonly controller: AbortController } | null = null;
+/**
+ * Prompts that arrived while a turn was in flight, awaiting their turn (FIFO). Only
+ * one turn runs at a time, so a second prompt never spawns a concurrent turn; it
+ * queues here and is answered when the active turn completes. Holding deferred
+ * prompts out of `history` until they run also keeps history strictly paired
+ * (user, assistant, user, assistant, ...) even if the log interleaves them.
+ */
+let deferredUserEvents: SessionEvent[] = [];
 
 /** Publishes one event to the durable log, attaching this host's producerId. */
 function emit(event: TrevorEventInput): Promise<void> {
@@ -107,12 +117,22 @@ function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): vo
   if (decoded?.type !== "user.message") {
     return;
   }
-  publishTurn(
-    emit,
-    pickProvider(providers, decoded.provider),
-    turnHistory,
-    decoded.reasoning,
-  ).catch((error) => console.error("turn error:", error));
+  // One controller per turn: a user.cancel for this runId (ESC in the browser)
+  // aborts it, which unwinds the agent loop and the in-flight provider stream.
+  const runId = crypto.randomUUID();
+  const controller = new AbortController();
+  activeRun = { runId, controller };
+  publishTurn(emit, pickProvider(providers, decoded.provider), turnHistory, {
+    runId,
+    reasoning: decoded.reasoning,
+    signal: controller.signal,
+  })
+    .catch((error) => console.error("turn error:", error))
+    .finally(() => {
+      if (activeRun?.runId === runId) {
+        activeRun = null;
+      }
+    });
 }
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
@@ -158,6 +178,48 @@ function goLive(): void {
   ).catch(() => {});
 }
 
+/**
+ * Records a user prompt and either answers it now or queues it behind the active
+ * turn. Exactly one turn runs at a time: a prompt that arrives mid-turn is deferred
+ * and picked up when that turn completes (see drainDeferred), so turns never overlap
+ * and the conversation stays strictly ordered.
+ */
+function handleUserMessage(message: SessionEvent, text: string): void {
+  if (activeRun) {
+    deferredUserEvents.push(message);
+    return;
+  }
+  // Collapse consecutive user turns. With one-turn-at-a-time dispatch this only
+  // fires for a genuinely abandoned turn (e.g. the host crashed mid-answer, leaving
+  // a user message with no assistant entry) - replace it rather than feeding the
+  // model two unanswered prompts at once.
+  const last = history[history.length - 1];
+  if (last?.role === "user") {
+    history[history.length - 1] = { role: "user", content: text };
+  } else {
+    history.push({ role: "user", content: text });
+  }
+  lastUserEvent = message;
+  if (live) {
+    respondTo(message, history.slice());
+  }
+}
+
+/** After a turn ends, start the next prompt that queued while it was running. */
+function drainDeferred(): void {
+  if (activeRun || !lease.isLeader()) {
+    return;
+  }
+  const next = deferredUserEvents.shift();
+  if (!next) {
+    return;
+  }
+  const decoded = decodeTrevorEvent(next);
+  if (decoded?.type === "user.message") {
+    handleUserMessage(next, decoded.text);
+  }
+}
+
 /** Applies one live or replayed session event to the host's in-memory state. */
 function handleEvent(message: SessionEvent): void {
   const decoded = decodeTrevorEvent(message);
@@ -165,25 +227,28 @@ function handleEvent(message: SessionEvent): void {
     return;
   }
   if (decoded.type === "user.message" && message.producerId !== PRODUCER_ID) {
-    // Collapse consecutive user turns. Two user messages with no assistant turn
-    // between them means the earlier turn was abandoned/failed (it left no
-    // assistant entry), so it's stale - drop it and answer the latest prompt
-    // rather than feeding the model a pile of unanswered messages at once.
-    const last = history[history.length - 1];
-    if (last?.role === "user") {
-      history[history.length - 1] = { role: "user", content: decoded.text };
-    } else {
-      history.push({ role: "user", content: decoded.text });
-    }
-    lastUserEvent = message;
-    if (live) {
-      respondTo(message, history.slice());
-    }
+    handleUserMessage(message, decoded.text);
   } else if (decoded.type === "assistant.completed") {
     if (decoded.text) {
       history.push({ role: "assistant", content: decoded.text });
     }
     lastAnswerSeq = Math.max(lastAnswerSeq, message.seq);
+    // The turn finished: free the slot and answer whatever queued while it ran.
+    // (.finally on the turn also clears activeRun; both are guarded by runId so
+    // whichever lands first wins and the other is a no-op.)
+    if (activeRun && activeRun.runId === decoded.runId) {
+      activeRun = null;
+    }
+    if (live) {
+      drainDeferred();
+    }
+  } else if (decoded.type === "user.cancel") {
+    // Abort the active turn if the cancel targets it, or if the browser asked to
+    // cancel "whatever is active" (empty runId, sent before assistant.started lands).
+    if (activeRun && (decoded.runId === activeRun.runId || decoded.runId === "")) {
+      console.log(`cancel: aborting run ${activeRun.runId.slice(0, 8)}`);
+      activeRun.controller.abort();
+    }
   } else if (live && (decoded.type === "host.beat" || decoded.type === "host.hello")) {
     if (decoded.instanceId) {
       lease.observe(
@@ -201,6 +266,10 @@ function connect(): void {
   history = [];
   lastUserEvent = null;
   lastAnswerSeq = -1;
+  // Rebuilt from replay; an in-flight turn's activeRun is left intact (its turn keeps
+  // emitting over REST and its replayed completed clears it - resetting could race a
+  // concurrent turn).
+  deferredUserEvents = [];
   connectSession({
     serviceUrl: SERVICE_URL,
     sessionId: SESSION_ID,
