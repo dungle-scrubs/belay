@@ -5,6 +5,7 @@ import {
   type PublishInput,
   publishEvent as publishEventRemote,
   type SessionEvent,
+  type SessionIdentity,
 } from "@trevor/richter";
 
 /**
@@ -33,18 +34,46 @@ export interface RichterConnection {
   readonly close: () => void;
 }
 
-/** Opens a session stream as a fresh web participant (replay-then-tail). */
+// Identity is per-tab and persisted in sessionStorage, so a page reload reuses it
+// instead of registering a new Richter participant on every load. sessionStorage
+// (not localStorage) scopes it to this tab, keeping distinct tabs and devices as
+// distinct presences - a session moves between machines by URL (?session=), never
+// by identity. Storage can throw (private mode); we fall back to an ephemeral id.
+const IDENTITY_KEY = "trevor-web-identity";
+
+function webIdentity(): SessionIdentity {
+  try {
+    const cached = sessionStorage.getItem(IDENTITY_KEY);
+    if (cached) {
+      return JSON.parse(cached) as SessionIdentity;
+    }
+  } catch {
+    // storage unavailable: fall through to a fresh, non-persisted identity
+  }
+
+  const identity: SessionIdentity = {
+    displayName: "trevor-web",
+    runtimeKind: "web",
+    instanceId: crypto.randomUUID(),
+    participantId: `web-${crypto.randomUUID()}`,
+  };
+
+  try {
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+  } catch {
+    // ignore: an ephemeral identity still works for this load
+  }
+
+  return identity;
+}
+
+/** Opens a session stream as this tab's stable web participant (replay-then-tail). */
 export function connect(options: ConnectOptions): RichterConnection {
   return connectSession({
     serviceUrl: SERVICE_URL,
     sessionId: options.sessionId,
     afterSeq: options.afterSeq,
-    identity: {
-      displayName: "trevor-web",
-      runtimeKind: "web",
-      instanceId: crypto.randomUUID(),
-      participantId: `web-${crypto.randomUUID()}`,
-    },
+    identity: webIdentity(),
     onEvent: options.onEvent,
     onReplayComplete: options.onReplayComplete,
     onStatus: options.onStatus,
