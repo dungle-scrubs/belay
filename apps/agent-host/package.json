@@ -10,7 +10,8 @@
   "dependencies": {
     "@mariozechner/pi-ai": "^0.73.1",
     "@trevor/richter": "workspace:*",
-    "effect": "^3.21.4"
+    "effect": "^3.21.4",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
