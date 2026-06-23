@@ -101,6 +101,16 @@ interpolation H-175) remains valid as the post-S3 backlog, re-sequenced onto the
 <!-- D-003 --> Multi-user features (`controlLease.*`, teams, `workspace.acquire`, multi-client identity)
 stay dropped; the capability-scoped filesystem lease (D-019) is the only authority mechanism.
 
+**Captured for later - shell.promote (H-035).** In V1 `shell.promote` adopts a *running* async `/shell`
+run into the unified `state.tasks`/`subagentRuns` registry (mints `shell_<runId>`, wires the abort
+controller, emits `task.started`) - pure bookkeeping, no re-exec. V2 has a blocking `/shell` and a
+`ProcessSupervisor` (`pN` jobs) instead. Decision: implement promote as **auto-promote-on-timeout** -
+route bash/`/shell` through the supervisor and, when a command outlives the timeout, *adopt it* as a
+tracked job (return "running as `pN`, poll it") rather than SIGTERM it. Blocked on the supervisor
+gaining a "foreground-until-timeout, then promote" spawn mode (today `runShell` uses `execAsync`, which
+kills on timeout and yields no handle). Sequenced **after** the Tasks tool, so a promoted shell becomes
+a first-class task in the same registry that the Tasks tool surfaces.
+
 ### Phase 3 - Desktop shell (later) <!-- D-021 -->
 Later phase, after the Phase 2+ host backlog. Captured here as architecture + decisions; **not milestone-
 decomposed yet** - decompose at phase entry. Package `apps/web` as a **self-contained desktop app**: one
