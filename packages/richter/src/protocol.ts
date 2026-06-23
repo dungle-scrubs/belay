@@ -1,3 +1,4 @@
+import { HEX64 } from "./blob";
 import type { SessionEvent } from "./wire";
 
 /**
@@ -44,6 +45,21 @@ export interface CommandSpec {
   readonly usage?: string;
 }
 
+/**
+ * A content-addressed artifact (image / document / other file) attached to a
+ * message. The bytes do NOT ride the event - they live in the blob store beside
+ * Richter (D-028); the event carries only this reference. `hash` is the sha256 the
+ * bytes are stored under, so the same artifact is shared across every session and
+ * fork that references it. See `blob.ts` for the store client.
+ */
+export interface ArtifactRef {
+  readonly kind: "image" | "document" | "file";
+  readonly mimeType: string;
+  readonly size: number;
+  readonly hash: string;
+  readonly name?: string;
+}
+
 /** A task's lifecycle state (the V1 set). "deleted" is an update verb, not a state. */
 export type TaskStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
@@ -72,12 +88,18 @@ export interface TrevorEventInput {
  * hand-built payloads these replaced.
  */
 export const events = {
-  userMessage: (p: { text: string; provider: string; reasoning?: string }): TrevorEventInput => ({
+  userMessage: (p: {
+    text: string;
+    provider: string;
+    reasoning?: string;
+    artifacts?: readonly ArtifactRef[];
+  }): TrevorEventInput => ({
     type: "user.message",
     payload: {
       text: p.text,
       provider: p.provider,
       ...(p.reasoning ? { reasoning: p.reasoning } : {}),
+      ...(p.artifacts?.length ? { artifacts: p.artifacts } : {}),
     },
   }),
   assistantStarted: (p: {
@@ -267,6 +289,28 @@ function coerceTasks(value: unknown): TaskSnapshot[] {
   });
 }
 
+const ARTIFACT_KINDS: readonly ArtifactRef["kind"][] = ["image", "document", "file"];
+
+function coerceArtifacts(value: unknown): ArtifactRef[] {
+  return coerceArray(value, (a) => {
+    const hash = str(a.hash);
+    if (!HEX64.test(hash)) {
+      return null;
+    }
+    const kind = ARTIFACT_KINDS.includes(a.kind as ArtifactRef["kind"])
+      ? (a.kind as ArtifactRef["kind"])
+      : "file";
+    const name = optStr(a.name);
+    return {
+      kind,
+      mimeType: str(a.mimeType, "application/octet-stream"),
+      size: num(a.size),
+      hash,
+      ...(name ? { name } : {}),
+    };
+  });
+}
+
 function coerceProviderModels(value: unknown): Record<string, ProviderModel> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -297,6 +341,7 @@ export type DecodedEvent =
       readonly text: string;
       readonly provider?: string;
       readonly reasoning?: string;
+      readonly artifacts: readonly ArtifactRef[];
     }
   | {
       readonly type: "assistant.started";
@@ -366,6 +411,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         text: str(p.text),
         provider: optStr(p.provider),
         reasoning: optStr(p.reasoning),
+        artifacts: coerceArtifacts(p.artifacts),
       };
     case "assistant.started":
       return {
