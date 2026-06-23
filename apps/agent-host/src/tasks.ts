@@ -63,6 +63,7 @@ export class TaskRegistry {
   onChange(fn: () => void): void {
     this.listeners.add(fn);
   }
+
   private notify(): void {
     for (const fn of this.listeners) {
       fn();
@@ -81,15 +82,20 @@ export class TaskRegistry {
 
   create(input: CreateInput): Task {
     const subject = input.subject.trim();
+
     if (!subject) {
       throw new Error("subject is required");
     }
+
     const status = input.status ?? "pending";
     const blockedBy = [...(input.blockedBy ?? [])];
+
     if (status === "in_progress") {
       this.assertUnblocked(blockedBy);
     }
+
     this.seq += 1;
+
     const id = `task_${this.seq}`;
     const now = new Date().toISOString();
     const task: Task = {
@@ -103,52 +109,68 @@ export class TaskRegistry {
       createdAt: now,
       updatedAt: now,
     };
+
     this.tasks.set(id, task);
     this.notify();
+
     return task;
   }
 
   /** Updates a task, deletes it (status "deleted"), or auto-clears the checklist. */
   update(id: string, fields: UpdateInput): { task: Task | null; cleared: boolean } {
     const task = this.tasks.get(id);
+
     if (!task) {
       throw new Error(`no such task "${id}"`);
     }
+
     if (fields.status === "deleted") {
       this.tasks.delete(id);
       this.notify();
       return { task: null, cleared: false };
     }
+
     const nextStatus = fields.status ?? task.status;
     const nextBlockedBy = fields.blockedBy ?? task.blockedBy;
+
     if (nextStatus === "in_progress" && task.status !== "in_progress") {
       this.assertUnblocked(nextBlockedBy);
     }
+
     if (fields.subject !== undefined) {
       task.subject = fields.subject.trim();
     }
+
     if (fields.description !== undefined) {
       task.description = fields.description.trim();
     }
+
     if (fields.activeForm !== undefined) {
       task.activeForm = fields.activeForm.trim();
     }
+
     if (fields.blockedBy !== undefined) {
       task.blockedBy = [...fields.blockedBy];
     }
+
     if (fields.blocks !== undefined) {
       task.blocks = [...fields.blocks];
     }
+
     task.status = nextStatus;
     task.updatedAt = new Date().toISOString();
+
     // Completing the last open task clears the finished checklist (V1 behavior), so
     // a done plan doesn't linger into the next topic.
     const allDone = [...this.tasks.values()].every((t) => t.status === "completed");
     const cleared = nextStatus === "completed" && this.tasks.size > 0 && allDone;
+
     if (cleared) {
       this.tasks.clear();
     }
+
     this.notify();
+
     return { task: cleared ? null : task, cleared };
   }
 
@@ -171,7 +193,9 @@ export class TaskRegistry {
   /** Restores the registry from a snapshot (replay / standby sync); does NOT re-emit. */
   load(snapshot: readonly TaskSnapshot[]): void {
     this.tasks.clear();
+
     let max = 0;
+
     for (const t of snapshot) {
       this.tasks.set(t.id, {
         id: t.id,
@@ -184,24 +208,30 @@ export class TaskRegistry {
         createdAt: "",
         updatedAt: "",
       });
+
       const n = Number(t.id.replace(/^task_/, ""));
+
       if (Number.isFinite(n) && n > max) {
         max = n;
       }
     }
+
     this.seq = Math.max(this.seq, max);
   }
 
   /** The ambient block injected into the system prompt each turn (empty if no tasks). */
   renderForPrompt(): string {
     const tasks = this.list();
+
     if (!tasks.length) {
       return "";
     }
+
     const rows = tasks.map((t) => {
       const dep = t.blockedBy.length ? ` (blocked by: ${t.blockedBy.join(", ")})` : "";
       return `  [${STATUS_LABEL[t.status]}] ${t.id}: ${t.activeForm}${dep}`;
     });
+
     return [
       "Your current task checklist (keep it current as you work; this is your plan, not the user's):",
       ...rows,
@@ -223,8 +253,14 @@ export function buildTaskTools(registry: TaskRegistry = taskRegistry): Tool[] {
     parameters: {
       type: "object",
       properties: {
-        subject: { type: "string", description: "Short imperative title of the task" },
-        description: { type: "string", description: "Optional detail / acceptance" },
+        subject: {
+          type: "string",
+          description: "Short imperative title of the task",
+        },
+        description: {
+          type: "string",
+          description: "Optional detail / acceptance",
+        },
         activeForm: {
           type: "string",
           description: "Optional present-tense label shown while active",
@@ -254,10 +290,15 @@ export function buildTaskTools(registry: TaskRegistry = taskRegistry): Tool[] {
             blockedBy: strArr(args.blockedBy),
             blocks: strArr(args.blocks),
           });
+
           return `created ${task.id}: ${task.subject}`;
         },
         catch: (cause) =>
-          new ToolExecutionError({ tool: "task_create", detail: msg(cause), cause }),
+          new ToolExecutionError({
+            tool: "task_create",
+            detail: msg(cause),
+            cause,
+          }),
       }),
   };
 
@@ -289,16 +330,23 @@ export function buildTaskTools(registry: TaskRegistry = taskRegistry): Tool[] {
             blockedBy: strArr(args.blockedBy),
             blocks: strArr(args.blocks),
           });
+
           if (cleared) {
             return "all tasks complete - checklist cleared";
           }
+
           if (!task) {
             return `deleted ${String(args.taskId ?? "")}`;
           }
+
           return `${task.id} -> ${task.status}`;
         },
         catch: (cause) =>
-          new ToolExecutionError({ tool: "task_update", detail: msg(cause), cause }),
+          new ToolExecutionError({
+            tool: "task_update",
+            detail: msg(cause),
+            cause,
+          }),
       }),
   };
 

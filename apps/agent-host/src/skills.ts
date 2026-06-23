@@ -27,6 +27,7 @@ import type { Tool } from "./tools/types";
 export const SKILLS_DIR = resolve(
   process.env.TREVOR_SKILLS_DIR ?? join(homedir(), ".agents", "skills"),
 );
+
 /** Skill shell-interpolation is opt-in (it runs commands when a skill is loaded). */
 export const SKILL_SHELL_INTERPOLATION =
   process.env.TREVOR_SKILL_SHELL === "1" || process.env.TREVOR_SKILL_SHELL === "true";
@@ -43,20 +44,28 @@ export interface Skill {
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
 /** Splits a SKILL.md into parsed frontmatter data and the remaining body. */
-function parseFrontmatter(text: string): { data: Record<string, unknown>; body: string } {
+function parseFrontmatter(text: string): {
+  data: Record<string, unknown>;
+  body: string;
+} {
   const match = text.match(FRONTMATTER);
+
   if (!match) {
     return { data: {}, body: text };
   }
+
   let data: Record<string, unknown> = {};
+
   try {
     const parsed = parseYaml(match[1] ?? "");
+
     if (parsed && typeof parsed === "object") {
       data = parsed as Record<string, unknown>;
     }
   } catch {
     data = {};
   }
+
   return { data, body: text.slice(match[0].length) };
 }
 
@@ -66,11 +75,14 @@ const trimStr = (value: unknown): string | undefined =>
 /** Builds a Skill from a SKILL.md, or null if its frontmatter disables it. */
 function toSkill(id: string, path: string, text: string): Skill | null {
   const { data } = parseFrontmatter(text);
+
   if (data.disabled === true) {
     return null;
   }
+
   const meta =
     data.meta && typeof data.meta === "object" ? (data.meta as Record<string, unknown>) : {};
+
   return {
     id,
     name: trimStr(data.name) ?? id,
@@ -88,23 +100,30 @@ export function discoverSkills(): readonly Skill[] {
   if (cache) {
     return cache;
   }
+
   const skills: Skill[] = [];
+
   let entries: string[];
+
   try {
     entries = readdirSync(SKILLS_DIR);
   } catch {
     cache = [];
     return cache;
   }
+
   for (const entry of entries.sort()) {
     if (entry.startsWith(".")) {
       continue;
     }
+
     const path = join(SKILLS_DIR, entry, "SKILL.md");
+
     try {
       // No statSync pre-check: readFileSync throws (caught below) when the entry is
       // a plain file or a dir without a SKILL.md, which is exactly what we skip.
       const skill = toSkill(entry, path, readFileSync(path, "utf8"));
+
       if (skill) {
         skills.push(skill);
       }
@@ -112,7 +131,9 @@ export function discoverSkills(): readonly Skill[] {
       // No readable SKILL.md here - skip it.
     }
   }
+
   cache = skills;
+
   return skills;
 }
 
@@ -125,41 +146,55 @@ export function discoverSkills(): readonly Skill[] {
 async function interpolateShell(body: string): Promise<string> {
   const lines = body.split("\n");
   const out: string[] = [];
+
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
     const trimmed = line.trim();
+
     if (/^```!\s*$/.test(trimmed)) {
       const script: string[] = [];
+
       i += 1;
+
       for (; i < lines.length; i += 1) {
         const inner = lines[i] ?? "";
+
         if (/^```\s*$/.test(inner.trim())) {
           break;
         }
+
         script.push(inner);
       }
+
       out.push(await runShell(script.join("\n")));
+
       continue; // i sits on the closing fence (or end); the loop step moves past it.
     }
+
     if (trimmed.length > 1 && trimmed.startsWith("!") && trimmed[1] !== "[") {
       out.push(await runShell(trimmed.slice(1).trim()));
       continue;
     }
+
     out.push(line);
   }
+
   return out.join("\n");
 }
 
 /** Loads a skill's instruction body (frontmatter stripped, interpolation applied if on). */
 export async function expandSkill(skill: Skill): Promise<string> {
   let text: string;
+
   try {
     text = readFileSync(skill.path, "utf8");
   } catch {
     return `error: cannot read skill "${skill.id}"`;
   }
+
   const { body } = parseFrontmatter(text);
   const expanded = SKILL_SHELL_INTERPOLATION ? await interpolateShell(body) : body;
+
   return cap(expanded.trim());
 }
 
@@ -183,22 +218,27 @@ export function buildSkillTool(skills: readonly Skill[]): Tool {
   const list = skills
     .map((s) => `- ${s.icon ? `${s.icon} ` : ""}${s.id}: ${blurb(s.description)}`)
     .join("\n");
+
   return {
     name: "skill",
     description: `Load a skill's full instructions by id and then follow them. Use a skill when the task matches its description or triggers. Available skills:\n${list}`,
     parameters: {
       type: "object",
-      properties: { name: { type: "string", description: "The skill id to load" } },
+      properties: {
+        name: { type: "string", description: "The skill id to load" },
+      },
       required: ["name"],
     },
     execute: (args) => {
       const id = String(args.name ?? "").trim();
       const skill = skills.find((s) => s.id === id);
+
       if (!skill) {
         return Effect.succeed(
           `error: unknown skill "${id}". Available: ${skills.map((s) => s.id).join(", ") || "(none)"}`,
         );
       }
+
       // expandSkill never rejects (it catches its own read), so Effect.promise is safe.
       return Effect.promise(() => expandSkill(skill));
     },
