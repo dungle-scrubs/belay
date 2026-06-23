@@ -1,0 +1,305 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "tw-shimmer";
+
+/* SMUI (SpaceMolt UI): a Nord-inspired terminal theme for shadcn/ui.
+ * Values are the authoritative set from statico/smui src/globals.css:
+ *   :root  = light mode (Nord Snow Storm)
+ *   .dark  = dark mode (Nord Polar Night)
+ * Colors are raw HSL triplets so they compose with alpha, e.g.
+ *   hsl(var(--smui-green) / 0.3). The @theme inline block below maps them to
+ *   Tailwind color utilities (bg-background, text-smui-red, ...). */
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: light;
+
+  /* shadcn base tokens -- light (Snow Storm) */
+  --background: 218 27% 94%;
+  --foreground: 220 16% 22%;
+  --card: 218 27% 89%;
+  --card-foreground: 220 16% 22%;
+  --popover: 218 27% 89%;
+  --popover-foreground: 220 16% 22%;
+  --primary: 213 32% 40%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 219 28% 84%;
+  --secondary-foreground: 220 16% 22%;
+  --muted: 219 28% 84%;
+  --muted-foreground: 220 17% 28%;
+  --accent: 213 20% 86%;
+  --accent-foreground: 213 32% 40%;
+  --destructive: 355 60% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 219 18% 72%;
+  --input: 219 18% 72%;
+  --ring: 213 32% 40%;
+  --radius: 0rem;
+
+  /* Charts */
+  --chart-1: 213 32% 44%;
+  --chart-2: 210 34% 42%;
+  --chart-3: 92 30% 36%;
+  --chart-4: 40 70% 35%;
+  --chart-5: 311 28% 42%;
+
+  /* Sidebar */
+  --sidebar-background: 218 27% 89%;
+  --sidebar-foreground: 220 16% 22%;
+  --sidebar-primary: 213 32% 40%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 213 20% 86%;
+  --sidebar-accent-foreground: 213 32% 40%;
+  --sidebar-border: 219 18% 72%;
+  --sidebar-ring: 213 32% 40%;
+
+  /* SMUI frost (darkened for light backgrounds) */
+  --smui-frost-1: 176 30% 35%;
+  --smui-frost-2: 193 40% 38%;
+  --smui-frost-3: 210 34% 40%;
+  --smui-frost-4: 213 32% 36%;
+
+  /* SMUI aurora status (darkened for light backgrounds) */
+  --smui-red: 355 55% 44%;
+  --smui-orange: 14 55% 44%;
+  --smui-yellow: 40 70% 34%;
+  --smui-green: 92 35% 34%;
+  --smui-purple: 311 28% 40%;
+
+  /* Surface hierarchy (Snow Storm) */
+  --smui-surface-0: 218 27% 94%;
+  --smui-surface-1: 218 27% 89%;
+  --smui-surface-2: 219 28% 84%;
+  --smui-surface-3: 219 20% 76%;
+
+  /* Interactive border state */
+  --smui-border-hover: 220 17% 50%;
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* shadcn base tokens -- dark (Polar Night) */
+  --background: 213 16% 12%;
+  --foreground: 213 27% 88%;
+  --card: 217 16% 15.5%;
+  --card-foreground: 213 27% 88%;
+  --popover: 217 16% 15.5%;
+  --popover-foreground: 213 27% 88%;
+  --primary: 193 44% 67%;
+  --primary-foreground: 213 16% 12%;
+  --secondary: 216 15% 19%;
+  --secondary-foreground: 213 27% 88%;
+  --muted: 216 15% 19%;
+  --muted-foreground: 213 14% 65%;
+  --accent: 193 10% 16%;
+  --accent-foreground: 193 44% 67%;
+  --destructive: 355 52% 65%;
+  --destructive-foreground: 219 28% 94%;
+  --border: 217 17% 28%;
+  --input: 217 17% 28%;
+  --ring: 193 44% 67%;
+  --radius: 0rem;
+
+  /* Charts */
+  --chart-1: 193 44% 67%;
+  --chart-2: 213 32% 52%;
+  --chart-3: 92 28% 65%;
+  --chart-4: 40 71% 73%;
+  --chart-5: 311 24% 63%;
+
+  /* Sidebar */
+  --sidebar-background: 217 16% 15.5%;
+  --sidebar-foreground: 213 27% 88%;
+  --sidebar-primary: 193 44% 67%;
+  --sidebar-primary-foreground: 213 16% 12%;
+  --sidebar-accent: 193 10% 16%;
+  --sidebar-accent-foreground: 193 44% 67%;
+  --sidebar-border: 217 17% 28%;
+  --sidebar-ring: 193 44% 67%;
+
+  /* SMUI frost (original Nord values for dark backgrounds) */
+  --smui-frost-1: 176 25% 65%;
+  --smui-frost-2: 193 44% 67%;
+  --smui-frost-3: 210 34% 63%;
+  --smui-frost-4: 213 32% 52%;
+
+  /* SMUI aurora status (original Nord values for dark backgrounds) */
+  --smui-red: 355 52% 64%;
+  --smui-orange: 14 51% 63%;
+  --smui-yellow: 40 71% 73%;
+  --smui-green: 92 28% 65%;
+  --smui-purple: 311 24% 63%;
+
+  /* Surface hierarchy (Polar Night) */
+  --smui-surface-0: 213 16% 12%;
+  --smui-surface-1: 217 16% 15.5%;
+  --smui-surface-2: 216 15% 19%;
+  --smui-surface-3: 215 14% 22%;
+
+  /* Interactive border state */
+  --smui-border-hover: 216 12% 37%;
+}
+
+/* Non-inline @theme: emits the custom properties AND generates utilities.
+ * Font + text scale must live here (not @theme inline) so the text-label/
+ * text-ui/... font-size utilities resolve. JetBrains Mono is the only font. */
+@theme {
+  --font-sans: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+
+  --text-label: 11px;
+  --text-ui: 13px;
+  --text-heading: 22px;
+  --text-stat: 26px;
+  --text-hero: 42px;
+}
+
+/* @theme inline: maps Tailwind color/radius utilities onto the runtime CSS
+ * variables above, so bg-background / text-smui-red switch with light/dark. */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  /* SMUI extended palette -> bg-smui-frost-2, text-smui-red, ... */
+  --color-smui-frost-1: hsl(var(--smui-frost-1));
+  --color-smui-frost-2: hsl(var(--smui-frost-2));
+  --color-smui-frost-3: hsl(var(--smui-frost-3));
+  --color-smui-frost-4: hsl(var(--smui-frost-4));
+  --color-smui-red: hsl(var(--smui-red));
+  --color-smui-orange: hsl(var(--smui-orange));
+  --color-smui-yellow: hsl(var(--smui-yellow));
+  --color-smui-green: hsl(var(--smui-green));
+  --color-smui-purple: hsl(var(--smui-purple));
+  --color-smui-surface-0: hsl(var(--smui-surface-0));
+  --color-smui-surface-1: hsl(var(--smui-surface-1));
+  --color-smui-surface-2: hsl(var(--smui-surface-2));
+  --color-smui-surface-3: hsl(var(--smui-surface-3));
+  --color-smui-border-hover: hsl(var(--smui-border-hover));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Card hover: subtle border-color transition (skill.md "card-glow"). */
+.card-glow {
+  transition: border-color 0.15s;
+}
+.card-glow:hover {
+  border-color: hsl(var(--smui-border-hover));
+}
+
+::selection {
+  background: hsl(193 44% 67% / 0.2);
+  color: hsl(193 44% 67%);
+}
+
+/* Skeleton shimmer for loading placeholders. */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--smui-surface-2)) 25%,
+    hsl(var(--smui-surface-3)) 50%,
+    hsl(var(--smui-surface-2)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Working indicator dots: staggered opacity pulse (see WorkingIndicator). */
+@keyframes smui-pulse-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* SMUI re-theming for the shared Markdown renderer (.trevor-md, see markdown.tsx).
+ * Scoped to .smui-md so it only applies inside the chat message components and
+ * never touches the live app, whose markdown.css stays light. Overrides only the
+ * colors/radius/font; markdown.css keeps owning the structural rules. */
+.smui-md .trevor-md a {
+  color: hsl(var(--primary));
+}
+.smui-md .trevor-md code {
+  background: hsl(var(--smui-surface-2));
+  color: hsl(var(--foreground));
+  font-family: var(--font-mono);
+  border-radius: 0;
+}
+.smui-md .trevor-md pre {
+  background: hsl(var(--smui-surface-1));
+  border-color: hsl(var(--border));
+  border-radius: 0;
+}
+.smui-md .trevor-md blockquote {
+  border-left-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+.smui-md .trevor-md th,
+.smui-md .trevor-md td {
+  border-color: hsl(var(--border));
+}
+.smui-md .trevor-md hr {
+  border-top-color: hsl(var(--border));
+}
+.smui-md .trevor-md--muted {
+  color: hsl(var(--muted-foreground));
+}

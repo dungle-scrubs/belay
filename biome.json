@@ -15,8 +15,19 @@
   "javascript": {
     "formatter": { "quoteStyle": "double", "semicolons": "always" }
   },
+  "css": {
+    "parser": { "tailwindDirectives": true }
+  },
   "assist": {
     "enabled": true,
     "actions": { "source": { "organizeImports": "on" } }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/components/assistant-ui/**"],
+      "linter": { "enabled": false },
+      "formatter": { "enabled": false },
+      "assist": { "enabled": false }
+    }
+  ]
 }
