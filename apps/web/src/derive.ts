@@ -3,6 +3,7 @@ import {
   decodeTrevorEvent,
   type ProviderModel,
   type SessionEvent,
+  type TaskSnapshot,
 } from "@trevor/richter";
 
 /**
@@ -168,6 +169,18 @@ export function providerModelsFrom(events: readonly SessionEvent[]): Record<stri
     }
   }
   return latest ?? FALLBACK_MODELS;
+}
+
+/** The latest task checklist the host published (empty when there are no tasks / cleared). */
+export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
+  let latest: TaskSnapshot[] = [];
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "tasks.current") {
+      latest = [...decoded.tasks];
+    }
+  }
+  return latest;
 }
 
 /** The immediate-command inventory the host last announced (empty until one is online). */

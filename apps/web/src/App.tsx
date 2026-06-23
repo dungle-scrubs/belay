@@ -19,6 +19,7 @@ import {
   parseCommand,
   providerModelsFrom,
   QWEN_FALLBACK,
+  tasksFrom,
   toolSummary,
 } from "./derive";
 import { Markdown } from "./markdown";
@@ -44,6 +45,21 @@ type QueuedPrompt = { id: string; text: string; provider: string; reasoning?: st
 function combineSteer(queue: readonly QueuedPrompt[], draft: string): string {
   return [...queue.map((q) => q.text), draft.trim()].filter(Boolean).join("\n\n");
 }
+// Checklist row glyph + color by status (matches the V1 task set).
+const TASK_ICON: Record<string, string> = {
+  pending: "☐",
+  in_progress: "◐",
+  completed: "☑",
+  failed: "✗",
+  cancelled: "⊘",
+};
+const TASK_COLOR: Record<string, string> = {
+  pending: "#555",
+  in_progress: "#2a7",
+  completed: "#9a9a9a",
+  failed: "#c0392b",
+  cancelled: "#9a9a9a",
+};
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
 export function App() {
@@ -81,6 +97,10 @@ export function App() {
   const host = useMemo(() => hostStatus(events, now), [events, now]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
   const active = useMemo(() => activeRunId(events), [events]);
+
+  // The agent's live task checklist (host-published snapshots), rendered in the header.
+  const tasks = useMemo(() => tasksFrom(events), [events]);
+  const [tasksOpen, setTasksOpen] = useState(true);
 
   // Immediate host commands the host announced, plus the set of names used to tell a
   // command from an ordinary prompt at submit time.
@@ -409,6 +429,64 @@ export function App() {
               </>
             ) : null}
           </p>
+        ) : null}
+
+        {/* The agent's live checklist (ambient + UI-reflected). Collapsible; auto-clears
+            when the host wipes a finished list, since the snapshot then comes back empty. */}
+        {tasks.length > 0 ? (
+          <div style={{ margin: "0.5rem 0", fontSize: "0.85rem" }}>
+            <button
+              type="button"
+              onClick={() => setTasksOpen((open) => !open)}
+              style={{
+                border: "none",
+                background: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "#555",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+              }}
+            >
+              {tasksOpen ? "▾" : "▸"} Tasks {tasks.filter((t) => t.status === "completed").length}/
+              {tasks.length}
+            </button>
+            {tasksOpen ? (
+              <div
+                style={{
+                  marginTop: "0.3rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.15rem",
+                }}
+              >
+                {tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    style={{ display: "flex", gap: "0.45rem", alignItems: "baseline" }}
+                  >
+                    <span style={{ color: TASK_COLOR[task.status] ?? "#555" }}>
+                      {TASK_ICON[task.status] ?? "•"}
+                    </span>
+                    <span
+                      style={{
+                        color: task.status === "completed" ? "#9a9a9a" : "#333",
+                        textDecoration: task.status === "completed" ? "line-through" : "none",
+                      }}
+                    >
+                      {task.activeForm}
+                      {task.blockedBy.length > 0 ? (
+                        <span style={{ color: "#bbb", fontSize: "0.75rem" }}>
+                          {" "}
+                          (blocked by {task.blockedBy.join(", ")})
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
