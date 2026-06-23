@@ -20,7 +20,7 @@ if (!provider) {
   process.exit(2);
 }
 
-const { ready, warm } = await provider.readiness();
+const { ready, warm } = await Effect.runPromise(provider.readiness());
 if (!ready) {
   console.error("SKIP: LM Studio not reachable - cannot validate A-004");
   process.exit(2);

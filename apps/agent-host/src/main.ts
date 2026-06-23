@@ -8,7 +8,7 @@ import {
   type SessionEvent,
   type TrevorEventInput,
 } from "@trevor/richter";
-import { Cause, Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
@@ -20,6 +20,7 @@ import {
   describeProviders,
   pickProvider,
 } from "./providers";
+import { Emit } from "./services";
 import { taskRegistry } from "./tasks";
 import { msg } from "./tools/shared";
 import { WORKSPACE_ROOT } from "./tools/workspace";
@@ -75,6 +76,9 @@ let deferredUserEvents: SessionEvent[] = [];
 function emit(event: TrevorEventInput): Promise<void> {
   return publishEvent(SERVICE_URL, SESSION_ID, { ...event, producerId: PRODUCER_ID });
 }
+
+/** The live Emit service: the turn program's events go to the Richter log via emit(). */
+const EmitLive = Layer.succeed(Emit, { publish: (event) => Effect.promise(() => emit(event)) });
 
 /** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
 function hostState(): Record<string, unknown> {
@@ -164,10 +168,10 @@ function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): vo
   // which tears down the in-flight provider stream and publishes the cancelled completion.
   const runId = crypto.randomUUID();
   const fiber = Effect.runFork(
-    publishTurn(emit, pickProvider(providers, decoded.provider), turnHistory, {
+    publishTurn(pickProvider(providers, decoded.provider), turnHistory, {
       runId,
       reasoning: decoded.reasoning,
-    }),
+    }).pipe(Effect.provide(EmitLive)),
   );
   activeRun = { runId, fiber };
   fiber.addObserver((exit) => {
@@ -192,14 +196,19 @@ function onBecomeLeader(): void {
   if (!local) {
     return;
   }
-  local
-    .readiness()
-    .then(({ warm }) => {
+  // Pre-warm the local model off the leader transition (best-effort: log and move on).
+  Effect.runFork(
+    Effect.gen(function* () {
+      const { warm } = yield* local.readiness();
       if (!warm) {
-        local.warm().catch((error) => warn("host", "warm failed", { error: msg(error) }));
+        yield* local.warm();
       }
-    })
-    .catch(() => {});
+    }).pipe(
+      Effect.catchAllCause((cause) =>
+        Effect.sync(() => warn("host", "warm failed", { cause: Cause.pretty(cause) })),
+      ),
+    ),
+  );
 }
 
 /** On go-live: start the lease (once), announce presence, and report online. */

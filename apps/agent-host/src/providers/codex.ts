@@ -54,13 +54,16 @@ export class CodexProvider implements Provider {
       : (levels[Math.floor(levels.length / 2)] ?? "medium");
   }
 
-  async readiness(): Promise<Readiness> {
-    const apiKey = await this.resolveApiKey().catch(() => null);
-    return { ready: apiKey !== null, warm: true };
+  readiness(): Effect.Effect<Readiness> {
+    return Effect.promise(async () => {
+      const apiKey = await this.resolveApiKey().catch(() => null);
+      return { ready: apiKey !== null, warm: true };
+    });
   }
 
-  async warm(): Promise<void> {
+  warm(): Effect.Effect<void> {
     // Cloud-hosted: nothing to load.
+    return Effect.void;
   }
 
   stream(

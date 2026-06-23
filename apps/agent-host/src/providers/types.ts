@@ -1,4 +1,4 @@
-import type { Stream } from "effect";
+import type { Effect, Stream } from "effect";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
 
 /** What a provider's stream can fail with, in the Effect `E` channel. */
@@ -73,8 +73,8 @@ export interface Provider {
   readonly model: string;
   readonly reasoningLevels: readonly string[];
   readonly defaultReasoning: string;
-  readiness(): Promise<Readiness>;
-  warm(): Promise<void>;
+  readiness(): Effect.Effect<Readiness>;
+  warm(): Effect.Effect<void>;
   /**
    * One model step as a Stream of events. Cancellation is fiber interruption - the
    * stream's scope tears the underlying request down (no signal arg); a stream failure

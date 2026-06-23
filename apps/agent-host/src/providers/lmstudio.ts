@@ -88,16 +88,18 @@ export class LmStudioProvider implements Provider {
     }
   }
 
-  async readiness(): Promise<Readiness> {
-    const info = await this.fetchModelInfo();
-    if (!info) {
-      return { ready: false, warm: false };
-    }
-    // Track the context LM Studio actually serves so the usage display and overflow
-    // detection match reality (ensureMaxContext loads it at the model's ceiling).
-    this.contextWindow =
-      info.loaded_context_length ?? info.max_context_length ?? this.contextWindow;
-    return { ready: true, warm: info.state === "loaded" };
+  readiness(): Effect.Effect<Readiness> {
+    return Effect.promise(async () => {
+      const info = await this.fetchModelInfo();
+      if (!info) {
+        return { ready: false, warm: false };
+      }
+      // Track the context LM Studio actually serves so the usage display and overflow
+      // detection match reality (ensureMaxContext loads it at the model's ceiling).
+      this.contextWindow =
+        info.loaded_context_length ?? info.max_context_length ?? this.contextWindow;
+      return { ready: true, warm: info.state === "loaded" };
+    });
   }
 
   /**
@@ -179,8 +181,8 @@ export class LmStudioProvider implements Provider {
   }
 
   /** Pre-load the model at its max context so the first turn doesn't pay for it. */
-  async warm(): Promise<void> {
-    await this.ensureMaxContext();
+  warm(): Effect.Effect<void> {
+    return Effect.promise(() => this.ensureMaxContext()).pipe(Effect.asVoid);
   }
 
   /** Load/context state for /doctor: what we serve, the cap, and why if not at max. */

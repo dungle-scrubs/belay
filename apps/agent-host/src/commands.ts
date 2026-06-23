@@ -1,4 +1,5 @@
 import type { CommandSpec } from "@trevor/richter";
+import { Effect } from "effect";
 import { fmtFields } from "./log";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
@@ -47,7 +48,7 @@ export interface CommandRegistry {
 async function providerStatus(key: string, provider: ProviderRegistry[string]): Promise<string> {
   let status: string;
   try {
-    const { ready, warm } = await provider.readiness();
+    const { ready, warm } = await Effect.runPromise(provider.readiness());
     status = ready ? (warm ? "warm" : "cold") : "unreachable";
   } catch {
     status = "unreachable";

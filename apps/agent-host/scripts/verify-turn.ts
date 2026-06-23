@@ -3,9 +3,10 @@
 // answers on the second. Exercises the multi-step loop, real tool execution, the tool
 // result threading back into the conversation, and the emitted event sequence - without
 // depending on a model choosing to call a tool. Run: pnpm exec tsx scripts/verify-turn.ts
-import { events, type TrevorEventInput } from "@trevor/richter";
-import { Effect, Stream } from "effect";
+import type { TrevorEventInput } from "@trevor/richter";
+import { Effect, Layer, Stream } from "effect";
 import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
+import { Emit } from "../src/services";
 import { publishTurn } from "../src/turn";
 
 const usage = { input: 10, output: 5, contextWindow: 1000, genMs: 1 };
@@ -17,8 +18,8 @@ const fakeProvider: Provider = {
   model: "fake-1",
   reasoningLevels: [],
   defaultReasoning: "off",
-  readiness: () => Promise.resolve({ ready: true, warm: true }),
-  warm: () => Promise.resolve(),
+  readiness: () => Effect.succeed({ ready: true, warm: true }),
+  warm: () => Effect.void,
   stream: (messages) => {
     const answered = messages.some((m) => m.role === "tool");
     const evs: ProviderEvent[] = answered
@@ -43,14 +44,16 @@ const fakeProvider: Provider = {
   },
 };
 
+// A test Emit layer collects the published events - the DI seam the Emit service buys.
 const collected: TrevorEventInput[] = [];
-const emit = (event: TrevorEventInput): Promise<void> => {
-  collected.push(event);
-  return Promise.resolve();
-};
+const EmitTest = Layer.succeed(Emit, {
+  publish: (event) => Effect.sync(() => void collected.push(event)),
+});
 
 const history: ChatMessage[] = [{ role: "user", content: "Please run echo hello-from-tool." }];
-await Effect.runPromise(publishTurn(emit, fakeProvider, history, { runId: "r1" }));
+await Effect.runPromise(
+  publishTurn(fakeProvider, history, { runId: "r1" }).pipe(Effect.provide(EmitTest)),
+);
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: string) => {
