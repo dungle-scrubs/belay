@@ -12,6 +12,8 @@
  * specific module is misbehaving.
  */
 
+import { Data } from "effect";
+
 export type Fields = Record<string, unknown>;
 
 /** Renders one field value: bare for simple tokens, quoted/JSON when it has spaces. */
@@ -72,16 +74,17 @@ export function debug(scope: string, message: string, fields?: Fields): void {
 }
 
 /** A broken self-imposed rule (distinct from input validation, which checks the caller). */
-export class InvariantError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvariantError";
+export class InvariantError extends Data.TaggedError("InvariantError")<{
+  readonly detail: string;
+}> {
+  override get message(): string {
+    return this.detail;
   }
 }
 
 /** Throws InvariantError when a self-imposed rule breaks, at the point it breaks. */
 export function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) {
-    throw new InvariantError(message);
+    throw new InvariantError({ detail: message });
   }
 }

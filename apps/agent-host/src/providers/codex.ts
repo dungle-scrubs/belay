@@ -78,19 +78,27 @@ export class CodexProvider implements Provider {
     try {
       auth = JSON.parse(await readFile(AUTH_PATH, "utf8")) as Record<string, unknown>;
     } catch (cause) {
-      throw new ProviderAuthError(this.id, `cannot read ${AUTH_PATH} (log in with the pi CLI)`, {
+      throw new ProviderAuthError({
+        provider: this.id,
+        detail: `cannot read ${AUTH_PATH} (log in with the pi CLI)`,
         cause,
       });
     }
     const credentials = auth[CODEX];
     if (!credentials) {
-      throw new ProviderAuthError(this.id, `no ${CODEX} entry in ${AUTH_PATH}`);
+      throw new ProviderAuthError({
+        provider: this.id,
+        detail: `no ${CODEX} entry in ${AUTH_PATH}`,
+      });
     }
     const { getOAuthApiKey } = await import("@mariozechner/pi-ai/oauth");
     // biome-ignore lint/suspicious/noExplicitAny: pi-ai OAuth credential shape is internal.
     const resolved = await getOAuthApiKey(CODEX as any, { [CODEX]: credentials } as any);
     if (!resolved) {
-      throw new ProviderAuthError(this.id, "OAuth refresh failed (re-login with the pi CLI)");
+      throw new ProviderAuthError({
+        provider: this.id,
+        detail: "OAuth refresh failed (re-login with the pi CLI)",
+      });
     }
     return resolved.apiKey;
   }

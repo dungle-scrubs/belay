@@ -1,41 +1,40 @@
+import { Data } from "effect";
+
 /**
- * Typed provider failures, so callers (the agent loop, /doctor, readiness) can tell
- * *which* contract broke instead of pattern-matching a generic message. Each names the
- * failure mode and preserves the underlying cause via the standard Error `cause`.
+ * Typed provider failures as Data.TaggedError, so they ride the Effect `E` channel and
+ * callers discriminate by `_tag` instead of pattern-matching a message. Each names the
+ * failure mode, computes a human message, and preserves the underlying `cause`.
  */
 
 /** The provider's backend could not be reached or did not respond usably. */
-export class ProviderUnavailable extends Error {
-  constructor(
-    readonly provider: string,
-    detail: string,
-    options?: { cause?: unknown },
-  ) {
-    super(`${provider} unavailable: ${detail}`, options);
-    this.name = "ProviderUnavailable";
+export class ProviderUnavailable extends Data.TaggedError("ProviderUnavailable")<{
+  readonly provider: string;
+  readonly detail: string;
+  readonly cause?: unknown;
+}> {
+  override get message(): string {
+    return `${this.provider} unavailable: ${this.detail}`;
   }
 }
 
 /** The provider is reachable but rejected our credentials (re-auth needed). */
-export class ProviderAuthError extends Error {
-  constructor(
-    readonly provider: string,
-    detail: string,
-    options?: { cause?: unknown },
-  ) {
-    super(`${provider} auth failed: ${detail}`, options);
-    this.name = "ProviderAuthError";
+export class ProviderAuthError extends Data.TaggedError("ProviderAuthError")<{
+  readonly provider: string;
+  readonly detail: string;
+  readonly cause?: unknown;
+}> {
+  override get message(): string {
+    return `${this.provider} auth failed: ${this.detail}`;
   }
 }
 
 /** Loading or unloading a local model failed; the model stays at its previous load. */
-export class ModelLoadError extends Error {
-  constructor(
-    readonly provider: string,
-    detail: string,
-    options?: { cause?: unknown },
-  ) {
-    super(`${provider} load failed: ${detail}`, options);
-    this.name = "ModelLoadError";
+export class ModelLoadError extends Data.TaggedError("ModelLoadError")<{
+  readonly provider: string;
+  readonly detail: string;
+  readonly cause?: unknown;
+}> {
+  override get message(): string {
+    return `${this.provider} load failed: ${this.detail}`;
   }
 }

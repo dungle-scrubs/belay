@@ -53,7 +53,7 @@ export class LmStudioProvider implements Provider {
   /** Wall-time of the last successful (re)load, ms; surfaced via debugInfo. */
   private lastReloadMs: number | null = null;
   /** Why the model isn't at max context (unreachable / lms load failed), or null if it is. */
-  private lastError: Error | null = null;
+  private lastError: ProviderUnavailable | ModelLoadError | null = null;
 
   constructor(config: LmStudioConfig) {
     this.url = config.url;
@@ -110,10 +110,10 @@ export class LmStudioProvider implements Provider {
         // Unreachable, or the model reports no ceiling: leave the load alone and serve
         // whatever we last knew. Record why so /doctor and the next turn can see it.
         const served = this.contextWindow || DEFAULT_CONTEXT_WINDOW;
-        this.lastError = new ProviderUnavailable(
-          this.id,
-          info ? "model reported no max_context_length" : "LM Studio not reachable",
-        );
+        this.lastError = new ProviderUnavailable({
+          provider: this.id,
+          detail: info ? "model reported no max_context_length" : "LM Studio not reachable",
+        });
         warn("lmstudio", "cannot size context, serving fallback", {
           model: this.model,
           served,
@@ -152,7 +152,7 @@ export class LmStudioProvider implements Provider {
         // Best-effort: lms is missing or the load failed. Keep serving the current load
         // (often the 8k JIT default) and record the typed reason rather than swallowing it -
         // this is exactly the silent fallback that surfaces later as a thinking overflow.
-        this.lastError = new ModelLoadError(this.id, msg(cause), { cause });
+        this.lastError = new ModelLoadError({ provider: this.id, detail: msg(cause), cause });
         this.contextWindow = info.loaded_context_length ?? this.contextWindow;
         warn("lmstudio", "load failed, keeping current context", {
           model: this.model,
