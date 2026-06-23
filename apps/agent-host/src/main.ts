@@ -8,6 +8,7 @@ import {
   type SessionEvent,
   type TrevorEventInput,
 } from "@trevor/richter";
+import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
 import {
   buildProviders,
@@ -41,6 +42,7 @@ const SERVICE_URL = process.env.RICHTER_URL ?? "http://localhost:3025";
 const SESSION_ID = process.env.SESSION_ID ?? "trevor-local";
 const PRODUCER_ID = "trevor-host";
 const providers = buildProviders();
+const commands = buildCommandRegistry();
 
 /** Stable per-process identity: shared producerId on events, unique stream id + instance. */
 const INSTANCE_ID = crypto.randomUUID();
@@ -174,8 +176,27 @@ function goLive(): void {
       instanceId: INSTANCE_ID,
       cwd: abbrevPath(process.cwd()),
       workspace: abbrevPath(WORKSPACE_ROOT),
+      // The immediate-command inventory, so the browser knows which slashes route
+      // to the host's command lane (and can drive a slash menu).
+      commands: commands.specs,
     }),
   ).catch(() => {});
+}
+
+/**
+ * Runs an immediate host command and publishes its result. Unlike a user.message
+ * this never touches the model or the turn queue - it executes now, even while a
+ * turn is streaming, and answers with a single command.result.
+ */
+async function runCommand(name: string, args: string): Promise<void> {
+  const { text, ok } = await commands.run(name, args, {
+    providers,
+    cwd: abbrevPath(process.cwd()),
+    workspace: abbrevPath(WORKSPACE_ROOT),
+    instanceId: INSTANCE_ID.slice(0, 8),
+    role: lease.isLeader() ? "leader" : "standby",
+  });
+  await emit(events.commandResult({ command: name, text, ok }));
 }
 
 /**
@@ -248,6 +269,14 @@ function handleEvent(message: SessionEvent): void {
     if (activeRun && (decoded.runId === activeRun.runId || decoded.runId === "")) {
       console.log(`cancel: aborting run ${activeRun.runId.slice(0, 8)}`);
       activeRun.controller.abort();
+    }
+  } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
+    // Immediate command lane: only the leader answers, and only when live (commands
+    // are actions, not state to rebuild on replay).
+    if (live && lease.isLeader()) {
+      const { command, args } = decoded;
+      console.log(`command: ${command}${args ? ` ${args}` : ""}`);
+      runCommand(command, args).catch((error) => console.error("command error:", error));
     }
   } else if (live && (decoded.type === "host.beat" || decoded.type === "host.hello")) {
     if (decoded.instanceId) {
