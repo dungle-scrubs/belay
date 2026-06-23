@@ -7,6 +7,7 @@ export interface RichterSession {
   readonly status: ConnectionStatus;
   readonly replayed: boolean;
   readonly publish: (text: string, provider: string, reasoning?: string) => Promise<void>;
+  readonly cancel: (runId: string) => Promise<void>;
 }
 
 /** Subscribes to a Richter session: replay-then-tail into state, plus publish. */
@@ -43,5 +44,20 @@ export function useRichterSession(sessionId: string | null): RichterSession {
     [sessionId],
   );
 
-  return { events, status, replayed, publish };
+  // Hard steering: ask the host to abort the active run. runId may be empty when
+  // the browser fires ESC before assistant.started lands (cancel "whatever runs").
+  const cancel = useCallback(
+    async (runId: string) => {
+      if (!sessionId) {
+        return;
+      }
+      await publishEvent(sessionId, {
+        producerId: "trevor-web",
+        ...richterEvents.userCancel({ runId }),
+      });
+    },
+    [sessionId],
+  );
+
+  return { events, status, replayed, publish, cancel };
 }

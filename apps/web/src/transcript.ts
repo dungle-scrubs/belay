@@ -17,6 +17,7 @@ export type AssistantMessage = {
   usage?: Usage;
   error?: string;
   overflow?: string;
+  cancelled?: boolean;
 };
 export type ToolMessage = { kind: "tool"; id: string; name: string; args: string; done: boolean };
 export type Message = { kind: "user"; id: string; text: string } | AssistantMessage | ToolMessage;
@@ -118,6 +119,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         openByRun.delete(decoded.runId);
         if (decoded.error) {
           segment.error = decoded.error;
+        }
+        if (decoded.cancelled) {
+          segment.cancelled = true;
         }
         if (!segment.text && !segment.thinking) {
           segment.text = decoded.text;

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { type SubmitEvent, useMemo, useState } from "react";
+import { type SubmitEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  activeRunId,
   FALLBACK_MODELS,
   fmtCtx,
   fmtTokens,
@@ -23,6 +24,17 @@ const SHOW_THINKING_KEY = "trevor.showThinking";
 // Host and browser default to one shared session so they auto-attach with no
 // manual wiring; override with ?session=<id> in the URL.
 const DEFAULT_SESSION = "trevor-local";
+// A prompt waiting in the local send queue, carrying the provider/reasoning chosen
+// when it was submitted so a model switch while it waits doesn't rewrite it. The id
+// is a stable React key (queue order can change when ESC-steer prepends).
+type QueuedPrompt = { id: string; text: string; provider: string; reasoning?: string };
+
+// Fold queued prompts (in order) and the current draft into one steering prompt.
+// Cancelling collapses everything the user has lined up into a single interruption,
+// rather than replaying queued prompts one at a time after the steer.
+function combineSteer(queue: readonly QueuedPrompt[], draft: string): string {
+  return [...queue.map((q) => q.text), draft.trim()].filter(Boolean).join("\n\n");
+}
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
 export function App() {
@@ -49,7 +61,7 @@ export function App() {
   });
   const [draft, setDraft] = useState("");
 
-  const { events, status, replayed, publish } = useRichterSession(sessionId);
+  const { events, status, replayed, publish, cancel } = useRichterSession(sessionId);
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
@@ -59,6 +71,19 @@ export function App() {
   useInterval(() => setNow(Date.now()), 4000);
   const host = useMemo(() => hostStatus(events, now), [events, now]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
+  const active = useMemo(() => activeRunId(events), [events]);
+
+  // Local send queue: a prompt submitted while a turn is in flight waits here and is
+  // published only once the session is idle, so the host never receives two prompts
+  // at once (which would run concurrent, out-of-order turns) and the event log stays
+  // cleanly paired. ESC-steer prepends, so an interruption preempts what's waiting.
+  const [queue, setQueue] = useState<QueuedPrompt[]>([]);
+  const busy = active !== null || awaitingResponse;
+  // inFlight bridges the window between publishing a prompt and seeing its echo turn
+  // the session busy, so the drain effect can't fire twice and double-send. prevBusy
+  // catches the turn-ended edge (busy high -> low) to release the latch.
+  const inFlightRef = useRef(false);
+  const prevBusyRef = useRef(busy);
 
   const activeProvider = provider ?? "qwen";
   const modelMeta = hostModels[activeProvider] ?? FALLBACK_MODELS[activeProvider] ?? QWEN_FALLBACK;
@@ -75,15 +100,102 @@ export function App() {
       ? "pnpm --filter @trevor/agent-host start"
       : `SESSION_ID=${target} pnpm --filter @trevor/agent-host start`;
 
-  const onSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
+  // Submitting always enqueues; the drain effect publishes when idle. This is what
+  // makes a second prompt during a turn wait its turn instead of firing immediately.
+  const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = draft.trim();
     if (!text) {
       return;
     }
     setDraft("");
-    await publish(text, activeProvider, reasoning || undefined);
+    setQueue((q) => [
+      ...q,
+      {
+        id: crypto.randomUUID(),
+        text,
+        provider: activeProvider,
+        reasoning: reasoning || undefined,
+      },
+    ]);
   };
+
+  // Release the in-flight latch when a turn ends (busy goes high then low), so the
+  // next queued prompt becomes eligible to publish. Runs before the drain effect.
+  useEffect(() => {
+    if (prevBusyRef.current && !busy) {
+      inFlightRef.current = false;
+    }
+    prevBusyRef.current = busy;
+  }, [busy]);
+
+  // Drain one prompt at a time: publish the head only when idle and nothing is in
+  // flight. Removing the head and latching inFlight before the echo arrives keeps a
+  // re-render from publishing the next prompt early.
+  useEffect(() => {
+    if (busy || inFlightRef.current || queue.length === 0) {
+      return;
+    }
+    const next = queue[0];
+    if (!next) {
+      return;
+    }
+    inFlightRef.current = true;
+    setQueue((q) => q.slice(1));
+    void publish(next.text, next.provider, next.reasoning);
+  }, [busy, queue, publish]);
+
+  // Hard steer: abort the active turn and fold queued prompts + draft into ONE
+  // steering prompt that runs next. The single steer replaces the queue, so the
+  // cancelled turn is followed by one combined interruption (not a replay of the
+  // queue). It publishes only once the cancel resolves the turn (busy -> idle),
+  // keeping the cancel strictly ahead of the steer.
+  const onCancel = () => {
+    const runId = active ?? (awaitingResponse ? "" : null);
+    const steer = combineSteer(queue, draft);
+    setDraft("");
+    setQueue(
+      steer
+        ? [
+            {
+              id: crypto.randomUUID(),
+              text: steer,
+              provider: activeProvider,
+              reasoning: reasoning || undefined,
+            },
+          ]
+        : [],
+    );
+    if (runId !== null) {
+      void cancel(runId);
+    }
+  };
+  // The cancel button is live whenever there's a turn to abort (active or pending).
+  const canCancel = busy;
+
+  // ESC mirrors the cancel button when a run is active/pending; with nothing to
+  // cancel it just clears the composer. One window listener reads the latest state
+  // from a ref so it never goes stale and works regardless of which element has focus.
+  const escRef = useRef({ active, awaiting: awaitingResponse, draft, setDraft, onCancel });
+  escRef.current = { active, awaiting: awaitingResponse, draft, setDraft, onCancel };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      const s = escRef.current;
+      const runId = s.active ?? (s.awaiting ? "" : null);
+      if (runId !== null) {
+        event.preventDefault();
+        s.onCancel();
+      } else if (s.draft) {
+        event.preventDefault();
+        s.setDraft("");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <main
@@ -234,6 +346,12 @@ export function App() {
                   : message.error}
               </div>
             ) : null;
+          const cancelledNote =
+            message.kind === "assistant" && message.cancelled ? (
+              <div style={{ fontSize: "0.75rem", color: "#888", margin: "0.3rem 0" }}>
+                ⊘ cancelled
+              </div>
+            ) : null;
           if (message.kind === "assistant" && !message.text && !message.done) {
             return (
               <div key={message.id} style={{ margin: "0.75rem 0" }}>
@@ -273,6 +391,7 @@ export function App() {
               {message.text ? <Markdown text={message.text} /> : null}
               {overflowNote}
               {errorNote}
+              {cancelledNote}
               {meta ? (
                 <div style={{ fontSize: "0.68rem", color: "#aaa", marginTop: "0.2rem" }}>
                   {meta}
@@ -288,9 +407,34 @@ export function App() {
             <div style={{ color: "#999", fontStyle: "italic" }}>thinking…</div>
           </div>
         ) : null}
+
+        {/* Prompts held in the local queue: shown muted as "queued" so they read as
+            waiting, not sent, until the current turn frees up and they publish. */}
+        {queue.map((q) => (
+          <div key={q.id} style={{ margin: "0.75rem 0", opacity: 0.5 }}>
+            <div style={{ fontSize: "0.72rem", color: "#999" }}>you · queued</div>
+            <Markdown text={q.text} muted />
+          </div>
+        ))}
       </div>
 
       <form onSubmit={onSubmit} style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+        {/* Hard-steer control, left of the composer: aborts the active turn and folds
+            any queued prompts + draft into one steering message. Mirrors ESC. */}
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={!canCancel}
+          title="Cancel the active turn (folds queued prompts + draft into one steering message)"
+          style={{
+            padding: "0.5rem 0.7rem",
+            color: canCancel ? "#c0392b" : "#bbb",
+            borderColor: canCancel ? "#c0392b" : "#ddd",
+            cursor: canCancel ? "pointer" : "default",
+          }}
+        >
+          ⊘ Cancel
+        </button>
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}

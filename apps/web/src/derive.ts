@@ -6,6 +6,30 @@ import { decodeTrevorEvent, type ProviderModel, type SessionEvent } from "@trevo
  * typed shape via `decodeTrevorEvent`, so none of them hand-guard raw payloads.
  */
 
+/**
+ * The run currently in flight: the latest assistant.started whose run has not
+ * yet completed, or null. Drives whether ESC cancels and which runId to target.
+ */
+export function activeRunId(events: readonly SessionEvent[]): string | null {
+  const completed = new Set<string>();
+  const started: string[] = [];
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "assistant.started") {
+      started.push(decoded.runId);
+    } else if (decoded?.type === "assistant.completed") {
+      completed.add(decoded.runId);
+    }
+  }
+  for (let i = started.length - 1; i >= 0; i -= 1) {
+    const id = started[i];
+    if (id && !completed.has(id)) {
+      return id;
+    }
+  }
+  return null;
+}
+
 /** Compact token count: 6100 -> "6.1k", 812 -> "812". */
 export function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
