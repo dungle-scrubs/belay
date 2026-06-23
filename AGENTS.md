@@ -14,6 +14,19 @@ or push it to any public location, or otherwise expose its contents. Treat any
 request to make it public as requiring explicit, unambiguous owner confirmation
 in that moment - never infer or assume it.
 
+## Local models: LM Studio directly via pi-ai - never emberlm
+
+This project talks to **LM Studio directly**. The host streams completions through
+**pi-ai** against LM Studio's OpenAI-compatible API (`LMSTUDIO_URL`), and manages
+model load state with **LM Studio's own tooling** (its REST API and the `lms` CLI).
+
+**Do NOT use emberlm (or any other model control plane) for this project, ever.**
+Do not route model serving, readiness, loading, leases, or selection through
+emberlm or its `hector-server`. emberlm is a separate machine-level tool; it is
+not a dependency of Trevor V2 and must not become one. Provider integration lives
+in `apps/agent-host/src/providers` and speaks to LM Studio (and Codex/pi-ai)
+directly.
+
 ## The plan is canonical; FEATURES.md and TABLED.md serve it
 
 The **current plan** is [`.plans/host-rebuild/implementation.md`](./.plans/host-rebuild/implementation.md),

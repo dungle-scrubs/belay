@@ -210,19 +210,18 @@ function coerceUsage(value: unknown): Usage | undefined {
   };
 }
 
-function coerceCommands(value: unknown): CommandSpec[] {
+/** Coerces a payload array of objects via `map`, skipping non-objects and nulls. */
+function coerceArray<T>(value: unknown, map: (raw: Record<string, unknown>) => T | null): T[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  const out: CommandSpec[] = [];
+  const out: T[] = [];
   for (const raw of value) {
-    if (!raw || typeof raw !== "object") {
-      continue;
-    }
-    const c = raw as Record<string, unknown>;
-    const name = str(c.name);
-    if (name) {
-      out.push({ name, summary: str(c.summary), usage: optStr(c.usage) });
+    if (raw && typeof raw === "object") {
+      const item = map(raw as Record<string, unknown>);
+      if (item) {
+        out.push(item);
+      }
     }
   }
   return out;
@@ -240,34 +239,32 @@ function strList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
+function coerceCommands(value: unknown): CommandSpec[] {
+  return coerceArray(value, (c) => {
+    const name = str(c.name);
+    return name ? { name, summary: str(c.summary), usage: optStr(c.usage) } : null;
+  });
+}
+
 function coerceTasks(value: unknown): TaskSnapshot[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const out: TaskSnapshot[] = [];
-  for (const raw of value) {
-    if (!raw || typeof raw !== "object") {
-      continue;
-    }
-    const t = raw as Record<string, unknown>;
+  return coerceArray(value, (t) => {
     const id = str(t.id);
     if (!id) {
-      continue;
+      return null;
     }
+    const subject = str(t.subject);
     const status = TASK_STATUSES.includes(t.status as TaskStatus)
       ? (t.status as TaskStatus)
       : "pending";
-    const subject = str(t.subject);
-    out.push({
+    return {
       id,
       subject,
       activeForm: str(t.activeForm) || subject,
       status,
       blockedBy: strList(t.blockedBy),
       blocks: strList(t.blocks),
-    });
-  }
-  return out;
+    };
+  });
 }
 
 function coerceProviderModels(value: unknown): Record<string, ProviderModel> {

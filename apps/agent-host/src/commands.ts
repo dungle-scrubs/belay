@@ -59,23 +59,31 @@ export function buildCommandRegistry(): CommandRegistry {
   });
 
   commands.push({
-    spec: { name: "/doctor", summary: "Host health: workspace, providers, tools" },
+    spec: {
+      name: "/doctor",
+      summary: "Host health: workspace, providers, tools",
+    },
     run: async (_args, ctx) => {
       const lines: string[] = [`workspace: ${ctx.workspace}`];
       if (ctx.cwd !== ctx.workspace) {
         lines.push(`cwd: ${ctx.cwd}`);
       }
       lines.push(`host: ${ctx.instanceId} (${ctx.role})`, "", "providers:");
-      for (const [key, provider] of Object.entries(ctx.providers)) {
-        lines.push(await providerStatus(key, provider));
-      }
-      lines.push("", `tools: ${TOOL_DEFS.map((t) => t.name).join(", ")}`);
+      // Probe every provider's readiness concurrently - they're independent.
+      const statuses = await Promise.all(
+        Object.entries(ctx.providers).map(([key, provider]) => providerStatus(key, provider)),
+      );
+      lines.push(...statuses, "", `tools: ${TOOL_DEFS.map((t) => t.name).join(", ")}`);
       return lines.join("\n");
     },
   });
 
   commands.push({
-    spec: { name: "/shell", summary: "Run a shell command on the host", usage: "/shell <command>" },
+    spec: {
+      name: "/shell",
+      summary: "Run a shell command on the host",
+      usage: "/shell <command>",
+    },
     run: (args) => {
       const command = args.trim();
       if (!command) {
@@ -116,7 +124,11 @@ export function buildCommandRegistry(): CommandRegistry {
   });
 
   commands.push({
-    spec: { name: "/jobs-stop", summary: "Stop a background process", usage: "/jobs-stop <id>" },
+    spec: {
+      name: "/jobs-stop",
+      summary: "Stop a background process",
+      usage: "/jobs-stop <id>",
+    },
     run: (args) => {
       const id = args.trim();
       if (!id) {

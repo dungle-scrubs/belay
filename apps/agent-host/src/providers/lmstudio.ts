@@ -1,6 +1,12 @@
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import type { Model } from "@mariozechner/pi-ai";
 import { streamPiAi } from "./pi-ai";
 import type { ChatMessage, Provider, ProviderEvent, Readiness, ToolDef } from "./types";
+
+const execAsync = promisify(exec);
+/** LM Studio's own CLI, used to (re)load a model at a chosen context length. */
+const LMS_BIN = process.env.LMS_BIN ?? "lms";
 
 export interface LmStudioConfig {
   /** OpenAI-compatible base URL, e.g. http://localhost:1234/v1 */
@@ -12,6 +18,13 @@ export interface LmStudioConfig {
 
 /** Context window assumed before the running model reports its own (tokens). */
 const DEFAULT_CONTEXT_WINDOW = 8192;
+
+/** One LM Studio model's load state, as the native /api/v0 endpoint reports it. */
+interface ModelInfo {
+  state?: string;
+  loaded_context_length?: number;
+  max_context_length?: number;
+}
 
 /**
  * Local LM Studio provider. Streaming and tool calling go through pi-ai's
@@ -28,57 +41,87 @@ export class LmStudioProvider implements Provider {
   readonly defaultReasoning = "off";
   private readonly url: string;
   private readonly native: string;
-  /** Effective context window of the loaded model (tokens); learned from model info. */
+  /** Effective context window currently served (tokens); learned from model info. */
   private contextWindow = 0;
+  /** Upper bound on the context we load at (LMSTUDIO_MAX_CONTEXT); default = model max. */
+  private readonly contextCap: number;
+  /** In-flight ensureMaxContext, so concurrent turns share one (re)load. */
+  private ensuring: Promise<number> | null = null;
 
   constructor(config: LmStudioConfig) {
     this.url = config.url;
     this.model = config.model;
     this.label = config.label;
     this.native = new URL("/api/v0", config.url).toString();
+    this.contextCap = Number(process.env.LMSTUDIO_MAX_CONTEXT) || Number.POSITIVE_INFINITY;
+  }
+
+  /** This model's load state from LM Studio's native endpoint, or null if unreachable. */
+  private async fetchModelInfo(): Promise<ModelInfo | null> {
+    try {
+      const response = await fetch(`${this.native}/models/${encodeURIComponent(this.model)}`);
+      return response.ok ? ((await response.json()) as ModelInfo) : null;
+    } catch {
+      return null;
+    }
   }
 
   async readiness(): Promise<Readiness> {
-    try {
-      const response = await fetch(`${this.native}/models/${encodeURIComponent(this.model)}`);
-      if (!response.ok) {
-        return { ready: false, warm: false };
-      }
-      const body = (await response.json()) as {
-        state?: string;
-        loaded_context_length?: number;
-        max_context_length?: number;
-      };
-      // Report the *loaded* context - the window LM Studio actually serves - so the
-      // usage display and overflow detection match reality. To use the model's full
-      // ceiling, load qwen at that context in LM Studio (lms load -c <tokens>); this
-      // value, and max_completion_tokens with it, then follow automatically.
-      this.contextWindow =
-        body.loaded_context_length ?? body.max_context_length ?? this.contextWindow;
-      return { ready: true, warm: body.state === "loaded" };
-    } catch {
+    const info = await this.fetchModelInfo();
+    if (!info) {
       return { ready: false, warm: false };
     }
+    // Track the context LM Studio actually serves so the usage display and overflow
+    // detection match reality (ensureMaxContext loads it at the model's ceiling).
+    this.contextWindow =
+      info.loaded_context_length ?? info.max_context_length ?? this.contextWindow;
+    return { ready: true, warm: info.state === "loaded" };
   }
 
-  /** The loaded context window, fetching model info once if not yet known. */
-  private async ensureContextWindow(): Promise<number> {
-    if (this.contextWindow === 0) {
-      await this.readiness();
+  /**
+   * Ensures the model is loaded at its maximum context. LM Studio defaults a JIT load
+   * to a small window (often 8k), so we (re)load it at max_context_length via the lms
+   * CLI - unload first, since `lms load` otherwise spawns a second instance - then use
+   * the context LM Studio actually serves. De-duped against concurrent turns, and
+   * best-effort: if lms is unavailable it leaves the current load and reports that.
+   */
+  private async ensureMaxContext(): Promise<number> {
+    if (this.ensuring) {
+      return this.ensuring;
     }
-    return this.contextWindow;
+    this.ensuring = (async () => {
+      const info = await this.fetchModelInfo();
+      const max = info?.max_context_length;
+      if (!max) {
+        return this.contextWindow || DEFAULT_CONTEXT_WINDOW;
+      }
+      const target = Math.min(max, this.contextCap);
+      if (info.state === "loaded" && info.loaded_context_length === target) {
+        this.contextWindow = target;
+        return target;
+      }
+      try {
+        const key = JSON.stringify(this.model);
+        if (info.state === "loaded") {
+          await execAsync(`${LMS_BIN} unload ${key}`);
+        }
+        await execAsync(`${LMS_BIN} load ${key} -c ${target} -y`, { timeout: 300_000 });
+        this.contextWindow = target;
+      } catch {
+        this.contextWindow = info.loaded_context_length ?? this.contextWindow;
+      }
+      return this.contextWindow || DEFAULT_CONTEXT_WINDOW;
+    })();
+    try {
+      return await this.ensuring;
+    } finally {
+      this.ensuring = null;
+    }
   }
 
+  /** Pre-load the model at its max context so the first turn doesn't pay for it. */
   async warm(): Promise<void> {
-    await fetch(`${this.url}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: 1,
-        messages: [{ role: "user", content: "ok" }],
-      }),
-    });
+    await this.ensureMaxContext();
   }
 
   async *stream(
@@ -87,7 +130,7 @@ export class LmStudioProvider implements Provider {
     reasoning?: string,
     signal?: AbortSignal,
   ): AsyncIterable<ProviderEvent> {
-    const contextWindow = (await this.ensureContextWindow()) || DEFAULT_CONTEXT_WINDOW;
+    const contextWindow = await this.ensureMaxContext();
     // qwen is binary. The qwen thinking format sends `enable_thinking` derived from
     // the reasoning level, so we always declare reasoning + that format and let the
     // level decide: "off" -> enable_thinking:false (qwen thinks by default otherwise),

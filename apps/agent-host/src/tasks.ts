@@ -1,5 +1,5 @@
 import type { TaskSnapshot, TaskStatus } from "@trevor/richter";
-import { msg } from "./tools/shared";
+import { msg, optStr, strArr } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
 /**
@@ -209,11 +209,6 @@ export class TaskRegistry {
 
 /** Host-wide checklist: one registry shared by the task tools, prompt, and emit. */
 export const taskRegistry = new TaskRegistry();
-
-const strArr = (value: unknown): string[] | undefined =>
-  Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : undefined;
-const optStr = (value: unknown): string | undefined =>
-  value === undefined ? undefined : String(value);
 
 const STATUS_ENUM: TaskStatus[] = ["pending", "in_progress", "completed", "failed", "cancelled"];
 

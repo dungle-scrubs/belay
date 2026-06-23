@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -101,15 +101,14 @@ export function discoverSkills(): readonly Skill[] {
     }
     const path = join(SKILLS_DIR, entry, "SKILL.md");
     try {
-      if (!statSync(path).isFile()) {
-        continue;
-      }
+      // No statSync pre-check: readFileSync throws (caught below) when the entry is
+      // a plain file or a dir without a SKILL.md, which is exactly what we skip.
       const skill = toSkill(entry, path, readFileSync(path, "utf8"));
       if (skill) {
         skills.push(skill);
       }
     } catch {
-      // No SKILL.md (entry is a plain file or a dir without one) - skip it.
+      // No readable SKILL.md here - skip it.
     }
   }
   cache = skills;

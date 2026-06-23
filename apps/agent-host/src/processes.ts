@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { classifyAlwaysPreventedBashCommand } from "./tools/bash-safety";
-import { cap, msg } from "./tools/shared";
+import { cap, msg, num } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
 /**
@@ -199,11 +199,6 @@ export class ProcessSupervisor {
 
 /** Host-wide supervisor: one registry shared by the process tool and /jobs. */
 export const supervisor = new ProcessSupervisor();
-
-const num = (value: unknown): number => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-};
 
 /** The model-facing tool: start/poll/kill/list over the shared supervisor. */
 export function buildProcessTool(sup: ProcessSupervisor = supervisor): Tool {

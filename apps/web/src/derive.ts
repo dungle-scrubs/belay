@@ -1,10 +1,29 @@
 import {
   type CommandSpec,
+  type DecodedEvent,
   decodeTrevorEvent,
   type ProviderModel,
   type SessionEvent,
   type TaskSnapshot,
 } from "@trevor/richter";
+
+/** The last value `pick` yields over the decoded log (the newest snapshot), else undefined. */
+function latest<T>(
+  events: readonly SessionEvent[],
+  pick: (decoded: DecodedEvent) => T | undefined,
+): T | undefined {
+  let result: T | undefined;
+
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    const value = decoded ? pick(decoded) : undefined;
+    if (value !== undefined) {
+      result = value;
+    }
+  }
+
+  return result;
+}
 
 /**
  * Pure view-model derivations over the Richter event log, kept out of App.tsx so
@@ -19,20 +38,25 @@ import {
 export function activeRunId(events: readonly SessionEvent[]): string | null {
   const completed = new Set<string>();
   const started: string[] = [];
+
   for (const event of events) {
     const decoded = decodeTrevorEvent(event);
+
     if (decoded?.type === "assistant.started") {
       started.push(decoded.runId);
     } else if (decoded?.type === "assistant.completed") {
       completed.add(decoded.runId);
     }
   }
+
   for (let i = started.length - 1; i >= 0; i -= 1) {
     const id = started[i];
+
     if (id && !completed.has(id)) {
       return id;
     }
   }
+
   return null;
 }
 
@@ -46,6 +70,7 @@ export function fmtCtx(n: number): string {
   if (n <= 0) {
     return "?";
   }
+
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
 }
 
@@ -59,14 +84,18 @@ export function isOverflowError(error: string): boolean {
 /** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
 export function toolSummary(name: string, argsJson: string): string {
   let args: Record<string, unknown> = {};
+
   try {
     args = JSON.parse(argsJson || "{}") as Record<string, unknown>;
   } catch {
     return "";
   }
+
   const primary =
     name === "bash" ? args.command : name === "grep" || name === "glob" ? args.pattern : args.path;
+
   const text = typeof primary === "string" ? primary : argsJson;
+
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }
 
@@ -91,18 +120,24 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
   let present = false;
   let workspace: string | null = null;
   let cwd: string | null = null;
+
   const role = new Map<string, string>();
   const lastSeen = new Map<string, number>();
+
   for (const event of events) {
     const decoded = decodeTrevorEvent(event);
+
     if (!decoded) {
       continue;
     }
+
     if (decoded.type === "host.online") {
       present = true;
+
       if (decoded.workspace) {
         workspace = decoded.workspace;
       }
+
       if (decoded.cwd) {
         cwd = decoded.cwd;
       }
@@ -114,18 +149,24 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
       decoded.type === "host.role"
     ) {
       const id = decoded.instanceId;
+
       if (!id) {
         continue;
       }
+
       const at = Date.parse(event.createdAt);
+
       lastSeen.set(id, Number.isNaN(at) ? nowMs : at);
+
       if (decoded.type === "host.role" && decoded.role) {
         role.set(id, decoded.role);
       }
     }
   }
+
   let leaderId: string | null = null;
   let leaderSeen = Number.NEGATIVE_INFINITY;
+
   for (const [id, value] of role) {
     const seen = lastSeen.get(id) ?? Number.NEGATIVE_INFINITY;
     if (value === "leader" && seen >= leaderSeen) {
@@ -133,22 +174,26 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
       leaderId = id;
     }
   }
+
   let standbyCount = 0;
+
   for (const [id, at] of lastSeen) {
     if (id !== leaderId && nowMs - at < HOST_RECENT_MS) {
       standbyCount += 1;
     }
   }
+
   return { present, leaderId, standbyCount, workspace, cwd };
 }
 
 // Used until the host announces itself: qwen is binary, GPT graduated.
 export const QWEN_FALLBACK: ProviderModel = {
-  label: "Qwen (local)",
+  label: "Qwen 27B 8-bit (local)",
   model: "qwen",
   reasoningLevels: ["off", "on"],
   defaultReasoning: "off",
 };
+
 export const FALLBACK_MODELS: Record<string, ProviderModel> = {
   qwen: QWEN_FALLBACK,
   gpt: {
@@ -157,42 +202,29 @@ export const FALLBACK_MODELS: Record<string, ProviderModel> = {
     reasoningLevels: ["minimal", "low", "medium", "high", "xhigh"],
     defaultReasoning: "medium",
   },
+  qwen4bit: {
+    label: "Qwen 27B 4-bit (local)",
+    model: "qwen",
+    reasoningLevels: ["off", "on"],
+    defaultReasoning: "off",
+  },
 };
 
 /** The latest per-provider model/reasoning map the host announced, else the fallback. */
 export function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {
-  let latest: Record<string, ProviderModel> | null = null;
-  for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
-    if (decoded?.type === "host.online") {
-      latest = decoded.models;
-    }
-  }
-  return latest ?? FALLBACK_MODELS;
+  return (
+    latest(events, (d) => (d.type === "host.online" ? d.models : undefined)) ?? FALLBACK_MODELS
+  );
 }
 
 /** The latest task checklist the host published (empty when there are no tasks / cleared). */
 export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
-  let latest: TaskSnapshot[] = [];
-  for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
-    if (decoded?.type === "tasks.current") {
-      latest = [...decoded.tasks];
-    }
-  }
-  return latest;
+  return [...(latest(events, (d) => (d.type === "tasks.current" ? d.tasks : undefined)) ?? [])];
 }
 
 /** The immediate-command inventory the host last announced (empty until one is online). */
 export function commandsFrom(events: readonly SessionEvent[]): CommandSpec[] {
-  let latest: CommandSpec[] = [];
-  for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
-    if (decoded?.type === "host.online") {
-      latest = [...decoded.commands];
-    }
-  }
-  return latest;
+  return [...(latest(events, (d) => (d.type === "host.online" ? d.commands : undefined)) ?? [])];
 }
 
 /**
@@ -207,10 +239,13 @@ export function parseCommand(
   if (!text.startsWith("/")) {
     return null;
   }
+
   const space = text.indexOf(" ");
   const command = space === -1 ? text : text.slice(0, space);
+
   if (!known.has(command)) {
     return null;
   }
+
   return { command, args: space === -1 ? "" : text.slice(space + 1).trim() };
 }

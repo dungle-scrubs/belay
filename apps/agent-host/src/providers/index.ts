@@ -20,13 +20,24 @@ export const DEFAULT_PROVIDER = "qwen";
 
 /** Builds the provider registry the host switches between per message. */
 export function buildProviders(): ProviderRegistry {
+  const lmstudioUrl = process.env.LMSTUDIO_URL ?? "http://localhost:1234/v1";
   return {
+    // Two qwen3.6-27b quants now coexist in LM Studio, so the bare "qwen3.6-27b-mlx"
+    // key is ambiguous - pin each to its org-prefixed id.
     qwen: new LmStudioProvider({
-      url: process.env.LMSTUDIO_URL ?? "http://localhost:1234/v1",
-      model: process.env.LMSTUDIO_MODEL ?? "qwen3.6-27b-mlx",
-      label: "Qwen (local)",
+      url: lmstudioUrl,
+      model: process.env.LMSTUDIO_MODEL ?? "unsloth/qwen3.6-27b-mlx",
+      label: "Qwen 27B 8-bit (local)",
     }),
-    gpt: new CodexProvider({ model: process.env.PIAI_MODEL ?? "gpt-5.5", label: "GPT-5.5" }),
+    gpt: new CodexProvider({
+      model: process.env.PIAI_MODEL ?? "gpt-5.5",
+      label: "GPT-5.5",
+    }),
+    qwen4bit: new LmStudioProvider({
+      url: lmstudioUrl,
+      model: "lmstudio-community/qwen3.6-27b-mlx",
+      label: "Qwen 27B 4-bit (local)",
+    }),
   };
 }
 
