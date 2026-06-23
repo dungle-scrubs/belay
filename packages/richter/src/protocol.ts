@@ -32,6 +32,18 @@ export interface ProviderModel {
   readonly defaultReasoning: string;
 }
 
+/**
+ * An immediate host command (slash command), announced in host.online so the
+ * browser knows which `/x` strings route to the host's command lane (executed
+ * directly, bypassing the model) and can drive a slash menu. `usage` shows the
+ * argument form when there is one (e.g. "/shell <command>").
+ */
+export interface CommandSpec {
+  readonly name: string;
+  readonly summary: string;
+  readonly usage?: string;
+}
+
 /** A publishable event before a producerId is attached: `{ type, payload }`. */
 export interface TrevorEventInput {
   readonly type: string;
@@ -97,6 +109,16 @@ export const events = {
     type: "user.cancel",
     payload: { runId: p.runId },
   }),
+  /** Browser invokes an immediate host command, bypassing the model/turn queue. */
+  userCommand: (p: { command: string; args: string }): TrevorEventInput => ({
+    type: "user.command",
+    payload: { command: p.command, args: p.args },
+  }),
+  /** Host's immediate result for a user.command (rendered, never fed to the model). */
+  commandResult: (p: { command: string; text: string; ok: boolean }): TrevorEventInput => ({
+    type: "command.result",
+    payload: { command: p.command, text: p.text, ok: p.ok },
+  }),
   toolStarted: (p: {
     runId: string;
     callId: string;
@@ -134,6 +156,7 @@ export const events = {
     instanceId: string;
     cwd: string;
     workspace: string;
+    commands: readonly CommandSpec[];
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
@@ -143,6 +166,7 @@ export const events = {
       instanceId: p.instanceId,
       cwd: p.cwd,
       workspace: p.workspace,
+      commands: p.commands,
     },
   }),
 } as const;
@@ -166,6 +190,24 @@ function coerceUsage(value: unknown): Usage | undefined {
     contextWindow: num(u.contextWindow),
     genMs: num(u.genMs),
   };
+}
+
+function coerceCommands(value: unknown): CommandSpec[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: CommandSpec[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const c = raw as Record<string, unknown>;
+    const name = str(c.name);
+    if (name) {
+      out.push({ name, summary: str(c.summary), usage: optStr(c.usage) });
+    }
+  }
+  return out;
 }
 
 function coerceProviderModels(value: unknown): Record<string, ProviderModel> {
@@ -218,6 +260,13 @@ export type DecodedEvent =
       readonly cancelled: boolean;
     }
   | { readonly type: "user.cancel"; readonly runId: string }
+  | { readonly type: "user.command"; readonly command: string; readonly args: string }
+  | {
+      readonly type: "command.result";
+      readonly command: string;
+      readonly text: string;
+      readonly ok: boolean;
+    }
   | {
       readonly type: "tool.started";
       readonly runId: string;
@@ -238,6 +287,7 @@ export type DecodedEvent =
       readonly workspace?: string;
       readonly cwd?: string;
       readonly models: Record<string, ProviderModel>;
+      readonly commands: readonly CommandSpec[];
     }
   | { readonly type: "host.hello"; readonly instanceId?: string }
   | { readonly type: "host.beat"; readonly instanceId?: string }
@@ -284,6 +334,15 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       };
     case "user.cancel":
       return { type: "user.cancel", runId };
+    case "user.command":
+      return { type: "user.command", command: str(p.command), args: str(p.args) };
+    case "command.result":
+      return {
+        type: "command.result",
+        command: str(p.command),
+        text: str(p.text),
+        ok: p.ok === true,
+      };
     case "tool.started":
       return {
         type: "tool.started",
@@ -307,6 +366,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         workspace: optStr(p.workspace),
         cwd: optStr(p.cwd),
         models: coerceProviderModels(p.models),
+        commands: coerceCommands(p.commands),
       };
     case "host.hello":
       return { type: "host.hello", instanceId: optStr(p.instanceId) };
