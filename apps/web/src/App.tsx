@@ -104,6 +104,12 @@ export function App() {
     setDraft(`${name} `);
     inputRef.current?.focus();
   };
+  // Focus the composer on load, once the session resolves and the input is enabled.
+  useEffect(() => {
+    if (sessionId) {
+      inputRef.current?.focus();
+    }
+  }, [sessionId]);
 
   // Local send queue: a prompt submitted while a turn is in flight waits here and is
   // published only once the session is idle, so the host never receives two prompts
@@ -295,7 +301,8 @@ export function App() {
         flexDirection: "column",
       }}
     >
-      <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: "auto" }}>
+      {/* Fixed top: title, controls, and session/host status stay put while the log scrolls. */}
+      <div style={{ flexShrink: 0, paddingTop: "1rem" }}>
         <header
           style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
         >
@@ -403,7 +410,10 @@ export function App() {
             ) : null}
           </p>
         ) : null}
+      </div>
 
+      {/* Scrollable region: only the transcript scrolls, between the fixed header and composer. */}
+      <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: "auto" }}>
         <div>
           {transcript.map((message) => {
             if (message.kind === "tool") {
