@@ -7,6 +7,7 @@ import { bashTool } from "./bash";
 import { editTool } from "./edit";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
+import { multiEditTool } from "./multi-edit";
 import { readTool } from "./read";
 import type { Tool } from "./types";
 import { writeTool } from "./write";
@@ -16,6 +17,7 @@ const FILE_TOOLS: readonly Tool[] = [
   bashTool,
   writeTool,
   editTool,
+  multiEditTool,
   globTool,
   grepTool,
   buildProcessTool(),

@@ -22,6 +22,7 @@ import {
   ToolCall,
   WorkingIndicator,
 } from "@/components/chat/message";
+import { MultiEditDiff } from "@/components/chat/multi-edit-diff";
 import { ToolDiff } from "@/components/chat/tool-diff";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -401,6 +402,31 @@ export function App() {
         {replayed ? (
           <div className="flex flex-col gap-8 fade-in animate-in duration-150">
             {transcript.map((message) => {
+              // multi_edit: one atomic operation, grouped by file as collapsible diffs.
+              if (message.kind === "tool" && message.name === "multi_edit") {
+                const a = parseToolArgs(message.args);
+                const raw = Array.isArray(a.edits) ? a.edits : [];
+                const edits = raw
+                  .map((item) => {
+                    const e = (item ?? {}) as Record<string, unknown>;
+                    return {
+                      path: typeof e.path === "string" ? e.path : "",
+                      old: typeof e.old === "string" ? e.old : "",
+                      new: typeof e.new === "string" ? e.new : "",
+                    };
+                  })
+                  .filter((e) => e.path);
+                if (edits.length > 0) {
+                  return (
+                    <MultiEditDiff
+                      key={message.id}
+                      className="pl-3.5"
+                      edits={edits}
+                      status={message.done ? "done" : "running"}
+                    />
+                  );
+                }
+              }
               // write/edit render as a code diff (up to 3 lines of subdued context).
               if (
                 message.kind === "tool" &&

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ToolCall } from "./message";
+import { MultiEditDiff } from "./multi-edit-diff";
 import { ToolDiff } from "./tool-diff";
 
 // One story per host tool. read/bash/glob/grep/skill render as the generic
@@ -99,6 +100,55 @@ export const Edit: Story = {
   render: () => (
     <Frame>
       <ToolDiff tool="edit" path="apps/web/src/greet.ts" oldText={EDIT_OLD} newText={EDIT_NEW} />
+    </Frame>
+  ),
+};
+
+// multi_edit, several edits to a single file (one atomic operation).
+export const MultiEditSameFile: Story = {
+  render: () => (
+    <Frame>
+      <MultiEditDiff
+        edits={[
+          {
+            path: "apps/web/src/greet.ts",
+            old: "export function greet(name) {",
+            new: "export function greet(name: string) {",
+          },
+          {
+            path: "apps/web/src/greet.ts",
+            old: '  const greeting = "hi " + name;',
+            new: "  const greeting = `hello, ${name}`;",
+          },
+        ]}
+      />
+    </Frame>
+  ),
+};
+
+// multi_edit across several files, each a collapsible section.
+export const MultiEditMultiFile: Story = {
+  render: () => (
+    <Frame>
+      <MultiEditDiff
+        edits={[
+          {
+            path: "apps/web/src/greet.ts",
+            old: 'const DEFAULT = "world";',
+            new: 'const DEFAULT = "friend";',
+          },
+          {
+            path: "apps/web/src/router.ts",
+            old: 'register("/old", handler);',
+            new: 'register("/new", handler);',
+          },
+          {
+            path: "apps/web/src/types.ts",
+            old: "export type Id = number;",
+            new: "export type Id = string;",
+          },
+        ]}
+      />
     </Frame>
   ),
 };
