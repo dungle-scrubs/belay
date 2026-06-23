@@ -81,6 +81,7 @@ export const events = {
     text: string;
     usage?: Usage;
     error?: string;
+    cancelled?: boolean;
   }): TrevorEventInput => ({
     type: "assistant.completed",
     payload: {
@@ -88,7 +89,13 @@ export const events = {
       text: p.text,
       ...(p.usage ? { usage: p.usage } : {}),
       ...(p.error ? { error: p.error } : {}),
+      ...(p.cancelled ? { cancelled: true } : {}),
     },
+  }),
+  /** User asked to cancel the active run (hard steering / ESC). */
+  userCancel: (p: { runId: string }): TrevorEventInput => ({
+    type: "user.cancel",
+    payload: { runId: p.runId },
   }),
   toolStarted: (p: {
     runId: string;
@@ -208,7 +215,9 @@ export type DecodedEvent =
       readonly text: string;
       readonly usage?: Usage;
       readonly error?: string;
+      readonly cancelled: boolean;
     }
+  | { readonly type: "user.cancel"; readonly runId: string }
   | {
       readonly type: "tool.started";
       readonly runId: string;
@@ -271,7 +280,10 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         text: str(p.text),
         usage: coerceUsage(p.usage),
         error: optStr(p.error),
+        cancelled: p.cancelled === true,
       };
+    case "user.cancel":
+      return { type: "user.cancel", runId };
     case "tool.started":
       return {
         type: "tool.started",
