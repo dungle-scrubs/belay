@@ -97,7 +97,3 @@ export const Populated: Story = {};
 export const Empty: Story = {
   render: () => <MockThread initial={[]} />,
 };
-
-export const Running: Story = {
-  render: () => <MockThread isRunning />,
-};

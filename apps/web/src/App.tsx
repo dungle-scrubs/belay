@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ArtifactRef } from "@trevor/richter";
 import { useInterval, useLocalStorageState } from "ahooks";
+import { Plus, X } from "lucide-react";
 import {
   type ChangeEvent,
   type ClipboardEvent as ReactClipboardEvent,
@@ -12,6 +13,20 @@ import {
   useRef,
   useState,
 } from "react";
+import { ModelSelector } from "@/components/assistant-ui/model-selector";
+import {
+  CommandMessage,
+  CommandResult,
+  MessageMeta,
+  ThinkingMessage,
+  ToolCall,
+  WorkingIndicator,
+} from "@/components/chat/message";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 import { ArtifactThumb } from "./ArtifactThumb";
 import { uploadArtifact } from "./blob";
 import {
@@ -59,6 +74,16 @@ function combineSteer(queue: readonly QueuedPrompt[], draft: string): string {
   return [...queue.map((q) => q.text), draft.trim()].filter(Boolean).join("\n\n");
 }
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
+
+// SMUI-themed markdown body: reuses the app's Markdown renderer, re-themed via the
+// .smui-md scope in index.css.
+function Md({ text, muted = false }: { text: string; muted?: boolean }) {
+  return (
+    <div className={cn("smui-md text-sm", muted ? "text-muted-foreground" : "text-foreground")}>
+      <Markdown text={text} muted={muted} />
+    </div>
+  );
+}
 
 export function App() {
   const target = new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
@@ -133,6 +158,12 @@ export function App() {
       inputRef.current?.focus();
     }
   }, [sessionId]);
+  // Refocus the composer whenever the tab/window regains focus.
+  useEffect(() => {
+    const focusInput = () => inputRef.current?.focus();
+    window.addEventListener("focus", focusInput);
+    return () => window.removeEventListener("focus", focusInput);
+  }, []);
 
   // Local send queue: a prompt submitted while a turn is in flight waits here and is
   // published only once the session is idle, so the host never receives two prompts
@@ -148,6 +179,11 @@ export function App() {
 
   const activeProvider = provider ?? "qwen";
   const modelMeta = hostModels[activeProvider] ?? FALLBACK_MODELS[activeProvider] ?? QWEN_FALLBACK;
+  // Model options for the picker; fall back to the active model before the host announces.
+  const modelOptions =
+    Object.keys(hostModels).length > 0
+      ? Object.entries(hostModels).map(([id, meta]) => ({ id, name: meta.label }))
+      : [{ id: activeProvider, name: modelMeta.label }];
   // Keep a stale stored level from showing as selected if the model's options changed.
   const stored = reasoningMap?.[activeProvider];
   const reasoning =
@@ -278,8 +314,6 @@ export function App() {
       void cancel(runId);
     }
   };
-  // The cancel button is live whenever there's a turn to abort (active or pending).
-  const canCancel = busy;
 
   // ESC mirrors the cancel button when a run is active/pending; with nothing to
   // cancel it just clears the composer. One window listener reads the latest state
@@ -305,22 +339,8 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // The composer is pinned to the bottom and the log scrolls above it. Auto-stick to
-  // the newest line as content grows, unless the user has scrolled up to read back.
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [stickToBottom, setStickToBottom] = useState(true);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-pin on each new event/queue entry.
-  useEffect(() => {
-    if (stickToBottom && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [events, queue, stickToBottom]);
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (el) {
-      setStickToBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
-    }
-  };
+  // No scroll JS: the transcript container is flex-col-reverse, so it sits at the
+  // bottom (newest) from the first paint and stays pinned - no jump, no animation.
 
   // Attachments: upload each picked/pasted/dropped file to the blob store and hold its
   // ArtifactRef until the next prompt carries it. Uploads run in parallel; a failed one
@@ -361,324 +381,174 @@ export function App() {
     setAttachments((a) => a.filter((ref) => ref.hash !== hash));
 
   return (
-    <main
-      style={{
-        maxWidth: 760,
-        margin: "0 auto",
-        padding: "0 1rem",
-        fontFamily: "system-ui",
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* Fixed top: title, controls, and session/host status stay put while the log scrolls. */}
-      <div style={{ flexShrink: 0, paddingTop: "1rem" }}>
-        <header
-          style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}
-        >
-          <h1>Trevor</h1>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.4rem",
-              alignItems: "flex-end",
-            }}
-          >
-            <select
-              value={activeProvider}
-              onChange={(event) => setProvider(event.target.value)}
-              style={{ padding: "0.3rem 0.4rem" }}
-            >
-              {/* Options come from the host's announced providers, so adding one host-side
-                surfaces here with no UI edit; the fallback covers the pre-announce window. */}
-              {Object.entries(hostModels).map(([key, meta]) => (
-                <option key={key} value={key}>
-                  {meta.label}
-                </option>
-              ))}
-            </select>
+    <main className="flex h-svh flex-col px-4">
+      {/* Transcript fills the view; the composer + footer pin to the bottom.
+          Scrollbar is hidden but the region still scrolls. */}
+      <div className="flex flex-1 flex-col-reverse overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {/* Nothing renders until the full history has replayed, then it appears all at
+            once (already pinned to the bottom) with a 150ms fade-in. */}
+        {replayed ? (
+          <div className="flex flex-col gap-8 fade-in animate-in duration-150">
+            {transcript.map((message) => {
+              if (message.kind === "tool") {
+                return (
+                  <ToolCall
+                    key={message.id}
+                    className="pl-3.5"
+                    name={message.name}
+                    args={toolSummary(message.name, message.args)}
+                    status={message.done ? "done" : "running"}
+                  />
+                );
+              }
+              if (message.kind === "command") {
+                return (
+                  <div key={message.id} className="pl-3.5">
+                    <CommandMessage command={message.command} args={message.args || undefined} />
+                  </div>
+                );
+              }
+              if (message.kind === "result") {
+                return (
+                  <div key={message.id} className="pl-3.5">
+                    <CommandResult command={message.command} text={message.text} ok={message.ok} />
+                  </div>
+                );
+              }
 
-            {modelMeta.reasoningLevels.length > 0 ? (
-              <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-                <span style={{ fontSize: "0.7rem", color: "#999" }}>reasoning</span>
-                {modelMeta.reasoningLevels.map((level) => {
-                  const active = level === reasoning;
-                  return (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => setReasoning(level)}
-                      style={{
-                        fontSize: "0.72rem",
-                        padding: "0.15rem 0.4rem",
-                        borderRadius: 4,
-                        border: active ? "1px solid #2a7" : "1px solid #ccc",
-                        background: active ? "#2a7" : "#fff",
-                        color: active ? "#fff" : "#555",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {level}
-                    </button>
-                  );
-                })}
+              const thinking =
+                message.kind === "assistant" && showThinkingOn && message.thinking
+                  ? message.thinking
+                  : null;
+
+              const overflowNote =
+                message.kind === "assistant" && message.overflow ? (
+                  <div className="text-label text-smui-orange">
+                    ⚠ context overflow — {message.overflow}
+                  </div>
+                ) : null;
+
+              const errorNote =
+                message.kind === "assistant" && message.error ? (
+                  <div className="text-label text-smui-red">
+                    ⚠{" "}
+                    {isOverflowError(message.error)
+                      ? `context overflow — ${message.error}`
+                      : message.error}
+                  </div>
+                ) : null;
+
+              const cancelledNote =
+                message.kind === "assistant" && message.cancelled ? (
+                  <div className="text-label text-muted-foreground">⊘ cancelled</div>
+                ) : null;
+
+              if (message.kind === "assistant" && !message.text && !message.done) {
+                return (
+                  <div key={message.id} className="flex flex-col gap-3 pl-3.5">
+                    {thinking ? (
+                      <ThinkingMessage content={thinking} />
+                    ) : (
+                      <WorkingIndicator
+                        label={message.warm ? "thinking" : `loading ${message.model}`}
+                      />
+                    )}
+                    {overflowNote}
+                    {errorNote}
+                  </div>
+                );
+              }
+
+              // Meta (model · context · speed) rides on the final segment - the one that
+              // carries usage - so it isn't repeated under every pre-tool segment.
+              let metaItems: string[] | null = null;
+              if (message.kind === "assistant" && message.usage) {
+                const usage = message.usage;
+                metaItems = [
+                  message.model,
+                  `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
+                ];
+                if (usage.genMs > 0) {
+                  metaItems.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
+                }
+              }
+
+              // User prompts read as a boxed, left-barred block; assistant replies are
+              // plain prose. Neither carries a "you"/"assistant" header.
+              if (message.kind === "user") {
+                return (
+                  <div
+                    key={message.id}
+                    className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
+                  >
+                    {message.text ? <Md text={message.text} /> : null}
+                    {message.artifacts.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {message.artifacts.map((ref) => (
+                          <ArtifactThumb key={ref.hash} artifact={ref} />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }
+
+              return (
+                <div key={message.id} className="flex flex-col gap-3 pl-3.5">
+                  {thinking ? <ThinkingMessage content={thinking} /> : null}
+                  {message.text ? <Md text={message.text} /> : null}
+                  {overflowNote}
+                  {errorNote}
+                  {cancelledNote}
+                  {metaItems ? <MessageMeta items={metaItems} /> : null}
+                </div>
+              );
+            })}
+
+            {awaitingResponse ? (
+              <div className="pl-3.5">
+                <WorkingIndicator label="thinking" />
               </div>
             ) : null}
 
-            <label
-              style={{
-                fontSize: "0.72rem",
-                color: "#777",
-                display: "flex",
-                gap: "0.3rem",
-                alignItems: "center",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={showThinkingOn}
-                onChange={(event) => setShowThinking(event.target.checked)}
-              />
-              show thinking
-            </label>
-          </div>
-        </header>
-
-        <p style={{ color: "#666" }}>
-          session <code>{target}</code> · {status}
-          {replayed ? " · replayed" : ""} · {events.length} events
-        </p>
-
-        {sessionId ? (
-          <p style={{ fontSize: "0.8rem", margin: "0.2rem 0" }}>
-            {host.leaderId ? (
-              <span style={{ color: "#2a7" }}>
-                ● host active
-                {host.standbyCount > 0
-                  ? ` (${host.leaderId.slice(0, 8)}) · ${host.standbyCount} standby`
-                  : ""}
-              </span>
-            ) : host.present ? (
-              <span style={{ color: "#a60" }}>● host starting…</span>
-            ) : (
-              <span style={{ color: "#a60" }}>
-                ● no host on this session — start one: <code>{hostCommand}</code>
-              </span>
-            )}
-          </p>
-        ) : null}
-
-        {host.workspace ? (
-          <p style={{ color: "#888", fontSize: "0.78rem", margin: "0.2rem 0" }}>
-            workspace <code>{host.workspace}</code>
-            {host.cwd && host.cwd !== host.workspace ? (
-              <>
-                {" · cwd "}
-                <code>{host.cwd}</code>
-              </>
-            ) : null}
-          </p>
-        ) : null}
-
-        <TasksPanel tasks={tasks} />
-      </div>
-
-      {/* Scrollable region: only the transcript scrolls, between the fixed header and composer. */}
-      <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: "auto" }}>
-        <div>
-          {transcript.map((message) => {
-            if (message.kind === "tool") {
-              const args = toolSummary(message.name, message.args);
-              return (
-                <div
-                  key={message.id}
-                  style={{
-                    margin: "0.4rem 0",
-                    fontSize: "0.78rem",
-                    color: "#777",
-                    fontFamily: "ui-monospace, monospace",
-                  }}
-                >
-                  🔧 {message.name}({args}) {message.done ? "✓" : "…"}
-                </div>
-              );
-            }
-            if (message.kind === "command") {
-              return (
-                <div key={message.id} style={{ margin: "0.75rem 0" }}>
-                  <div style={{ fontSize: "0.72rem", color: "#999" }}>you</div>
-                  <code style={{ fontFamily: "ui-monospace, monospace", fontSize: "0.85rem" }}>
-                    {message.args ? `${message.command} ${message.args}` : message.command}
-                  </code>
-                </div>
-              );
-            }
-            if (message.kind === "result") {
-              return (
-                <div key={message.id} style={{ margin: "0.75rem 0" }}>
-                  <div style={{ fontSize: "0.72rem", color: message.ok ? "#999" : "#c0392b" }}>
-                    {message.command}
-                    {message.ok ? "" : " · failed"}
-                  </div>
-                  <pre
-                    style={{
-                      margin: "0.2rem 0",
-                      padding: "0.5rem 0.7rem",
-                      background: "#f6f6f6",
-                      border: "1px solid #eee",
-                      borderRadius: 6,
-                      fontSize: "0.8rem",
-                      whiteSpace: "pre-wrap",
-                      overflowX: "auto",
-                      fontFamily: "ui-monospace, monospace",
-                    }}
-                  >
-                    {message.text}
-                  </pre>
-                </div>
-              );
-            }
-            const thinking =
-              message.kind === "assistant" && showThinkingOn && message.thinking
-                ? message.thinking
-                : null;
-
-            const overflowNote =
-              message.kind === "assistant" && message.overflow ? (
-                <div style={{ fontSize: "0.75rem", color: "#b26a00", margin: "0.3rem 0" }}>
-                  ⚠ context overflow — {message.overflow}
-                </div>
-              ) : null;
-
-            const errorNote =
-              message.kind === "assistant" && message.error ? (
-                <div style={{ fontSize: "0.75rem", color: "#c0392b", margin: "0.3rem 0" }}>
-                  ⚠{" "}
-                  {isOverflowError(message.error)
-                    ? `context overflow — ${message.error}`
-                    : message.error}
-                </div>
-              ) : null;
-
-            const cancelledNote =
-              message.kind === "assistant" && message.cancelled ? (
-                <div style={{ fontSize: "0.75rem", color: "#888", margin: "0.3rem 0" }}>
-                  ⊘ cancelled
-                </div>
-              ) : null;
-
-            if (message.kind === "assistant" && !message.text && !message.done) {
-              return (
-                <div key={message.id} style={{ margin: "0.75rem 0" }}>
-                  <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
-                  {thinking ? (
-                    <Markdown text={thinking} muted />
-                  ) : (
-                    <div style={{ color: "#999", fontStyle: "italic" }}>
-                      {message.warm ? "thinking…" : `loading ${message.model}…`}
-                    </div>
-                  )}
-                  {overflowNote}
-                  {errorNote}
-                </div>
-              );
-            }
-
-            const label =
-              message.kind === "user"
-                ? "you"
-                : message.done
-                  ? "assistant"
-                  : "assistant · streaming";
-            // Meta (model · context · speed) rides on the final segment - the one that
-            // carries usage - so it isn't repeated under every pre-tool segment.
-            let meta: string | null = null;
-            if (message.kind === "assistant" && message.usage) {
-              const usage = message.usage;
-              const parts = [
-                message.model,
-                `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
-              ];
-              if (usage.genMs > 0) {
-                parts.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
-              }
-              meta = parts.join(" · ");
-            }
-
-            return (
-              <div key={message.id} style={{ margin: "0.75rem 0" }}>
-                <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>
-                {thinking ? <Markdown text={thinking} muted /> : null}
-                {message.text ? <Markdown text={message.text} /> : null}
-                {message.kind === "user" && message.artifacts.length ? (
-                  <div
-                    style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", margin: "0.3rem 0" }}
-                  >
-                    {message.artifacts.map((ref) => (
-                      <ArtifactThumb key={ref.hash} artifact={ref} />
+            {/* Prompts held in the local queue: shown muted as "queued" so they read as
+            waiting, not sent, until the current turn frees up and they publish. */}
+            {queue.map((q) => (
+              <div
+                key={q.id}
+                className="flex flex-col gap-2 border-l-2 border-primary/50 bg-card px-3 py-2 opacity-60"
+              >
+                {q.text ? <Md text={q.text} muted /> : null}
+                {q.artifacts?.length ? (
+                  <div className="flex gap-1.5">
+                    {q.artifacts.map((ref) => (
+                      <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
                     ))}
                   </div>
                 ) : null}
-                {overflowNote}
-                {errorNote}
-                {cancelledNote}
-                {meta ? (
-                  <div style={{ fontSize: "0.68rem", color: "#aaa", marginTop: "0.2rem" }}>
-                    {meta}
-                  </div>
-                ) : null}
               </div>
-            );
-          })}
-
-          {awaitingResponse ? (
-            <div style={{ margin: "0.75rem 0" }}>
-              <div style={{ fontSize: "0.72rem", color: "#999" }}>assistant</div>
-              <div style={{ color: "#999", fontStyle: "italic" }}>thinking…</div>
-            </div>
-          ) : null}
-
-          {/* Prompts held in the local queue: shown muted as "queued" so they read as
-            waiting, not sent, until the current turn frees up and they publish. */}
-          {queue.map((q) => (
-            <div key={q.id} style={{ margin: "0.75rem 0", opacity: 0.5 }}>
-              <div style={{ fontSize: "0.72rem", color: "#999" }}>you · queued</div>
-              {q.text ? <Markdown text={q.text} muted /> : null}
-              {q.artifacts?.length ? (
-                <div style={{ display: "flex", gap: "0.3rem", marginTop: "0.2rem" }}>
-                  {q.artifacts.map((ref) => (
-                    <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      {/* Pinned composer: the input bar stays at the bottom; the log above scrolls.
-          Files dropped anywhere on the composer area upload as attachments. */}
+      {/* Live task checklist, above the composer. */}
+      <TasksPanel tasks={tasks} />
+
+      {/* Pinned bottom: composer, then a two-column footer (status + model controls).
+          Files dropped anywhere here upload as attachments. */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: passive drop target; the
-          keyboard-accessible path is the 📎 attach button below. */}
+          keyboard-accessible path is the attach button below. */}
       <div
         onDrop={onDrop}
         onDragOver={(event) => event.preventDefault()}
-        style={{ flexShrink: 0, paddingTop: "0.5rem", paddingBottom: "1rem", background: "#fff" }}
+        className="shrink-0 pt-2 pb-4"
       >
         {/* Slash menu: filters the host's announced command inventory as you type a
             leading "/". Arrows/Tab/Enter pick a row (handled on the input); a row click
             fills the composer. onMouseDown (not onClick) so the input keeps focus. */}
         {menuOpen ? (
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 6,
-              marginTop: "0.75rem",
-              overflow: "hidden",
-            }}
-          >
+          <div className="mb-2 overflow-hidden border border-border bg-popover">
             {menuMatches.map((c, i) => (
               <button
                 key={c.name}
@@ -687,47 +557,25 @@ export function App() {
                   event.preventDefault();
                   acceptCommand(c.name);
                 }}
-                style={{
-                  display: "flex",
-                  width: "100%",
-                  gap: "0.6rem",
-                  alignItems: "baseline",
-                  padding: "0.35rem 0.6rem",
-                  border: "none",
-                  textAlign: "left",
-                  font: "inherit",
-                  background: i === menuIdx ? "#eef3ff" : "#fff",
-                  cursor: "pointer",
-                }}
+                className={cn(
+                  "flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left",
+                  i === menuIdx ? "bg-accent" : "hover:bg-secondary",
+                )}
               >
-                <code style={{ fontWeight: 600, fontSize: "0.82rem" }}>{c.usage ?? c.name}</code>
-                <span style={{ color: "#888", fontSize: "0.78rem" }}>{c.summary}</span>
+                <code className="text-sm font-semibold text-primary">{c.usage ?? c.name}</code>
+                <span className="text-xs text-muted-foreground">{c.summary}</span>
               </button>
             ))}
           </div>
         ) : null}
 
         {uploadError ? (
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              alignItems: "center",
-              margin: "0.4rem 0",
-              color: "#c0392b",
-              fontSize: "0.78rem",
-            }}
-          >
+          <div className="mb-2 flex items-center gap-2 text-label tracking-wider text-smui-red">
             <span>⚠ {uploadError}</span>
             <button
               type="button"
               onClick={() => setUploadError(null)}
-              style={{
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                color: "#999",
-              }}
+              className="cursor-pointer text-muted-foreground hover:text-foreground"
             >
               dismiss
             </button>
@@ -737,101 +585,164 @@ export function App() {
         {/* Pending attachments, shown as removable chips (image thumbnail or a file pill)
             above the input until the next prompt carries them. */}
         {attachments.length || uploading > 0 ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", margin: "0.4rem 0" }}>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             {attachments.map((ref) => (
               <span
                 key={ref.hash}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.3rem",
-                  border: "1px solid #ddd",
-                  borderRadius: 6,
-                  padding: "0.2rem 0.4rem",
-                  fontSize: "0.75rem",
-                  background: "#fafafa",
-                }}
+                className="inline-flex items-center gap-1.5 border border-border bg-card px-1.5 py-1 text-xs"
               >
                 <ArtifactThumb artifact={ref} size={28} square />
                 {ref.kind === "image" ? (
-                  <span
-                    style={{
-                      maxWidth: 140,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {ref.name ?? ref.kind}
-                  </span>
+                  <span className="max-w-[140px] truncate">{ref.name ?? ref.kind}</span>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => removeAttachment(ref.hash)}
                   title="Remove"
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    cursor: "pointer",
-                    color: "#999",
-                  }}
+                  className="cursor-pointer text-muted-foreground hover:text-smui-red"
                 >
-                  ×
+                  <X className="size-3" />
                 </button>
               </span>
             ))}
             {uploading > 0 ? (
-              <span style={{ fontSize: "0.75rem", color: "#999", alignSelf: "center" }}>
+              <span className="text-label tracking-wider text-muted-foreground">
                 uploading {uploading}…
               </span>
             ) : null}
           </div>
         ) : null}
 
-        <form
-          onSubmit={onSubmit}
-          style={{ display: "flex", gap: "0.5rem", marginTop: menuOpen ? "0.4rem" : 0 }}
-        >
-          {/* Hard-steer control, left of the composer: aborts the active turn and folds
-            any queued prompts + draft into one steering message. Mirrors ESC. */}
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={!canCancel}
-            title="Cancel the active turn (folds queued prompts + draft into one steering message)"
-            style={{
-              padding: "0.5rem 0.7rem",
-              color: canCancel ? "#c0392b" : "#bbb",
-              borderColor: canCancel ? "#c0392b" : "#ddd",
-              cursor: canCancel ? "pointer" : "default",
-            }}
-          >
-            ⊘ Cancel
-          </button>
-          <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!sessionId}
-            title="Attach files (or paste / drag-drop)"
-            style={{ padding: "0.5rem 0.6rem" }}
-          >
-            📎
-          </button>
-          <input
-            ref={inputRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={onInputKeyDown}
-            onPaste={onPaste}
-            placeholder={`message ${modelMeta.label}… (/ for commands)`}
-            disabled={!sessionId}
-            style={{ flex: 1, padding: "0.5rem" }}
-          />
-          <button type="submit" disabled={!sessionId}>
-            Send
-          </button>
+        <form onSubmit={onSubmit}>
+          <div className="flex flex-col border border-input bg-background transition-colors focus-within:border-ring">
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={onInputKeyDown}
+              onPaste={onPaste}
+              placeholder={`message ${modelMeta.label}… (/ for commands)`}
+              disabled={!sessionId}
+              className="w-full bg-transparent px-3 pt-2.5 pb-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
+            />
+            <div className="flex items-center gap-2 px-2 pb-2">
+              <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!sessionId}
+                aria-label="Attach files (or paste / drag-drop)"
+              >
+                <Plus className="size-4.5" />
+              </Button>
+            </div>
+          </div>
+          {/* Single text input: Enter submits the form implicitly (no send button). */}
         </form>
+
+        {/* Footer under the prompt input: cwd/session/host (left), model controls (right). */}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+          <div className="flex flex-col gap-1">
+            {replayed ? (
+              <div className="flex flex-col gap-1 fade-in animate-in duration-150">
+                {host.workspace ? (
+                  <p className="text-label tracking-wider text-muted-foreground">
+                    workspace <code className="text-foreground">{host.workspace}</code>
+                    {host.cwd && host.cwd !== host.workspace ? (
+                      <>
+                        {" · cwd "}
+                        <code className="text-foreground">{host.cwd}</code>
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
+                <p className="text-label tracking-wider text-muted-foreground">
+                  session <code className="text-foreground">{target}</code> · {status}
+                  {replayed ? " · replayed" : ""} · {events.length} events
+                </p>
+                {sessionId ? (
+                  <p className="text-label tracking-wider">
+                    {host.leaderId ? (
+                      <span className="text-smui-green">
+                        ● host active
+                        {host.standbyCount > 0
+                          ? ` (${host.leaderId.slice(0, 8)}) · ${host.standbyCount} standby`
+                          : ""}
+                      </span>
+                    ) : host.present ? (
+                      <span className="text-smui-yellow">● host starting…</span>
+                    ) : (
+                      <span className="text-smui-yellow">
+                        ● no host on this session — start one:{" "}
+                        <code className="text-foreground">{hostCommand}</code>
+                      </span>
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <ModelSelector.Root
+              models={modelOptions}
+              value={activeProvider}
+              onValueChange={setProvider}
+            >
+              <ModelSelector.Trigger className="w-44 text-label" />
+              <ModelSelector.Content>
+                <ModelSelector.Search />
+                <ModelSelector.List />
+              </ModelSelector.Content>
+            </ModelSelector.Root>
+
+            {modelMeta.reasoningLevels.length > 0 ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-label tracking-wider uppercase text-muted-foreground">
+                  reasoning
+                </span>
+                <ToggleGroup
+                  type="single"
+                  value={reasoning}
+                  onValueChange={(next) => {
+                    if (next) {
+                      setReasoning(next);
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                >
+                  {modelMeta.reasoningLevels.map((level) => (
+                    <ToggleGroupItem
+                      key={level}
+                      value={level}
+                      className="h-6 px-2 text-label lowercase data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >
+                      {level}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+            ) : null}
+
+            <div className="flex items-center gap-1.5">
+              <Checkbox
+                id="show-thinking"
+                checked={showThinkingOn}
+                onCheckedChange={(checked) => setShowThinking(checked === true)}
+              />
+              <Label
+                htmlFor="show-thinking"
+                className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
+              >
+                show thinking
+              </Label>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   );

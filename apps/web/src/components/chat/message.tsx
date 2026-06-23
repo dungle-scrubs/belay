@@ -44,15 +44,16 @@ export function WorkingIndicator({ label = "working" }: { label?: string }) {
 
 type ToolStatus = "running" | "done" | "error";
 
-const TOOL_STATUS_DOT: Record<ToolStatus, string> = {
-  running: "bg-smui-yellow animate-pulse",
-  done: "bg-smui-green",
-  error: "bg-smui-red",
+// Status shows in the wrench icon color (no separate dot).
+const TOOL_STATUS_ICON: Record<ToolStatus, string> = {
+  running: "text-smui-yellow animate-pulse",
+  done: "text-smui-frost-3",
+  error: "text-smui-red",
 };
 
 /**
- * Generic tool-call row: icon, name(args), and a status dot, with an optional
- * output body. The foundation specific tool renderers build on.
+ * Generic tool-call row: icon, name(args), with an optional output body. The
+ * foundation specific tool renderers build on. Status tints the icon.
  */
 export function ToolCall({
   name,
@@ -70,14 +71,11 @@ export function ToolCall({
   return (
     <div className={cn("flex flex-col gap-1", className)}>
       <div className="flex items-center gap-2 text-ui text-muted-foreground">
-        <Wrench className="size-3.5 shrink-0 text-smui-frost-3" />
+        <Wrench className={cn("size-3.5 shrink-0", TOOL_STATUS_ICON[status])} />
         <code className="text-ui text-foreground">
           {name}
           <span className="text-muted-foreground">({args ?? ""})</span>
         </code>
-        <span
-          className={cn("ml-auto inline-block size-[5px] rounded-full", TOOL_STATUS_DOT[status])}
-        />
       </div>
       {children ? (
         <div className="border-l border-border pl-3 text-sm text-muted-foreground">{children}</div>
@@ -96,29 +94,19 @@ function MarkdownBody({ text, muted = false }: { text: string; muted?: boolean }
   );
 }
 
-/** A prompt from the user, rendered as markdown. */
+/** A prompt from the user: a boxed, left-barred block (no header). */
 export function UserMessage({ text }: { text: string }) {
   return (
-    <div className="flex flex-col gap-1">
-      <MessageHeading>you</MessageHeading>
+    <div className="border-l-2 border-primary bg-card px-3 py-2">
       <MarkdownBody text={text} />
     </div>
   );
 }
 
-/** A model response (markdown), with an optional meta node and streaming label. */
-export function AssistantMessage({
-  content,
-  streaming = false,
-  meta,
-}: {
-  content: string;
-  streaming?: boolean;
-  meta?: ReactNode;
-}) {
+/** A model response (markdown), plain prose with an optional meta node (no header). */
+export function AssistantMessage({ content, meta }: { content: string; meta?: ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <MessageHeading>{streaming ? "assistant · streaming" : "assistant"}</MessageHeading>
       <MarkdownBody text={content} />
       {meta}
     </div>

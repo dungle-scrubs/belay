@@ -1,7 +1,8 @@
 import type { TaskSnapshot } from "@trevor/richter";
-import { useState } from "react";
+import { useBoolean } from "ahooks";
+import { cn } from "@/lib/utils";
 
-// Checklist row glyph + color by status (matches the V1 task set).
+// Checklist row glyph + SMUI color by status (matches the V1 task set).
 const TASK_ICON: Record<string, string> = {
   pending: "☐",
   in_progress: "◐",
@@ -10,11 +11,11 @@ const TASK_ICON: Record<string, string> = {
   cancelled: "⊘",
 };
 const TASK_COLOR: Record<string, string> = {
-  pending: "#555",
-  in_progress: "#2a7",
-  completed: "#9a9a9a",
-  failed: "#c0392b",
-  cancelled: "#9a9a9a",
+  pending: "text-muted-foreground",
+  in_progress: "text-smui-green",
+  completed: "text-muted-foreground/70",
+  failed: "text-smui-red",
+  cancelled: "text-muted-foreground/70",
 };
 
 /**
@@ -23,46 +24,35 @@ const TASK_COLOR: Record<string, string> = {
  * checklist (the snapshot then comes back empty).
  */
 export function TasksPanel({ tasks }: { tasks: readonly TaskSnapshot[] }) {
-  const [open, setOpen] = useState(true);
+  const [open, { toggle }] = useBoolean(true);
   if (tasks.length === 0) {
     return null;
   }
   const done = tasks.filter((t) => t.status === "completed").length;
   return (
-    <div style={{ margin: "0.5rem 0", fontSize: "0.85rem" }}>
+    <div className="flex flex-col gap-1.5 text-sm">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          border: "none",
-          background: "none",
-          padding: 0,
-          cursor: "pointer",
-          color: "#555",
-          fontSize: "0.8rem",
-          fontWeight: 600,
-        }}
+        onClick={toggle}
+        className="flex w-fit cursor-pointer items-center gap-1 text-label tracking-wider uppercase text-muted-foreground hover:text-foreground"
       >
-        {open ? "▾" : "▸"} Tasks {done}/{tasks.length}
+        {open ? "▾" : "▸"} tasks {done}/{tasks.length}
       </button>
       {open ? (
-        <div
-          style={{ marginTop: "0.3rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}
-        >
+        <div className="flex flex-col gap-0.5">
           {tasks.map((task) => (
-            <div key={task.id} style={{ display: "flex", gap: "0.45rem", alignItems: "baseline" }}>
-              <span style={{ color: TASK_COLOR[task.status] ?? "#555" }}>
+            <div key={task.id} className="flex items-baseline gap-1.5">
+              <span className={TASK_COLOR[task.status] ?? "text-muted-foreground"}>
                 {TASK_ICON[task.status] ?? "•"}
               </span>
               <span
-                style={{
-                  color: task.status === "completed" ? "#9a9a9a" : "#333",
-                  textDecoration: task.status === "completed" ? "line-through" : "none",
-                }}
+                className={cn(
+                  task.status === "completed" && "text-muted-foreground/70 line-through",
+                )}
               >
                 {task.activeForm}
                 {task.blockedBy.length > 0 ? (
-                  <span style={{ color: "#bbb", fontSize: "0.75rem" }}>
+                  <span className="text-label text-muted-foreground/60">
                     {" "}
                     (blocked by {task.blockedBy.join(", ")})
                   </span>

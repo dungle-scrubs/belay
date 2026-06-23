@@ -1,4 +1,4 @@
-import "@fontsource-variable/jetbrains-mono";
+import "@fontsource-variable/jetbrains-mono/index.css";
 import "../src/index.css";
 import type { Preview } from "@storybook/react-vite";
 import { TooltipProvider } from "../src/components/ui/tooltip";

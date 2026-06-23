@@ -4,3 +4,6 @@ storybook-static/
 *.log
 .DS_Store
 .turbo/
+# SQLite write-ahead-log / shared-memory sidecar files (transient)
+*.db-shm
+*.db-wal
