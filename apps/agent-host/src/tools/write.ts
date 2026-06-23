@@ -1,5 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { Effect } from "effect";
+import { ToolExecutionError } from "./errors";
 import { msg } from "./shared";
 import type { Tool } from "./types";
 
@@ -24,14 +26,17 @@ export const writeTool: Tool = {
     },
     required: ["path", "content"],
   },
-  async execute(args) {
-    try {
+  execute: (args) =>
+    Effect.gen(function* () {
       const target = resolve(process.cwd(), String(args.path ?? ""));
-      await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, String(args.content ?? ""), "utf8");
+      yield* Effect.tryPromise({
+        try: () => mkdir(dirname(target), { recursive: true }),
+        catch: (cause) => new ToolExecutionError({ tool: "write", detail: msg(cause), cause }),
+      });
+      yield* Effect.tryPromise({
+        try: () => writeFile(target, String(args.content ?? ""), "utf8"),
+        catch: (cause) => new ToolExecutionError({ tool: "write", detail: msg(cause), cause }),
+      });
       return `wrote ${target}`;
-    } catch (error) {
-      return `error: ${msg(error)}`;
-    }
-  },
+    }),
 };

@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { ChatMessage, Provider, ToolCall, Usage } from "../providers";
 import { executeTool, TOOL_DEFS } from "../tools";
 
@@ -58,7 +59,9 @@ export async function* runAgent(
         return; // cancelled before this tool ran
       }
       yield { type: "tool_start", call };
-      const result = await executeTool(call.name, call.arguments, runId);
+      // Transitional seam: the executor is an Effect; the loop is still an async
+      // generator (it becomes an Effect/Stream in a later slice), so run it here.
+      const result = await Effect.runPromise(executeTool(call.name, call.arguments, runId));
       yield { type: "tool_end", call, result };
       conversation.push({ role: "tool", content: result, toolCallId: call.id, name: call.name });
     }

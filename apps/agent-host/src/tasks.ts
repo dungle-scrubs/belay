@@ -1,4 +1,6 @@
 import type { TaskSnapshot, TaskStatus } from "@trevor/richter";
+import { Effect } from "effect";
+import { ToolExecutionError } from "./tools/errors";
 import { msg, optStr, strArr } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
@@ -241,21 +243,22 @@ export function buildTaskTools(registry: TaskRegistry = taskRegistry): Tool[] {
       },
       required: ["subject"],
     },
-    execute(args) {
-      try {
-        const task = registry.create({
-          subject: String(args.subject ?? ""),
-          description: optStr(args.description),
-          activeForm: optStr(args.activeForm),
-          status: args.status as TaskStatus | undefined,
-          blockedBy: strArr(args.blockedBy),
-          blocks: strArr(args.blocks),
-        });
-        return Promise.resolve(`created ${task.id}: ${task.subject}`);
-      } catch (error) {
-        return Promise.resolve(`error: ${msg(error)}`);
-      }
-    },
+    execute: (args) =>
+      Effect.try({
+        try: () => {
+          const task = registry.create({
+            subject: String(args.subject ?? ""),
+            description: optStr(args.description),
+            activeForm: optStr(args.activeForm),
+            status: args.status as TaskStatus | undefined,
+            blockedBy: strArr(args.blockedBy),
+            blocks: strArr(args.blocks),
+          });
+          return `created ${task.id}: ${task.subject}`;
+        },
+        catch: (cause) =>
+          new ToolExecutionError({ tool: "task_create", detail: msg(cause), cause }),
+      }),
   };
 
   const update: Tool = {
@@ -275,27 +278,28 @@ export function buildTaskTools(registry: TaskRegistry = taskRegistry): Tool[] {
       },
       required: ["taskId"],
     },
-    execute(args) {
-      try {
-        const { task, cleared } = registry.update(String(args.taskId ?? ""), {
-          subject: optStr(args.subject),
-          description: optStr(args.description),
-          activeForm: optStr(args.activeForm),
-          status: args.status as TaskStatus | "deleted" | undefined,
-          blockedBy: strArr(args.blockedBy),
-          blocks: strArr(args.blocks),
-        });
-        if (cleared) {
-          return Promise.resolve("all tasks complete - checklist cleared");
-        }
-        if (!task) {
-          return Promise.resolve(`deleted ${String(args.taskId ?? "")}`);
-        }
-        return Promise.resolve(`${task.id} -> ${task.status}`);
-      } catch (error) {
-        return Promise.resolve(`error: ${msg(error)}`);
-      }
-    },
+    execute: (args) =>
+      Effect.try({
+        try: () => {
+          const { task, cleared } = registry.update(String(args.taskId ?? ""), {
+            subject: optStr(args.subject),
+            description: optStr(args.description),
+            activeForm: optStr(args.activeForm),
+            status: args.status as TaskStatus | "deleted" | undefined,
+            blockedBy: strArr(args.blockedBy),
+            blocks: strArr(args.blocks),
+          });
+          if (cleared) {
+            return "all tasks complete - checklist cleared";
+          }
+          if (!task) {
+            return `deleted ${String(args.taskId ?? "")}`;
+          }
+          return `${task.id} -> ${task.status}`;
+        },
+        catch: (cause) =>
+          new ToolExecutionError({ tool: "task_update", detail: msg(cause), cause }),
+      }),
   };
 
   return [create, update];

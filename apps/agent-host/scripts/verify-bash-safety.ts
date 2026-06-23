@@ -2,6 +2,7 @@
 // refused, and ordinary commands (including non-protected recursive deletes)
 // pass through. Run: pnpm exec tsx scripts/verify-bash-safety.ts
 
+import { Effect } from "effect";
 import { executeTool } from "../src/tools";
 import { classifyAlwaysPreventedBashCommand as classify } from "../src/tools/bash-safety";
 
@@ -64,8 +65,12 @@ for (const command of allow) {
 }
 
 // Integration: the real bash tool refuses a destructive command and runs a safe one.
-const refused = await executeTool("bash", JSON.stringify({ command: "rm -rf /" }));
-const ran = await executeTool("bash", JSON.stringify({ command: "echo wired-ok" }));
+const refused = await Effect.runPromise(
+  executeTool("bash", JSON.stringify({ command: "rm -rf /" })),
+);
+const ran = await Effect.runPromise(
+  executeTool("bash", JSON.stringify({ command: "echo wired-ok" })),
+);
 if (!refused.startsWith("refused:")) {
   console.error(`WIRING (should refuse): ${refused}`);
   failures += 1;

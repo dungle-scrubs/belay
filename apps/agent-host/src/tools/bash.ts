@@ -1,7 +1,12 @@
+import { Effect } from "effect";
 import { runShell } from "./run-shell";
 import type { Tool } from "./types";
 
-/** Runs a shell command in the host's working directory (safety floor, timeout, cap). */
+/**
+ * Runs a shell command in the host's working directory (safety floor, timeout, cap).
+ * runShell never rejects - it encodes refusals and failures as result strings the model
+ * reads - so it adapts into the Effect tool contract with Effect.promise (no `E`).
+ */
 export const bashTool: Tool = {
   name: "bash",
   description: "Run a shell command in the host working directory; returns stdout and stderr.",
@@ -10,5 +15,5 @@ export const bashTool: Tool = {
     properties: { command: { type: "string", description: "Shell command to run" } },
     required: ["command"],
   },
-  execute: (args) => runShell(String(args.command ?? "")),
+  execute: (args) => Effect.promise(() => runShell(String(args.command ?? ""))),
 };

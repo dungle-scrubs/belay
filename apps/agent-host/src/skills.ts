@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect } from "effect";
 import { parse as parseYaml } from "yaml";
 import { runShell } from "./tools/run-shell";
 import { cap } from "./tools/shared";
@@ -190,15 +191,16 @@ export function buildSkillTool(skills: readonly Skill[]): Tool {
       properties: { name: { type: "string", description: "The skill id to load" } },
       required: ["name"],
     },
-    execute(args) {
+    execute: (args) => {
       const id = String(args.name ?? "").trim();
       const skill = skills.find((s) => s.id === id);
       if (!skill) {
-        return Promise.resolve(
+        return Effect.succeed(
           `error: unknown skill "${id}". Available: ${skills.map((s) => s.id).join(", ") || "(none)"}`,
         );
       }
-      return expandSkill(skill);
+      // expandSkill never rejects (it catches its own read), so Effect.promise is safe.
+      return Effect.promise(() => expandSkill(skill));
     },
   };
 }

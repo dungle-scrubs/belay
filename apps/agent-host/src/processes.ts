@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { Effect } from "effect";
 import { invariant } from "./log";
 import { classifyAlwaysPreventedBashCommand } from "./tools/bash-safety";
 import { cap, msg, num } from "./tools/shared";
@@ -225,30 +226,29 @@ export function buildProcessTool(sup: ProcessSupervisor = supervisor): Tool {
       },
       required: ["action"],
     },
-    execute(args) {
-      switch (String(args.action ?? "")) {
-        case "start": {
-          const command = String(args.command ?? "").trim();
-          if (!command) {
-            return Promise.resolve("error: command required for start");
+    execute: (args) =>
+      Effect.sync(() => {
+        switch (String(args.action ?? "")) {
+          case "start": {
+            const command = String(args.command ?? "").trim();
+            if (!command) {
+              return "error: command required for start";
+            }
+            return JSON.stringify(sup.start(command, process.cwd()));
           }
-          return Promise.resolve(JSON.stringify(sup.start(command, process.cwd())));
-        }
-        case "poll":
-          return Promise.resolve(
-            cap(
+          case "poll":
+            return cap(
               JSON.stringify(
                 sup.poll(String(args.id ?? ""), num(args.stdoutCursor), num(args.stderrCursor)),
               ),
-            ),
-          );
-        case "kill":
-          return Promise.resolve(JSON.stringify(sup.kill(String(args.id ?? ""))));
-        case "list":
-          return Promise.resolve(JSON.stringify(sup.list()));
-        default:
-          return Promise.resolve(`error: unknown action "${String(args.action ?? "")}"`);
-      }
-    },
+            );
+          case "kill":
+            return JSON.stringify(sup.kill(String(args.id ?? "")));
+          case "list":
+            return JSON.stringify(sup.list());
+          default:
+            return `error: unknown action "${String(args.action ?? "")}"`;
+        }
+      }),
   };
 }

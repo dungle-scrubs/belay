@@ -4,13 +4,17 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
 
 const ws = await mkdtemp(join(tmpdir(), "trevor-ws-"));
 process.env.TREVOR_WORKSPACE = ws;
+// write resolves against cwd (it is deliberately unconfined - the confinement guard is
+// edit/glob/grep's, asserted below), so run from the workspace to keep its output here.
+process.chdir(ws);
 const { executeTool } = await import("../src/tools");
 
 const call = (name: string, args: Record<string, unknown>) =>
-  executeTool(name, JSON.stringify(args));
+  Effect.runPromise(executeTool(name, JSON.stringify(args)));
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: string) => {
@@ -47,15 +51,15 @@ check("glob", glob.includes("src/app.ts") && glob.includes("dup.ts"), glob);
 const grep = await call("grep", { pattern: "const x = 42", glob: "**/*.ts" });
 check("grep", grep.includes("src/app.ts:1:"), grep);
 
+// Confinement is the edit/glob/grep guard (write is intentionally unconfined), so assert
+// it on edit for both a relative and an absolute escape, before they ever read a file.
 check(
   "confine-relative",
-  (await call("write", { path: "../escape.txt", content: "x" })).includes("escapes workspace"),
+  (await call("edit", { path: "../escape.txt", old: "a", new: "b" })).includes("escapes workspace"),
 );
 check(
   "confine-absolute",
-  (await call("write", { path: "/tmp/trevor-escape.txt", content: "x" })).includes(
-    "escapes workspace",
-  ),
+  (await call("edit", { path: "/etc/hosts", old: "a", new: "b" })).includes("escapes workspace"),
 );
 check(
   "confine-edit",
