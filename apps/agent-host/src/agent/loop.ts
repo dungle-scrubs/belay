@@ -22,6 +22,7 @@ export async function* runAgent(
   history: readonly ChatMessage[],
   reasoning?: string,
   signal?: AbortSignal,
+  runId?: string,
 ): AsyncIterable<AgentEvent> {
   const conversation: ChatMessage[] = [...history];
   for (let step = 0; step < MAX_STEPS; step += 1) {
@@ -57,7 +58,7 @@ export async function* runAgent(
         return; // cancelled before this tool ran
       }
       yield { type: "tool_start", call };
-      const result = await executeTool(call.name, call.arguments);
+      const result = await executeTool(call.name, call.arguments, runId);
       yield { type: "tool_end", call, result };
       conversation.push({ role: "tool", content: result, toolCallId: call.id, name: call.name });
     }

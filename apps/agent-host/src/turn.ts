@@ -72,7 +72,7 @@ export async function publishTurn(
     emit(events.assistantCompleted({ runId, text: full, usage, ...extra }));
 
   try {
-    for await (const event of runAgent(provider, turnHistory, reasoning, signal)) {
+    for await (const event of runAgent(provider, turnHistory, reasoning, signal, runId)) {
       if (event.type === "text") {
         full += event.text;
         await text.add(event.text);
