@@ -1,15 +1,14 @@
-// A-004 spike: does interrupting an Effect fiber actually tear down the pi-ai /
-// LM Studio stream, or does the model keep generating (a leak)?
+// A-004 regression check: interrupting a fiber that consumes the real provider Stream
+// tears the pi-ai / LM Studio request down, rather than letting the model keep generating.
 //
-// It builds the realistic slice-4 bridge - an Effect whose interruption aborts the
-// AbortController that pi-ai streams under - forks it as a fiber, lets tokens flow,
-// interrupts mid-stream, then checks whether tokens KEEP arriving afterward. If the
-// abort propagates to the underlying request, the token count freezes; if it leaks,
-// the count keeps climbing during the grace window.
+// It runs provider.stream (the production Stream, whose scope aborts the underlying
+// request on interruption) inside a forked fiber, lets tokens flow, interrupts the fiber
+// mid-generation, then checks whether tokens KEEP arriving. If the abort propagates the
+// count freezes; if it leaks the count keeps climbing during the grace window.
 //
 // Requires LM Studio reachable with the qwen model loaded. Run:
 //   pnpm exec tsx scripts/spike-a004-interrupt.ts
-import { Effect, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber, Stream } from "effect";
 
 // Pin the load target to whatever is already loaded so provider.stream's
 // ensureMaxContext is a no-op (we are testing interrupt, not model loading).
@@ -37,67 +36,46 @@ const messages = [
 ];
 
 let events = 0;
-let loopExited = false;
-let loopError: string | null = null;
-const controller = new AbortController();
-
-// The slice-4 cancellation bridge: Effect.async whose returned canceler aborts the
-// controller when the fiber is interrupted. That controller's signal is what pi-ai
-// (and thus the LM Studio HTTP request) streams under.
-const streamProgram = Effect.async<void>((resume) => {
-  void (async () => {
-    try {
-      for await (const _event of provider.stream(messages, [], "off", controller.signal)) {
-        events += 1;
-      }
-      loopExited = true;
-      resume(Effect.void);
-    } catch (error) {
-      loopExited = true;
-      loopError = error instanceof Error ? error.message : String(error);
-      resume(Effect.void);
-    }
-  })();
-  return Effect.sync(() => controller.abort());
+let done = false;
+// The production Stream: its scope finalizer aborts the controller pi-ai streams under,
+// so interrupting the consuming fiber tears the request down.
+const fiber = Effect.runFork(
+  Stream.runForEach(provider.stream(messages, [], "off"), () =>
+    Effect.sync(() => {
+      events += 1;
+    }),
+  ),
+);
+fiber.addObserver(() => {
+  done = true;
 });
-
-const fiber = Effect.runFork(streamProgram);
 
 // Wait until streaming is clearly underway (or the stream finishes / times out first).
 const waitStart = Date.now();
-while (events < 20 && !loopExited && Date.now() - waitStart < 30_000) {
+while (events < 20 && !done && Date.now() - waitStart < 30_000) {
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
-if (loopExited) {
-  console.error(
-    `INCONCLUSIVE: stream ended before interrupt (events=${events}, error=${loopError ?? "none"}). Retry with a longer prompt.`,
-  );
+if (done) {
+  console.error(`INCONCLUSIVE: stream ended before interrupt (events=${events}). Retry.`);
   process.exit(2);
 }
 
 const eventsAtInterrupt = events;
 console.log(`streaming underway: ${eventsAtInterrupt} events received; interrupting the fiber...`);
-await Effect.runPromise(Fiber.interrupt(fiber));
+const exit = await Effect.runPromise(Fiber.interrupt(fiber));
 
 // Grace window: if the abort propagated, the count is frozen; if it leaked, it climbs.
 await new Promise((resolve) => setTimeout(resolve, 2500));
 const eventsAfterGrace = events;
 const deltaAfterInterrupt = eventsAfterGrace - eventsAtInterrupt;
+const interrupted = Exit.isFailure(exit) && Cause.isInterrupted(exit.cause);
 
-console.log({
-  signalAborted: controller.signal.aborted,
-  loopExited,
-  loopError,
-  eventsAtInterrupt,
-  eventsAfterGrace,
-  deltaAfterInterrupt,
-});
+console.log({ interrupted, eventsAtInterrupt, eventsAfterGrace, deltaAfterInterrupt });
 
-// Teardown holds if the signal aborted, the consume loop terminated, and essentially no
-// tokens arrived after the interrupt (a couple in-flight before the abort landed is fine).
-const torndown = controller.signal.aborted && loopExited && deltaAfterInterrupt <= 2;
-if (torndown) {
+// Teardown holds if the fiber ended interrupted and essentially no tokens arrived after
+// the interrupt (a couple in-flight before the abort landed is fine).
+if (interrupted && deltaAfterInterrupt <= 2) {
   console.log("A-004 PASS: fiber interrupt tears down the pi-ai / LM Studio stream.");
   process.exit(0);
 }

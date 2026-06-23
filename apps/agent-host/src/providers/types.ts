@@ -1,3 +1,9 @@
+import type { Stream } from "effect";
+import type { ProviderAuthError, ProviderUnavailable } from "./errors";
+
+/** What a provider's stream can fail with, in the Effect `E` channel. */
+export type ProviderError = ProviderUnavailable | ProviderAuthError;
+
 /** Model load state for a provider: reachable, and warm (loaded) vs cold. */
 export interface Readiness {
   readonly ready: boolean;
@@ -69,12 +75,16 @@ export interface Provider {
   readonly defaultReasoning: string;
   readiness(): Promise<Readiness>;
   warm(): Promise<void>;
+  /**
+   * One model step as a Stream of events. Cancellation is fiber interruption - the
+   * stream's scope tears the underlying request down (no signal arg); a stream failure
+   * rides the typed ProviderError channel.
+   */
   stream(
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
     reasoning?: string,
-    signal?: AbortSignal,
-  ): AsyncIterable<ProviderEvent>;
+  ): Stream.Stream<ProviderEvent, ProviderError>;
   /**
    * Optional inspectable internal state for /doctor: load/context details, last error,
    * whatever the adapter hides that an operator would otherwise have to read source for.

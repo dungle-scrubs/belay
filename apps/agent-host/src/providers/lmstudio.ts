@@ -1,11 +1,19 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Model } from "@mariozechner/pi-ai";
+import { Effect, Stream } from "effect";
 import { debug, log, warn } from "../log";
 import { msg } from "../tools/shared";
 import { ModelLoadError, ProviderUnavailable } from "./errors";
 import { streamPiAi } from "./pi-ai";
-import type { ChatMessage, Provider, ProviderEvent, Readiness, ToolDef } from "./types";
+import type {
+  ChatMessage,
+  Provider,
+  ProviderError,
+  ProviderEvent,
+  Readiness,
+  ToolDef,
+} from "./types";
 
 const execAsync = promisify(exec);
 /** LM Studio's own CLI, used to (re)load a model at a chosen context length. */
@@ -186,40 +194,46 @@ export class LmStudioProvider implements Provider {
     };
   }
 
-  async *stream(
+  stream(
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
     reasoning?: string,
-    signal?: AbortSignal,
-  ): AsyncIterable<ProviderEvent> {
-    const contextWindow = await this.ensureMaxContext();
-    // qwen is binary. The qwen thinking format sends `enable_thinking` derived from
-    // the reasoning level, so we always declare reasoning + that format and let the
-    // level decide: "off" -> enable_thinking:false (qwen thinks by default otherwise),
-    // anything else -> enable_thinking:true. thinkingFormat must be explicit since a
-    // localhost baseUrl gives pi-ai nothing to auto-detect from.
-    const thinking = reasoning !== undefined && reasoning !== "off";
-    const model: Model<"openai-completions"> = {
-      id: this.model,
-      name: this.model,
-      api: "openai-completions",
-      provider: "lmstudio",
-      baseUrl: this.url,
-      reasoning: true,
-      input: ["text"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow,
-      maxTokens: contextWindow,
-      compat: { thinkingFormat: "qwen" },
-    };
-    // LM Studio ignores the key, but pi-ai requires a non-empty one. With the qwen
-    // format + model.reasoning, omitting the level (undefined) sends enable_thinking:
-    // false; "high" sends true. "off" isn't a pi-ai ThinkingLevel, so undefined is it.
-    yield* streamPiAi(model, messages, tools, {
-      apiKey: "lm-studio",
-      contextWindow,
-      reasoning: thinking ? "high" : undefined,
-      signal,
-    });
+  ): Stream.Stream<ProviderEvent, ProviderError> {
+    // ensureMaxContext is async (and best-effort, never fails), so unwrap it into the
+    // stream; the model is then built against the context LM Studio actually serves.
+    return Stream.unwrap(
+      Effect.promise(() => this.ensureMaxContext()).pipe(
+        Effect.map((contextWindow) => {
+          // qwen is binary. The qwen thinking format sends `enable_thinking` derived from
+          // the reasoning level, so we always declare reasoning + that format and let the
+          // level decide: "off" -> enable_thinking:false (qwen thinks by default otherwise),
+          // anything else -> enable_thinking:true. thinkingFormat must be explicit since a
+          // localhost baseUrl gives pi-ai nothing to auto-detect from.
+          const thinking = reasoning !== undefined && reasoning !== "off";
+          const model: Model<"openai-completions"> = {
+            id: this.model,
+            name: this.model,
+            api: "openai-completions",
+            provider: "lmstudio",
+            baseUrl: this.url,
+            reasoning: true,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow,
+            maxTokens: contextWindow,
+            compat: { thinkingFormat: "qwen" },
+          };
+          // LM Studio ignores the key, but pi-ai requires a non-empty one. With the qwen
+          // format + model.reasoning, omitting the level (undefined) sends enable_thinking:
+          // false; "high" sends true. "off" isn't a pi-ai ThinkingLevel, so undefined is it.
+          return streamPiAi(model, messages, tools, {
+            apiKey: "lm-studio",
+            contextWindow,
+            reasoning: thinking ? "high" : undefined,
+            provider: this.id,
+          });
+        }),
+      ),
+    );
   }
 }

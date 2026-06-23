@@ -1,9 +1,18 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { getModel, getSupportedThinkingLevels, type ThinkingLevel } from "@mariozechner/pi-ai";
+import { Effect, Stream } from "effect";
+import { msg } from "../tools/shared";
 import { ProviderAuthError } from "./errors";
 import { streamPiAi } from "./pi-ai";
-import type { ChatMessage, Provider, ProviderEvent, Readiness, ToolDef } from "./types";
+import type {
+  ChatMessage,
+  Provider,
+  ProviderError,
+  ProviderEvent,
+  Readiness,
+  ToolDef,
+} from "./types";
 
 const AUTH_PATH = `${homedir()}/.pi/auth.json`;
 const CODEX = "openai-codex";
@@ -54,23 +63,35 @@ export class CodexProvider implements Provider {
     // Cloud-hosted: nothing to load.
   }
 
-  async *stream(
+  stream(
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
     reasoning?: string,
-    signal?: AbortSignal,
-  ): AsyncIterable<ProviderEvent> {
-    const apiKey = await this.resolveApiKey();
-    // The model id is configurable at runtime; pi-ai validates it against its
-    // registry, so the literal cast only satisfies its strict getModel typing.
-    const model = getModel(CODEX, this.model as "gpt-5.5");
-    // pi-ai clamps an out-of-range level to the nearest supported one.
-    yield* streamPiAi(model, messages, tools, {
-      apiKey,
-      contextWindow: model.contextWindow,
-      reasoning: (reasoning ?? this.defaultReasoning) as ThinkingLevel,
-      signal,
-    });
+  ): Stream.Stream<ProviderEvent, ProviderError> {
+    // resolveApiKey can fail with ProviderAuthError; unwrap it so that rides the stream's
+    // typed error channel rather than throwing out of an async generator.
+    return Stream.unwrap(
+      Effect.tryPromise({
+        try: () => this.resolveApiKey(),
+        catch: (cause) =>
+          cause instanceof ProviderAuthError
+            ? cause
+            : new ProviderAuthError({ provider: this.id, detail: msg(cause), cause }),
+      }).pipe(
+        Effect.map((apiKey) => {
+          // The model id is configurable at runtime; pi-ai validates it against its
+          // registry, so the literal cast only satisfies its strict getModel typing.
+          const model = getModel(CODEX, this.model as "gpt-5.5");
+          // pi-ai clamps an out-of-range level to the nearest supported one.
+          return streamPiAi(model, messages, tools, {
+            apiKey,
+            contextWindow: model.contextWindow,
+            reasoning: (reasoning ?? this.defaultReasoning) as ThinkingLevel,
+            provider: this.id,
+          });
+        }),
+      ),
+    );
   }
 
   private async resolveApiKey(): Promise<string> {

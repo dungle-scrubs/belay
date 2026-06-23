@@ -6,6 +6,7 @@ import type { Provider } from "./types";
 export type {
   ChatMessage,
   Provider,
+  ProviderError,
   ProviderEvent,
   Readiness,
   ToolCall,

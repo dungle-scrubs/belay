@@ -8,6 +8,7 @@ import {
   type SessionEvent,
   type TrevorEventInput,
 } from "@trevor/richter";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
@@ -58,8 +59,9 @@ let history: ChatMessage[] = [];
 let lastUserEvent: SessionEvent | null = null;
 let lastAnswerSeq = -1;
 let leaseRunning = false;
-/** The turn currently being answered, if any - its controller aborts on ESC/cancel. */
-let activeRun: { readonly runId: string; readonly controller: AbortController } | null = null;
+/** The turn currently being answered, if any - its fiber is interrupted on ESC/cancel. */
+let activeRun: { readonly runId: string; readonly fiber: Fiber.RuntimeFiber<void, never> } | null =
+  null;
 /**
  * Prompts that arrived while a turn was in flight, awaiting their turn (FIFO). Only
  * one turn runs at a time, so a second prompt never spawns a concurrent turn; it
@@ -158,22 +160,26 @@ function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): vo
     checkTurn(false, "respondTo while a turn is active", { active: activeRun.runId.slice(0, 8) });
     return;
   }
-  // One controller per turn: a user.cancel for this runId (ESC in the browser)
-  // aborts it, which unwinds the agent loop and the in-flight provider stream.
+  // One fiber per turn: a user.cancel for this runId (ESC in the browser) interrupts it,
+  // which tears down the in-flight provider stream and publishes the cancelled completion.
   const runId = crypto.randomUUID();
-  const controller = new AbortController();
-  activeRun = { runId, controller };
-  publishTurn(emit, pickProvider(providers, decoded.provider), turnHistory, {
-    runId,
-    reasoning: decoded.reasoning,
-    signal: controller.signal,
-  })
-    .catch((error) => warn("host", "turn failed", { run: runId.slice(0, 8), error: msg(error) }))
-    .finally(() => {
-      if (activeRun?.runId === runId) {
-        activeRun = null;
-      }
-    });
+  const fiber = Effect.runFork(
+    publishTurn(emit, pickProvider(providers, decoded.provider), turnHistory, {
+      runId,
+      reasoning: decoded.reasoning,
+    }),
+  );
+  activeRun = { runId, fiber };
+  fiber.addObserver((exit) => {
+    // publishTurn handles provider failures internally, so a non-interrupt failure here
+    // is an unexpected defect worth surfacing.
+    if (Exit.isFailure(exit) && !Cause.isInterruptedOnly(exit.cause)) {
+      warn("host", "turn died", { run: runId.slice(0, 8), cause: Cause.pretty(exit.cause) });
+    }
+    if (activeRun?.runId === runId) {
+      activeRun = null;
+    }
+  });
 }
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
@@ -315,8 +321,8 @@ function handleEvent(message: SessionEvent): void {
     // Abort the active turn if the cancel targets it, or if the browser asked to
     // cancel "whatever is active" (empty runId, sent before assistant.started lands).
     if (activeRun && (decoded.runId === activeRun.runId || decoded.runId === "")) {
-      log("host", "cancel: aborting run", { run: activeRun.runId.slice(0, 8) });
-      activeRun.controller.abort();
+      log("host", "cancel: interrupting run", { run: activeRun.runId.slice(0, 8) });
+      Effect.runFork(Fiber.interrupt(activeRun.fiber));
     }
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
     // Immediate command lane: only the leader answers, and only when live (commands

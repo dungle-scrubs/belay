@@ -7,9 +7,12 @@ import {
   type ThinkingLevel,
   type TSchema,
 } from "@mariozechner/pi-ai";
+import { Effect, Stream } from "effect";
 import { debug } from "../log";
+import { msg } from "../tools/shared";
+import { ProviderUnavailable } from "./errors";
 import { buildSystemPrompt } from "./system-prompt";
-import type { ChatMessage, ProviderEvent, ToolDef } from "./types";
+import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
 
 function parseArgs(raw: string): Record<string, unknown> {
   try {
@@ -70,11 +73,10 @@ export function toPiAiTools(tools: readonly ToolDef[]): Context["tools"] {
 
 /**
  * Streams one model step through pi-ai and maps its events onto host ProviderEvents.
- * The caller supplies the model (cloud via getModel, or a hand-built local model),
- * an apiKey, and the effective contextWindow - cloud knows it statically, local
- * adapters learn it from the running model - for the trailing usage event.
+ * Private async generator over the signal-driven request; the public streamPiAi below
+ * wraps it as an Effect Stream and owns the AbortController.
  */
-export async function* streamPiAi<TApi extends Api>(
+async function* piAiEvents<TApi extends Api>(
   model: Model<TApi>,
   messages: readonly ChatMessage[],
   tools: readonly ToolDef[],
@@ -82,7 +84,7 @@ export async function* streamPiAi<TApi extends Api>(
     readonly apiKey: string;
     readonly contextWindow: number;
     readonly reasoning?: ThinkingLevel;
-    readonly signal?: AbortSignal;
+    readonly signal: AbortSignal;
   },
 ): AsyncIterable<ProviderEvent> {
   const context: Context = {
@@ -101,12 +103,12 @@ export async function* streamPiAi<TApi extends Api>(
       generationAt = Date.now();
     }
   };
-  // signal rides into streamSimple so an ESC abort closes the underlying request
-  // (upstream cancel where the adapter supports it, local detach otherwise).
+  // signal rides into streamSimple so an interrupt (which aborts it - see streamPiAi)
+  // closes the underlying request: upstream cancel where the adapter supports it.
   const streamOptions = {
     apiKey: options.apiKey,
     ...(options.reasoning ? { reasoning: options.reasoning } : {}),
-    ...(options.signal ? { signal: options.signal } : {}),
+    signal: options.signal,
   };
   debug("pi-ai", "stream", {
     model: model.id,
@@ -173,4 +175,35 @@ export async function* streamPiAi<TApi extends Api>(
       }
     }
   }
+}
+
+/**
+ * One model step as an Effect Stream of ProviderEvents. The stream owns an
+ * AbortController whose abort is registered as a scoped finalizer, so interrupting the
+ * consuming fiber tears the underlying pi-ai/LM Studio request down cleanly (validated:
+ * A-004, scripts/spike-a004-interrupt.ts). A thrown stream error becomes a typed
+ * ProviderUnavailable in the `E` channel; a clean abort ends the stream without failing.
+ */
+export function streamPiAi<TApi extends Api>(
+  model: Model<TApi>,
+  messages: readonly ChatMessage[],
+  tools: readonly ToolDef[],
+  options: {
+    readonly apiKey: string;
+    readonly contextWindow: number;
+    readonly reasoning?: ThinkingLevel;
+    readonly provider: string;
+  },
+): Stream.Stream<ProviderEvent, ProviderError> {
+  return Stream.unwrapScoped(
+    Effect.gen(function* () {
+      const controller = new AbortController();
+      yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()));
+      return Stream.fromAsyncIterable(
+        piAiEvents(model, messages, tools, { ...options, signal: controller.signal }),
+        (cause) =>
+          new ProviderUnavailable({ provider: options.provider, detail: msg(cause), cause }),
+      );
+    }),
+  );
 }
