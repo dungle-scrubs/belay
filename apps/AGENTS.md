@@ -28,6 +28,13 @@ single `Promise.all` stays plain TypeScript per `typescript-standards` (Result
 types, discriminated unions, typed error classes) - do not pull in Effect just
 to get those.
 
+This policy governs the *decision* to adopt. The host (`apps/agent-host`) has crossed
+that threshold: its turn pipeline and control plane are an Effect program (typed
+`Data.TaggedError` channel, `Stream`, fiber-interrupt cancellation, `Context.Tag` +
+`Layer` DI), so new code there stays inside it rather than re-deciding per file. See
+[`apps/agent-host/AGENTS.md`](./agent-host/AGENTS.md) for the host's stay-in-Effect stance
+and the boundaries it deliberately keeps imperative.
+
 - **Stable core only.** Target the semver-stable v3 `effect` core - no
   `alpha` / `beta` / `rc` / `next` dist-tags, the same discipline as TanStack
   below. Ecosystem packages (`@effect/platform` and other not-yet-stable
