@@ -81,6 +81,7 @@ export async function* streamPiAi<TApi extends Api>(
     readonly apiKey: string;
     readonly contextWindow: number;
     readonly reasoning?: ThinkingLevel;
+    readonly signal?: AbortSignal;
   },
 ): AsyncIterable<ProviderEvent> {
   const context: Context = {
@@ -99,9 +100,13 @@ export async function* streamPiAi<TApi extends Api>(
       generationAt = Date.now();
     }
   };
-  const streamOptions = options.reasoning
-    ? { apiKey: options.apiKey, reasoning: options.reasoning }
-    : { apiKey: options.apiKey };
+  // signal rides into streamSimple so an ESC abort closes the underlying request
+  // (upstream cancel where the adapter supports it, local detach otherwise).
+  const streamOptions = {
+    apiKey: options.apiKey,
+    ...(options.reasoning ? { reasoning: options.reasoning } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  };
   for await (const event of streamSimple(model, context, streamOptions)) {
     if (
       event.type === "text_delta" ||

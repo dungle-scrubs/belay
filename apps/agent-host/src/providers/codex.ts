@@ -57,6 +57,7 @@ export class CodexProvider implements Provider {
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
     reasoning?: string,
+    signal?: AbortSignal,
   ): AsyncIterable<ProviderEvent> {
     const apiKey = await this.resolveApiKey();
     // The model id is configurable at runtime; pi-ai validates it against its
@@ -67,6 +68,7 @@ export class CodexProvider implements Provider {
       apiKey,
       contextWindow: model.contextWindow,
       reasoning: (reasoning ?? this.defaultReasoning) as ThinkingLevel,
+      signal,
     });
   }
 

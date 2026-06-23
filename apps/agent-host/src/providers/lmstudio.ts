@@ -85,6 +85,7 @@ export class LmStudioProvider implements Provider {
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
     reasoning?: string,
+    signal?: AbortSignal,
   ): AsyncIterable<ProviderEvent> {
     const contextWindow = (await this.ensureContextWindow()) || DEFAULT_CONTEXT_WINDOW;
     // qwen is binary. The qwen thinking format sends `enable_thinking` derived from
@@ -113,6 +114,7 @@ export class LmStudioProvider implements Provider {
       apiKey: "lm-studio",
       contextWindow,
       reasoning: thinking ? "high" : undefined,
+      signal,
     });
   }
 }

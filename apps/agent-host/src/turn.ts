@@ -47,9 +47,9 @@ export async function publishTurn(
   emit: Emit,
   provider: Provider,
   turnHistory: readonly ChatMessage[],
-  reasoning?: string,
+  options: { readonly runId: string; readonly reasoning?: string; readonly signal?: AbortSignal },
 ): Promise<void> {
-  const runId = crypto.randomUUID();
+  const { runId, reasoning, signal } = options;
   const { warm } = await provider.readiness();
   await emit(
     events.assistantStarted({ runId, warm, model: provider.model, provider: provider.id }),
@@ -66,9 +66,13 @@ export async function publishTurn(
     await text.flush();
     await thinking.flush();
   };
+  // The terminal event, emitted exactly once: a cancelled run (ESC) is distinct
+  // from an errored one, and both carry whatever partial text already streamed.
+  const complete = (extra: { error?: string; cancelled?: boolean }): Promise<void> =>
+    emit(events.assistantCompleted({ runId, text: full, usage, ...extra }));
 
   try {
-    for await (const event of runAgent(provider, turnHistory, reasoning)) {
+    for await (const event of runAgent(provider, turnHistory, reasoning, signal)) {
       if (event.type === "text") {
         full += event.text;
         await text.add(event.text);
@@ -110,16 +114,15 @@ export async function publishTurn(
     }
   } catch (error) {
     await flushAll();
-    await emit(
-      events.assistantCompleted({
-        runId,
-        text: full,
-        usage,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
+    // On some transports an abort throws here instead of ending the stream; an
+    // aborted signal means a clean cancel, anything else is a real error.
+    if (signal?.aborted) {
+      await complete({ cancelled: true });
+    } else {
+      await complete({ error: error instanceof Error ? error.message : String(error) });
+    }
     return;
   }
   await flushAll();
-  await emit(events.assistantCompleted({ runId, text: full, usage }));
+  await complete(signal?.aborted ? { cancelled: true } : {});
 }

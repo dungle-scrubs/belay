@@ -73,5 +73,6 @@ export interface Provider {
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
     reasoning?: string,
+    signal?: AbortSignal,
   ): AsyncIterable<ProviderEvent>;
 }

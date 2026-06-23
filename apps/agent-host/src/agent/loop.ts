@@ -21,12 +21,16 @@ export async function* runAgent(
   provider: Provider,
   history: readonly ChatMessage[],
   reasoning?: string,
+  signal?: AbortSignal,
 ): AsyncIterable<AgentEvent> {
   const conversation: ChatMessage[] = [...history];
   for (let step = 0; step < MAX_STEPS; step += 1) {
+    if (signal?.aborted) {
+      return; // cancelled between steps - do not start another model request
+    }
     const toolCalls: ToolCall[] = [];
     let assistantText = "";
-    for await (const event of provider.stream(conversation, TOOL_DEFS, reasoning)) {
+    for await (const event of provider.stream(conversation, TOOL_DEFS, reasoning, signal)) {
       if (event.type === "text") {
         assistantText += event.text;
         yield { type: "text", text: event.text };
@@ -41,11 +45,17 @@ export async function* runAgent(
         toolCalls.push(event.call);
       }
     }
+    if (signal?.aborted) {
+      return; // ESC landed mid-stream: stop before running tools or another step
+    }
     if (toolCalls.length === 0) {
       return; // the model answered without calling a tool
     }
     conversation.push({ role: "assistant", content: assistantText, toolCalls });
     for (const call of toolCalls) {
+      if (signal?.aborted) {
+        return; // cancelled before this tool ran
+      }
       yield { type: "tool_start", call };
       const result = await executeTool(call.name, call.arguments);
       yield { type: "tool_end", call, result };
