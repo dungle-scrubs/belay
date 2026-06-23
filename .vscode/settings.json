@@ -1,0 +1,6 @@
+{
+  "//": "Tailwind v4 uses CSS at-rules (@custom-variant, @theme, @apply, @variant, @utility, @source, @plugin) the built-in CSS validator doesn't know. Stop it flagging them as 'Unknown at rule'; Biome (tailwindDirectives) is the real CSS linter here.",
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore"
+}
