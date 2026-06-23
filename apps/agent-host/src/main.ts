@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import {
+  type ArtifactRef,
   connectSession,
   decodeTrevorEvent,
   ensureSession,
@@ -261,20 +262,27 @@ async function runCommand(name: string, args: string): Promise<void> {
  * and picked up when that turn completes (see drainDeferred), so turns never overlap
  * and the conversation stays strictly ordered.
  */
-function handleUserMessage(message: SessionEvent, text: string): void {
+function handleUserMessage(
+  message: SessionEvent,
+  text: string,
+  artifacts: readonly ArtifactRef[],
+): void {
   if (activeRun) {
     deferredUserEvents.push(message);
     return;
   }
+  const userTurn: ChatMessage = artifacts.length
+    ? { role: "user", content: text, artifacts }
+    : { role: "user", content: text };
   // Collapse consecutive user turns. With one-turn-at-a-time dispatch this only
   // fires for a genuinely abandoned turn (e.g. the host crashed mid-answer, leaving
   // a user message with no assistant entry) - replace it rather than feeding the
   // model two unanswered prompts at once.
   const last = history[history.length - 1];
   if (last?.role === "user") {
-    history[history.length - 1] = { role: "user", content: text };
+    history[history.length - 1] = userTurn;
   } else {
-    history.push({ role: "user", content: text });
+    history.push(userTurn);
   }
   lastUserEvent = message;
   if (live) {
@@ -293,7 +301,7 @@ function drainDeferred(): void {
   }
   const decoded = decodeTrevorEvent(next);
   if (decoded?.type === "user.message") {
-    handleUserMessage(next, decoded.text);
+    handleUserMessage(next, decoded.text, decoded.artifacts);
   }
 }
 
@@ -304,7 +312,7 @@ function handleEvent(message: SessionEvent): void {
     return;
   }
   if (decoded.type === "user.message" && message.producerId !== PRODUCER_ID) {
-    handleUserMessage(message, decoded.text);
+    handleUserMessage(message, decoded.text, decoded.artifacts);
   } else if (decoded.type === "assistant.completed") {
     if (decoded.text) {
       // Invariant: history stays strictly paired - an assistant reply lands only on top

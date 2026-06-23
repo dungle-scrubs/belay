@@ -7,6 +7,7 @@ import { ProviderAuthError } from "./errors";
 import { streamPiAi } from "./pi-ai";
 import type {
   ChatMessage,
+  ModelCapabilities,
   Provider,
   ProviderError,
   ProviderEvent,
@@ -36,22 +37,33 @@ export class CodexProvider implements Provider {
   /** GPT-5.x reasoning is graduated (minimal..xhigh) and read from the pi-ai model. */
   readonly reasoningLevels: readonly string[];
   readonly defaultReasoning: string;
+  private readonly images: boolean;
 
   constructor(config: CodexConfig) {
     this.model = config.model;
     this.label = config.label;
-    // Derive the model's thinking options once; fall back to the GPT-5.x range if the
-    // configured id is not (yet) in pi-ai's registry, so the host still starts.
+    // Derive the model's thinking options + image support once; fall back to the GPT-5.x
+    // shape if the configured id is not (yet) in pi-ai's registry, so the host still starts.
     let levels: readonly string[];
+    let images: boolean;
     try {
-      levels = getSupportedThinkingLevels(getModel(CODEX, this.model as "gpt-5.5"));
+      const model = getModel(CODEX, this.model as "gpt-5.5");
+      levels = getSupportedThinkingLevels(model);
+      images = model.input?.includes("image") ?? true;
     } catch {
       levels = ["minimal", "low", "medium", "high", "xhigh"];
+      images = true;
     }
     this.reasoningLevels = levels;
+    this.images = images;
     this.defaultReasoning = levels.includes("medium")
       ? "medium"
       : (levels[Math.floor(levels.length / 2)] ?? "medium");
+  }
+
+  /** Cloud GPT-5.x: image support from the registry, tools always supported. */
+  capabilities(): Effect.Effect<ModelCapabilities> {
+    return Effect.succeed({ images: this.images, tools: true });
   }
 
   readiness(): Effect.Effect<Readiness> {

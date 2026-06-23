@@ -1,3 +1,4 @@
+import type { ArtifactRef } from "@trevor/richter";
 import type { Effect, Stream } from "effect";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
 
@@ -8,6 +9,19 @@ export type ProviderError = ProviderUnavailable | ProviderAuthError;
 export interface Readiness {
   readonly ready: boolean;
   readonly warm: boolean;
+}
+
+/**
+ * What the current model can do, detected from the provider's source of truth - LM Studio's
+ * native model `type`/`capabilities`, or the pi-ai model registry - never hardcoded. Probed
+ * (not a static field) because a local provider learns it from whichever model is loaded,
+ * which changes at runtime.
+ */
+export interface ModelCapabilities {
+  /** Accepts image input (vision). */
+  readonly images: boolean;
+  /** Supports tool / function calling. */
+  readonly tools: boolean;
 }
 
 /** A tool exposed to the model (OpenAI-style JSON-schema parameters). */
@@ -45,6 +59,13 @@ export type ProviderEvent =
   | { readonly type: "usage"; readonly usage: Usage }
   | { readonly type: "overflow"; readonly reason: string };
 
+/** An image resolved from a blob-store artifact to inline base64, for a vision provider. */
+export interface ChatImage {
+  readonly hash: string;
+  readonly mimeType: string;
+  readonly data: string;
+}
+
 /** One message in the conversation (user, assistant, or a tool result). */
 export interface ChatMessage {
   readonly role: "user" | "assistant" | "tool";
@@ -52,6 +73,8 @@ export interface ChatMessage {
   readonly toolCalls?: readonly ToolCall[]; // assistant turn that requested tools
   readonly toolCallId?: string; // tool result: the call it answers
   readonly name?: string; // tool result: the tool name
+  readonly artifacts?: readonly ArtifactRef[]; // user turn: content-addressed attachments
+  readonly images?: readonly ChatImage[]; // user turn: image artifacts resolved to base64
 }
 
 /**
@@ -74,6 +97,8 @@ export interface Provider {
   readonly reasoningLevels: readonly string[];
   readonly defaultReasoning: string;
   readiness(): Effect.Effect<Readiness>;
+  /** Detects what the current model can do (vision, tools), from the provider's own source. */
+  capabilities(): Effect.Effect<ModelCapabilities>;
   warm(): Effect.Effect<void>;
   /**
    * One model step as a Stream of events. Cancellation is fiber interruption - the

@@ -1,6 +1,7 @@
 import { events } from "@trevor/richter";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
 import { type AgentEvent, runAgent } from "./agent/loop";
+import { resolveHistoryImages } from "./artifacts";
 import type { ChatMessage, Provider, Usage } from "./providers";
 import { Emit } from "./services";
 
@@ -52,26 +53,47 @@ export function publishTurn(
   options: { readonly runId: string; readonly reasoning?: string },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning } = options;
+
   return Effect.gen(function* () {
     const emit = yield* Emit;
+
     const { warm } = yield* provider.readiness();
+
+    // Inline image attachments before the model step, but only when the model actually accepts
+    // images - detected first-class via capabilities(), never hardcoded per provider (D-028).
+    const caps = yield* provider.capabilities();
+
+    const history = caps.images
+      ? yield* Effect.promise(() => resolveHistoryImages(turnHistory))
+      : turnHistory;
+    const useTools = caps.tools;
+
     yield* emit.publish(
-      events.assistantStarted({ runId, warm, model: provider.model, provider: provider.id }),
+      events.assistantStarted({
+        runId,
+        warm,
+        model: provider.model,
+        provider: provider.id,
+      }),
     );
 
     let full = "";
     let usage: Usage | undefined;
+
     const text = new DeltaBuffer((delta) =>
       emit.publish(events.assistantDelta({ runId, text: delta })),
     );
+
     // Reasoning text rides its own event channel so the browser can show or hide it.
     const thinking = new DeltaBuffer((delta) =>
       emit.publish(events.assistantThinking({ runId, text: delta })),
     );
+
     const flushAll = Effect.gen(function* () {
       yield* text.flush();
       yield* thinking.flush();
     });
+
     const complete = (extra: { error?: string; cancelled?: boolean }) =>
       emit.publish(events.assistantCompleted({ runId, text: full, usage, ...extra }));
 
@@ -117,10 +139,11 @@ export function publishTurn(
         }
       });
 
-    yield* Stream.runForEach(runAgent(provider, turnHistory, reasoning, runId), handle).pipe(
+    yield* Stream.runForEach(runAgent(provider, history, reasoning, runId, useTools), handle).pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
           yield* flushAll;
+
           if (Exit.isSuccess(exit)) {
             yield* complete({});
           } else if (Cause.isInterruptedOnly(exit.cause)) {

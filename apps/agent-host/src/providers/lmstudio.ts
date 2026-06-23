@@ -8,6 +8,7 @@ import { ModelLoadError, ProviderUnavailable } from "./errors";
 import { streamPiAi } from "./pi-ai";
 import type {
   ChatMessage,
+  ModelCapabilities,
   Provider,
   ProviderError,
   ProviderEvent,
@@ -32,6 +33,10 @@ const DEFAULT_CONTEXT_WINDOW = 8192;
 
 /** One LM Studio model's load state, as the native /api/v0 endpoint reports it. */
 interface ModelInfo {
+  /** "vlm" for a vision-language model, "llm" for text-only, "embeddings", etc. */
+  type?: string;
+  /** Feature flags LM Studio reports, e.g. ["tool_use"]. */
+  capabilities?: readonly string[];
   state?: string;
   loaded_context_length?: number;
   max_context_length?: number;
@@ -50,6 +55,12 @@ export class LmStudioProvider implements Provider {
   /** Local qwen thinking is binary (enable_thinking on/off); "off" = no reasoning. */
   readonly reasoningLevels = ["off", "on"] as const;
   readonly defaultReasoning = "off";
+  /** Vision (`type: "vlm"`) and tools (`tool_use`) learned from the loaded model's record. */
+  private vision = false;
+  private tools = true;
+  private learned = false;
+  /** LMSTUDIO_VISION forces image support on/off; unset = auto-detect from the model type. */
+  private readonly visionOverride: boolean | null;
   private readonly url: string;
   private readonly native: string;
   /** Effective context window currently served (tokens); learned from model info. */
@@ -69,6 +80,9 @@ export class LmStudioProvider implements Provider {
     this.label = config.label;
     this.native = new URL("/api/v0", config.url).toString();
     this.contextCap = Number(process.env.LMSTUDIO_MAX_CONTEXT) || Number.POSITIVE_INFINITY;
+    const v = process.env.LMSTUDIO_VISION;
+    this.visionOverride =
+      v === "1" || v === "true" ? true : v === "0" || v === "false" ? false : null;
   }
 
   /** This model's load state from LM Studio's native endpoint, or null if unreachable. */
@@ -81,7 +95,11 @@ export class LmStudioProvider implements Provider {
         debug("lmstudio", "model info not ok", { model: this.model, status: response.status });
         return null;
       }
-      return (await response.json()) as ModelInfo;
+      const info = (await response.json()) as ModelInfo;
+      this.vision = info.type === "vlm";
+      this.tools = info.capabilities?.includes("tool_use") ?? this.tools;
+      this.learned = true;
+      return info;
     } catch (cause) {
       debug("lmstudio", "model info unreachable", { model: this.model, error: msg(cause) });
       return null;
@@ -99,6 +117,22 @@ export class LmStudioProvider implements Provider {
       this.contextWindow =
         info.loaded_context_length ?? info.max_context_length ?? this.contextWindow;
       return { ready: true, warm: info.state === "loaded" };
+    });
+  }
+
+  /** Whether images are sent to the model: the env override, else the detected VLM flag. */
+  private get visionEnabled(): boolean {
+    return this.visionOverride ?? this.vision;
+  }
+
+  /** Vision + tool support. readiness()/ensureMaxContext() refresh the record each turn, so
+   *  this only fetches when nothing has yet (e.g. a standalone probe). */
+  capabilities(): Effect.Effect<ModelCapabilities> {
+    return Effect.promise(async () => {
+      if (!this.learned) {
+        await this.fetchModelInfo();
+      }
+      return { images: this.visionEnabled, tools: this.tools };
     });
   }
 
@@ -219,7 +253,7 @@ export class LmStudioProvider implements Provider {
             provider: "lmstudio",
             baseUrl: this.url,
             reasoning: true,
-            input: ["text"],
+            input: this.visionEnabled ? ["text", "image"] : ["text"],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow,
             maxTokens: contextWindow,

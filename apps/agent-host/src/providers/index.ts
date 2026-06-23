@@ -4,6 +4,7 @@ import { LmStudioProvider } from "./lmstudio";
 import type { Provider } from "./types";
 
 export type {
+  ChatImage,
   ChatMessage,
   Provider,
   ProviderError,

@@ -22,6 +22,34 @@ function parseArgs(raw: string): Record<string, unknown> {
   }
 }
 
+type TextBlock = { type: "text"; text: string };
+type ImageBlock = { type: "image"; data: string; mimeType: string };
+
+/**
+ * Builds a pi-ai user content value: a plain string when there are no resolved images,
+ * or a [text, ...image] block array when the message carries them (D-028). Artifacts that
+ * are NOT shown as images (documents, or images when the model can't see them) are
+ * surfaced as a short text note so the model at least knows they were attached.
+ */
+function userContent(message: ChatMessage): string | (TextBlock | ImageBlock)[] {
+  const images = message.images ?? [];
+  // Note exactly the artifacts that were NOT inlined (documents, plus any image the host
+  // couldn't inline - HEIC, undecodable), so the model still knows they were attached.
+  const inlined = new Set(images.map((i) => i.hash));
+  const noted = (message.artifacts ?? []).filter((a) => !inlined.has(a.hash));
+  const note = noted.length
+    ? `\n\n[attachments: ${noted.map((a) => a.name ?? a.kind).join(", ")}]`
+    : "";
+  const text = `${message.content}${note}`;
+  if (images.length === 0) {
+    return text;
+  }
+  return [
+    ...(text ? [{ type: "text" as const, text }] : []),
+    ...images.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType })),
+  ];
+}
+
 /**
  * Converts the host history to pi-ai messages, preserving tool calls and results:
  * an assistant turn that called tools becomes content blocks (text + toolCall), and
@@ -30,7 +58,7 @@ function parseArgs(raw: string): Record<string, unknown> {
 export function toPiAiMessages(messages: readonly ChatMessage[]): Context["messages"] {
   return messages.map((message): unknown => {
     if (message.role === "user") {
-      return { role: "user", content: message.content, timestamp: Date.now() };
+      return { role: "user", content: userContent(message), timestamp: Date.now() };
     }
     if (message.role === "tool") {
       return {

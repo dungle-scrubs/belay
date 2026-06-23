@@ -28,8 +28,10 @@ export function runAgent(
   history: readonly ChatMessage[],
   reasoning?: string,
   runId?: string,
+  useTools = true,
 ): Stream.Stream<AgentEvent, ProviderError> {
   const conversation: ChatMessage[] = [...history];
+  const tools = useTools ? TOOL_DEFS : [];
 
   // Stream.suspend keeps each step lazy: its provider.stream (which reads `conversation`)
   // is constructed only when the stream actually reaches this step - after the prior
@@ -45,7 +47,7 @@ export function runAgent(
       // The model step: pass text/thinking/usage/overflow through as AgentEvents while
       // siphoning off assistant text (accumulated) and tool calls (collected, not emitted
       // here - tool_start/tool_end come during execution below).
-      const modelStep = provider.stream(conversation, TOOL_DEFS, reasoning).pipe(
+      const modelStep = provider.stream(conversation, tools, reasoning).pipe(
         Stream.filterMap((event) => {
           if (event.type === "text") {
             assistantText += event.text;

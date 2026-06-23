@@ -19,6 +19,7 @@ const fakeProvider: Provider = {
   reasoningLevels: [],
   defaultReasoning: "off",
   readiness: () => Effect.succeed({ ready: true, warm: true }),
+  capabilities: () => Effect.succeed({ images: false, tools: true }),
   warm: () => Effect.void,
   stream: (messages) => {
     const answered = messages.some((m) => m.role === "tool");
