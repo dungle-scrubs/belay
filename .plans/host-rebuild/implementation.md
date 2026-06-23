@@ -69,7 +69,7 @@ through Richter's durable, ordered event log. Nothing spawns the host; there is 
 | Code | Assumption | Status |
 |---|---|---|
 | A-002 | Effect v3 viable for the project horizon | recorded (D-001) |
-| A-004 | Interrupting an Effect fiber tears down the pi-ai stream | untested; validated at Slice 2 |
+| A-004 | Interrupting an Effect fiber tears down the pi-ai stream | **validated 2026-06-23** (`scripts/spike-a004-interrupt.ts`): an `Effect.async` canceler that calls `AbortController.abort()` tears the LM Studio stream down cleanly - 0-token leak across 3 runs. Cancellation is interrupt-based, not the D-010 race-and-abandon fallback. |
 | A-005 | Node+Effect host packages as a spawnable artifact (compiled binary or bundled Node) for a Tauri sidecar | untested; validated at Phase 3 (re-opens A-001) |
 | ~~A-001~~ | ~~Effect under `bun --compile`~~ | retired - no Bun binary (D-018) |
 | ~~A-003~~ | ~~copied Rust TUI builds unchanged~~ | retired - no TUI (D-013) |
@@ -141,8 +141,10 @@ harness; different views/devices may subscribe to the same session (lease-free R
 ## Risks
 - **Richter coupling.** Trevor depends on a running Richter; mitigated by Docker-local dev and Richter being
   generic (no trevor-specific changes - it attaches as a participant).
-- **pi-ai interruption leak (D-010).** Validated at Slice 2; fallback is race-and-abandon + per-runId
-  post-cancel delta suppression.
+- **pi-ai interruption leak (D-010).** ~~Validated at Slice 2~~ **validated 2026-06-23** (A-004,
+  `scripts/spike-a004-interrupt.ts`): fiber interrupt -> `AbortController.abort()` tears the stream down
+  with no leak, so the host uses interrupt-based cancellation; the race-and-abandon + per-runId
+  post-cancel delta suppression fallback is held in reserve, not needed.
 - **Effect-dialect drift.** Keep Effect to justified boundaries (Schema decode, host control plane); plain
   React/TS elsewhere so an Effect island does not fight React.
 - **Same-cwd contention (Phase 3, D-022).** "Multiple versions of the same cwd" lets two sessions hold
