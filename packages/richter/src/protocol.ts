@@ -44,6 +44,19 @@ export interface CommandSpec {
   readonly usage?: string;
 }
 
+/** A task's lifecycle state (the V1 set). "deleted" is an update verb, not a state. */
+export type TaskStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
+
+/** One task as it rides the wire / renders in the UI (a row of the live checklist). */
+export interface TaskSnapshot {
+  readonly id: string;
+  readonly subject: string;
+  readonly activeForm: string;
+  readonly status: TaskStatus;
+  readonly blockedBy: readonly string[];
+  readonly blocks: readonly string[];
+}
+
 /** A publishable event before a producerId is attached: `{ type, payload }`. */
 export interface TrevorEventInput {
   readonly type: string;
@@ -118,6 +131,11 @@ export const events = {
   commandResult: (p: { command: string; text: string; ok: boolean }): TrevorEventInput => ({
     type: "command.result",
     payload: { command: p.command, text: p.text, ok: p.ok },
+  }),
+  /** The whole task checklist after a change - a snapshot the UI renders and the host restores from. */
+  tasksCurrent: (p: { tasks: readonly TaskSnapshot[] }): TrevorEventInput => ({
+    type: "tasks.current",
+    payload: { tasks: p.tasks },
   }),
   toolStarted: (p: {
     runId: string;
@@ -210,6 +228,48 @@ function coerceCommands(value: unknown): CommandSpec[] {
   return out;
 }
 
+const TASK_STATUSES: readonly TaskStatus[] = [
+  "pending",
+  "in_progress",
+  "completed",
+  "failed",
+  "cancelled",
+];
+
+function strList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+function coerceTasks(value: unknown): TaskSnapshot[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: TaskSnapshot[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const t = raw as Record<string, unknown>;
+    const id = str(t.id);
+    if (!id) {
+      continue;
+    }
+    const status = TASK_STATUSES.includes(t.status as TaskStatus)
+      ? (t.status as TaskStatus)
+      : "pending";
+    const subject = str(t.subject);
+    out.push({
+      id,
+      subject,
+      activeForm: str(t.activeForm) || subject,
+      status,
+      blockedBy: strList(t.blockedBy),
+      blocks: strList(t.blocks),
+    });
+  }
+  return out;
+}
+
 function coerceProviderModels(value: unknown): Record<string, ProviderModel> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -267,6 +327,7 @@ export type DecodedEvent =
       readonly text: string;
       readonly ok: boolean;
     }
+  | { readonly type: "tasks.current"; readonly tasks: readonly TaskSnapshot[] }
   | {
       readonly type: "tool.started";
       readonly runId: string;
@@ -343,6 +404,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         text: str(p.text),
         ok: p.ok === true,
       };
+    case "tasks.current":
+      return { type: "tasks.current", tasks: coerceTasks(p.tasks) };
     case "tool.started":
       return {
         type: "tool.started",
