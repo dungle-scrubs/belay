@@ -24,7 +24,7 @@ const TOOL_SELECTION_GUIDANCE = [
   "Prefer read, write, and edit over bash when a dedicated file tool fits the task.",
   "Use grep for exact strings, symbols, error text, or regular expressions, and glob for path or filename discovery.",
   "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
-  "write, edit, glob, and grep are scoped to the workspace root; use paths relative to it, not absolute or parent-directory paths.",
+  "edit, glob, and grep are scoped to the workspace root; use paths relative to it. read, write, and bash use the host working directory and accept absolute paths.",
   "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
 ] as const;
 
@@ -50,7 +50,7 @@ const RESPONSE_CALIBRATION_GUIDANCE = [
 
 /** Where the agent's file tools operate, so the model resolves paths correctly. */
 export interface SystemPromptContext {
-  /** Root that write/edit/glob/grep are confined to. Defaults to WORKSPACE_ROOT. */
+  /** Root that edit/glob/grep are confined to. Defaults to WORKSPACE_ROOT. */
   readonly workspaceRoot?: string;
   /** Host working directory read and bash run from. Defaults to process.cwd(). */
   readonly cwd?: string;
@@ -62,7 +62,7 @@ function executionContext(workspaceRoot: string, cwd: string): string {
     lines.push(`Host working directory: ${cwd}`);
   }
   lines.push(
-    "write, edit, glob, and grep are confined to the workspace root; read and bash run from the host working directory.",
+    "edit, glob, and grep are confined to the workspace root; read, write, and bash run from the host working directory and accept absolute paths.",
   );
   return lines.join("\n");
 }
