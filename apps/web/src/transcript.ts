@@ -1,6 +1,11 @@
-import { decodeTrevorEvent, type SessionEvent, type Usage } from "@trevor/richter";
+import {
+  type ArtifactRef,
+  decodeTrevorEvent,
+  type SessionEvent,
+  type Usage,
+} from "@trevor/richter";
 
-export type { Usage };
+export type { ArtifactRef, Usage };
 
 // One assistant *segment*: the run of thinking/text between tool calls. A turn that
 // calls tools produces several, interleaved with tool messages in arrival order.
@@ -31,7 +36,7 @@ export type CommandResultMessage = {
   ok: boolean;
 };
 export type Message =
-  | { kind: "user"; id: string; text: string }
+  | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
   | AssistantMessage
   | ToolMessage
   | CommandMessage
@@ -80,7 +85,12 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
     }
     switch (decoded.type) {
       case "user.message":
-        messages.push({ kind: "user", id: event.eventId, text: decoded.text });
+        messages.push({
+          kind: "user",
+          id: event.eventId,
+          text: decoded.text,
+          artifacts: decoded.artifacts,
+        });
         break;
       case "user.command":
         messages.push({

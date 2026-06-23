@@ -1,4 +1,4 @@
-import { events as richterEvents, type SessionEvent } from "@trevor/richter";
+import { type ArtifactRef, events as richterEvents, type SessionEvent } from "@trevor/richter";
 import { useCallback, useEffect, useState } from "react";
 import { type ConnectionStatus, connect, publishEvent } from "./client";
 
@@ -6,7 +6,12 @@ export interface RichterSession {
   readonly events: readonly SessionEvent[];
   readonly status: ConnectionStatus;
   readonly replayed: boolean;
-  readonly publish: (text: string, provider: string, reasoning?: string) => Promise<void>;
+  readonly publish: (
+    text: string,
+    provider: string,
+    reasoning?: string,
+    artifacts?: readonly ArtifactRef[],
+  ) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
   readonly command: (command: string, args: string) => Promise<void>;
 }
@@ -33,13 +38,18 @@ export function useRichterSession(sessionId: string | null): RichterSession {
   }, [sessionId]);
 
   const publish = useCallback(
-    async (text: string, provider: string, reasoning?: string) => {
+    async (
+      text: string,
+      provider: string,
+      reasoning?: string,
+      artifacts?: readonly ArtifactRef[],
+    ) => {
       if (!sessionId) {
         return;
       }
       await publishEvent(sessionId, {
         producerId: "trevor-web",
-        ...richterEvents.userMessage({ text, provider, reasoning }),
+        ...richterEvents.userMessage({ text, provider, reasoning, artifacts }),
       });
     },
     [sessionId],

@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import type { ArtifactRef } from "@trevor/richter";
 import { useInterval, useLocalStorageState } from "ahooks";
 import {
+  type ChangeEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
   useEffect,
@@ -8,6 +12,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { ArtifactThumb } from "./ArtifactThumb";
+import { uploadArtifact } from "./blob";
 import {
   activeRunId,
   commandsFrom,
@@ -38,7 +44,13 @@ const DEFAULT_SESSION = "trevor-local";
 // A prompt waiting in the local send queue, carrying the provider/reasoning chosen
 // when it was submitted so a model switch while it waits doesn't rewrite it. The id
 // is a stable React key (queue order can change when ESC-steer prepends).
-type QueuedPrompt = { id: string; text: string; provider: string; reasoning?: string };
+type QueuedPrompt = {
+  id: string;
+  text: string;
+  provider: string;
+  reasoning?: string;
+  artifacts?: readonly ArtifactRef[];
+};
 
 // Fold queued prompts (in order) and the current draft into one steering prompt.
 // Cancelling collapses everything the user has lined up into a single interruption,
@@ -71,6 +83,12 @@ export function App() {
     defaultValue: true,
   });
   const [draft, setDraft] = useState("");
+  // Pending attachments: ArtifactRefs already uploaded to the blob store, waiting to ride
+  // the next prompt. `uploading` counts in-flight uploads so the composer can show progress.
+  const [attachments, setAttachments] = useState<readonly ArtifactRef[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { events, status, replayed, publish, cancel, command } = useRichterSession(sessionId);
   // These scan the whole event log; without memoizing, every keystroke in the draft
@@ -149,16 +167,20 @@ export function App() {
   const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = draft.trim();
-    if (!text) {
-      return;
-    }
-    const cmd = parseCommand(text, commandNames);
+    // A slash command (text only) routes to the immediate host lane. Otherwise a prompt
+    // may carry text, attachments, or both - attachments-only is a valid "look at this".
+    const cmd = text ? parseCommand(text, commandNames) : null;
     if (cmd) {
       setDraft("");
       void command(cmd.command, cmd.args);
       return;
     }
+    if (!text && attachments.length === 0) {
+      return;
+    }
     setDraft("");
+    const artifacts = attachments.length ? attachments : undefined;
+    setAttachments([]);
     setQueue((q) => [
       ...q,
       {
@@ -166,6 +188,7 @@ export function App() {
         text,
         provider: activeProvider,
         reasoning: reasoning || undefined,
+        artifacts,
       },
     ]);
   };
@@ -222,7 +245,7 @@ export function App() {
     }
     inFlightRef.current = true;
     setQueue((q) => q.slice(1));
-    void publish(next.text, next.provider, next.reasoning);
+    void publish(next.text, next.provider, next.reasoning, next.artifacts);
   }, [busy, queue, publish]);
 
   // Hard steer: abort the active turn and fold queued prompts + draft into ONE
@@ -233,15 +256,20 @@ export function App() {
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
     const steer = combineSteer(queue, draft);
+    // Fold every queued/attached artifact into the single steering prompt too, so a hard
+    // steer keeps the images the user lined up rather than silently dropping them.
+    const steerArtifacts = [...queue.flatMap((q) => q.artifacts ?? []), ...attachments];
     setDraft("");
+    setAttachments([]);
     setQueue(
-      steer
+      steer || steerArtifacts.length
         ? [
             {
               id: crypto.randomUUID(),
               text: steer,
               provider: activeProvider,
               reasoning: reasoning || undefined,
+              artifacts: steerArtifacts.length ? steerArtifacts : undefined,
             },
           ]
         : [],
@@ -293,6 +321,44 @@ export function App() {
       setStickToBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40);
     }
   };
+
+  // Attachments: upload each picked/pasted/dropped file to the blob store and hold its
+  // ArtifactRef until the next prompt carries it. Uploads run in parallel; a failed one
+  // simply doesn't attach. `uploading` brackets each so the composer can show progress.
+  const addFiles = (files: Iterable<File>) => {
+    setUploadError(null);
+    for (const file of files) {
+      setUploading((n) => n + 1);
+      uploadArtifact(file)
+        .then((ref) => setAttachments((a) => [...a, ref]))
+        .catch((cause: unknown) => {
+          const detail = cause instanceof Error ? cause.message : String(cause);
+          setUploadError(`couldn't attach ${file.name || "file"}: ${detail}`);
+        })
+        .finally(() => setUploading((n) => n - 1));
+    }
+  };
+  const onPickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      addFiles(event.target.files);
+    }
+    event.target.value = ""; // let the same file be re-picked
+  };
+  const onPaste = (event: ReactClipboardEvent<HTMLInputElement>) => {
+    const files = [...event.clipboardData.files];
+    if (files.length) {
+      event.preventDefault();
+      addFiles(files);
+    }
+  };
+  const onDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (event.dataTransfer.files.length) {
+      addFiles(event.dataTransfer.files);
+    }
+  };
+  const removeAttachment = (hash: string) =>
+    setAttachments((a) => a.filter((ref) => ref.hash !== hash));
 
   return (
     <main
@@ -546,6 +612,15 @@ export function App() {
                 <div style={{ fontSize: "0.72rem", color: "#999" }}>{label}</div>
                 {thinking ? <Markdown text={thinking} muted /> : null}
                 {message.text ? <Markdown text={message.text} /> : null}
+                {message.kind === "user" && message.artifacts.length ? (
+                  <div
+                    style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", margin: "0.3rem 0" }}
+                  >
+                    {message.artifacts.map((ref) => (
+                      <ArtifactThumb key={ref.hash} artifact={ref} />
+                    ))}
+                  </div>
+                ) : null}
                 {overflowNote}
                 {errorNote}
                 {cancelledNote}
@@ -570,14 +645,26 @@ export function App() {
           {queue.map((q) => (
             <div key={q.id} style={{ margin: "0.75rem 0", opacity: 0.5 }}>
               <div style={{ fontSize: "0.72rem", color: "#999" }}>you · queued</div>
-              <Markdown text={q.text} muted />
+              {q.text ? <Markdown text={q.text} muted /> : null}
+              {q.artifacts?.length ? (
+                <div style={{ display: "flex", gap: "0.3rem", marginTop: "0.2rem" }}>
+                  {q.artifacts.map((ref) => (
+                    <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Pinned composer: the input bar stays at the bottom; the log above scrolls. */}
+      {/* Pinned composer: the input bar stays at the bottom; the log above scrolls.
+          Files dropped anywhere on the composer area upload as attachments. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: passive drop target; the
+          keyboard-accessible path is the 📎 attach button below. */}
       <div
+        onDrop={onDrop}
+        onDragOver={(event) => event.preventDefault()}
         style={{ flexShrink: 0, paddingTop: "0.5rem", paddingBottom: "1rem", background: "#fff" }}
       >
         {/* Slash menu: filters the host's announced command inventory as you type a
@@ -620,6 +707,87 @@ export function App() {
           </div>
         ) : null}
 
+        {uploadError ? (
+          <div
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              alignItems: "center",
+              margin: "0.4rem 0",
+              color: "#c0392b",
+              fontSize: "0.78rem",
+            }}
+          >
+            <span>⚠ {uploadError}</span>
+            <button
+              type="button"
+              onClick={() => setUploadError(null)}
+              style={{
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                color: "#999",
+              }}
+            >
+              dismiss
+            </button>
+          </div>
+        ) : null}
+
+        {/* Pending attachments, shown as removable chips (image thumbnail or a file pill)
+            above the input until the next prompt carries them. */}
+        {attachments.length || uploading > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", margin: "0.4rem 0" }}>
+            {attachments.map((ref) => (
+              <span
+                key={ref.hash}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  border: "1px solid #ddd",
+                  borderRadius: 6,
+                  padding: "0.2rem 0.4rem",
+                  fontSize: "0.75rem",
+                  background: "#fafafa",
+                }}
+              >
+                <ArtifactThumb artifact={ref} size={28} square />
+                {ref.kind === "image" ? (
+                  <span
+                    style={{
+                      maxWidth: 140,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {ref.name ?? ref.kind}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(ref.hash)}
+                  title="Remove"
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    color: "#999",
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {uploading > 0 ? (
+              <span style={{ fontSize: "0.75rem", color: "#999", alignSelf: "center" }}>
+                uploading {uploading}…
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
         <form
           onSubmit={onSubmit}
           style={{ display: "flex", gap: "0.5rem", marginTop: menuOpen ? "0.4rem" : 0 }}
@@ -640,11 +808,22 @@ export function App() {
           >
             ⊘ Cancel
           </button>
+          <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!sessionId}
+            title="Attach files (or paste / drag-drop)"
+            style={{ padding: "0.5rem 0.6rem" }}
+          >
+            📎
+          </button>
           <input
             ref={inputRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onInputKeyDown}
+            onPaste={onPaste}
             placeholder={`message ${modelMeta.label}… (/ for commands)`}
             disabled={!sessionId}
             style={{ flex: 1, padding: "0.5rem" }}
