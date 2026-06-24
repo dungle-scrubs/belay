@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import { richterTransport } from "@trevor/richter";
 import {
-  type ArtifactRef,
   decodeTrevorEvent,
   events,
   type SessionEvent,
@@ -9,6 +8,8 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
+import { buildHistory } from "./agent/history-projection";
+import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
@@ -64,21 +65,14 @@ const PARTICIPANT_ID = `${PRODUCER_ID}:${INSTANCE_ID.slice(0, 8)}`;
 
 // Single live connection's state (rebuilt from replay on each connect).
 let live = false;
+/** The prompt projection: `history === buildHistory(historyEvents)`. The event log
+ *  is what the host folds; a deferred mid-turn prompt is admitted only when it drains
+ *  (the scheduler defers it out of the log), so the projection stays strictly paired. */
 let history: ChatMessage[] = [];
-let lastUserEvent: SessionEvent | null = null;
-let lastAnswerSeq = -1;
+let historyEvents: SessionEvent[] = [];
 let leaseRunning = false;
-/** The turn currently being answered, if any - its fiber is interrupted on ESC/cancel. */
-let activeRun: { readonly runId: string; readonly fiber: Fiber.RuntimeFiber<void, never> } | null =
-  null;
-/**
- * Prompts that arrived while a turn was in flight, awaiting their turn (FIFO). Only
- * one turn runs at a time, so a second prompt never spawns a concurrent turn; it
- * queues here and is answered when the active turn completes. Holding deferred
- * prompts out of `history` until they run also keeps history strictly paired
- * (user, assistant, user, assistant, ...) even if the log interleaves them.
- */
-let deferredUserEvents: SessionEvent[] = [];
+// The turn-dispatch state (active run, deferred FIFO, catch-up watermarks) lives in
+// the TurnScheduler constructed below, not in module mutables.
 
 /** Publishes one event to the durable log, attaching this host's producerId. */
 function emit(event: TrevorEventInput): Promise<void> {
@@ -90,12 +84,13 @@ const EmitLive = Layer.succeed(Emit, { publish: (event) => Effect.promise(() => 
 
 /** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
 function hostState(): Record<string, unknown> {
+  const turns = scheduler.debug();
   return {
     live,
-    activeRun: activeRun ? activeRun.runId.slice(0, 8) : null,
-    queued: deferredUserEvents.length,
+    activeRun: turns.active,
+    queued: turns.queued,
     history: history.length,
-    lastAnswerSeq,
+    lastAnswerSeq: turns.lastAnswerSeq,
   };
 }
 
@@ -157,23 +152,23 @@ function abbrevPath(absolute: string): string {
   return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
 }
 
-/** Answers a user.message - but only when this host holds the lease. */
-function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): void {
+/**
+ * Forks the agent turn for a user.message and returns its handle for the scheduler to
+ * track, or null when this host should not answer it (self-authored, not the leader, or
+ * not a user.message). One fiber per turn: cancelling it (ESC in the browser) tears down
+ * the in-flight provider stream and publishes the cancelled completion. The fiber
+ * observer is a backstop that frees the scheduler's slot if the fiber dies without a
+ * completion event; the scheduler structurally guarantees one turn at a time, so there
+ * is no "already active" case to guard here.
+ */
+function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): ActiveTurn | null {
   if (event.producerId === PRODUCER_ID || !lease.isLeader()) {
-    return;
+    return null;
   }
   const decoded = decodeTrevorEvent(event);
   if (decoded?.type !== "user.message") {
-    return;
+    return null;
   }
-  // Invariant: only one turn runs at a time. Callers gate on activeRun, so reaching here
-  // with one set is a dispatch bug - drop the new turn rather than stream two at once.
-  if (activeRun) {
-    checkTurn(false, "respondTo while a turn is active", { active: activeRun.runId.slice(0, 8) });
-    return;
-  }
-  // One fiber per turn: a user.cancel for this runId (ESC in the browser) interrupts it,
-  // which tears down the in-flight provider stream and publishes the cancelled completion.
   const runId = crypto.randomUUID();
   const fiber = Effect.runFork(
     publishTurn(pickProvider(providers, decoded.provider), turnHistory, {
@@ -181,23 +176,42 @@ function respondTo(event: SessionEvent, turnHistory: readonly ChatMessage[]): vo
       reasoning: decoded.reasoning,
     }).pipe(Effect.provide(EmitLive)),
   );
-  activeRun = { runId, fiber };
   fiber.addObserver((exit) => {
     // publishTurn handles provider failures internally, so a non-interrupt failure here
     // is an unexpected defect worth surfacing.
     if (Exit.isFailure(exit) && !Cause.isInterruptedOnly(exit.cause)) {
       warn("host", "turn died", { run: runId.slice(0, 8), cause: Cause.pretty(exit.cause) });
     }
-    if (activeRun?.runId === runId) {
-      activeRun = null;
-    }
+    scheduler.settle(runId);
   });
+  return {
+    runId,
+    cancel: () => {
+      log("host", "cancel: interrupting run", { run: runId.slice(0, 8) });
+      Effect.runFork(Fiber.interrupt(fiber));
+    },
+  };
 }
+
+/**
+ * The turn machine: owns when turns run (one at a time, deferred FIFO, leader catch-up).
+ * Each prompt is recorded through `start`, which admits it to the prompt view and - only
+ * when this host is the live leader - forks its turn. On replay the prompt is recorded
+ * without being answered.
+ */
+const scheduler = new TurnScheduler({
+  isLeader: () => lease.isLeader(),
+  start: (event) => {
+    admit(event);
+    return live ? startTurn(event, history.slice()) : null;
+  },
+});
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
 function onBecomeLeader(): void {
-  if (lastUserEvent && lastUserEvent.seq > lastAnswerSeq) {
-    respondTo(lastUserEvent, history.slice()); // catch up a prompt that arrived while probing
+  const pending = scheduler.pendingCatchUp();
+  if (pending) {
+    scheduler.submit(pending); // catch up a prompt that arrived while probing
     return;
   }
   const local = providers[DEFAULT_PROVIDER];
@@ -263,53 +277,12 @@ async function runCommand(name: string, args: string): Promise<void> {
   await emit(events.commandResult({ command: name, text, ok }));
 }
 
-/**
- * Records a user prompt and either answers it now or queues it behind the active
- * turn. Exactly one turn runs at a time: a prompt that arrives mid-turn is deferred
- * and picked up when that turn completes (see drainDeferred), so turns never overlap
- * and the conversation stays strictly ordered.
- */
-function handleUserMessage(
-  message: SessionEvent,
-  text: string,
-  artifacts: readonly ArtifactRef[],
-): void {
-  if (activeRun) {
-    deferredUserEvents.push(message);
-    return;
-  }
-  const userTurn: ChatMessage = artifacts.length
-    ? { role: "user", content: text, artifacts }
-    : { role: "user", content: text };
-  // Collapse consecutive user turns. With one-turn-at-a-time dispatch this only
-  // fires for a genuinely abandoned turn (e.g. the host crashed mid-answer, leaving
-  // a user message with no assistant entry) - replace it rather than feeding the
-  // model two unanswered prompts at once.
-  const last = history[history.length - 1];
-  if (last?.role === "user") {
-    history[history.length - 1] = userTurn;
-  } else {
-    history.push(userTurn);
-  }
-  lastUserEvent = message;
-  if (live) {
-    respondTo(message, history.slice());
-  }
-}
-
-/** After a turn ends, start the next prompt that queued while it was running. */
-function drainDeferred(): void {
-  if (activeRun || !lease.isLeader()) {
-    return;
-  }
-  const next = deferredUserEvents.shift();
-  if (!next) {
-    return;
-  }
-  const decoded = decodeTrevorEvent(next);
-  if (decoded?.type === "user.message") {
-    handleUserMessage(next, decoded.text, decoded.artifacts);
-  }
+/** Admits one event to the prompt projection and recomputes the derived history.
+ *  The fold (mapping, artifacts, blank-filter, user collapse, /clear reset) is owned
+ *  by buildHistory; this is the only place history changes. */
+function admit(event: SessionEvent): void {
+  historyEvents.push(event);
+  history = buildHistory(historyEvents, { selfProducerId: PRODUCER_ID });
 }
 
 /** Applies one live or replayed session event to the host's in-memory state. */
@@ -319,48 +292,40 @@ function handleEvent(message: SessionEvent): void {
     return;
   }
   if (decoded.type === "user.message" && message.producerId !== PRODUCER_ID) {
-    handleUserMessage(message, decoded.text, decoded.artifacts);
+    scheduler.submit(message);
   } else if (decoded.type === "assistant.completed") {
-    // Only a real reply joins history. A blank or whitespace-only completion is NOT
-    // persisted: saving it would teach the model that empty replies are normal and
-    // poison every later turn into the same empty stop (the cascade behind silent
-    // dead-ends). `.trim()` catches the whitespace-only case a bare truthiness check missed.
+    // Invariant: history stays strictly paired - an assistant reply lands only on top
+    // of the user turn it answers. A different role on top means the pairing the loop
+    // depends on has drifted (e.g. a missed/duplicated turn). Checked against the
+    // pre-admit projection; buildHistory then drops a blank/whitespace-only completion
+    // (the empty-reply poison) and appends only a real reply.
     if (decoded.text.trim()) {
-      // Invariant: history stays strictly paired - an assistant reply lands only on top
-      // of the user turn it answers. A different role on top means the pairing the loop
-      // depends on has drifted (e.g. a missed/duplicated turn).
       const last = history[history.length - 1];
       checkTurn(last?.role === "user", "assistant reply with no preceding user turn", {
         last: last?.role ?? "none",
       });
-      history.push({ role: "assistant", content: decoded.text });
     }
-    lastAnswerSeq = Math.max(lastAnswerSeq, message.seq);
-    // The turn finished: free the slot and answer whatever queued while it ran.
-    // (.finally on the turn also clears activeRun; both are guarded by runId so
-    // whichever lands first wins and the other is a no-op.)
-    if (activeRun && activeRun.runId === decoded.runId) {
-      activeRun = null;
-    }
+    admit(message);
+    // The turn finished: note the answered seq, free the slot, and (live only) answer
+    // whatever queued while it ran. Draining follows the completion event, not the fiber
+    // exit, so the next turn's prompt view already includes this reply (just admitted).
+    scheduler.recordAnswer(decoded.runId, message.seq);
     if (live) {
-      drainDeferred();
+      scheduler.drain();
     }
   } else if (decoded.type === "user.cancel") {
     // Abort the active turn if the cancel targets it, or if the browser asked to
     // cancel "whatever is active" (empty runId, sent before assistant.started lands).
-    if (activeRun && (decoded.runId === activeRun.runId || decoded.runId === "")) {
-      log("host", "cancel: interrupting run", { run: activeRun.runId.slice(0, 8) });
-      Effect.runFork(Fiber.interrupt(activeRun.fiber));
-    }
+    scheduler.cancel(decoded.runId);
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
     if (decoded.command === "/clear") {
-      // Reset the conversation baseline so the model's prompt starts empty after a clear -
-      // applied on replay too, so a reload/restart stays clean. The old events remain in
-      // the durable log but never reach the prompt again. (sanitizeHistory drops any stray
-      // leading assistant turn if a clear lands mid-answer.)
-      history = [];
-      lastUserEvent = null;
-      deferredUserEvents = [];
+      // Admit the clear so the projection resets from this point - applied on replay
+      // too, so a reload/restart stays clean. The old events remain in the durable log
+      // but buildHistory drops everything before the clear (sanitizeHistory also strips
+      // a stray leading assistant turn if a clear lands mid-answer). The scheduler drops
+      // its queued prompts + catch-up target alongside (the active run is left to finish).
+      admit(message);
+      scheduler.clearPending();
     }
     // Immediate command lane: only the leader answers, and only when live (commands
     // are actions, not state to rebuild on replay).
@@ -402,12 +367,11 @@ function handleEvent(message: SessionEvent): void {
 function connect(): void {
   live = false;
   history = [];
-  lastUserEvent = null;
-  lastAnswerSeq = -1;
-  // Rebuilt from replay; an in-flight turn's activeRun is left intact (its turn keeps
+  historyEvents = [];
+  // Rebuilt from replay; an in-flight turn's active run is left intact (its turn keeps
   // emitting over REST and its replayed completed clears it - resetting could race a
-  // concurrent turn).
-  deferredUserEvents = [];
+  // concurrent turn). The deferred queue + catch-up watermarks are rebuilt from replay.
+  scheduler.resetForReconnect();
   transport.connectSession({
     sessionId: SESSION_ID,
     identity: {
