@@ -7,3 +7,5 @@ storybook-static/
 # SQLite write-ahead-log / shared-memory sidecar files (transient)
 *.db-shm
 *.db-wal
+# agent-host local scratch workspace
+apps/agent-host/tmp/
