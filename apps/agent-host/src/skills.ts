@@ -1,9 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { parse as parseYaml } from "yaml";
-import { runShell } from "./tools/run-shell";
+import { ToolInputError } from "./tools/errors";
+import { renderShell, runShell } from "./tools/run-shell";
 import { cap } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
@@ -166,13 +167,13 @@ async function interpolateShell(body: string): Promise<string> {
         script.push(inner);
       }
 
-      out.push(await runShell(script.join("\n")));
+      out.push(renderShell(await runShell(script.join("\n"))));
 
       continue; // i sits on the closing fence (or end); the loop step moves past it.
     }
 
     if (trimmed.length > 1 && trimmed.startsWith("!") && trimmed[1] !== "[") {
-      out.push(await runShell(trimmed.slice(1).trim()));
+      out.push(renderShell(await runShell(trimmed.slice(1).trim())));
       continue;
     }
 
@@ -214,7 +215,11 @@ function blurb(description: string): string {
  * blurb (level 1) and `skill(name)` returns one skill's full instructions (level 2).
  * Returned only when skills exist, so an empty library advertises no tool.
  */
-export function buildSkillTool(skills: readonly Skill[]): Tool {
+const SkillParams = Schema.Struct({
+  name: Schema.String.annotations({ description: "The skill id to load" }),
+});
+
+export function buildSkillTool(skills: readonly Skill[]): Tool<typeof SkillParams.Type> {
   const list = skills
     .map((s) => `- ${s.icon ? `${s.icon} ` : ""}${s.id}: ${blurb(s.description)}`)
     .join("\n");
@@ -222,20 +227,18 @@ export function buildSkillTool(skills: readonly Skill[]): Tool {
   return {
     name: "skill",
     description: `Load a skill's full instructions by id and then follow them. Use a skill when the task matches its description or triggers. Available skills:\n${list}`,
-    parameters: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "The skill id to load" },
-      },
-      required: ["name"],
-    },
+    params: SkillParams,
     execute: (args) => {
-      const id = String(args.name ?? "").trim();
+      const id = args.name.trim();
       const skill = skills.find((s) => s.id === id);
 
       if (!skill) {
-        return Effect.succeed(
-          `error: unknown skill "${id}". Available: ${skills.map((s) => s.id).join(", ") || "(none)"}`,
+        // An unknown id is a value (domain) failure; surface it as a typed input error.
+        return Effect.fail(
+          new ToolInputError({
+            tool: "skill",
+            detail: `unknown skill "${id}". Available: ${skills.map((s) => s.id).join(", ") || "(none)"}`,
+          }),
         );
       }
 

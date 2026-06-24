@@ -1,10 +1,11 @@
-import { Effect } from "effect";
+import { Effect, Either, JSONSchema, ParseResult, Schema } from "effect";
 import { log, warn } from "../log";
 import { buildProcessTool } from "../processes";
 import { buildSkillTool, discoverSkills } from "../skills";
 import { buildTaskTools } from "../tasks";
 import { bashTool } from "./bash";
 import { editTool } from "./edit";
+import { ToolInputError } from "./errors";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { multiEditTool } from "./multi-edit";
@@ -13,7 +14,10 @@ import type { Tool } from "./types";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
 
-const FILE_TOOLS: readonly Tool[] = [
+// The TOOLS array is heterogeneous (each tool decodes to its own params type), so it holds
+// `Tool<any>`; each per-tool definition stays strongly typed at its own declaration.
+// biome-ignore lint/suspicious/noExplicitAny: heterogeneous tool params; each tool stays typed.
+const FILE_TOOLS: readonly Tool<any>[] = [
   readTool,
   bashTool,
   writeTool,
@@ -30,15 +34,39 @@ const FILE_TOOLS: readonly Tool[] = [
 // dir advertises nothing. Its description carries the skill inventory (level-1
 // progressive disclosure); skill(name) loads one body on demand (level 2).
 const discoveredSkills = discoverSkills();
-const TOOLS: readonly Tool[] = discoveredSkills.length
+// biome-ignore lint/suspicious/noExplicitAny: heterogeneous tool params; each tool stays typed.
+const TOOLS: readonly Tool<any>[] = discoveredSkills.length
   ? [...FILE_TOOLS, buildSkillTool(discoveredSkills)]
   : FILE_TOOLS;
 
-/** Tool definitions advertised to the model. */
-export const TOOL_DEFS = TOOLS.map(({ name, description, parameters }) => ({
-  name,
-  description,
-  parameters,
+/**
+ * Derives the provider-facing JSON Schema for a tool's parameters from its Effect Schema.
+ * `JSONSchema.make` returns a draft-07 doc with a top-level `$schema` key (dropped here);
+ * every tool's params schema is kept FLAT (inline primitives/arrays, no cross-references)
+ * so the doc never carries a `$defs` block. The result is the plain
+ * `{ type: "object", properties, required }` object the provider casts to a typebox schema
+ * (providers/pi-ai.ts `toPiAiTools`).
+ */
+export function toParametersJsonSchema(
+  // biome-ignore lint/suspicious/noExplicitAny: matches the Tool.params Encoded erasure.
+  schema: Schema.Schema<unknown, any>,
+): Record<string, unknown> {
+  const { $schema, $defs, ...rest } = JSONSchema.make(schema) as unknown as Record<string, unknown>;
+  if ($defs) {
+    // Every params schema is flat by construction; a $defs means a cross-reference slipped
+    // in (e.g. a bare Schema.Int) and the provider would receive an unusable $ref. Inline it.
+    throw new Error(
+      `tool parameter schema produced a $defs block (must stay flat): ${JSON.stringify($defs)}`,
+    );
+  }
+  return rest;
+}
+
+/** Tool definitions advertised to the model (parameters derived from each tool's schema). */
+export const TOOL_DEFS = TOOLS.map((tool) => ({
+  name: tool.name,
+  description: tool.description,
+  parameters: toParametersJsonSchema(tool.params),
 }));
 
 /**
@@ -46,6 +74,9 @@ export const TOOL_DEFS = TOOLS.map(({ name, description, parameters }) => ({
  * fails: a tool's typed ToolError is rendered to an `error:` result the model can read -
  * one bad tool call must not collapse the whole turn - and attributed to that tool in
  * the host log. `runId` (the turn's correlation id) only tags the boundary log.
+ *
+ * The raw arguments are decoded once here against the tool's schema; a decode failure is a
+ * ToolInputError carrying the formatted reason, rendered through the same `error:` path.
  */
 export function executeTool(
   name: string,
@@ -56,29 +87,42 @@ export function executeTool(
   if (!tool) {
     return Effect.succeed(`error: unknown tool "${name}"`);
   }
-  let args: Record<string, unknown>;
+  let parsed: unknown;
   try {
-    args = JSON.parse(argumentsJson || "{}") as Record<string, unknown>;
+    parsed = JSON.parse(argumentsJson || "{}");
   } catch {
     return Effect.succeed("error: tool arguments were not valid JSON");
   }
+  const decoded = Schema.decodeUnknownEither(tool.params)(parsed);
+  if (Either.isLeft(decoded)) {
+    const detail = ParseResult.TreeFormatter.formatErrorSync(decoded.left);
+    return renderFailure(name, new ToolInputError({ tool: name, detail }), runId, Date.now());
+  }
   const startedAt = Date.now();
-  return tool.execute(args).pipe(
+  return tool.execute(decoded.right).pipe(
     Effect.tap(() =>
       Effect.sync(() =>
         log("tool", "executed", { run: runId, name, ms: Date.now() - startedAt, ok: true }),
       ),
     ),
-    Effect.catchAll((error) =>
-      Effect.sync(() => {
-        warn("tool", "failed", {
-          run: runId,
-          name,
-          ms: Date.now() - startedAt,
-          error: error.message,
-        });
-        return `error: ${name} failed - ${error.message}`;
-      }),
-    ),
+    Effect.catchAll((error) => renderFailure(name, error, runId, startedAt)),
   );
+}
+
+/** Renders a tool failure to one model-facing `error: …` line and logs it. */
+function renderFailure(
+  name: string,
+  error: { readonly message: string },
+  runId: string | undefined,
+  startedAt: number,
+): Effect.Effect<string> {
+  return Effect.sync(() => {
+    warn("tool", "failed", {
+      run: runId,
+      name,
+      ms: Date.now() - startedAt,
+      error: error.message,
+    });
+    return `error: ${name} failed - ${error.message}`;
+  });
 }

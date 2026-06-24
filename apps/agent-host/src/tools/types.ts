@@ -1,10 +1,26 @@
-import type { Effect } from "effect";
+import type { Effect, Schema } from "effect";
 import type { ToolError } from "./errors";
 
-/** A tool the model can call: a name + JSON-Schema parameters, and an Effect executor. */
-export interface Tool {
+/**
+ * A tool the model can call: a name, a description, an Effect `Schema` for its
+ * parameters, and a typed Effect executor.
+ *
+ * The schema is the single source of truth for the parameter boundary: the registry
+ * DERIVES the advertised JSON Schema from it (`toParametersJsonSchema`) and DECODES the
+ * raw arguments against it once in `executeTool`, so `execute` receives a typed, validated
+ * `A` - no per-tool `String(args.x ?? "")` coercion or inline `return "error: bad arg"`.
+ *
+ * The generic `A` is the decoded parameter type. The TOOLS array is heterogeneous, so it
+ * holds `Tool<unknown>`; each per-tool definition stays strongly typed via `Tool<T>` where
+ * `T = typeof Params.Type`.
+ */
+export interface Tool<A = unknown> {
   readonly name: string;
   readonly description: string;
-  readonly parameters: Record<string, unknown>;
-  execute(args: Record<string, unknown>): Effect.Effect<string, ToolError>;
+  // The Encoded (wire) type is irrelevant at this boundary - only the decoded `A` is - and
+  // it genuinely varies per tool (e.g. an optional-with-default field is optional on the
+  // wire but present after decode), so it is intentionally erased here.
+  // biome-ignore lint/suspicious/noExplicitAny: the schema's Encoded type is erased; only A matters.
+  readonly params: Schema.Schema<A, any>;
+  execute(args: A): Effect.Effect<string, ToolError>;
 }

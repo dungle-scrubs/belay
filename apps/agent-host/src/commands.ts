@@ -5,7 +5,7 @@ import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
 import { discoverSkills, SKILLS_DIR } from "./skills";
 import { TOOL_DEFS } from "./tools";
-import { runShell } from "./tools/run-shell";
+import { renderShell, runShell } from "./tools/run-shell";
 
 /**
  * Immediate host commands (slash commands): the host runs these directly and
@@ -101,13 +101,14 @@ export function buildCommandRegistry(): CommandRegistry {
       summary: "Run a shell command on the host",
       usage: "/shell <command>",
     },
-    run: (args) => {
+    run: async (args) => {
       const command = args.trim();
       if (!command) {
         return "usage: /shell <command>";
       }
-      // Shared runShell carries the safety classifier, timeout, and output cap.
-      return runShell(command);
+      // Shared runShell carries the safety classifier, timeout, and output cap; render its
+      // result inline (byte-identical to the old refusal/failure/output strings).
+      return renderShell(await runShell(command));
     },
   });
 
@@ -158,8 +159,9 @@ export function buildCommandRegistry(): CommandRegistry {
       if (!id) {
         return "usage: /jobs-stop <id>";
       }
+      // kill throws ProcessError on an unknown id; the registry's run() try/catch renders it.
       const result = supervisor.kill(id);
-      return "error" in result ? result.error : `${result.id} -> ${result.status}`;
+      return `${result.id} -> ${result.status}`;
     },
   });
 

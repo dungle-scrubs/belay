@@ -1,7 +1,7 @@
 import type { TaskSnapshot, TaskStatus } from "@trevor/session";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { ToolExecutionError } from "./tools/errors";
-import { msg, optStr, strArr } from "./tools/shared";
+import { msg } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
 /**
@@ -45,6 +45,16 @@ interface UpdateInput {
   blockedBy?: string[];
   blocks?: string[];
 }
+
+/**
+ * The outcome of an update, named instead of encoded by `task: null`: the task was
+ * deleted, completing it cleared the whole checklist, or it was updated in place. The
+ * tool renders each to its model-facing line; genuine not-found stays a thrown error.
+ */
+export type UpdateResult =
+  | { readonly kind: "deleted" }
+  | { readonly kind: "cleared" }
+  | { readonly kind: "updated"; readonly task: Task };
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   pending: "pending",
@@ -116,8 +126,9 @@ export class TaskRegistry {
     return task;
   }
 
-  /** Updates a task, deletes it (status "deleted"), or auto-clears the checklist. */
-  update(id: string, fields: UpdateInput): { task: Task | null; cleared: boolean } {
+  /** Updates a task, deletes it (status "deleted"), or auto-clears the checklist. Throws
+   *  on an unknown id; the task tool catches that into the typed `E` channel. */
+  update(id: string, fields: UpdateInput): UpdateResult {
     const task = this.tasks.get(id);
 
     if (!task) {
@@ -127,7 +138,7 @@ export class TaskRegistry {
     if (fields.status === "deleted") {
       this.tasks.delete(id);
       this.notify();
-      return { task: null, cleared: false };
+      return { kind: "deleted" };
     }
 
     const nextStatus = fields.status ?? task.status;
@@ -171,7 +182,7 @@ export class TaskRegistry {
 
     this.notify();
 
-    return { task: cleared ? null : task, cleared };
+    return cleared ? { kind: "cleared" } : { kind: "updated", task };
   }
 
   list(): Task[] {
@@ -242,53 +253,63 @@ export class TaskRegistry {
 /** Host-wide checklist: one registry shared by the task tools, prompt, and emit. */
 export const taskRegistry = new TaskRegistry();
 
-const STATUS_ENUM: TaskStatus[] = ["pending", "in_progress", "completed", "failed", "cancelled"];
+const STATUS_ENUM: readonly TaskStatus[] = [
+  "pending",
+  "in_progress",
+  "completed",
+  "failed",
+  "cancelled",
+];
+
+/** An optional list of task ids; a readonly array is copied at the registry boundary. */
+const TaskIds = Schema.optional(Schema.Array(Schema.String));
+
+/** A list arg decodes to a readonly array; the registry takes mutable ids, so copy it. */
+const ids = (value: readonly string[] | undefined): string[] | undefined =>
+  value ? [...value] : undefined;
+
+const CreateParams = Schema.Struct({
+  subject: Schema.String.annotations({ description: "Short imperative title of the task" }),
+  description: Schema.optional(Schema.String).annotations({
+    description: "Optional detail / acceptance",
+  }),
+  activeForm: Schema.optional(Schema.String).annotations({
+    description: "Optional present-tense label shown while active",
+  }),
+  status: Schema.optional(Schema.Literal(...STATUS_ENUM)),
+  blockedBy: TaskIds.annotations({ description: "Task ids that must finish first" }),
+  blocks: TaskIds.annotations({ description: "Task ids this one blocks" }),
+});
+
+const UpdateParams = Schema.Struct({
+  taskId: Schema.String.annotations({ description: "The id of the task to update" }),
+  subject: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
+  activeForm: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.Literal(...STATUS_ENUM, "deleted")),
+  blockedBy: TaskIds,
+  blocks: TaskIds,
+});
 
 /** The model-facing checklist tools (create + update); reads are covered ambiently. */
-export function buildTaskTools(registry: TaskRegistry = taskRegistry): Tool[] {
-  const create: Tool = {
+export function buildTaskTools(
+  registry: TaskRegistry = taskRegistry,
+): [Tool<typeof CreateParams.Type>, Tool<typeof UpdateParams.Type>] {
+  const create: Tool<typeof CreateParams.Type> = {
     name: "task_create",
     description:
       "Add a task to your working checklist (shown back to you every turn). Use it to plan and track multi-step work; skip it for trivial one-step requests, and never create fake or demo tasks. Keep exactly one task in_progress at a time.",
-    parameters: {
-      type: "object",
-      properties: {
-        subject: {
-          type: "string",
-          description: "Short imperative title of the task",
-        },
-        description: {
-          type: "string",
-          description: "Optional detail / acceptance",
-        },
-        activeForm: {
-          type: "string",
-          description: "Optional present-tense label shown while active",
-        },
-        status: { type: "string", enum: STATUS_ENUM },
-        blockedBy: {
-          type: "array",
-          items: { type: "string" },
-          description: "Task ids that must finish first",
-        },
-        blocks: {
-          type: "array",
-          items: { type: "string" },
-          description: "Task ids this one blocks",
-        },
-      },
-      required: ["subject"],
-    },
+    params: CreateParams,
     execute: (args) =>
       Effect.try({
         try: () => {
           const task = registry.create({
-            subject: String(args.subject ?? ""),
-            description: optStr(args.description),
-            activeForm: optStr(args.activeForm),
-            status: args.status as TaskStatus | undefined,
-            blockedBy: strArr(args.blockedBy),
-            blocks: strArr(args.blocks),
+            subject: args.subject,
+            description: args.description,
+            activeForm: args.activeForm,
+            status: args.status,
+            blockedBy: ids(args.blockedBy),
+            blocks: ids(args.blocks),
           });
 
           return `created ${task.id}: ${task.subject}`;
@@ -302,44 +323,31 @@ export function buildTaskTools(registry: TaskRegistry = taskRegistry): Tool[] {
       }),
   };
 
-  const update: Tool = {
+  const update: Tool<typeof UpdateParams.Type> = {
     name: "task_update",
     description:
       "Update a checklist task by id: set status to in_progress when you start it, completed when done, failed/cancelled if it won't be done, or deleted to retire a stale one. Completing the last open task auto-clears the whole checklist; on a new topic, delete stale tasks and create a fresh list.",
-    parameters: {
-      type: "object",
-      properties: {
-        taskId: { type: "string", description: "The id of the task to update" },
-        subject: { type: "string" },
-        description: { type: "string" },
-        activeForm: { type: "string" },
-        status: { type: "string", enum: [...STATUS_ENUM, "deleted"] },
-        blockedBy: { type: "array", items: { type: "string" } },
-        blocks: { type: "array", items: { type: "string" } },
-      },
-      required: ["taskId"],
-    },
+    params: UpdateParams,
     execute: (args) =>
       Effect.try({
         try: () => {
-          const { task, cleared } = registry.update(String(args.taskId ?? ""), {
-            subject: optStr(args.subject),
-            description: optStr(args.description),
-            activeForm: optStr(args.activeForm),
-            status: args.status as TaskStatus | "deleted" | undefined,
-            blockedBy: strArr(args.blockedBy),
-            blocks: strArr(args.blocks),
+          const result = registry.update(args.taskId, {
+            subject: args.subject,
+            description: args.description,
+            activeForm: args.activeForm,
+            status: args.status,
+            blockedBy: ids(args.blockedBy),
+            blocks: ids(args.blocks),
           });
 
-          if (cleared) {
-            return "all tasks complete - checklist cleared";
+          switch (result.kind) {
+            case "cleared":
+              return "all tasks complete - checklist cleared";
+            case "deleted":
+              return `deleted ${args.taskId}`;
+            case "updated":
+              return `${result.task.id} -> ${result.task.status}`;
           }
-
-          if (!task) {
-            return `deleted ${String(args.taskId ?? "")}`;
-          }
-
-          return `${task.id} -> ${task.status}`;
         },
         catch: (cause) =>
           new ToolExecutionError({

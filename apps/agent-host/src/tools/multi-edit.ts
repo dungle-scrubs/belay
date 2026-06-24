@@ -1,16 +1,25 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { ToolInputError } from "./errors";
 import { applyUniqueReplacement, replaceMissMessage } from "./replace";
 import { tryTool, tryToolSync } from "./shared";
 import type { Tool } from "./types";
 import { confine, WORKSPACE_ROOT } from "./workspace";
 
-interface MultiEditItem {
-  path: string;
-  old: string;
-  new: string;
-}
+const Params = Schema.Struct({
+  edits: Schema.Array(
+    Schema.Struct({
+      path: Schema.String.annotations({ description: "File path within the workspace" }),
+      old: Schema.String.annotations({
+        description: "Exact text to replace (unique in the file here)",
+      }),
+      new: Schema.String.annotations({ description: "Replacement text" }),
+    }),
+  ).annotations({
+    description: "Edits applied in order. Repeat a path to make several edits to one file.",
+  }),
+});
 
 /**
  * Applies several exact-substring replacements atomically - many edits to one file
@@ -19,62 +28,49 @@ interface MultiEditItem {
  * applies everything in memory first, then writes - so a single failed edit leaves
  * no file changed.
  */
-export const multiEditTool: Tool = {
+export const multiEditTool: Tool<typeof Params.Type> = {
   name: "multi_edit",
   description:
     "Apply several exact-substring replacements atomically across one or more workspace files. " +
     "Edits apply in order (later edits see earlier ones); each 'old' must appear exactly once in " +
     "its file at that point. All-or-nothing: if any edit fails, no file is written. Confined to the workspace.",
-  parameters: {
-    type: "object",
-    properties: {
-      edits: {
-        type: "array",
-        description: "Edits applied in order. Repeat a path to make several edits to one file.",
-        items: {
-          type: "object",
-          properties: {
-            path: { type: "string", description: "File path within the workspace" },
-            old: { type: "string", description: "Exact text to replace (unique in the file here)" },
-            new: { type: "string", description: "Replacement text" },
-          },
-          required: ["path", "old", "new"],
-        },
-      },
-    },
-    required: ["edits"],
-  },
+  params: Params,
   execute: (args) =>
     Effect.gen(function* () {
-      const rawEdits = Array.isArray(args.edits) ? args.edits : [];
-      if (rawEdits.length === 0) {
-        return "error: 'edits' must be a non-empty array";
+      const edits = args.edits;
+      if (edits.length === 0) {
+        return yield* Effect.fail(
+          new ToolInputError({ tool: "multi_edit", detail: "'edits' must be a non-empty array" }),
+        );
       }
 
-      // Normalize + validate the edit list up front.
-      const edits: MultiEditItem[] = [];
-      for (const raw of rawEdits) {
-        const item = (raw ?? {}) as Record<string, unknown>;
-        const path = String(item.path ?? "");
-        const old = String(item.old ?? "");
-        if (!path) {
-          return "error: each edit needs a 'path'";
+      // The schema guarantees each edit has string path/old/new; validate the value-level
+      // preconditions (non-empty path and old) the old code checked.
+      for (const edit of edits) {
+        if (!edit.path) {
+          return yield* Effect.fail(
+            new ToolInputError({ tool: "multi_edit", detail: "each edit needs a 'path'" }),
+          );
         }
-        if (old === "") {
-          return `error: 'old' must be non-empty (${path})`;
+        if (edit.old === "") {
+          return yield* Effect.fail(
+            new ToolInputError({
+              tool: "multi_edit",
+              detail: `'old' must be non-empty (${edit.path})`,
+            }),
+          );
         }
-        edits.push({ path, old, new: String(item.new ?? "") });
       }
 
       // Group by path, preserving first-seen order.
       const order: string[] = [];
-      const byPath = new Map<string, MultiEditItem[]>();
+      const byPath = new Map<string, { old: string; new: string }[]>();
       for (const edit of edits) {
         const list = byPath.get(edit.path);
         if (list) {
-          list.push(edit);
+          list.push({ old: edit.old, new: edit.new });
         } else {
-          byPath.set(edit.path, [edit]);
+          byPath.set(edit.path, [{ old: edit.old, new: edit.new }]);
           order.push(edit.path);
         }
       }
@@ -88,7 +84,10 @@ export const multiEditTool: Tool = {
         for (const edit of byPath.get(path) ?? []) {
           const result = applyUniqueReplacement(content, edit.old, edit.new);
           if (!result.ok) {
-            return replaceMissMessage(result, ` in ${path}`);
+            // replaceMissMessage opens with `error: `; strip it so the executor's own
+            // prefix isn't doubled (the wording, with the ` in <path>` suffix, is pinned).
+            const detail = replaceMissMessage(result, ` in ${path}`).replace(/^error:\s*/u, "");
+            return yield* Effect.fail(new ToolInputError({ tool: "multi_edit", detail }));
           }
           content = result.content;
         }

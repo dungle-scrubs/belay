@@ -1,6 +1,7 @@
 import { glob, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { ToolInputError } from "./errors";
 import { cap, SKIP_DIRS, tryTool } from "./shared";
 import type { Tool } from "./types";
 import { WORKSPACE_ROOT } from "./workspace";
@@ -8,33 +9,34 @@ import { WORKSPACE_ROOT } from "./workspace";
 const MAX_GREP_FILES = 2000;
 const MAX_GREP_MATCHES = 100;
 
+const Params = Schema.Struct({
+  pattern: Schema.String.annotations({ description: "JavaScript regular expression" }),
+  glob: Schema.optionalWith(Schema.String, { default: () => "**/*" }).annotations({
+    description: "Optional file glob to search (default '**/*')",
+  }),
+});
+
 /** Searches workspace file contents for a regex, returning path:line matches. */
-export const grepTool: Tool = {
+export const grepTool: Tool<typeof Params.Type> = {
   name: "grep",
   description:
     "Search workspace file contents for a JS regular expression. Optionally restrict files with 'glob' (default '**/*'). Returns path:line:text matches.",
-  parameters: {
-    type: "object",
-    properties: {
-      pattern: { type: "string", description: "JavaScript regular expression" },
-      glob: {
-        type: "string",
-        description: "Optional file glob to search (default '**/*')",
-      },
-    },
-    required: ["pattern"],
-  },
+  params: Params,
   execute: (args) =>
     Effect.gen(function* () {
       let regex: RegExp;
 
       try {
-        regex = new RegExp(String(args.pattern ?? ""));
+        regex = new RegExp(args.pattern);
       } catch {
-        return "error: invalid regular expression";
+        // The pattern is a syntactically valid string but not a valid regex - a value
+        // (domain) failure, surfaced as a typed input error.
+        return yield* Effect.fail(
+          new ToolInputError({ tool: "grep", detail: "invalid regular expression" }),
+        );
       }
 
-      const fileGlob = String(args.glob ?? "**/*");
+      const fileGlob = args.glob;
 
       return yield* tryTool("grep", async () => {
         const results: string[] = [];

@@ -65,13 +65,16 @@ for (const command of allow) {
 }
 
 // Integration: the real bash tool refuses a destructive command and runs a safe one.
+// The bash tool now fails a refusal in the typed `E` channel, so the executor renders it
+// as `error: bash failed - refused: …` rather than a bare `refused:` success string.
 const refused = await Effect.runPromise(
   executeTool("bash", JSON.stringify({ command: "rm -rf /" })),
 );
 const ran = await Effect.runPromise(
   executeTool("bash", JSON.stringify({ command: "echo wired-ok" })),
 );
-if (!refused.startsWith("refused:")) {
+const wasRefused = refused.startsWith("error: bash failed - refused:");
+if (!wasRefused) {
   console.error(`WIRING (should refuse): ${refused}`);
   failures += 1;
 }
@@ -81,7 +84,7 @@ if (!ran.includes("wired-ok")) {
 }
 
 console.log(
-  `deny ${deny.length} / allow ${allow.length} / wiring refused=${refused.startsWith("refused:")} ran=${ran.includes("wired-ok")}`,
+  `deny ${deny.length} / allow ${allow.length} / wiring refused=${wasRefused} ran=${ran.includes("wired-ok")}`,
 );
 if (failures === 0) {
   console.log("BASH-SAFETY PASS");

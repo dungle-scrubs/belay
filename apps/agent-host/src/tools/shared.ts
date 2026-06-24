@@ -38,18 +38,3 @@ export const tryTool = <A>(
 /** The synchronous variant - e.g. `confine()`, which throws on a path escape. */
 export const tryToolSync = <A>(tool: string, op: () => A): Effect.Effect<A, ToolExecutionError> =>
   Effect.try({ try: op, catch: toolError(tool) });
-
-// Tool-argument coercers shared by the tool executors (args arrive as `unknown`).
-/** A present value as a string, or undefined when the field was omitted. */
-export const optStr = (value: unknown): string | undefined =>
-  value === undefined ? undefined : String(value);
-
-/** A finite number, or 0 (used for cursors/counts). */
-export const num = (value: unknown): number => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-};
-
-/** A string array when given one, else undefined (omitted ≠ empty). */
-export const strArr = (value: unknown): string[] | undefined =>
-  Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : undefined;
