@@ -1,4 +1,4 @@
-import type { ProviderModel } from "@trevor/session";
+import { DEFAULT_PROVIDER_MODELS, type ProviderModel } from "@trevor/session";
 import { CodexProvider } from "./codex";
 import { LmStudioProvider } from "./lmstudio";
 import type { Provider } from "./types";
@@ -29,16 +29,16 @@ export function buildProviders(): ProviderRegistry {
     qwen: new LmStudioProvider({
       url: lmstudioUrl,
       model: process.env.LMSTUDIO_MODEL ?? "unsloth/qwen3.6-27b-mlx",
-      label: "Qwen 27B 8-bit (local)",
+      label: DEFAULT_PROVIDER_MODELS.qwen.label,
     }),
     gpt: new CodexProvider({
       model: process.env.PIAI_MODEL ?? "gpt-5.5",
-      label: "GPT-5.5",
+      label: DEFAULT_PROVIDER_MODELS.gpt.label,
     }),
     qwen4bit: new LmStudioProvider({
       url: lmstudioUrl,
       model: "lmstudio-community/qwen3.6-27b-mlx",
-      label: "Qwen 27B 4-bit (local)",
+      label: DEFAULT_PROVIDER_MODELS.qwen4bit.label,
       // Loaded at 64k - the working window, and the target compaction (D-036) keeps the
       // prompt under by summarizing old turns. qwen3.6 is natively 256k-capable; 64k is the
       // load cap we operate at (a balance of headroom vs. KV-cache memory). Overflow

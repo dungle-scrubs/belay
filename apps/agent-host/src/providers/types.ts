@@ -1,6 +1,10 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef, Usage } from "@trevor/session";
 import type { Effect, Stream } from "effect";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
+
+// `Usage` is the wire type, owned in @trevor/session (the host's per-step usage and the
+// serialized turn usage are the same shape, so they share one declaration - D-005).
+export type { Usage };
 
 /** What a provider's stream can fail with, in the Effect `E` channel. */
 export type ProviderError = ProviderUnavailable | ProviderAuthError;
@@ -39,15 +43,6 @@ export interface ToolCall {
   readonly id: string;
   readonly name: string;
   readonly arguments: string;
-}
-
-/** Token usage for one model step: prompt (context used) + generated, vs the window. */
-export interface Usage {
-  readonly input: number;
-  readonly output: number;
-  readonly contextWindow: number;
-  /** Generation wall-time for this step (first token -> end), ms; for tokens/sec. */
-  readonly genMs: number;
 }
 
 /**

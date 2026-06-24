@@ -1,5 +1,6 @@
 import {
   type CommandSpec,
+  DEFAULT_PROVIDER_MODELS,
   type DecodedEvent,
   decodeTrevorEvent,
   type ProviderModel,
@@ -186,29 +187,11 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
   return { present, leaderId, standbyCount, workspace, cwd };
 }
 
-// Used until the host announces itself: qwen is binary, GPT graduated.
-export const QWEN_FALLBACK: ProviderModel = {
-  label: "Qwen 27B 8-bit (local)",
-  model: "qwen",
-  reasoningLevels: ["off", "on"],
-  defaultReasoning: "off",
-};
-
-export const FALLBACK_MODELS: Record<string, ProviderModel> = {
-  qwen: QWEN_FALLBACK,
-  gpt: {
-    label: "GPT-5.5",
-    model: "GPT-5.5",
-    reasoningLevels: ["minimal", "low", "medium", "high", "xhigh"],
-    defaultReasoning: "medium",
-  },
-  qwen4bit: {
-    label: "Qwen 27B 4-bit (local)",
-    model: "qwen",
-    reasoningLevels: ["off", "on"],
-    defaultReasoning: "off",
-  },
-};
+// Used until the host announces itself: the shared roster (@trevor/session) is the one
+// source the host's labels also derive from, so the pre-announce UI cannot drift from it.
+export const FALLBACK_MODELS: Record<string, ProviderModel> = DEFAULT_PROVIDER_MODELS;
+// Last-resort default for an unknown provider key (qwen is binary thinking).
+export const QWEN_FALLBACK: ProviderModel = DEFAULT_PROVIDER_MODELS.qwen;
 
 /** The latest per-provider model/reasoning map the host announced, else the fallback. */
 export function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {

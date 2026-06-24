@@ -1,5 +1,8 @@
 import { HEX64 } from "./blob";
+import { BREAKDOWN_CATEGORIES, type UsageBreakdown } from "./breakdown";
 import type { SessionEvent } from "./event";
+
+export type { UsageBreakdown };
 
 /**
  * The trevor session protocol: the `user.message`, `assistant.*`, `tool.*`, and
@@ -17,40 +20,21 @@ import type { SessionEvent } from "./event";
  *     switch on `.type` instead of hand-guarding `typeof payload.x === "string"`.
  */
 
-/** Token usage carried on assistant.completed: prompt (context used) + generated. */
+/**
+ * Token usage for one model step / turn: prompt (context used) + generated, vs the
+ * window. Carried on assistant.completed; the host also uses it per model step (D-005).
+ */
 export interface Usage {
   readonly input: number;
   readonly output: number;
   readonly contextWindow: number;
+  /** Generation wall-time (first token -> end), ms; for tokens/sec. */
   readonly genMs: number;
 }
 
-/**
- * Per-call token-source breakdown ("where did the context go?"), carried on
- * assistant.completed. Values are character counts per category measured by the
- * host (see agent-host `usage/breakdown`); the input pool is what fills the
- * prompt (tool results usually dominate), the output pool is what the model
- * generated this turn (thinking lives only here). The UI turns these into the
- * "data in this call" treemap.
- */
-export interface UsageBreakdown {
-  readonly input: {
-    readonly systemAndTools: number;
-    readonly userText: number;
-    readonly assistantText: number;
-    readonly toolCallArgs: number;
-    readonly toolResults: number;
-    readonly imagesBase64: number;
-    readonly imageCount: number;
-    /** Tool-result chars keyed by tool name - which tool is eating the context. */
-    readonly byTool: Readonly<Record<string, number>>;
-  };
-  readonly output: {
-    readonly thinking: number;
-    readonly answer: number;
-    readonly toolCallArgs: number;
-  };
-}
+// The wire `UsageBreakdown` type and its category schema live in ./breakdown (the
+// single source host accumulation, this decoder, and the web treemap all derive from);
+// re-exported above so existing `@trevor/session` importers are unaffected.
 
 /** A selectable provider's display label, model id, and thinking options. */
 export interface ProviderModel {
@@ -317,23 +301,22 @@ function coerceBreakdown(value: unknown): UsageBreakdown | undefined {
   for (const [name, chars] of Object.entries(byToolRaw)) {
     byTool[name] = num(chars);
   }
-  return {
-    input: {
-      systemAndTools: num(inp.systemAndTools),
-      userText: num(inp.userText),
-      assistantText: num(inp.assistantText),
-      toolCallArgs: num(inp.toolCallArgs),
-      toolResults: num(inp.toolResults),
-      imagesBase64: num(inp.imagesBase64),
-      imageCount: num(inp.imageCount),
-      byTool,
-    },
-    output: {
-      thinking: num(out.thinking),
-      answer: num(out.answer),
-      toolCallArgs: num(out.toolCallArgs),
-    },
+  // Text categories are decoded from the shared descriptor (each pool's keys); images
+  // and byTool are the explicit non-category fields.
+  const input: Record<string, unknown> = {
+    imagesBase64: num(inp.imagesBase64),
+    imageCount: num(inp.imageCount),
+    byTool,
   };
+  const output: Record<string, unknown> = {};
+  for (const c of BREAKDOWN_CATEGORIES) {
+    if (c.pool === "input") {
+      input[c.key] = num(inp[c.key]);
+    } else {
+      output[c.key] = num(out[c.key]);
+    }
+  }
+  return { input, output } as UsageBreakdown;
 }
 
 /** Coerces a payload array of objects via `map`, skipping non-objects and nulls. */

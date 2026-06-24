@@ -1,4 +1,4 @@
-import type { UsageBreakdown } from "@trevor/session";
+import { BREAKDOWN_CATEGORIES, type UsageBreakdown } from "@trevor/session";
 import type { TreemapLeaf } from "./treemap-layout";
 
 /**
@@ -29,11 +29,20 @@ export interface PanelBreakdown {
 }
 
 export function panelBreakdown(b: UsageBreakdown): PanelBreakdown {
-  const toolTotal = b.input.toolResults;
+  // Tool results vs. fixed overhead is the descriptor's `isOverhead` split, so this
+  // rollup can never drift from the host's category set (byTool/images are not
+  // categories, so the numeric cast never reads them).
+  const inputCounts = b.input as unknown as Record<string, number>;
+  const sumInput = (overheadGroup: boolean): number =>
+    BREAKDOWN_CATEGORIES.reduce(
+      (t, c) =>
+        c.pool === "input" && c.isOverhead === overheadGroup ? t + (inputCounts[c.key] ?? 0) : t,
+      0,
+    );
+  const toolTotal = sumInput(false);
   const thinking = b.output.thinking;
   const answer = b.output.answer;
-  const overhead =
-    b.input.systemAndTools + b.input.userText + b.input.assistantText + b.input.toolCallArgs;
+  const overhead = sumInput(true);
   const total = toolTotal + thinking + answer + overhead;
 
   const allLeaves: TreemapLeaf[] = [];

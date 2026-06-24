@@ -1,3 +1,4 @@
+import { BREAKDOWN_CATEGORIES, type BreakdownPool, type UsageBreakdown } from "@trevor/session";
 import { log } from "../log";
 import type { ChatMessage, Usage } from "../providers";
 
@@ -17,6 +18,11 @@ import type { ChatMessage, Usage } from "../providers";
  * Images are tracked apart from the text categories because a vision model's
  * token cost is not proportional to base64 length, so folding base64 chars into
  * the text shares would badly distort them.
+ *
+ * The category set itself (keys, pools, overhead grouping) is the shared
+ * `BREAKDOWN_CATEGORIES` descriptor in @trevor/session; the wire `UsageBreakdown`,
+ * this accumulator's totals/session-roll-up, and the web treemap all derive from it,
+ * so adding a category is one edit and the surfaces cannot drift.
  */
 
 const CHARS_PER_TOKEN = 4;
@@ -24,6 +30,7 @@ const estTokens = (chars: number): number => Math.round(chars / CHARS_PER_TOKEN)
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;
 
+/** The accumulator's internal mutable shape (the wire `UsageBreakdown` is readonly). */
 interface InputCats {
   systemAndTools: number;
   userText: number;
@@ -32,7 +39,6 @@ interface InputCats {
   toolResults: number;
   imagesBase64: number;
   imageCount: number;
-  /** Tool result chars keyed by tool name - which tool is eating the context. */
   byTool: Record<string, number>;
 }
 
@@ -40,11 +46,6 @@ interface OutputCats {
   thinking: number;
   answer: number;
   toolCallArgs: number;
-}
-
-export interface UsageBreakdown {
-  readonly input: InputCats;
-  readonly output: OutputCats;
 }
 
 /**
@@ -120,18 +121,31 @@ export class BreakdownAccumulator {
   }
 }
 
+/** Reads a pool's category counts as a plain number map. byTool/images are not
+ *  descriptor categories, so iterating BREAKDOWN_CATEGORIES never reads them. */
+const poolCounts = (b: UsageBreakdown, pool: BreakdownPool): Record<string, number> =>
+  b[pool] as unknown as Record<string, number>;
+
+/** A category count, defaulting to 0 (every descriptor key is present, so this only
+ *  satisfies noUncheckedIndexedAccess on the string index). */
+const at = (counts: Record<string, number>, key: string): number => counts[key] ?? 0;
+
+/** Sums one pool's descriptor categories (images/byTool excluded - not categories). */
+const sumPool = (b: UsageBreakdown, pool: BreakdownPool): number => {
+  const counts = poolCounts(b, pool);
+  let total = 0;
+  for (const c of BREAKDOWN_CATEGORIES) {
+    if (c.pool === pool) total += at(counts, c.key);
+  }
+  return total;
+};
+
 /** Total of the text-bearing input categories (images excluded - see header). */
-const inputTextChars = (b: UsageBreakdown): number =>
-  b.input.systemAndTools +
-  b.input.userText +
-  b.input.assistantText +
-  b.input.toolCallArgs +
-  b.input.toolResults;
+const inputTextChars = (b: UsageBreakdown): number => sumPool(b, "input");
 
-const outputChars = (b: UsageBreakdown): number =>
-  b.output.thinking + b.output.answer + b.output.toolCallArgs;
+const outputChars = (b: UsageBreakdown): number => sumPool(b, "output");
 
-const topTools = (byTool: Record<string, number>, n = 3): string => {
+const topTools = (byTool: Readonly<Record<string, number>>, n = 3): string => {
   const entries = Object.entries(byTool).sort((a, b) => b[1] - a[1]);
   if (entries.length === 0) return "none";
   return entries
@@ -140,12 +154,21 @@ const topTools = (byTool: Record<string, number>, n = 3): string => {
     .join(",");
 };
 
-/** Running session totals so the per-turn line can also report an across-turns average. */
+/** A fresh per-category totals map for one pool, zeroed from the descriptor. */
+const zeroPool = (pool: BreakdownPool): Record<string, number> =>
+  Object.fromEntries(BREAKDOWN_CATEGORIES.filter((c) => c.pool === pool).map((c) => [c.key, 0]));
+
+/** Running session totals (per category) so the per-turn line can also report an
+ *  across-turns average. Keyed by category; both init and accumulation iterate the
+ *  descriptor, so a new category rolls in without touching this. */
 const session = {
   turns: 0,
-  in: { systemAndTools: 0, userText: 0, assistantText: 0, toolCallArgs: 0, toolResults: 0 },
-  out: { thinking: 0, answer: 0, toolCallArgs: 0 },
+  in: zeroPool("input"),
+  out: zeroPool("output"),
 };
+
+const sumValues = (r: Record<string, number>): number =>
+  Object.values(r).reduce((a, b) => a + b, 0);
 
 /**
  * Logs one turn's breakdown on the `usage` scope, then a rolling session average.
@@ -181,32 +204,23 @@ export function logUsageBreakdown(
   });
 
   session.turns += 1;
-  session.in.systemAndTools += b.input.systemAndTools;
-  session.in.userText += b.input.userText;
-  session.in.assistantText += b.input.assistantText;
-  session.in.toolCallArgs += b.input.toolCallArgs;
-  session.in.toolResults += b.input.toolResults;
-  session.out.thinking += b.output.thinking;
-  session.out.answer += b.output.answer;
-  session.out.toolCallArgs += b.output.toolCallArgs;
+  for (const c of BREAKDOWN_CATEGORIES) {
+    const dst = c.pool === "input" ? session.in : session.out;
+    dst[c.key] = at(dst, c.key) + at(poolCounts(b, c.pool), c.key);
+  }
 
-  const sIn =
-    session.in.systemAndTools +
-    session.in.userText +
-    session.in.assistantText +
-    session.in.toolCallArgs +
-    session.in.toolResults;
-  const sOut = session.out.thinking + session.out.answer + session.out.toolCallArgs;
+  const sIn = sumValues(session.in);
+  const sOut = sumValues(session.out);
 
   log("usage", "session-avg", {
     turns: session.turns,
-    inToolResults: pct(session.in.toolResults, sIn),
-    inSysTools: pct(session.in.systemAndTools, sIn),
-    inUserText: pct(session.in.userText, sIn),
-    inAssistant: pct(session.in.assistantText, sIn),
-    inToolArgs: pct(session.in.toolCallArgs, sIn),
-    outThinking: pct(session.out.thinking, sOut),
-    outAnswer: pct(session.out.answer, sOut),
-    outArgs: pct(session.out.toolCallArgs, sOut),
+    inToolResults: pct(at(session.in, "toolResults"), sIn),
+    inSysTools: pct(at(session.in, "systemAndTools"), sIn),
+    inUserText: pct(at(session.in, "userText"), sIn),
+    inAssistant: pct(at(session.in, "assistantText"), sIn),
+    inToolArgs: pct(at(session.in, "toolCallArgs"), sIn),
+    outThinking: pct(at(session.out, "thinking"), sOut),
+    outAnswer: pct(at(session.out, "answer"), sOut),
+    outArgs: pct(at(session.out, "toolCallArgs"), sOut),
   });
 }
