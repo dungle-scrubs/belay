@@ -10,6 +10,7 @@ import {
   type SubmitEvent,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
@@ -51,6 +52,7 @@ import {
   toolSummary,
 } from "./derive";
 import { Markdown } from "./markdown";
+import { foldSteer, type QueuedPrompt, sendQueueReducer } from "./send-queue";
 import { ensureSession } from "./session/client";
 import { useSession } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
@@ -63,23 +65,8 @@ const SHOW_THINKING_KEY = "trevor.showThinking";
 // Host and browser default to one shared session so they auto-attach with no
 // manual wiring; override with ?session=<id> in the URL.
 const DEFAULT_SESSION = "trevor-local";
-// A prompt waiting in the local send queue, carrying the provider/reasoning chosen
-// when it was submitted so a model switch while it waits doesn't rewrite it. The id
-// is a stable React key (queue order can change when ESC-steer prepends).
-type QueuedPrompt = {
-  id: string;
-  text: string;
-  provider: string;
-  reasoning?: string;
-  artifacts?: readonly ArtifactRef[];
-};
-
-// Fold queued prompts (in order) and the current draft into one steering prompt.
-// Cancelling collapses everything the user has lined up into a single interruption,
-// rather than replaying queued prompts one at a time after the steer.
-function combineSteer(queue: readonly QueuedPrompt[], draft: string): string {
-  return [...queue.map((q) => q.text), draft.trim()].filter(Boolean).join("\n\n");
-}
+// The local send queue + hard-steer fold (QueuedPrompt, sendQueueReducer, foldSteer)
+// live in ./send-queue, unit-tested without React. App.tsx owns only the React glue.
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
 // SMUI-themed markdown body: reuses the app's Markdown renderer, re-themed via the
@@ -296,7 +283,7 @@ export function App() {
   // published only once the session is idle, so the host never receives two prompts
   // at once (which would run concurrent, out-of-order turns) and the event log stays
   // cleanly paired. ESC-steer prepends, so an interruption preempts what's waiting.
-  const [queue, setQueue] = useState<QueuedPrompt[]>([]);
+  const [queue, dispatchQueue] = useReducer(sendQueueReducer, [] as QueuedPrompt[]);
   const busy = active !== null || awaitingResponse;
   // inFlight bridges the window between publishing a prompt and seeing its echo turn
   // the session busy, so the drain effect can't fire twice and double-send. prevBusy
@@ -344,16 +331,16 @@ export function App() {
     setDraft("");
     const artifacts = attachments.length ? attachments : undefined;
     setAttachments([]);
-    setQueue((q) => [
-      ...q,
-      {
+    dispatchQueue({
+      type: "enqueue",
+      prompt: {
         id: crypto.randomUUID(),
         text,
         provider: activeProvider,
         reasoning: reasoning || undefined,
         artifacts,
       },
-    ]);
+    });
   };
 
   // Slash-menu key handling on the composer, active only while the menu is open:
@@ -407,7 +394,7 @@ export function App() {
       return;
     }
     inFlightRef.current = true;
-    setQueue((q) => q.slice(1));
+    dispatchQueue({ type: "drainHead" });
     void publish(next.text, next.provider, next.reasoning, next.artifacts);
   }, [busy, queue, publish]);
 
@@ -418,25 +405,16 @@ export function App() {
   // keeping the cancel strictly ahead of the steer.
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
-    const steer = combineSteer(queue, draft);
-    // Fold every queued/attached artifact into the single steering prompt too, so a hard
-    // steer keeps the images the user lined up rather than silently dropping them.
-    const steerArtifacts = [...queue.flatMap((q) => q.artifacts ?? []), ...attachments];
+    // Fold the queued prompts + draft + every queued/attached artifact into ONE steering
+    // prompt (foldSteer keeps the images the user lined up rather than dropping them).
+    const steer = foldSteer(queue, draft, attachments, {
+      id: crypto.randomUUID(),
+      provider: activeProvider,
+      reasoning: reasoning || undefined,
+    });
     setDraft("");
     setAttachments([]);
-    setQueue(
-      steer || steerArtifacts.length
-        ? [
-            {
-              id: crypto.randomUUID(),
-              text: steer,
-              provider: activeProvider,
-              reasoning: reasoning || undefined,
-              artifacts: steerArtifacts.length ? steerArtifacts : undefined,
-            },
-          ]
-        : [],
-    );
+    dispatchQueue({ type: "steer", prompt: steer });
     if (runId !== null) {
       void cancel(runId);
     }
@@ -582,7 +560,7 @@ export function App() {
 
   return (
     <div className="flex h-svh">
-      <main className="relative flex min-w-0 flex-1 flex-col px-4">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4">
         {!panelOpen ? (
           <button
             type="button"
@@ -628,6 +606,7 @@ export function App() {
                         className={toolClass}
                         edits={edits}
                         status={message.done ? "done" : "running"}
+                        border={false}
                         onOpenPath={(path) => void openInEditor(path)}
                       />
                     );
