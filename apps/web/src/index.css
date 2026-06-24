@@ -68,6 +68,7 @@
   --smui-purple: 311 28% 40%;
 
   /* Surface hierarchy (Snow Storm) */
+  --smui-surface-sunken: 218 27% 97%; /* recessed below base (the transcript well) */
   --smui-surface-0: 218 27% 94%;
   --smui-surface-1: 218 27% 89%;
   --smui-surface-2: 219 28% 84%;
@@ -133,6 +134,7 @@
   --smui-purple: 311 24% 63%;
 
   /* Surface hierarchy (Polar Night) */
+  --smui-surface-sunken: 213 16% 9%; /* recessed below base (the transcript well) */
   --smui-surface-0: 213 16% 12%;
   --smui-surface-1: 217 16% 15.5%;
   --smui-surface-2: 216 15% 19%;
@@ -204,6 +206,7 @@
   --color-smui-yellow: hsl(var(--smui-yellow));
   --color-smui-green: hsl(var(--smui-green));
   --color-smui-purple: hsl(var(--smui-purple));
+  --color-smui-surface-sunken: hsl(var(--smui-surface-sunken));
   --color-smui-surface-0: hsl(var(--smui-surface-0));
   --color-smui-surface-1: hsl(var(--smui-surface-1));
   --color-smui-surface-2: hsl(var(--smui-surface-2));

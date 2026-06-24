@@ -205,7 +205,11 @@ export function ThinkingMessage({
       </button>
       {open ? (
         <div className="border-l border-border pl-3">
-          <MarkdownBody text={content} muted />
+          {/* Thinking reads one shade quieter than muted prose - it's scaffolding,
+              not the answer. Opacity keeps the left border at full strength. */}
+          <div className="opacity-75">
+            <MarkdownBody text={content} muted />
+          </div>
         </div>
       ) : null}
     </div>
