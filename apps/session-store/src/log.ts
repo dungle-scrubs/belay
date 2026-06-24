@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { PublishInput, SessionEvent } from "@trevor/session";
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
@@ -15,23 +16,10 @@ import { DatabaseSync } from "node:sqlite";
  * with another). WAL mode lets a reader replay while a writer appends.
  */
 
-/** One stored event, matching the shared SessionEvent shape participants decode. */
-export interface StoredEvent {
-  readonly sessionId: string;
-  readonly seq: number;
-  readonly eventId: string;
-  readonly type: string;
-  readonly producerId: string;
-  readonly payload: Record<string, unknown>;
-  readonly createdAt: string;
-}
-
-/** The fields a publisher supplies; the log assigns seq/eventId/createdAt. */
-export interface AppendInput {
-  readonly type: string;
-  readonly producerId: string;
-  readonly payload: Record<string, unknown>;
-}
+// A stored event is the shared SessionEvent, and the fields a publisher supplies
+// are PublishInput - both owned by @trevor/session (the event shape is the
+// contract; the log assigns seq/eventId/createdAt). EventRow below is the
+// genuinely private SQLite row (payload is a JSON string on disk).
 
 interface EventRow {
   readonly sessionId: string;
@@ -82,7 +70,7 @@ export class SessionLog {
   }
 
   /** Appends one event, assigning the next per-session seq; returns the stored row. */
-  append(sessionId: string, input: AppendInput, eventId: string, nowIso: string): StoredEvent {
+  append(sessionId: string, input: PublishInput, eventId: string, nowIso: string): SessionEvent {
     this.ensureSession(sessionId, nowIso);
     const row = this.db
       .prepare("SELECT COALESCE(MAX(seq), 0) AS maxSeq FROM events WHERE sessionId = ?")
@@ -107,7 +95,7 @@ export class SessionLog {
   }
 
   /** Every event for a session with seq > afterSeq, in seq order (the replay). */
-  readAfter(sessionId: string, afterSeq: number): StoredEvent[] {
+  readAfter(sessionId: string, afterSeq: number): SessionEvent[] {
     const rows = this.db
       .prepare(
         `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt

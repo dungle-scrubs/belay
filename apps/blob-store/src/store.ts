@@ -13,9 +13,16 @@ import { dirname, join } from "node:path";
  *
  * This is the storage core, kept free of HTTP so it is directly testable; the
  * server in `main.ts` is a thin transport over it.
+ *
+ * This service is a standalone leaf with ZERO workspace deps (no Effect, no
+ * framework, no @trevor/session) so it can be deployed and reasoned about in
+ * isolation. The client SDK contract it must satisfy lives in
+ * packages/session/src/blob.ts (HEX64 + PutBlobResult). HEX64 and the result
+ * shape below are intentionally duplicated here to preserve that isolation - they
+ * are NOT imported across the boundary and must be kept in sync by hand.
  */
 
-/** A blob hash: a lowercase sha256 hex digest (the content address). */
+/** A blob hash: a lowercase sha256 hex digest (the content address). Mirrors @trevor/session HEX64. */
 export const HEX64 = /^[0-9a-f]{64}$/;
 
 /** Per-blob metadata persisted alongside the bytes. */

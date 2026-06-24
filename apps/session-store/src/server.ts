@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { frames, type PublishInput } from "@trevor/session";
 import { type WebSocket, WebSocketServer } from "ws";
-import { type AppendInput, SessionLog } from "./log";
+import { SessionLog } from "./log";
 
 /**
  * Builds the local session-store HTTP + WebSocket server over a SQLite log,
@@ -123,7 +124,7 @@ export function createSessionStore(dbPath: string): Server {
       const sessionId = decodeURIComponent(eventsMatch[1] as string);
       readJson(req)
         .then((body) => {
-          const input = body as Partial<AppendInput>;
+          const input = body as Partial<PublishInput>;
           if (typeof input.type !== "string" || typeof input.producerId !== "string") {
             json(res, 400, { error: "type and producerId required" });
             return;
@@ -140,7 +141,7 @@ export function createSessionStore(dbPath: string): Server {
           );
           // The event "returns over the stream": fan out to every subscriber,
           // including the publisher's own socket (matching the Richter round-trip).
-          broadcast(sessionId, { op: "event", event: stored });
+          broadcast(sessionId, frames.event(stored));
           json(res, 201, { ok: true, seq: stored.seq });
         })
         .catch(() => json(res, 400, { error: "invalid JSON body" }));
@@ -165,9 +166,9 @@ export function createSessionStore(dbPath: string): Server {
     // are all synchronous on the single event-loop thread, so no append can
     // interleave between the replay snapshot and joining the live fan-out.
     for (const event of log.readAfter(sessionId, afterSeq)) {
-      socket.send(JSON.stringify({ op: "event", event }));
+      socket.send(JSON.stringify(frames.event(event)));
     }
-    socket.send(JSON.stringify({ op: "replay.complete" }));
+    socket.send(JSON.stringify(frames.replayComplete()));
     subscribe(sessionId, socket);
 
     socket.on("close", () => unsubscribe(sessionId, socket));

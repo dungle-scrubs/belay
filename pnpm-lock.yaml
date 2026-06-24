@@ -69,13 +69,13 @@ importers:
 
   apps/session-store:
     dependencies:
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../../packages/session
       ws:
         specifier: ^8.21.0
         version: 8.21.0
     devDependencies:
-      '@trevor/session':
-        specifier: workspace:*
-        version: link:../../packages/session
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0

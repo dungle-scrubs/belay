@@ -9,16 +9,23 @@ import type { ArtifactRef } from "./protocol";
  *
  * The blob store is NOT Richter: events carry only an ArtifactRef
  * (`{ kind, mimeType, size, hash }`); the bytes live in the store, fetched on demand.
+ *
+ * This module is the canonical CLIENT SDK CONTRACT for the blob store: HEX64 and
+ * PutBlobResult describe the wire the standalone `@trevor/blob-store` server must
+ * satisfy. That server keeps a zero-deps copy of these (it must not import this
+ * package), so the two are kept in sync by hand - see apps/blob-store/src/store.ts.
  */
 
 /** A blob hash: a lowercase sha256 hex digest (the content address). */
 export const HEX64 = /^[0-9a-f]{64}$/;
 
-/** What the store returns after a successful upload. */
+/** The full wire response the store returns after a successful upload. */
 export interface PutBlobResult {
   readonly hash: string;
   readonly size: number;
   readonly mimeType: string;
+  /** Whether the bytes were already present (the store deduped, no new write). */
+  readonly deduped: boolean;
 }
 
 const trimSlash = (base: string): string => base.replace(/\/$/, "");

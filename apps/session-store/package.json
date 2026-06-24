@@ -9,10 +9,10 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@trevor/session": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {
-    "@trevor/session": "workspace:*",
     "@types/node": "^26.0.0",
     "@types/ws": "^8.18.1",
     "tsx": "^4.22.4",
