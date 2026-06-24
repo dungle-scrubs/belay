@@ -14,13 +14,7 @@ import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { supervisor } from "./processes";
-import {
-  buildProviders,
-  type ChatMessage,
-  DEFAULT_PROVIDER,
-  describeProviders,
-  pickProvider,
-} from "./providers";
+import { buildProviders, type ChatMessage, DEFAULT_PROVIDER, pickProvider } from "./providers";
 import { Emit } from "./services";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
@@ -246,9 +240,13 @@ function goLive(): void {
     events.hostOnline({
       // Per-provider model id + thinking options so the browser can render the right
       // reasoning control (none / binary / graduated) for whichever provider is chosen.
+      // Each provider describes its own descriptor, so the announcement can't drift from
+      // the Provider interface.
       providers: Object.keys(providers),
       default: DEFAULT_PROVIDER,
-      models: describeProviders(providers),
+      models: Object.fromEntries(
+        Object.entries(providers).map(([key, provider]) => [key, provider.describe()]),
+      ),
       instanceId: INSTANCE_ID,
       cwd: abbrevPath(process.cwd()),
       workspace: abbrevPath(WORKSPACE_ROOT),
@@ -321,9 +319,9 @@ function handleEvent(message: SessionEvent): void {
     if (decoded.command === "/clear") {
       // Admit the clear so the projection resets from this point - applied on replay
       // too, so a reload/restart stays clean. The old events remain in the durable log
-      // but buildHistory drops everything before the clear (sanitizeHistory also strips
-      // a stray leading assistant turn if a clear lands mid-answer). The scheduler drops
-      // its queued prompts + catch-up target alongside (the active run is left to finish).
+      // but buildHistory drops everything before the clear, and strips a stray leading
+      // assistant turn if a clear lands mid-answer. The scheduler drops its queued
+      // prompts + catch-up target alongside (the active run is left to finish).
       admit(message);
       scheduler.clearPending();
     }

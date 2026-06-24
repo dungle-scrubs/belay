@@ -22,6 +22,14 @@ function parseArgs(raw: string): Record<string, unknown> {
   }
 }
 
+/**
+ * The "prompt doesn't fit" overflow reason, built once so the two prompt-too-big
+ * branches (the pre-request estimate guard and LM Studio's context-length 400) can't
+ * drift. LM Studio's own message omits the sizes, so we attach our estimate + window.
+ */
+const promptTooBig = (promptTokensEst: number, contextWindow: number): string =>
+  `the prompt (~${promptTokensEst} tokens) is too big for the ${contextWindow}-token context window`;
+
 type TextBlock = { type: "text"; text: string };
 type ImageBlock = { type: "image"; data: string; mimeType: string };
 
@@ -101,8 +109,8 @@ export function toPiAiTools(tools: readonly ToolDef[]): Context["tools"] {
 
 /**
  * Streams one model step through pi-ai and maps its events onto host ProviderEvents.
- * Private async generator over the signal-driven request; the public streamPiAi below
- * wraps it as an Effect Stream and owns the AbortController.
+ * Private async generator over the signal-driven request; the public streamPiAiModel
+ * below wraps it as an Effect Stream and owns the AbortController.
  */
 async function* piAiEvents<TApi extends Api>(
   model: Model<TApi>,
@@ -142,7 +150,7 @@ async function* piAiEvents<TApi extends Api>(
   if (promptTokensEst >= options.contextWindow) {
     yield {
       type: "overflow",
-      reason: `the prompt (~${promptTokensEst} tokens) is too big for the ${options.contextWindow}-token context window`,
+      reason: promptTooBig(promptTokensEst, options.contextWindow),
     };
     return;
   }
@@ -157,7 +165,7 @@ async function* piAiEvents<TApi extends Api>(
       generationAt = Date.now();
     }
   };
-  // signal rides into streamSimple so an interrupt (which aborts it - see streamPiAi)
+  // signal rides into streamSimple so an interrupt (which aborts it - see streamPiAiModel)
   // closes the underlying request: upstream cancel where the adapter supports it.
   const streamOptions = {
     apiKey: options.apiKey,
@@ -242,7 +250,7 @@ async function* piAiEvents<TApi extends Api>(
       if (/context length|tokens to keep|larger context|context window/i.test(detail)) {
         yield {
           type: "overflow",
-          reason: `the prompt (~${promptTokensEst} tokens) is too big for the ${options.contextWindow}-token context window`,
+          reason: promptTooBig(promptTokensEst, options.contextWindow),
         };
         return;
       }
@@ -252,31 +260,36 @@ async function* piAiEvents<TApi extends Api>(
 }
 
 /**
- * One model step as an Effect Stream of ProviderEvents. The stream owns an
- * AbortController whose abort is registered as a scoped finalizer, so interrupting the
- * consuming fiber tears the underlying pi-ai/LM Studio request down cleanly (validated:
- * A-004, scripts/spike-a004-interrupt.ts). A thrown stream error becomes a typed
- * ProviderUnavailable in the `E` channel; a clean abort ends the stream without failing.
+ * One model step as an Effect Stream of ProviderEvents - the single entry both adapters
+ * use. It owns all the shared plumbing: it resolves the adapter's `buildModel` Effect
+ * (the only thing that differs - LM Studio sizes a local model against the served window,
+ * Codex resolves its OAuth key and looks up the registry model), then runs that model
+ * through pi-ai under an AbortController whose abort is registered as a scoped finalizer,
+ * so interrupting the consuming fiber tears the underlying pi-ai/LM Studio request down
+ * cleanly (validated: A-004, scripts/spike-a004-interrupt.ts). A `buildModel` failure or a
+ * thrown stream error rides the typed ProviderError `E` channel; a clean abort ends the
+ * stream without failing.
  */
-export function streamPiAi<TApi extends Api>(
-  model: Model<TApi>,
-  messages: readonly ChatMessage[],
-  tools: readonly ToolDef[],
+export function streamPiAiModel<TApi extends Api>(
+  buildModel: Effect.Effect<Model<TApi>, ProviderError>,
   options: {
+    readonly messages: readonly ChatMessage[];
+    readonly tools: readonly ToolDef[];
     readonly apiKey: string;
     readonly contextWindow: number;
     readonly reasoning?: ThinkingLevel;
     readonly provider: string;
   },
 ): Stream.Stream<ProviderEvent, ProviderError> {
+  const { messages, tools, provider, ...streamOptions } = options;
   return Stream.unwrapScoped(
     Effect.gen(function* () {
+      const model = yield* buildModel;
       const controller = new AbortController();
       yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()));
       return Stream.fromAsyncIterable(
-        piAiEvents(model, messages, tools, { ...options, signal: controller.signal }),
-        (cause) =>
-          new ProviderUnavailable({ provider: options.provider, detail: msg(cause), cause }),
+        piAiEvents(model, messages, tools, { ...streamOptions, signal: controller.signal }),
+        (cause) => new ProviderUnavailable({ provider, detail: msg(cause), cause }),
       );
     }),
   );

@@ -7,13 +7,16 @@ import type { ChatMessage } from "../providers";
  * the web's `toTranscript` (transcript.ts) - one pure fold over `SessionEvent[]`,
  * read through `decodeTrevorEvent` so it never hand-guards raw payload fields.
  *
- * It OWNS the conversation-shaping invariants that were previously scattered as
- * imperative mutation across main.ts:
+ * It OWNS every conversation-shaping invariant that keeps the prompt model-safe -
+ * the rules once scattered as imperative mutation across main.ts plus the turn-time
+ * `sanitizeHistory` defense (now folded in), so the projection emits an
+ * already-model-safe view and no second pass is needed:
  *   - user.message  -> a `{role:"user"}` turn (with artifacts when present),
  *     collapsing onto a preceding user turn so the prompt alternates user/assistant
  *   - assistant.completed -> a `{role:"assistant"}` turn, but a blank/whitespace-only
  *     completion is dropped (saving it teaches the model empty replies are normal -
- *     the cascade behind silent dead-ends)
+ *     the cascade behind silent dead-ends), and a reply with no preceding user turn
+ *     is dropped so the prompt always opens on a user message
  *   - user.command "/clear" -> resets the projection to empty from that point
  *   - every other event (assistant.started/delta/thinking, tool.*, host.*) -> ignored
  *
@@ -23,8 +26,6 @@ import type { ChatMessage } from "../providers";
  *
  * It is NOT responsible for scheduling - when a turn runs, deferring a mid-turn
  * prompt, or the one-turn-at-a-time gate all live with the turn machine, not here.
- * It is also distinct from `sanitizeHistory` (history.ts), the turn-time defense
- * applied to the snapshot just before the model sees it; this builds that snapshot.
  *
  * Pure and total: the same event log always yields the same messages, which is what
  * makes it the natural home for compaction's prompt-builder (trevor-v2 D-040) - pins
@@ -59,8 +60,10 @@ export function buildHistory(
       }
     } else if (decoded.type === "assistant.completed") {
       // Only a real reply joins the prompt. `.trim()` catches the whitespace-only
-      // case a bare truthiness check would miss.
-      if (decoded.text.trim()) {
+      // case a bare truthiness check would miss. A reply with no preceding user turn
+      // is dropped too: the prompt must open on a user message, so a stray leading
+      // assistant turn (e.g. a clear that landed mid-answer) never reaches the model.
+      if (decoded.text.trim() && out.length > 0) {
         out.push({ role: "assistant", content: decoded.text });
       }
     } else if (decoded.type === "user.command" && !fromSelf && decoded.command === "/clear") {

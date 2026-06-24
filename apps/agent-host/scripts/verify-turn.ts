@@ -18,6 +18,12 @@ const fakeProvider: Provider = {
   model: "fake-1",
   reasoningLevels: [],
   defaultReasoning: "off",
+  describe: () => ({
+    label: "Fake",
+    model: "fake-1",
+    reasoningLevels: [],
+    defaultReasoning: "off",
+  }),
   readiness: () => Effect.succeed({ ready: true, warm: true }),
   capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
   warm: () => Effect.void,

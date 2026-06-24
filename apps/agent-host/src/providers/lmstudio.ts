@@ -5,15 +5,15 @@ import { Effect, Stream } from "effect";
 import { debug, log, warn } from "../log";
 import { msg } from "../tools/shared";
 import { ModelLoadError, ProviderUnavailable } from "./errors";
-import { streamPiAi } from "./pi-ai";
-import type {
-  ChatMessage,
-  ModelCapabilities,
-  Provider,
-  ProviderError,
-  ProviderEvent,
-  Readiness,
-  ToolDef,
+import { streamPiAiModel } from "./pi-ai";
+import {
+  type ChatMessage,
+  DescribableProvider,
+  type ModelCapabilities,
+  type ProviderError,
+  type ProviderEvent,
+  type Readiness,
+  type ToolDef,
 } from "./types";
 
 const execAsync = promisify(exec);
@@ -54,7 +54,7 @@ interface ModelInfo {
  * (readiness/warm) and the real context window come from LM Studio's native
  * /api/v0 endpoint, which pi-ai does not model.
  */
-export class LmStudioProvider implements Provider {
+export class LmStudioProvider extends DescribableProvider {
   readonly id = "lmstudio";
   readonly label: string;
   readonly model: string;
@@ -84,6 +84,7 @@ export class LmStudioProvider implements Provider {
   private lastError: ProviderUnavailable | ModelLoadError | null = null;
 
   constructor(config: LmStudioConfig) {
+    super();
     this.url = config.url;
     this.model = config.model;
     this.label = config.label;
@@ -247,7 +248,8 @@ export class LmStudioProvider implements Provider {
     reasoning?: string,
   ): Stream.Stream<ProviderEvent, ProviderError> {
     // ensureMaxContext is async (and best-effort, never fails), so unwrap it into the
-    // stream; the model is then built against the context LM Studio actually serves.
+    // stream; the model is then built against the context LM Studio actually serves, and
+    // the same served window feeds the stream options.
     return Stream.unwrap(
       Effect.promise(() => this.ensureMaxContext()).pipe(
         Effect.map((contextWindow) => {
@@ -273,7 +275,9 @@ export class LmStudioProvider implements Provider {
           // LM Studio ignores the key, but pi-ai requires a non-empty one. With the qwen
           // format + model.reasoning, omitting the level (undefined) sends enable_thinking:
           // false; "high" sends true. "off" isn't a pi-ai ThinkingLevel, so undefined is it.
-          return streamPiAi(model, messages, tools, {
+          return streamPiAiModel(Effect.succeed(model), {
+            messages,
+            tools,
             apiKey: "lm-studio",
             contextWindow,
             reasoning: thinking ? "high" : undefined,

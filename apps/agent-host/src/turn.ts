@@ -1,6 +1,5 @@
 import { events } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
-import { sanitizeHistory } from "./agent/history";
 import { type AgentEvent, runAgent } from "./agent/loop";
 import { resolveHistoryImages } from "./artifacts";
 import type { ChatMessage, Provider, Usage } from "./providers";
@@ -102,11 +101,14 @@ export function publishTurn(
       return;
     }
 
-    // Sanitize the prompt view before the model sees it: drop blank assistant turns
-    // and enforce user/assistant alternation, so a poisoned history can't push the
-    // model into an empty stop (the cascade behind silent dead-ends).
-    const sane = sanitizeHistory(turnHistory);
-    const history = caps.images ? yield* Effect.promise(() => resolveHistoryImages(sane)) : sane;
+    // The prompt view is already model-safe: buildHistory (history-projection.ts) owns
+    // the conversation-shaping invariants - blank assistant turns dropped, user/assistant
+    // alternation enforced, no leading non-user turn - so a poisoned history can't push the
+    // model into an empty stop (the cascade behind silent dead-ends). Only image inlining
+    // (vision models only, D-028) is applied here.
+    const history = caps.images
+      ? yield* Effect.promise(() => resolveHistoryImages(turnHistory))
+      : turnHistory;
     const useTools = caps.tools;
 
     // Token-source breakdown ("where does the context go?"). Fixed overhead = the

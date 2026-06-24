@@ -79,6 +79,21 @@ test("collapses a run of consecutive user turns to the latest (abandoned turn)",
   assert.deepEqual(project(log), [{ role: "user", content: "b" }]);
 });
 
+test("drops a leading assistant completion so the prompt opens on a user turn", () => {
+  // A completion arriving before any user message (e.g. a /clear that landed
+  // mid-answer) must not lead the prompt - the model sees only the later turn.
+  // This is the unique defense folded in from the old sanitizeHistory pass.
+  const log = [
+    ev(events.assistantCompleted({ runId: "r0", text: "stray reply" }), SELF),
+    ev(events.userMessage({ text: "hi", provider: "qwen" })),
+    ev(events.assistantCompleted({ runId: "r1", text: "hello" }), SELF),
+  ];
+  assert.deepEqual(project(log), [
+    { role: "user", content: "hi" },
+    { role: "assistant", content: "hello" },
+  ]);
+});
+
 test("/clear resets the projection mid-stream", () => {
   const log = [
     ev(events.userMessage({ text: "first", provider: "qwen" })),

@@ -4,15 +4,15 @@ import { getModel, getSupportedThinkingLevels, type ThinkingLevel } from "@mario
 import { Effect, Stream } from "effect";
 import { msg } from "../tools/shared";
 import { ProviderAuthError } from "./errors";
-import { streamPiAi } from "./pi-ai";
-import type {
-  ChatMessage,
-  ModelCapabilities,
-  Provider,
-  ProviderError,
-  ProviderEvent,
-  Readiness,
-  ToolDef,
+import { streamPiAiModel } from "./pi-ai";
+import {
+  type ChatMessage,
+  DescribableProvider,
+  type ModelCapabilities,
+  type ProviderError,
+  type ProviderEvent,
+  type Readiness,
+  type ToolDef,
 } from "./types";
 
 const AUTH_PATH = `${homedir()}/.pi/auth.json`;
@@ -30,7 +30,7 @@ export interface CodexConfig {
  * always warm. Supports tool calling: tools ride in the pi-ai context, and tool
  * calls surface as tool_call events for the agent loop to execute.
  */
-export class CodexProvider implements Provider {
+export class CodexProvider extends DescribableProvider {
   readonly id = "codex";
   readonly label: string;
   readonly model: string;
@@ -40,6 +40,7 @@ export class CodexProvider implements Provider {
   private readonly images: boolean;
 
   constructor(config: CodexConfig) {
+    super();
     this.model = config.model;
     this.label = config.label;
     // Derive the model's thinking options + image support once; fall back to the GPT-5.x
@@ -85,7 +86,8 @@ export class CodexProvider implements Provider {
     reasoning?: string,
   ): Stream.Stream<ProviderEvent, ProviderError> {
     // resolveApiKey can fail with ProviderAuthError; unwrap it so that rides the stream's
-    // typed error channel rather than throwing out of an async generator.
+    // typed error channel rather than throwing out of an async generator. The resolved key
+    // feeds the stream options, so it's resolved here rather than inside the model thunk.
     return Stream.unwrap(
       Effect.tryPromise({
         try: () => this.resolveApiKey(),
@@ -99,7 +101,9 @@ export class CodexProvider implements Provider {
           // registry, so the literal cast only satisfies its strict getModel typing.
           const model = getModel(CODEX, this.model as "gpt-5.5");
           // pi-ai clamps an out-of-range level to the nearest supported one.
-          return streamPiAi(model, messages, tools, {
+          return streamPiAiModel(Effect.succeed(model), {
+            messages,
+            tools,
             apiKey,
             contextWindow: model.contextWindow,
             reasoning: (reasoning ?? this.defaultReasoning) as ThinkingLevel,

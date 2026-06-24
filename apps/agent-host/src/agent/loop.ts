@@ -1,5 +1,5 @@
 import { Effect, Option, Stream } from "effect";
-import type { ChatMessage, Provider, ProviderError, ToolCall, Usage } from "../providers";
+import type { ChatMessage, ModelEvent, Provider, ProviderError, ToolCall } from "../providers";
 import { executeTool, TOOL_DEFS } from "../tools";
 import { reduceReasoning, trimLargestToolResult } from "./recovery";
 
@@ -8,16 +8,15 @@ const MAX_STEPS = 8;
  *  recovery can never spin (D-037). */
 const MAX_RECOVERY = 2;
 
-/** One event from the agent loop: text, thinking, a tool call, usage, overflow, a
- *  recovery adjustment (an in-turn overflow rung - distinct from compaction, the
- *  durable history summarization deferred to D-036), or an empty answer. */
+/** One event from the agent loop: the shared model-step events (`ModelEvent`: text,
+ *  thinking, usage, overflow) forwarded unchanged from the provider, plus the loop-only
+ *  cases - tool start/end (the loop turns a provider tool_call into these as it executes),
+ *  a recovery adjustment (an in-turn overflow rung - distinct from compaction, the durable
+ *  history summarization deferred to D-036), or an empty answer. */
 export type AgentEvent =
-  | { readonly type: "text"; readonly text: string }
-  | { readonly type: "thinking"; readonly text: string }
+  | ModelEvent
   | { readonly type: "tool_start"; readonly call: ToolCall }
   | { readonly type: "tool_end"; readonly call: ToolCall; readonly result: string }
-  | { readonly type: "usage"; readonly usage: Usage }
-  | { readonly type: "overflow"; readonly reason: string }
   | {
       readonly type: "recovered";
       readonly action: "trim" | "reduce-thinking";
@@ -114,28 +113,26 @@ export function runAgent(
       let assistantText = "";
       let overflowReason: string | null = null;
 
-      // The model step: pass text/thinking/usage through as AgentEvents while siphoning
-      // off assistant text (accumulated), tool calls (collected), and any overflow
-      // (captured for recovery below - not surfaced here).
+      // The model step: forward the shared ModelEvent variants (text/thinking/usage)
+      // straight through - they ARE AgentEvents - while siphoning off assistant text
+      // (accumulated), tool calls (collected, into tool_start/tool_end below), and any
+      // overflow (captured for recovery below - not surfaced here).
       const modelStep = provider.stream(conversation, tools, currentReasoning).pipe(
         Stream.filterMap((event) => {
-          if (event.type === "text") {
-            assistantText += event.text;
-            return Option.some<AgentEvent>({ type: "text", text: event.text });
-          }
-          if (event.type === "thinking") {
-            return Option.some<AgentEvent>({ type: "thinking", text: event.text });
+          if (event.type === "tool_call") {
+            toolCalls.push(event.call);
+            return Option.none<AgentEvent>();
           }
           if (event.type === "overflow") {
             // Capture; afterModel decides recover-and-retry vs terminal (D-035, D-038).
             overflowReason = event.reason;
             return Option.none<AgentEvent>();
           }
-          if (event.type === "usage") {
-            return Option.some<AgentEvent>({ type: "usage", usage: event.usage });
+          if (event.type === "text") {
+            assistantText += event.text;
           }
-          toolCalls.push(event.call);
-          return Option.none<AgentEvent>();
+          // text/thinking/usage flow through unchanged (shared ModelEvent shapes).
+          return Option.some<AgentEvent>(event);
         }),
       );
 

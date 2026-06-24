@@ -1,10 +1,12 @@
-import type { ArtifactRef, Usage } from "@trevor/session";
+import type { ArtifactRef, ProviderModel, Usage } from "@trevor/session";
 import type { Effect, Stream } from "effect";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
 
-// `Usage` is the wire type, owned in @trevor/session (the host's per-step usage and the
-// serialized turn usage are the same shape, so they share one declaration - D-005).
-export type { Usage };
+// Wire types owned in @trevor/session, re-exported so importers can reach them through the
+// providers barrel: `Usage` (the host's per-step usage and the serialized turn usage are the
+// same shape, so they share one declaration - D-005) and `ProviderModel` (the per-provider
+// descriptor the host announces in host.online).
+export type { ProviderModel, Usage };
 
 /** What a provider's stream can fail with, in the Effect `E` channel. */
 export type ProviderError = ProviderUnavailable | ProviderAuthError;
@@ -46,16 +48,24 @@ export interface ToolCall {
 }
 
 /**
- * One streamed event from a provider: assistant text, reasoning ("thinking") text,
- * a tool call, or token usage. Thinking is the model's reasoning trace - kept on its
- * own channel so callers can render or hide it without polluting the answer.
+ * The model-step events that pass through the host unchanged: assistant text,
+ * reasoning ("thinking") text, token usage, and an overflow signal. Thinking is the
+ * model's reasoning trace - kept on its own channel so callers can render or hide it
+ * without polluting the answer. These four are shared verbatim with the agent loop's
+ * `AgentEvent` (agent/loop.ts), so the loop forwards them rather than re-declaring them.
  */
-export type ProviderEvent =
+export type ModelEvent =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "thinking"; readonly text: string }
-  | { readonly type: "tool_call"; readonly call: ToolCall }
   | { readonly type: "usage"; readonly usage: Usage }
   | { readonly type: "overflow"; readonly reason: string };
+
+/**
+ * One streamed event from a provider: the shared model-step events plus a tool call.
+ * The tool call is provider-only - the agent loop turns it into tool_start/tool_end as
+ * it executes; the other four flow through to the loop's `AgentEvent` unchanged.
+ */
+export type ProviderEvent = ModelEvent | { readonly type: "tool_call"; readonly call: ToolCall };
 
 /** An image resolved from a blob-store artifact to inline base64, for a vision provider. */
 export interface ChatImage {
@@ -94,6 +104,12 @@ export interface Provider {
   readonly model: string;
   readonly reasoningLevels: readonly string[];
   readonly defaultReasoning: string;
+  /**
+   * This provider's wire descriptor for the host.online announcement: label, model id,
+   * and reasoning options. Implemented once (DescribableProvider) from the four fields
+   * above, so a new ProviderModel field is a type error here, not a silent omission.
+   */
+  describe(): ProviderModel;
   readiness(): Effect.Effect<Readiness>;
   /** Detects what the current model can do (vision, tools), from the provider's own source. */
   capabilities(): Effect.Effect<ModelCapabilities>;
@@ -113,4 +129,40 @@ export interface Provider {
    * whatever the adapter hides that an operator would otherwise have to read source for.
    */
   debugInfo?(): Record<string, unknown>;
+}
+
+/**
+ * Base for the concrete providers: implements `describe()` once from the four roster
+ * fields each adapter already declares (label/model/reasoning), so the host.online
+ * descriptor can't drift from the interface and adding a ProviderModel field surfaces
+ * as a compile error here rather than a silent omission. Adapters extend this and supply
+ * the streaming/readiness behavior.
+ */
+export abstract class DescribableProvider implements Provider {
+  abstract readonly id: string;
+  abstract readonly label: string;
+  abstract readonly model: string;
+  abstract readonly reasoningLevels: readonly string[];
+  abstract readonly defaultReasoning: string;
+
+  describe(): ProviderModel {
+    return {
+      label: this.label,
+      model: this.model,
+      reasoningLevels: this.reasoningLevels,
+      defaultReasoning: this.defaultReasoning,
+    };
+  }
+
+  abstract readiness(): Effect.Effect<Readiness>;
+  abstract capabilities(): Effect.Effect<ModelCapabilities>;
+  abstract warm(): Effect.Effect<void>;
+  abstract stream(
+    messages: readonly ChatMessage[],
+    tools: readonly ToolDef[],
+    reasoning?: string,
+  ): Stream.Stream<ProviderEvent, ProviderError>;
+  // `debugInfo` stays optional on the Provider interface; an adapter that exposes it
+  // (e.g. LmStudioProvider) declares it directly without an override, since the base
+  // doesn't.
 }

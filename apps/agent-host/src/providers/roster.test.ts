@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_PROVIDER_MODELS } from "@trevor/session";
-import { buildProviders, describeProviders } from "./index";
+import { buildProviders } from "./index";
 
 /**
  * Characterization tests for the shared provider roster (M8 / D-008).
@@ -36,8 +36,8 @@ test("DEFAULT_PROVIDER_MODELS is the canonical pre-announce roster", () => {
 });
 
 test("the host's built providers take their labels from the shared roster", () => {
-  const described = describeProviders(buildProviders());
+  const providers = buildProviders();
   for (const [key, model] of Object.entries(DEFAULT_PROVIDER_MODELS)) {
-    assert.equal(described[key]?.label, model.label);
+    assert.equal(providers[key]?.describe().label, model.label);
   }
 });

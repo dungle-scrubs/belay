@@ -1,4 +1,4 @@
-import { DEFAULT_PROVIDER_MODELS, type ProviderModel } from "@trevor/session";
+import { DEFAULT_PROVIDER_MODELS } from "@trevor/session";
 import { CodexProvider } from "./codex";
 import { LmStudioProvider } from "./lmstudio";
 import type { Provider } from "./types";
@@ -6,6 +6,7 @@ import type { Provider } from "./types";
 export type {
   ChatImage,
   ChatMessage,
+  ModelEvent,
   Provider,
   ProviderError,
   ProviderEvent,
@@ -57,18 +58,4 @@ export function pickProvider(providers: ProviderRegistry, key: unknown): Provide
     throw new Error(`no provider for "${String(key)}" and no "${DEFAULT_PROVIDER}" default`);
   }
   return provider;
-}
-
-/** Describes each provider's label/model/reasoning options for the host.online announcement. */
-export function describeProviders(providers: ProviderRegistry): Record<string, ProviderModel> {
-  const out: Record<string, ProviderModel> = {};
-  for (const [key, provider] of Object.entries(providers)) {
-    out[key] = {
-      label: provider.label,
-      model: provider.model,
-      reasoningLevels: provider.reasoningLevels,
-      defaultReasoning: provider.defaultReasoning,
-    };
-  }
-  return out;
 }
