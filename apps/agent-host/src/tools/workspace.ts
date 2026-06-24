@@ -1,12 +1,30 @@
 import { resolve, sep } from "node:path";
 
 /**
- * The directory that write/edit/glob/grep are confined to. Point the agent at a
+ * The directory the workspace-confined tools operate inside. Point the agent at a
  * target repo with TREVOR_WORKSPACE; defaults to the host's working directory.
  * Confinement is a path-escape guard (no `../` or absolute path may leave the
  * root), the write-side analogue of the bash safety floor - not a sandbox.
  */
 export const WORKSPACE_ROOT = resolve(process.env.TREVOR_WORKSPACE ?? process.cwd());
+
+/**
+ * The single workspace-confinement policy: which tools are scoped to WORKSPACE_ROOT, as
+ * advertised to the model and enforced by the tools. Confinement has two mechanisms:
+ *   - edit (and the edit-family multi_edit) resolve every path through confine() below;
+ *   - glob and grep run with `cwd: WORKSPACE_ROOT`.
+ * read, write, and bash are deliberately NOT confined - they use the host working
+ * directory and accept absolute paths. The system prompt's confinement lines and
+ * isWorkspaceConfined() both derive from these lists, so the advertised rule can never
+ * drift from the set the tools enforce.
+ */
+export const WORKSPACE_CONFINED_TOOLS = ["edit", "glob", "grep"] as const;
+export const HOST_CWD_TOOLS = ["read", "write", "bash"] as const;
+
+/** True when a tool's file access is confined to the workspace root (vs. the host cwd). */
+export function isWorkspaceConfined(tool: string): boolean {
+  return (WORKSPACE_CONFINED_TOOLS as readonly string[]).includes(tool);
+}
 
 /** Resolves a path inside the workspace, or throws if it escapes the root. */
 export function confine(path: string): string {

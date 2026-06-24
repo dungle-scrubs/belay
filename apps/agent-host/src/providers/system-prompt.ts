@@ -1,6 +1,26 @@
 import { taskRegistry } from "../tasks";
-import { WORKSPACE_ROOT } from "../tools/workspace";
+import { HOST_CWD_TOOLS, WORKSPACE_CONFINED_TOOLS, WORKSPACE_ROOT } from "../tools/workspace";
 import type { ToolDef } from "./types";
+
+/** Oxford-comma join: "a", "a and b", "a, b, and c" - matches the prompt's prose. */
+function listAnd(items: readonly string[]): string {
+  if (items.length <= 1) {
+    return items[0] ?? "";
+  }
+  if (items.length === 2) {
+    return `${items[0]} and ${items[1]}`;
+  }
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+// The confinement rule, rendered once from the workspace policy (tools/workspace.ts) so
+// the prompt cannot advertise a confinement the tools do not enforce. Two phrasings for
+// the two prompt locations (tool-selection guidance vs. the execution-context header);
+// both derive the same confined / host-cwd tool lists.
+const CONFINED = listAnd(WORKSPACE_CONFINED_TOOLS);
+const HOST_CWD = listAnd(HOST_CWD_TOOLS);
+const CONFINEMENT_GUIDANCE = `${CONFINED} are scoped to the workspace root; use paths relative to it. ${HOST_CWD} use the host working directory and accept absolute paths.`;
+const CONFINEMENT_EXECUTION = `${CONFINED} are confined to the workspace root; ${HOST_CWD} run from the host working directory and accept absolute paths.`;
 
 /**
  * Who Trevor is and what the turn is for. Kept tool-agnostic so it holds whether or
@@ -25,9 +45,9 @@ const TOOL_SELECTION_GUIDANCE = [
   "Prefer read, write, and edit over bash when a dedicated file tool fits the task.",
   "Use grep for exact strings, symbols, error text, or regular expressions, and glob for path or filename discovery.",
   "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
-  "edit, glob, and grep are scoped to the workspace root; use paths relative to it. read, write, and bash use the host working directory and accept absolute paths.",
+  CONFINEMENT_GUIDANCE,
   "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
-] as const;
+];
 
 /** How to maintain the working checklist (ported from V1's task guidance). */
 const TASK_GUIDANCE = [
@@ -72,9 +92,7 @@ function executionContext(workspaceRoot: string, cwd: string): string {
   if (cwd !== workspaceRoot) {
     lines.push(`Host working directory: ${cwd}`);
   }
-  lines.push(
-    "edit, glob, and grep are confined to the workspace root; read, write, and bash run from the host working directory and accept absolute paths.",
-  );
+  lines.push(CONFINEMENT_EXECUTION);
   return lines.join("\n");
 }
 
