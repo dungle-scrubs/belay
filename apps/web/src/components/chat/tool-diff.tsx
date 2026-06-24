@@ -1,8 +1,8 @@
 import { createTwoFilesPatch } from "diff";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
 import { countChanges, DiffStat, withNewline } from "./diff-utils";
-import { ToolCall } from "./message";
-import { ToolSection } from "./tool-section";
+import type { ToolStatus } from "./message";
+import { ToolShell } from "./tool-shell";
 
 interface ToolDiffProps {
   /** "write" (new/overwritten file) or "edit" (in-place replacement). */
@@ -12,14 +12,12 @@ interface ToolDiffProps {
   oldText?: string;
   /** New text: an edit's new_string, or a write's full file content. */
   newText: string;
-  status?: "running" | "done" | "error";
+  status?: ToolStatus;
   /** Whether the diff body starts expanded; the global compact setting drives this. */
   defaultOpen?: boolean;
   /**
-   * Draw the diff inside a bordered ToolSection box with a +/- header. Off by default:
-   * a single file's diff sits flat under the already-collapsible tool row, so the box
-   * (and its second chevron) would be redundant. multi_edit boxes its files; this is
-   * the seam to box a single diff too when wanted.
+   * Draw the diff inside a bordered ToolSection box with a +/- header (see ToolShell's
+   * `border`). Off by default: a single file's diff sits flat under the row.
    */
   border?: boolean;
   className?: string;
@@ -54,19 +52,17 @@ export function ToolDiff({
   );
   const diff = <DiffViewer patch={patch} variant="ghost" showHeader={false} />;
   return (
-    <ToolCall
+    <ToolShell
       name={tool}
       args={path}
       status={status}
       defaultOpen={defaultOpen}
       className={className}
       onOpenPath={onOpenPath}
-    >
-      {border ? (
-        <ToolSection meta={<DiffStat {...countChanges(oldText, newText)} />}>{diff}</ToolSection>
-      ) : (
-        diff
-      )}
-    </ToolCall>
+      border={border}
+      sectionMeta={<DiffStat {...countChanges(oldText, newText)} />}
+      flat={diff}
+      bordered={diff}
+    />
   );
 }

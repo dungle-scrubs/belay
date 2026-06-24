@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useState } from "react";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -9,7 +9,6 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import {
-  useScrollLock,
   useToolCallElapsed,
   type ToolApprovalOption,
   type ToolCallMessagePart,
@@ -24,8 +23,10 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-
-const ANIMATION_DURATION = 200;
+import {
+  ANIMATION_DURATION,
+  useCollapsibleDisclosure,
+} from "./use-collapsible-disclosure";
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -44,30 +45,18 @@ function ToolFallbackRoot({
   children,
   ...props
 }: ToolFallbackRootProps) {
-  const collapsibleRef = useRef<HTMLDivElement>(null);
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
-  const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
-
-  const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
-
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      lockScroll();
-      if (!isControlled) {
-        setUncontrolledOpen(open);
-      }
-      controlledOnOpenChange?.(open);
-    },
-    [lockScroll, isControlled, controlledOnOpenChange],
-  );
+  const { ref, open, onOpenChange } = useCollapsibleDisclosure({
+    open: controlledOpen,
+    defaultOpen,
+    onOpenChange: controlledOnOpenChange,
+  });
 
   return (
     <Collapsible
-      ref={collapsibleRef}
+      ref={ref}
       data-slot="tool-fallback-root"
-      open={isOpen}
-      onOpenChange={handleOpenChange}
+      open={open}
+      onOpenChange={onOpenChange}
       className={cn(
         "aui-tool-fallback-root group/tool-fallback-root w-full",
         className,

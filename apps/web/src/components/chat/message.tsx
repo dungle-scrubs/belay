@@ -43,7 +43,9 @@ export function WorkingIndicator({ label = "working" }: { label?: string }) {
   );
 }
 
-type ToolStatus = "running" | "done" | "error";
+/** The lifecycle of a tool call as the chat renders it: the single union every tool
+ *  renderer (diff, output, web-search, multi-edit) shares, rather than re-declaring. */
+export type ToolStatus = "running" | "done" | "error";
 
 // Status shows in the wrench icon color (no separate dot).
 const TOOL_STATUS_ICON: Record<ToolStatus, string> = {

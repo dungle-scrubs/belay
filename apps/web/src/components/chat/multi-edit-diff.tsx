@@ -2,8 +2,9 @@ import { createTwoFilesPatch } from "diff";
 import type { ReactNode } from "react";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
 import { countChanges, DiffStat, withNewline } from "./diff-utils";
-import { OpenPathLink, ToolCall } from "./message";
+import { OpenPathLink, type ToolStatus } from "./message";
 import { ToolSection } from "./tool-section";
+import { ToolShell } from "./tool-shell";
 
 export interface MultiEdit {
   path: string;
@@ -13,7 +14,7 @@ export interface MultiEdit {
 
 interface MultiEditDiffProps {
   edits: readonly MultiEdit[];
-  status?: "running" | "done" | "error";
+  status?: ToolStatus;
   /** Whether the whole operation starts expanded; the global compact setting drives this. */
   defaultOpen?: boolean;
   /**
@@ -66,67 +67,74 @@ export function MultiEditDiff({
     groups.length === 1 ? "" : "s"
   } · +${totalAdded} -${totalRemoved}`;
 
+  // multi_edit boxes per file internally (`border` drives each group), so the outer shell
+  // never wraps the body in its own ToolSection - the body is the same flat children.
+  const body = (
+    <div className="flex flex-col gap-2">
+      {groups.map((group) => {
+        let added = 0;
+        let removed = 0;
+        for (const edit of group.edits) {
+          const c = countChanges(edit.old, edit.new);
+          added += c.added;
+          removed += c.removed;
+        }
+        const diffs = group.edits.map((edit) => (
+          <DiffViewer
+            key={`${group.path}::${edit.old}`}
+            patch={createTwoFilesPatch(
+              group.path,
+              group.path,
+              withNewline(edit.old),
+              withNewline(edit.new),
+              undefined,
+              undefined,
+              { context: 2 },
+            )}
+            variant="ghost"
+            showHeader={false}
+          />
+        ));
+
+        if (border) {
+          return (
+            <ToolSection
+              key={group.path}
+              title={<code>{fileName(group.path)}</code>}
+              meta={<DiffStat added={added} removed={removed} />}
+            >
+              {diffs}
+            </ToolSection>
+          );
+        }
+
+        return (
+          <div key={group.path} className="flex flex-col">
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <code className="flex-1 truncate text-xs text-foreground">
+                {fileName(group.path)}
+              </code>
+              <span className="shrink-0 text-label tracking-wider">
+                <DiffStat added={added} removed={removed} />
+              </span>
+            </div>
+            {diffs}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <ToolCall
+    <ToolShell
       name="multi_edit"
       args={summary}
       status={status}
       defaultOpen={defaultOpen}
       className={className}
-    >
-      <div className="flex flex-col gap-2">
-        {groups.map((group) => {
-          let added = 0;
-          let removed = 0;
-          for (const edit of group.edits) {
-            const c = countChanges(edit.old, edit.new);
-            added += c.added;
-            removed += c.removed;
-          }
-          const diffs = group.edits.map((edit) => (
-            <DiffViewer
-              key={`${group.path}::${edit.old}`}
-              patch={createTwoFilesPatch(
-                group.path,
-                group.path,
-                withNewline(edit.old),
-                withNewline(edit.new),
-                undefined,
-                undefined,
-                { context: 2 },
-              )}
-              variant="ghost"
-              showHeader={false}
-            />
-          ));
-
-          if (border) {
-            return (
-              <ToolSection
-                key={group.path}
-                title={<code>{fileName(group.path)}</code>}
-                meta={<DiffStat added={added} removed={removed} />}
-              >
-                {diffs}
-              </ToolSection>
-            );
-          }
-
-          return (
-            <div key={group.path} className="flex flex-col">
-              <div className="flex items-center gap-2 px-2 py-1.5">
-                <code className="flex-1 truncate text-xs text-foreground">
-                  {fileName(group.path)}
-                </code>
-                <span className="shrink-0 text-label tracking-wider">
-                  <DiffStat added={added} removed={removed} />
-                </span>
-              </div>
-              {diffs}
-            </div>
-          );
-        })}
-      </div>
-    </ToolCall>
+      border={false}
+      flat={body}
+      bordered={body}
+    />
   );
 }

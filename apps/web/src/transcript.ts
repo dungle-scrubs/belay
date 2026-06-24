@@ -1,5 +1,6 @@
 import {
   type ArtifactRef,
+  addBreakdown,
   decodeTrevorEvent,
   type SessionEvent,
   type Usage,
@@ -264,4 +265,74 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
     }
   }
   return messages;
+}
+
+/**
+ * The SidePanel's whole view-model, folded from the transcript (+ the raw events for the
+ * live snapshot) in one place - the single surface that owns the live-vs-completed
+ * precedence and the per-category context aggregation. Previously four sibling useMemos
+ * in App.tsx fanned out as six props; this collapses them so the panel reads from one
+ * object and the context sum can never re-list (and so drift from) the canonical category
+ * set - it folds every completed request's breakdown via `addBreakdown`.
+ *
+ * Request data (ctx meter + Request treemap): the in-flight call wins while a turn
+ * streams (live usage/breakdown), else the latest completed call's authoritative data.
+ * Context data: the whole session - every completed request's breakdown + tokens summed,
+ * so it grows turn over turn. `contextBreakdown`/`contextTokens` stay independently
+ * undefined (one can be present without the other) to match the prior behavior.
+ */
+export interface PanelModel {
+  readonly ctxUsed?: number;
+  readonly ctxMax?: number;
+  readonly totalTokens?: number;
+  readonly breakdown?: UsageBreakdown;
+  readonly contextBreakdown?: UsageBreakdown;
+  readonly contextTokens?: number;
+}
+
+export function panelModel(
+  transcript: readonly Message[],
+  events: readonly SessionEvent[],
+): PanelModel {
+  // The latest completed call's usage + breakdown (walk back to the newest assistant
+  // segment that carries either), for the Request tab / ctx meter when no turn streams.
+  let lastCall: AssistantMessage | null = null;
+  for (let i = transcript.length - 1; i >= 0; i -= 1) {
+    const m = transcript[i];
+    if (m?.kind === "assistant" && (m.breakdown || m.usage)) {
+      lastCall = m;
+      break;
+    }
+  }
+
+  // The whole-context aggregation: sum every completed request's breakdown (category-
+  // driven, via addBreakdown) and its tokens. The two stay independently optional.
+  let contextBreakdown: UsageBreakdown | undefined;
+  let contextTokens: number | undefined;
+  for (const m of transcript) {
+    if (m.kind !== "assistant") {
+      continue;
+    }
+    if (m.breakdown) {
+      contextBreakdown = contextBreakdown
+        ? addBreakdown(contextBreakdown, m.breakdown)
+        : m.breakdown;
+    }
+    if (m.usage) {
+      contextTokens = (contextTokens ?? 0) + m.usage.input + m.usage.output;
+    }
+  }
+
+  // The in-flight call wins for Request data while a turn streams; else the completed call.
+  const live = liveCallFrom(events);
+  const ctxUsed = live?.usage.input ?? lastCall?.usage?.input;
+  const ctxMax = live?.usage.contextWindow ?? lastCall?.usage?.contextWindow;
+  const totalTokens = live
+    ? live.usage.input + live.usage.output
+    : lastCall?.usage
+      ? lastCall.usage.input + lastCall.usage.output
+      : undefined;
+  const breakdown = live?.breakdown ?? lastCall?.breakdown;
+
+  return { ctxUsed, ctxMax, totalTokens, breakdown, contextBreakdown, contextTokens };
 }

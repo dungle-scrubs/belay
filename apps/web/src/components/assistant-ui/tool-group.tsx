@@ -1,24 +1,18 @@
 "use client";
 
-import {
-  memo,
-  useCallback,
-  useRef,
-  useState,
-  type FC,
-  type PropsWithChildren,
-} from "react";
+import { memo, type FC, type PropsWithChildren } from "react";
 import { ChevronDownIcon, LoaderIcon } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { useScrollLock } from "@assistant-ui/react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-
-const ANIMATION_DURATION = 200;
+import {
+  ANIMATION_DURATION,
+  useCollapsibleDisclosure,
+} from "./use-collapsible-disclosure";
 
 const toolGroupVariants = cva("aui-tool-group-root group/tool-group w-full", {
   variants: {
@@ -50,31 +44,19 @@ function ToolGroupRoot({
   children,
   ...props
 }: ToolGroupRootProps) {
-  const collapsibleRef = useRef<HTMLDivElement>(null);
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
-  const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
-
-  const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
-
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      lockScroll();
-      if (!isControlled) {
-        setUncontrolledOpen(open);
-      }
-      controlledOnOpenChange?.(open);
-    },
-    [lockScroll, isControlled, controlledOnOpenChange],
-  );
+  const { ref, open, onOpenChange } = useCollapsibleDisclosure({
+    open: controlledOpen,
+    defaultOpen,
+    onOpenChange: controlledOnOpenChange,
+  });
 
   return (
     <Collapsible
-      ref={collapsibleRef}
+      ref={ref}
       data-slot="tool-group-root"
       data-variant={variant ?? "outline"}
-      open={isOpen}
-      onOpenChange={handleOpenChange}
+      open={open}
+      onOpenChange={onOpenChange}
       className={cn(
         toolGroupVariants({ variant }),
         "group/tool-group-root",

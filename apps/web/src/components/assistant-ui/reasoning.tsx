@@ -13,7 +13,6 @@ import {
 import { cva, type VariantProps } from "class-variance-authority";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import {
-  useScrollLock,
   useAuiState,
   type ReasoningMessagePartComponent,
   type ReasoningGroupComponent,
@@ -25,8 +24,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-
-const ANIMATION_DURATION = 200;
+import {
+  ANIMATION_DURATION,
+  useCollapsibleDisclosure,
+} from "./use-collapsible-disclosure";
 
 const ReasoningPreviewContext = createContext(false);
 
@@ -70,15 +71,21 @@ function ReasoningRoot({
   children,
   ...props
 }: ReasoningRootProps) {
-  const collapsibleRef = useRef<HTMLDivElement>(null);
+  // Reasoning layers its streaming auto-open on the shared base: the disclosure hook
+  // owns the scroll-lock ref, the lock callback, and the controlled detection; the
+  // three-state `userOpen` (null = auto) and the streaming resolution stay here.
+  const { ref, lockScroll, isControlled } = useCollapsibleDisclosure({
+    open: controlledOpen,
+    defaultOpen,
+    onOpenChange: controlledOnOpenChange,
+  });
   const initialOpenRef = useRef(defaultOpen);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  const lockScroll = useScrollLock(collapsibleRef, ANIMATION_DURATION);
 
-  const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled
-    ? controlledOpen
-    : (userOpen ?? streaming ?? initialOpenRef.current);
+  const isOpen =
+    controlledOpen !== undefined
+      ? controlledOpen
+      : (userOpen ?? streaming ?? initialOpenRef.current);
   const isAutoMode = isControlled || userOpen === null;
   const isPreview = streaming === true && isOpen && isAutoMode;
 
@@ -102,7 +109,7 @@ function ReasoningRoot({
 
   return (
     <Collapsible
-      ref={collapsibleRef}
+      ref={ref}
       data-slot="reasoning-root"
       data-variant={variant}
       open={isOpen}

@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
-import { ToolCall, WorkingIndicator } from "./message";
-import { ToolSection } from "./tool-section";
+import { ToolCall, type ToolStatus, WorkingIndicator } from "./message";
+import { ToolShell } from "./tool-shell";
 
 /** One normalized search result, mirroring the web-search library's `Source`. */
 export interface WebSearchResultItem {
@@ -21,13 +21,12 @@ interface WebSearchResultsProps {
   results?: readonly WebSearchResultItem[];
   /** A rendered error (e.g. missing credentials, all providers failed). */
   error?: string;
-  status?: "running" | "done" | "error";
+  status?: ToolStatus;
   /** Whether the results body starts expanded; the global compact setting drives this. */
   defaultOpen?: boolean;
   /**
-   * Draw the results inside a bordered ToolSection box. Off by default: the single
-   * result list sits flat under the already-collapsible tool row, so the box would be
-   * redundant. This is the seam to box the list when wanted.
+   * Draw the results inside a bordered ToolSection box (see ToolShell's `border`). Off by
+   * default: the single result list sits flat under the row, so the box would be redundant.
    */
   border?: boolean;
   className?: string;
@@ -130,23 +129,21 @@ export function WebSearchResults({
     );
 
   return (
-    <ToolCall
+    <ToolShell
       name="web_search"
       args={query}
       status={status}
       defaultOpen={defaultOpen}
       className={className}
-    >
-      {border ? (
-        <ToolSection title={<span className="text-muted-foreground">{meta}</span>}>
-          <div className="p-2.5">{list}</div>
-        </ToolSection>
-      ) : (
+      border={border}
+      sectionTitle={<span className="text-muted-foreground">{meta}</span>}
+      bordered={<div className="p-2.5">{list}</div>}
+      flat={
         <div className="flex flex-col gap-2.5">
           <span className="text-label tracking-wider text-muted-foreground/70">{meta}</span>
           {list}
         </div>
-      )}
-    </ToolCall>
+      }
+    />
   );
 }

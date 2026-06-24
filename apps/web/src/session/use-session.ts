@@ -1,4 +1,9 @@
-import { type ArtifactRef, type SessionEvent, events as sessionEvents } from "@trevor/session";
+import {
+  type ArtifactRef,
+  type SessionEvent,
+  events as sessionEvents,
+  type TrevorEventInput,
+} from "@trevor/session";
 import { useCallback, useEffect, useState } from "react";
 import { type ConnectionStatus, connect, publishEvent } from "./client";
 
@@ -38,66 +43,44 @@ export function useSession(sessionId: string | null): SessionState {
     return () => connection.close();
   }, [sessionId]);
 
-  const publish = useCallback(
-    async (
-      text: string,
-      provider: string,
-      reasoning?: string,
-      artifacts?: readonly ArtifactRef[],
-    ) => {
+  // Every browser-published event is stamped with the same web producer id and gated on
+  // a live session, so that guard + the "trevor-web" constant live here once and the
+  // public methods below are one-line delegations to the matching event builder.
+  const publishVia = useCallback(
+    async (built: TrevorEventInput) => {
       if (!sessionId) {
         return;
       }
-      await publishEvent(sessionId, {
-        producerId: "trevor-web",
-        ...sessionEvents.userMessage({ text, provider, reasoning, artifacts }),
-      });
+      await publishEvent(sessionId, { producerId: "trevor-web", ...built });
     },
     [sessionId],
+  );
+
+  const publish = useCallback(
+    (text: string, provider: string, reasoning?: string, artifacts?: readonly ArtifactRef[]) =>
+      publishVia(sessionEvents.userMessage({ text, provider, reasoning, artifacts })),
+    [publishVia],
   );
 
   // Hard steering: ask the host to abort the active run. runId may be empty when
   // the browser fires ESC before assistant.started lands (cancel "whatever runs").
   const cancel = useCallback(
-    async (runId: string) => {
-      if (!sessionId) {
-        return;
-      }
-      await publishEvent(sessionId, {
-        producerId: "trevor-web",
-        ...sessionEvents.userCancel({ runId }),
-      });
-    },
-    [sessionId],
+    (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
+    [publishVia],
   );
 
   // Immediate command lane: route a slash command to the host instead of the model.
   const command = useCallback(
-    async (command: string, args: string) => {
-      if (!sessionId) {
-        return;
-      }
-      await publishEvent(sessionId, {
-        producerId: "trevor-web",
-        ...sessionEvents.userCommand({ command, args }),
-      });
-    },
-    [sessionId],
+    (command: string, args: string) => publishVia(sessionEvents.userCommand({ command, args })),
+    [publishVia],
   );
 
   // Side-channel: ask the host to open a local file in the editor. Not a chat
   // message or command - it never renders in the transcript.
   const openInEditor = useCallback(
-    async (path: string, line?: number, column?: number) => {
-      if (!sessionId) {
-        return;
-      }
-      await publishEvent(sessionId, {
-        producerId: "trevor-web",
-        ...sessionEvents.editorOpen({ path, line, column }),
-      });
-    },
-    [sessionId],
+    (path: string, line?: number, column?: number) =>
+      publishVia(sessionEvents.editorOpen({ path, line, column })),
+    [publishVia],
   );
 
   return { events, status, replayed, publish, cancel, command, openInEditor };

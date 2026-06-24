@@ -10,7 +10,6 @@ import {
   type SubmitEvent,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from "react";
@@ -21,13 +20,9 @@ import {
   CommandResult,
   MessageMeta,
   ThinkingMessage,
-  ToolCall,
   WorkingIndicator,
 } from "@/components/chat/message";
-import { MultiEditDiff } from "@/components/chat/multi-edit-diff";
-import { ToolDiff } from "@/components/chat/tool-diff";
-import { ToolOutput } from "@/components/chat/tool-output";
-import { type WebSearchResultItem, WebSearchResults } from "@/components/chat/web-search";
+import { ToolMessage } from "@/components/chat/tool-message";
 import { SidePanel } from "@/components/panel/SidePanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -49,14 +44,13 @@ import {
   providerModelsFrom,
   QWEN_FALLBACK,
   tasksFrom,
-  toolSummary,
 } from "./derive";
+import { useSendQueue } from "./hooks/use-send-queue";
 import { Markdown } from "./markdown";
-import { foldSteer, type QueuedPrompt, sendQueueReducer } from "./send-queue";
 import { ensureSession } from "./session/client";
 import { useSession } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
-import { type AssistantMessage, liveCallFrom, toTranscript } from "./transcript";
+import { panelModel, toTranscript } from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -66,7 +60,8 @@ const SHOW_THINKING_KEY = "trevor.showThinking";
 // manual wiring; override with ?session=<id> in the URL.
 const DEFAULT_SESSION = "trevor-local";
 // The local send queue + hard-steer fold (QueuedPrompt, sendQueueReducer, foldSteer)
-// live in ./send-queue, unit-tested without React. App.tsx owns only the React glue.
+// live in ./send-queue, unit-tested without React; the React state machine that drives
+// them (the busy/in-flight latch + release/drain effects) lives in ./hooks/use-send-queue.
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
 // SMUI-themed markdown body: reuses the app's Markdown renderer, re-themed via the
@@ -77,53 +72,6 @@ function Md({ text, muted = false }: { text: string; muted?: boolean }) {
       <Markdown text={text} muted={muted} />
     </div>
   );
-}
-
-// Tool-call arguments arrive as a JSON string; parse defensively (a streaming or
-// malformed call yields {}).
-function parseToolArgs(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-const FRESHNESS_WINDOWS = ["day", "week", "month", "year"] as const;
-type FreshnessWindow = (typeof FRESHNESS_WINDOWS)[number];
-
-interface ParsedWebSearch {
-  provider?: "brave" | "serper";
-  freshness?: FreshnessWindow;
-  results?: WebSearchResultItem[];
-  error?: string;
-}
-
-// The web_search tool emits JSON ({provider, query, freshness?, results:[...]}) on
-// success, or an "error: ..." line on failure. Parse defensively: null while the call
-// is still running (no result yet), an error string surfaced as-is, otherwise the
-// structured form. A truncated/non-JSON body falls back to a plain error display.
-function parseWebSearchResult(raw: string | undefined): ParsedWebSearch | null {
-  if (!raw) {
-    return null;
-  }
-  if (raw.startsWith("error:")) {
-    return { error: raw.replace(/^error:\s*/u, "") };
-  }
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (Array.isArray(parsed.results)) {
-      const freshness = FRESHNESS_WINDOWS.find((window) => window === parsed.freshness);
-      return {
-        provider: parsed.provider === "serper" ? "serper" : "brave",
-        freshness,
-        results: parsed.results as WebSearchResultItem[],
-      };
-    }
-  } catch {
-    // Truncated or non-JSON; fall through to a generic display below.
-  }
-  return { error: raw };
 }
 
 export function App() {
@@ -172,73 +120,11 @@ export function App() {
   // The agent's live task checklist (host-published snapshots), rendered in the header.
   const tasks = useMemo(() => tasksFrom(events), [events]);
 
-  // The latest completed call's usage + token breakdown, for the side panel's
-  // "data in this call". The completed segment carries both.
-  const lastCall = useMemo((): AssistantMessage | null => {
-    for (let i = transcript.length - 1; i >= 0; i -= 1) {
-      const m = transcript[i];
-      if (m?.kind === "assistant" && (m.breakdown || m.usage)) {
-        return m;
-      }
-    }
-    return null;
-  }, [transcript]);
-
-  // The in-flight call: while a turn streams, each model step publishes a live usage +
-  // breakdown snapshot, so the ctx meter and Request treemap fill in mid-turn instead of
-  // only at completion. Undefined between turns, where lastCall's authoritative data wins.
-  const liveCall = useMemo(() => liveCallFrom(events), [events]);
-
-  // The "Context" tab is the whole session, not just the latest call: sum every
-  // completed request's breakdown (and its tokens) so it grows turn over turn and
-  // always exceeds the single most-recent "Request". (The Request tab stays on
-  // lastCall.) Char totals drive the treemap; provider tokens drive the header.
-  const contextBreakdown = useMemo(() => {
-    const input = {
-      systemAndTools: 0,
-      userText: 0,
-      assistantText: 0,
-      toolCallArgs: 0,
-      toolResults: 0,
-      imagesBase64: 0,
-      imageCount: 0,
-      byTool: {} as Record<string, number>,
-    };
-    const output = { thinking: 0, answer: 0, toolCallArgs: 0 };
-    let any = false;
-    for (const m of transcript) {
-      if (m.kind !== "assistant" || !m.breakdown) {
-        continue;
-      }
-      any = true;
-      const b = m.breakdown;
-      input.systemAndTools += b.input.systemAndTools;
-      input.userText += b.input.userText;
-      input.assistantText += b.input.assistantText;
-      input.toolCallArgs += b.input.toolCallArgs;
-      input.toolResults += b.input.toolResults;
-      input.imagesBase64 += b.input.imagesBase64;
-      input.imageCount += b.input.imageCount;
-      for (const [name, chars] of Object.entries(b.input.byTool)) {
-        input.byTool[name] = (input.byTool[name] ?? 0) + chars;
-      }
-      output.thinking += b.output.thinking;
-      output.answer += b.output.answer;
-      output.toolCallArgs += b.output.toolCallArgs;
-    }
-    return any ? { input, output } : undefined;
-  }, [transcript]);
-  const contextTokens = useMemo(() => {
-    let total = 0;
-    let any = false;
-    for (const m of transcript) {
-      if (m.kind === "assistant" && m.usage) {
-        any = true;
-        total += m.usage.input + m.usage.output;
-      }
-    }
-    return any ? total : undefined;
-  }, [transcript]);
+  // The SidePanel's whole view-model in one pure selector: live-vs-completed precedence
+  // for the Request data (ctx meter + treemap) and the per-category context aggregation,
+  // folded from the transcript (+ raw events for the live snapshot). Spread into
+  // <SidePanel> below. host depends on `now`; this only on transcript/events.
+  const panel = useMemo(() => panelModel(transcript, events), [transcript, events]);
   // The right-side panel is toggleable; remember the choice across reloads.
   const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("trevor.panel", {
     defaultValue: true,
@@ -283,13 +169,10 @@ export function App() {
   // published only once the session is idle, so the host never receives two prompts
   // at once (which would run concurrent, out-of-order turns) and the event log stays
   // cleanly paired. ESC-steer prepends, so an interruption preempts what's waiting.
-  const [queue, dispatchQueue] = useReducer(sendQueueReducer, [] as QueuedPrompt[]);
+  // The reducer wiring + the in-flight/echo latch + the release/drain effects live in
+  // useSendQueue; App.tsx calls submit/steer and renders the queue.
   const busy = active !== null || awaitingResponse;
-  // inFlight bridges the window between publishing a prompt and seeing its echo turn
-  // the session busy, so the drain effect can't fire twice and double-send. prevBusy
-  // catches the turn-ended edge (busy high -> low) to release the latch.
-  const inFlightRef = useRef(false);
-  const prevBusyRef = useRef(busy);
+  const { queue, submit, steer } = useSendQueue({ busy, publish });
 
   const activeProvider = provider ?? "qwen";
   const modelMeta = hostModels[activeProvider] ?? FALLBACK_MODELS[activeProvider] ?? QWEN_FALLBACK;
@@ -331,15 +214,12 @@ export function App() {
     setDraft("");
     const artifacts = attachments.length ? attachments : undefined;
     setAttachments([]);
-    dispatchQueue({
-      type: "enqueue",
-      prompt: {
-        id: crypto.randomUUID(),
-        text,
-        provider: activeProvider,
-        reasoning: reasoning || undefined,
-        artifacts,
-      },
+    submit({
+      id: crypto.randomUUID(),
+      text,
+      provider: activeProvider,
+      reasoning: reasoning || undefined,
+      artifacts,
     });
   };
 
@@ -373,31 +253,6 @@ export function App() {
     }
   };
 
-  // Release the in-flight latch when a turn ends (busy goes high then low), so the
-  // next queued prompt becomes eligible to publish. Runs before the drain effect.
-  useEffect(() => {
-    if (prevBusyRef.current && !busy) {
-      inFlightRef.current = false;
-    }
-    prevBusyRef.current = busy;
-  }, [busy]);
-
-  // Drain one prompt at a time: publish the head only when idle and nothing is in
-  // flight. Removing the head and latching inFlight before the echo arrives keeps a
-  // re-render from publishing the next prompt early.
-  useEffect(() => {
-    if (busy || inFlightRef.current || queue.length === 0) {
-      return;
-    }
-    const next = queue[0];
-    if (!next) {
-      return;
-    }
-    inFlightRef.current = true;
-    dispatchQueue({ type: "drainHead" });
-    void publish(next.text, next.provider, next.reasoning, next.artifacts);
-  }, [busy, queue, publish]);
-
   // Hard steer: abort the active turn and fold queued prompts + draft into ONE
   // steering prompt that runs next. The single steer replaces the queue, so the
   // cancelled turn is followed by one combined interruption (not a replay of the
@@ -405,16 +260,15 @@ export function App() {
   // keeping the cancel strictly ahead of the steer.
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
-    // Fold the queued prompts + draft + every queued/attached artifact into ONE steering
-    // prompt (foldSteer keeps the images the user lined up rather than dropping them).
-    const steer = foldSteer(queue, draft, attachments, {
+    // Fold the queued prompts + draft + queued/attached artifacts into ONE steering
+    // prompt that replaces the queue, then ask the host to cancel the active run.
+    steer(draft, attachments, {
       id: crypto.randomUUID(),
       provider: activeProvider,
       reasoning: reasoning || undefined,
     });
     setDraft("");
     setAttachments([]);
-    dispatchQueue({ type: "steer", prompt: steer });
     if (runId !== null) {
       void cancel(runId);
     }
@@ -585,116 +439,16 @@ export function App() {
                   "pl-3.5",
                   message.kind === "tool" && transcript[index - 1]?.kind === "tool" && "-mt-6",
                 );
-                // multi_edit: one atomic operation, grouped by file as collapsible diffs.
-                if (message.kind === "tool" && message.name === "multi_edit") {
-                  const a = parseToolArgs(message.args);
-                  const raw = Array.isArray(a.edits) ? a.edits : [];
-                  const edits = raw
-                    .map((item) => {
-                      const e = (item ?? {}) as Record<string, unknown>;
-                      return {
-                        path: typeof e.path === "string" ? e.path : "",
-                        old: typeof e.old === "string" ? e.old : "",
-                        new: typeof e.new === "string" ? e.new : "",
-                      };
-                    })
-                    .filter((e) => e.path);
-                  if (edits.length > 0) {
-                    return (
-                      <MultiEditDiff
-                        key={message.id}
-                        className={toolClass}
-                        edits={edits}
-                        status={message.done ? "done" : "running"}
-                        border={false}
-                        onOpenPath={(path) => void openInEditor(path)}
-                      />
-                    );
-                  }
-                }
-                // write/edit render as a code diff (up to 3 lines of subdued context).
-                if (
-                  message.kind === "tool" &&
-                  (message.name === "write" || message.name === "edit")
-                ) {
-                  const a = parseToolArgs(message.args);
-                  const path = typeof a.path === "string" ? a.path : "";
-                  if (path) {
-                    const status = message.done ? "done" : "running";
-                    return message.name === "write" ? (
-                      <ToolDiff
-                        key={message.id}
-                        className={toolClass}
-                        tool="write"
-                        path={path}
-                        newText={typeof a.content === "string" ? a.content : ""}
-                        status={status}
-                        onOpenPath={() => void openInEditor(path)}
-                      />
-                    ) : (
-                      <ToolDiff
-                        key={message.id}
-                        className={toolClass}
-                        tool="edit"
-                        path={path}
-                        oldText={typeof a.old === "string" ? a.old : ""}
-                        newText={typeof a.new === "string" ? a.new : ""}
-                        status={status}
-                        onOpenPath={() => void openInEditor(path)}
-                      />
-                    );
-                  }
-                }
-                // web_search renders its JSON output as a result list (or the working
-                // indicator while running, or its error message).
-                if (message.kind === "tool" && message.name === "web_search") {
-                  const a = parseToolArgs(message.args);
-                  const parsed = parseWebSearchResult(message.result);
-                  return (
-                    <WebSearchResults
-                      key={message.id}
-                      className={toolClass}
-                      query={typeof a.query === "string" ? a.query : ""}
-                      provider={parsed?.provider}
-                      freshness={parsed?.freshness}
-                      results={parsed?.results}
-                      error={parsed?.error}
-                      status={message.done ? "done" : "running"}
-                    />
-                  );
-                }
-                // bash/grep render their text output (command output, matches) flat.
-                if (
-                  message.kind === "tool" &&
-                  (message.name === "bash" || message.name === "grep")
-                ) {
-                  return (
-                    <ToolOutput
-                      key={message.id}
-                      className={toolClass}
-                      name={message.name}
-                      args={toolSummary(message.name, message.args)}
-                      output={message.result}
-                      status={message.done ? "done" : "running"}
-                    />
-                  );
-                }
+                // Every tool message dispatches to its renderer in one place: ToolMessage
+                // owns the name ladder, the done -> status derivation, and the per-tool
+                // arg/result parsing.
                 if (message.kind === "tool") {
-                  // Tools whose primary arg is a file path get a clickable path that
-                  // opens it in the editor (read/ls/...); pattern/command tools don't.
-                  const toolPath = parseToolArgs(message.args).path;
                   return (
-                    <ToolCall
+                    <ToolMessage
                       key={message.id}
+                      message={message}
                       className={toolClass}
-                      name={message.name}
-                      args={toolSummary(message.name, message.args)}
-                      status={message.done ? "done" : "running"}
-                      onOpenPath={
-                        typeof toolPath === "string" && toolPath
-                          ? () => void openInEditor(toolPath)
-                          : undefined
-                      }
+                      onOpenPath={(path) => void openInEditor(path)}
                     />
                   );
                 }
@@ -975,18 +729,7 @@ export function App() {
           subtitle={`${status}${replayed ? " · replayed" : ""} · ${events.length} events`}
           statusNode={statusNode}
           workspace={host.workspace ?? undefined}
-          ctxUsed={liveCall?.usage.input ?? lastCall?.usage?.input}
-          ctxMax={liveCall?.usage.contextWindow ?? lastCall?.usage?.contextWindow}
-          totalTokens={
-            liveCall
-              ? liveCall.usage.input + liveCall.usage.output
-              : lastCall?.usage
-                ? lastCall.usage.input + lastCall.usage.output
-                : undefined
-          }
-          breakdown={liveCall?.breakdown ?? lastCall?.breakdown}
-          contextTokens={contextTokens}
-          contextBreakdown={contextBreakdown}
+          {...panel}
           ready={replayed}
           controls={panelControls}
           onClose={() => setPanelOpen(false)}

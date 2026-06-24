@@ -14,16 +14,8 @@ const GOLD = "hsl(var(--smui-yellow))";
 const GREEN = "hsl(var(--smui-green))";
 const STEEL = "hsl(var(--muted-foreground))";
 
-export interface LegendGroup {
-  readonly key: string;
-  readonly label: string;
-  readonly value: number;
-  readonly color: string;
-}
-
 export interface PanelBreakdown {
   readonly leaves: TreemapLeaf[];
-  readonly groups: LegendGroup[];
   /** Total chars across the shown categories, for legend percentages. */
   readonly total: number;
 }
@@ -59,13 +51,5 @@ export function panelBreakdown(b: UsageBreakdown): PanelBreakdown {
   // visible size (see `squarify`'s `minFraction`) rather than dropping them.
   const leaves = allLeaves;
 
-  // Legend lists every category that rounds to >= 1%, so a 0% row never shows.
-  const groups: LegendGroup[] = [
-    { key: "tools", label: "Tool results", value: toolTotal, color: BLUE },
-    { key: "thinking", label: "Thinking", value: thinking, color: GOLD },
-    { key: "answer", label: "Final response", value: answer, color: GREEN },
-    { key: "overhead", label: "Overhead", value: overhead, color: STEEL },
-  ].filter((g) => total > 0 && Math.round((g.value / total) * 100) >= 1);
-
-  return { leaves, groups, total };
+  return { leaves, total };
 }

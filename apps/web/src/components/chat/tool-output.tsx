@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { ToolCall } from "./message";
-import { ToolSection } from "./tool-section";
+import { ToolCall, type ToolStatus } from "./message";
+import { ToolShell } from "./tool-shell";
 
 // Default number of output lines to show before hiding the rest behind a "+N more"
 // indicator. A long listing (e.g. `find` over a tree) otherwise floods the transcript;
@@ -13,12 +13,12 @@ interface ToolOutputProps {
   args?: ReactNode;
   /** The tool's text output (command output, grep matches, ...); a bare row when absent. */
   output?: string;
-  status?: "running" | "done" | "error";
+  status?: ToolStatus;
   /** Whether the output body starts expanded; the global compact setting drives this. */
   defaultOpen?: boolean;
   /**
-   * Draw the output inside a bordered ToolSection box. Off by default: a single output
-   * block sits flat under the already-collapsible tool row, matching edit/write/web_search.
+   * Draw the output inside a bordered ToolSection box (see ToolShell's `border`). Off by
+   * default: a single output block sits flat under the row, matching edit/write/web_search.
    */
   border?: boolean;
   /** Lines of output to show before the rest is hidden behind a "+N more" indicator. */
@@ -56,15 +56,16 @@ export function ToolOutput({
 
   const body = <OutputBody output={output} previewLines={previewLines} />;
   return (
-    <ToolCall
+    <ToolShell
       name={name}
       args={args}
       status={status}
       defaultOpen={defaultOpen}
       className={className}
-    >
-      {border ? <ToolSection>{<div className="p-2.5">{body}</div>}</ToolSection> : body}
-    </ToolCall>
+      border={border}
+      flat={body}
+      bordered={<div className="p-2.5">{body}</div>}
+    />
   );
 }
 

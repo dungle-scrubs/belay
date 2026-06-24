@@ -59,3 +59,54 @@ export interface UsageBreakdown {
   };
   readonly output: PoolCounts<"output">;
 }
+
+/** A zero `UsageBreakdown` - the additive identity for `addBreakdown` and the empty
+ *  accumulator a category-driven sum folds onto. */
+function emptyBreakdown(): UsageBreakdown {
+  const input = { imagesBase64: 0, imageCount: 0, byTool: {} as Record<string, number> } as Record<
+    string,
+    unknown
+  >;
+  const output = {} as Record<string, number>;
+  for (const c of BREAKDOWN_CATEGORIES) {
+    if (c.pool === "input") {
+      input[c.key] = 0;
+    } else {
+      output[c.key] = 0;
+    }
+  }
+  return { input, output } as unknown as UsageBreakdown;
+}
+
+/**
+ * Sums two `UsageBreakdown`s category by category, driven by `BREAKDOWN_CATEGORIES`
+ * plus the explicit image/byTool fields - so the fold can never drift from the
+ * canonical category set (adding a category here is zero extra edits). Used to
+ * accumulate every completed request's breakdown into the whole-context total.
+ */
+export function addBreakdown(a: UsageBreakdown, b: UsageBreakdown): UsageBreakdown {
+  const out = emptyBreakdown();
+  const oi = out.input as unknown as Record<string, number>;
+  const oo = out.output as unknown as Record<string, number>;
+  const ai = a.input as unknown as Record<string, number>;
+  const ao = a.output as unknown as Record<string, number>;
+  const bi = b.input as unknown as Record<string, number>;
+  const bo = b.output as unknown as Record<string, number>;
+  for (const c of BREAKDOWN_CATEGORIES) {
+    if (c.pool === "input") {
+      oi[c.key] = (ai[c.key] ?? 0) + (bi[c.key] ?? 0);
+    } else {
+      oo[c.key] = (ao[c.key] ?? 0) + (bo[c.key] ?? 0);
+    }
+  }
+  oi.imagesBase64 = a.input.imagesBase64 + b.input.imagesBase64;
+  oi.imageCount = a.input.imageCount + b.input.imageCount;
+  const byTool = out.input.byTool as Record<string, number>;
+  for (const [name, chars] of Object.entries(a.input.byTool)) {
+    byTool[name] = (byTool[name] ?? 0) + chars;
+  }
+  for (const [name, chars] of Object.entries(b.input.byTool)) {
+    byTool[name] = (byTool[name] ?? 0) + chars;
+  }
+  return out;
+}
