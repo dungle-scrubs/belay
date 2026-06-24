@@ -265,6 +265,93 @@ projection* under the window across turns. Target window: the local 4-bit at **6
   cloud-permitted) - the same routing as per-agent models (D-046). **Chunking fallback:** if a fold region ever
   exceeds the summarizer's own window, summarize oldest-chunk-first (map-reduce); single-pass assumed for v1.
 
+### Then: concurrent read-only tool execution <!-- D-050 -->
+
+A small, self-contained change that can land alongside or just after compaction (D-040), well before the
+larger subagents work. Decomposed for execution in `progress-report.md` (the active near-term cutoff).
+Today the agent loop runs a turn's tool calls **strictly sequentially**: `runAgent`
+(`apps/agent-host/src/agent/loop.ts`) builds a per-call stream with `toolCalls.map(...)` and folds them with
+`Stream.concat`, so each tool starts only once the previous fully drains. Turn-level overlap is already
+excluded by the one-turn-at-a-time scheduler (`turn-scheduler.ts`), so the only parallelism on the table is
+*within* a single model step's tool batch. For the common fan-out case (several `read`/`grep`/`glob` in one
+batch) the sequential fold wastes wall-clock - independent I/O-bound reads that could overlap run end-to-end.
+
+- <!-- D-050 --> **Read-only tools run concurrently (bounded); mutating tools stay serial barriers.** Within
+  one step's tool batch, a maximal run of read-only calls executes as one concurrent group (`Stream.mergeAll`
+  under a bounded `TOOL_CONCURRENCY` cap, so a burst of searches cannot open unbounded sockets/file handles or
+  hit `web_search` rate limits); every effectful call is a **barrier** that runs alone. Segments execute in the
+  model's emission order, so a read never overlaps an adjacent write and two writes never overlap - preserving
+  the no-lost-update / no-read-straddles-a-write guarantees the sequential loop gives today (`edit` is a
+  read-modify-write against file contents; concurrent same-path edits would clobber).
+  - **Purity is a declared property of the tool, derived - never a hardcoded list.** Add `readOnly?: boolean`
+    to the `Tool` interface (`tools/types.ts`); it **defaults to false (a serial barrier)**, so omitting it on
+    a new tool is always safe (just not concurrent) and can never be a correctness bug. The loop derives the
+    concurrent-eligible set from the registry - `tools/index.ts` exports `READ_ONLY_TOOLS` built by filtering
+    `TOOLS` - so a new read-only tool is picked up the moment it sets the flag, with no second place to forget.
+    `read`/`glob`/`grep`/`web_search` opt in; `edit`/`write`/`multi_edit`/`bash` and the dynamic
+    `process`/`task`/`skill` tools stay barriers by default.
+  - **Results commit to the conversation in CALL order, not completion order.** Each result is captured into an
+    index-keyed slot; after the whole batch drains the slots are appended to the conversation in call order,
+    then `step(n+1)` is concatenated. This keeps history/replay and overflow recovery deterministic -
+    `trimLargestToolResult` (D-036) and the prompt projection (`history-projection.ts`) see a stable,
+    call-ordered shape regardless of which read finished first. The inter-step data dependency still holds: the
+    next model step reads a fully-committed conversation.
+  - **Cancellation is unaffected.** `Stream.mergeAll`'s children are interrupted when the parent fiber is
+    interrupted, so the interrupt-based teardown (A-004) covers concurrent tools with no new abort plumbing.
+  - **Follow-up to verify, not assumed:** on the wire `tool_start`/`tool_end` events for a read group can now
+    arrive out of call order; the web keys tool results by `call.id`
+    (`apps/web/src/components/chat/message.tsx`), so rendering is expected to tolerate this - **verify before
+    shipping**, and if strict wire order is wanted, hoist the read group's `tool_start` emissions ahead of the
+    merged executes.
+
+### Then: graceful turn-budget termination <!-- D-051 -->
+
+The sibling of overflow recovery (D-034): that feature governs how a turn behaves when its *prompt* is too
+big; this one governs how a turn *ends* when it runs long. A turn is not one model call - it is a bounded
+loop of model↔tool steps (`runAgent`, `apps/agent-host/src/agent/loop.ts`), capped today by a fixed
+`MAX_STEPS = 8`. When the cap is hit the loop returns `Stream.empty`, which `turn.ts` treats as a normal
+success and ships `assistant.completed {}` carrying whatever partial preamble streamed - **no `error`, no
+`cancelled`, no `noReply`**. The result is a turn that dead-ends mid-investigation yet looks complete, with
+no answer and no continuation.
+
+**Observed (2026-06-24, local 4-bit qwen at 64k).** The last five substantive turns each terminated at
+**exactly `MAX_STEPS = 8`** with the context window at **16-18%** (e.g. `usage.input` 11.6k / 65.5k) - killed
+by an arbitrary step count, not by any scarce resource - and each ended on a tool result with no final text
+and no terminal signal. The `n >= MAX_STEPS` branch is the **only** loop exit that emits nothing at all
+(unlike `empty`→`noReply` at `loop.ts:161-172` and the terminal `assistant.overflow` of D-038), so a budget
+exhaustion is indistinguishable from the model deciding it was finished.
+
+- <!-- D-051 --> **A turn never ends silently at the budget (observable).** The cap branch emits a terminal
+  `AgentEvent` `{ type: "step_limit"; steps }` instead of `Stream.empty`; `turn.ts` maps it onto the terminal
+  completion as a first-class reason (a `stepLimit` flag on `assistant.completed`, the same shape family as
+  `noReply`), carried in the shared `@trevor/session` event schema so the web and `/doctor` can show "stopped
+  after N steps" rather than a turn that reads as a clean answer. This closes the one unobservable exit.
+- <!-- D-052 --> **Forced final synthesis - exhaustion yields an answer, never a stub.** Reaching the budget
+  runs exactly **one** more model step with **tools removed** - the existing no-tools path
+  `provider.stream(conversation, [], reasoning)` - plus a transient nudge pushed into the loop's *ephemeral*
+  `conversation` ("tool budget reached; answer now from what you've gathered; do not request more tools"). With
+  no tools declared the model cannot request more and must synthesize from the context it already holds. The
+  step is bounded to one (no recursion, independent of `MAX_STEPS`, the same discipline as `MAX_RECOVERY`),
+  reasoning forced off/low for a direct answer, and if it still returns empty it falls through to the existing
+  `empty`→`noReply` path. The nudge lives only in `conversation` (`loop.ts` builds it as `[...history]`, never
+  persisted), so it cannot poison durable history or break the user/assistant alternation `sanitizeHistory`
+  enforces.
+- <!-- D-053 --> **Re-base the budget on context pressure, not a fixed step count.** `MAX_STEPS` is a poor
+  proxy: a one-line `ls` and a 40k-char `cat` each cost "one step," while the resource actually at stake is the
+  context window. Gate the *next* tool round on window occupancy - continue only while the last step's
+  `usage.input` is below ~**80%** of `usage.contextWindow` (the loop captures the latest usage into its
+  closure, as it already does `overflowReason`); otherwise go straight to D-052 synthesis. `MAX_STEPS` stays
+  only as a high runaway backstop (~30-40), not the governor. This **auto-scales per model** (a 64k local model
+  gets fewer rounds than a 200k cloud model, with no per-model tuning) and **composes with overflow recovery**:
+  the budget is the *proactive* "wrap up before the wall" gate, D-036 trimming is the *reactive* "trim at the
+  wall" airbag, so a turn neither dead-ends short of an answer nor runs blind into the window. Headroom is kept
+  generous (75-80%, not 95%) because the next step's tool-result size is unknown in advance and the synthesis
+  output still needs room; fall back to `MAX_STEPS`-only when `contextWindow` is 0/unknown.
+
+Self-contained (loop + turn + one event field) and independent of compaction (D-040) and concurrent reads
+(D-050), so it can land in any order relative to them - it is a correctness fix, so promote ahead of the
+perf work if the silent dead-ends bite. Decomposed for execution in `progress-report.md`.
+
 ### Then: subagents <!-- D-045 -->
 
 Promoted from backlog (D-033) to the feature after compaction. A subagent is a delegated agent that runs in
@@ -415,6 +502,10 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 - **Same-cwd contention (Phase 3, D-022).** Two sessions can hold filesystem authority over one directory at
   once (two harnesses in one repo can stomp each other). The D-019 lease is per-session, not per-cwd.
   Accepted as a deliberate user action; revisit with a cwd-level advisory lock if it bites.
+- **Silent turn-budget dead-ends (observed 2026-06-24).** A long turn that exhausts the fixed `MAX_STEPS`
+  ends via `Stream.empty` and reads as a clean `assistant.completed`, with no answer and no signal - on the
+  local 4-bit at 64k this hit five consecutive turns at the window's 16-18%. Addressed by graceful turn-budget
+  termination (D-051…D-053): observable exit, forced synthesis, context-pressure budget.
 
 ---
 _Consolidated 2026-06-23: single plan; FEATURES.md + TABLED.md deleted and folded in; graceful-overflow-recovery merged (D-034…D-038); routing engine + T-1 dropped for good (D-032); work-kinds kept inert (D-039). Supersedes all prior Trevor V2 planning documents._
@@ -427,5 +518,13 @@ event with a per-fold delta manifest; tool-less ~1k summary on the turn model wi
 a deferred post-subagents layer (D-044: isolated sub-agent, BM25 + neighborhood expansion, this-session-only).
 **Subagents** promoted from backlog to the feature after compaction (D-045…D-049: two v1 flavors
 general-purpose + explorer, file-based discovery, inline+async modes, strict context isolation with forkable
-child runs, ephemeral model-minted agents slightly deferred; verifier/teams/bounded-child stay backlog). New
-decisions **D-040…D-049 are authored here in markdown and still need syncing into `plan.db`** (canonical store)._
+child runs, ephemeral model-minted agents slightly deferred; verifier/teams/bounded-child stay backlog).
+**Concurrent read-only tool execution** added as a small near-term phase after compaction (D-050: read-only
+tools run concurrently under a bounded cap, mutating tools stay serial barriers, tool purity declared per-tool
+via a defaulted `readOnly` flag and derived from the registry, results committed to the conversation in call
+order). **Graceful turn-budget termination** added as a self-contained correctness phase (D-051…D-053:
+the step-budget loop exit becomes observable via a `step_limit` event + `stepLimit` completion flag, the
+budget forces a final tool-less synthesis instead of dead-ending on a tool result, and the cap is re-based on
+context-window occupancy with `MAX_STEPS` demoted to a runaway backstop - motivated by the 2026-06-24 local
+4-bit case where five turns died at exactly `MAX_STEPS=8` with the window at 16-18%). New decisions
+**D-040…D-053 are authored here in markdown and still need syncing into `plan.db`** (canonical store)._
