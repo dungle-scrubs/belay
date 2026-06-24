@@ -10,6 +10,7 @@ import { grepTool } from "./grep";
 import { multiEditTool } from "./multi-edit";
 import { readTool } from "./read";
 import type { Tool } from "./types";
+import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
 
 const FILE_TOOLS: readonly Tool[] = [
@@ -20,6 +21,7 @@ const FILE_TOOLS: readonly Tool[] = [
   multiEditTool,
   globTool,
   grepTool,
+  webSearchTool,
   buildProcessTool(),
   ...buildTaskTools(),
 ];
