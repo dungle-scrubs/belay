@@ -25,6 +25,7 @@ export function Treemap({
   total,
   totalTokens,
   height = 184,
+  ready = true,
 }: {
   leaves: readonly TreemapLeaf[];
   /** True call total, the denominator for tooltip/legend percentages. */
@@ -35,6 +36,8 @@ export function Treemap({
    */
   totalTokens?: number;
   height?: number;
+  /** Session ready (initial replay done); cells don't animate until then. */
+  ready?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -54,9 +57,9 @@ export function Treemap({
     [leaves, width, height],
   );
 
-  // Don't animate the initial layout in; only glide on later size changes. Armed once
-  // the first measured layout has painted (width > 0).
-  const armed = useArmedAfterMount(width > 0);
+  // Don't animate the initial layout in or the replay settling; only glide on later
+  // size changes. Armed once the session is ready and the first layout has painted.
+  const armed = useArmedAfterMount(ready && width > 0);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: passive hover target; tooltip mirrors the always-visible legend below.

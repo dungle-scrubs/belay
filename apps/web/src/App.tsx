@@ -1008,6 +1008,7 @@ export function App() {
           breakdown={liveCall?.breakdown ?? lastCall?.breakdown}
           contextTokens={contextTokens}
           contextBreakdown={contextBreakdown}
+          ready={replayed}
           controls={panelControls}
           onClose={() => setPanelOpen(false)}
         />

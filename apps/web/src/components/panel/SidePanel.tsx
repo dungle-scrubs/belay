@@ -34,6 +34,13 @@ export interface SidePanelProps {
   readonly contextTokens?: number;
   /** Model / reasoning controls, injected by the host so the panel stays presentational. */
   readonly controls?: ReactNode;
+  /**
+   * Whether the session has finished its initial replay. Transitions stay off until
+   * this is true so a refresh - where data streams in event by event - settles into
+   * place without animating; only live changes after load glide. Defaults to true so
+   * static usages (e.g. stories) animate normally.
+   */
+  readonly ready?: boolean;
   readonly onClose?: () => void;
 }
 
@@ -55,14 +62,16 @@ export function SidePanel({
   contextBreakdown,
   contextTokens,
   controls,
+  ready = true,
   onClose,
 }: SidePanelProps) {
   const [tab, setTab] = useState<"request" | "context">("request");
   const activeTotal = tab === "request" ? totalTokens : contextTokens;
 
-  // The ctx meter snaps to its value on first appearance; only later updates glide.
+  // The ctx meter snaps to its value on first appearance and through the initial
+  // replay; only live updates once the session is ready glide.
   const showMeter = ctxUsed != null && ctxMax != null && ctxMax > 0;
-  const meterArmed = useArmedAfterMount(showMeter);
+  const meterArmed = useArmedAfterMount(ready && showMeter);
 
   return (
     <aside className="flex h-full w-80 shrink-0 flex-col gap-4 border-l border-border bg-card/40 px-4 py-4">
@@ -134,6 +143,7 @@ export function SidePanel({
               breakdown={breakdown}
               totalTokens={totalTokens}
               emptyLabel="No call data yet"
+              ready={ready}
             />
           </TabsContent>
           <TabsContent value="context">
@@ -141,6 +151,7 @@ export function SidePanel({
               breakdown={contextBreakdown}
               totalTokens={contextTokens}
               emptyLabel="No context yet"
+              ready={ready}
             />
           </TabsContent>
         </Tabs>
@@ -162,10 +173,12 @@ function BreakdownView({
   breakdown,
   totalTokens,
   emptyLabel,
+  ready,
 }: {
   breakdown?: UsageBreakdown;
   totalTokens?: number;
   emptyLabel: string;
+  ready?: boolean;
 }) {
   const bd = breakdown ? panelBreakdown(breakdown) : null;
 
@@ -179,7 +192,13 @@ function BreakdownView({
 
   return (
     <div className="flex flex-col gap-2">
-      <Treemap leaves={bd.leaves} total={bd.total} totalTokens={totalTokens} height={184} />
+      <Treemap
+        leaves={bd.leaves}
+        total={bd.total}
+        totalTokens={totalTokens}
+        height={184}
+        ready={ready}
+      />
       {/* One legend row per treemap cell (biggest first), so the list and the
           treemap always agree on what's shown. */}
       <ul className="flex flex-col gap-1">
