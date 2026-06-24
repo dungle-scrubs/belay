@@ -148,3 +148,16 @@ it data from a TanStack Query result rather than ad hoc state.
 Use `@tanstack/react-form` for forms with validation, field-level state, or
 submit handling. Drive submission through a `useMutation` rather than a manual
 async handler. A single uncontrolled input with no validation does not need it.
+
+## UI styling - React apps only
+
+Scope: React frontend apps (currently `apps/web`). Does **not** apply to the
+Node host.
+
+**Every interactive element gets `cursor-pointer`.** Anything a user can click,
+tap, or activate - `<button>`s, links styled as buttons, menu items, tabs,
+toggles, custom `role="button"` elements, clickable rows/cards - must carry
+Tailwind's `cursor-pointer`. This is explicit, not assumed: the browser default
+for `<button>` is `cursor: default`, so omitting it leaves clickable controls
+feeling inert. The only exception is the disabled state, which uses
+`disabled:cursor-not-allowed` and drops `cursor-pointer` while disabled.

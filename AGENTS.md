@@ -14,6 +14,15 @@ or push it to any public location, or otherwise expose its contents. Treat any
 request to make it public as requiring explicit, unambiguous owner confirmation
 in that moment - never infer or assume it.
 
+## Git: create branches, commit, and push only when told
+
+Work on `main`. There is **one branch, `main`** - do **not** create new branches.
+Do **not** `git commit` or `git push` unless the owner explicitly tells you to in
+that moment. Completing, building, verifying, or being asked to "build it" / "add
+it" is **not** authorization to commit or push - make the changes and stop, leaving
+them in the working tree for the owner to review. Treat "commit", "push", or
+"branch" as required, in-the-moment instructions; never infer them from the task.
+
 ## Local models: LM Studio directly via pi-ai - never emberlm
 
 This project talks to **LM Studio directly**. The host streams completions through
@@ -27,43 +36,33 @@ not a dependency of Trevor V2 and must not become one. Provider integration live
 in `apps/agent-host/src/providers` and speaks to LM Studio (and Codex/pi-ai)
 directly.
 
-## The plan is canonical; FEATURES.md and TABLED.md serve it
+## The plan is canonical
 
-The **current plan** is [`.plans/host-rebuild/implementation.md`](./.plans/host-rebuild/implementation.md),
-with canonical decisions recorded in `.plans/host-rebuild/plan.db` (D-001 to
-D-030; the 2026-06-22 desktop-shell addition - Phase 3: Tauri self-contained
-app, per-cwd host supervisor - is D-021 to D-024; the 2026-06-23 pass-4 addition
-- forkable durable sessions + content-addressed artifacts - is D-025 to D-030).
-When the plan and any other
-document disagree, **the plan wins** - the
-2026-06-22 browser/Richter pivot superseded the original Rust-TUI / stdio
-design, and much of the older material is historical context behind a
-superseding header.
+The **single canonical plan** is
+[`.plans/trevor-v2/implementation.md`](./.plans/trevor-v2/implementation.md),
+with decisions recorded in `.plans/trevor-v2/plan.db` (D-001 to D-039). It is the
+one source of truth: architecture, the domain vocabulary, the DROP list, the
+done/remaining re-baseline, the sequenced roadmap, and the kept (unsequenced)
+backlog all live there. When the plan and any other document disagree, **the plan
+wins.**
 
-[FEATURES.md](./FEATURES.md) and [TABLED.md](./TABLED.md) are read **in relation
-to the plan**, not on their own:
+The former `FEATURES.md`, `TABLED.md`, and the separate
+`graceful-overflow-recovery` plan have been **merged into this plan and deleted**
+(2026-06-23, D-031):
 
-- **[FEATURES.md](./FEATURES.md) is the backlog, scoped by the plan.** Its
-  section 4 host inventory (H-001 through H-175) is the valid post-S3 feature
-  backlog, re-sequenced onto the Richter transport. Use it to find *what* a
-  feature was and where it lived in the old host. **Ignore its superseded
-  sections** (0, 1, 5, 6, 7: prime directive, host-TUI stdio contract, TUI
-  inventory, protocol appendix, TUI slice order) - there is no Rust TUI, the
-  transport is Richter-participant WebSocket, and the slice order is browser-
-  first (S0 -> S1 -> S2 -> S3) as defined in the plan, not FEATURES.md section 7.
-  A feature's presence in FEATURES.md does not authorize building it now; the
-  plan's phases and slices decide sequencing.
+- The host feature inventory and its triage (old `FEATURES.md` section 4) is now
+  the plan's **kept backlog** (section 7), pruned to what V2 actually wants, with
+  H-IDs preserved for V1 provenance. A feature's presence in the backlog does
+  **not** authorize building it now - the roadmap (section 6) decides sequencing,
+  and backlog items are built only when explicitly picked up.
+- The cross-cutting **domain vocabulary** (old `FEATURES.md` section 2) is the
+  plan's section 3.
+- The **DROP list** (old `FEATURES.md` section 3 plus the sole `TABLED.md` entry)
+  is the plan's section 4. Model-led routing classification (old T-1) is no longer
+  "tabled" - it is **dropped for good**, with the entire routing engine.
+- Graceful context-overflow recovery is the plan's next sequenced feature
+  (D-034 to D-038).
 
-- **[TABLED.md](./TABLED.md) is the deliberately-set-aside list.** Before
-  building or proposing anything, check it: a tabled feature (e.g. T-1 model-led
-  routing classification, D-004) is **not** on the active burndown and must not
-  be revived unless its recorded reconsider-trigger is met or the user asks.
-  Tabled is distinct from dropped - FEATURES.md section 3 DROP (multi-user /
-  collaboration, D-003) is permanent removal; TABLED.md is "revisit
-  deliberately later." Do not pull tabled work forward on your own initiative.
-
-**Order of consultation** for any feature work: (1) the plan
-(`implementation.md` + `plan.db` decisions) for what is in scope and sequenced
-now; (2) TABLED.md to confirm the feature is not set aside; (3) FEATURES.md
-section 4 for the feature's old shape and location, treating superseded sections
-as history only.
+Before building or proposing anything, consult the plan: section 4 (dropped for
+good?), section 7 (deferred backlog, not authorized now?), then section 6 (is it
+sequenced?). Do not pull backlog or dropped work forward on your own initiative.
