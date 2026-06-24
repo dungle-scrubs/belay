@@ -14,6 +14,7 @@ export interface SessionState {
   ) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
   readonly command: (command: string, args: string) => Promise<void>;
+  readonly openInEditor: (path: string, line?: number, column?: number) => Promise<void>;
 }
 
 /** Subscribes to a session: replay-then-tail into state, plus publish. */
@@ -84,5 +85,20 @@ export function useSession(sessionId: string | null): SessionState {
     [sessionId],
   );
 
-  return { events, status, replayed, publish, cancel, command };
+  // Side-channel: ask the host to open a local file in the editor. Not a chat
+  // message or command - it never renders in the transcript.
+  const openInEditor = useCallback(
+    async (path: string, line?: number, column?: number) => {
+      if (!sessionId) {
+        return;
+      }
+      await publishEvent(sessionId, {
+        producerId: "trevor-web",
+        ...sessionEvents.editorOpen({ path, line, column }),
+      });
+    },
+    [sessionId],
+  );
+
+  return { events, status, replayed, publish, cancel, command, openInEditor };
 }

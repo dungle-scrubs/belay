@@ -1,6 +1,7 @@
 import { useBoolean } from "ahooks";
 import { ChevronRight, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown";
 
@@ -53,34 +54,101 @@ const TOOL_STATUS_ICON: Record<ToolStatus, string> = {
 
 /**
  * Generic tool-call row: icon, name(args), with an optional output body. The
- * foundation specific tool renderers build on. Status tints the icon.
+ * foundation specific tool renderers build on (diffs, search results, etc.), so
+ * making *it* collapsible makes every result-bearing tool call collapsible.
+ *
+ * With a body, the row is a collapsible trigger (leading chevron) and the body is
+ * its content; `defaultOpen` is the single seam a future global "compact" setting
+ * drives to collapse every tool call to its one-line header. Body-less rows (read,
+ * glob, skill) are already one line, so they render as a plain, non-interactive row
+ * with a chevron-width spacer that keeps every name(args) left edge aligned. Status
+ * tints the wrench icon.
  */
+/**
+ * The args text of a tool row rendered as a click target that opens the file in
+ * the local editor. A `role="button"` span (not a real `<button>`) so it nests
+ * safely inside the collapsible trigger; `stopPropagation` keeps a click from
+ * toggling the row open/closed.
+ */
+export function OpenPathLink({ children, onOpen }: { children: ReactNode; onOpen: () => void }) {
+  const open = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    onOpen();
+  };
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a real <button> can't nest inside the collapsible trigger button; role + keydown keep it keyboard-accessible.
+    <span
+      role="button"
+      tabIndex={0}
+      title="Open in editor"
+      onClick={open}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open(event);
+        }
+      }}
+      className="cursor-pointer underline-offset-2 hover:text-foreground hover:underline"
+    >
+      {children}
+    </span>
+  );
+}
+
 export function ToolCall({
   name,
   args,
   status = "done",
   children,
+  defaultOpen = true,
   className,
+  onOpenPath,
 }: {
   name: string;
   args?: ReactNode;
   status?: ToolStatus;
   children?: ReactNode;
+  defaultOpen?: boolean;
   className?: string;
+  /** When set, the args text becomes a click target that opens the file in the editor. */
+  onOpenPath?: () => void;
 }) {
-  return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <div className="flex items-center gap-2 text-ui text-muted-foreground">
-        <Wrench className={cn("size-3.5 shrink-0", TOOL_STATUS_ICON[status])} />
-        <code className="text-ui text-foreground">
-          {name}
-          <span className="text-muted-foreground">({args ?? ""})</span>
-        </code>
+  const argsNode = onOpenPath ? (
+    <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
+  ) : (
+    (args ?? "")
+  );
+  const header = (
+    <>
+      <Wrench className={cn("size-3.5 shrink-0", TOOL_STATUS_ICON[status])} />
+      <code className="text-ui text-foreground">
+        {name}
+        <span className="text-muted-foreground">({argsNode})</span>
+      </code>
+    </>
+  );
+
+  if (!children) {
+    return (
+      <div className={cn("flex flex-col gap-1", className)}>
+        <div className="flex items-center gap-2 text-ui text-muted-foreground">
+          <span className="size-3 shrink-0" aria-hidden />
+          {header}
+        </div>
       </div>
-      {children ? (
+    );
+  }
+
+  return (
+    <Collapsible defaultOpen={defaultOpen} className={cn("flex flex-col gap-1", className)}>
+      <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 text-ui text-muted-foreground">
+        <ChevronRight className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+        {header}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
         <div className="border-l border-border pl-3 text-sm text-muted-foreground">{children}</div>
-      ) : null}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

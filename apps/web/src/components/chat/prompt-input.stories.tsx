@@ -6,6 +6,7 @@ import {
 } from "@assistant-ui/react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
+import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { Thread } from "@/components/assistant-ui/thread";
 
 const SAMPLE: ThreadMessageLike[] = [
@@ -78,6 +79,8 @@ function MockThread({
       <div className="mx-auto h-[36rem] w-full max-w-3xl border border-border">
         <Thread />
       </div>
+      {/* Drag-highlight any message text to reveal the "Quote" toolbar. */}
+      <QuoteSelectionToolbar />
     </AssistantRuntimeProvider>
   );
 }
@@ -96,4 +99,18 @@ export const Populated: Story = {};
 
 export const Empty: Story = {
   render: () => <MockThread initial={[]} />,
+};
+
+// Demonstrates the quote-on-selection toolbar. Highlight any message text to
+// reveal the "Quote" / "Tangent" popup.
+export const QuoteFromSelection: Story = {
+  name: "Quote from selection",
+  render: () => (
+    <div className="flex h-full flex-col">
+      <p className="text-muted-foreground mx-auto w-full max-w-3xl px-4 pt-4 text-sm">
+        Drag-highlight any text in a message below to reveal the Quote / Tangent toolbar.
+      </p>
+      <MockThread />
+    </div>
+  ),
 };

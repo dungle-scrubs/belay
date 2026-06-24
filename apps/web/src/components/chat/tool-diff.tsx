@@ -1,6 +1,8 @@
 import { createTwoFilesPatch } from "diff";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
+import { countChanges, DiffStat, withNewline } from "./diff-utils";
 import { ToolCall } from "./message";
+import { ToolSection } from "./tool-section";
 
 interface ToolDiffProps {
   /** "write" (new/overwritten file) or "edit" (in-place replacement). */
@@ -11,19 +13,24 @@ interface ToolDiffProps {
   /** New text: an edit's new_string, or a write's full file content. */
   newText: string;
   status?: "running" | "done" | "error";
+  /** Whether the diff body starts expanded; the global compact setting drives this. */
+  defaultOpen?: boolean;
+  /**
+   * Draw the diff inside a bordered ToolSection box with a +/- header. Off by default:
+   * a single file's diff sits flat under the already-collapsible tool row, so the box
+   * (and its second chevron) would be redundant. multi_edit boxes its files; this is
+   * the seam to box a single diff too when wanted.
+   */
+  border?: boolean;
   className?: string;
+  /** Opens the edited file in the local editor (the path row becomes clickable). */
+  onOpenPath?: () => void;
 }
 
 /**
- * A diff over a bare snippet has no trailing newline, so `createTwoFilesPatch`
- * appends a "\ No newline at end of file" marker that renders as noise. Padding
- * both sides with a newline keeps the patch clean.
- */
-const withNewline = (text: string) => (text === "" || text.endsWith("\n") ? text : `${text}\n`);
-
-/**
- * Renders a write/edit tool call as a code diff: the ToolCall row plus a unified
- * diff with up to 3 lines of subdued, unchanged context around each change.
+ * Renders a write/edit tool call as a code diff under the ToolCall row, with up to 3
+ * lines of subdued, unchanged context. Flat by default (the row already collapses);
+ * pass `border` to wrap it in the shared ToolSection box, matching multi_edit's files.
  */
 export function ToolDiff({
   tool,
@@ -31,7 +38,10 @@ export function ToolDiff({
   oldText = "",
   newText,
   status = "done",
+  defaultOpen = true,
+  border = false,
   className,
+  onOpenPath,
 }: ToolDiffProps) {
   const patch = createTwoFilesPatch(
     path,
@@ -42,9 +52,21 @@ export function ToolDiff({
     undefined,
     { context: 3 },
   );
+  const diff = <DiffViewer patch={patch} variant="ghost" showHeader={false} />;
   return (
-    <ToolCall name={tool} args={path} status={status} className={className}>
-      <DiffViewer patch={patch} variant="ghost" showHeader={false} />
+    <ToolCall
+      name={tool}
+      args={path}
+      status={status}
+      defaultOpen={defaultOpen}
+      className={className}
+      onOpenPath={onOpenPath}
+    >
+      {border ? (
+        <ToolSection meta={<DiffStat {...countChanges(oldText, newText)} />}>{diff}</ToolSection>
+      ) : (
+        diff
+      )}
     </ToolCall>
   );
 }

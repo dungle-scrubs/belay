@@ -3,9 +3,10 @@ import {
   decodeTrevorEvent,
   type SessionEvent,
   type Usage,
+  type UsageBreakdown,
 } from "@trevor/session";
 
-export type { ArtifactRef, Usage };
+export type { ArtifactRef, Usage, UsageBreakdown };
 
 // One assistant *segment*: the run of thinking/text between tool calls. A turn that
 // calls tools produces several, interleaved with tool messages in arrival order.
@@ -20,11 +21,22 @@ export type AssistantMessage = {
   model: string;
   provider?: string;
   usage?: Usage;
+  breakdown?: UsageBreakdown;
   error?: string;
   overflow?: string;
   cancelled?: boolean;
+  /** The model ended the turn with no reply (after a retry). */
+  noReply?: boolean;
 };
-export type ToolMessage = { kind: "tool"; id: string; name: string; args: string; done: boolean };
+export type ToolMessage = {
+  kind: "tool";
+  id: string;
+  name: string;
+  args: string;
+  done: boolean;
+  /** The tool's rendered output (from tool.completed), used by renderers like web_search. */
+  result?: string;
+};
 // An immediate slash command and the host's result for it (the command lane - these
 // never go to the model, so they render as their own pair, not assistant turns).
 export type CommandMessage = { kind: "command"; id: string; command: string; args: string };
@@ -35,12 +47,54 @@ export type CommandResultMessage = {
   text: string;
   ok: boolean;
 };
+// A graceful-overflow-recovery adjustment, rendered inline as a status marker: the
+// loop recovered (trimmed a tool result / reduced thinking) and retried. Distinct from
+// compaction (durable history summarization, D-036, not yet built).
+export type RecoveredMessage = {
+  kind: "recovered";
+  id: string;
+  action: string;
+  detail: string;
+  reclaimed: number;
+};
 export type Message =
   | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
   | AssistantMessage
   | ToolMessage
   | CommandMessage
-  | CommandResultMessage;
+  | CommandResultMessage
+  | RecoveredMessage;
+
+/** A live, mid-turn snapshot of the in-flight call: usage drives the ctx meter, the
+ *  breakdown drives the Request treemap, both before the turn completes. */
+export interface LiveCall {
+  readonly usage: Usage;
+  readonly breakdown?: UsageBreakdown;
+}
+
+/**
+ * The in-flight snapshot for the panel: the newest `assistant.progress` from a turn
+ * that hasn't completed yet, or `undefined` once the latest turn has finished (so
+ * callers fall back to the completed call's authoritative usage + breakdown). Walks
+ * back from the newest event and stops at the first completion - a progress seen
+ * before any completion means a turn is still streaming.
+ */
+export function liveCallFrom(events: readonly SessionEvent[]): LiveCall | undefined {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    const decoded = event ? decodeTrevorEvent(event) : null;
+    if (!decoded) {
+      continue;
+    }
+    if (decoded.type === "assistant.completed") {
+      return undefined;
+    }
+    if (decoded.type === "assistant.progress" && decoded.usage) {
+      return { usage: decoded.usage, breakdown: decoded.breakdown };
+    }
+  }
+  return undefined;
+}
 
 /**
  * Coalesces the raw event log into a transcript in arrival order. An assistant turn
@@ -93,6 +147,15 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         });
         break;
       case "user.command":
+        if (decoded.command === "/clear") {
+          // A clear resets the conversation: drop everything before it (and any in-flight
+          // run state) so the transcript starts fresh from this point.
+          messages.length = 0;
+          runMeta.clear();
+          openByRun.clear();
+          lastByRun.clear();
+          toolByCall.clear();
+        }
         messages.push({
           kind: "command",
           id: event.eventId,
@@ -125,6 +188,22 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
       case "assistant.overflow":
         openSegment(decoded.runId).overflow = decoded.reason;
         break;
+      case "assistant.recovered": {
+        // Finalize the open segment so the retry's output starts fresh below the marker.
+        const open = openByRun.get(decoded.runId);
+        if (open) {
+          open.done = true;
+          openByRun.delete(decoded.runId);
+        }
+        messages.push({
+          kind: "recovered",
+          id: event.eventId,
+          action: decoded.action,
+          detail: decoded.detail,
+          reclaimed: decoded.reclaimed,
+        });
+        break;
+      }
       case "tool.started": {
         // Finalize the open segment so the next thinking/text starts a new one below the tool.
         const open = openByRun.get(decoded.runId);
@@ -147,6 +226,7 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         const tool = toolByCall.get(decoded.callId);
         if (tool) {
           tool.done = true;
+          tool.result = decoded.result;
         }
         break;
       }
@@ -165,11 +245,17 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         if (decoded.cancelled) {
           segment.cancelled = true;
         }
+        if (decoded.noReply) {
+          segment.noReply = true;
+        }
         if (!segment.text && !segment.thinking) {
           segment.text = decoded.text;
         }
         if (decoded.usage) {
           segment.usage = decoded.usage;
+        }
+        if (decoded.breakdown) {
+          segment.breakdown = decoded.breakdown;
         }
         break;
       }

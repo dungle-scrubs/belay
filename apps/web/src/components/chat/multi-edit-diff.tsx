@@ -1,8 +1,9 @@
-import { createTwoFilesPatch, diffLines } from "diff";
-import { ChevronRight } from "lucide-react";
+import { createTwoFilesPatch } from "diff";
+import type { ReactNode } from "react";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ToolCall } from "./message";
+import { countChanges, DiffStat, withNewline } from "./diff-utils";
+import { OpenPathLink, ToolCall } from "./message";
+import { ToolSection } from "./tool-section";
 
 export interface MultiEdit {
   path: string;
@@ -13,36 +14,35 @@ export interface MultiEdit {
 interface MultiEditDiffProps {
   edits: readonly MultiEdit[];
   status?: "running" | "done" | "error";
+  /** Whether the whole operation starts expanded; the global compact setting drives this. */
+  defaultOpen?: boolean;
+  /**
+   * Wrap each file in a bordered ToolSection box. On by default: multi_edit spans files,
+   * so per-file boxes give each its own border, name, and collapse. Off renders each file
+   * as a flat name + stat header over its diffs (no box), to match single edit/write.
+   */
+  border?: boolean;
   className?: string;
+  /** Opens a file in the local editor (each file name becomes a clickable link). */
+  onOpenPath?: (path: string) => void;
 }
-
-function countChanges(oldText: string, newText: string): { added: number; removed: number } {
-  let added = 0;
-  let removed = 0;
-  for (const part of diffLines(oldText, newText)) {
-    const lines = part.count ?? 0;
-    if (part.added) {
-      added += lines;
-    } else if (part.removed) {
-      removed += lines;
-    }
-  }
-  return { added, removed };
-}
-
-/**
- * A diff over a bare snippet has no trailing newline, so `createTwoFilesPatch`
- * appends a "\ No newline at end of file" marker that renders as noise. Padding
- * both sides with a newline keeps the patch clean.
- */
-const withNewline = (text: string) => (text.endsWith("\n") ? text : `${text}\n`);
 
 /**
  * Renders a multi_edit tool call: a single atomic operation made of several edits,
- * grouped by file. Each file is a collapsible section with its own +/- counts; each
- * edit shows up to 2 lines of subdued surrounding context.
+ * grouped by file. Each file shows its own +/- counts; each edit shows up to 2 lines of
+ * subdued surrounding context. Files are bordered ToolSection boxes by default (`border`).
  */
-export function MultiEditDiff({ edits, status = "done", className }: MultiEditDiffProps) {
+export function MultiEditDiff({
+  edits,
+  status = "done",
+  defaultOpen = true,
+  border = true,
+  className,
+  onOpenPath,
+}: MultiEditDiffProps) {
+  // A file name: a click-to-open link when `onOpenPath` is wired, else plain text.
+  const fileName = (path: string): ReactNode =>
+    onOpenPath ? <OpenPathLink onOpen={() => onOpenPath(path)}>{path}</OpenPathLink> : path;
   // Group by file, preserving first-seen order.
   const groups: { path: string; edits: MultiEdit[] }[] = [];
   for (const edit of edits) {
@@ -67,7 +67,13 @@ export function MultiEditDiff({ edits, status = "done", className }: MultiEditDi
   } · +${totalAdded} -${totalRemoved}`;
 
   return (
-    <ToolCall name="multi_edit" args={summary} status={status} className={className}>
+    <ToolCall
+      name="multi_edit"
+      args={summary}
+      status={status}
+      defaultOpen={defaultOpen}
+      className={className}
+    >
       <div className="flex flex-col gap-2">
         {groups.map((group) => {
           let added = 0;
@@ -77,41 +83,47 @@ export function MultiEditDiff({ edits, status = "done", className }: MultiEditDi
             added += c.added;
             removed += c.removed;
           }
+          const diffs = group.edits.map((edit) => (
+            <DiffViewer
+              key={`${group.path}::${edit.old}`}
+              patch={createTwoFilesPatch(
+                group.path,
+                group.path,
+                withNewline(edit.old),
+                withNewline(edit.new),
+                undefined,
+                undefined,
+                { context: 2 },
+              )}
+              variant="ghost"
+              showHeader={false}
+            />
+          ));
+
+          if (border) {
+            return (
+              <ToolSection
+                key={group.path}
+                title={<code>{fileName(group.path)}</code>}
+                meta={<DiffStat added={added} removed={removed} />}
+              >
+                {diffs}
+              </ToolSection>
+            );
+          }
+
           return (
-            <Collapsible
-              key={group.path}
-              defaultOpen
-              className="overflow-hidden border border-border bg-smui-surface-1"
-            >
-              <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 px-2 py-1.5">
-                <ChevronRight className="size-3 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-                <code className="flex-1 truncate text-left text-xs text-foreground">
-                  {group.path}
+            <div key={group.path} className="flex flex-col">
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <code className="flex-1 truncate text-xs text-foreground">
+                  {fileName(group.path)}
                 </code>
-                <span className="text-label tracking-wider">
-                  <span className="text-smui-green">+{added}</span>{" "}
-                  <span className="text-smui-red">-{removed}</span>
+                <span className="shrink-0 text-label tracking-wider">
+                  <DiffStat added={added} removed={removed} />
                 </span>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="border-t border-border">
-                {group.edits.map((edit) => (
-                  <DiffViewer
-                    key={`${group.path}::${edit.old}`}
-                    patch={createTwoFilesPatch(
-                      group.path,
-                      group.path,
-                      withNewline(edit.old),
-                      withNewline(edit.new),
-                      undefined,
-                      undefined,
-                      { context: 2 },
-                    )}
-                    variant="ghost"
-                    showHeader={false}
-                  />
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
+              </div>
+              {diffs}
+            </div>
           );
         })}
       </div>

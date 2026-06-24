@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ArtifactRef } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { Plus, X } from "lucide-react";
+import { CircleX, PanelRight, Plus, RotateCw, TriangleAlert, X } from "lucide-react";
 import {
   type ChangeEvent,
   type ClipboardEvent as ReactClipboardEvent,
@@ -14,6 +14,7 @@ import {
   useState,
 } from "react";
 import { ModelSelector } from "@/components/assistant-ui/model-selector";
+import { CommandMenu } from "@/components/chat/command-menu";
 import {
   CommandMessage,
   CommandResult,
@@ -24,6 +25,10 @@ import {
 } from "@/components/chat/message";
 import { MultiEditDiff } from "@/components/chat/multi-edit-diff";
 import { ToolDiff } from "@/components/chat/tool-diff";
+import { ToolOutput } from "@/components/chat/tool-output";
+import { type WebSearchResultItem, WebSearchResults } from "@/components/chat/web-search";
+import { SidePanel } from "@/components/panel/SidePanel";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -49,7 +54,7 @@ import { Markdown } from "./markdown";
 import { ensureSession } from "./session/client";
 import { useSession } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
-import { toTranscript } from "./transcript";
+import { type AssistantMessage, liveCallFrom, toTranscript } from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -97,6 +102,43 @@ function parseToolArgs(raw: string): Record<string, unknown> {
   }
 }
 
+const FRESHNESS_WINDOWS = ["day", "week", "month", "year"] as const;
+type FreshnessWindow = (typeof FRESHNESS_WINDOWS)[number];
+
+interface ParsedWebSearch {
+  provider?: "brave" | "serper";
+  freshness?: FreshnessWindow;
+  results?: WebSearchResultItem[];
+  error?: string;
+}
+
+// The web_search tool emits JSON ({provider, query, freshness?, results:[...]}) on
+// success, or an "error: ..." line on failure. Parse defensively: null while the call
+// is still running (no result yet), an error string surfaced as-is, otherwise the
+// structured form. A truncated/non-JSON body falls back to a plain error display.
+function parseWebSearchResult(raw: string | undefined): ParsedWebSearch | null {
+  if (!raw) {
+    return null;
+  }
+  if (raw.startsWith("error:")) {
+    return { error: raw.replace(/^error:\s*/u, "") };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (Array.isArray(parsed.results)) {
+      const freshness = FRESHNESS_WINDOWS.find((window) => window === parsed.freshness);
+      return {
+        provider: parsed.provider === "serper" ? "serper" : "brave",
+        freshness,
+        results: parsed.results as WebSearchResultItem[],
+      };
+    }
+  } catch {
+    // Truncated or non-JSON; fall through to a generic display below.
+  }
+  return { error: raw };
+}
+
 export function App() {
   const target = new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
   const sessionQuery = useQuery({
@@ -127,7 +169,8 @@ export function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { events, status, replayed, publish, cancel, command } = useSession(sessionId);
+  const { events, status, replayed, publish, cancel, command, openInEditor } =
+    useSession(sessionId);
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
@@ -141,6 +184,78 @@ export function App() {
 
   // The agent's live task checklist (host-published snapshots), rendered in the header.
   const tasks = useMemo(() => tasksFrom(events), [events]);
+
+  // The latest completed call's usage + token breakdown, for the side panel's
+  // "data in this call". The completed segment carries both.
+  const lastCall = useMemo((): AssistantMessage | null => {
+    for (let i = transcript.length - 1; i >= 0; i -= 1) {
+      const m = transcript[i];
+      if (m?.kind === "assistant" && (m.breakdown || m.usage)) {
+        return m;
+      }
+    }
+    return null;
+  }, [transcript]);
+
+  // The in-flight call: while a turn streams, each model step publishes a live usage +
+  // breakdown snapshot, so the ctx meter and Request treemap fill in mid-turn instead of
+  // only at completion. Undefined between turns, where lastCall's authoritative data wins.
+  const liveCall = useMemo(() => liveCallFrom(events), [events]);
+
+  // The "Context" tab is the whole session, not just the latest call: sum every
+  // completed request's breakdown (and its tokens) so it grows turn over turn and
+  // always exceeds the single most-recent "Request". (The Request tab stays on
+  // lastCall.) Char totals drive the treemap; provider tokens drive the header.
+  const contextBreakdown = useMemo(() => {
+    const input = {
+      systemAndTools: 0,
+      userText: 0,
+      assistantText: 0,
+      toolCallArgs: 0,
+      toolResults: 0,
+      imagesBase64: 0,
+      imageCount: 0,
+      byTool: {} as Record<string, number>,
+    };
+    const output = { thinking: 0, answer: 0, toolCallArgs: 0 };
+    let any = false;
+    for (const m of transcript) {
+      if (m.kind !== "assistant" || !m.breakdown) {
+        continue;
+      }
+      any = true;
+      const b = m.breakdown;
+      input.systemAndTools += b.input.systemAndTools;
+      input.userText += b.input.userText;
+      input.assistantText += b.input.assistantText;
+      input.toolCallArgs += b.input.toolCallArgs;
+      input.toolResults += b.input.toolResults;
+      input.imagesBase64 += b.input.imagesBase64;
+      input.imageCount += b.input.imageCount;
+      for (const [name, chars] of Object.entries(b.input.byTool)) {
+        input.byTool[name] = (input.byTool[name] ?? 0) + chars;
+      }
+      output.thinking += b.output.thinking;
+      output.answer += b.output.answer;
+      output.toolCallArgs += b.output.toolCallArgs;
+    }
+    return any ? { input, output } : undefined;
+  }, [transcript]);
+  const contextTokens = useMemo(() => {
+    let total = 0;
+    let any = false;
+    for (const m of transcript) {
+      if (m.kind === "assistant" && m.usage) {
+        any = true;
+        total += m.usage.input + m.usage.output;
+      }
+    }
+    return any ? total : undefined;
+  }, [transcript]);
+  // The right-side panel is toggleable; remember the choice across reloads.
+  const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("trevor.panel", {
+    defaultValue: true,
+  });
 
   // Immediate host commands the host announced, plus the set of names used to tell a
   // command from an ordinary prompt at submit time.
@@ -392,426 +507,517 @@ export function App() {
   const removeAttachment = (hash: string) =>
     setAttachments((a) => a.filter((ref) => ref.hash !== hash));
 
+  // Model + reasoning + thinking controls, moved out of the footer into the panel.
+  const panelControls = (
+    <>
+      <ModelSelector.Root models={modelOptions} value={activeProvider} onValueChange={setProvider}>
+        <ModelSelector.Trigger className="w-full justify-between text-label" />
+        <ModelSelector.Content>
+          <ModelSelector.Search />
+          <ModelSelector.List />
+        </ModelSelector.Content>
+      </ModelSelector.Root>
+
+      {modelMeta.reasoningLevels.length > 0 ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-label tracking-wider uppercase text-muted-foreground">
+            reasoning
+          </span>
+          <ToggleGroup
+            type="single"
+            value={reasoning}
+            onValueChange={(next) => {
+              if (next) {
+                setReasoning(next);
+              }
+            }}
+            variant="outline"
+            size="sm"
+          >
+            {modelMeta.reasoningLevels.map((level) => (
+              <ToggleGroupItem
+                key={level}
+                value={level}
+                className="h-6 px-2 text-label lowercase data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+              >
+                {level}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-1.5">
+        <Checkbox
+          id="show-thinking"
+          checked={showThinkingOn}
+          onCheckedChange={(checked) => setShowThinking(checked === true)}
+        />
+        <Label
+          htmlFor="show-thinking"
+          className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
+        >
+          show thinking
+        </Label>
+      </div>
+    </>
+  );
+
+  // Host/connection status, moved out of the footer into the panel header.
+  const statusNode =
+    replayed && sessionId ? (
+      host.leaderId ? (
+        <span className="text-smui-green">
+          ● host active
+          {host.standbyCount > 0 ? ` · ${host.standbyCount} standby` : ""}
+        </span>
+      ) : host.present ? (
+        <span className="text-smui-yellow">● host starting…</span>
+      ) : (
+        <span className="text-smui-yellow">
+          ● no host — <code className="text-foreground">{hostCommand}</code>
+        </span>
+      )
+    ) : null;
+
   return (
-    <main className="flex h-svh flex-col px-4">
-      {/* Transcript fills the view; the composer + footer pin to the bottom.
+    <div className="flex h-svh">
+      <main className="relative flex min-w-0 flex-1 flex-col px-4">
+        {!panelOpen ? (
+          <button
+            type="button"
+            onClick={() => setPanelOpen(true)}
+            aria-label="Open panel"
+            className="absolute top-4 right-4 z-10 cursor-pointer text-muted-foreground hover:text-foreground"
+          >
+            <PanelRight className="size-4.5" />
+          </button>
+        ) : null}
+        {/* Transcript fills the view; the composer + footer pin to the bottom.
           Scrollbar is hidden but the region still scrolls. */}
-      <div className="flex flex-1 flex-col-reverse overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {/* Nothing renders until the full history has replayed, then it appears all at
+        <div className="flex flex-1 flex-col-reverse overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Nothing renders until the full history has replayed, then it appears all at
             once (already pinned to the bottom) with a 150ms fade-in. */}
-        {replayed ? (
-          <div className="flex flex-col gap-8 fade-in animate-in duration-150">
-            {transcript.map((message) => {
-              // multi_edit: one atomic operation, grouped by file as collapsible diffs.
-              if (message.kind === "tool" && message.name === "multi_edit") {
-                const a = parseToolArgs(message.args);
-                const raw = Array.isArray(a.edits) ? a.edits : [];
-                const edits = raw
-                  .map((item) => {
-                    const e = (item ?? {}) as Record<string, unknown>;
-                    return {
-                      path: typeof e.path === "string" ? e.path : "",
-                      old: typeof e.old === "string" ? e.old : "",
-                      new: typeof e.new === "string" ? e.new : "",
-                    };
-                  })
-                  .filter((e) => e.path);
-                if (edits.length > 0) {
+          {replayed ? (
+            <div className="flex flex-col gap-8 fade-in animate-in duration-150">
+              {transcript.map((message, index) => {
+                // Consecutive tool calls read as one block: collapse the gap-8 between
+                // a tool row and the tool row directly above it.
+                const toolClass = cn(
+                  "pl-3.5",
+                  message.kind === "tool" && transcript[index - 1]?.kind === "tool" && "-mt-6",
+                );
+                // multi_edit: one atomic operation, grouped by file as collapsible diffs.
+                if (message.kind === "tool" && message.name === "multi_edit") {
+                  const a = parseToolArgs(message.args);
+                  const raw = Array.isArray(a.edits) ? a.edits : [];
+                  const edits = raw
+                    .map((item) => {
+                      const e = (item ?? {}) as Record<string, unknown>;
+                      return {
+                        path: typeof e.path === "string" ? e.path : "",
+                        old: typeof e.old === "string" ? e.old : "",
+                        new: typeof e.new === "string" ? e.new : "",
+                      };
+                    })
+                    .filter((e) => e.path);
+                  if (edits.length > 0) {
+                    return (
+                      <MultiEditDiff
+                        key={message.id}
+                        className={toolClass}
+                        edits={edits}
+                        status={message.done ? "done" : "running"}
+                        onOpenPath={(path) => void openInEditor(path)}
+                      />
+                    );
+                  }
+                }
+                // write/edit render as a code diff (up to 3 lines of subdued context).
+                if (
+                  message.kind === "tool" &&
+                  (message.name === "write" || message.name === "edit")
+                ) {
+                  const a = parseToolArgs(message.args);
+                  const path = typeof a.path === "string" ? a.path : "";
+                  if (path) {
+                    const status = message.done ? "done" : "running";
+                    return message.name === "write" ? (
+                      <ToolDiff
+                        key={message.id}
+                        className={toolClass}
+                        tool="write"
+                        path={path}
+                        newText={typeof a.content === "string" ? a.content : ""}
+                        status={status}
+                        onOpenPath={() => void openInEditor(path)}
+                      />
+                    ) : (
+                      <ToolDiff
+                        key={message.id}
+                        className={toolClass}
+                        tool="edit"
+                        path={path}
+                        oldText={typeof a.old === "string" ? a.old : ""}
+                        newText={typeof a.new === "string" ? a.new : ""}
+                        status={status}
+                        onOpenPath={() => void openInEditor(path)}
+                      />
+                    );
+                  }
+                }
+                // web_search renders its JSON output as a result list (or the working
+                // indicator while running, or its error message).
+                if (message.kind === "tool" && message.name === "web_search") {
+                  const a = parseToolArgs(message.args);
+                  const parsed = parseWebSearchResult(message.result);
                   return (
-                    <MultiEditDiff
+                    <WebSearchResults
                       key={message.id}
-                      className="pl-3.5"
-                      edits={edits}
+                      className={toolClass}
+                      query={typeof a.query === "string" ? a.query : ""}
+                      provider={parsed?.provider}
+                      freshness={parsed?.freshness}
+                      results={parsed?.results}
+                      error={parsed?.error}
                       status={message.done ? "done" : "running"}
                     />
                   );
                 }
-              }
-              // write/edit render as a code diff (up to 3 lines of subdued context).
-              if (
-                message.kind === "tool" &&
-                (message.name === "write" || message.name === "edit")
-              ) {
-                const a = parseToolArgs(message.args);
-                const path = typeof a.path === "string" ? a.path : "";
-                if (path) {
-                  const status = message.done ? "done" : "running";
-                  return message.name === "write" ? (
-                    <ToolDiff
+                // bash/grep render their text output (command output, matches) flat.
+                if (
+                  message.kind === "tool" &&
+                  (message.name === "bash" || message.name === "grep")
+                ) {
+                  return (
+                    <ToolOutput
                       key={message.id}
-                      className="pl-3.5"
-                      tool="write"
-                      path={path}
-                      newText={typeof a.content === "string" ? a.content : ""}
-                      status={status}
-                    />
-                  ) : (
-                    <ToolDiff
-                      key={message.id}
-                      className="pl-3.5"
-                      tool="edit"
-                      path={path}
-                      oldText={typeof a.old === "string" ? a.old : ""}
-                      newText={typeof a.new === "string" ? a.new : ""}
-                      status={status}
+                      className={toolClass}
+                      name={message.name}
+                      args={toolSummary(message.name, message.args)}
+                      output={message.result}
+                      status={message.done ? "done" : "running"}
                     />
                   );
                 }
-              }
-              if (message.kind === "tool") {
-                return (
-                  <ToolCall
-                    key={message.id}
-                    className="pl-3.5"
-                    name={message.name}
-                    args={toolSummary(message.name, message.args)}
-                    status={message.done ? "done" : "running"}
-                  />
-                );
-              }
-              if (message.kind === "command") {
-                return (
-                  <div key={message.id} className="pl-3.5">
-                    <CommandMessage command={message.command} args={message.args || undefined} />
-                  </div>
-                );
-              }
-              if (message.kind === "result") {
-                return (
-                  <div key={message.id} className="pl-3.5">
-                    <CommandResult command={message.command} text={message.text} ok={message.ok} />
-                  </div>
-                );
-              }
+                if (message.kind === "tool") {
+                  // Tools whose primary arg is a file path get a clickable path that
+                  // opens it in the editor (read/ls/...); pattern/command tools don't.
+                  const toolPath = parseToolArgs(message.args).path;
+                  return (
+                    <ToolCall
+                      key={message.id}
+                      className={toolClass}
+                      name={message.name}
+                      args={toolSummary(message.name, message.args)}
+                      status={message.done ? "done" : "running"}
+                      onOpenPath={
+                        typeof toolPath === "string" && toolPath
+                          ? () => void openInEditor(toolPath)
+                          : undefined
+                      }
+                    />
+                  );
+                }
+                if (message.kind === "command") {
+                  return (
+                    <div key={message.id} className="pl-3.5">
+                      <CommandMessage command={message.command} args={message.args || undefined} />
+                    </div>
+                  );
+                }
+                if (message.kind === "result") {
+                  return (
+                    <div key={message.id} className="pl-3.5">
+                      <CommandResult
+                        command={message.command}
+                        text={message.text}
+                        ok={message.ok}
+                      />
+                    </div>
+                  );
+                }
+                if (message.kind === "recovered") {
+                  const reclaimed =
+                    message.reclaimed > 0
+                      ? ` · ~${fmtTokens(Math.round(message.reclaimed / 4))} reclaimed`
+                      : "";
+                  return (
+                    <div key={message.id} className="pl-3.5">
+                      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
+                        <RotateCw className="h-3.5 w-3.5" />
+                        <AlertTitle className="text-smui-yellow">context full</AlertTitle>
+                        <AlertDescription>
+                          {message.detail}
+                          {reclaimed} · retrying
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  );
+                }
 
-              const thinking =
-                message.kind === "assistant" && showThinkingOn && message.thinking
-                  ? message.thinking
-                  : null;
+                const thinking =
+                  message.kind === "assistant" && showThinkingOn && message.thinking
+                    ? message.thinking
+                    : null;
 
-              const overflowNote =
-                message.kind === "assistant" && message.overflow ? (
-                  <div className="text-label text-smui-orange">
-                    ⚠ context overflow — {message.overflow}
-                  </div>
-                ) : null;
+                const overflowNote =
+                  message.kind === "assistant" && message.overflow ? (
+                    <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
+                      <TriangleAlert className="h-3.5 w-3.5" />
+                      <AlertTitle className="text-smui-yellow">context overflow</AlertTitle>
+                      <AlertDescription>{message.overflow}</AlertDescription>
+                    </Alert>
+                  ) : null;
 
-              const errorNote =
-                message.kind === "assistant" && message.error ? (
-                  <div className="text-label text-smui-red">
-                    ⚠{" "}
-                    {isOverflowError(message.error)
-                      ? `context overflow — ${message.error}`
-                      : message.error}
-                  </div>
-                ) : null;
+                const errorNote =
+                  message.kind === "assistant" && message.error ? (
+                    <Alert variant="destructive">
+                      <CircleX className="h-3.5 w-3.5" />
+                      <AlertTitle>
+                        {isOverflowError(message.error) ? "context overflow" : "error"}
+                      </AlertTitle>
+                      <AlertDescription>{message.error}</AlertDescription>
+                    </Alert>
+                  ) : null;
 
-              const cancelledNote =
-                message.kind === "assistant" && message.cancelled ? (
-                  <div className="text-label text-muted-foreground">⊘ cancelled</div>
-                ) : null;
+                const cancelledNote =
+                  message.kind === "assistant" && message.cancelled ? (
+                    <div className="text-label text-muted-foreground">⊘ cancelled</div>
+                  ) : null;
 
-              if (message.kind === "assistant" && !message.text && !message.done) {
+                const noReplyNote =
+                  message.kind === "assistant" && message.noReply ? (
+                    <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
+                      <TriangleAlert className="h-3.5 w-3.5" />
+                      <AlertTitle className="text-smui-yellow">no reply</AlertTitle>
+                      <AlertDescription>
+                        The model ended the turn without a reply. Try again or rephrase.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null;
+
+                if (message.kind === "assistant" && !message.text && !message.done) {
+                  return (
+                    <div key={message.id} className="flex flex-col gap-3 pl-3.5">
+                      {thinking ? (
+                        <ThinkingMessage content={thinking} />
+                      ) : (
+                        <WorkingIndicator
+                          label={message.warm ? "thinking" : `loading ${message.model}`}
+                        />
+                      )}
+                      {overflowNote}
+                      {errorNote}
+                    </div>
+                  );
+                }
+
+                // Meta (model · context · speed) rides on the final segment - the one that
+                // carries usage - so it isn't repeated under every pre-tool segment.
+                let metaItems: string[] | null = null;
+                if (message.kind === "assistant" && message.usage) {
+                  const usage = message.usage;
+                  metaItems = [
+                    message.model,
+                    `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
+                  ];
+                  if (usage.genMs > 0) {
+                    metaItems.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
+                  }
+                }
+
+                // User prompts read as a boxed, left-barred block; assistant replies are
+                // plain prose. Neither carries a "you"/"assistant" header.
+                if (message.kind === "user") {
+                  return (
+                    <div
+                      key={message.id}
+                      className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
+                    >
+                      {message.text ? <Md text={message.text} /> : null}
+                      {message.artifacts.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {message.artifacts.map((ref) => (
+                            <ArtifactThumb key={ref.hash} artifact={ref} />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={message.id} className="flex flex-col gap-3 pl-3.5">
-                    {thinking ? (
-                      <ThinkingMessage content={thinking} />
-                    ) : (
-                      <WorkingIndicator
-                        label={message.warm ? "thinking" : `loading ${message.model}`}
-                      />
-                    )}
+                    {thinking ? <ThinkingMessage content={thinking} /> : null}
+                    {message.text ? <Md text={message.text} /> : null}
                     {overflowNote}
                     {errorNote}
+                    {cancelledNote}
+                    {noReplyNote}
+                    {metaItems ? <MessageMeta items={metaItems} /> : null}
                   </div>
                 );
-              }
+              })}
 
-              // Meta (model · context · speed) rides on the final segment - the one that
-              // carries usage - so it isn't repeated under every pre-tool segment.
-              let metaItems: string[] | null = null;
-              if (message.kind === "assistant" && message.usage) {
-                const usage = message.usage;
-                metaItems = [
-                  message.model,
-                  `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
-                ];
-                if (usage.genMs > 0) {
-                  metaItems.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
-                }
-              }
-
-              // User prompts read as a boxed, left-barred block; assistant replies are
-              // plain prose. Neither carries a "you"/"assistant" header.
-              if (message.kind === "user") {
-                return (
-                  <div
-                    key={message.id}
-                    className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
-                  >
-                    {message.text ? <Md text={message.text} /> : null}
-                    {message.artifacts.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {message.artifacts.map((ref) => (
-                          <ArtifactThumb key={ref.hash} artifact={ref} />
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              }
-
-              return (
-                <div key={message.id} className="flex flex-col gap-3 pl-3.5">
-                  {thinking ? <ThinkingMessage content={thinking} /> : null}
-                  {message.text ? <Md text={message.text} /> : null}
-                  {overflowNote}
-                  {errorNote}
-                  {cancelledNote}
-                  {metaItems ? <MessageMeta items={metaItems} /> : null}
+              {awaitingResponse ? (
+                <div className="pl-3.5">
+                  <WorkingIndicator label="thinking" />
                 </div>
-              );
-            })}
+              ) : null}
 
-            {awaitingResponse ? (
-              <div className="pl-3.5">
-                <WorkingIndicator label="thinking" />
-              </div>
-            ) : null}
-
-            {/* Prompts held in the local queue: shown muted as "queued" so they read as
+              {/* Prompts held in the local queue: shown muted as "queued" so they read as
             waiting, not sent, until the current turn frees up and they publish. */}
-            {queue.map((q) => (
-              <div
-                key={q.id}
-                className="flex flex-col gap-2 border-l-2 border-primary/50 bg-card px-3 py-2 opacity-60"
-              >
-                {q.text ? <Md text={q.text} muted /> : null}
-                {q.artifacts?.length ? (
-                  <div className="flex gap-1.5">
-                    {q.artifacts.map((ref) => (
-                      <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {/* Live task checklist, above the composer. */}
-      <TasksPanel tasks={tasks} />
-
-      {/* Pinned bottom: composer, then a two-column footer (status + model controls).
-          Files dropped anywhere here upload as attachments. */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: passive drop target; the
-          keyboard-accessible path is the attach button below. */}
-      <div
-        onDrop={onDrop}
-        onDragOver={(event) => event.preventDefault()}
-        className="shrink-0 pt-2 pb-4"
-      >
-        {/* Slash menu: filters the host's announced command inventory as you type a
-            leading "/". Arrows/Tab/Enter pick a row (handled on the input); a row click
-            fills the composer. onMouseDown (not onClick) so the input keeps focus. */}
-        {menuOpen ? (
-          <div className="mb-2 overflow-hidden border border-border bg-popover">
-            {menuMatches.map((c, i) => (
-              <button
-                key={c.name}
-                type="button"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  acceptCommand(c.name);
-                }}
-                className={cn(
-                  "flex w-full cursor-pointer items-baseline gap-2 px-3 py-1.5 text-left",
-                  i === menuIdx ? "bg-accent" : "hover:bg-secondary",
-                )}
-              >
-                <code className="text-sm font-semibold text-primary">{c.usage ?? c.name}</code>
-                <span className="text-xs text-muted-foreground">{c.summary}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {uploadError ? (
-          <div className="mb-2 flex items-center gap-2 text-label tracking-wider text-smui-red">
-            <span>⚠ {uploadError}</span>
-            <button
-              type="button"
-              onClick={() => setUploadError(null)}
-              className="cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              dismiss
-            </button>
-          </div>
-        ) : null}
-
-        {/* Pending attachments, shown as removable chips (image thumbnail or a file pill)
-            above the input until the next prompt carries them. */}
-        {attachments.length || uploading > 0 ? (
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            {attachments.map((ref) => (
-              <span
-                key={ref.hash}
-                className="inline-flex items-center gap-1.5 border border-border bg-card px-1.5 py-1 text-xs"
-              >
-                <ArtifactThumb artifact={ref} size={28} square />
-                {ref.kind === "image" ? (
-                  <span className="max-w-[140px] truncate">{ref.name ?? ref.kind}</span>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => removeAttachment(ref.hash)}
-                  title="Remove"
-                  className="cursor-pointer text-muted-foreground hover:text-smui-red"
+              {queue.map((q) => (
+                <div
+                  key={q.id}
+                  className="flex flex-col gap-2 border-l-2 border-primary/50 bg-card px-3 py-2 opacity-60"
                 >
-                  <X className="size-3" />
-                </button>
-              </span>
-            ))}
-            {uploading > 0 ? (
-              <span className="text-label tracking-wider text-muted-foreground">
-                uploading {uploading}…
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-
-        <form onSubmit={onSubmit}>
-          <div className="flex flex-col border border-input bg-background transition-colors focus-within:border-ring">
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={onInputKeyDown}
-              onPaste={onPaste}
-              placeholder={`message ${modelMeta.label}… (/ for commands)`}
-              disabled={!sessionId}
-              className="w-full bg-transparent px-3 pt-2.5 pb-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
-            />
-            <div className="flex items-center gap-2 px-2 pb-2">
-              <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!sessionId}
-                aria-label="Attach files (or paste / drag-drop)"
-              >
-                <Plus className="size-4.5" />
-              </Button>
+                  {q.text ? <Md text={q.text} muted /> : null}
+                  {q.artifacts?.length ? (
+                    <div className="flex gap-1.5">
+                      {q.artifacts.map((ref) => (
+                        <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
-          </div>
-          {/* Single text input: Enter submits the form implicitly (no send button). */}
-        </form>
-
-        {/* Footer under the prompt input: cwd/session/host (left), model controls (right). */}
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
-          <div className="flex flex-col gap-1">
-            {replayed ? (
-              <div className="flex flex-col gap-1 fade-in animate-in duration-150">
-                {host.workspace ? (
-                  <p className="text-label tracking-wider text-muted-foreground">
-                    workspace <code className="text-foreground">{host.workspace}</code>
-                    {host.cwd && host.cwd !== host.workspace ? (
-                      <>
-                        {" · cwd "}
-                        <code className="text-foreground">{host.cwd}</code>
-                      </>
-                    ) : null}
-                  </p>
-                ) : null}
-                <p className="text-label tracking-wider text-muted-foreground">
-                  session <code className="text-foreground">{target}</code> · {status}
-                  {replayed ? " · replayed" : ""} · {events.length} events
-                </p>
-                {sessionId ? (
-                  <p className="text-label tracking-wider">
-                    {host.leaderId ? (
-                      <span className="text-smui-green">
-                        ● host active
-                        {host.standbyCount > 0
-                          ? ` (${host.leaderId.slice(0, 8)}) · ${host.standbyCount} standby`
-                          : ""}
-                      </span>
-                    ) : host.present ? (
-                      <span className="text-smui-yellow">● host starting…</span>
-                    ) : (
-                      <span className="text-smui-yellow">
-                        ● no host on this session — start one:{" "}
-                        <code className="text-foreground">{hostCommand}</code>
-                      </span>
-                    )}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <ModelSelector.Root
-              models={modelOptions}
-              value={activeProvider}
-              onValueChange={setProvider}
-            >
-              <ModelSelector.Trigger className="w-44 text-label" />
-              <ModelSelector.Content>
-                <ModelSelector.Search />
-                <ModelSelector.List />
-              </ModelSelector.Content>
-            </ModelSelector.Root>
-
-            {modelMeta.reasoningLevels.length > 0 ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-label tracking-wider uppercase text-muted-foreground">
-                  reasoning
-                </span>
-                <ToggleGroup
-                  type="single"
-                  value={reasoning}
-                  onValueChange={(next) => {
-                    if (next) {
-                      setReasoning(next);
-                    }
-                  }}
-                  variant="outline"
-                  size="sm"
-                >
-                  {modelMeta.reasoningLevels.map((level) => (
-                    <ToggleGroupItem
-                      key={level}
-                      value={level}
-                      className="h-6 px-2 text-label lowercase data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                    >
-                      {level}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </div>
-            ) : null}
-
-            <div className="flex items-center gap-1.5">
-              <Checkbox
-                id="show-thinking"
-                checked={showThinkingOn}
-                onCheckedChange={(checked) => setShowThinking(checked === true)}
-              />
-              <Label
-                htmlFor="show-thinking"
-                className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
-              >
-                show thinking
-              </Label>
-            </div>
-          </div>
+          ) : null}
         </div>
+
+        {/* Live task checklist, above the composer. */}
+        <TasksPanel tasks={tasks} />
+
+        {/* Pinned bottom: composer, then a two-column footer (status + model controls).
+          Files dropped anywhere here upload as attachments. */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: passive drop target; the
+          keyboard-accessible path is the attach button below. */}
+        <div
+          onDrop={onDrop}
+          onDragOver={(event) => event.preventDefault()}
+          className="relative shrink-0 pt-2 pb-4"
+        >
+          {/* Slash menu: overlays above the composer (absolute, so it never pushes the
+            transcript up). Filters the host's announced command inventory as you type a
+            leading "/", with the matched prefix highlighted. Arrows/Tab/Enter pick a row
+            (handled on the input); a row click fills the composer. onMouseDown (not
+            onClick) so the input keeps focus. */}
+          {menuOpen ? (
+            <CommandMenu
+              className="absolute inset-x-0 bottom-full z-20 mb-2"
+              matches={menuMatches}
+              activeIndex={menuIdx}
+              query={slashQuery ?? ""}
+              onPick={acceptCommand}
+            />
+          ) : null}
+
+          {uploadError ? (
+            <div className="mb-2 flex items-center gap-2 text-label tracking-wider text-smui-red">
+              <span>⚠ {uploadError}</span>
+              <button
+                type="button"
+                onClick={() => setUploadError(null)}
+                className="cursor-pointer text-muted-foreground hover:text-foreground"
+              >
+                dismiss
+              </button>
+            </div>
+          ) : null}
+
+          {/* Pending attachments, shown as removable chips (image thumbnail or a file pill)
+            above the input until the next prompt carries them. */}
+          {attachments.length || uploading > 0 ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {attachments.map((ref) => (
+                <span
+                  key={ref.hash}
+                  className="inline-flex items-center gap-1.5 border border-border bg-card px-1.5 py-1 text-xs"
+                >
+                  <ArtifactThumb artifact={ref} size={28} square />
+                  {ref.kind === "image" ? (
+                    <span className="max-w-[140px] truncate">{ref.name ?? ref.kind}</span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(ref.hash)}
+                    title="Remove"
+                    className="cursor-pointer text-muted-foreground hover:text-smui-red"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+              {uploading > 0 ? (
+                <span className="text-label tracking-wider text-muted-foreground">
+                  uploading {uploading}…
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          <form onSubmit={onSubmit}>
+            <div className="flex flex-col border border-input bg-background transition-colors focus-within:border-ring">
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={onInputKeyDown}
+                onPaste={onPaste}
+                placeholder={`message ${modelMeta.label}… (/ for commands)`}
+                disabled={!sessionId}
+                className="w-full bg-transparent px-3 pt-2.5 pb-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
+              />
+              <div className="flex items-center gap-2 px-2 pb-2">
+                <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!sessionId}
+                  aria-label="Attach files (or paste / drag-drop)"
+                >
+                  <Plus className="size-4.5" />
+                </Button>
+              </div>
+            </div>
+            {/* Single text input: Enter submits the form implicitly (no send button). */}
+          </form>
+        </div>
+      </main>
+
+      {panelOpen ? (
+        <SidePanel
+          title={target}
+          subtitle={`${status}${replayed ? " · replayed" : ""} · ${events.length} events`}
+          statusNode={statusNode}
+          workspace={host.workspace ?? undefined}
+          ctxUsed={liveCall?.usage.input ?? lastCall?.usage?.input}
+          ctxMax={liveCall?.usage.contextWindow ?? lastCall?.usage?.contextWindow}
+          totalTokens={
+            liveCall
+              ? liveCall.usage.input + liveCall.usage.output
+              : lastCall?.usage
+                ? lastCall.usage.input + lastCall.usage.output
+                : undefined
+          }
+          breakdown={liveCall?.breakdown ?? lastCall?.breakdown}
+          contextTokens={contextTokens}
+          contextBreakdown={contextBreakdown}
+          controls={panelControls}
+          onClose={() => setPanelOpen(false)}
+        />
+      ) : null}
+
+      {/* Session id, pinned bottom-right above everything, so it stays legible in
+          screenshots regardless of panel/layout state. */}
+      <div className="fixed right-3 bottom-2 z-[100] rounded border border-border bg-card/90 px-2 py-1 font-mono text-label tracking-wider text-muted-foreground shadow-sm backdrop-blur-sm">
+        {target}
       </div>
-    </main>
+    </div>
   );
 }
