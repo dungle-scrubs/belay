@@ -1,26 +1,27 @@
 import { richterTransport } from "@trevor/richter";
-import type {
-  ConnectionStatus,
-  PublishInput,
-  SessionConnection,
-  SessionEvent,
-  SessionIdentity,
+import {
+  type ConnectionStatus,
+  type PublishInput,
+  type SessionConnection,
+  type SessionEvent,
+  type SessionIdentity,
+  streamTransport,
 } from "@trevor/session";
 
 /**
- * Web binding for the session transport: it selects a backend (today the Richter
- * transport) from the configured service URL and stamps a fresh web identity onto
- * each connection. The stream URL, decode loop, and REST calls live in the
- * transport package, so the host and the browser cannot drift on the contract.
+ * Web binding for the session transport: it selects a backend and stamps a fresh
+ * web identity onto each connection. The stream URL, decode loop, and REST calls
+ * live in @trevor/session, so the host and the browser cannot drift on the contract.
+ *
+ * Backend selection (the plugin seam): by default the browser talks same-origin to
+ * the local session-store, which the Vite dev proxy (vite.config.ts) forwards
+ * /sessions (REST + WS) to - so no cross-origin (CORS). Set VITE_RICHTER_URL to opt
+ * into Richter instead (a Richter that serves CORS directly).
  */
-
-// Default to same-origin so requests go through the Vite dev proxy (vite.config.ts),
-// which forwards /sessions (REST + WS) to the backend and avoids cross-origin (CORS)
-// failures. Set VITE_RICHTER_URL to hit a backend that serves CORS directly.
-const SERVICE_URL = import.meta.env.VITE_RICHTER_URL ?? window.location.origin;
-
-// Backend selection (the plugin seam): swap richterTransport for a local transport here.
-const transport = richterTransport(SERVICE_URL);
+const RICHTER_URL = import.meta.env.VITE_RICHTER_URL;
+const transport = RICHTER_URL
+  ? richterTransport(RICHTER_URL)
+  : streamTransport(window.location.origin);
 
 export type { ConnectionStatus, PublishInput };
 

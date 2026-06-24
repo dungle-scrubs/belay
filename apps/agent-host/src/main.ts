@@ -5,6 +5,7 @@ import {
   decodeTrevorEvent,
   events,
   type SessionEvent,
+  streamTransport,
   type TrevorEventInput,
 } from "@trevor/session";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
@@ -26,7 +27,7 @@ import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
 
 /**
- * Trevor host: a Richter participant that runs an agent loop (model <-> tools) for
+ * Trevor host: a session participant that runs an agent loop (model <-> tools) for
  * each new user.message over the full conversation, via a per-message-selectable
  * Provider (local qwen, or GPT-5.x over Codex OAuth) - both with tool calling.
  * It builds history from the event log, gates on replay, reports cold/warm
@@ -36,20 +37,23 @@ import { publishTurn } from "./turn";
  * The session contract (event shape, the `events` constructors, `decodeTrevorEvent`)
  * lives in @trevor/session and is shared with the web client, so host and browser
  * can never disagree on the protocol. The durable log is reached through a
- * SessionTransport; this host plugs in the Richter transport (@trevor/richter), but
- * the loop below depends only on the contract, not on Richter.
+ * SessionTransport; by default this host plugs in the local session-store, and sets
+ * RICHTER_URL to opt into Richter instead. Either way the loop below depends only on
+ * the contract, not on a backend.
  *
  * Many hosts may share one session (each with a distinct participant id so
  * Richter lets them coexist), but only the lease LEADER answers turns; others
  * stand by and take over if the leader goes quiet (see ./lease).
  */
 
-const SERVICE_URL = process.env.RICHTER_URL ?? "http://localhost:3025";
 const SESSION_ID = process.env.SESSION_ID ?? "trevor-local";
 const PRODUCER_ID = "trevor-host";
-// Backend selection (the plugin seam): the host speaks the SessionTransport
-// contract; here it plugs in the Richter transport. A local backend swaps in here.
-const transport = richterTransport(SERVICE_URL);
+// Backend selection (the plugin seam): default to the local session-store; set
+// RICHTER_URL to opt into the Richter durable substrate instead. The host speaks
+// the SessionTransport contract either way.
+const RICHTER_URL = process.env.RICHTER_URL;
+const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? "http://127.0.0.1:17424";
+const transport = RICHTER_URL ? richterTransport(RICHTER_URL) : streamTransport(SESSION_STORE_URL);
 const providers = buildProviders();
 const commands = buildCommandRegistry();
 
