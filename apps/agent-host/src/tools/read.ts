@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
-import { ToolExecutionError } from "./errors";
-import { cap, msg } from "./shared";
+import { cap, tryTool } from "./shared";
 import type { Tool } from "./types";
 
 /** Reads a UTF-8 text file relative to the host's working directory. */
@@ -14,8 +13,5 @@ export const readTool: Tool = {
     required: ["path"],
   },
   execute: (args) =>
-    Effect.tryPromise({
-      try: () => readFile(String(args.path ?? ""), "utf8"),
-      catch: (cause) => new ToolExecutionError({ tool: "read", detail: msg(cause), cause }),
-    }).pipe(Effect.map(cap)),
+    tryTool("read", () => readFile(String(args.path ?? ""), "utf8")).pipe(Effect.map(cap)),
 };

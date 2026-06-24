@@ -1,8 +1,7 @@
 import { glob, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { ToolExecutionError } from "./errors";
-import { cap, msg, SKIP_DIRS } from "./shared";
+import { cap, SKIP_DIRS, tryTool } from "./shared";
 import type { Tool } from "./types";
 import { WORKSPACE_ROOT } from "./workspace";
 
@@ -37,45 +36,42 @@ export const grepTool: Tool = {
 
       const fileGlob = String(args.glob ?? "**/*");
 
-      return yield* Effect.tryPromise({
-        try: async () => {
-          const results: string[] = [];
+      return yield* tryTool("grep", async () => {
+        const results: string[] = [];
 
-          let scanned = 0;
+        let scanned = 0;
 
-          for await (const entry of glob(fileGlob, { cwd: WORKSPACE_ROOT })) {
-            if (SKIP_DIRS.test(`/${entry}/`) || scanned >= MAX_GREP_FILES) {
-              continue;
-            }
+        for await (const entry of glob(fileGlob, { cwd: WORKSPACE_ROOT })) {
+          if (SKIP_DIRS.test(`/${entry}/`) || scanned >= MAX_GREP_FILES) {
+            continue;
+          }
 
-            scanned += 1;
+          scanned += 1;
 
-            let content: string;
+          let content: string;
 
-            try {
-              content = await readFile(resolve(WORKSPACE_ROOT, entry), "utf8");
-            } catch {
-              continue; // directory, binary, or unreadable - skip
-            }
+          try {
+            content = await readFile(resolve(WORKSPACE_ROOT, entry), "utf8");
+          } catch {
+            continue; // directory, binary, or unreadable - skip
+          }
 
-            const lines = content.split("\n");
+          const lines = content.split("\n");
 
-            for (let i = 0; i < lines.length; i += 1) {
-              const line = lines[i] as string;
+          for (let i = 0; i < lines.length; i += 1) {
+            const line = lines[i] as string;
 
-              if (regex.test(line)) {
-                results.push(`${entry}:${i + 1}:${line.trim().slice(0, 200)}`);
+            if (regex.test(line)) {
+              results.push(`${entry}:${i + 1}:${line.trim().slice(0, 200)}`);
 
-                if (results.length >= MAX_GREP_MATCHES) {
-                  return cap(`${results.join("\n")}\n…[capped at ${MAX_GREP_MATCHES} matches]`);
-                }
+              if (results.length >= MAX_GREP_MATCHES) {
+                return cap(`${results.join("\n")}\n…[capped at ${MAX_GREP_MATCHES} matches]`);
               }
             }
           }
+        }
 
-          return cap(results.length > 0 ? results.join("\n") : "(no matches)");
-        },
-        catch: (cause) => new ToolExecutionError({ tool: "grep", detail: msg(cause), cause }),
+        return cap(results.length > 0 ? results.join("\n") : "(no matches)");
       });
     }),
 };

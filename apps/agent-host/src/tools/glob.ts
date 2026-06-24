@@ -1,7 +1,5 @@
 import { glob } from "node:fs/promises";
-import { Effect } from "effect";
-import { ToolExecutionError } from "./errors";
-import { cap, msg, SKIP_DIRS } from "./shared";
+import { cap, SKIP_DIRS, tryTool } from "./shared";
 import type { Tool } from "./types";
 import { WORKSPACE_ROOT } from "./workspace";
 
@@ -19,21 +17,18 @@ export const globTool: Tool = {
     required: ["pattern"],
   },
   execute: (args) =>
-    Effect.tryPromise({
-      try: async () => {
-        const matches: string[] = [];
-        for await (const entry of glob(String(args.pattern ?? ""), { cwd: WORKSPACE_ROOT })) {
-          if (SKIP_DIRS.test(`/${entry}/`)) {
-            continue;
-          }
-          matches.push(entry);
-          if (matches.length >= MAX_GLOB) {
-            matches.push(`…[capped at ${MAX_GLOB}]`);
-            break;
-          }
+    tryTool("glob", async () => {
+      const matches: string[] = [];
+      for await (const entry of glob(String(args.pattern ?? ""), { cwd: WORKSPACE_ROOT })) {
+        if (SKIP_DIRS.test(`/${entry}/`)) {
+          continue;
         }
-        return cap(matches.length > 0 ? matches.sort().join("\n") : "(no matches)");
-      },
-      catch: (cause) => new ToolExecutionError({ tool: "glob", detail: msg(cause), cause }),
+        matches.push(entry);
+        if (matches.length >= MAX_GLOB) {
+          matches.push(`…[capped at ${MAX_GLOB}]`);
+          break;
+        }
+      }
+      return cap(matches.length > 0 ? matches.sort().join("\n") : "(no matches)");
     }),
 };

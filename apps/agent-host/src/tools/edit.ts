@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { Effect } from "effect";
-import { ToolExecutionError } from "./errors";
-import { msg } from "./shared";
+import { applyUniqueReplacement, replaceMissMessage } from "./replace";
+import { tryTool, tryToolSync } from "./shared";
 import type { Tool } from "./types";
 import { confine, WORKSPACE_ROOT } from "./workspace";
 
@@ -28,25 +28,13 @@ export const editTool: Tool = {
       }
       // confine throws on a path escape; the fs calls reject - both become the same
       // typed failure, which the executor renders to one `error: …` line.
-      const target = yield* Effect.try({
-        try: () => confine(String(args.path ?? "")),
-        catch: (cause) => new ToolExecutionError({ tool: "edit", detail: msg(cause), cause }),
-      });
-      const content = yield* Effect.tryPromise({
-        try: () => readFile(target, "utf8"),
-        catch: (cause) => new ToolExecutionError({ tool: "edit", detail: msg(cause), cause }),
-      });
-      const occurrences = content.split(old).length - 1;
-      if (occurrences === 0) {
-        return "error: 'old' text not found";
+      const target = yield* tryToolSync("edit", () => confine(String(args.path ?? "")));
+      const content = yield* tryTool("edit", () => readFile(target, "utf8"));
+      const result = applyUniqueReplacement(content, old, String(args.new ?? ""));
+      if (!result.ok) {
+        return replaceMissMessage(result);
       }
-      if (occurrences > 1) {
-        return `error: 'old' text appears ${occurrences} times (must be unique)`;
-      }
-      yield* Effect.tryPromise({
-        try: () => writeFile(target, content.replace(old, String(args.new ?? "")), "utf8"),
-        catch: (cause) => new ToolExecutionError({ tool: "edit", detail: msg(cause), cause }),
-      });
+      yield* tryTool("edit", () => writeFile(target, result.content, "utf8"));
       return `edited ${relative(WORKSPACE_ROOT, target)}`;
     }),
 };

@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { Effect } from "effect";
-import { ToolExecutionError } from "./errors";
-import { msg } from "./shared";
+import { applyUniqueReplacement, replaceMissMessage } from "./replace";
+import { tryTool, tryToolSync } from "./shared";
 import type { Tool } from "./types";
 import { confine, WORKSPACE_ROOT } from "./workspace";
 
@@ -83,36 +83,21 @@ export const multiEditTool: Tool = {
       // before a single write, so the workspace is never left half-edited.
       const pending: { target: string; rel: string; content: string }[] = [];
       for (const path of order) {
-        const target = yield* Effect.try({
-          try: () => confine(path),
-          catch: (cause) =>
-            new ToolExecutionError({ tool: "multi_edit", detail: msg(cause), cause }),
-        });
-        let content = yield* Effect.tryPromise({
-          try: () => readFile(target, "utf8"),
-          catch: (cause) =>
-            new ToolExecutionError({ tool: "multi_edit", detail: msg(cause), cause }),
-        });
+        const target = yield* tryToolSync("multi_edit", () => confine(path));
+        let content = yield* tryTool("multi_edit", () => readFile(target, "utf8"));
         for (const edit of byPath.get(path) ?? []) {
-          const occurrences = content.split(edit.old).length - 1;
-          if (occurrences === 0) {
-            return `error: 'old' text not found in ${path}`;
+          const result = applyUniqueReplacement(content, edit.old, edit.new);
+          if (!result.ok) {
+            return replaceMissMessage(result, ` in ${path}`);
           }
-          if (occurrences > 1) {
-            return `error: 'old' text appears ${occurrences} times in ${path} (must be unique)`;
-          }
-          content = content.replace(edit.old, edit.new);
+          content = result.content;
         }
         pending.push({ target, rel: relative(WORKSPACE_ROOT, target), content });
       }
 
       // Phase 2: commit every file.
       for (const file of pending) {
-        yield* Effect.tryPromise({
-          try: () => writeFile(file.target, file.content, "utf8"),
-          catch: (cause) =>
-            new ToolExecutionError({ tool: "multi_edit", detail: msg(cause), cause }),
-        });
+        yield* tryTool("multi_edit", () => writeFile(file.target, file.content, "utf8"));
       }
 
       const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
