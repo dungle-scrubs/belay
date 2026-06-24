@@ -7,7 +7,7 @@ import type { Tool } from "./tools/types";
 
 /**
  * Background process supervisor (the V2 port of the old host's ProcessSupervisor,
- * FEATURES.md H-023/H-035). Long-lived commands - dev servers, watchers - run here
+ * plan H-023/H-035). Long-lived commands - dev servers, watchers - run here
  * instead of through the always-blocking bash tool.
  *
  * Each process is a real child of the host (spawned with a pipe, NOT detached), so

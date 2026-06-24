@@ -112,6 +112,13 @@ export function buildCommandRegistry(): CommandRegistry {
   });
 
   commands.push({
+    spec: { name: "/clear", summary: "Clear the conversation and start fresh" },
+    // The actual history reset happens in the host's event handler (so it applies on
+    // replay too); this just confirms the action in the command lane.
+    run: () => "✓ conversation cleared — starting fresh",
+  });
+
+  commands.push({
     spec: { name: "/skills", summary: "List discovered skills" },
     run: () => {
       const skills = discoverSkills();

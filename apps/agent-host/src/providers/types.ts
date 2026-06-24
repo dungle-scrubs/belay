@@ -22,6 +22,9 @@ export interface ModelCapabilities {
   readonly images: boolean;
   /** Supports tool / function calling. */
   readonly tools: boolean;
+  /** The model's native max context length in tokens (its capability, NOT what it is
+   *  loaded at); 0 when unknown. The 16k minimum-to-run guard checks this. */
+  readonly contextLength: number;
 }
 
 /** A tool exposed to the model (OpenAI-style JSON-schema parameters). */

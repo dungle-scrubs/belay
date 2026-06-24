@@ -22,6 +22,7 @@ import {
 } from "./providers";
 import { Emit } from "./services";
 import { taskRegistry } from "./tasks";
+import { openInEditor } from "./tools/open-editor";
 import { msg } from "./tools/shared";
 import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
@@ -320,7 +321,11 @@ function handleEvent(message: SessionEvent): void {
   if (decoded.type === "user.message" && message.producerId !== PRODUCER_ID) {
     handleUserMessage(message, decoded.text, decoded.artifacts);
   } else if (decoded.type === "assistant.completed") {
-    if (decoded.text) {
+    // Only a real reply joins history. A blank or whitespace-only completion is NOT
+    // persisted: saving it would teach the model that empty replies are normal and
+    // poison every later turn into the same empty stop (the cascade behind silent
+    // dead-ends). `.trim()` catches the whitespace-only case a bare truthiness check missed.
+    if (decoded.text.trim()) {
       // Invariant: history stays strictly paired - an assistant reply lands only on top
       // of the user turn it answers. A different role on top means the pairing the loop
       // depends on has drifted (e.g. a missed/duplicated turn).
@@ -348,6 +353,15 @@ function handleEvent(message: SessionEvent): void {
       Effect.runFork(Fiber.interrupt(activeRun.fiber));
     }
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
+    if (decoded.command === "/clear") {
+      // Reset the conversation baseline so the model's prompt starts empty after a clear -
+      // applied on replay too, so a reload/restart stays clean. The old events remain in
+      // the durable log but never reach the prompt again. (sanitizeHistory drops any stray
+      // leading assistant turn if a clear lands mid-answer.)
+      history = [];
+      lastUserEvent = null;
+      deferredUserEvents = [];
+    }
     // Immediate command lane: only the leader answers, and only when live (commands
     // are actions, not state to rebuild on replay).
     if (live && lease.isLeader()) {
@@ -355,6 +369,15 @@ function handleEvent(message: SessionEvent): void {
       log("host", "command", { command, args: args || undefined });
       runCommand(command, args).catch((error) =>
         warn("host", "command failed", { command, error: msg(error) }),
+      );
+    }
+  } else if (decoded.type === "editor.open" && message.producerId !== PRODUCER_ID) {
+    // Side-channel action (like commands): only the live leader acts, never on
+    // replay - opening a file is a one-shot effect, not state to rebuild.
+    if (live && lease.isLeader() && decoded.path) {
+      log("host", "editor.open", { path: decoded.path });
+      openInEditor(decoded.path, decoded.line, decoded.column).catch((error) =>
+        warn("host", "editor.open failed", { path: decoded.path, error: msg(error) }),
       );
     }
   } else if (decoded.type === "tasks.current") {

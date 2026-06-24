@@ -63,7 +63,8 @@ export class CodexProvider implements Provider {
 
   /** Cloud GPT-5.x: image support from the registry, tools always supported. */
   capabilities(): Effect.Effect<ModelCapabilities> {
-    return Effect.succeed({ images: this.images, tools: true });
+    // gpt-5.x carries ample context; 0 = unknown, so the turn's context guard skips it.
+    return Effect.succeed({ images: this.images, tools: true, contextLength: 0 });
   }
 
   readiness(): Effect.Effect<Readiness> {

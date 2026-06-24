@@ -1,12 +1,32 @@
 import { events } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
+import { sanitizeHistory } from "./agent/history";
 import { type AgentEvent, runAgent } from "./agent/loop";
 import { resolveHistoryImages } from "./artifacts";
 import type { ChatMessage, Provider, Usage } from "./providers";
+import { buildSystemPrompt } from "./providers/system-prompt";
 import { Emit } from "./services";
+import { TOOL_DEFS } from "./tools";
+import { MAX_OUTPUT } from "./tools/shared";
+import { BreakdownAccumulator, logUsageBreakdown } from "./usage/breakdown";
 
 /** Stream deltas are coalesced until this many chars accumulate, then flushed. */
 const DELTA_FLUSH_CHARS = 40;
+
+/**
+ * Minimum context window (tokens) required to run Trevor: the model needs room for the
+ * ~5k system-prompt+tools floor plus headroom, or it returns empty with no signal, so
+ * the turn fails loud with an actionable message instead. Override with TREVOR_MIN_CONTEXT.
+ *
+ * For the shipped product the CONFIGURED (loaded) window is what matters - a model
+ * loaded below this should error. Right now the guard checks the model's NATIVE
+ * capability (caps.contextLength) instead, purely as a testing affordance: it lets us
+ * load a 256k-capable model at 4-6k to exercise overflow recovery without tripping the
+ * guard. TODO (when overflow handling lands): switch the check to the served/loaded
+ * window so a sub-16k configured window errors. Providers reporting 0 (unknown) are not
+ * checked.
+ */
+const MIN_CONTEXT_TOKENS = Number(process.env.TREVOR_MIN_CONTEXT) || 16_384;
 
 /**
  * Buffers streamed text on one channel (assistant.delta or assistant.thinking),
@@ -63,10 +83,40 @@ export function publishTurn(
     // images - detected first-class via capabilities(), never hardcoded per provider (D-028).
     const caps = yield* provider.capabilities();
 
-    const history = caps.images
-      ? yield* Effect.promise(() => resolveHistoryImages(turnHistory))
-      : turnHistory;
+    // Pre-flight capability guard: a model whose NATIVE context is below the minimum
+    // can't fit the ~5k system-prompt+tools floor with room to work, so it would return
+    // empty with no signal. Fail loud with an actionable message instead. Checks the
+    // model's capability, not its loaded window - a model loaded small for overflow
+    // testing still passes (its native ceiling is large).
+    if (caps.contextLength > 0 && caps.contextLength < MIN_CONTEXT_TOKENS) {
+      yield* emit.publish(
+        events.assistantStarted({ runId, warm, model: provider.model, provider: provider.id }),
+      );
+      yield* emit.publish(
+        events.assistantCompleted({
+          runId,
+          text: "",
+          error: `Model ${provider.model} supports only ${caps.contextLength} tokens of context, below the ${MIN_CONTEXT_TOKENS} (16k) minimum required to run Trevor. Pick a model with at least 16k of context.`,
+        }),
+      );
+      return;
+    }
+
+    // Sanitize the prompt view before the model sees it: drop blank assistant turns
+    // and enforce user/assistant alternation, so a poisoned history can't push the
+    // model into an empty stop (the cascade behind silent dead-ends).
+    const sane = sanitizeHistory(turnHistory);
+    const history = caps.images ? yield* Effect.promise(() => resolveHistoryImages(sane)) : sane;
     const useTools = caps.tools;
+
+    // Token-source breakdown ("where does the context go?"). Fixed overhead = the
+    // system prompt + the tool schemas the provider re-sends every step; the rest
+    // is seeded from history and grows as the turn's tool results stream in.
+    const toolDefs = useTools ? TOOL_DEFS : [];
+    const breakdown = new BreakdownAccumulator(
+      buildSystemPrompt(toolDefs).length + (useTools ? JSON.stringify(toolDefs).length : 0),
+    );
+    breakdown.seedHistory(history);
 
     yield* emit.publish(
       events.assistantStarted({
@@ -79,6 +129,9 @@ export function publishTurn(
 
     let full = "";
     let usage: Usage | undefined;
+    // Set when the loop reports the model ended the turn with no reply (after its one
+    // retry): the terminal completion carries it so the UI shows a notice, not silence.
+    let noReply = false;
 
     const text = new DeltaBuffer((delta) =>
       emit.publish(events.assistantDelta({ runId, text: delta })),
@@ -95,16 +148,28 @@ export function publishTurn(
     });
 
     const complete = (extra: { error?: string; cancelled?: boolean }) =>
-      emit.publish(events.assistantCompleted({ runId, text: full, usage, ...extra }));
+      emit.publish(
+        events.assistantCompleted({
+          runId,
+          text: full,
+          usage,
+          breakdown: breakdown.snapshot(),
+          ...(noReply ? { noReply: true } : {}),
+          ...extra,
+        }),
+      );
 
     const handle = (event: AgentEvent) =>
       Effect.gen(function* () {
         if (event.type === "text") {
           full += event.text;
+          breakdown.onAnswer(event.text.length);
           yield* text.add(event.text);
         } else if (event.type === "thinking") {
+          breakdown.onThinking(event.text.length);
           yield* thinking.add(event.text);
         } else if (event.type === "tool_start") {
+          breakdown.onToolCall(event.call.arguments.length);
           yield* flushAll;
           yield* emit.publish(
             events.toolStarted({
@@ -115,19 +180,40 @@ export function publishTurn(
             }),
           );
         } else if (event.type === "tool_end") {
+          breakdown.onToolResult(event.call.name, event.result.length);
           yield* emit.publish(
             events.toolCompleted({
               runId,
               callId: event.call.id,
               name: event.call.name,
-              result: event.result.slice(0, 4000),
+              // Align the event-result cap with the tool-level output cap so a tool's
+              // full result (e.g. web_search JSON) reaches the model and web intact.
+              result: event.result.slice(0, MAX_OUTPUT),
             }),
           );
         } else if (event.type === "overflow") {
-          // Surface the overflow so the user sees why a turn was cut short. Graceful
-          // auto-recovery (compact/adjust and continue) is planned separately.
+          // The loop reaches here only once recovery is exhausted - it retries with
+          // cheap recovery first (emitting `recovered` status below). This terminal
+          // overflow means the cheap rungs couldn't make the turn fit.
           yield* flushAll;
           yield* emit.publish(events.assistantOverflow({ runId, reason: event.reason }));
+        } else if (event.type === "recovered") {
+          // A recovery adjustment landed: finalize the current segment and surface a
+          // live status, then the retry's output streams below it (D-038).
+          yield* flushAll;
+          yield* emit.publish(
+            events.assistantRecovered({
+              runId,
+              action: event.action,
+              detail: event.detail,
+              reclaimed: event.reclaimed,
+            }),
+          );
+        } else if (event.type === "empty") {
+          // The model ended the turn with no reply (and the retry didn't help). Mark it
+          // so the terminal completion shows a notice instead of an empty bubble.
+          yield* flushAll;
+          noReply = true;
         } else {
           // input is the prompt size of the latest step (current context); output sums.
           usage = {
@@ -136,6 +222,13 @@ export function publishTurn(
             contextWindow: event.usage.contextWindow,
             genMs: (usage?.genMs ?? 0) + event.usage.genMs,
           };
+          // Surface the context as it grows: publish a live snapshot each step so the
+          // panel's ctx meter and Request treemap fill in mid-turn instead of jumping at
+          // completion. The terminal assistant.completed still carries the authoritative
+          // final usage + breakdown.
+          yield* emit.publish(
+            events.assistantProgress({ runId, usage, breakdown: breakdown.snapshot() }),
+          );
         }
       });
 
@@ -143,6 +236,7 @@ export function publishTurn(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
           yield* flushAll;
+          yield* Effect.sync(() => logUsageBreakdown(runId, breakdown.snapshot(), usage));
 
           if (Exit.isSuccess(exit)) {
             yield* complete({});

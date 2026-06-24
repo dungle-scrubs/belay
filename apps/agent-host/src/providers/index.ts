@@ -39,8 +39,12 @@ export function buildProviders(): ProviderRegistry {
       url: lmstudioUrl,
       model: "lmstudio-community/qwen3.6-27b-mlx",
       label: "Qwen 27B 4-bit (local)",
-      // Pinned to 4k so smoke runs reach context overflow quickly (D-034 recovery testbed).
-      maxContext: 4096,
+      // Loaded at 64k - the working window, and the target compaction (D-036) keeps the
+      // prompt under by summarizing old turns. qwen3.6 is natively 256k-capable; 64k is the
+      // load cap we operate at (a balance of headroom vs. KV-cache memory). Overflow
+      // recovery (D-034) was validated against a tiny 6k cap; normal runs use 64k with
+      // compaction as the primary defense and recovery as the per-turn airbag beneath it.
+      maxContext: 65536,
     }),
   };
 }

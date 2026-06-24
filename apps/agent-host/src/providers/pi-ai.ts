@@ -120,6 +120,32 @@ async function* piAiEvents<TApi extends Api>(
     messages: toPiAiMessages(messages),
     ...(tools.length > 0 ? { tools: toPiAiTools(tools) } : {}),
   };
+  // Rough prompt-token estimate (chars/4) for the overflow message - LM Studio's
+  // context-length error omits the sizes, so we attach our own.
+  const promptTokensEst = Math.round(
+    ((context.systemPrompt?.length ?? 0) +
+      JSON.stringify(tools).length +
+      messages.reduce(
+        (sum, m) =>
+          sum + m.content.length + (m.toolCalls?.reduce((a, c) => a + c.arguments.length, 0) ?? 0),
+        0,
+      )) /
+      4,
+  );
+  // LM Studio's default context policy SILENTLY TRUNCATES an over-window prompt (rolling
+  // window: it drops the oldest messages to fit) instead of erroring - so an oversized
+  // prompt never surfaces as a 400, the loop never sees overflow, and the model loses the
+  // early context (it re-reads and loops). Don't trust the provider to complain: detect it
+  // from our own estimate. When the prompt alone exceeds the window, emit overflow so the
+  // loop trims a tool result and retries - or, when nothing is left to trim, surfaces the
+  // size. This fires BEFORE the request, so recovery uses the input lever (trim), not output.
+  if (promptTokensEst >= options.contextWindow) {
+    yield {
+      type: "overflow",
+      reason: `the prompt (~${promptTokensEst} tokens) is too big for the ${options.contextWindow}-token context window`,
+    };
+    return;
+  }
   // Time generation from the first GENERATED token (reasoning or visible) to done,
   // so tokens/sec covers the same span the output tokens were produced in. Timing
   // from the first visible token alone undercounts reasoning models (hidden reasoning
@@ -201,6 +227,26 @@ async function* piAiEvents<TApi extends Api>(
             : "the prompt exceeded the model's context window",
         };
       }
+    } else if (event.type === "error") {
+      // A clean interrupt (cancel/ESC) ends the stream quietly; the fiber interrupt
+      // propagates on its own.
+      if (event.reason === "aborted") {
+        return;
+      }
+      // LM Studio rejects a prompt larger than the loaded window with a context-length
+      // 400. It was being swallowed (unhandled `error` event), so a too-big prompt looked
+      // like an empty turn. Surface it as overflow so the loop trims & retries when there
+      // are tool results, or surfaces a clear too-small-window message when there aren't -
+      // LM Studio's message omits the sizes, so we attach the estimate and the window.
+      const detail = event.error.errorMessage ?? "provider stream error";
+      if (/context length|tokens to keep|larger context|context window/i.test(detail)) {
+        yield {
+          type: "overflow",
+          reason: `the prompt (~${promptTokensEst} tokens) is too big for the ${options.contextWindow}-token context window`,
+        };
+        return;
+      }
+      throw new Error(detail);
     }
   }
 }

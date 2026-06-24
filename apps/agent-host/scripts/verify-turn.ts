@@ -19,7 +19,7 @@ const fakeProvider: Provider = {
   reasoningLevels: [],
   defaultReasoning: "off",
   readiness: () => Effect.succeed({ ready: true, warm: true }),
-  capabilities: () => Effect.succeed({ images: false, tools: true }),
+  capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
   warm: () => Effect.void,
   stream: (messages) => {
     const answered = messages.some((m) => m.role === "tool");
@@ -79,6 +79,25 @@ check(
   String(payloadOf("tool.completed")?.result ?? ""),
 );
 check("one-completed", completed.length === 1, `count=${completed.length}`);
+// One live progress snapshot per model step (two steps here), each carrying usage,
+// so the panel's ctx meter can grow mid-turn before the terminal completion.
+const progress = collected.filter((e) => e.type === "assistant.progress");
+check("progress-per-step", progress.length === 2, `count=${progress.length}`);
+check(
+  "progress-carries-usage",
+  progress.every((e) => (e.payload.usage as { input?: number } | undefined)?.input === 10),
+  JSON.stringify(progress.map((e) => e.payload.usage)),
+);
+check(
+  "progress-carries-breakdown",
+  progress.every((e) => (e.payload.breakdown as { input?: unknown } | undefined)?.input != null),
+  JSON.stringify(progress.map((e) => e.payload.breakdown)),
+);
+check(
+  "progress-before-completed",
+  types.indexOf("assistant.progress") < types.lastIndexOf("assistant.completed"),
+  types.join(" -> "),
+);
 check("no-error", final?.error === undefined, String(final?.error));
 check(
   "final-text-threaded",

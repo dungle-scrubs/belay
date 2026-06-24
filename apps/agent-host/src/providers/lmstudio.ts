@@ -26,6 +26,12 @@ export interface LmStudioConfig {
   readonly model: string;
   /** Human-friendly name for the UI selector. */
   readonly label: string;
+  /**
+   * Per-model context-window cap (tokens). Pins this model's load below its
+   * native ceiling - e.g. to make overflow reachable in smoke runs. Takes
+   * precedence over the global LMSTUDIO_MAX_CONTEXT; unset = model max.
+   */
+  readonly maxContext?: number;
 }
 
 /** Context window assumed before the running model reports its own (tokens). */
@@ -65,7 +71,10 @@ export class LmStudioProvider implements Provider {
   private readonly native: string;
   /** Effective context window currently served (tokens); learned from model info. */
   private contextWindow = 0;
-  /** Upper bound on the context we load at (LMSTUDIO_MAX_CONTEXT); default = model max. */
+  /** The model's native max context length (tokens; its ceiling regardless of load).
+   *  The 16k minimum-to-run guard checks this, not the served window. */
+  private nativeContext = 0;
+  /** Upper bound on the context we load at (config.maxContext or LMSTUDIO_MAX_CONTEXT); default = model max. */
   private readonly contextCap: number;
   /** In-flight ensureMaxContext, so concurrent turns share one (re)load. */
   private ensuring: Promise<number> | null = null;
@@ -79,7 +88,8 @@ export class LmStudioProvider implements Provider {
     this.model = config.model;
     this.label = config.label;
     this.native = new URL("/api/v0", config.url).toString();
-    this.contextCap = Number(process.env.LMSTUDIO_MAX_CONTEXT) || Number.POSITIVE_INFINITY;
+    this.contextCap =
+      config.maxContext ?? (Number(process.env.LMSTUDIO_MAX_CONTEXT) || Number.POSITIVE_INFINITY);
     const v = process.env.LMSTUDIO_VISION;
     this.visionOverride =
       v === "1" || v === "true" ? true : v === "0" || v === "false" ? false : null;
@@ -98,6 +108,7 @@ export class LmStudioProvider implements Provider {
       const info = (await response.json()) as ModelInfo;
       this.vision = info.type === "vlm";
       this.tools = info.capabilities?.includes("tool_use") ?? this.tools;
+      this.nativeContext = info.max_context_length ?? this.nativeContext;
       this.learned = true;
       return info;
     } catch (cause) {
@@ -132,7 +143,7 @@ export class LmStudioProvider implements Provider {
       if (!this.learned) {
         await this.fetchModelInfo();
       }
-      return { images: this.visionEnabled, tools: this.tools };
+      return { images: this.visionEnabled, tools: this.tools, contextLength: this.nativeContext };
     });
   }
 

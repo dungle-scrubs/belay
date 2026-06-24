@@ -25,6 +25,33 @@ export interface Usage {
   readonly genMs: number;
 }
 
+/**
+ * Per-call token-source breakdown ("where did the context go?"), carried on
+ * assistant.completed. Values are character counts per category measured by the
+ * host (see agent-host `usage/breakdown`); the input pool is what fills the
+ * prompt (tool results usually dominate), the output pool is what the model
+ * generated this turn (thinking lives only here). The UI turns these into the
+ * "data in this call" treemap.
+ */
+export interface UsageBreakdown {
+  readonly input: {
+    readonly systemAndTools: number;
+    readonly userText: number;
+    readonly assistantText: number;
+    readonly toolCallArgs: number;
+    readonly toolResults: number;
+    readonly imagesBase64: number;
+    readonly imageCount: number;
+    /** Tool-result chars keyed by tool name - which tool is eating the context. */
+    readonly byTool: Readonly<Record<string, number>>;
+  };
+  readonly output: {
+    readonly thinking: number;
+    readonly answer: number;
+    readonly toolCallArgs: number;
+  };
+}
+
 /** A selectable provider's display label, model id, and thinking options. */
 export interface ProviderModel {
   readonly label: string;
@@ -123,20 +150,53 @@ export const events = {
     type: "assistant.overflow",
     payload: { runId: p.runId, reason: p.reason },
   }),
+  /** A graceful-overflow-recovery adjustment: the loop trimmed/reduced and is retrying.
+   *  Distinct from compaction (durable history summarization, D-036, not yet built). */
+  assistantRecovered: (p: {
+    runId: string;
+    action: "trim" | "reduce-thinking";
+    detail: string;
+    reclaimed: number;
+  }): TrevorEventInput => ({
+    type: "assistant.recovered",
+    payload: { runId: p.runId, action: p.action, detail: p.detail, reclaimed: p.reclaimed },
+  }),
+  /**
+   * A live, mid-turn usage snapshot. Each model step reports its prompt size, so
+   * the UI's context meter can grow as the turn runs instead of jumping only at
+   * completion. The terminal assistant.completed still carries the authoritative
+   * final usage + breakdown; these are advisory and need not be persisted-perfect.
+   */
+  assistantProgress: (p: {
+    runId: string;
+    usage: Usage;
+    breakdown?: UsageBreakdown;
+  }): TrevorEventInput => ({
+    type: "assistant.progress",
+    payload: {
+      runId: p.runId,
+      usage: p.usage,
+      ...(p.breakdown ? { breakdown: p.breakdown } : {}),
+    },
+  }),
   assistantCompleted: (p: {
     runId: string;
     text: string;
     usage?: Usage;
+    breakdown?: UsageBreakdown;
     error?: string;
     cancelled?: boolean;
+    noReply?: boolean;
   }): TrevorEventInput => ({
     type: "assistant.completed",
     payload: {
       runId: p.runId,
       text: p.text,
       ...(p.usage ? { usage: p.usage } : {}),
+      ...(p.breakdown ? { breakdown: p.breakdown } : {}),
       ...(p.error ? { error: p.error } : {}),
       ...(p.cancelled ? { cancelled: true } : {}),
+      ...(p.noReply ? { noReply: true } : {}),
     },
   }),
   /** User asked to cancel the active run (hard steering / ESC). */
@@ -153,6 +213,19 @@ export const events = {
   commandResult: (p: { command: string; text: string; ok: boolean }): TrevorEventInput => ({
     type: "command.result",
     payload: { command: p.command, text: p.text, ok: p.ok },
+  }),
+  /**
+   * Browser asks the host to open a file in the local editor. A side-channel
+   * action - not part of the conversation, so it never renders in the transcript
+   * nor reaches the model. The host runs its configured editor CLI.
+   */
+  editorOpen: (p: { path: string; line?: number; column?: number }): TrevorEventInput => ({
+    type: "editor.open",
+    payload: {
+      path: p.path,
+      ...(p.line != null ? { line: p.line } : {}),
+      ...(p.column != null ? { column: p.column } : {}),
+    },
   }),
   /** The whole task checklist after a change - a snapshot the UI renders and the host restores from. */
   tasksCurrent: (p: { tasks: readonly TaskSnapshot[] }): TrevorEventInput => ({
@@ -229,6 +302,37 @@ function coerceUsage(value: unknown): Usage | undefined {
     output: num(u.output),
     contextWindow: num(u.contextWindow),
     genMs: num(u.genMs),
+  };
+}
+
+function coerceBreakdown(value: unknown): UsageBreakdown | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const b = value as Record<string, unknown>;
+  const inp = (b.input ?? {}) as Record<string, unknown>;
+  const out = (b.output ?? {}) as Record<string, unknown>;
+  const byToolRaw = (inp.byTool ?? {}) as Record<string, unknown>;
+  const byTool: Record<string, number> = {};
+  for (const [name, chars] of Object.entries(byToolRaw)) {
+    byTool[name] = num(chars);
+  }
+  return {
+    input: {
+      systemAndTools: num(inp.systemAndTools),
+      userText: num(inp.userText),
+      assistantText: num(inp.assistantText),
+      toolCallArgs: num(inp.toolCallArgs),
+      toolResults: num(inp.toolResults),
+      imagesBase64: num(inp.imagesBase64),
+      imageCount: num(inp.imageCount),
+      byTool,
+    },
+    output: {
+      thinking: num(out.thinking),
+      answer: num(out.answer),
+      toolCallArgs: num(out.toolCallArgs),
+    },
   };
 }
 
@@ -354,12 +458,27 @@ export type DecodedEvent =
   | { readonly type: "assistant.thinking"; readonly runId: string; readonly text: string }
   | { readonly type: "assistant.overflow"; readonly runId: string; readonly reason: string }
   | {
+      readonly type: "assistant.recovered";
+      readonly runId: string;
+      readonly action: string;
+      readonly detail: string;
+      readonly reclaimed: number;
+    }
+  | {
+      readonly type: "assistant.progress";
+      readonly runId: string;
+      readonly usage?: Usage;
+      readonly breakdown?: UsageBreakdown;
+    }
+  | {
       readonly type: "assistant.completed";
       readonly runId: string;
       readonly text: string;
       readonly usage?: Usage;
+      readonly breakdown?: UsageBreakdown;
       readonly error?: string;
       readonly cancelled: boolean;
+      readonly noReply: boolean;
     }
   | { readonly type: "user.cancel"; readonly runId: string }
   | { readonly type: "user.command"; readonly command: string; readonly args: string }
@@ -368,6 +487,12 @@ export type DecodedEvent =
       readonly command: string;
       readonly text: string;
       readonly ok: boolean;
+    }
+  | {
+      readonly type: "editor.open";
+      readonly path: string;
+      readonly line?: number;
+      readonly column?: number;
     }
   | { readonly type: "tasks.current"; readonly tasks: readonly TaskSnapshot[] }
   | {
@@ -427,14 +552,31 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       return { type: "assistant.thinking", runId, text: str(p.text) };
     case "assistant.overflow":
       return { type: "assistant.overflow", runId, reason: str(p.reason, "context overflow") };
+    case "assistant.recovered":
+      return {
+        type: "assistant.recovered",
+        runId,
+        action: str(p.action, "trim"),
+        detail: str(p.detail),
+        reclaimed: num(p.reclaimed),
+      };
+    case "assistant.progress":
+      return {
+        type: "assistant.progress",
+        runId,
+        usage: coerceUsage(p.usage),
+        breakdown: coerceBreakdown(p.breakdown),
+      };
     case "assistant.completed":
       return {
         type: "assistant.completed",
         runId,
         text: str(p.text),
         usage: coerceUsage(p.usage),
+        breakdown: coerceBreakdown(p.breakdown),
         error: optStr(p.error),
         cancelled: p.cancelled === true,
+        noReply: p.noReply === true,
       };
     case "user.cancel":
       return { type: "user.cancel", runId };
@@ -446,6 +588,13 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         command: str(p.command),
         text: str(p.text),
         ok: p.ok === true,
+      };
+    case "editor.open":
+      return {
+        type: "editor.open",
+        path: str(p.path),
+        line: typeof p.line === "number" ? p.line : undefined,
+        column: typeof p.column === "number" ? p.column : undefined,
       };
     case "tasks.current":
       return { type: "tasks.current", tasks: coerceTasks(p.tasks) };
