@@ -3,7 +3,7 @@
 // answers on the second. Exercises the multi-step loop, real tool execution, the tool
 // result threading back into the conversation, and the emitted event sequence - without
 // depending on a model choosing to call a tool. Run: pnpm exec tsx scripts/verify-turn.ts
-import type { TrevorEventInput } from "@trevor/richter";
+import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Layer, Stream } from "effect";
 import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
 import { Emit } from "../src/services";

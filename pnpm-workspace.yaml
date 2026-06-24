@@ -1,8 +1,9 @@
 packages:
   - "apps/*"
-  - "packages/richter"
+  - "packages/*"
 allowBuilds:
   '@google/genai': false
   esbuild: true
   lefthook: true
   protobufjs: false
+  web-search: true

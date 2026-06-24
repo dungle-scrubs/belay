@@ -1,4 +1,4 @@
-import type { TrevorEventInput } from "@trevor/richter";
+import type { TrevorEventInput } from "@trevor/session";
 import { Context, type Effect } from "effect";
 
 /**

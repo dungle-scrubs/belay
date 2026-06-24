@@ -1,4 +1,4 @@
-import type { ProviderModel } from "@trevor/richter";
+import type { ProviderModel } from "@trevor/session";
 import { CodexProvider } from "./codex";
 import { LmStudioProvider } from "./lmstudio";
 import type { Provider } from "./types";
@@ -39,6 +39,8 @@ export function buildProviders(): ProviderRegistry {
       url: lmstudioUrl,
       model: "lmstudio-community/qwen3.6-27b-mlx",
       label: "Qwen 27B 4-bit (local)",
+      // Pinned to 4k so smoke runs reach context overflow quickly (D-034 recovery testbed).
+      maxContext: 4096,
     }),
   };
 }

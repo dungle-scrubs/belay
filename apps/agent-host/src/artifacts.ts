@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { type ArtifactRef, fetchBlobBytes } from "@trevor/richter";
+import { type ArtifactRef, fetchBlobBytes } from "@trevor/session";
 import type { ChatImage, ChatMessage } from "./providers";
 
 const execAsync = promisify(exec);

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ArtifactRef } from "@trevor/richter";
+import type { ArtifactRef } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { Plus, X } from "lucide-react";
 import {
@@ -46,8 +46,8 @@ import {
   toolSummary,
 } from "./derive";
 import { Markdown } from "./markdown";
-import { ensureSession } from "./richter/client";
-import { useRichterSession } from "./richter/use-richter-session";
+import { ensureSession } from "./session/client";
+import { useSession } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
 import { toTranscript } from "./transcript";
 
@@ -127,7 +127,7 @@ export function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { events, status, replayed, publish, cancel, command } = useRichterSession(sessionId);
+  const { events, status, replayed, publish, cancel, command } = useSession(sessionId);
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.

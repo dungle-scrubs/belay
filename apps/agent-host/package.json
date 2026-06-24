@@ -4,13 +4,17 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "dev:op": "opchain primary --read op run --env-file=$HOME/.trevorV2/.env.op -- tsx watch src/main.ts",
     "start": "tsx src/main.ts",
+    "start:op": "opchain primary --read op run --env-file=$HOME/.trevorV2/.env.op -- tsx src/main.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.73.1",
     "@trevor/richter": "workspace:*",
+    "@trevor/session": "workspace:*",
     "effect": "^3.21.4",
+    "web-search": "github:dungle-scrubs/web-search#3d9d0db4d28ad6801250adb3b294c19f89b819d5",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

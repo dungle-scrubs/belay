@@ -3,7 +3,7 @@ import {
   decodeTrevorEvent,
   type SessionEvent,
   type Usage,
-} from "@trevor/richter";
+} from "@trevor/session";
 
 export type { ArtifactRef, Usage };
 

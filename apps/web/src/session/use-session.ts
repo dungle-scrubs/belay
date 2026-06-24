@@ -1,8 +1,8 @@
-import { type ArtifactRef, events as richterEvents, type SessionEvent } from "@trevor/richter";
+import { type ArtifactRef, type SessionEvent, events as sessionEvents } from "@trevor/session";
 import { useCallback, useEffect, useState } from "react";
 import { type ConnectionStatus, connect, publishEvent } from "./client";
 
-export interface RichterSession {
+export interface SessionState {
   readonly events: readonly SessionEvent[];
   readonly status: ConnectionStatus;
   readonly replayed: boolean;
@@ -16,8 +16,8 @@ export interface RichterSession {
   readonly command: (command: string, args: string) => Promise<void>;
 }
 
-/** Subscribes to a Richter session: replay-then-tail into state, plus publish. */
-export function useRichterSession(sessionId: string | null): RichterSession {
+/** Subscribes to a session: replay-then-tail into state, plus publish. */
+export function useSession(sessionId: string | null): SessionState {
   const [events, setEvents] = useState<readonly SessionEvent[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [replayed, setReplayed] = useState(false);
@@ -49,7 +49,7 @@ export function useRichterSession(sessionId: string | null): RichterSession {
       }
       await publishEvent(sessionId, {
         producerId: "trevor-web",
-        ...richterEvents.userMessage({ text, provider, reasoning, artifacts }),
+        ...sessionEvents.userMessage({ text, provider, reasoning, artifacts }),
       });
     },
     [sessionId],
@@ -64,7 +64,7 @@ export function useRichterSession(sessionId: string | null): RichterSession {
       }
       await publishEvent(sessionId, {
         producerId: "trevor-web",
-        ...richterEvents.userCancel({ runId }),
+        ...sessionEvents.userCancel({ runId }),
       });
     },
     [sessionId],
@@ -78,7 +78,7 @@ export function useRichterSession(sessionId: string | null): RichterSession {
       }
       await publishEvent(sessionId, {
         producerId: "trevor-web",
-        ...richterEvents.userCommand({ command, args }),
+        ...sessionEvents.userCommand({ command, args }),
       });
     },
     [sessionId],

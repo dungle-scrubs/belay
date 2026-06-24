@@ -1,4 +1,4 @@
-import type { TaskSnapshot, TaskStatus } from "@trevor/richter";
+import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { Effect } from "effect";
 import { ToolExecutionError } from "./tools/errors";
 import { msg, optStr, strArr } from "./tools/shared";

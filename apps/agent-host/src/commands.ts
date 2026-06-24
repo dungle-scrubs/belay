@@ -1,4 +1,4 @@
-import type { CommandSpec } from "@trevor/richter";
+import type { CommandSpec } from "@trevor/session";
 import { Effect } from "effect";
 import { fmtFields } from "./log";
 import { supervisor } from "./processes";
@@ -10,7 +10,7 @@ import { runShell } from "./tools/run-shell";
 /**
  * Immediate host commands (slash commands): the host runs these directly and
  * publishes a command.result, instead of routing the text to the model. This is
- * the V2 form of the old RPC "immediate host commands" lane (FEATURES.md H-016) -
+ * the V2 form of the old RPC "immediate host commands" lane (plan H-016) -
  * adapted to the Richter transport, where the browser publishes a user.command and
  * the leader answers with command.result.
  *

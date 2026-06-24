@@ -1,4 +1,4 @@
-import type { TaskSnapshot } from "@trevor/richter";
+import type { TaskSnapshot } from "@trevor/session";
 import { useBoolean } from "ahooks";
 import { cn } from "@/lib/utils";
 

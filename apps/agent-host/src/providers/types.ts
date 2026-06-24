@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/richter";
+import type { ArtifactRef } from "@trevor/session";
 import type { Effect, Stream } from "effect";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
 

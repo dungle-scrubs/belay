@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/richter",
+  "name": "@trevor/session",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,7 +10,6 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/session": "workspace:*",
     "effect": "^3.21.4"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@ import {
   type ProviderModel,
   type SessionEvent,
   type TaskSnapshot,
-} from "@trevor/richter";
+} from "@trevor/session";
 
 /** The last value `pick` yields over the decoded log (the newest snapshot), else undefined. */
 function latest<T>(

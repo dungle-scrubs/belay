@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/richter";
+import type { ArtifactRef } from "@trevor/session";
 import { useState } from "react";
 import { artifactSrc } from "./blob";
 

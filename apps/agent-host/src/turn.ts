@@ -1,4 +1,4 @@
-import { events } from "@trevor/richter";
+import { events } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
 import { type AgentEvent, runAgent } from "./agent/loop";
 import { resolveHistoryImages } from "./artifacts";

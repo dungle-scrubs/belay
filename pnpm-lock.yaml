@@ -29,9 +29,15 @@ importers:
       '@trevor/richter':
         specifier: workspace:*
         version: link:../../packages/richter
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../../packages/session
       effect:
         specifier: ^3.21.4
         version: 3.21.4
+      web-search:
+        specifier: github:dungle-scrubs/web-search#3d9d0db4d28ad6801250adb3b294c19f89b819d5
+        version: https://codeload.github.com/dungle-scrubs/web-search/tar.gz/3d9d0db4d28ad6801250adb3b294c19f89b819d5
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -75,6 +81,9 @@ importers:
       '@trevor/richter':
         specifier: workspace:*
         version: link:../../packages/richter
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../../packages/session
       ahooks:
         specifier: ^3.9.7
         version: 3.9.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -165,6 +174,19 @@ importers:
         version: 8.0.16(@types/node@26.0.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
 
   packages/richter:
+    dependencies:
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../session
+      effect:
+        specifier: ^3.21.4
+        version: 3.21.4
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/session:
     dependencies:
       effect:
         specifier: ^3.21.4
@@ -2359,6 +2381,10 @@ packages:
   comma-separated-tokens@2.0.3:
     resolution: {integrity: sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==}
 
+  commander@15.0.0:
+    resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
+    engines: {node: '>=22.12.0'}
+
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
@@ -3530,6 +3556,12 @@ packages:
         optional: true
       yaml:
         optional: true
+
+  web-search@https://codeload.github.com/dungle-scrubs/web-search/tar.gz/3d9d0db4d28ad6801250adb3b294c19f89b819d5:
+    resolution: {gitHosted: true, integrity: sha512-6siihSirOsuLPUWll7S7jGLAVNjKyc6nF34i8VMgfojgg7K7JEuPwmvX0KiVOqLZXzAT8iT9a/+l5U8k80jb2w==, tarball: https://codeload.github.com/dungle-scrubs/web-search/tar.gz/3d9d0db4d28ad6801250adb3b294c19f89b819d5}
+    version: 0.2.0
+    engines: {node: '>=22.12.0'}
+    hasBin: true
 
   web-streams-polyfill@3.3.3:
     resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
@@ -5765,6 +5797,8 @@ snapshots:
 
   comma-separated-tokens@2.0.3: {}
 
+  commander@15.0.0: {}
+
   convert-source-map@2.0.0: {}
 
   css.escape@1.5.1: {}
@@ -7222,6 +7256,11 @@ snapshots:
       jiti: 2.7.0
       tsx: 4.22.4
       yaml: 2.9.0
+
+  web-search@https://codeload.github.com/dungle-scrubs/web-search/tar.gz/3d9d0db4d28ad6801250adb3b294c19f89b819d5:
+    dependencies:
+      commander: 15.0.0
+      effect: 3.21.4
 
   web-streams-polyfill@3.3.3: {}
 

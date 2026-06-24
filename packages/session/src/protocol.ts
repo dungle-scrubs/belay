@@ -1,5 +1,5 @@
 import { HEX64 } from "./blob";
-import type { SessionEvent } from "./wire";
+import type { SessionEvent } from "./event";
 
 /**
  * The trevor session protocol: the `user.message`, `assistant.*`, `tool.*`, and

@@ -1,4 +1,4 @@
-import { type ArtifactRef, artifactRef, blobUrl, putBlob } from "@trevor/richter";
+import { type ArtifactRef, artifactRef, blobUrl, putBlob } from "@trevor/session";
 
 /**
  * Web binding for the content-addressed blob store (D-028): resolves the store URL

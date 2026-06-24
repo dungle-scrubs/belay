@@ -1,14 +1,12 @@
 import { homedir } from "node:os";
+import { richterTransport } from "@trevor/richter";
 import {
   type ArtifactRef,
-  connectSession,
   decodeTrevorEvent,
-  ensureSession,
   events,
-  publishEvent,
   type SessionEvent,
   type TrevorEventInput,
-} from "@trevor/richter";
+} from "@trevor/session";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
@@ -35,10 +33,11 @@ import { publishTurn } from "./turn";
  * readiness, and defaults to a shared session ("trevor-local") so host and
  * browser auto-attach; override with SESSION_ID.
  *
- * The Richter transport (stream URL, replay-then-tail decode, REST publish) lives
- * in @trevor/richter and is shared with the web client; the trevor event names and
- * payload shapes come from its `events` constructors and `decodeTrevorEvent`, so
- * host and browser can never disagree on the protocol.
+ * The session contract (event shape, the `events` constructors, `decodeTrevorEvent`)
+ * lives in @trevor/session and is shared with the web client, so host and browser
+ * can never disagree on the protocol. The durable log is reached through a
+ * SessionTransport; this host plugs in the Richter transport (@trevor/richter), but
+ * the loop below depends only on the contract, not on Richter.
  *
  * Many hosts may share one session (each with a distinct participant id so
  * Richter lets them coexist), but only the lease LEADER answers turns; others
@@ -48,6 +47,9 @@ import { publishTurn } from "./turn";
 const SERVICE_URL = process.env.RICHTER_URL ?? "http://localhost:3025";
 const SESSION_ID = process.env.SESSION_ID ?? "trevor-local";
 const PRODUCER_ID = "trevor-host";
+// Backend selection (the plugin seam): the host speaks the SessionTransport
+// contract; here it plugs in the Richter transport. A local backend swaps in here.
+const transport = richterTransport(SERVICE_URL);
 const providers = buildProviders();
 const commands = buildCommandRegistry();
 
@@ -75,7 +77,7 @@ let deferredUserEvents: SessionEvent[] = [];
 
 /** Publishes one event to the durable log, attaching this host's producerId. */
 function emit(event: TrevorEventInput): Promise<void> {
-  return publishEvent(SERVICE_URL, SESSION_ID, { ...event, producerId: PRODUCER_ID });
+  return transport.publishEvent(SESSION_ID, { ...event, producerId: PRODUCER_ID });
 }
 
 /** The live Emit service: the turn program's events go to the Richter log via emit(). */
@@ -379,8 +381,7 @@ function connect(): void {
   // emitting over REST and its replayed completed clears it - resetting could race a
   // concurrent turn).
   deferredUserEvents = [];
-  connectSession({
-    serviceUrl: SERVICE_URL,
+  transport.connectSession({
     sessionId: SESSION_ID,
     identity: {
       displayName: "trevor-host",
@@ -419,7 +420,8 @@ log("host", "starting", {
   providers: Object.keys(providers).join(","),
   default: DEFAULT_PROVIDER,
 });
-ensureSession(SERVICE_URL, SESSION_ID)
+transport
+  .ensureSession(SESSION_ID)
   .then(() => connect())
   .catch((error) => {
     warn("host", "startup failed", { error: msg(error) });
