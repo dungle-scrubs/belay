@@ -66,3 +66,92 @@ test("assistant.completed coerces cancelled/noReply/stepLimit to safe defaults",
   assert.equal(decoded.stepLimit, 0);
   assert.equal(decoded.usage, undefined);
 });
+
+test("context.compacted round-trips, including the per-fold delta manifest", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.contextCompacted({
+        foldId: "f1",
+        throughSeq: 42,
+        summary: "rolling summary",
+        manifest: {
+          turnRange: { fromSeq: 1, toSeq: 42 },
+          files: ["src/a.ts"],
+          tools: ["read"],
+          topics: ["auth"],
+        },
+        tokensBefore: 50_000,
+        tokensAfter: 20_000,
+        model: "qwen",
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "context.compacted",
+    foldId: "f1",
+    throughSeq: 42,
+    supersedes: undefined,
+    summary: "rolling summary",
+    manifest: {
+      turnRange: { fromSeq: 1, toSeq: 42 },
+      files: ["src/a.ts"],
+      tools: ["read"],
+      topics: ["auth"],
+    },
+    tokensBefore: 50_000,
+    tokensAfter: 20_000,
+    model: "qwen",
+  });
+});
+
+test("a superseding fold chains off the prior foldId; supersedes is omitted when absent", () => {
+  const first = events.contextCompacted({
+    foldId: "f1",
+    throughSeq: 10,
+    summary: "s1",
+    manifest: { turnRange: { fromSeq: 1, toSeq: 10 }, files: [], tools: [], topics: [] },
+    tokensBefore: 40_000,
+    tokensAfter: 18_000,
+    model: "qwen",
+  });
+  assert.equal("supersedes" in first.payload, false);
+
+  const second = events.contextCompacted({
+    foldId: "f2",
+    throughSeq: 20,
+    supersedes: "f1",
+    summary: "s2",
+    manifest: { turnRange: { fromSeq: 11, toSeq: 20 }, files: [], tools: [], topics: [] },
+    tokensBefore: 45_000,
+    tokensAfter: 19_000,
+    model: "qwen",
+  });
+  const decoded = decodeTrevorEvent(stored(second));
+  assert.equal(decoded?.type === "context.compacted" && decoded.supersedes, "f1");
+});
+
+test("context.compacting round-trips the live fold-progress tick", () => {
+  const decoded = decodeTrevorEvent(
+    stored(events.contextCompacting({ foldId: "f1", tokens: 240, budget: 1_000 })),
+  );
+  assert.deepEqual(decoded, {
+    type: "context.compacting",
+    foldId: "f1",
+    tokens: 240,
+    budget: 1_000,
+  });
+});
+
+test("a malformed context.compacted manifest coerces to empty arrays, never throws", () => {
+  const decoded = decodeTrevorEvent(
+    stored({ type: "context.compacted", payload: { summary: "s", manifest: "nope" } }),
+  );
+  assert.equal(decoded?.type, "context.compacted");
+  if (decoded?.type !== "context.compacted") return;
+  assert.deepEqual(decoded.manifest, {
+    turnRange: { fromSeq: 0, toSeq: 0 },
+    files: [],
+    tools: [],
+    topics: [],
+  });
+});

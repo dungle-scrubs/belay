@@ -86,6 +86,20 @@ export interface TaskSnapshot {
   readonly blocks: readonly string[];
 }
 
+/**
+ * The per-fold DELTA manifest carried on a `context.compacted` event: what THIS fold
+ * folded away, not a cumulative picture. `turnRange` is the seq span it covers; `files`,
+ * `tools`, and `topics` name the recallable references it collapsed (session recall, D-044,
+ * advertises these so the model knows what detail it can ask back). Reconstruct the full
+ * folded picture by walking the rolling chain - each fold `supersedes` the prior.
+ */
+export interface CompactionManifest {
+  readonly turnRange: { readonly fromSeq: number; readonly toSeq: number };
+  readonly files: readonly string[];
+  readonly tools: readonly string[];
+  readonly topics: readonly string[];
+}
+
 /** A publishable event before a producerId is attached: `{ type, payload }`. */
 export interface TrevorEventInput {
   readonly type: string;
@@ -137,7 +151,7 @@ export const events = {
     payload: { runId: p.runId, reason: p.reason },
   }),
   /** A graceful-overflow-recovery adjustment: the loop trimmed/reduced and is retrying.
-   *  Distinct from compaction (durable history summarization, D-036, not yet built). */
+   *  The within-turn airbag - distinct from `context.compacted`, the durable cross-turn fold. */
   assistantRecovered: (p: {
     runId: string;
     action: "trim" | "reduce-thinking";
@@ -146,6 +160,45 @@ export const events = {
   }): TrevorEventInput => ({
     type: "assistant.recovered",
     payload: { runId: p.runId, action: p.action, detail: p.detail, reclaimed: p.reclaimed },
+  }),
+  /**
+   * A durable cross-turn compaction fold (D-040…D-043): the rolling summary that keeps the
+   * prompt projection under the window. Appended, never mutating the log; each fold supersedes
+   * the prior (the rolling chain), so the prompt-builder takes the latest. The manifest is this
+   * fold's delta. Distinct from `assistant.recovered`, the within-turn airbag.
+   */
+  contextCompacted: (p: {
+    foldId: string;
+    throughSeq: number;
+    supersedes?: string;
+    summary: string;
+    manifest: CompactionManifest;
+    tokensBefore: number;
+    tokensAfter: number;
+    model: string;
+  }): TrevorEventInput => ({
+    type: "context.compacted",
+    payload: {
+      foldId: p.foldId,
+      throughSeq: p.throughSeq,
+      ...(p.supersedes ? { supersedes: p.supersedes } : {}),
+      summary: p.summary,
+      manifest: p.manifest,
+      tokensBefore: p.tokensBefore,
+      tokensAfter: p.tokensAfter,
+      model: p.model,
+    },
+  }),
+  /**
+   * A live, advisory progress tick while a fold's summary is being generated (D-040): the rolling
+   * summary streams, so the UI fills a transient progress bar from `tokens` against `budget`. The
+   * matching `context.compacted` ends the fold and the bar vanishes. Like `assistant.progress`,
+   * this is advisory (need not be replay-perfect) - honest per tick (real tokens streamed so far),
+   * never a predicted percentage.
+   */
+  contextCompacting: (p: { foldId: string; tokens: number; budget: number }): TrevorEventInput => ({
+    type: "context.compacting",
+    payload: { foldId: p.foldId, tokens: p.tokens, budget: p.budget },
   }),
   /**
    * A live, mid-turn usage snapshot. Each model step reports its prompt size, so
@@ -172,6 +225,7 @@ export const events = {
     breakdown?: UsageBreakdown;
     error?: string;
     cancelled?: boolean;
+    interrupted?: boolean;
     noReply?: boolean;
     stepLimit?: number;
   }): TrevorEventInput => ({
@@ -183,6 +237,9 @@ export const events = {
       ...(p.breakdown ? { breakdown: p.breakdown } : {}),
       ...(p.error ? { error: p.error } : {}),
       ...(p.cancelled ? { cancelled: true } : {}),
+      // Closed by the host (restart/crash mid-turn reap), not by the user - rendered distinctly
+      // from `cancelled` so a host hot-reload never looks like the user pressed ESC.
+      ...(p.interrupted ? { interrupted: true } : {}),
       ...(p.noReply ? { noReply: true } : {}),
       // Step count when the turn was budget-terminated (step backstop or context gate);
       // omitted on a normal turn. A forced final answer still streams; this flags WHY.
@@ -382,6 +439,20 @@ function coerceTasks(value: unknown): TaskSnapshot[] {
   });
 }
 
+function coerceManifest(value: unknown): CompactionManifest {
+  const m = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const range = (m.turnRange && typeof m.turnRange === "object" ? m.turnRange : {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    turnRange: { fromSeq: num(range.fromSeq), toSeq: num(range.toSeq) },
+    files: strList(m.files),
+    tools: strList(m.tools),
+    topics: strList(m.topics),
+  };
+}
+
 const ARTIFACT_KINDS: readonly ArtifactRef["kind"][] = ["image", "document", "file"];
 
 function coerceArtifacts(value: unknown): ArtifactRef[] {
@@ -470,9 +541,28 @@ export type DecodedEvent =
       readonly breakdown?: UsageBreakdown;
       readonly error?: string;
       readonly cancelled: boolean;
+      /** Closed by a host reap (restart/crash mid-turn), not a user cancel - rendered distinctly. */
+      readonly interrupted: boolean;
       readonly noReply: boolean;
       /** Steps run when the turn hit its budget (0 = not budget-terminated). */
       readonly stepLimit: number;
+    }
+  | {
+      readonly type: "context.compacted";
+      readonly foldId: string;
+      readonly throughSeq: number;
+      readonly supersedes?: string;
+      readonly summary: string;
+      readonly manifest: CompactionManifest;
+      readonly tokensBefore: number;
+      readonly tokensAfter: number;
+      readonly model: string;
+    }
+  | {
+      readonly type: "context.compacting";
+      readonly foldId: string;
+      readonly tokens: number;
+      readonly budget: number;
     }
   | { readonly type: "user.cancel"; readonly runId: string }
   | { readonly type: "user.command"; readonly command: string; readonly args: string }
@@ -574,8 +664,30 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         breakdown: coerceBreakdown(p.breakdown),
         error: optStr(p.error),
         cancelled: p.cancelled === true,
+        interrupted: p.interrupted === true,
         noReply: p.noReply === true,
         stepLimit: typeof p.stepLimit === "number" ? p.stepLimit : 0,
+      };
+    case "context.compacted":
+      return {
+        type: "context.compacted",
+        // A fold without an explicit id falls back to the event's own id, so the rolling
+        // chain still links (supersedes references a foldId) even on a forward-compat event.
+        foldId: str(p.foldId, event.eventId),
+        throughSeq: num(p.throughSeq),
+        supersedes: optStr(p.supersedes),
+        summary: str(p.summary),
+        manifest: coerceManifest(p.manifest),
+        tokensBefore: num(p.tokensBefore),
+        tokensAfter: num(p.tokensAfter),
+        model: str(p.model, "model"),
+      };
+    case "context.compacting":
+      return {
+        type: "context.compacting",
+        foldId: str(p.foldId, event.eventId),
+        tokens: num(p.tokens),
+        budget: num(p.budget),
       };
     case "user.cancel":
       return { type: "user.cancel", runId };
