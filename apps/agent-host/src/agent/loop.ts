@@ -3,7 +3,14 @@ import type { ChatMessage, ModelEvent, Provider, ProviderError, ToolCall } from 
 import { executeTool, TOOL_DEFS } from "../tools";
 import { reduceReasoning, trimLargestToolResult } from "./recovery";
 
-const MAX_STEPS = 8;
+/** Runaway backstop, NOT the everyday governor: it only bounds a pathological tool loop
+ *  that never converges. The real budget is context pressure (CONTEXT_BUDGET_FRACTION below),
+ *  so a turn normally stops because it's out of ROOM, never at an arbitrary step count (D-053). */
+const MAX_STEPS = 32;
+/** Stop opening new tool rounds once the latest prompt reaches this fraction of the model's
+ *  context window, and force a final answer instead. Falls back to MAX_STEPS-only when the
+ *  window is unknown (0). This is the governor; MAX_STEPS is the backstop (D-053). */
+const CONTEXT_BUDGET_FRACTION = 0.8;
 /** Per-turn cap on in-loop overflow-recovery adjustments, independent of MAX_STEPS so
  *  recovery can never spin (D-037). */
 const MAX_RECOVERY = 2;
@@ -12,7 +19,8 @@ const MAX_RECOVERY = 2;
  *  thinking, usage, overflow) forwarded unchanged from the provider, plus the loop-only
  *  cases - tool start/end (the loop turns a provider tool_call into these as it executes),
  *  a recovery adjustment (an in-turn overflow rung - distinct from compaction, the durable
- *  history summarization deferred to D-036), or an empty answer. */
+ *  history summarization deferred to D-036), a `step_limit` (the turn hit its budget and is
+ *  forcing a final answer - D-051), or an empty answer. */
 export type AgentEvent =
   | ModelEvent
   | { readonly type: "tool_start"; readonly call: ToolCall }
@@ -23,6 +31,7 @@ export type AgentEvent =
       readonly detail: string;
       readonly reclaimed: number;
     }
+  | { readonly type: "step_limit"; readonly steps: number }
   | { readonly type: "empty" };
 
 /**
@@ -56,6 +65,13 @@ export function runAgent(
   let recoveryBudget = MAX_RECOVERY;
   let currentReasoning = reasoning;
   let thinkingReduced = false;
+
+  // The latest model step's prompt size + window, captured from its usage event (like
+  // overflowReason). Drives the context-pressure budget (D-053): when the prompt that fed
+  // the last step crosses CONTEXT_BUDGET_FRACTION of the window, the next round forces a
+  // final answer instead of opening more tool calls. Both 0 until the first usage arrives.
+  let lastInputTokens = 0;
+  let lastContextWindow = 0;
 
   // One overflow adjustment: mutate the conversation/reasoning in place and return a
   // `recovered` event, or null when nothing cheap is left. Cheapest-first and
@@ -101,13 +117,62 @@ export function runAgent(
     return null;
   };
 
+  // Budget reached (step backstop or context gate): force ONE final answer instead of ending
+  // silently on a tool stub (D-051, D-052). Tools are removed so the model must answer from
+  // what it already gathered; a transient nudge is pushed into the LOCAL `conversation` only -
+  // never emitted, never persisted (durable history is rebuilt from emitted events, not this
+  // array). Reasoning is forced to the cheapest level, and it runs exactly once (no recursion,
+  // no tools to recurse on). An empty result falls through to the `empty` -> noReply path, so a
+  // capped turn still never dead-ends in silence. `step_limit` is emitted first as the
+  // observable termination signal, then the forced answer streams as ordinary text.
+  const synthesize = (n: number): Stream.Stream<AgentEvent, ProviderError> =>
+    Stream.suspend(() => {
+      conversation.push({
+        role: "user",
+        content:
+          "You have reached your tool-call budget for this turn. Do not call any more tools. " +
+          "Answer the original request now, as completely as you can from what you have already gathered.",
+      });
+      const synthReasoning = provider.reasoningLevels.includes("off")
+        ? "off"
+        : provider.reasoningLevels[0];
+      let answer = "";
+      const model = provider.stream(conversation, [], synthReasoning).pipe(
+        Stream.filterMap((event) => {
+          // Tools were removed; drop any stray tool_call/overflow and keep text/thinking/usage.
+          if (event.type === "tool_call" || event.type === "overflow") {
+            return Option.none<AgentEvent>();
+          }
+          if (event.type === "text") {
+            answer += event.text;
+          }
+          return Option.some<AgentEvent>(event);
+        }),
+      );
+      const afterSynthesis = Stream.unwrap(
+        Effect.sync(() =>
+          answer.trim() === "" ? Stream.succeed<AgentEvent>({ type: "empty" }) : Stream.empty,
+        ),
+      );
+      return Stream.concat(
+        Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }),
+        Stream.concat(model, afterSynthesis),
+      );
+    });
+
   // Stream.suspend keeps each step lazy: its provider.stream (which reads `conversation`)
   // is constructed only when the stream actually reaches this step - after the prior
   // step's tools have run and threaded their results - never eagerly while building it.
   const step = (n: number): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
-      if (n >= MAX_STEPS) {
-        return Stream.empty;
+      // Budget gate before opening another tool round: the step backstop OR - the real
+      // governor - the prior step's prompt crossing CONTEXT_BUDGET_FRACTION of the window.
+      // Either way force a final answer rather than ending on a tool stub. At step 0 both are
+      // clear (no prior usage), so the first round always runs.
+      const overContext =
+        lastContextWindow > 0 && lastInputTokens >= CONTEXT_BUDGET_FRACTION * lastContextWindow;
+      if (n >= MAX_STEPS || overContext) {
+        return synthesize(n);
       }
       const toolCalls: ToolCall[] = [];
       let assistantText = "";
@@ -130,6 +195,11 @@ export function runAgent(
           }
           if (event.type === "text") {
             assistantText += event.text;
+          }
+          if (event.type === "usage") {
+            // Capture the prompt size + window for the next round's context-budget gate.
+            lastInputTokens = event.usage.input;
+            lastContextWindow = event.usage.contextWindow;
           }
           // text/thinking/usage flow through unchanged (shared ModelEvent shapes).
           return Option.some<AgentEvent>(event);

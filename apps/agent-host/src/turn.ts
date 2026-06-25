@@ -134,6 +134,10 @@ export function publishTurn(
     // Set when the loop reports the model ended the turn with no reply (after its one
     // retry): the terminal completion carries it so the UI shows a notice, not silence.
     let noReply = false;
+    // Steps run when the turn hit its budget (step backstop or context gate). >0 flags the
+    // completion as budget-terminated (a forced final answer follows) - distinct from a clean
+    // answer, so the UI can show "stopped after N steps" (D-051).
+    let stepLimitSteps = 0;
 
     const text = new DeltaBuffer((delta) =>
       emit.publish(events.assistantDelta({ runId, text: delta })),
@@ -157,6 +161,7 @@ export function publishTurn(
           usage,
           breakdown: breakdown.snapshot(),
           ...(noReply ? { noReply: true } : {}),
+          ...(stepLimitSteps > 0 ? { stepLimit: stepLimitSteps } : {}),
           ...extra,
         }),
       );
@@ -216,6 +221,12 @@ export function publishTurn(
           // so the terminal completion shows a notice instead of an empty bubble.
           yield* flushAll;
           noReply = true;
+        } else if (event.type === "step_limit") {
+          // The loop hit its budget and is forcing a final answer (which streams after this
+          // as ordinary text). Record the step count so the completion is flagged with WHY,
+          // distinct from a clean answer; flush so the forced answer reads as a new segment.
+          yield* flushAll;
+          stepLimitSteps = event.steps;
         } else {
           // input is the prompt size of the latest step (current context); output sums.
           usage = {
