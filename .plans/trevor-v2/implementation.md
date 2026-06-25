@@ -352,6 +352,62 @@ Self-contained (loop + turn + one event field) and independent of compaction (D-
 (D-050), so it can land in any order relative to them - it is a correctness fix, so promote ahead of the
 perf work if the silent dead-ends bite. Decomposed for execution in `progress-report.md`.
 
+### Later (parked): per-turn tool-call guardrails <!-- D-054 -->
+
+Inspired by NousResearch Hermes' pure tool-call loop guardrail controller
+([`agent/tool_guardrails.py`](https://github.com/NousResearch/hermes-agent/blob/main/agent/tool_guardrails.py)).
+Hermes' useful shape is small: a side-effect-free per-turn controller observes tool calls/results, detects
+repeated exact failures and repeated read-only calls returning identical results, and returns a decision
+(`allow` / `warn` / `block` / `halt`). Runtime code decides whether that decision becomes model-visible
+guidance, a synthetic tool result, telemetry, or a controlled turn halt.
+
+This is parked behind the current cutoff. It complements graceful turn-budget termination (D-051…D-053), but
+does not replace it: the budget feature governs how a long turn ends; guardrails steer the model *before* it
+burns the whole budget retrying the same failed/no-progress tool path. Pick it up after the loop-budget and
+read-only-concurrency work if repeated tool loops remain visible in real runs.
+
+- <!-- D-054 --> **Pure per-turn controller, not a permission system.** Add a small host module
+  (e.g. `apps/agent-host/src/agent/tool-guardrails.ts`) that owns only in-memory, per-turn observation:
+  canonicalize tool arguments, hash them, record exact failure counts, record read-only same-result counts,
+  and return typed decisions. It must not execute tools, mutate conversation history, publish events, read
+  config from global state, persist lessons, or decide policy/permissions. The loop (`runAgent`) owns how to
+  surface the decision, keeping the same separation Hermes uses.
+- <!-- D-055 --> **Tool purity comes from the registry.** Do not copy Hermes' hardcoded idempotent/mutating
+  name lists. Reuse the D-050 `readOnly?: boolean` metadata on `Tool` and the derived read-only registry
+  (`READ_ONLY_TOOLS`) as the single source of truth. A tool omitted from `readOnly` is a serial/mutating
+  barrier and is excluded from same-result no-progress detection by default. `read`, `glob`, `grep`, and
+  `web_search` can opt in; `write`, `edit`, `multi_edit`, `bash`, `process`, task tools, and dynamic skill
+  tools stay excluded unless explicitly proven read-only.
+- <!-- D-056 --> **Redacted fingerprints only.** Public events, logs, and UI markers carry tool name, action,
+  count, short reason code, and sha256 fingerprints of canonical args/results - never raw arguments or raw
+  output. Canonicalization should parse JSON tool args when possible, sort object keys, use compact JSON, and
+  hash the normalized value. Result hashing should parse structured JSON when possible and fall back to the
+  raw string. This follows both Hermes' `ToolCallSignature` shape and Trevor V1's
+  `ToolProgressMonitor.fingerprintToolValue` pattern.
+- <!-- D-057 --> **V2 failure classification is simple and local.** Because V2's `executeTool` renders typed
+  tool failures into one model-facing `error: ...` string, the first version can classify failures from that
+  convention instead of porting V1's full structured-output detector. Exact repeated failure = same tool +
+  same arg fingerprint + same normalized error/result fingerprint. A successful mutating result clears the
+  matching failure/no-progress entry for that signature. If later tools return richer typed output, extend the
+  classifier at the tool boundary, not with broad substring heuristics across the transcript.
+- <!-- D-058 --> **Warn first; hard stops stay opt-in.** Defaults should be advisory: after a low threshold
+  (e.g. two exact failures or two identical read-only results) append concise provider-visible guidance to
+  the tool result and emit a redacted `tool.guardrail`/`tool.progress` event for the UI. Hard blocking should
+  be an explicit config or runtime option and, when enabled, return a synthetic retryable tool result rather
+  than throwing out of the loop. The message should tell the model to inspect the latest error/output, change
+  arguments or strategy, or report the blocker after one diagnostic attempt. It must not tell the model to stop
+  using tools entirely.
+- **V1 overlap to reuse cautiously:** `~/dev/trevor/packages/agent-host/src/agent/tool-progress-monitor.ts`
+  already proves the useful Trevor-specific pieces: hash-only progress signals, repeated idempotent
+  no-progress detection, repeated-failure warnings, optional synthetic blocked results, mutating-tool
+  exclusion through tool metadata, and provider-visible recovery guidance. Do **not** port V1's durable
+  "Tool Progress Lessons" persistence/classifier in this slice; that belongs with a later learning/memory
+  feature if it is still wanted. The first V2 cut is per-turn only.
+- **Validation when picked up:** add focused host tests for (1) repeated read-only same-result warning,
+  (2) repeated exact failure warning, (3) mutating tools excluded from no-progress comparison, (4) optional
+  synthetic blocked result, (5) no raw args/output in emitted events, and (6) integration with the D-051
+  forced-synthesis path so a guarded loop still produces a final answer or explicit terminal reason.
+
 ### Then: subagents <!-- D-045 -->
 
 Promoted from backlog (D-033) to the feature after compaction. A subagent is a delegated agent that runs in
@@ -526,5 +582,10 @@ order). **Graceful turn-budget termination** added as a self-contained correctne
 the step-budget loop exit becomes observable via a `step_limit` event + `stepLimit` completion flag, the
 budget forces a final tool-less synthesis instead of dead-ending on a tool result, and the cap is re-based on
 context-window occupancy with `MAX_STEPS` demoted to a runaway backstop - motivated by the 2026-06-24 local
-4-bit case where five turns died at exactly `MAX_STEPS=8` with the window at 16-18%). New decisions
-**D-040…D-053 are authored here in markdown and still need syncing into `plan.db`** (canonical store)._
+4-bit case where five turns died at exactly `MAX_STEPS=8` with the window at 16-18%). **Per-turn tool-call
+guardrails** parked as a later correctness follow-up (D-054…D-058), inspired by Hermes'
+[`agent/tool_guardrails.py`](https://github.com/NousResearch/hermes-agent/blob/main/agent/tool_guardrails.py)
+and Trevor V1's `ToolProgressMonitor`: pure per-turn controller, registry-derived read-only classification,
+redacted fingerprints, simple V2-local failure classification, warn-first with opt-in hard stops, and no
+durable Tool Progress Lessons in the first cut. New decisions **D-040…D-058 are authored here in markdown
+and still need syncing into `plan.db`** (canonical store)._

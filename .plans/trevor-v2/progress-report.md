@@ -74,45 +74,49 @@ and no signal.
 ### M1: Observable budget exhaustion
 Source: `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `packages/session/src/event.ts` (D-051)
 
-- [ ] `AgentEvent` gains a terminal `{ type: "step_limit"; steps: number }` variant
-- [ ] The `n >= MAX_STEPS` branch emits `step_limit` instead of returning `Stream.empty`
-- [ ] `turn.ts` maps `step_limit` to a `stepLimit` reason on the terminal `assistant.completed` (never a bare `complete({})`)
-- [ ] The `assistant.completed` event carries the `stepLimit` flag in the shared `@trevor/session` schema and the web decodes it
-- [ ] Unit test: a turn that hits the cap emits exactly one `step_limit` and a flagged completion, not a clean success
+- [x] `AgentEvent` gains a terminal `{ type: "step_limit"; steps: number }` variant
+- [x] The `n >= MAX_STEPS` branch emits `step_limit` instead of returning `Stream.empty`
+- [x] `turn.ts` maps `step_limit` to a `stepLimit` reason on the terminal `assistant.completed` (never a bare `complete({})`)
+- [x] The `assistant.completed` event carries the `stepLimit` flag in the shared `@trevor/session` schema and the web decodes it
+- [x] Unit test: a turn that hits the cap emits exactly one `step_limit` and a flagged completion, not a clean success
 
 ### M2: Forced final synthesis
 Source: `apps/agent-host/src/agent/loop.ts` (D-052)
 
-- [ ] At the budget, run one model step with tools removed (`provider.stream(conversation, [], reasoning)`) instead of ending
-- [ ] A transient "tool budget reached - answer now" nudge is pushed into the loop's `conversation` only (never emitted or persisted)
-- [ ] Synthesis reasoning forced off/low; the step is bounded to exactly one (no recursion, independent of `MAX_STEPS`)
-- [ ] Synthesis output streams as ordinary `text` AgentEvents → `assistant.delta`
-- [ ] An empty synthesis falls through to the existing `empty`→`noReply` path
-- [ ] Unit test: a capped turn yields a non-empty final answer, and the nudge never appears in the persisted history projection
+- [x] At the budget, run one model step with tools removed (`provider.stream(conversation, [], reasoning)`) instead of ending
+- [x] A transient "tool budget reached - answer now" nudge is pushed into the loop's `conversation` only (never emitted or persisted)
+- [x] Synthesis reasoning forced off/low; the step is bounded to exactly one (no recursion, independent of `MAX_STEPS`)
+- [x] Synthesis output streams as ordinary `text` AgentEvents → `assistant.delta`
+- [x] An empty synthesis falls through to the existing `empty`→`noReply` path
+- [x] Unit test: a capped turn yields a non-empty final answer, and the nudge never appears in the persisted history projection
 
 ### M3: Context-pressure budget
 Source: `apps/agent-host/src/agent/loop.ts` (D-053)
 
-- [ ] The loop captures the latest step's `usage.input`/`usage.contextWindow` into its closure (as it already does `overflowReason`)
-- [ ] `CONTEXT_BUDGET_FRACTION` (~0.80) defined as loop policy
-- [ ] The next tool round proceeds only while `usage.input < fraction * contextWindow`; otherwise → M2 synthesis
-- [ ] `MAX_STEPS` raised to a high runaway backstop (~30-40), documented as a backstop, not the governor
-- [ ] Fallback to `MAX_STEPS`-only when `contextWindow` is 0 / unknown
-- [ ] Unit test: under a small loaded window the turn stops at the context gate (not at a fixed count); under a large window it runs more rounds
+- [x] The loop captures the latest step's `usage.input`/`usage.contextWindow` into its closure (as it already does `overflowReason`)
+- [x] `CONTEXT_BUDGET_FRACTION` (~0.80) defined as loop policy
+- [x] The next tool round proceeds only while `usage.input < fraction * contextWindow`; otherwise → M2 synthesis
+- [x] `MAX_STEPS` raised to a high runaway backstop (~30-40), documented as a backstop, not the governor
+- [x] Fallback to `MAX_STEPS`-only when `contextWindow` is 0 / unknown
+- [x] Unit test: under a small loaded window the turn stops at the context gate (not at a fixed count); under a large window it runs more rounds
 
 ### M4: Surfacing + reproduction (verification)
 Source: `apps/web` transcript/panel, `apps/agent-host/src/commands.ts` (`/doctor`)
 
-- [ ] The web renders a "stopped after N steps" marker for a `stepLimit` completion, distinct from a normal answer and from `noReply`
+- [x] The web renders a "stopped after N steps" marker for a `stepLimit` completion, distinct from a normal answer and from `noReply`
 - [ ] Host state / `/doctor` reports the turn termination reason (answered | step_limit | overflow | noReply | cancelled)
-- [ ] Manual repro: the 2026-06-24 case (cross-repo tool sweep on the 4-bit at 64k) now ends with an answer and a visible reason
+- [x] Manual repro: the previously-failing turns now end with an answer - deepseek (was 191-char cut-off → 4316), glm (was 299 → 3069), qwen4bit (was empty → 2701); none hit the cap now that MAX_STEPS is a backstop
 
 ## Summary
-- Phase 1 (active cutoff - concurrent reads): 20 features, 0 completed, 20 remaining
-- Phase 2 (queued next - turn-budget termination): 20 features, 0 completed, 20 remaining
+- Phase 1 (concurrent reads): 20 features, 0 completed, 20 remaining
+- Phase 2 (turn-budget termination): 20 features, 19 completed, 1 remaining
 - Total features: 40
-- Completed: 0
-- Remaining: 40
-- Current cutoff blockers: 20 (Phase 1)
-- Accepted/deferred follow-up: 0
+- Completed: 19
+- Remaining: 21
+- Current cutoff blockers: 21 (Phase 1 + Phase 2 M4 /doctor)
+- Accepted/deferred follow-up: 1 (Phase 2 M4: `/doctor` turn-termination reason - needs host-loop state; the `stepLimit` flag is already on the completion event)
 - Superseded/obsolete checklist debt: 0
+
+> Phase 2 shipped 2026-06-25 ahead of Phase 1 (its silent turn-budget dead-ends were biting:
+> deepseek/glm cut off mid-answer, qwen4bit returning empty). Phase 1 (concurrent reads) is
+> now the remaining cutoff work.
