@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import type { ArtifactRef } from "@trevor/session";
+import { test } from "vitest";
 import { combineSteer, foldSteer, type QueuedPrompt, sendQueueReducer } from "./send-queue";
 
 /**

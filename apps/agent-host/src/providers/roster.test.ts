@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { buildProviders, DEFAULT_PROVIDER } from "./index";
+import { test } from "vitest";
+import { buildProviders, DEFAULT_PROVIDER, pickProvider } from "./index";
 
 /**
  * Characterization test for the host's provider roster.
@@ -31,4 +31,12 @@ test("buildProviders exposes the canonical provider keys and labels", () => {
 
 test("the default provider key resolves to a built provider", () => {
   assert.ok(buildProviders()[DEFAULT_PROVIDER]);
+});
+
+test("pickProvider resolves a known key and falls back to the default for an unknown one", () => {
+  const providers = buildProviders();
+  assert.equal(pickProvider(providers, "glm").describe().label, EXPECTED_LABELS.glm);
+  // Unknown key and a missing/non-string key both fall back to the default (qwen).
+  assert.equal(pickProvider(providers, "nonexistent").describe().label, EXPECTED_LABELS.qwen);
+  assert.equal(pickProvider(providers, undefined).describe().label, EXPECTED_LABELS.qwen);
 });

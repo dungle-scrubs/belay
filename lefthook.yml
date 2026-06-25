@@ -8,3 +8,6 @@ pre-commit:
     types:
       glob: "*.{ts,tsx}"
       run: pnpm -r typecheck
+    unit:
+      glob: "*.{ts,tsx}"
+      run: pnpm test:unit

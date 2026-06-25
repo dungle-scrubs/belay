@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import {
   BREAKDOWN_CATEGORIES,
   decodeTrevorEvent,
@@ -8,6 +7,7 @@ import {
   type TrevorEventInput,
   type UsageBreakdown,
 } from "@trevor/session";
+import { test } from "vitest";
 import { BreakdownAccumulator } from "./breakdown";
 
 /**

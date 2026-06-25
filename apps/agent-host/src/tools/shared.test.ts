@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import { Effect } from "effect";
+import { test } from "vitest";
 import { ToolExecutionError } from "./errors";
 import { tryTool, tryToolSync } from "./shared";
 

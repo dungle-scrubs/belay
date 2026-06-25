@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import { Effect, Stream } from "effect";
+import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
 import { type AgentEvent, runAgent } from "./loop";
 

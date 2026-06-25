@@ -2,12 +2,14 @@
   "name": "@trevor/agent-host",
   "private": true,
   "type": "module",
+  "exports": {
+    "./testing": "./test/support/index.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "dev:op": "opchain primary --read op run --env-file=$HOME/.trevorV2/.env.op -- tsx watch src/main.ts",
     "start": "tsx src/main.ts",
     "start:op": "opchain primary --read op run --env-file=$HOME/.trevorV2/.env.op -- tsx src/main.ts",
-    "test": "node --import tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {

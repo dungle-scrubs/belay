@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 import { SessionLog } from "./log";
 
 const at = "2026-06-24T00:00:00.000Z";

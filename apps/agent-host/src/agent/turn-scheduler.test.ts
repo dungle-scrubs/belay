@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import type { SessionEvent } from "@trevor/session";
+import { test } from "vitest";
 import { type ActiveTurn, TurnScheduler } from "./turn-scheduler";
 
 /**

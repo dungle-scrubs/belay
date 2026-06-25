@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import {
   events,
   type SessionEvent,
   type TrevorEventInput,
   type UsageBreakdown,
 } from "@trevor/session";
+import { test } from "vitest";
 import { panelModel, toTranscript } from "./transcript";
 
 const usage = {

@@ -12,15 +12,24 @@
     "build": "pnpm -r build",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "pnpm -r test",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:web": "vitest run --project web",
+    "test:e2e": "vitest run --project e2e",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "pnpm -r typecheck",
     "prepare": "lefthook install"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
+    "@effect/vitest": "^0.29.0",
     "@typescript/native-preview": "7.0.0-dev.20260621.1",
+    "@vitest/coverage-v8": "^4.1.9",
     "concurrently": "^9.2.1",
     "lefthook": "^2.1.9",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }

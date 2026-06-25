@@ -2,10 +2,12 @@
   "name": "@trevor/blob-store",
   "private": true,
   "type": "module",
+  "exports": {
+    "./server": "./src/server.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "test": "node --import tsx --test src/*.test.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "devDependencies": {

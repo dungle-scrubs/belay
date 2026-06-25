@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
 import { events, type SessionEvent, type TrevorEventInput } from "@trevor/session";
+import { test } from "vitest";
 import type { ChatMessage } from "../providers";
 import { buildHistory } from "./history-projection";
 
