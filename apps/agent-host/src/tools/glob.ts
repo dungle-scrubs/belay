@@ -1,8 +1,6 @@
-import { glob } from "node:fs/promises";
 import { Schema } from "effect";
-import { cap, SKIP_DIRS, tryTool } from "./shared";
-import type { Tool } from "./types";
-import { WORKSPACE_ROOT } from "./workspace";
+import { collectWorkspace } from "./search";
+import { defineTool } from "./shared";
 
 export const MAX_GLOB = 500;
 
@@ -30,27 +28,15 @@ export function shapeGlob(matches: readonly string[], truncated: boolean): strin
 }
 
 /** Lists workspace files matching a glob pattern. */
-export const globTool: Tool<typeof Params.Type> = {
+export const globTool = defineTool({
   name: "glob",
   description: "List workspace files matching a glob pattern, e.g. 'src/**/*.ts'.",
   params: Params,
   readOnly: true,
-  execute: (args) =>
-    tryTool("glob", async () => {
-      const matches: string[] = [];
-      let truncated = false;
-      for await (const entry of glob(args.pattern, { cwd: WORKSPACE_ROOT })) {
-        if (SKIP_DIRS.test(`/${entry}/`)) {
-          continue;
-        }
-        // Hitting the cap with another match still to come means this is an incomplete slice:
-        // record it and stop, so `truncated` distinguishes "exactly MAX_GLOB" from "more exist".
-        if (matches.length >= MAX_GLOB) {
-          truncated = true;
-          break;
-        }
-        matches.push(entry);
-      }
-      return cap(shapeGlob(matches, truncated));
+  capped: true,
+  execute: (args, ops) =>
+    ops.attempt(async () => {
+      const { items, truncated } = await collectWorkspace(args.pattern, MAX_GLOB, (entry) => entry);
+      return shapeGlob(items, truncated);
     }),
-};
+});

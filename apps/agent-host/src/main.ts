@@ -429,7 +429,7 @@ function onBecomeLeader(): void {
   }
   const pending = scheduler.pendingCatchUp();
   if (pending) {
-    scheduler.submit(pending); // catch up a prompt that arrived while probing
+    scheduler.noteTurn(pending); // catch up a prompt that arrived while probing
     return;
   }
   const local = providers[DEFAULT_PROVIDER];
@@ -575,13 +575,13 @@ function handleEvent(message: SessionEvent): void {
     return;
   }
   if (decoded.type === "user.message" && message.producerId !== PRODUCER_ID) {
-    scheduler.submit(message);
+    scheduler.noteTurn(message);
   } else if (decoded.type === "assistant.started") {
     // Track the run as in flight (a started with no completion) so a later leader can reap it if a
     // crash/reload leaves it dangling. Cleared on its completion below.
     inFlightRuns.add(decoded.runId);
     // Note the attempt so catch-up never re-runs this prompt after a restart (replayed too).
-    scheduler.noteAttempt(message.seq);
+    scheduler.noteTurn(message);
   } else if (decoded.type === "assistant.progress") {
     // Track the LIVE prompt size as the turn streams, so the compaction gate + /compact's reported
     // before-size stay current even when the turn is CANCELLED (a cancel carries no usage of its
@@ -613,16 +613,12 @@ function handleEvent(message: SessionEvent): void {
       lastWindow = decoded.usage.contextWindow;
     }
     compactionFloorReached = false;
-    // The turn finished: note the answered seq, free the slot, and (live only) answer
-    // whatever queued while it ran. Draining follows the completion event, not the fiber
-    // exit, so the next turn's prompt view already includes this reply (just admitted).
-    scheduler.recordAnswer(decoded.runId, message.seq);
-    if (live) {
-      // drain() applies blocking-before to any queued prompt (it folds first if over budget);
-      // maybeCompact() then folds proactively in the idle slot when nothing is queued (D-041).
-      scheduler.drain();
-      scheduler.maybeCompact();
-    }
+    // The turn finished: free the slot + note the answered seq, drain whatever queued while it ran
+    // (blocking-before: a queued prompt folds first if over budget), then fold proactively in the
+    // idle slot when nothing is queued (D-041) - that ordering is owned by processCompletion. The
+    // next turn's prompt view already includes this reply (admitted just above). Inert off-live: the
+    // forked `start` returns null during replay and the proactive fold gates on liveness.
+    scheduler.processCompletion(decoded.runId, message.seq);
   } else if (decoded.type === "context.compacted") {
     // A fold landed (our own echo, or the leader's on a standby): admit it so the projection
     // shrinks to pins + summary + recent, drop the budget estimate to its post-fold size, and

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import { parse as parseYaml } from "yaml";
+import type { Command } from "./commands";
 import { ToolInputError } from "./tools/errors";
 import { renderShell, runShell } from "./tools/run-shell";
 import { cap } from "./tools/shared";
@@ -136,6 +137,27 @@ export function discoverSkills(): readonly Skill[] {
   cache = skills;
 
   return skills;
+}
+
+/**
+ * The `/skills` immediate command, owned here so commands.ts no longer reaches into skill-discovery
+ * internals (SKILLS_DIR / discoverSkills): it lists every discovered skill, or says where it looked
+ * when the library is empty. Registered from commands.ts as one line. Reads no runtime context.
+ */
+export function buildSkillCommand(): Command {
+  return {
+    spec: { name: "/skills", summary: "List discovered skills" },
+    select: () => undefined,
+    run: () => {
+      const skills = discoverSkills();
+      if (!skills.length) {
+        return `No skills found in ${SKILLS_DIR}.`;
+      }
+      return skills
+        .map((s) => `${s.icon ? `${s.icon} ` : ""}${s.id} - ${s.description}`)
+        .join("\n");
+    },
+  };
 }
 
 /**

@@ -112,6 +112,26 @@ export class BreakdownAccumulator {
     this.input.byTool[name] = (this.input.byTool[name] ?? 0) + chars;
   }
 
+  /**
+   * Total chars across one pool's descriptor categories (images/byTool excluded - not categories).
+   * This is the accumulator's home for the category schema: callers ask for a pool total instead of
+   * reading `snapshot()` and hand-summing by iterating BREAKDOWN_CATEGORIES, so a new category folds
+   * into the total here without re-opening every caller. `snapshot()` stays the wire envelope only.
+   */
+  poolTotal(pool: BreakdownPool): number {
+    const counts = (pool === "input" ? this.input : this.output) as unknown as Record<
+      string,
+      number
+    >;
+    let total = 0;
+    for (const c of BREAKDOWN_CATEGORIES) {
+      if (c.pool === pool) {
+        total += counts[c.key] ?? 0;
+      }
+    }
+    return total;
+  }
+
   snapshot(): UsageBreakdown {
     return {
       input: { ...this.input, byTool: { ...this.input.byTool } },
@@ -128,21 +148,6 @@ const poolCounts = (b: UsageBreakdown, pool: BreakdownPool): Record<string, numb
 /** A category count, defaulting to 0 (every descriptor key is present, so this only
  *  satisfies noUncheckedIndexedAccess on the string index). */
 const at = (counts: Record<string, number>, key: string): number => counts[key] ?? 0;
-
-/** Sums one pool's descriptor categories (images/byTool excluded - not categories). */
-const sumPool = (b: UsageBreakdown, pool: BreakdownPool): number => {
-  const counts = poolCounts(b, pool);
-  let total = 0;
-  for (const c of BREAKDOWN_CATEGORIES) {
-    if (c.pool === pool) total += at(counts, c.key);
-  }
-  return total;
-};
-
-/** Total of the text-bearing input categories (images excluded - see header). */
-const inputTextChars = (b: UsageBreakdown): number => sumPool(b, "input");
-
-const outputChars = (b: UsageBreakdown): number => sumPool(b, "output");
 
 const topTools = (byTool: Readonly<Record<string, number>>, n = 3): string => {
   const entries = Object.entries(byTool).sort((a, b) => b[1] - a[1]);
@@ -171,15 +176,18 @@ const sumValues = (r: Record<string, number>): number =>
 
 /**
  * Logs one turn's breakdown on the `usage` scope, then a rolling session average.
- * Greppable as `usage: breakdown` / `usage: session-avg`.
+ * Greppable as `usage: breakdown` / `usage: session-avg`. Takes the accumulator (not a raw
+ * snapshot) so the pool totals come from its category-driven `poolTotal` accessor rather than this
+ * caller re-summing the schema; the per-category percentages still read the snapshot's fields.
  */
 export function logUsageBreakdown(
   runId: string,
-  b: UsageBreakdown,
+  breakdown: BreakdownAccumulator,
   usage: Usage | undefined,
 ): void {
-  const inText = inputTextChars(b);
-  const outTotal = outputChars(b);
+  const b = breakdown.snapshot();
+  const inText = breakdown.poolTotal("input");
+  const outTotal = breakdown.poolTotal("output");
 
   log("usage", "breakdown", {
     runId,

@@ -1,11 +1,7 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { relative } from "node:path";
+import { writeFile } from "node:fs/promises";
 import { Effect, Schema } from "effect";
-import { ToolInputError } from "./errors";
-import { applyUniqueReplacement, replaceMissMessage } from "./replace";
-import { tryTool, tryToolSync } from "./shared";
-import type { Tool } from "./types";
-import { confine, WORKSPACE_ROOT } from "./workspace";
+import { type PreparedEdit, prepareEdit } from "./edit-core";
+import { defineTool } from "./shared";
 
 const Params = Schema.Struct({
   edits: Schema.Array(
@@ -25,40 +21,31 @@ const Params = Schema.Struct({
  * Applies several exact-substring replacements atomically - many edits to one file
  * and/or edits across multiple files. Edits run in order (later edits see earlier
  * ones); each `old` must be unique in that file at the point it applies. Reads and
- * applies everything in memory first, then writes - so a single failed edit leaves
- * no file changed.
+ * applies everything in memory first (prepareEdit), then writes - so a single failed
+ * edit leaves no file changed.
  */
-export const multiEditTool: Tool<typeof Params.Type> = {
+export const multiEditTool = defineTool({
   name: "multi_edit",
   description:
     "Apply several exact-substring replacements atomically across one or more workspace files. " +
     "Edits apply in order (later edits see earlier ones); each 'old' must appear exactly once in " +
     "its file at that point. All-or-nothing: if any edit fails, no file is written. Confined to the workspace.",
   params: Params,
-  execute: (args) =>
+  execute: (args, ops) =>
     Effect.gen(function* () {
       const edits = args.edits;
       if (edits.length === 0) {
-        return yield* Effect.fail(
-          new ToolInputError({ tool: "multi_edit", detail: "'edits' must be a non-empty array" }),
-        );
+        return yield* ops.reject("'edits' must be a non-empty array");
       }
 
       // The schema guarantees each edit has string path/old/new; validate the value-level
       // preconditions (non-empty path and old) the old code checked.
       for (const edit of edits) {
         if (!edit.path) {
-          return yield* Effect.fail(
-            new ToolInputError({ tool: "multi_edit", detail: "each edit needs a 'path'" }),
-          );
+          return yield* ops.reject("each edit needs a 'path'");
         }
         if (edit.old === "") {
-          return yield* Effect.fail(
-            new ToolInputError({
-              tool: "multi_edit",
-              detail: `'old' must be non-empty (${edit.path})`,
-            }),
-          );
+          return yield* ops.reject(`'old' must be non-empty (${edit.path})`);
         }
       }
 
@@ -75,28 +62,17 @@ export const multiEditTool: Tool<typeof Params.Type> = {
         }
       }
 
-      // Phase 1: read each file and apply its edits in memory. Any miss aborts here,
+      // Phase 1: confine + read + apply each file's edits in memory. Any miss aborts here,
       // before a single write, so the workspace is never left half-edited.
-      const pending: { target: string; rel: string; content: string }[] = [];
+      const pending: PreparedEdit[] = [];
       for (const path of order) {
-        const target = yield* tryToolSync("multi_edit", () => confine(path));
-        let content = yield* tryTool("multi_edit", () => readFile(target, "utf8"));
-        for (const edit of byPath.get(path) ?? []) {
-          const result = applyUniqueReplacement(content, edit.old, edit.new);
-          if (!result.ok) {
-            // replaceMissMessage opens with `error: `; strip it so the executor's own
-            // prefix isn't doubled (the wording, with the ` in <path>` suffix, is pinned).
-            const detail = replaceMissMessage(result, ` in ${path}`).replace(/^error:\s*/u, "");
-            return yield* Effect.fail(new ToolInputError({ tool: "multi_edit", detail }));
-          }
-          content = result.content;
-        }
-        pending.push({ target, rel: relative(WORKSPACE_ROOT, target), content });
+        const prepared = yield* prepareEdit(ops, path, byPath.get(path) ?? [], ` in ${path}`);
+        pending.push(prepared);
       }
 
       // Phase 2: commit every file.
       for (const file of pending) {
-        yield* tryTool("multi_edit", () => writeFile(file.target, file.content, "utf8"));
+        yield* ops.attempt(() => writeFile(file.target, file.content, "utf8"));
       }
 
       const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
@@ -104,4 +80,4 @@ export const multiEditTool: Tool<typeof Params.Type> = {
         .map((file) => file.rel)
         .join(", ")}`;
     }),
-};
+});

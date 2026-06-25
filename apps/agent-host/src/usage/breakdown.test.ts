@@ -82,3 +82,44 @@ test("snapshot is an independent copy", () => {
   assert.equal(first.input.toolResults, 10);
   assert.equal(first.input.byTool.read, 10);
 });
+
+test("poolTotal sums a pool's descriptor categories, excluding images/byTool", () => {
+  const acc = new BreakdownAccumulator(100); // systemAndTools = 100
+  acc.seedHistory([
+    {
+      role: "user",
+      content: "hi", // userText = 2
+      images: [{ hash: "h", mimeType: "image/png", data: "x".repeat(4096) }],
+    },
+  ]);
+  acc.onToolResult("read", 500); // toolResults = 500
+  acc.onToolCall('{"q":"x"}'.length); // input+output toolCallArgs
+  acc.onThinking(800); // output thinking
+  acc.onAnswer(120); // output answer
+
+  // input total = systemAndTools + userText + toolResults + toolCallArgs (images EXCLUDED)
+  const args = '{"q":"x"}'.length;
+  assert.equal(acc.poolTotal("input"), 100 + 2 + 500 + args);
+  // output total = thinking + answer + toolCallArgs
+  assert.equal(acc.poolTotal("output"), 800 + 120 + args);
+});
+
+test("a new category would fold into poolTotal without re-summing at the caller", () => {
+  // poolTotal is the schema's one home: its sum tracks the accumulator's descriptor fields, so a
+  // caller asking for the total never enumerates categories itself. Pin that the input total is the
+  // sum of exactly the text categories the snapshot exposes (the wire envelope).
+  const acc = new BreakdownAccumulator(0);
+  acc.seedHistory([
+    { role: "user", content: "abcde" },
+    { role: "assistant", content: "fg", toolCalls: [{ id: "c", name: "read", arguments: "{}" }] },
+    { role: "tool", content: "hij", toolCallId: "c", name: "read" },
+  ]);
+  const b = acc.snapshot();
+  const handSum =
+    b.input.systemAndTools +
+    b.input.userText +
+    b.input.assistantText +
+    b.input.toolCallArgs +
+    b.input.toolResults;
+  assert.equal(acc.poolTotal("input"), handSum);
+});

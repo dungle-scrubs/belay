@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { fmtFields } from "./log";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
-import { discoverSkills, SKILLS_DIR } from "./skills";
+import { buildSkillCommand } from "./skills";
 import { TOOL_DEFS } from "./tools";
 import { renderShell, runShell } from "./tools/run-shell";
 
@@ -20,7 +20,12 @@ import { renderShell, runShell } from "./tools/run-shell";
  * announced inventory automatically.
  */
 
-/** Runtime facts a command may report on; supplied fresh per invocation. */
+/**
+ * The full set of runtime facts main.ts can supply to a command. It is assembled ONCE per
+ * invocation in main.ts; an individual command never receives it whole - each command's `select`
+ * picks the narrow slice it actually reads (see Command), so adding a context field doesn't widen
+ * every command's input and a command can't reach a fact it has no business reading.
+ */
 export interface CommandContext {
   readonly providers: ProviderRegistry;
   readonly cwd: string;
@@ -36,9 +41,25 @@ export interface CommandContext {
   readonly compact?: () => Promise<string>;
 }
 
-interface Command {
+/** The /doctor slice: the host-health facts it reports (no compaction hook). */
+export type DoctorInput = Omit<CommandContext, "compact">;
+
+/** The /compact slice: just the optional compaction hook. */
+export interface CompactInput {
+  readonly compact?: () => Promise<string>;
+}
+
+/**
+ * One immediate command: its announced spec, a `select` that derives the command's NARROW input
+ * (`I`) from the full CommandContext - the only fields its `run` may read - and the `run` that
+ * produces the result text. A command that needs no context uses `I = void`. The registry always
+ * calls `run(args, select(ctx))`, so each command declares its own input shape instead of every
+ * command sharing one wide context.
+ */
+export interface Command<I = void> {
   readonly spec: CommandSpec;
-  run(args: string, ctx: CommandContext): Promise<string> | string;
+  readonly select: (ctx: CommandContext) => I;
+  run(args: string, input: I): Promise<string> | string;
 }
 
 /** The command registry: the announced specs plus a name -> result runner. */
@@ -64,46 +85,63 @@ async function providerStatus(key: string, provider: ProviderRegistry[string]): 
 }
 
 export function buildCommandRegistry(): CommandRegistry {
-  const commands: Command[] = [];
+  const commands: Command<unknown>[] = [];
+  /** Registers a command, preserving its narrow input type at the declaration site. */
+  const add = <I>(command: Command<I>): void => {
+    commands.push(command as Command<unknown>);
+  };
+  /** The shared selector for commands that read no runtime context. */
+  const none = (): void => undefined;
 
-  commands.push({
+  add({
     spec: { name: "/help", summary: "List available host commands" },
+    select: none,
     run: () => commands.map((c) => `${c.spec.usage ?? c.spec.name} - ${c.spec.summary}`).join("\n"),
   });
 
-  commands.push({
+  add<DoctorInput>({
     spec: {
       name: "/doctor",
       summary: "Host health: workspace, providers, tools",
     },
-    run: async (_args, ctx) => {
-      const lines: string[] = [`workspace: ${ctx.workspace}`];
-      if (ctx.cwd !== ctx.workspace) {
-        lines.push(`cwd: ${ctx.cwd}`);
+    select: ({ providers, cwd, workspace, instanceId, role, host, lease }) => ({
+      providers,
+      cwd,
+      workspace,
+      instanceId,
+      role,
+      host,
+      lease,
+    }),
+    run: async (_args, input) => {
+      const lines: string[] = [`workspace: ${input.workspace}`];
+      if (input.cwd !== input.workspace) {
+        lines.push(`cwd: ${input.cwd}`);
       }
-      lines.push(`host: ${ctx.instanceId} (${ctx.role})`);
-      if (ctx.host) {
-        lines.push(`turn: ${fmtFields(ctx.host)}`);
+      lines.push(`host: ${input.instanceId} (${input.role})`);
+      if (input.host) {
+        lines.push(`turn: ${fmtFields(input.host)}`);
       }
-      if (ctx.lease) {
-        lines.push(`lease: ${fmtFields(ctx.lease)}`);
+      if (input.lease) {
+        lines.push(`lease: ${fmtFields(input.lease)}`);
       }
       lines.push("", "providers:");
       // Probe every provider's readiness concurrently - they're independent.
       const statuses = await Promise.all(
-        Object.entries(ctx.providers).map(([key, provider]) => providerStatus(key, provider)),
+        Object.entries(input.providers).map(([key, provider]) => providerStatus(key, provider)),
       );
       lines.push(...statuses, "", `tools: ${TOOL_DEFS.map((t) => t.name).join(", ")}`);
       return lines.join("\n");
     },
   });
 
-  commands.push({
+  add({
     spec: {
       name: "/shell",
       summary: "Run a shell command on the host",
       usage: "/shell <command>",
     },
+    select: none,
     run: async (args) => {
       const command = args.trim();
       if (!command) {
@@ -115,40 +153,33 @@ export function buildCommandRegistry(): CommandRegistry {
     },
   });
 
-  commands.push({
+  add({
     spec: { name: "/clear", summary: "Clear the conversation and start fresh" },
+    select: none,
     // The actual history reset happens in the host's event handler (so it applies on
     // replay too); this just confirms the action in the command lane.
     run: () => "✓ conversation cleared — starting fresh",
   });
 
-  commands.push({
+  add<CompactInput>({
     spec: { name: "/compact", summary: "Fold older turns into a summary to free context" },
+    select: ({ compact }) => ({ compact }),
     // The fold itself (plan + summarize + emit context.compacted) runs in the host, since it
     // needs the live event log + provider; this command just triggers it and reports the result.
-    run: async (_args, ctx) => {
-      if (!ctx.compact) {
+    run: async (_args, { compact }) => {
+      if (!compact) {
         return "Compaction is unavailable (only the live leader can compact).";
       }
-      return ctx.compact();
+      return compact();
     },
   });
 
-  commands.push({
-    spec: { name: "/skills", summary: "List discovered skills" },
-    run: () => {
-      const skills = discoverSkills();
-      if (!skills.length) {
-        return `No skills found in ${SKILLS_DIR}.`;
-      }
-      return skills
-        .map((s) => `${s.icon ? `${s.icon} ` : ""}${s.id} - ${s.description}`)
-        .join("\n");
-    },
-  });
+  // /skills is owned by skills.ts (it knows skill discovery); registered here as one line.
+  add(buildSkillCommand());
 
-  commands.push({
+  add({
     spec: { name: "/jobs", summary: "List background processes" },
+    select: none,
     run: () => {
       const jobs = supervisor.list();
       if (!jobs.length) {
@@ -163,12 +194,13 @@ export function buildCommandRegistry(): CommandRegistry {
     },
   });
 
-  commands.push({
+  add({
     spec: {
       name: "/jobs-stop",
       summary: "Stop a background process",
       usage: "/jobs-stop <id>",
     },
+    select: none,
     run: (args) => {
       const id = args.trim();
       if (!id) {
@@ -190,7 +222,8 @@ export function buildCommandRegistry(): CommandRegistry {
         return { text: `unknown command ${name} - try /help`, ok: false };
       }
       try {
-        return { text: await command.run(args, ctx), ok: true };
+        // Hand the command only its own slice of the context (select), never the whole thing.
+        return { text: await command.run(args, command.select(ctx)), ok: true };
       } catch (error) {
         return {
           text: `error: ${error instanceof Error ? error.message : String(error)}`,

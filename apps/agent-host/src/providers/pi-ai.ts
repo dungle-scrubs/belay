@@ -1,7 +1,6 @@
 import {
   type Api,
   type Context,
-  isContextOverflow,
   type Model,
   streamSimple,
   type ThinkingLevel,
@@ -10,6 +9,12 @@ import {
 import { Effect, Stream } from "effect";
 import { debug } from "../log";
 import { msg } from "../tools/shared";
+import {
+  classifyResponseOverflow,
+  isAuthError,
+  isContextLengthError,
+  promptTooBig,
+} from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
 import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
@@ -21,24 +26,6 @@ function parseArgs(raw: string): Record<string, unknown> {
     return {};
   }
 }
-
-/**
- * The "prompt doesn't fit" overflow reason, built once so the two prompt-too-big
- * branches (the pre-request estimate guard and LM Studio's context-length 400) can't
- * drift. LM Studio's own message omits the sizes, so we attach our estimate + window.
- */
-const promptTooBig = (promptTokensEst: number, contextWindow: number): string =>
-  `the prompt (~${promptTokensEst} tokens) is too big for the ${contextWindow}-token context window`;
-
-/**
- * A provider stream error that means "the credential was refused", not "the backend is
- * down" - an expired/revoked/invalid API key or OAuth token. We classify it from the
- * error text (status 401/403, "unauthorized", "invalid api key", "authentication",
- * "expired") so a bad key surfaces as ProviderAuthError ("auth failed - re-auth"), the
- * actionable message, instead of a generic ProviderUnavailable.
- */
-const AUTH_ERROR =
-  /\b401\b|\b403\b|unauthor|forbidden|invalid[\s_-]*(api[\s_-]*key|token|x-api-key)|authentication|api[\s_-]*key.*(invalid|expired|missing)|token.*expired|expired.*token/i;
 
 type TextBlock = { type: "text"; text: string };
 type ImageBlock = { type: "image"; data: string; mimeType: string };
@@ -132,10 +119,12 @@ async function* piAiEvents<TApi extends Api>(
     readonly reasoning?: ThinkingLevel;
     readonly provider: string;
     readonly signal: AbortSignal;
+    /** The system prompt, built upstream (streamPiAiModel) so this adapter just consumes it. */
+    readonly systemPrompt: string;
   },
 ): AsyncIterable<ProviderEvent> {
   const context: Context = {
-    systemPrompt: buildSystemPrompt(tools),
+    systemPrompt: options.systemPrompt,
     messages: toPiAiMessages(messages),
     ...(tools.length > 0 ? { tools: toPiAiTools(tools) } : {}),
   };
@@ -231,20 +220,11 @@ async function* piAiEvents<TApi extends Api>(
           genMs: Date.now() - (generationAt || requestAt),
         },
       };
-      // Overflow = the response was bounded by the context window. A "length" stop
-      // only counts when input+output actually fills the window (so a model whose
-      // max-output cap is below its window doesn't false-positive on long answers);
-      // isContextOverflow adds the prompt-too-large / provider-error variants.
-      const used = (usage?.input ?? 0) + (usage?.output ?? 0);
-      const hitWall =
-        event.message?.stopReason === "length" && used >= options.contextWindow * 0.98;
-      if (event.message && (hitWall || isContextOverflow(event.message, options.contextWindow))) {
-        yield {
-          type: "overflow",
-          reason: hitWall
-            ? "hit the context window mid-response — output was truncated"
-            : "the prompt exceeded the model's context window",
-        };
+      // Did the finished response overflow the window? The classifier owns the decision
+      // (a window-filling "length" stop, or pi-ai's prompt-too-large variants) and the wording.
+      const overflowReason = classifyResponseOverflow(event.message, options.contextWindow);
+      if (overflowReason) {
+        yield { type: "overflow", reason: overflowReason };
       }
     } else if (event.type === "error") {
       // A clean interrupt (cancel/ESC) ends the stream quietly; the fiber interrupt
@@ -258,7 +238,7 @@ async function* piAiEvents<TApi extends Api>(
       // are tool results, or surfaces a clear too-small-window message when there aren't -
       // LM Studio's message omits the sizes, so we attach the estimate and the window.
       const detail = event.error.errorMessage ?? "provider stream error";
-      if (/context length|tokens to keep|larger context|context window/i.test(detail)) {
+      if (isContextLengthError(detail)) {
         yield {
           type: "overflow",
           reason: promptTooBig(promptTokensEst, options.contextWindow),
@@ -267,7 +247,7 @@ async function* piAiEvents<TApi extends Api>(
       }
       // A refused credential is an auth failure, not an outage: surface it as such so the
       // UI tells the user to re-auth rather than "provider unavailable".
-      if (AUTH_ERROR.test(detail)) {
+      if (isAuthError(detail)) {
         throw new ProviderAuthError({ provider: options.provider, detail });
       }
       throw new Error(detail);
@@ -295,9 +275,12 @@ export function streamPiAiModel<TApi extends Api>(
     readonly contextWindow: number;
     readonly reasoning?: ThinkingLevel;
     readonly provider: string;
+    /** The turn's system prompt. Defaults to the one derived from `tools`; passing it lets the
+     *  turn-runner build it once. Either way piAiEvents just consumes it (it owns no prompt policy). */
+    readonly systemPrompt?: string;
   },
 ): Stream.Stream<ProviderEvent, ProviderError> {
-  const { messages, tools, provider, ...streamOptions } = options;
+  const { messages, tools, provider, systemPrompt, ...streamOptions } = options;
   return Stream.unwrapScoped(
     Effect.gen(function* () {
       const model = yield* buildModel;
@@ -308,9 +291,10 @@ export function streamPiAiModel<TApi extends Api>(
           ...streamOptions,
           provider,
           signal: controller.signal,
+          systemPrompt: systemPrompt ?? buildSystemPrompt(tools),
         }),
-        // A classified auth failure (see AUTH_ERROR) rides through as-is; anything else is
-        // an outage -> ProviderUnavailable.
+        // A classified auth failure (see error-classifier) rides through as-is; anything else
+        // is an outage -> ProviderUnavailable.
         (cause) =>
           cause instanceof ProviderAuthError
             ? cause

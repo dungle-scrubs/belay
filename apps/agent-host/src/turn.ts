@@ -249,7 +249,7 @@ export function publishTurn(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
           yield* flushAll;
-          yield* Effect.sync(() => logUsageBreakdown(runId, breakdown.snapshot(), usage));
+          yield* Effect.sync(() => logUsageBreakdown(runId, breakdown, usage));
 
           if (Exit.isSuccess(exit)) {
             yield* complete({});
