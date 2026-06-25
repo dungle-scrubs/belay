@@ -36,6 +36,89 @@ not a dependency of Trevor V2 and must not become one. Provider integration live
 in `apps/agent-host/src/providers` and speaks to LM Studio (and Codex/pi-ai)
 directly.
 
+## Testing
+
+Tests are organized by **scope, not by one global placement rule**. "Where does
+a test go" has four answers, decided by what the test exercises. Get the scope
+right and placement follows; do **not** default everything to "next to the
+source" or "in one `tests/` folder."
+
+**Placement by scope:**
+
+- **Unit** - one pure module in isolation (the folds: `recovery`, `transcript`,
+  `send-queue`, `log`, `store`, `protocol`). **Co-located** as `foo.test.ts`
+  beside `foo.ts`; it moves, renames, and is deleted with the code. This is the
+  default and the only tier that lives in `src/`.
+- **Integration** - several modules of one package against a real local
+  dependency (session-store over a real socket + temp SQLite; blob-store on an
+  ephemeral port; the host turn pipeline with a fake provider). Lives in that
+  package's `test/` dir, e.g. `apps/session-store/test/`.
+- **Conformance / contract** - an interface every implementation must satisfy.
+  Authored **with the contract owner** and parameterized over implementations:
+  the transport contract lives in `packages/session/test/` and runs against both
+  `session-store` and Richter. A contract suite never lives inside one
+  implementor.
+- **End-to-end / smoke** - boots multiple services and drives the whole system.
+  Lives in the top-level **`e2e/`** workspace, never in a leaf package, because
+  it owns multi-service lifecycle (ports, boot, teardown) and depends on
+  everything.
+
+Shared harness lives in two homes, split by typing: the generic pieces -
+ephemeral-port service boot/teardown, temp dirs, a transport client,
+`waitFor`/`subscribe` - in **`packages/test-kit`**, imported by every tier; the
+host-typed pieces - the deterministic **fake provider** and the turn driver -
+under **`apps/agent-host/test/support`**, re-exported via
+`@trevor/agent-host/testing` for the e2e workspace. Never copy-pasted.
+
+**The decision rule (use this to avoid drift):** lift a test out of `src/` only
+when it **owns lifecycle** (boots a service, binds a port, writes a real DB) or
+**spans packages**. Otherwise co-locate it. Clutter from co-located unit files
+is solved by editor file-nesting and `tsconfig` build excludes, not by a
+parallel `tests/` tree.
+
+**Runner: Vitest with projects.** One runner owns every tier as a project
+(`unit` | `integration` | `web` | `e2e`), each with its own environment,
+timeout, and gating. `node:test` and the hand-run `scripts/verify-*` regime are retired -
+there is **one test system**, runnable via `pnpm test` and selectable by
+project. Do **not** add new `verify-*` scripts; fold existing ones into the tier
+they belong to.
+
+**Per-app environment:**
+
+- **`apps/agent-host`** (Effect) - use **`@effect/vitest`**. Drive time-injected
+  machines (`src/lease.ts`, the turn scheduler) with **`TestClock`** instead of
+  real waits; provide the `Emit` service via a collecting test `Layer`; the
+  deterministic **fake provider** stands in for a model in the turn pipeline.
+- **`apps/web`** (React) - component and hook tests run in the **`web`** project
+  under **jsdom + Testing Library** (`render` for components, `renderHook` for
+  hooks); the file suffix is `*.test.tsx` (the node-env `unit` project only globs
+  `*.test.ts`, so they never overlap). Storybook stays the visual catalog, not a
+  substitute for behavioral tests. A full-browser Playwright pass against the
+  running app is a future option, not yet set up.
+
+**E2E lanes** (in `e2e/`), so the suite stays deterministic and CI-able:
+
+- **Hermetic** - boots store + blob + host on ephemeral ports with the fake
+  provider. Default, deterministic, runs in CI.
+- **Live model** - exercises real providers (LM Studio via `LMSTUDIO_URL`, cloud
+  via `~/.pi/auth.json`). **Gated**: when a prerequisite is absent the test
+  **skips with a stated reason** - it never silently passes and never fails the
+  run.
+
+(Browser/DOM behavior is covered by the `web` jsdom project above, not an e2e
+lane; a full-browser Playwright pass would be a future addition here.)
+
+**Gating:** unit + integration + web green, plus the hermetic e2e lane, is the
+bar for a change being done. Pre-commit runs Biome + typecheck + the fast `unit`
+project (`lefthook.yml`); CI (`.github/workflows/ci.yml`) runs lint, typecheck,
+and all test projects; the live-model lane runs on demand / nightly, never on
+every commit.
+
+**Status:** in place. The Vitest projects, `packages/test-kit`, the relocated
+and parameterized conformance suite, and the `e2e/` workspace are stood up, and
+the `scripts/verify-*` regime has been folded into the tiers and removed. Build
+new tests into this structure; do not reintroduce the old regime.
+
 ## The plan is canonical
 
 The **single canonical plan** is

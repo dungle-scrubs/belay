@@ -23,12 +23,13 @@ file. Concretely, follow the patterns already in the tree:
 - **Cancellation is fiber interruption.** A turn is a forked fiber; `user.cancel`
   interrupts it (`src/main.ts`). The provider Stream's scope aborts the underlying request
   via an `Effect.addFinalizer` -> `AbortController.abort()` bridge in `streamPiAi`. This is
-  validated (A-004, `scripts/spike-a004-interrupt.ts`) - **do not** add manual
+  validated by the hermetic interrupt test in `test/turn.test.ts` (a turn that hangs mid-stream
+  is interrupted and closes with a cancelled completion) - **do not** add manual
   `signal?.aborted` checks or thread an `AbortSignal` through the pipeline; interrupt the
   fiber instead. The D-010 race-and-abandon fallback is held in reserve, not used.
 - **Dependencies are services + `Layer`.** Emission is the `Emit` `Context.Tag` service
   (`src/services.ts`); `main` provides `EmitLive`, tests provide a collecting layer
-  (`scripts/verify-turn.ts`). Add new cross-cutting collaborators as `Context.Tag` services
+  (`test/support/fake-provider.ts`). Add new cross-cutting collaborators as `Context.Tag` services
   with a live Layer and a test Layer - don't thread callbacks.
 - **Tools return `Effect<string, ToolError>`** (`src/tools/types.ts`); the executor renders
   the typed failure to one model-facing `error: …` line (`src/tools/index.ts`). A new tool
@@ -52,15 +53,28 @@ fights their design. Do not "fix" them into Effect:
 Observability tracing (`Effect.withSpan`, `Effect.log`) is a future add on the turn/tool
 Effects when an OTel exporter is wanted; until then the plain `log`/`warn` leaf stays.
 
-## Verifying
+## Testing
 
-There is no unit-test runner yet; the host ships per-slice verification scripts. Run the
-relevant ones after a change (they are the regression suite):
+Follow the project-wide testing doctrine in the repo-root
+[`AGENTS.md`](../../AGENTS.md) ("Testing"): tests are placed by scope, the runner is
+Vitest with projects, and there is **one test system** - the old hand-run `scripts/verify-*`
+regime has been folded into the tiers and removed. Host specifics:
 
-- `pnpm exec tsx scripts/verify-turn.ts` - the turn pipeline end to end (fake provider,
-  multi-step tool loop, via a test `Emit` layer).
-- `pnpm exec tsx scripts/verify-tools.ts` and `scripts/verify-bash-safety.ts` - the tools.
-- `pnpm exec tsx scripts/spike-a004-interrupt.ts` - interrupt-based cancellation against a
-  live LM Studio (skips if unreachable).
+- **Test Effect code by running it at the boundary.** `Effect.runPromise` / `runFork` inside a
+  Vitest test (see `test/turn.test.ts`) is the default; reach for `@effect/vitest`'s
+  `it.effect` for an Effect-native case. Do not eyeball a script's stdout.
+- **Time-injected machines take the clock as an argument.** The lease state machine
+  (`src/lease.ts`) is driven by `tick`/`observe` with an explicit time (`src/lease.test.ts`),
+  so election, deferral, and ttl takeover are deterministic with no real waiting; use
+  `@effect/vitest`'s `TestClock` for Effect-timed code.
+- **Inject collaborators as test `Layer`s.** Provide `Emit` (`src/services.ts`) via a
+  collecting layer to assert the emitted event sequence; the deterministic **fake provider**
+  (`test/support/fake-provider.ts`) stands in for a model so a turn does not depend on a
+  model choosing to call a tool.
+- **Placement.** Unit tests co-locate (`src/**/foo.test.ts`); host **integration** tests
+  (the real turn pipeline, tool fs, bash safety) live in `apps/agent-host/test/`; cross-service
+  smoke lives in the top-level `e2e/` workspace.
+- **Live LM Studio is a gated lane.** The live agent/context checks live in `e2e/live/` and
+  skip with a stated reason when the live host env is absent; they never fail the run.
 
-Plus `pnpm -r typecheck` and `pnpm biome check` (both run by the pre-commit hook).
+`pnpm -r typecheck` and `pnpm biome check` run on the pre-commit hook.
