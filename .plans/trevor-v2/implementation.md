@@ -173,6 +173,12 @@ These are **not** in V2 and **not** in the backlog. Permanent removals.
   → `assistant.recovered`** to reserve "compaction" for the cross-turn feature (§6, D-040). The 4-bit local
   model now loads at **64k** (the working window and compaction target); recovery was validated against a 6k
   cap. Web renders both as Alert markers.
+- **Session-contract single-sourcing** (D-059, **shipped 2026-06-25**): the provider roster is now
+  host-owned - the shared `DEFAULT_PROVIDER_MODELS` was deleted (it had drifted from `ProviderModel`) - and
+  the cross-surface coordination literals (default session id, `runtimeKind`, producer ids, lease roles) plus
+  the stream wire-param names now live once in `packages/session` (`identity.ts`, stream codec). The host
+  announces `default`/`providers`, which the decoder now surfaces instead of the web hardcoding them.
+  Prompted by a domain-drift audit; see §6.
 
 ## 6. Roadmap - remaining work, sequenced
 
@@ -199,6 +205,35 @@ for the record):
 - **Detection caveat (learned in build):** LM Studio's default context policy silently truncates an
   over-window prompt (rolling window), so overflow had to be detected proactively from the host's own prompt
   estimate, not from a provider error.
+
+### Shipped: session-contract single-sourcing <!-- D-059 --> (2026-06-25)
+
+`packages/session` is the one owner of every value the host, web, and session-store must agree on; the
+cross-surface literals and contracts that could silently drift were consolidated there. Prompted by a
+domain-drift audit of the sessions area. What shipped:
+- <!-- D-059 --> **Host owns the provider roster; the shared pre-announce copy is gone.** Deleted
+  `packages/session/src/providers.ts` (`DEFAULT_PROVIDER_MODELS`) - a hand-authored roster that had already
+  drifted from the `ProviderModel` interface (missing `kind`) and duplicated reasoning levels the host
+  auto-detects. The host announces the real, env-resolved roster in `host.online`; the session log persists
+  it (replayed on connect), so a previously-seen host's roster survives a restart and a never-seen session
+  shows an empty picker, not a guess. `buildProviders` curates the display labels; each adapter auto-detects
+  its reasoning options (pi-ai registry / LM Studio).
+- **Announced default surfaced, not re-hardcoded.** `host.online` already carried `default`/`providers` but
+  `decodeTrevorEvent` dropped them and the web hardcoded `"qwen"`. The decoder surfaces them now; the web's
+  initial provider selection derives from the announced default.
+- **Identity constants centralized** in `packages/session/src/identity.ts`: `DEFAULT_SESSION_ID` (host
+  `SESSION_ID` default + web `?session=` default - they auto-pair only if equal), `RUNTIME_KIND` (host/web;
+  the store's presence check keys off the host kind), `PRODUCER_IDS` (host/web event authorship), and
+  `HOST_ROLE` (leader/standby; the lease emits, the web reads). Each was a bare literal spelled per surface,
+  where a rename silently broke presence or split host/browser into different sessions.
+- **Stream wire-param names single-sourced.** `encodeStreamParams`/`decodeStreamParams`
+  (`stream-transport.ts`) own the `/sessions/{id}/stream` query-param names; the client encodes and the
+  session-store decodes through the same codec instead of hand-parsing. NOTE: those names are also the
+  external Richter wire contract, so the codec removes client/local-store drift but does not make the names
+  free to rename unilaterally.
+- **Validated live:** the host announces `default=qwen` + the 6-provider roster; the store recognizes the
+  host (runtimeKind match) and the codec round-trips identity into the presence frame. Repo
+  typecheck/test/lint green.
 
 ### Next: cross-turn compaction <!-- D-040 -->
 
