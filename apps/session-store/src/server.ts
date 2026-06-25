@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { frames, type PublishInput } from "@trevor/session";
+import { frames, type HostPresence, type PublishInput } from "@trevor/session";
 import { type WebSocket, WebSocketServer } from "ws";
 import { SessionLog } from "./log";
 
@@ -25,6 +25,11 @@ import { SessionLog } from "./log";
 
 const STREAM_PATH = /^\/sessions\/([^/]+)\/stream$/;
 const EVENTS_PATH = /^\/sessions\/([^/]+)\/events$/;
+
+// The runtimeKind the agent-host declares on its stream identity (see apps/agent-host
+// main.ts). Presence tracks THIS runtime - "is a host connected right now" - so a
+// browser (runtimeKind "web") joining never counts as a host.
+const HOST_RUNTIME = "trevor";
 
 /** Permissive CORS: the browser (trevor-web :17420) reads/writes cross-origin, no credentials. */
 function cors(res: ServerResponse): void {
@@ -90,6 +95,46 @@ export function createSessionStore(dbPath: string): Server {
       }
     }
   };
+
+  // Hosts (the agent-host runtime) connected per session, keyed by socket. This is the
+  // LIVE source of presence: a host appears when its stream opens and is gone the instant
+  // the socket closes (crash, kill, lost connection) - which the latched host.online
+  // events in the durable log can never reflect. Browsers are not tracked here.
+  const hosts = new Map<string, Map<WebSocket, HostPresence>>();
+
+  // The distinct hosts live for a session. Deduped by instanceId, since a reconnecting
+  // host can momentarily hold both its old and new socket.
+  const hostsOf = (sessionId: string): HostPresence[] => {
+    const set = hosts.get(sessionId);
+    if (!set) {
+      return [];
+    }
+    const byId = new Map<string, HostPresence>();
+    for (const presence of set.values()) {
+      byId.set(presence.instanceId, presence);
+    }
+    return [...byId.values()];
+  };
+
+  const addHost = (sessionId: string, socket: WebSocket, presence: HostPresence): void => {
+    const set = hosts.get(sessionId) ?? new Map<WebSocket, HostPresence>();
+    set.set(socket, presence);
+    hosts.set(sessionId, set);
+  };
+
+  const removeHost = (sessionId: string, socket: WebSocket): boolean => {
+    const set = hosts.get(sessionId);
+    if (!set?.delete(socket)) {
+      return false;
+    }
+    if (set.size === 0) {
+      hosts.delete(sessionId);
+    }
+    return true;
+  };
+
+  const broadcastPresence = (sessionId: string): void =>
+    broadcast(sessionId, frames.presence(hostsOf(sessionId)));
 
   const server = createServer((req, res) => {
     cors(res);
@@ -162,6 +207,13 @@ export function createSessionStore(dbPath: string): Server {
     const sessionId = decodeURIComponent(match[1] as string);
     const afterSeq = Number(url.searchParams.get("after") ?? 0) || 0;
 
+    // Identity rides the stream URL (see @trevor/session streamUrl). A connection from
+    // the agent-host runtime counts toward presence; anything else (a browser) only
+    // observes it.
+    const runtimeKind = url.searchParams.get("runtimeKind") ?? "";
+    const instanceId = url.searchParams.get("instanceId") ?? "";
+    const isHost = runtimeKind === HOST_RUNTIME && instanceId.length > 0;
+
     // Synchronous replay-then-subscribe: the node:sqlite reads and the subscribe
     // are all synchronous on the single event-loop thread, so no append can
     // interleave between the replay snapshot and joining the live fan-out.
@@ -171,7 +223,29 @@ export function createSessionStore(dbPath: string): Server {
     socket.send(JSON.stringify(frames.replayComplete()));
     subscribe(sessionId, socket);
 
-    socket.on("close", () => unsubscribe(sessionId, socket));
+    if (isHost) {
+      // A host joined: record it, then push the new live set to everyone (this socket
+      // included) so viewers flip to "host active" immediately.
+      addHost(sessionId, socket, {
+        instanceId,
+        participantId: url.searchParams.get("participantId") ?? "",
+        displayName: url.searchParams.get("displayName") ?? "",
+      });
+      broadcastPresence(sessionId);
+    } else {
+      // A viewer joined: it just needs the current live set once (no host-set change,
+      // so don't disturb the others).
+      socket.send(JSON.stringify(frames.presence(hostsOf(sessionId))));
+    }
+
+    socket.on("close", () => {
+      unsubscribe(sessionId, socket);
+      // A host's socket closing IS the disconnect signal - drop it and tell everyone,
+      // so a crashed/killed host stops showing as active within one round trip.
+      if (isHost && removeHost(sessionId, socket)) {
+        broadcastPresence(sessionId);
+      }
+    });
   });
 
   return server;

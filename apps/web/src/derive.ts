@@ -1,8 +1,8 @@
 import {
   type CommandSpec,
-  DEFAULT_PROVIDER_MODELS,
   type DecodedEvent,
   decodeTrevorEvent,
+  type HostPresence,
   type ProviderModel,
   type SessionEvent,
   type TaskSnapshot,
@@ -112,13 +112,24 @@ export type HostStatus = {
 const HOST_RECENT_MS = 15000;
 
 /**
- * Derives host presence from the lease's host.* events. The current leader is the
- * host whose latest role is "leader" - shown as last-known, since a lone leader
- * goes silent. A standby pings every heartbeat, so live standbys are those seen
- * within HOST_RECENT_MS (excluding the leader); stale ids from dead hosts drop off.
+ * Derives host presence. Liveness comes from the backend's LIVE connection set
+ * (`presence`) when it reports one - a host is present only while its socket is open, so
+ * a crashed/killed host disappears even though its host.online stays latched in the log.
+ * The leader/cwd/workspace still come from the host.* events, but the leader counts only
+ * if it is among the live sockets; the other live hosts are standbys.
+ *
+ * `presence === null` means the backend never reports presence (e.g. Richter): fall back
+ * to the event-log view, where `present` latches on the first host.online (a lone leader
+ * goes silent, so it can't be timed out) and standbys count only if seen within
+ * HOST_RECENT_MS. This path cannot detect a silently-dead leader - the reason the live
+ * set is preferred wherever a backend offers it.
  */
-export function hostStatus(events: readonly SessionEvent[], nowMs: number): HostStatus {
-  let present = false;
+export function hostStatus(
+  events: readonly SessionEvent[],
+  presence: readonly HostPresence[] | null,
+  nowMs: number,
+): HostStatus {
+  let everOnline = false;
   let workspace: string | null = null;
   let cwd: string | null = null;
 
@@ -133,7 +144,7 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
     }
 
     if (decoded.type === "host.online") {
-      present = true;
+      everOnline = true;
 
       if (decoded.workspace) {
         workspace = decoded.workspace;
@@ -165,6 +176,8 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
     }
   }
 
+  // The most recently elected leader, by event order (the id whose latest role is
+  // "leader" and seen latest). Shared by both presence paths.
   let leaderId: string | null = null;
   let leaderSeen = Number.NEGATIVE_INFINITY;
 
@@ -176,6 +189,22 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
     }
   }
 
+  // Live-connection path: the leader counts only if its socket is live; standbys are the
+  // other live hosts. A host that connected but hasn't yet emitted its leader role shows
+  // present with no leader ("host starting…"), which is exactly the transient truth.
+  if (presence !== null) {
+    const liveIds = new Set(presence.map((host) => host.instanceId));
+    const leaderLive = leaderId !== null && liveIds.has(leaderId) ? leaderId : null;
+    let standbyCount = 0;
+    for (const id of liveIds) {
+      if (id !== leaderLive) {
+        standbyCount += 1;
+      }
+    }
+    return { present: liveIds.size > 0, leaderId: leaderLive, standbyCount, workspace, cwd };
+  }
+
+  // Event-log fallback (no live presence reported).
   let standbyCount = 0;
 
   for (const [id, at] of lastSeen) {
@@ -184,20 +213,18 @@ export function hostStatus(events: readonly SessionEvent[], nowMs: number): Host
     }
   }
 
-  return { present, leaderId, standbyCount, workspace, cwd };
+  return { present: everOnline, leaderId, standbyCount, workspace, cwd };
 }
 
-// Used until the host announces itself: the shared roster (@trevor/session) is the one
-// source the host's labels also derive from, so the pre-announce UI cannot drift from it.
-export const FALLBACK_MODELS: Record<string, ProviderModel> = DEFAULT_PROVIDER_MODELS;
-// Last-resort default for an unknown provider key (qwen is binary thinking).
-export const QWEN_FALLBACK: ProviderModel = DEFAULT_PROVIDER_MODELS.qwen;
-
-/** The latest per-provider model/reasoning map the host announced, else the fallback. */
+/**
+ * The latest per-provider model/reasoning map the host announced, or `{}` before any host
+ * has joined this session. The host is the single source of the roster (labels curated in
+ * buildProviders, reasoning options auto-detected), durably replayed from the session log -
+ * so a previously-seen host's roster survives a restart, and a never-seen one yields an
+ * empty picker rather than a hand-authored guess that could drift from what the host runs.
+ */
 export function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {
-  return (
-    latest(events, (d) => (d.type === "host.online" ? d.models : undefined)) ?? FALLBACK_MODELS
-  );
+  return latest(events, (d) => (d.type === "host.online" ? d.models : undefined)) ?? {};
 }
 
 /** The latest task checklist the host published (empty when there are no tasks / cleared). */

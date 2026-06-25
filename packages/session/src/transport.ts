@@ -1,3 +1,4 @@
+import type { HostPresence } from "./envelope";
 import type { SessionEvent } from "./event";
 
 /**
@@ -35,6 +36,12 @@ export interface ConnectSessionOptions {
   readonly onEvent: (event: SessionEvent) => void;
   readonly onReplayComplete?: () => void;
   readonly onStatus?: (status: ConnectionStatus) => void;
+  /**
+   * The live host set, pushed by backends that track connections. Fires on connect
+   * and whenever a host joins/leaves; never fires on a backend without presence
+   * support, so callers treat "never fired" (vs. "fired empty") as unknown.
+   */
+  readonly onPresence?: (hosts: readonly HostPresence[]) => void;
 }
 
 /** A live stream handle; closing it detaches this participant. */

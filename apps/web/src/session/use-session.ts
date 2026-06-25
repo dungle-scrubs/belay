@@ -5,12 +5,18 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { useCallback, useEffect, useState } from "react";
-import { type ConnectionStatus, connect, publishEvent } from "./client";
+import { type ConnectionStatus, connect, type HostPresence, publishEvent } from "./client";
 
 export interface SessionState {
   readonly events: readonly SessionEvent[];
   readonly status: ConnectionStatus;
   readonly replayed: boolean;
+  /**
+   * The hosts connected to the session right now, as the backend's live transport
+   * reports it - or null when the backend never reports presence (e.g. Richter), so
+   * callers can fall back to the event-log view instead of reading null as "no host".
+   */
+  readonly presence: readonly HostPresence[] | null;
   readonly publish: (
     text: string,
     provider: string,
@@ -27,6 +33,7 @@ export function useSession(sessionId: string | null): SessionState {
   const [events, setEvents] = useState<readonly SessionEvent[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [replayed, setReplayed] = useState(false);
+  const [presence, setPresence] = useState<readonly HostPresence[] | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
@@ -34,11 +41,13 @@ export function useSession(sessionId: string | null): SessionState {
     }
     setEvents([]);
     setReplayed(false);
+    setPresence(null);
     const connection = connect({
       sessionId,
       onEvent: (event) => setEvents((prev) => [...prev, event]),
       onReplayComplete: () => setReplayed(true),
       onStatus: setStatus,
+      onPresence: setPresence,
     });
     return () => connection.close();
   }, [sessionId]);
@@ -83,5 +92,5 @@ export function useSession(sessionId: string | null): SessionState {
     [publishVia],
   );
 
-  return { events, status, replayed, publish, cancel, command, openInEditor };
+  return { events, status, replayed, presence, publish, cancel, command, openInEditor };
 }

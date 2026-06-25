@@ -45,7 +45,15 @@ function streamUrl(
 
 /** Opens one session stream (replay-then-tail) and decodes each envelope. */
 function connectStream(serviceUrl: string, options: ConnectSessionOptions): SessionConnection {
-  const { sessionId, identity, afterSeq = 0, onEvent, onReplayComplete, onStatus } = options;
+  const {
+    sessionId,
+    identity,
+    afterSeq = 0,
+    onEvent,
+    onReplayComplete,
+    onStatus,
+    onPresence,
+  } = options;
   onStatus?.("connecting");
   const socket = new WebSocket(streamUrl(serviceUrl, sessionId, identity, afterSeq));
 
@@ -67,6 +75,8 @@ function connectStream(serviceUrl: string, options: ConnectSessionOptions): Sess
       onEvent(envelope.event);
     } else if (envelope.op === "replay.complete") {
       onReplayComplete?.();
+    } else if (envelope.op === "presence") {
+      onPresence?.(envelope.hosts);
     }
   });
 

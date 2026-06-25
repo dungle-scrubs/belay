@@ -1,6 +1,7 @@
 import { richterTransport } from "@trevor/richter";
 import {
   type ConnectionStatus,
+  type HostPresence,
   type PublishInput,
   type SessionConnection,
   type SessionEvent,
@@ -23,7 +24,7 @@ const transport = RICHTER_URL
   ? richterTransport(RICHTER_URL)
   : streamTransport(window.location.origin);
 
-export type { ConnectionStatus, PublishInput };
+export type { ConnectionStatus, HostPresence, PublishInput };
 
 export interface ConnectOptions {
   readonly sessionId: string;
@@ -31,6 +32,7 @@ export interface ConnectOptions {
   readonly onEvent: (event: SessionEvent) => void;
   readonly onReplayComplete?: () => void;
   readonly onStatus?: (status: ConnectionStatus) => void;
+  readonly onPresence?: (hosts: readonly HostPresence[]) => void;
 }
 
 // Identity is per-tab and persisted in sessionStorage, so a page reload reuses it
@@ -75,6 +77,7 @@ export function connect(options: ConnectOptions): SessionConnection {
     onEvent: options.onEvent,
     onReplayComplete: options.onReplayComplete,
     onStatus: options.onStatus,
+    onPresence: options.onPresence,
   });
 }
 

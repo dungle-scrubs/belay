@@ -131,6 +131,46 @@ test("a late joiner replays history (seq>after) then replay.complete, then tails
   b.connection.close();
 });
 
+/**
+ * A subscriber that records the latest live-host presence the backend pushes. `kind`
+ * is the runtimeKind: "trevor" makes the connection count as a host, anything else
+ * (a browser) only observes presence.
+ */
+function presenceWatcher(transport: SessionTransport, sessionId: string, id: string, kind: string) {
+  let presence: readonly { instanceId: string }[] | null = null;
+  const connection = transport.connectSession({
+    sessionId,
+    identity: { displayName: id, runtimeKind: kind, instanceId: id, participantId: id },
+    onEvent: () => {},
+    onPresence: (hosts) => {
+      presence = hosts.map((host) => ({ instanceId: host.instanceId }));
+    },
+  });
+  return { connection, latest: () => presence };
+}
+
+test("presence: a host connecting then disconnecting updates the live set viewers see", async () => {
+  await transport.ensureSession("presence");
+
+  // A viewer learns the (empty) live set as soon as it connects.
+  const viewer = presenceWatcher(transport, "presence", "viewer", "web");
+  await waitFor(() => viewer.latest() !== null);
+  assert.deepEqual(viewer.latest(), []);
+
+  // A host connecting pushes the new live set to the viewer.
+  const host = presenceWatcher(transport, "presence", "host-1", "trevor");
+  await waitFor(() => (viewer.latest()?.length ?? 0) === 1);
+  assert.deepEqual(viewer.latest(), [{ instanceId: "host-1" }]);
+
+  // The host's socket closing IS the disconnect: the viewer sees an empty live set
+  // again, which a latched host.online event could never express.
+  host.connection.close();
+  await waitFor(() => (viewer.latest()?.length ?? 0) === 0);
+  assert.deepEqual(viewer.latest(), []);
+
+  viewer.connection.close();
+});
+
 test("two subscribers both receive a newly published event", async () => {
   await transport.ensureSession("fanout");
   const a = subscriber(transport, "fanout", "A");
