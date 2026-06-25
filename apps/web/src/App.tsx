@@ -17,14 +17,17 @@ import { ModelSelector } from "@/components/assistant-ui/model-selector";
 import { buildQuotedComposerText } from "@/components/assistant-ui/quote";
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { CommandMenu } from "@/components/chat/command-menu";
+import { CompactingBar } from "@/components/chat/compacting-bar";
+import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import {
   CommandMessage,
   CommandResult,
   MessageMeta,
   ThinkingMessage,
+  type ToolStatus,
   WorkingIndicator,
 } from "@/components/chat/message";
-import { ToolMessage } from "@/components/chat/tool-message";
+import { parseToolArgs, ToolMessage } from "@/components/chat/tool-message";
 import { SidePanel } from "@/components/panel/SidePanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -45,13 +48,19 @@ import {
   parseCommand,
   providerModelsFrom,
   tasksFrom,
+  toolSummary,
 } from "./derive";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { Markdown } from "./markdown";
 import { ensureSession } from "./session/client";
 import { useSession } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
-import { panelModel, toTranscript } from "./transcript";
+import {
+  panelModel,
+  readOnlyToolBatches,
+  type ToolMessage as ToolMessageData,
+  toTranscript,
+} from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -111,6 +120,26 @@ export function App() {
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
   const transcript = useMemo(() => toTranscript(events), [events]);
+  // Runs of 2+ consecutive read-only tool rows were one concurrent batch (D-050); group them so
+  // they render as a single compact block instead of stacked cards.
+  const toolBatches = useMemo(() => readOnlyToolBatches(transcript), [transcript]);
+  // Maps one batched read-only tool message to a ConcurrentTools row: status from done + an
+  // `error:` result, args via the shared summary, and a clickable path for path-bearing tools.
+  const toConcurrentTool = (tool: ToolMessageData): ConcurrentTool => {
+    const status: ToolStatus = !tool.done
+      ? "running"
+      : tool.result?.startsWith("error:")
+        ? "error"
+        : "done";
+    const path = parseToolArgs(tool.args).path;
+    return {
+      id: tool.id,
+      name: tool.name,
+      args: toolSummary(tool.name, tool.args),
+      status,
+      onOpenPath: typeof path === "string" && path ? () => void openInEditor(path) : undefined,
+    };
+  };
   const awaitingResponse = transcript.at(-1)?.kind === "user";
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
@@ -120,6 +149,9 @@ export function App() {
   // user hasn't chosen one, rather than to a hardcoded key.
   const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
   const active = useMemo(() => activeRunId(events), [events]);
+  // True while a manual /compact fold is streaming (a transient bar in the transcript). ESC cancels
+  // it (manual folds are interruptible; automatic ones run to completion).
+  const compacting = useMemo(() => transcript.some((m) => m.kind === "compacting"), [transcript]);
 
   // The agent's live task checklist (host-published snapshots), rendered in the header.
   const tasks = useMemo(() => tasksFrom(events), [events]);
@@ -143,7 +175,7 @@ export function App() {
   const commandNames = useMemo(() => new Set(commands.map((c) => c.name)), [commands]);
   // Slash menu: open while the draft is a bare "/token" (no space yet) with matches,
   // unless Esc dismissed it for exactly this text. menuIndex is the highlighted row.
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissedFor, setMenuDismissedFor] = useState<string | null>(null);
   const slashQuery = draft.startsWith("/") && !draft.includes(" ") ? draft : null;
@@ -229,6 +261,7 @@ export function App() {
     if (cmd) {
       setDraft("");
       void command(cmd.command, cmd.args);
+      setAtBottom(true); // re-pin: follow the command + its result down to the bottom
       return;
     }
     if (!text && attachments.length === 0) {
@@ -244,15 +277,24 @@ export function App() {
       reasoning: reasoning || undefined,
       artifacts,
     });
+    // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
+    // new item (the prompt when its event round-trips, then the streaming answer) and holds there.
+    setAtBottom(true);
   };
 
   // Slash-menu key handling on the composer, active only while the menu is open:
   // arrows move the highlight, Tab/Enter complete it, Esc dismisses (and is swallowed
   // so the window ESC cancel/steer handler doesn't also fire). An exact match + Enter
   // falls through to submit, so a fully-typed command runs on one Enter.
-  const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+  const onInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     const selected = menuOpen ? menuMatches[menuIdx] : undefined;
     if (!selected) {
+      // Menu closed: in a textarea Enter inserts a newline, so submit explicitly. Enter
+      // sends; Shift+Enter keeps the newline (for multi-line prompts and quoted blocks).
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        event.currentTarget.form?.requestSubmit();
+      }
       return;
     }
     if (event.key === "ArrowDown") {
@@ -264,10 +306,13 @@ export function App() {
     } else if (event.key === "Tab") {
       event.preventDefault();
       acceptCommand(selected.name);
-    } else if (event.key === "Enter") {
+    } else if (event.key === "Enter" && !event.shiftKey) {
+      // Complete the highlighted command, or submit when it is already fully typed.
+      event.preventDefault();
       if (selected.name !== draft) {
-        event.preventDefault();
         acceptCommand(selected.name);
+      } else {
+        event.currentTarget.form?.requestSubmit();
       }
     } else if (event.key === "Escape") {
       event.preventDefault();
@@ -294,14 +339,26 @@ export function App() {
     setAttachments([]);
     if (runId !== null) {
       void cancel(runId);
+    } else if (compacting) {
+      // No turn to cancel, but a manual /compact is folding - ESC aborts it (empty runId).
+      void cancel("");
     }
+    // Return focus to the composer so the user can type the next prompt immediately after cancelling.
+    inputRef.current?.focus();
   };
 
   // ESC mirrors the cancel button when a run is active/pending; with nothing to
   // cancel it just clears the composer. One window listener reads the latest state
   // from a ref so it never goes stale and works regardless of which element has focus.
-  const escRef = useRef({ active, awaiting: awaitingResponse, draft, setDraft, onCancel });
-  escRef.current = { active, awaiting: awaitingResponse, draft, setDraft, onCancel };
+  const escRef = useRef({
+    active,
+    awaiting: awaitingResponse,
+    compacting,
+    draft,
+    setDraft,
+    onCancel,
+  });
+  escRef.current = { active, awaiting: awaitingResponse, compacting, draft, setDraft, onCancel };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
@@ -309,7 +366,8 @@ export function App() {
       }
       const s = escRef.current;
       const runId = s.active ?? (s.awaiting ? "" : null);
-      if (runId !== null) {
+      // A turn to cancel, OR a manual fold to abort - either routes through onCancel.
+      if (runId !== null || s.compacting) {
         event.preventDefault();
         s.onCancel();
       } else if (s.draft) {
@@ -336,6 +394,29 @@ export function App() {
     }
   };
   const scrollToBottom = () => transcriptRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  // Follow the bottom while pinned: when `atBottom`, snap to the newest content on EVERY transcript
+  // update - a streaming answer, a burst of tool rows, or the two events a /compact appends (the
+  // command then its result) all keep the view at the bottom, not just the first one. Instant (no
+  // smooth) so it tracks tightly without lagging behind a fast stream; col-reverse alone did not
+  // hold through multi-event bursts. Scrolling up flips `atBottom` off (onTranscriptScroll) and
+  // stops the follow; a submit re-arms it via setAtBottom(true). A no-op when already at 0.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `transcript` is the trigger (not read) - re-pin on each update while at the bottom.
+  useEffect(() => {
+    if (atBottom) {
+      transcriptRef.current?.scrollTo({ top: 0 });
+    }
+  }, [transcript, atBottom]);
+
+  // Auto-grow the composer to fit multi-line prompts and quoted blocks, capped by its
+  // max-height (then it scrolls). Reset to "auto" first so it also shrinks back down. `draft`
+  // is the dependency on purpose: it drives the textarea content whose height we re-measure.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the draft changes
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
 
   // Quote a highlighted message into the composer: append it as a markdown blockquote
   // below the current draft, then focus the input and park the cursor on the fresh line
@@ -374,7 +455,7 @@ export function App() {
     }
     event.target.value = ""; // let the same file be re-picked
   };
-  const onPaste = (event: ReactClipboardEvent<HTMLInputElement>) => {
+  const onPaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
     const files = [...event.clipboardData.files];
     if (files.length) {
       event.preventDefault();
@@ -504,6 +585,18 @@ export function App() {
                   // owns the name ladder, the done -> status derivation, and the per-tool
                   // arg/result parsing.
                   if (message.kind === "tool") {
+                    // A continuation row of a concurrent batch already drawn at its first row.
+                    if (toolBatches.skip.has(message.id)) {
+                      return null;
+                    }
+                    const batch = toolBatches.batchAt.get(message.id);
+                    if (batch) {
+                      return (
+                        <div key={message.id} className={toolClass}>
+                          <ConcurrentTools tools={batch.map(toConcurrentTool)} />
+                        </div>
+                      );
+                    }
                     return (
                       <ToolMessage
                         key={message.id}
@@ -552,6 +645,17 @@ export function App() {
                       </div>
                     );
                   }
+                  if (message.kind === "compacting") {
+                    // The live cross-turn fold (D-040): a TRANSIENT bar that vanishes when the fold
+                    // completes. Its own component owns the continuous (rAF) fill animation.
+                    return (
+                      <CompactingBar
+                        key={message.id}
+                        tokens={message.tokens}
+                        budget={message.budget}
+                      />
+                    );
+                  }
 
                   const thinking =
                     message.kind === "assistant" && showThinkingOn && message.thinking
@@ -580,7 +684,16 @@ export function App() {
 
                   const cancelledNote =
                     message.kind === "assistant" && message.cancelled ? (
-                      <div className="text-label text-muted-foreground">⊘ cancelled</div>
+                      <div className="text-sm text-smui-red">cancelled</div>
+                    ) : null;
+
+                  // The host closed this turn (a restart/crash reaped it mid-flight), not the user -
+                  // a muted note, NOT the red "cancelled", so a hot-reload never looks like an ESC.
+                  const interruptedNote =
+                    message.kind === "assistant" && message.interrupted ? (
+                      <div className="text-sm text-muted-foreground">
+                        ⊘ interrupted · host restarted
+                      </div>
                     ) : null;
 
                   const noReplyNote =
@@ -666,6 +779,7 @@ export function App() {
                       {overflowNote}
                       {errorNote}
                       {cancelledNote}
+                      {interruptedNote}
                       {noReplyNote}
                       {stepLimitNote}
                       {metaItems ? <MessageMeta items={metaItems} /> : null}
@@ -673,9 +787,13 @@ export function App() {
                   );
                 })}
 
-                {awaitingResponse ? (
+                {/* A persistent "working" pulse whenever a turn is in flight - not just while
+                    waiting for the first token. Fills the dead air between steps (e.g. while the
+                    model generates the next thinking/tool batch after a read completes), so the
+                    turn never looks stalled. `active` is the running run id (null once it ends). */}
+                {active !== null || awaitingResponse ? (
                   <div className="pl-3.5">
-                    <WorkingIndicator label="thinking" />
+                    <WorkingIndicator label="working" />
                   </div>
                 ) : null}
 
@@ -784,7 +902,7 @@ export function App() {
 
           <form onSubmit={onSubmit}>
             <div className="flex flex-col border border-input bg-background transition-colors focus-within:border-ring">
-              <input
+              <textarea
                 ref={inputRef}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -792,7 +910,8 @@ export function App() {
                 onPaste={onPaste}
                 placeholder={`message ${modelMeta.label}… (/ for commands)`}
                 disabled={!sessionId}
-                className="w-full bg-transparent px-3 pt-2.5 pb-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
+                rows={1}
+                className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 pb-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
               />
               <div className="flex items-center gap-2 px-2 pb-2">
                 <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
@@ -809,7 +928,7 @@ export function App() {
                 </Button>
               </div>
             </div>
-            {/* Single text input: Enter submits the form implicitly (no send button). */}
+            {/* Auto-growing textarea: Enter submits, Shift+Enter inserts a newline. */}
           </form>
         </div>
       </main>
@@ -827,10 +946,11 @@ export function App() {
         />
       ) : null}
 
-      {/* Session id, pinned bottom-right above everything, so it stays legible in
-          screenshots regardless of panel/layout state. */}
-      <div className="fixed right-3 bottom-2 z-[100] rounded border border-border bg-card/90 px-2 py-1 font-mono text-label tracking-wider text-muted-foreground shadow-sm backdrop-blur-sm">
-        {target}
+      {/* Pinned bottom-right: the session id, for orientation across tabs. */}
+      <div className="fixed right-3 bottom-2 z-[100] flex items-center gap-1.5">
+        <div className="rounded border border-border bg-card/90 px-2 py-1 font-mono text-label tracking-wider text-muted-foreground shadow-sm backdrop-blur-sm">
+          {target}
+        </div>
       </div>
     </div>
   );

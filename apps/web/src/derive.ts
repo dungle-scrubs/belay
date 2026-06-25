@@ -34,32 +34,34 @@ function latest<T>(
  */
 
 /**
- * The run currently in flight: the latest assistant.started whose run has not
- * yet completed, or null. Drives whether ESC cancels and which runId to target.
+ * The run currently in flight, or null. The host runs ONE turn at a time, so only the MOST
+ * RECENT run can still be active: it's in flight iff the last `assistant.started` has no matching
+ * `assistant.completed`. An older started-without-completion (a turn whose host crashed or was
+ * interrupted before it could emit a completion) is a dead ORPHAN - it must not count, or `busy`
+ * would latch forever and the local send queue would never drain (queued prompts stuck dimmed).
+ * A `/clear` resets the detection too, mirroring the transcript: no pre-clear run is active after it.
+ * Drives whether ESC cancels and which runId to target.
  */
 export function activeRunId(events: readonly SessionEvent[]): string | null {
   const completed = new Set<string>();
-  const started: string[] = [];
+  let lastStarted: string | null = null;
 
   for (const event of events) {
     const decoded = decodeTrevorEvent(event);
-
-    if (decoded?.type === "assistant.started") {
-      started.push(decoded.runId);
-    } else if (decoded?.type === "assistant.completed") {
+    if (!decoded) {
+      continue;
+    }
+    if (decoded.type === "user.command" && decoded.command === "/clear") {
+      lastStarted = null;
+      completed.clear();
+    } else if (decoded.type === "assistant.started") {
+      lastStarted = decoded.runId;
+    } else if (decoded.type === "assistant.completed") {
       completed.add(decoded.runId);
     }
   }
 
-  for (let i = started.length - 1; i >= 0; i -= 1) {
-    const id = started[i];
-
-    if (id && !completed.has(id)) {
-      return id;
-    }
-  }
-
-  return null;
+  return lastStarted && !completed.has(lastStarted) ? lastStarted : null;
 }
 
 /** Compact token count: 6100 -> "6.1k", 812 -> "812". */

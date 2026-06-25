@@ -46,8 +46,17 @@ export function Treemap({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver((entries) => setWidth(entries[0]?.contentRect.width ?? 0));
+    // Only ever adopt a POSITIVE width. A transient 0 (the panel reflowing, or the tab briefly
+    // hidden) would otherwise collapse every cell to nothing, and the cell transition would then
+    // animate them all back up - reading as the whole treemap "scaling in" on each change. Keeping
+    // the last good width means only the portions' sizes glide when the breakdown shifts.
+    const adopt = (w: number) => {
+      if (w > 0) {
+        setWidth(w);
+      }
+    };
+    adopt(el.clientWidth);
+    const ro = new ResizeObserver((entries) => adopt(entries[0]?.contentRect.width ?? 0));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);

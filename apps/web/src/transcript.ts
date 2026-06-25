@@ -26,6 +26,8 @@ export type AssistantMessage = {
   error?: string;
   overflow?: string;
   cancelled?: boolean;
+  /** Closed by a host reap (restart/crash mid-turn), not a user cancel - rendered as a muted note. */
+  interrupted?: boolean;
   /** The model ended the turn with no reply (after a retry). */
   noReply?: boolean;
   /** Steps run when the turn hit its budget (>0 = a forced answer after the step/context cap). */
@@ -60,13 +62,80 @@ export type RecoveredMessage = {
   detail: string;
   reclaimed: number;
 };
+// A cross-turn compaction fold IN PROGRESS (D-040), rendered inline as a TRANSIENT progress bar:
+// older turns are being folded into a rolling summary, which streams. `tokens`/`budget` fill the
+// bar honestly (real tokens streamed ÷ the ~1k budget, never a predicted %). It appears while the
+// fold runs and VANISHES when the matching `context.compacted` lands - the folded turns themselves
+// stay in the transcript (full history retained, D-042). Distinct from `recovered` (within-turn).
+export type CompactingMessage = {
+  kind: "compacting";
+  id: string;
+  foldId: string;
+  tokens: number;
+  budget: number;
+};
 export type Message =
   | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
   | AssistantMessage
   | ToolMessage
   | CommandMessage
   | CommandResultMessage
-  | RecoveredMessage;
+  | RecoveredMessage
+  | CompactingMessage;
+
+// The read-only tools the host fans out concurrently (mirrors agent-host's READ_ONLY_TOOLS). A run
+// of 2+ consecutive read-only tool rows was one parallel batch, so the UI groups it into a single
+// compact block (ConcurrentTools) instead of stacked one-off cards.
+export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "read",
+  "glob",
+  "grep",
+  "web_search",
+]);
+
+/**
+ * Finds the concurrent read-only batches in a transcript: each run of 2+ consecutive read-only tool
+ * messages. Returns a map from the run's first message id to the whole run (rendered together at
+ * that row), and the set of continuation ids to skip while mapping (they're drawn inside the batch).
+ * A lone read-only tool, or one broken from the run by a mutating tool / assistant segment, is not a
+ * batch and renders as its usual card.
+ */
+export function readOnlyToolBatches(messages: readonly Message[]): {
+  readonly batchAt: ReadonlyMap<string, readonly ToolMessage[]>;
+  readonly skip: ReadonlySet<string>;
+} {
+  const batchAt = new Map<string, readonly ToolMessage[]>();
+  const skip = new Set<string>();
+  let i = 0;
+  while (i < messages.length) {
+    const head = messages[i];
+    if (head?.kind === "tool" && READ_ONLY_TOOL_NAMES.has(head.name)) {
+      const run: ToolMessage[] = [];
+      while (i < messages.length) {
+        const next = messages[i];
+        if (next?.kind === "tool" && READ_ONLY_TOOL_NAMES.has(next.name)) {
+          run.push(next);
+          i += 1;
+        } else {
+          break;
+        }
+      }
+      const first = run[0];
+      if (first && run.length >= 2) {
+        batchAt.set(first.id, run);
+        for (let k = 1; k < run.length; k += 1) {
+          const continuation = run[k];
+          if (continuation) {
+            skip.add(continuation.id);
+          }
+        }
+      }
+    } else {
+      i += 1;
+    }
+  }
+  return { batchAt, skip };
+}
 
 /** A live, mid-turn snapshot of the in-flight call: usage drives the ctx meter, the
  *  breakdown drives the Request treemap, both before the turn completes. */
@@ -113,6 +182,28 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
   const openByRun = new Map<string, AssistantMessage>();
   const lastByRun = new Map<string, AssistantMessage>();
   const toolByCall = new Map<string, ToolMessage>();
+  // The latest live usage/breakdown per run (from assistant.progress). A cancelled turn's completion
+  // carries no usage, so without this its panel data (ctx meter + Request treemap) would vanish on
+  // cancel; we fall the segment back to its last progress snapshot so the current context survives.
+  const progressByRun = new Map<string, { usage?: Usage; breakdown?: UsageBreakdown }>();
+  // In-flight compaction folds: the live progress bar keyed by foldId, plus the folds already
+  // finished (so a late `context.compacting` tick that arrives after `context.compacted` is ignored
+  // rather than re-spawning a bar that should have vanished).
+  const compactingByFold = new Map<string, CompactingMessage>();
+  const doneFolds = new Set<string>();
+  // Reaps every open fold bar from the transcript. A fold runs on the host's one-turn gate, so a
+  // bar is only ever live at the tail; once a turn or command follows it without a matching
+  // `context.compacted`, that fold was interrupted (host reset mid-fold) and its bar is an orphan -
+  // drop it so it can't linger forever (and so a fresh fold never shows a second bar beside it).
+  const reapCompacting = (): void => {
+    for (const bar of compactingByFold.values()) {
+      const index = messages.indexOf(bar);
+      if (index >= 0) {
+        messages.splice(index, 1);
+      }
+    }
+    compactingByFold.clear();
+  };
   let segCount = 0;
   const openSegment = (runId: string): AssistantMessage => {
     let segment = openByRun.get(runId);
@@ -141,7 +232,14 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
       continue;
     }
     switch (decoded.type) {
+      case "user.cancel":
+        // ESC during a manual /compact: the host interrupts the fold and emits no context.compacted,
+        // so reap the bar here (it's the only signal that the fold ended). A no-op when no bar is open.
+        reapCompacting();
+        break;
       case "user.message":
+        // A new prompt means any still-open fold bar was orphaned by a mid-fold reset - reap it.
+        reapCompacting();
         messages.push({
           kind: "user",
           id: event.eventId,
@@ -150,6 +248,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         });
         break;
       case "user.command":
+        // A fold never spans a command, so an open bar here is an orphan (reap it before the new
+        // fold's first tick, so /compact can't show a stale bar above its fresh one).
+        reapCompacting();
         if (decoded.command === "/clear") {
           // A clear resets the conversation: drop everything before it (and any in-flight
           // run state) so the transcript starts fresh from this point.
@@ -158,6 +259,8 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           openByRun.clear();
           lastByRun.clear();
           toolByCall.clear();
+          progressByRun.clear();
+          doneFolds.clear();
         }
         messages.push({
           kind: "command",
@@ -176,6 +279,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         });
         break;
       case "assistant.started":
+        // A turn starting means any open fold already finished or was interrupted - reap a lingering
+        // bar (this is what clears a lone orphan stuck at some % from a prior mid-fold reset).
+        reapCompacting();
         runMeta.set(decoded.runId, {
           model: decoded.model,
           warm: decoded.warm,
@@ -191,6 +297,16 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
       case "assistant.overflow":
         openSegment(decoded.runId).overflow = decoded.reason;
         break;
+      case "assistant.progress":
+        // Remember the turn's latest live usage/breakdown, so a cancel (whose completion carries
+        // none) can keep showing the context it reached. Not rendered itself - only a fallback.
+        if (decoded.usage || decoded.breakdown) {
+          progressByRun.set(decoded.runId, {
+            usage: decoded.usage,
+            breakdown: decoded.breakdown,
+          });
+        }
+        break;
       case "assistant.recovered": {
         // Finalize the open segment so the retry's output starts fresh below the marker.
         const open = openByRun.get(decoded.runId);
@@ -205,6 +321,46 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           detail: decoded.detail,
           reclaimed: decoded.reclaimed,
         });
+        break;
+      }
+      case "context.compacting": {
+        // A live fold tick: spawn the progress bar on the first tick, then advance it in place
+        // (monotonic - a reordered tick never rewinds). Ignored once the fold has completed.
+        if (doneFolds.has(decoded.foldId)) {
+          break;
+        }
+        const existing = compactingByFold.get(decoded.foldId);
+        if (existing) {
+          existing.tokens = Math.max(existing.tokens, decoded.tokens);
+          existing.budget = decoded.budget;
+        } else {
+          // Singleton: a new fold supersedes any still-open (orphaned) bar from a prior fold, so
+          // only one progress bar is ever on screen.
+          reapCompacting();
+          const bar: CompactingMessage = {
+            kind: "compacting",
+            id: decoded.foldId,
+            foldId: decoded.foldId,
+            tokens: decoded.tokens,
+            budget: decoded.budget,
+          };
+          compactingByFold.set(decoded.foldId, bar);
+          messages.push(bar);
+        }
+        break;
+      }
+      case "context.compacted": {
+        // The fold finished: the live progress bar VANISHES (the folded turns stay in the
+        // transcript - full history retained, D-042; only the model's PROMPT was compacted).
+        doneFolds.add(decoded.foldId);
+        const bar = compactingByFold.get(decoded.foldId);
+        if (bar) {
+          const index = messages.indexOf(bar);
+          if (index >= 0) {
+            messages.splice(index, 1);
+          }
+          compactingByFold.delete(decoded.foldId);
+        }
         break;
       }
       case "tool.started": {
@@ -248,6 +404,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         if (decoded.cancelled) {
           segment.cancelled = true;
         }
+        if (decoded.interrupted) {
+          segment.interrupted = true;
+        }
         if (decoded.noReply) {
           segment.noReply = true;
         }
@@ -257,12 +416,21 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         if (!segment.text && !segment.thinking) {
           segment.text = decoded.text;
         }
+        // Usage/breakdown from the completion when it carries them (a normal turn); otherwise fall
+        // back to the run's last progress snapshot, so a cancelled turn (completion has none) keeps
+        // the context it reached instead of blanking the panel to "No call data yet".
+        const progress = progressByRun.get(decoded.runId);
         if (decoded.usage) {
           segment.usage = decoded.usage;
+        } else if (progress?.usage) {
+          segment.usage = progress.usage;
         }
         if (decoded.breakdown) {
           segment.breakdown = decoded.breakdown;
+        } else if (progress?.breakdown) {
+          segment.breakdown = progress.breakdown;
         }
+        progressByRun.delete(decoded.runId);
         break;
       }
       default:
@@ -337,9 +505,31 @@ export function panelModel(
     }
   }
 
+  // A fold that's the most recent context event (no turn has measured the compacted prompt yet, and
+  // nothing is streaming): the NEXT prompt will be its `tokensAfter` estimate, not the last request.
+  // The ctx meter previews that estimate so it drops the instant a fold lands - the visible proof
+  // that compaction shrank the context - and the next real turn replaces it with a measurement. Only
+  // the meter previews; the Request treemap stays the last actual request (no faked per-category
+  // split, which the provider only reports on a real request).
+  // Walk back to the newest fold-or-turn: if a fold is more recent than any completed turn, the next
+  // prompt will be its tokensAfter. A short tail walk, not a full forward decode of the whole log.
+  let foldAfter: number | undefined;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    const decoded = event ? decodeTrevorEvent(event) : null;
+    if (decoded?.type === "context.compacted") {
+      foldAfter = decoded.tokensAfter;
+      break;
+    }
+    if (decoded?.type === "assistant.completed") {
+      break; // a completed turn measured the post-fold prompt; no preview needed
+    }
+  }
+
   // The in-flight call wins for Request data while a turn streams; else the completed call.
   const live = liveCallFrom(events);
-  const ctxUsed = live?.usage.input ?? lastCall?.usage?.input;
+  const previewFold = !live && foldAfter !== undefined;
+  const ctxUsed = previewFold ? foldAfter : (live?.usage.input ?? lastCall?.usage?.input);
   const ctxMax = live?.usage.contextWindow ?? lastCall?.usage?.contextWindow;
   const totalTokens = live
     ? live.usage.input + live.usage.output

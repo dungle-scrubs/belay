@@ -8,7 +8,7 @@ import { type WebSearchResultItem, WebSearchResults } from "./web-search";
 
 // Tool-call arguments arrive as a JSON string; parse defensively (a streaming or
 // malformed call yields {}).
-function parseToolArgs(raw: string): Record<string, unknown> {
+export function parseToolArgs(raw: string): Record<string, unknown> {
   try {
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {

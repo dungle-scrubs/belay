@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranchIcon, TextQuoteIcon } from "lucide-react";
+import { CopyIcon, GitBranchIcon, TextQuoteIcon } from "lucide-react";
 import { type FC, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -112,7 +112,18 @@ export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> 
     onQuote(text);
   };
 
-  return <QuoteToolbar anchor={anchor} onQuote={handleQuote} />;
+  // Copy the highlighted text to the clipboard. A dedicated action because native Cmd+C is
+  // fragile here: the transcript re-renders (the host-recency tick, streaming deltas) collapse
+  // the selection before the user can press it. We grab the text now, while it is still
+  // selected, and dismiss the toolbar (leaving the highlight in place).
+  const handleCopy = () => {
+    const text = window.getSelection()?.toString().trim();
+    if (!text) return;
+    void navigator.clipboard?.writeText(text);
+    setAnchor(null);
+  };
+
+  return <QuoteToolbar anchor={anchor} onCopy={handleCopy} onQuote={handleQuote} />;
 };
 
 /**
@@ -121,7 +132,15 @@ export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> 
  * slide or scale). `onMouseDown` preventDefault keeps the selection alive when a
  * button is clicked.
  */
-function QuoteToolbar({ anchor, onQuote }: { anchor: Anchor; onQuote: () => void }) {
+function QuoteToolbar({
+  anchor,
+  onCopy,
+  onQuote,
+}: {
+  anchor: Anchor;
+  onCopy: () => void;
+  onQuote: () => void;
+}) {
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
@@ -146,6 +165,15 @@ function QuoteToolbar({ anchor, onQuote }: { anchor: Anchor; onQuote: () => void
       // Keep the selection alive when the toolbar is clicked.
       onMouseDown={(e) => e.preventDefault()}
     >
+      <button
+        type="button"
+        onClick={onCopy}
+        className="aui-selection-toolbar-copy hover:bg-accent hover:text-accent-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+      >
+        <CopyIcon className="size-3.5" />
+        Copy
+      </button>
+      <div className="bg-border/60 h-4 w-px" aria-hidden="true" />
       <button
         type="button"
         onClick={onQuote}

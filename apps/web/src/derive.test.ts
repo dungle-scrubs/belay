@@ -61,6 +61,23 @@ test("activeRunId returns the latest unfinished run, else null", () => {
   assert.equal(activeRunId([started("r1"), started("r2"), done("r1")]), "r2");
 });
 
+test("a dead orphan run (started, never completed, then a later run finished) is NOT active", () => {
+  const started = (runId: string) =>
+    evt("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
+  const done = (runId: string) => evt("assistant.completed", { runId, text: "ok" });
+  // r1 started but its host crashed before completing; r2 then ran and finished. Nothing is active.
+  // The old bug returned "r1" here, latching `busy` forever and freezing the send queue.
+  assert.equal(activeRunId([started("r1"), started("r2"), done("r2")]), null);
+});
+
+test("a /clear resets active-run detection: a pre-clear orphan does not count", () => {
+  const started = (runId: string) =>
+    evt("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
+  const clear = () => evt("user.command", { command: "/clear", args: "" });
+  assert.equal(activeRunId([started("r1"), clear()]), null, "pre-clear orphan cleared");
+  assert.equal(activeRunId([started("r1"), clear(), started("r2")]), "r2", "post-clear run counts");
+});
+
 test("fmtTokens and fmtCtx render compact counts", () => {
   assert.equal(fmtTokens(6100), "6.1k");
   assert.equal(fmtTokens(812), "812");
