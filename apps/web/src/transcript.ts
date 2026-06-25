@@ -28,6 +28,8 @@ export type AssistantMessage = {
   cancelled?: boolean;
   /** The model ended the turn with no reply (after a retry). */
   noReply?: boolean;
+  /** Steps run when the turn hit its budget (>0 = a forced answer after the step/context cap). */
+  stepLimit?: number;
 };
 export type ToolMessage = {
   kind: "tool";
@@ -249,6 +251,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         if (decoded.noReply) {
           segment.noReply = true;
         }
+        if (decoded.stepLimit) {
+          segment.stepLimit = decoded.stepLimit;
+        }
         if (!segment.text && !segment.thinking) {
           segment.text = decoded.text;
         }
@@ -290,10 +295,19 @@ export interface PanelModel {
   readonly contextTokens?: number;
 }
 
+export interface PanelModelOptions {
+  readonly replayed: boolean;
+}
+
 export function panelModel(
   transcript: readonly Message[],
   events: readonly SessionEvent[],
+  options: PanelModelOptions,
 ): PanelModel {
+  if (!options.replayed) {
+    return {};
+  }
+
   // The latest completed call's usage + breakdown (walk back to the newest assistant
   // segment that carries either), for the Request tab / ctx meter when no turn streams.
   let lastCall: AssistantMessage | null = null;

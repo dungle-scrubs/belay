@@ -52,6 +52,11 @@ export type ModelOption = {
   /** Extra terms matched by ModelSelector.Search, in addition to id and name. */
   keywords?: readonly string[];
   /**
+   * Optional section heading. When any option sets it, the list renders one labeled
+   * group per distinct value (in first-seen order); otherwise the list is flat.
+   */
+  group?: string;
+  /**
    * Reasoning effort levels the model supports. Pass `true` for the default
    * low/medium/high levels, or a custom list. Omit for models without
    * configurable reasoning.
@@ -420,17 +425,58 @@ function ModelSelectorList({
       )}
       {...props}
     >
-      {children ?? (
-        <>
-          <ModelSelectorEmpty />
-          <CommandGroup>
-            {models.map((model) => (
-              <ModelSelectorItem key={model.id} model={model} />
-            ))}
-          </CommandGroup>
-        </>
-      )}
+      {children ?? <ModelSelectorDefaultList models={models} />}
     </CommandList>
+  );
+}
+
+/**
+ * The default list body: one labeled CommandGroup per distinct `group` (in first-seen
+ * order) when any option declares one, else a single flat group. The empty-state lives
+ * outside the groups so "No models found." still shows when a search filters all out.
+ */
+function ModelSelectorDefaultList({ models }: { models: readonly ModelOption[] }) {
+  const grouped = models.some((model) => model.group);
+  if (!grouped) {
+    return (
+      <>
+        <ModelSelectorEmpty />
+        <CommandGroup>
+          {models.map((model) => (
+            <ModelSelectorItem key={model.id} model={model} />
+          ))}
+        </CommandGroup>
+      </>
+    );
+  }
+  // Preserve first-seen group order; ungrouped options fall under a trailing unlabeled group.
+  const order: string[] = [];
+  const byGroup = new Map<string, ModelOption[]>();
+  for (const model of models) {
+    const key = model.group ?? "";
+    if (!byGroup.has(key)) {
+      byGroup.set(key, []);
+      order.push(key);
+    }
+    byGroup.get(key)?.push(model);
+  }
+  return (
+    <>
+      <ModelSelectorEmpty />
+      {order.map((key) => (
+        <CommandGroup
+          key={key || "_"}
+          heading={key || undefined}
+          // Small uppercase section headings (matching the app's other labels), scoped
+          // here so the shared CommandGroup default elsewhere (e.g. the slash menu) is untouched.
+          className="[&_[cmdk-group-heading]]:text-[0.7rem] [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:uppercase"
+        >
+          {byGroup.get(key)?.map((model) => (
+            <ModelSelectorItem key={model.id} model={model} />
+          ))}
+        </CommandGroup>
+      ))}
+    </>
   );
 }
 

@@ -83,9 +83,7 @@ function OutputBody({ output, previewLines }: { output: string; previewLines: nu
 
   return (
     <div className="flex flex-col gap-0.5">
-      <pre className="overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
-        {shown}
-      </pre>
+      <pre className="overflow-x-auto whitespace-pre text-xs text-muted-foreground/70">{shown}</pre>
       {hidden > 0 ? (
         <span className="text-label tracking-wider text-muted-foreground/60">
           … +{hidden} more {hidden === 1 ? "line" : "lines"}

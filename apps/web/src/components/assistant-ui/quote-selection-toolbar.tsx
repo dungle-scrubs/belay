@@ -1,43 +1,11 @@
 "use client";
 
-import { useThreadRuntime } from "@assistant-ui/react";
 import { GitBranchIcon, TextQuoteIcon } from "lucide-react";
-import { useEffect, useState, type FC } from "react";
+import { type FC, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
-/**
- * Wraps each line of `selected` in a markdown blockquote marker. Empty lines
- * become a bare `>` so the quote stays a single contiguous block.
- */
-const toBlockquote = (selected: string): string =>
-  selected
-    .split("\n")
-    .map((line) => (line.length > 0 ? `> ${line}` : ">"))
-    .join("\n");
-
-/**
- * Builds the new composer value when quoting `selected` into a composer that
- * already holds `existing`. The quote is appended below any existing text,
- * separated by a blank line, and the returned `cursor` lands on the empty line
- * beneath the quote (GitHub-style) so the user can type their reference.
- */
-export const buildQuotedComposerText = (
-  existing: string,
-  selected: string,
-): { value: string; cursor: number } => {
-  const quote = toBlockquote(selected.trim());
-  const base = existing.replace(/\s+$/, "");
-  const prefix = base.length > 0 ? `${base}\n\n` : "";
-  const value = `${prefix}${quote}\n\n`;
-
-  return { value, cursor: value.length };
-};
-
-// The visible composer textarea (react-textarea-autosize's measurement clone is
-// aria-hidden and never carries this class).
-const COMPOSER_INPUT_SELECTOR =
-  'textarea.aui-composer-input:not([aria-hidden="true"])';
+export { buildQuotedComposerText } from "./quote";
 
 const TOOLBAR_CLASS = "aui-selection-toolbar-root";
 
@@ -85,15 +53,14 @@ const focusEndAnchor = (selection: Selection): Anchor | null => {
  * anchored to where the cursor ended up - the pointer release point - rather
  * than the center of the selection.
  *
- * "Quote" drops the selection into the prompt composer as a markdown blockquote
- * and parks the cursor on a fresh line below, ready to reference. "Tangent" is
- * a disabled placeholder for now.
+ * "Quote" hands the selected text to `onQuote` (the host wires it into its own
+ * composer, e.g. as a markdown blockquote via buildQuotedComposerText). "Tangent"
+ * is a disabled placeholder for now.
  *
- * Render this once inside the thread, alongside `<Thread />`, within the
- * `AssistantRuntimeProvider`.
+ * Composer-agnostic: render it once anywhere in the app; it only needs message
+ * elements to carry `data-message-id` so a selection can be scoped to one message.
  */
-export const QuoteSelectionToolbar: FC = () => {
-  const thread = useThreadRuntime();
+export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> = ({ onQuote }) => {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
 
   useEffect(() => {
@@ -140,26 +107,9 @@ export const QuoteSelectionToolbar: FC = () => {
     const selection = window.getSelection();
     const text = selection?.toString().trim();
     if (!text) return;
-
-    const composer = thread.composer;
-    const { value, cursor } = buildQuotedComposerText(
-      composer.getState().text,
-      text,
-    );
-    composer.setText(value);
     selection?.removeAllRanges();
     setAnchor(null);
-
-    // The composer textarea is controlled, so its DOM value updates on the
-    // next commit. Wait a frame before focusing and parking the cursor.
-    requestAnimationFrame(() => {
-      const input = document.querySelector<HTMLTextAreaElement>(
-        COMPOSER_INPUT_SELECTOR,
-      );
-      if (!input) return;
-      input.focus();
-      input.setSelectionRange(cursor, cursor);
-    });
+    onQuote(text);
   };
 
   return <QuoteToolbar anchor={anchor} onQuote={handleQuote} />;

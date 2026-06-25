@@ -6,7 +6,6 @@ import {
 } from "@assistant-ui/react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { Thread } from "@/components/assistant-ui/thread";
 
 const SAMPLE: ThreadMessageLike[] = [
@@ -79,8 +78,7 @@ function MockThread({
       <div className="mx-auto h-[36rem] w-full max-w-3xl border border-border">
         <Thread />
       </div>
-      {/* Drag-highlight any message text to reveal the "Quote" toolbar. */}
-      <QuoteSelectionToolbar />
+      {/* Select-to-quote has its own story (Chat/QuoteSelectionToolbar). */}
     </AssistantRuntimeProvider>
   );
 }

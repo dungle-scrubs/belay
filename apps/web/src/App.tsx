@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ArtifactRef } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { CircleX, PanelRight, Plus, RotateCw, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, CircleX, PanelRight, Plus, RotateCw, TriangleAlert, X } from "lucide-react";
 import {
   type ChangeEvent,
   type ClipboardEvent as ReactClipboardEvent,
@@ -14,6 +14,8 @@ import {
   useState,
 } from "react";
 import { ModelSelector } from "@/components/assistant-ui/model-selector";
+import { buildQuotedComposerText } from "@/components/assistant-ui/quote";
+import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { CommandMenu } from "@/components/chat/command-menu";
 import {
   CommandMessage,
@@ -35,14 +37,12 @@ import { uploadArtifact } from "./blob";
 import {
   activeRunId,
   commandsFrom,
-  FALLBACK_MODELS,
   fmtCtx,
   fmtTokens,
   hostStatus,
   isOverflowError,
   parseCommand,
   providerModelsFrom,
-  QWEN_FALLBACK,
   tasksFrom,
 } from "./derive";
 import { useSendQueue } from "./hooks/use-send-queue";
@@ -104,7 +104,7 @@ export function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { events, status, replayed, publish, cancel, command, openInEditor } =
+  const { events, status, replayed, presence, publish, cancel, command, openInEditor } =
     useSession(sessionId);
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
@@ -113,7 +113,7 @@ export function App() {
   const awaitingResponse = transcript.at(-1)?.kind === "user";
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
-  const host = useMemo(() => hostStatus(events, now), [events, now]);
+  const host = useMemo(() => hostStatus(events, presence, now), [events, presence, now]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
   const active = useMemo(() => activeRunId(events), [events]);
 
@@ -124,7 +124,10 @@ export function App() {
   // for the Request data (ctx meter + treemap) and the per-category context aggregation,
   // folded from the transcript (+ raw events for the live snapshot). Spread into
   // <SidePanel> below. host depends on `now`; this only on transcript/events.
-  const panel = useMemo(() => panelModel(transcript, events), [transcript, events]);
+  const panel = useMemo(
+    () => panelModel(transcript, events, { replayed }),
+    [transcript, events, replayed],
+  );
   // The right-side panel is toggleable; remember the choice across reloads.
   const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("trevor.panel", {
     defaultValue: true,
@@ -175,11 +178,27 @@ export function App() {
   const { queue, submit, steer } = useSendQueue({ busy, publish });
 
   const activeProvider = provider ?? "qwen";
-  const modelMeta = hostModels[activeProvider] ?? FALLBACK_MODELS[activeProvider] ?? QWEN_FALLBACK;
-  // Model options for the picker; fall back to the active model before the host announces.
+  // Before any host has announced (empty hostModels), there's no roster to show: fall back
+  // to a neutral descriptor keyed by the active provider, so the picker renders one inert
+  // entry and no reasoning control until host.online arrives and supplies the real roster.
+  const modelMeta = hostModels[activeProvider] ?? {
+    label: activeProvider,
+    model: activeProvider,
+    reasoningLevels: [],
+    defaultReasoning: "off",
+    kind: "local" as const,
+  };
+  // Model options for the picker, grouped local-first then cloud (the picker renders a
+  // labeled section per group). Falls back to the active model before the host announces.
   const modelOptions =
     Object.keys(hostModels).length > 0
-      ? Object.entries(hostModels).map(([id, meta]) => ({ id, name: meta.label }))
+      ? Object.entries(hostModels)
+          .map(([id, meta]) => ({
+            id,
+            name: meta.label,
+            group: meta.kind === "local" ? "Local" : "Cloud",
+          }))
+          .sort((a, b) => (a.group === b.group ? 0 : a.group === "Local" ? -1 : 1))
       : [{ id: activeProvider, name: modelMeta.label }];
   // Keep a stale stored level from showing as selected if the model's options changed.
   const stored = reasoningMap?.[activeProvider];
@@ -298,8 +317,36 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // No scroll JS: the transcript container is flex-col-reverse, so it sits at the
-  // bottom (newest) from the first paint and stays pinned - no jump, no animation.
+  // The transcript container is flex-col-reverse, so it sits at the bottom (newest) from
+  // the first paint and natively stays pinned when new items arrive WHILE at the bottom -
+  // and leaves the view alone when scrolled up (no yank). All we add is a jump-to-bottom
+  // affordance: track whether we're at the bottom (col-reverse => scrollTop 0 is the
+  // bottom, so |scrollTop| within a few px counts as "at bottom"), and show a down-chevron
+  // when not. The chevron scrolls back to 0 (the bottom) and then vanishes.
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const onTranscriptScroll = () => {
+    const el = transcriptRef.current;
+    if (el) {
+      setAtBottom(Math.abs(el.scrollTop) < 40);
+    }
+  };
+  const scrollToBottom = () => transcriptRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+
+  // Quote a highlighted message into the composer: append it as a markdown blockquote
+  // below the current draft, then focus the input and park the cursor on the fresh line
+  // beneath it (GitHub-style). Driven by QuoteSelectionToolbar's selection detection.
+  const quoteSelection = (selected: string) => {
+    const { value, cursor } = buildQuotedComposerText(draft, selected);
+    setDraft(value);
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (input) {
+        input.focus();
+        input.setSelectionRange(cursor, cursor);
+      }
+    });
+  };
 
   // Attachments: upload each picked/pasted/dropped file to the blob store and hold its
   // ArtifactRef until the next prompt carries it. Uploads run in parallel; a failed one
@@ -351,7 +398,7 @@ export function App() {
       </ModelSelector.Root>
 
       {modelMeta.reasoningLevels.length > 0 ? (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <span className="text-label tracking-wider uppercase text-muted-foreground">
             reasoning
           </span>
@@ -365,6 +412,7 @@ export function App() {
             }}
             variant="outline"
             size="sm"
+            className="shrink-0"
           >
             {modelMeta.reasoningLevels.map((level) => (
               <ToggleGroupItem
@@ -415,6 +463,9 @@ export function App() {
   return (
     <div className="flex h-svh">
       <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4">
+        {/* Highlight text in any message (data-message-id) to get a floating Quote action
+          that drops the selection into the composer as a markdown blockquote. */}
+        <QuoteSelectionToolbar onQuote={quoteSelection} />
         {!panelOpen ? (
           <button
             type="button"
@@ -426,197 +477,233 @@ export function App() {
           </button>
         ) : null}
         {/* Transcript fills the view; the composer + footer pin to the bottom.
-          Scrollbar is hidden but the region still scrolls. */}
-        <div className="flex flex-1 flex-col-reverse overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* Nothing renders until the full history has replayed, then it appears all at
+          Scrollbar is hidden but the region still scrolls. The relative wrapper anchors
+          the jump-to-bottom chevron over the transcript's lower edge. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div
+            ref={transcriptRef}
+            onScroll={onTranscriptScroll}
+            className="flex flex-1 flex-col-reverse overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {/* Nothing renders until the full history has replayed, then it appears all at
             once (already pinned to the bottom) with a 150ms fade-in. */}
-          {replayed ? (
-            <div className="flex flex-col gap-8 fade-in animate-in duration-150">
-              {transcript.map((message, index) => {
-                // Consecutive tool calls read as one block: collapse the gap-8 between
-                // a tool row and the tool row directly above it.
-                const toolClass = cn(
-                  "pl-3.5",
-                  message.kind === "tool" && transcript[index - 1]?.kind === "tool" && "-mt-6",
-                );
-                // Every tool message dispatches to its renderer in one place: ToolMessage
-                // owns the name ladder, the done -> status derivation, and the per-tool
-                // arg/result parsing.
-                if (message.kind === "tool") {
-                  return (
-                    <ToolMessage
-                      key={message.id}
-                      message={message}
-                      className={toolClass}
-                      onOpenPath={(path) => void openInEditor(path)}
-                    />
+            {replayed ? (
+              <div className="flex flex-col gap-8 fade-in animate-in duration-150">
+                {transcript.map((message, index) => {
+                  // Consecutive tool calls read as one block: collapse the gap-8 between
+                  // a tool row and the tool row directly above it.
+                  const toolClass = cn(
+                    "pl-3.5",
+                    message.kind === "tool" && transcript[index - 1]?.kind === "tool" && "-mt-6",
                   );
-                }
-                if (message.kind === "command") {
-                  return (
-                    <div key={message.id} className="pl-3.5">
-                      <CommandMessage command={message.command} args={message.args || undefined} />
-                    </div>
-                  );
-                }
-                if (message.kind === "result") {
-                  return (
-                    <div key={message.id} className="pl-3.5">
-                      <CommandResult
-                        command={message.command}
-                        text={message.text}
-                        ok={message.ok}
+                  // Every tool message dispatches to its renderer in one place: ToolMessage
+                  // owns the name ladder, the done -> status derivation, and the per-tool
+                  // arg/result parsing.
+                  if (message.kind === "tool") {
+                    return (
+                      <ToolMessage
+                        key={message.id}
+                        message={message}
+                        className={toolClass}
+                        onOpenPath={(path) => void openInEditor(path)}
                       />
-                    </div>
-                  );
-                }
-                if (message.kind === "recovered") {
-                  const reclaimed =
-                    message.reclaimed > 0
-                      ? ` · ~${fmtTokens(Math.round(message.reclaimed / 4))} reclaimed`
-                      : "";
-                  return (
-                    <div key={message.id} className="pl-3.5">
+                    );
+                  }
+                  if (message.kind === "command") {
+                    return (
+                      <div key={message.id} className="pl-3.5">
+                        <CommandMessage
+                          command={message.command}
+                          args={message.args || undefined}
+                        />
+                      </div>
+                    );
+                  }
+                  if (message.kind === "result") {
+                    return (
+                      <div key={message.id} className="pl-3.5">
+                        <CommandResult
+                          command={message.command}
+                          text={message.text}
+                          ok={message.ok}
+                        />
+                      </div>
+                    );
+                  }
+                  if (message.kind === "recovered") {
+                    const reclaimed =
+                      message.reclaimed > 0
+                        ? ` · ~${fmtTokens(Math.round(message.reclaimed / 4))} reclaimed`
+                        : "";
+                    return (
+                      <div key={message.id} className="pl-3.5">
+                        <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
+                          <RotateCw className="h-3.5 w-3.5" />
+                          <AlertTitle className="text-smui-yellow">context full</AlertTitle>
+                          <AlertDescription>
+                            {message.detail}
+                            {reclaimed} · retrying
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    );
+                  }
+
+                  const thinking =
+                    message.kind === "assistant" && showThinkingOn && message.thinking
+                      ? message.thinking
+                      : null;
+
+                  const overflowNote =
+                    message.kind === "assistant" && message.overflow ? (
                       <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                        <RotateCw className="h-3.5 w-3.5" />
-                        <AlertTitle className="text-smui-yellow">context full</AlertTitle>
+                        <TriangleAlert className="h-3.5 w-3.5" />
+                        <AlertTitle className="text-smui-yellow">context overflow</AlertTitle>
+                        <AlertDescription>{message.overflow}</AlertDescription>
+                      </Alert>
+                    ) : null;
+
+                  const errorNote =
+                    message.kind === "assistant" && message.error ? (
+                      <Alert variant="destructive">
+                        <CircleX className="h-3.5 w-3.5" />
+                        <AlertTitle>
+                          {isOverflowError(message.error) ? "context overflow" : "error"}
+                        </AlertTitle>
+                        <AlertDescription>{message.error}</AlertDescription>
+                      </Alert>
+                    ) : null;
+
+                  const cancelledNote =
+                    message.kind === "assistant" && message.cancelled ? (
+                      <div className="text-label text-muted-foreground">⊘ cancelled</div>
+                    ) : null;
+
+                  const noReplyNote =
+                    message.kind === "assistant" && message.noReply ? (
+                      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
+                        <TriangleAlert className="h-3.5 w-3.5" />
+                        <AlertTitle className="text-smui-yellow">no reply</AlertTitle>
                         <AlertDescription>
-                          {message.detail}
-                          {reclaimed} · retrying
+                          The model ended the turn without a reply. Try again or rephrase.
                         </AlertDescription>
                       </Alert>
-                    </div>
-                  );
-                }
+                    ) : null;
 
-                const thinking =
-                  message.kind === "assistant" && showThinkingOn && message.thinking
-                    ? message.thinking
-                    : null;
+                  // Budget-terminated turn: the answer above was forced after the model hit
+                  // its tool-call budget (step backstop or context pressure). A muted footnote
+                  // so the answer reads normally but the user knows it was cut short of more work.
+                  const stepLimitNote =
+                    message.kind === "assistant" && message.stepLimit ? (
+                      <div className="text-label text-muted-foreground">
+                        ⚐ answered after the {message.stepLimit}-step tool budget
+                      </div>
+                    ) : null;
 
-                const overflowNote =
-                  message.kind === "assistant" && message.overflow ? (
-                    <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                      <TriangleAlert className="h-3.5 w-3.5" />
-                      <AlertTitle className="text-smui-yellow">context overflow</AlertTitle>
-                      <AlertDescription>{message.overflow}</AlertDescription>
-                    </Alert>
-                  ) : null;
-
-                const errorNote =
-                  message.kind === "assistant" && message.error ? (
-                    <Alert variant="destructive">
-                      <CircleX className="h-3.5 w-3.5" />
-                      <AlertTitle>
-                        {isOverflowError(message.error) ? "context overflow" : "error"}
-                      </AlertTitle>
-                      <AlertDescription>{message.error}</AlertDescription>
-                    </Alert>
-                  ) : null;
-
-                const cancelledNote =
-                  message.kind === "assistant" && message.cancelled ? (
-                    <div className="text-label text-muted-foreground">⊘ cancelled</div>
-                  ) : null;
-
-                const noReplyNote =
-                  message.kind === "assistant" && message.noReply ? (
-                    <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                      <TriangleAlert className="h-3.5 w-3.5" />
-                      <AlertTitle className="text-smui-yellow">no reply</AlertTitle>
-                      <AlertDescription>
-                        The model ended the turn without a reply. Try again or rephrase.
-                      </AlertDescription>
-                    </Alert>
-                  ) : null;
-
-                if (message.kind === "assistant" && !message.text && !message.done) {
-                  return (
-                    <div key={message.id} className="flex flex-col gap-3 pl-3.5">
-                      {thinking ? (
-                        <ThinkingMessage content={thinking} />
-                      ) : (
-                        <WorkingIndicator
-                          label={message.warm ? "thinking" : `loading ${message.model}`}
-                        />
-                      )}
-                      {overflowNote}
-                      {errorNote}
-                    </div>
-                  );
-                }
-
-                // Meta (model · context · speed) rides on the final segment - the one that
-                // carries usage - so it isn't repeated under every pre-tool segment.
-                let metaItems: string[] | null = null;
-                if (message.kind === "assistant" && message.usage) {
-                  const usage = message.usage;
-                  metaItems = [
-                    message.model,
-                    `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
-                  ];
-                  if (usage.genMs > 0) {
-                    metaItems.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
+                  if (message.kind === "assistant" && !message.text && !message.done) {
+                    return (
+                      <div key={message.id} className="flex flex-col gap-3 pl-3.5">
+                        {thinking ? (
+                          <ThinkingMessage content={thinking} />
+                        ) : (
+                          <WorkingIndicator
+                            label={message.warm ? "thinking" : `loading ${message.model}`}
+                          />
+                        )}
+                        {overflowNote}
+                        {errorNote}
+                      </div>
+                    );
                   }
-                }
 
-                // User prompts read as a boxed, left-barred block; assistant replies are
-                // plain prose. Neither carries a "you"/"assistant" header.
-                if (message.kind === "user") {
+                  // Meta (model · context · speed) rides on the final segment - the one that
+                  // carries usage - so it isn't repeated under every pre-tool segment.
+                  let metaItems: string[] | null = null;
+                  if (message.kind === "assistant" && message.usage) {
+                    const usage = message.usage;
+                    metaItems = [
+                      message.model,
+                      `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
+                    ];
+                    if (usage.genMs > 0) {
+                      metaItems.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
+                    }
+                  }
+
+                  // User prompts read as a boxed, left-barred block; assistant replies are
+                  // plain prose. Neither carries a "you"/"assistant" header.
+                  if (message.kind === "user") {
+                    return (
+                      <div
+                        key={message.id}
+                        data-message-id={message.id}
+                        className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
+                      >
+                        {message.text ? <Md text={message.text} /> : null}
+                        {message.artifacts.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {message.artifacts.map((ref) => (
+                              <ArtifactThumb key={ref.hash} artifact={ref} />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
+
                   return (
                     <div
                       key={message.id}
-                      className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
+                      data-message-id={message.id}
+                      className="flex flex-col gap-3 pl-3.5"
                     >
+                      {thinking ? <ThinkingMessage content={thinking} /> : null}
                       {message.text ? <Md text={message.text} /> : null}
-                      {message.artifacts.length ? (
-                        <div className="flex flex-wrap gap-2">
-                          {message.artifacts.map((ref) => (
-                            <ArtifactThumb key={ref.hash} artifact={ref} />
-                          ))}
-                        </div>
-                      ) : null}
+                      {overflowNote}
+                      {errorNote}
+                      {cancelledNote}
+                      {noReplyNote}
+                      {stepLimitNote}
+                      {metaItems ? <MessageMeta items={metaItems} /> : null}
                     </div>
                   );
-                }
+                })}
 
-                return (
-                  <div key={message.id} className="flex flex-col gap-3 pl-3.5">
-                    {thinking ? <ThinkingMessage content={thinking} /> : null}
-                    {message.text ? <Md text={message.text} /> : null}
-                    {overflowNote}
-                    {errorNote}
-                    {cancelledNote}
-                    {noReplyNote}
-                    {metaItems ? <MessageMeta items={metaItems} /> : null}
+                {awaitingResponse ? (
+                  <div className="pl-3.5">
+                    <WorkingIndicator label="thinking" />
                   </div>
-                );
-              })}
+                ) : null}
 
-              {awaitingResponse ? (
-                <div className="pl-3.5">
-                  <WorkingIndicator label="thinking" />
-                </div>
-              ) : null}
-
-              {/* Prompts held in the local queue: shown muted as "queued" so they read as
+                {/* Prompts held in the local queue: shown muted as "queued" so they read as
             waiting, not sent, until the current turn frees up and they publish. */}
-              {queue.map((q) => (
-                <div
-                  key={q.id}
-                  className="flex flex-col gap-2 border-l-2 border-primary/50 bg-card px-3 py-2 opacity-60"
-                >
-                  {q.text ? <Md text={q.text} muted /> : null}
-                  {q.artifacts?.length ? (
-                    <div className="flex gap-1.5">
-                      {q.artifacts.map((ref) => (
-                        <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+                {queue.map((q) => (
+                  <div
+                    key={q.id}
+                    className="flex flex-col gap-2 border-l-2 border-primary/50 bg-card px-3 py-2 opacity-60"
+                  >
+                    {q.text ? <Md text={q.text} muted /> : null}
+                    {q.artifacts?.length ? (
+                      <div className="flex gap-1.5">
+                        {q.artifacts.map((ref) => (
+                          <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {!atBottom ? (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              aria-label="Scroll to bottom"
+              className="absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+            >
+              <ChevronDown className="size-4" />
+            </button>
           ) : null}
         </div>
 
