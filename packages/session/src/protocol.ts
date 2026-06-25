@@ -508,6 +508,10 @@ export type DecodedEvent =
       readonly instanceId?: string;
       readonly workspace?: string;
       readonly cwd?: string;
+      /** The provider key the host announces as its default (host-owned; the UI's
+       *  initial selection derives from this, never a hardcoded key). */
+      readonly default?: string;
+      readonly providers: readonly string[];
       readonly models: Record<string, ProviderModel>;
       readonly commands: readonly CommandSpec[];
     }
@@ -615,6 +619,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         instanceId: optStr(p.instanceId),
         workspace: optStr(p.workspace),
         cwd: optStr(p.cwd),
+        default: optStr(p.default),
+        providers: strList(p.providers),
         models: coerceProviderModels(p.models),
         commands: coerceCommands(p.commands),
       };

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ArtifactRef } from "@trevor/session";
+import { type ArtifactRef, DEFAULT_SESSION_ID } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { ChevronDown, CircleX, PanelRight, Plus, RotateCw, TriangleAlert, X } from "lucide-react";
 import {
@@ -37,6 +37,7 @@ import { uploadArtifact } from "./blob";
 import {
   activeRunId,
   commandsFrom,
+  defaultProviderFrom,
   fmtCtx,
   fmtTokens,
   hostStatus,
@@ -56,9 +57,10 @@ const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
 const REASONING_KEY = "trevor.reasoning";
 const SHOW_THINKING_KEY = "trevor.showThinking";
-// Host and browser default to one shared session so they auto-attach with no
-// manual wiring; override with ?session=<id> in the URL.
-const DEFAULT_SESSION = "trevor-local";
+// Host and browser default to one shared session so they auto-attach with no manual
+// wiring; override with ?session=<id> in the URL. The id is owned in @trevor/session so
+// this and the host's SESSION_ID default cannot drift into two different sessions.
+const DEFAULT_SESSION = DEFAULT_SESSION_ID;
 // The local send queue + hard-steer fold (QueuedPrompt, sendQueueReducer, foldSteer)
 // live in ./send-queue, unit-tested without React; the React state machine that drives
 // them (the busy/in-flight latch + release/drain effects) lives in ./hooks/use-send-queue.
@@ -85,10 +87,9 @@ export function App() {
   });
   const sessionId = sessionQuery.data ?? null;
 
-  const [provider, setProvider] = useLocalStorageState<string>(PROVIDER_KEY, {
-    ...rawString,
-    defaultValue: "qwen",
-  });
+  // No default here: an unset provider falls through to the host-announced default
+  // (defaultProviderFrom) below, so the initial selection is host-owned, not hardcoded.
+  const [provider, setProvider] = useLocalStorageState<string>(PROVIDER_KEY, rawString);
   const [reasoningMap, setReasoningMap] = useLocalStorageState<Record<string, string>>(
     REASONING_KEY,
     { defaultValue: {} },
@@ -115,6 +116,9 @@ export function App() {
   useInterval(() => setNow(Date.now()), 4000);
   const host = useMemo(() => hostStatus(events, presence, now), [events, presence, now]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
+  // The host-announced default provider; the initial selection falls back to it when the
+  // user hasn't chosen one, rather than to a hardcoded key.
+  const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
   const active = useMemo(() => activeRunId(events), [events]);
 
   // The agent's live task checklist (host-published snapshots), rendered in the header.
@@ -177,7 +181,7 @@ export function App() {
   const busy = active !== null || awaitingResponse;
   const { queue, submit, steer } = useSendQueue({ busy, publish });
 
-  const activeProvider = provider ?? "qwen";
+  const activeProvider = provider ?? hostDefault ?? "qwen";
   // Before any host has announced (empty hostModels), there's no roster to show: fall back
   // to a neutral descriptor keyed by the active provider, so the picker renders one inert
   // entry and no reasoning control until host.online arrives and supplies the real roster.

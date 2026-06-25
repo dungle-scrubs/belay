@@ -1,5 +1,6 @@
 import {
   type ArtifactRef,
+  PRODUCER_IDS,
   type SessionEvent,
   events as sessionEvents,
   type TrevorEventInput,
@@ -52,15 +53,16 @@ export function useSession(sessionId: string | null): SessionState {
     return () => connection.close();
   }, [sessionId]);
 
-  // Every browser-published event is stamped with the same web producer id and gated on
-  // a live session, so that guard + the "trevor-web" constant live here once and the
-  // public methods below are one-line delegations to the matching event builder.
+  // Every browser-published event is stamped with the shared web producer id
+  // (PRODUCER_IDS.web, owned in @trevor/session) and gated on a live session, so that
+  // guard lives here once and the public methods below are one-line delegations to the
+  // matching event builder.
   const publishVia = useCallback(
     async (built: TrevorEventInput) => {
       if (!sessionId) {
         return;
       }
-      await publishEvent(sessionId, { producerId: "trevor-web", ...built });
+      await publishEvent(sessionId, { producerId: PRODUCER_IDS.web, ...built });
     },
     [sessionId],
   );

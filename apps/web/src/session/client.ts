@@ -3,6 +3,7 @@ import {
   type ConnectionStatus,
   type HostPresence,
   type PublishInput,
+  RUNTIME_KIND,
   type SessionConnection,
   type SessionEvent,
   type SessionIdentity,
@@ -54,7 +55,7 @@ function webIdentity(): SessionIdentity {
 
   const identity: SessionIdentity = {
     displayName: "trevor-web",
-    runtimeKind: "web",
+    runtimeKind: RUNTIME_KIND.web,
     instanceId: crypto.randomUUID(),
     participantId: `web-${crypto.randomUUID()}`,
   };

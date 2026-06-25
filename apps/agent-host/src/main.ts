@@ -1,8 +1,11 @@
 import { homedir } from "node:os";
 import { richterTransport } from "@trevor/richter";
 import {
+  DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
+  PRODUCER_IDS,
+  RUNTIME_KIND,
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
@@ -42,8 +45,8 @@ import { publishTurn } from "./turn";
  * stand by and take over if the leader goes quiet (see ./lease).
  */
 
-const SESSION_ID = process.env.SESSION_ID ?? "trevor-local";
-const PRODUCER_ID = "trevor-host";
+const SESSION_ID = process.env.SESSION_ID ?? DEFAULT_SESSION_ID;
+const PRODUCER_ID = PRODUCER_IDS.host;
 // Backend selection (the plugin seam): default to the local session-store; set
 // RICHTER_URL to opt into the Richter durable substrate instead. The host speaks
 // the SessionTransport contract either way.
@@ -374,7 +377,7 @@ function connect(): void {
     sessionId: SESSION_ID,
     identity: {
       displayName: "trevor-host",
-      runtimeKind: "trevor",
+      runtimeKind: RUNTIME_KIND.host,
       instanceId: INSTANCE_ID,
       participantId: PARTICIPANT_ID,
     },

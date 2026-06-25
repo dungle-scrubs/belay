@@ -23,9 +23,12 @@
  * Date.now(); no internal clock, so the state machine is unit-testable.
  */
 
+import type { HostRole } from "@trevor/session";
 import { debug } from "./log";
 
-export type LeaseRole = "probing" | "leader" | "standby";
+/** Lease roles: the wire-visible `HostRole` (leader/standby) plus the private "probing"
+ *  start state the lease occupies before it has claimed or deferred. */
+export type LeaseRole = "probing" | HostRole;
 export type HostSignal = "hello" | "beat";
 
 export interface LeaseCallbacks {

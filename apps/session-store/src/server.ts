@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { frames, type HostPresence, type PublishInput } from "@trevor/session";
+import {
+  decodeStreamParams,
+  frames,
+  type HostPresence,
+  type PublishInput,
+  RUNTIME_KIND,
+} from "@trevor/session";
 import { type WebSocket, WebSocketServer } from "ws";
 import { SessionLog } from "./log";
 
@@ -26,10 +32,10 @@ import { SessionLog } from "./log";
 const STREAM_PATH = /^\/sessions\/([^/]+)\/stream$/;
 const EVENTS_PATH = /^\/sessions\/([^/]+)\/events$/;
 
-// The runtimeKind the agent-host declares on its stream identity (see apps/agent-host
-// main.ts). Presence tracks THIS runtime - "is a host connected right now" - so a
-// browser (runtimeKind "web") joining never counts as a host.
-const HOST_RUNTIME = "trevor";
+// The runtimeKind the agent-host declares on its stream identity (RUNTIME_KIND.host,
+// owned in @trevor/session). Presence tracks THIS runtime - "is a host connected right
+// now" - so a browser (RUNTIME_KIND.web) joining never counts as a host.
+const HOST_RUNTIME = RUNTIME_KIND.host;
 
 /** Permissive CORS: the browser (trevor-web :17420) reads/writes cross-origin, no credentials. */
 function cors(res: ServerResponse): void {
@@ -205,13 +211,13 @@ export function createSessionStore(dbPath: string): Server {
       return;
     }
     const sessionId = decodeURIComponent(match[1] as string);
-    const afterSeq = Number(url.searchParams.get("after") ?? 0) || 0;
 
-    // Identity rides the stream URL (see @trevor/session streamUrl). A connection from
-    // the agent-host runtime counts toward presence; anything else (a browser) only
-    // observes it.
-    const runtimeKind = url.searchParams.get("runtimeKind") ?? "";
-    const instanceId = url.searchParams.get("instanceId") ?? "";
+    // Identity + cursor ride the stream URL; decode them with the same codec the client
+    // encodes with (@trevor/session) so the param names can't drift between the two. A
+    // connection from the agent-host runtime counts toward presence; anything else (a
+    // browser) only observes it.
+    const { identity, afterSeq } = decodeStreamParams(url.searchParams);
+    const { runtimeKind, instanceId, participantId, displayName } = identity;
     const isHost = runtimeKind === HOST_RUNTIME && instanceId.length > 0;
 
     // Synchronous replay-then-subscribe: the node:sqlite reads and the subscribe
@@ -226,11 +232,7 @@ export function createSessionStore(dbPath: string): Server {
     if (isHost) {
       // A host joined: record it, then push the new live set to everyone (this socket
       // included) so viewers flip to "host active" immediately.
-      addHost(sessionId, socket, {
-        instanceId,
-        participantId: url.searchParams.get("participantId") ?? "",
-        displayName: url.searchParams.get("displayName") ?? "",
-      });
+      addHost(sessionId, socket, { instanceId, participantId, displayName });
       broadcastPresence(sessionId);
     } else {
       // A viewer joined: it just needs the current live set once (no host-set change,

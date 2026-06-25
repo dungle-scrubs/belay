@@ -2,6 +2,7 @@ import {
   type CommandSpec,
   type DecodedEvent,
   decodeTrevorEvent,
+  HOST_ROLE,
   type HostPresence,
   type ProviderModel,
   type SessionEvent,
@@ -183,7 +184,7 @@ export function hostStatus(
 
   for (const [id, value] of role) {
     const seen = lastSeen.get(id) ?? Number.NEGATIVE_INFINITY;
-    if (value === "leader" && seen >= leaderSeen) {
+    if (value === HOST_ROLE.leader && seen >= leaderSeen) {
       leaderSeen = seen;
       leaderId = id;
     }
@@ -225,6 +226,15 @@ export function hostStatus(
  */
 export function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {
   return latest(events, (d) => (d.type === "host.online" ? d.models : undefined)) ?? {};
+}
+
+/**
+ * The provider key the host announced as its default, or undefined before any host has
+ * announced. The host owns the default (DEFAULT_PROVIDER) and ships it on host.online;
+ * the UI's initial selection derives from this instead of hardcoding a provider key.
+ */
+export function defaultProviderFrom(events: readonly SessionEvent[]): string | undefined {
+  return latest(events, (d) => (d.type === "host.online" && d.default ? d.default : undefined));
 }
 
 /** The latest task checklist the host published (empty when there are no tasks / cleared). */
