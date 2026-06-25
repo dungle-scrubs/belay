@@ -16,6 +16,21 @@ export interface TurnSchedulerDeps {
    * tracks whatever handle this returns as the single active run.
    */
   readonly start: (event: SessionEvent) => ActiveTurn | null;
+  /**
+   * True when the prompt projection has crossed the compaction budget and a fold must run
+   * before the next turn starts (blocking-before, D-041). Optional: omitting it (with `compact`)
+   * disables compaction gating entirely, leaving the plain turn behaviour. The host must return
+   * false once a fold has brought the projection back under budget (or could not fold further),
+   * so the gate never loops.
+   */
+  readonly needsCompaction?: () => boolean;
+  /**
+   * Kicks off ONE compaction off the idle slot (async): the host plans + summarizes + emits the
+   * fold, then calls `finishCompaction` when the projection has updated. The scheduler holds all
+   * turns behind it (the same one-at-a-time gate that serializes turns), so a fold never runs
+   * concurrently with a turn.
+   */
+  readonly compact?: () => void;
 }
 
 /**
@@ -53,6 +68,12 @@ export class TurnScheduler {
    *  say whether the latest prompt still needs an answer (leader catch-up). */
   private lastUser: SessionEvent | null = null;
   private lastAnswerSeq = -1;
+  /** The highest seq of any assistant.started seen (this host's or another's), i.e. the latest
+   *  prompt ATTEMPT. Catch-up only re-runs a prompt nothing has attempted yet, so a prompt already
+   *  attempted (then orphaned by a crash/restart) is never auto-re-run on the next leadership. */
+  private lastStartSeq = -1;
+  /** A compaction fold is running in the idle slot: hold every turn behind it (D-041). */
+  private compacting = false;
 
   constructor(private readonly deps: TurnSchedulerDeps) {}
 
@@ -62,13 +83,13 @@ export class TurnScheduler {
   }
 
   /**
-   * Submits a user prompt: answer it now if idle, else queue it (FIFO) behind the
-   * active turn so turns never overlap. Recording the prompt (and deciding whether
-   * to dispatch it) is delegated to `start`; a deferred prompt is recorded only when
-   * it is later drained, which keeps the prompt view strictly paired.
+   * Submits a user prompt: answer it now if idle, else queue it (FIFO) behind the active turn
+   * (or a running compaction) so turns never overlap. Recording the prompt (and deciding whether
+   * to dispatch it) is delegated to `start`; a deferred prompt is recorded only when it is later
+   * drained, which keeps the prompt view strictly paired.
    */
   submit(event: SessionEvent): void {
-    if (this.active) {
+    if (this.active || this.compacting) {
       this.queue.push(event);
       return;
     }
@@ -92,16 +113,41 @@ export class TurnScheduler {
     }
   }
 
-  /** Starts the next queued prompt, if idle and the leader. A non-leader holds the
-   *  queue (it must not pop a prompt it cannot answer). */
+  /** Starts the next queued prompt, if idle and the leader. A non-leader holds the queue (it must
+   *  not pop a prompt it cannot answer); a running compaction holds it too (blocking-before). */
   drain(): void {
-    if (this.active || !this.deps.isLeader()) {
+    if (this.active || this.compacting || !this.deps.isLeader()) {
       return;
     }
     const next = this.queue.shift();
     if (next) {
       this.startNow(next);
     }
+  }
+
+  /**
+   * Background-after compaction (D-041): when idle and over budget, fold proactively even with no
+   * prompt waiting, so the NEXT turn starts pre-compacted with no visible pause. A no-op when a
+   * turn or fold is already running, when not the leader, or when compaction is disabled/not needed.
+   */
+  maybeCompact(): void {
+    if (this.active || this.compacting || !this.deps.isLeader()) {
+      return;
+    }
+    if (this.deps.compact && this.deps.needsCompaction?.()) {
+      this.compacting = true;
+      this.deps.compact();
+    }
+  }
+
+  /** The host signals its fold finished (the projection has updated): release the gate and start
+   *  whatever waited behind it. Idempotent - a no-op when no compaction was running. */
+  finishCompaction(): void {
+    if (!this.compacting) {
+      return;
+    }
+    this.compacting = false;
+    this.drain();
   }
 
   /** Aborts the active turn if it matches `runId`, or `""` to cancel whatever is active
@@ -112,10 +158,27 @@ export class TurnScheduler {
     }
   }
 
-  /** The latest prompt that has not yet been answered, or null - used to catch up a
-   *  prompt that arrived while this host was a standby, on becoming leader. */
+  /** Notes a prompt attempt (an assistant.started landed): records its seq so catch-up never
+   *  re-runs a prompt that was already attempted - replayed from the log too, so the watermark
+   *  survives a restart. */
+  noteAttempt(seq: number): void {
+    this.lastStartSeq = Math.max(this.lastStartSeq, seq);
+  }
+
+  /**
+   * The latest prompt to catch up on becoming leader, or null. Catch-up answers a prompt that
+   * arrived while this host was a standby/probing - but ONLY one nothing has acted on yet: no answer
+   * AND no prior attempt (an assistant.started after it). A prompt already attempted (by any host,
+   * then orphaned by a crash/restart) is NOT re-run - the orphan reap closes it and the host idles -
+   * so a restart can never loop re-running the same prompt.
+   */
   pendingCatchUp(): SessionEvent | null {
-    return this.lastUser && this.lastUser.seq > this.lastAnswerSeq ? this.lastUser : null;
+    if (!this.lastUser) {
+      return null;
+    }
+    const answered = this.lastUser.seq <= this.lastAnswerSeq;
+    const attempted = this.lastUser.seq <= this.lastStartSeq;
+    return answered || attempted ? null : this.lastUser;
   }
 
   /** On /clear: drop the queued prompts and the catch-up target so the cleared prompts
@@ -134,6 +197,7 @@ export class TurnScheduler {
     this.queue = [];
     this.lastUser = null;
     this.lastAnswerSeq = -1;
+    this.lastStartSeq = -1;
   }
 
   /** A snapshot of the turn machine for /doctor: what is running and what waits. */
@@ -141,15 +205,28 @@ export class TurnScheduler {
     readonly active: string | null;
     readonly queued: number;
     readonly lastAnswerSeq: number;
+    readonly compacting: boolean;
   } {
     return {
       active: this.active ? this.active.runId.slice(0, 8) : null,
       queued: this.queue.length,
       lastAnswerSeq: this.lastAnswerSeq,
+      compacting: this.compacting,
     };
   }
 
   private startNow(event: SessionEvent): void {
+    // Blocking-before (D-041): a turn must never start over the compaction budget. Defer it to the
+    // front of the queue behind a fold; finishCompaction() drains it once the projection shrinks.
+    // The host's needsCompaction must return false after a fold (or when it cannot fold further),
+    // so a turn re-drained here proceeds rather than looping.
+    if (this.deps.compact && this.deps.needsCompaction?.()) {
+      this.compacting = true;
+      this.queue.unshift(event);
+      this.lastUser = event;
+      this.deps.compact();
+      return;
+    }
     this.lastUser = event;
     const turn = this.deps.start(event);
     if (turn) {

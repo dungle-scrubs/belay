@@ -9,16 +9,27 @@ import {
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
+  type Usage,
+  type UsageBreakdown,
 } from "@trevor/session";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
+import { COMPACT_WHEN, overBudget, runCompaction } from "./agent/compactor";
 import { buildHistory } from "./agent/history-projection";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { supervisor } from "./processes";
-import { buildProviders, type ChatMessage, DEFAULT_PROVIDER, pickProvider } from "./providers";
+import {
+  buildProviders,
+  type ChatMessage,
+  DEFAULT_PROVIDER,
+  type Provider,
+  type ProviderError,
+  pickProvider,
+} from "./providers";
 import { Emit } from "./services";
+import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
 import { msg } from "./tools/shared";
@@ -62,9 +73,13 @@ const PARTICIPANT_ID = `${PRODUCER_ID}:${INSTANCE_ID.slice(0, 8)}`;
 
 // Single live connection's state (rebuilt from replay on each connect).
 let live = false;
-/** The prompt projection: `history === buildHistory(historyEvents)`. The event log
- *  is what the host folds; a deferred mid-turn prompt is admitted only when it drains
- *  (the scheduler defers it out of the log), so the projection stays strictly paired. */
+/** The prompt projection: `history === buildHistory(historyEvents)` at every turn boundary. The
+ *  event log is what the host folds (now including the turn's tool.started/tool.completed, which
+ *  buildHistory carries across turns). A deferred mid-turn prompt is admitted only when it drains
+ *  (the scheduler defers it out of the log), so the projection stays strictly paired. Tool events
+ *  are RECORDED (pushed) but not re-projected per call - `history` is only read at turn boundaries,
+ *  where the next admit rebuilds with them - so a tool-heavy turn doesn't re-fold the whole log on
+ *  every call. */
 let history: ChatMessage[] = [];
 let historyEvents: SessionEvent[] = [];
 let leaseRunning = false;
@@ -76,8 +91,29 @@ function emit(event: TrevorEventInput): Promise<void> {
   return transport.publishEvent(SESSION_ID, { ...event, producerId: PRODUCER_ID });
 }
 
-/** The live Emit service: the turn program's events go to the Richter log via emit(). */
-const EmitLive = Layer.succeed(Emit, { publish: (event) => Effect.promise(() => emit(event)) });
+/** Run ids that already have a terminal assistant.completed published. A cancel emits the
+ *  completion IMMEDIATELY (so clients free instantly) and the turn fiber's onExit also tries to -
+ *  this dedupes so a run closes exactly once. (Grows with run count; bounded by the session.) */
+const completedRuns = new Set<string>();
+
+/** The live Emit service: the turn program's events go to the Richter log via emit(). A second
+ *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
+ *  is dropped. */
+const EmitLive = Layer.succeed(Emit, {
+  publish: (event) =>
+    Effect.promise(() => {
+      if (event.type === "assistant.completed") {
+        const runId = typeof event.payload.runId === "string" ? event.payload.runId : "";
+        if (runId) {
+          if (completedRuns.has(runId)) {
+            return Promise.resolve();
+          }
+          completedRuns.add(runId);
+        }
+      }
+      return emit(event);
+    }),
+});
 
 /** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
 function hostState(): Record<string, unknown> {
@@ -88,6 +124,12 @@ function hostState(): Record<string, unknown> {
     queued: turns.queued,
     history: history.length,
     lastAnswerSeq: turns.lastAnswerSeq,
+    compacting: turns.compacting,
+    ...(lastFold
+      ? {
+          lastFold: `seq≤${lastFold.throughSeq} ~${lastFold.tokensBefore}→${lastFold.tokensAfter}tok`,
+        }
+      : {}),
   };
 }
 
@@ -167,8 +209,11 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     return null;
   }
   const runId = crypto.randomUUID();
+  const provider = pickProvider(providers, decoded.provider);
+  // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
+  lastProvider = provider;
   const fiber = Effect.runFork(
-    publishTurn(pickProvider(providers, decoded.provider), turnHistory, {
+    publishTurn(provider, turnHistory, {
       runId,
       reasoning: decoded.reasoning,
     }).pipe(Effect.provide(EmitLive)),
@@ -196,16 +241,192 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
  * when this host is the live leader - forks its turn. On replay the prompt is recorded
  * without being answered.
  */
+// --- cross-turn compaction (D-040..D-043) ---
+// The latest turn's prompt size + window, captured from each assistant.completed usage, drive the
+// between-turn compaction gate (the within-turn airbag is overflow recovery). `floorReached` stops
+// retrying a fold that could not shrink further until a fresh turn moves the needle; `lastProvider`
+// is the model the fold summarizes with (the last turn's provider, per D-043).
+let lastInput = 0;
+let lastWindow = 0;
+let compactionFloorReached = false;
+let lastProvider: Provider | undefined;
+/** The in-flight MANUAL `/compact` fold, so ESC can interrupt it (the user asked, so they can take
+ *  it back). Only the manual fold is tracked - automatic folds are not interruptible (the blocking
+ *  one is load-bearing for the next turn). Null when no manual fold is running. */
+let manualCompactFiber: Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null = null;
+/** True between a `/compact` command and its `command.result`. If a host dies mid-fold the command
+ *  is left with no result (a dangling `/compact` that looks broken); the next leader gives it one. */
+let compactPending = false;
+/** The most recent fold, for /doctor (null until the first compaction). */
+let lastFold: { throughSeq: number; tokensBefore: number; tokensAfter: number } | null = null;
+
+/** Run ids whose assistant.started has no assistant.completed yet - the turns in flight. Tracked
+ *  from the replayed + live log so a leader can REAP the ones a previous leader left dangling when
+ *  it crashed or hot-reloaded mid-turn (see reapOrphans). Without that, every client reads the
+ *  dangling run as still-active forever: the send queue freezes (prompts stuck "queued") and ESC
+ *  targets a run no fiber backs (cancel is a no-op). */
+const inFlightRuns = new Set<string>();
+
+/** The latest usage/breakdown seen per in-flight run (from assistant.progress). A cancel/reap closes
+ *  a run with NO usage of its own, but the turn still consumed what it consumed - so the terminal
+ *  completion carries this last-known usage instead of dropping it (keeps the ctx meter + token
+ *  accounting honest across a cancel). Cleared when the run's completion lands. */
+const lastUsageByRun = new Map<string, { usage?: Usage; breakdown?: UsageBreakdown }>();
+
+/**
+ * Publishes the terminal completion for a run being closed WITHOUT a completion of its own - a user
+ * cancel (ESC) or a host reap of an orphan. Dedups via `completedRuns` (the fiber's own onExit is
+ * dropped, so the run closes exactly once) and carries the run's last-known usage, since the tokens
+ * it consumed don't vanish on a cancel. `cancelled` = the user pressed ESC; `interrupted` = the host
+ * closed it (restart/crash mid-turn), rendered as a muted "host restarted" note rather than an ESC.
+ */
+function closeRun(runId: string, kind: "cancelled" | "interrupted"): void {
+  if (completedRuns.has(runId)) {
+    return;
+  }
+  completedRuns.add(runId);
+  const last = lastUsageByRun.get(runId);
+  emit(
+    events.assistantCompleted({
+      runId,
+      text: "",
+      ...(kind === "cancelled" ? { cancelled: true } : { interrupted: true }),
+      ...(last?.usage ? { usage: last.usage } : {}),
+      ...(last?.breakdown ? { breakdown: last.breakdown } : {}),
+    }),
+  ).catch(() => {});
+}
+
+/**
+ * Closes runs left dangling by a previous leader (crashed or hot-reloaded mid-turn): an
+ * assistant.started with no completion. Called on TAKING leadership, when this host has no turn of
+ * its own running, so every in-flight run is a dead orphan. Closes each as `interrupted`, which
+ * unfreezes the send queue and makes ESC meaningful again on the next real turn. Idempotent: each
+ * emitted completion echoes back and the set is cleared.
+ */
+function reapOrphans(): void {
+  if (inFlightRuns.size === 0) {
+    return;
+  }
+  for (const runId of [...inFlightRuns]) {
+    if (completedRuns.has(runId)) {
+      continue; // already closed (e.g. the user cancelled it)
+    }
+    log("host", "reaping orphaned run", { run: runId.slice(0, 8) });
+    closeRun(runId, "interrupted");
+  }
+  inFlightRuns.clear();
+}
+
+/** Emit at most one progress tick per this many summary tokens, so a streaming fold publishes a
+ *  bounded handful of advisory `context.compacting` events rather than one per delta. */
+const COMPACT_PROGRESS_TOKEN_STEP = 40;
+
+/** Builds a throttled progress callback for one fold: emits an honest live `context.compacting`
+ *  tick (real tokens streamed ÷ budget) as the summary streams, fire-and-forget. The web fills a
+ *  transient bar from these and drops it when the matching `context.compacted` lands. */
+function compactionProgress(foldId: string): (tokens: number, budget: number) => void {
+  // -1 = nothing emitted yet (so the first tick always fires, even at 0). A plain 0 sentinel breaks
+  // the throttle while the summary sits at 0 tokens - the model ingesting a large fold prompt before
+  // its first output token - flooding the log with identical tokens:0 ticks.
+  let lastEmitted = -1;
+  return (tokens, budget) => {
+    if (lastEmitted >= 0 && tokens - lastEmitted < COMPACT_PROGRESS_TOKEN_STEP) {
+      return;
+    }
+    lastEmitted = tokens;
+    emit(events.contextCompacting({ foldId, tokens, budget })).catch(() => {});
+  };
+}
+
+/** True when a fold should run before the next turn: live leader, over COMPACT_WHEN of the window,
+ *  and not already at the fold floor. Live + leader gated so replay/standbys never gate (a fold that
+ *  cannot change the budget there would loop the scheduler). */
+function needsCompaction(): boolean {
+  return (
+    live &&
+    lease.isLeader() &&
+    !compactionFloorReached &&
+    overBudget(lastInput, lastWindow, COMPACT_WHEN)
+  );
+}
+
+/**
+ * Kicks off ONE fold off the idle slot: plan + summarize + emit `context.compacted`. The fold's own
+ * echo (handled below) admits it, updates the budget estimate, and releases the gate. A no-fold
+ * result (nothing left to fold) or any failure marks the floor and releases the gate directly, so
+ * the gate never loops. Not live/leader (or no provider) just releases the gate.
+ */
+function startCompaction(): void {
+  const provider = lastProvider ?? providers[DEFAULT_PROVIDER];
+  if (!live || !lease.isLeader() || !provider) {
+    scheduler.finishCompaction();
+    return;
+  }
+  const foldId = crypto.randomUUID();
+  Effect.runFork(
+    runCompaction(
+      provider,
+      historyEvents.slice(),
+      lastWindow,
+      PRODUCER_ID,
+      lastInput,
+      foldId,
+      compactionProgress(foldId),
+    ).pipe(
+      Effect.flatMap((event) =>
+        event
+          ? // Its echo (the context.compacted case in handleEvent) admits it + releases the gate.
+            Effect.promise(() => emit(event))
+          : Effect.sync(() => {
+              compactionFloorReached = true; // nothing left to fold - stop until the next turn
+              scheduler.finishCompaction();
+            }),
+      ),
+      Effect.catchAllCause((cause) =>
+        Effect.sync(() => {
+          warn("host", "compaction failed", { cause: Cause.pretty(cause) });
+          compactionFloorReached = true;
+          scheduler.finishCompaction();
+        }),
+      ),
+    ),
+  );
+}
+
 const scheduler = new TurnScheduler({
   isLeader: () => lease.isLeader(),
   start: (event) => {
     admit(event);
     return live ? startTurn(event, history.slice()) : null;
   },
+  needsCompaction,
+  compact: startCompaction,
 });
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
 function onBecomeLeader(): void {
+  if (inFlightRuns.size > 0) {
+    // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
+    // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
+    // the pending prompt - it was already attempted and interrupted, so the host idles clean instead
+    // of auto-re-running a slow turn; the user re-submits if they want it.
+    reapOrphans();
+    scheduler.clearPending();
+  }
+  // A /compact whose fold a previous leader was interrupted mid-run (restart/crash) left its command
+  // with no result - a dangling "/compact" that looks broken. Give it one. `!manualCompactFiber`
+  // guards the (rare) leadership-flap-mid-fold case where this host is the one actually running it.
+  if (compactPending && !manualCompactFiber) {
+    compactPending = false;
+    emit(
+      events.commandResult({
+        command: "/compact",
+        text: "Compaction interrupted — the host restarted. Run /compact again.",
+        ok: false,
+      }),
+    ).catch(() => {});
+  }
   const pending = scheduler.pendingCatchUp();
   if (pending) {
     scheduler.submit(pending); // catch up a prompt that arrived while probing
@@ -261,6 +482,56 @@ function goLive(): void {
 }
 
 /**
+ * Forces one compaction fold now (the /compact command), at ANY context level: `force` folds every
+ * completed turn regardless of the budget (the user asked - their choice), not just when over 80%.
+ * Same plan + summary + emit path, whose echo admits the fold. Refuses only while a turn is active
+ * (a fold must not overlap a turn, D-041), and reports when there's genuinely nothing to fold.
+ */
+async function forceCompact(): Promise<string> {
+  if (scheduler.isBusy()) {
+    return "A turn is in progress — run /compact again once it finishes.";
+  }
+  if (manualCompactFiber) {
+    return "A compaction is already running.";
+  }
+  const provider = lastProvider ?? providers[DEFAULT_PROVIDER];
+  if (!provider) {
+    return "No provider available to summarize.";
+  }
+  const foldId = crypto.randomUUID();
+  // Forked (not awaited inline) so ESC can interrupt it - the summary's provider stream aborts on
+  // interrupt. On interrupt nothing is emitted, so the context is left exactly as it was.
+  const fiber = Effect.runFork(
+    runCompaction(
+      provider,
+      historyEvents.slice(),
+      lastWindow,
+      PRODUCER_ID,
+      lastInput,
+      foldId,
+      compactionProgress(foldId),
+      true, // force: fold regardless of the current context %
+    ),
+  );
+  manualCompactFiber = fiber;
+  const exit = await Effect.runPromise(Fiber.await(fiber));
+  manualCompactFiber = null;
+  if (Exit.isFailure(exit)) {
+    if (Cause.isInterruptedOnly(exit.cause)) {
+      return "Compaction cancelled."; // the user pressed ESC; no fold applied
+    }
+    warn("host", "compaction failed", { cause: Cause.pretty(exit.cause) });
+    return "Compaction failed.";
+  }
+  const event = exit.value;
+  if (!event) {
+    return "Nothing to compact — no completed turns to fold yet.";
+  }
+  await emit(event); // the echo admits the fold and updates the budget estimate
+  return `✓ compacted ~${Number(event.payload.tokensBefore)} → ~${Number(event.payload.tokensAfter)} tokens`;
+}
+
+/**
  * Runs an immediate host command and publishes its result. Unlike a user.message
  * this never touches the model or the turn queue - it executes now, even while a
  * turn is streaming, and answers with a single command.result.
@@ -274,16 +545,27 @@ async function runCommand(name: string, args: string): Promise<void> {
     role: lease.isLeader() ? "leader" : "standby",
     host: hostState(),
     lease: lease.debugInfo(Date.now()),
+    compact: forceCompact,
   });
   await emit(events.commandResult({ command: name, text, ok }));
 }
 
 /** Admits one event to the prompt projection and recomputes the derived history.
- *  The fold (mapping, artifacts, blank-filter, user collapse, /clear reset) is owned
- *  by buildHistory; this is the only place history changes. */
+ *  The fold (mapping, artifacts, blank-filter, user collapse, /clear reset, tool reconstruction)
+ *  is owned by buildHistory; this is the only place `history` is rebuilt. */
 function admit(event: SessionEvent): void {
   historyEvents.push(event);
   history = buildHistory(historyEvents, { selfProducerId: PRODUCER_ID });
+}
+
+/** Pushes an event into the durable history WITHOUT rebuilding the projection - for events that
+ *  accumulate but only matter at a turn boundary: tool.started/completed (buildHistory reconstructs
+ *  them into the conversation and carries them across turns) and tasks.current (the compaction pin).
+ *  `history` is read only at turn boundaries, so the next admit (the turn's assistant.completed, then
+ *  the following user.message) rebuilds with them - a tool-heavy turn, or a burst of task updates,
+ *  never re-folds the whole log per event. */
+function recordEvent(event: SessionEvent): void {
+  historyEvents.push(event);
 }
 
 /** Applies one live or replayed session event to the host's in-memory state. */
@@ -294,7 +576,24 @@ function handleEvent(message: SessionEvent): void {
   }
   if (decoded.type === "user.message" && message.producerId !== PRODUCER_ID) {
     scheduler.submit(message);
+  } else if (decoded.type === "assistant.started") {
+    // Track the run as in flight (a started with no completion) so a later leader can reap it if a
+    // crash/reload leaves it dangling. Cleared on its completion below.
+    inFlightRuns.add(decoded.runId);
+    // Note the attempt so catch-up never re-runs this prompt after a restart (replayed too).
+    scheduler.noteAttempt(message.seq);
+  } else if (decoded.type === "assistant.progress") {
+    // Track the LIVE prompt size as the turn streams, so the compaction gate + /compact's reported
+    // before-size stay current even when the turn is CANCELLED (a cancel carries no usage of its
+    // own). Also stash the per-run usage so the cancel/reap completion can carry it.
+    if (decoded.usage) {
+      lastInput = decoded.usage.input;
+      lastWindow = decoded.usage.contextWindow;
+      lastUsageByRun.set(decoded.runId, { usage: decoded.usage, breakdown: decoded.breakdown });
+    }
   } else if (decoded.type === "assistant.completed") {
+    inFlightRuns.delete(decoded.runId); // the run finished (normally, cancelled, or reaped)
+    lastUsageByRun.delete(decoded.runId);
     // Invariant: history stays strictly paired - an assistant reply lands only on top
     // of the user turn it answers. A different role on top means the pairing the loop
     // depends on has drifted (e.g. a missed/duplicated turn). Checked against the
@@ -307,18 +606,66 @@ function handleEvent(message: SessionEvent): void {
       });
     }
     admit(message);
+    // Capture this turn's prompt size + window for the compaction gate, and clear the fold floor
+    // (a fresh turn moved the needle, so a fold worth trying may exist again).
+    if (decoded.usage) {
+      lastInput = decoded.usage.input;
+      lastWindow = decoded.usage.contextWindow;
+    }
+    compactionFloorReached = false;
     // The turn finished: note the answered seq, free the slot, and (live only) answer
     // whatever queued while it ran. Draining follows the completion event, not the fiber
     // exit, so the next turn's prompt view already includes this reply (just admitted).
     scheduler.recordAnswer(decoded.runId, message.seq);
     if (live) {
+      // drain() applies blocking-before to any queued prompt (it folds first if over budget);
+      // maybeCompact() then folds proactively in the idle slot when nothing is queued (D-041).
       scheduler.drain();
+      scheduler.maybeCompact();
     }
-  } else if (decoded.type === "user.cancel") {
-    // Abort the active turn if the cancel targets it, or if the browser asked to
-    // cancel "whatever is active" (empty runId, sent before assistant.started lands).
+  } else if (decoded.type === "context.compacted") {
+    // A fold landed (our own echo, or the leader's on a standby): admit it so the projection
+    // shrinks to pins + summary + recent, drop the budget estimate to its post-fold size, and
+    // release the compaction gate so any turn deferred behind it can now start.
+    admit(message);
+    lastInput = decoded.tokensAfter;
+    lastFold = {
+      throughSeq: decoded.throughSeq,
+      tokensBefore: decoded.tokensBefore,
+      tokensAfter: decoded.tokensAfter,
+    };
+    scheduler.finishCompaction();
+  } else if (decoded.type === "tool.started" || decoded.type === "tool.completed") {
+    // Record the turn's tool activity so buildHistory carries the calls + results into the next
+    // turn's prompt (the model keeps what it read until compaction folds it). Not re-projected per
+    // call; the turn's assistant.completed admit rebuilds with them.
+    recordEvent(message);
+  } else if (decoded.type === "user.cancel" && live && lease.isLeader()) {
+    // LIVE LEADER ONLY. Cancel is IMMEDIATE: publish the cancelled completion now - so every client
+    // frees this instant (the turn shows cancelled, the send queue drains) - and interrupt the fiber
+    // to tear the model request down. The fiber's own onExit completion is deduped, so the run closes
+    // exactly once. This also closes an ORPHAN (a dead run with no fiber): the emit alone ends it. An
+    // empty runId means "whatever is active" - close every in-flight run.
+    //
+    // The live+leader gate is load-bearing: a cancel is an ACTION, not state to rebuild. Its
+    // completions are already in the durable log; re-running this on replay would RE-EMIT a fresh
+    // cancelled burst for every in-flight run at that point - which is what made each host restart
+    // republish a wall of "cancelled" completions. Replay just lets those logged completions stand.
+    // Interrupt a MANUAL /compact if one is running (the user asked for it, so they can take it
+    // back). Automatic folds aren't tracked here, so they run to completion. The fold's bar vanishes
+    // via the web's user.cancel reap; nothing was emitted, so the context is unchanged.
+    if (manualCompactFiber) {
+      Effect.runFork(Fiber.interrupt(manualCompactFiber));
+    }
+    const targets = decoded.runId ? [decoded.runId] : [...inFlightRuns];
+    for (const runId of targets) {
+      closeRun(runId, "cancelled");
+    }
     scheduler.cancel(decoded.runId);
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
+    if (decoded.command === "/compact") {
+      compactPending = true; // cleared by its command.result; reaped if a restart interrupts it
+    }
     if (decoded.command === "/clear") {
       // Admit the clear so the projection resets from this point - applied on replay
       // too, so a reload/restart stays clean. The old events remain in the durable log
@@ -337,6 +684,12 @@ function handleEvent(message: SessionEvent): void {
         warn("host", "command failed", { command, error: msg(error) }),
       );
     }
+  } else if (decoded.type === "command.result") {
+    // A /compact resolved (✓ / nothing / cancelled / failed): it no longer needs a result. Tracked
+    // on replay too, so a fresh leader only reaps a genuinely-dangling /compact.
+    if (decoded.command === "/compact") {
+      compactPending = false;
+    }
   } else if (decoded.type === "editor.open" && message.producerId !== PRODUCER_ID) {
     // Side-channel action (like commands): only the live leader acts, never on
     // replay - opening a file is a one-shot effect, not state to rebuild.
@@ -347,6 +700,10 @@ function handleEvent(message: SessionEvent): void {
       );
     }
   } else if (decoded.type === "tasks.current") {
+    // Recorded WITHOUT a rebuild: the task list only matters as a compaction pin (history-projection)
+    // read at the next turn boundary, so a burst of task updates never re-folds the whole log per
+    // update - the next real admit (the turn's completion) picks up the latest tasks.
+    recordEvent(message);
     // Restore the checklist from the log on replay, and keep standbys in sync for
     // failover. The live leader owns the registry (it mutates it directly), so it
     // ignores the read-back of its own snapshot to avoid clobbering newer edits.
@@ -412,8 +769,13 @@ log("host", "starting", {
   providers: Object.keys(providers).join(","),
   default: DEFAULT_PROVIDER,
 });
-transport
-  .ensureSession(SESSION_ID)
+// Retry the initial ensureSession through a not-yet-ready store (the pnpm-dev startup race,
+// a transient blip) instead of exiting on the first "fetch failed" - matching the reconnect
+// resilience connect() already has for the live stream.
+ensureSessionWithRetry(() => transport.ensureSession(SESSION_ID), {
+  onRetry: (attempt, error) =>
+    warn("host", "session not ready; retrying", { attempt, error: msg(error) }),
+})
   .then(() => connect())
   .catch((error) => {
     warn("host", "startup failed", { error: msg(error) });

@@ -159,6 +159,25 @@ test("pendingCatchUp is null once the latest prompt has been answered", () => {
   assert.equal(h.scheduler.pendingCatchUp(), null);
 });
 
+test("catch-up does NOT re-run a prompt already attempted (orphaned by a crash/restart)", () => {
+  // The prompt was submitted and a turn STARTED for it (assistant.started -> noteAttempt), but the
+  // host restarted before any completion. On replay the prompt is unanswered - yet it must NOT be
+  // auto-re-run: the orphan reap closes it and the host idles. Without this, every restart loops,
+  // re-running and re-cancelling the same prompt.
+  const h = harness({ leader: false });
+  const p = userEv("read the whole codebase");
+  h.scheduler.submit(p);
+  h.scheduler.noteAttempt(p.seq + 1); // a turn's assistant.started landed (seq after the prompt)
+  assert.equal(h.scheduler.pendingCatchUp(), null, "an attempted prompt is never caught up");
+});
+
+test("catch-up DOES re-run a never-attempted prompt (arrived during a leadership gap)", () => {
+  const h = harness({ leader: false });
+  const p = userEv("hello");
+  h.scheduler.submit(p); // recorded while standby; no host ever started a turn for it
+  assert.equal(h.scheduler.pendingCatchUp(), p, "a never-attempted prompt is caught up");
+});
+
 test("drain holds the queue when not leader", () => {
   const h = harness();
   h.scheduler.submit(userEv("a")); // run0 active
@@ -188,4 +207,85 @@ test("reconnect clears the queue but leaves an in-flight run intact", () => {
   h.scheduler.resetForReconnect();
   assert.equal(h.scheduler.isBusy(), true); // active run survives reconnect
   assert.equal(h.scheduler.debug().queued, 0); // queue cleared
+});
+
+/**
+ * Compaction gating (D-041): the scheduler holds turns behind a fold. `needsCompaction` reports
+ * whether the projection is over budget (the host flips it false after a fold) and `compact` kicks
+ * one off; `finishCompaction` releases the gate. Exercised as a state machine with stub deps.
+ */
+function compactionHarness() {
+  const started: SessionEvent[] = [];
+  let overBudget = false;
+  let compactCalls = 0;
+  const scheduler = new TurnScheduler({
+    isLeader: () => true,
+    start: (event): ActiveTurn | null => {
+      started.push(event);
+      return { runId: `run${started.length - 1}`, cancel: () => {} };
+    },
+    needsCompaction: () => overBudget,
+    compact: () => {
+      compactCalls += 1;
+    },
+  });
+  return {
+    scheduler,
+    started,
+    setOverBudget: (v: boolean) => {
+      overBudget = v;
+    },
+    compactCalls: () => compactCalls,
+  };
+}
+
+test("blocking-before: an over-budget submit defers behind a fold, then starts on finish", () => {
+  const h = compactionHarness();
+  h.setOverBudget(true);
+  const a = userEv("a");
+
+  h.scheduler.submit(a);
+  // Over budget: a fold is kicked off and the turn is held - it must NOT start over budget.
+  assert.equal(h.compactCalls(), 1, "a blocking fold was kicked off");
+  assert.deepEqual(h.started, [], "the turn did not start over budget");
+  assert.equal(h.scheduler.isBusy(), false);
+  assert.equal(h.scheduler.debug().compacting, true);
+
+  // A prompt arriving mid-fold is held too.
+  h.scheduler.submit(userEv("b"));
+  assert.equal(h.scheduler.debug().queued, 2, "deferred turn + the mid-fold prompt both wait");
+
+  // The host folds, flips the budget, and signals: the deferred turn starts (b stays queued).
+  h.setOverBudget(false);
+  h.scheduler.finishCompaction();
+  assert.deepEqual(h.started, [a], "the deferred turn starts once under budget");
+  assert.equal(h.scheduler.isBusy(), true);
+  assert.equal(h.scheduler.debug().compacting, false);
+});
+
+test("background-after: maybeCompact folds proactively when idle and over budget", () => {
+  const h = compactionHarness();
+
+  h.scheduler.maybeCompact();
+  assert.equal(h.compactCalls(), 0, "under budget: nothing to do");
+
+  h.setOverBudget(true);
+  h.scheduler.maybeCompact();
+  assert.equal(h.compactCalls(), 1, "over budget + idle: a proactive fold runs");
+  assert.equal(h.scheduler.debug().compacting, true);
+  assert.deepEqual(h.started, [], "no turn started for a background fold");
+
+  // Nothing queued: finishing just clears the gate.
+  h.setOverBudget(false);
+  h.scheduler.finishCompaction();
+  assert.equal(h.scheduler.debug().compacting, false);
+});
+
+test("compaction gating is inert when the scheduler has no compaction deps", () => {
+  // The plain harness (no needsCompaction/compact) starts turns immediately - compaction is opt-in.
+  const h = harness();
+  h.scheduler.submit(userEv("a"));
+  assert.equal(h.scheduler.isBusy(), true);
+  h.scheduler.maybeCompact(); // no-op, no deps
+  assert.equal(h.scheduler.debug().compacting, false);
 });

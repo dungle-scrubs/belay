@@ -31,6 +31,9 @@ export interface CommandContext {
   readonly host?: Record<string, unknown>;
   /** Election internals (lease.debugInfo), for /doctor. */
   readonly lease?: Record<string, unknown>;
+  /** Forces one cross-turn compaction fold now and resolves with a human-readable result line
+   *  (D-040), for /compact. Absent when the host cannot compact (e.g. not the live leader). */
+  readonly compact?: () => Promise<string>;
 }
 
 interface Command {
@@ -117,6 +120,18 @@ export function buildCommandRegistry(): CommandRegistry {
     // The actual history reset happens in the host's event handler (so it applies on
     // replay too); this just confirms the action in the command lane.
     run: () => "✓ conversation cleared — starting fresh",
+  });
+
+  commands.push({
+    spec: { name: "/compact", summary: "Fold older turns into a summary to free context" },
+    // The fold itself (plan + summarize + emit context.compacted) runs in the host, since it
+    // needs the live event log + provider; this command just triggers it and reports the result.
+    run: async (_args, ctx) => {
+      if (!ctx.compact) {
+        return "Compaction is unavailable (only the live leader can compact).";
+      }
+      return ctx.compact();
+    },
   });
 
   commands.push({
