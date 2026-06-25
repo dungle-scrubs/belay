@@ -687,13 +687,10 @@ export function App() {
                       <div className="text-sm text-smui-red">cancelled</div>
                     ) : null;
 
-                  // The host closed this turn (a restart/crash reaped it mid-flight), not the user -
-                  // a muted note, NOT the red "cancelled", so a hot-reload never looks like an ESC.
+                  // The host closed this turn (a restart/crash reaped it mid-flight), not the user.
                   const interruptedNote =
                     message.kind === "assistant" && message.interrupted ? (
-                      <div className="text-sm text-muted-foreground">
-                        ⊘ interrupted · host restarted
-                      </div>
+                      <div className="text-sm text-smui-red">interrupted · host restarted</div>
                     ) : null;
 
                   const noReplyNote =
