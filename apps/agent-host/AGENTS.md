@@ -53,6 +53,22 @@ fights their design. Do not "fix" them into Effect:
 Observability tracing (`Effect.withSpan`, `Effect.log`) is a future add on the turn/tool
 Effects when an OTel exporter is wanted; until then the plain `log`/`warn` leaf stays.
 
+## Running the host locally
+
+The host loads your code at process start and holds it for its lifetime - it does **not**
+hot-apply source edits. After changing host code (anything the host imports under `src/`),
+**restart the host** for the change to take effect. The durable event log survives a
+restart, so the session continues from where it was; only the code is reloaded. There is no
+in-app restart control - stop and relaunch the process yourself
+(`pnpm --filter @trevor/agent-host start:op`, or whatever dev runner you use). `tsx watch`
+restarts on a file change but not on a clean exit, so don't rely on a self-exit to relaunch.
+
+Run **exactly one** host against a session. Multiple host processes contend for the same
+session lease and churn leadership, and every leadership change reaps in-flight runs - so a
+stray/orphaned host shows up as repeating bursts of `cancelled`/`interrupted` completions.
+If you see that, check for more than one host (`ps -Ao pid,ppid,command | grep agent-host`,
+watch for a process with `ppid 1`) and kill the extras.
+
 ## Testing
 
 Follow the project-wide testing doctrine in the repo-root
