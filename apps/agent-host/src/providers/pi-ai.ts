@@ -282,7 +282,7 @@ async function* piAiEvents<TApi extends Api>(
  * Codex resolves its OAuth key and looks up the registry model), then runs that model
  * through pi-ai under an AbortController whose abort is registered as a scoped finalizer,
  * so interrupting the consuming fiber tears the underlying pi-ai/LM Studio request down
- * cleanly (validated: A-004, scripts/spike-a004-interrupt.ts). A `buildModel` failure or a
+ * cleanly (validated: A-004, the hermetic interrupt test in test/turn.test.ts). A `buildModel` failure or a
  * thrown stream error rides the typed ProviderError `E` channel; a clean abort ends the
  * stream without failing.
  */
