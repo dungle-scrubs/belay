@@ -42,6 +42,8 @@ export interface ProviderModel {
   readonly model: string;
   readonly reasoningLevels: readonly string[];
   readonly defaultReasoning: string;
+  /** Where the model runs: "local" (on this machine, e.g. LM Studio) or "cloud". */
+  readonly kind: "local" | "cloud";
 }
 
 /**
@@ -171,6 +173,7 @@ export const events = {
     error?: string;
     cancelled?: boolean;
     noReply?: boolean;
+    stepLimit?: number;
   }): TrevorEventInput => ({
     type: "assistant.completed",
     payload: {
@@ -181,6 +184,9 @@ export const events = {
       ...(p.error ? { error: p.error } : {}),
       ...(p.cancelled ? { cancelled: true } : {}),
       ...(p.noReply ? { noReply: true } : {}),
+      // Step count when the turn was budget-terminated (step backstop or context gate);
+      // omitted on a normal turn. A forced final answer still streams; this flags WHY.
+      ...(p.stepLimit ? { stepLimit: p.stepLimit } : {}),
     },
   }),
   /** User asked to cancel the active run (hard steering / ESC). */
@@ -416,6 +422,9 @@ function coerceProviderModels(value: unknown): Record<string, ProviderModel> {
       model: str(m.model, key),
       reasoningLevels: levels,
       defaultReasoning: optStr(m.defaultReasoning) ?? levels[0] ?? "",
+      // Default to "cloud": only an explicit "local" marks an on-machine model, so an
+      // older host that doesn't announce kind reads as cloud (never mislabeled local).
+      kind: m.kind === "local" ? "local" : "cloud",
     };
   }
   return out;
@@ -462,6 +471,8 @@ export type DecodedEvent =
       readonly error?: string;
       readonly cancelled: boolean;
       readonly noReply: boolean;
+      /** Steps run when the turn hit its budget (0 = not budget-terminated). */
+      readonly stepLimit: number;
     }
   | { readonly type: "user.cancel"; readonly runId: string }
   | { readonly type: "user.command"; readonly command: string; readonly args: string }
@@ -560,6 +571,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         error: optStr(p.error),
         cancelled: p.cancelled === true,
         noReply: p.noReply === true,
+        stepLimit: typeof p.stepLimit === "number" ? p.stepLimit : 0,
       };
     case "user.cancel":
       return { type: "user.cancel", runId };

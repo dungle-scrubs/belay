@@ -56,6 +56,7 @@ interface ModelInfo {
  */
 export class LmStudioProvider extends DescribableProvider {
   readonly id = "lmstudio";
+  readonly kind = "local" as const;
   readonly label: string;
   readonly model: string;
   /** Local qwen thinking is binary (enable_thinking on/off); "off" = no reasoning. */

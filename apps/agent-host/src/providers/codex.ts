@@ -32,6 +32,7 @@ export interface CodexConfig {
  */
 export class CodexProvider extends DescribableProvider {
   readonly id = "codex";
+  readonly kind = "cloud" as const;
   readonly label: string;
   readonly model: string;
   /** GPT-5.x reasoning is graduated (minimal..xhigh) and read from the pi-ai model. */

@@ -10,7 +10,7 @@ import {
 import { Effect, Stream } from "effect";
 import { debug } from "../log";
 import { msg } from "../tools/shared";
-import { ProviderUnavailable } from "./errors";
+import { ProviderAuthError, ProviderUnavailable } from "./errors";
 import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
 
@@ -29,6 +29,16 @@ function parseArgs(raw: string): Record<string, unknown> {
  */
 const promptTooBig = (promptTokensEst: number, contextWindow: number): string =>
   `the prompt (~${promptTokensEst} tokens) is too big for the ${contextWindow}-token context window`;
+
+/**
+ * A provider stream error that means "the credential was refused", not "the backend is
+ * down" - an expired/revoked/invalid API key or OAuth token. We classify it from the
+ * error text (status 401/403, "unauthorized", "invalid api key", "authentication",
+ * "expired") so a bad key surfaces as ProviderAuthError ("auth failed - re-auth"), the
+ * actionable message, instead of a generic ProviderUnavailable.
+ */
+const AUTH_ERROR =
+  /\b401\b|\b403\b|unauthor|forbidden|invalid[\s_-]*(api[\s_-]*key|token|x-api-key)|authentication|api[\s_-]*key.*(invalid|expired|missing)|token.*expired|expired.*token/i;
 
 type TextBlock = { type: "text"; text: string };
 type ImageBlock = { type: "image"; data: string; mimeType: string };
@@ -120,6 +130,7 @@ async function* piAiEvents<TApi extends Api>(
     readonly apiKey: string;
     readonly contextWindow: number;
     readonly reasoning?: ThinkingLevel;
+    readonly provider: string;
     readonly signal: AbortSignal;
   },
 ): AsyncIterable<ProviderEvent> {
@@ -254,6 +265,11 @@ async function* piAiEvents<TApi extends Api>(
         };
         return;
       }
+      // A refused credential is an auth failure, not an outage: surface it as such so the
+      // UI tells the user to re-auth rather than "provider unavailable".
+      if (AUTH_ERROR.test(detail)) {
+        throw new ProviderAuthError({ provider: options.provider, detail });
+      }
       throw new Error(detail);
     }
   }
@@ -288,8 +304,17 @@ export function streamPiAiModel<TApi extends Api>(
       const controller = new AbortController();
       yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()));
       return Stream.fromAsyncIterable(
-        piAiEvents(model, messages, tools, { ...streamOptions, signal: controller.signal }),
-        (cause) => new ProviderUnavailable({ provider, detail: msg(cause), cause }),
+        piAiEvents(model, messages, tools, {
+          ...streamOptions,
+          provider,
+          signal: controller.signal,
+        }),
+        // A classified auth failure (see AUTH_ERROR) rides through as-is; anything else is
+        // an outage -> ProviderUnavailable.
+        (cause) =>
+          cause instanceof ProviderAuthError
+            ? cause
+            : new ProviderUnavailable({ provider, detail: msg(cause), cause }),
       );
     }),
   );

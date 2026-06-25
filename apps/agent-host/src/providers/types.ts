@@ -104,9 +104,11 @@ export interface Provider {
   readonly model: string;
   readonly reasoningLevels: readonly string[];
   readonly defaultReasoning: string;
+  /** Where the model runs: "local" (on this machine) or "cloud" (a remote API). */
+  readonly kind: "local" | "cloud";
   /**
    * This provider's wire descriptor for the host.online announcement: label, model id,
-   * and reasoning options. Implemented once (DescribableProvider) from the four fields
+   * reasoning options, and kind. Implemented once (DescribableProvider) from the fields
    * above, so a new ProviderModel field is a type error here, not a silent omission.
    */
   describe(): ProviderModel;
@@ -144,6 +146,7 @@ export abstract class DescribableProvider implements Provider {
   abstract readonly model: string;
   abstract readonly reasoningLevels: readonly string[];
   abstract readonly defaultReasoning: string;
+  abstract readonly kind: "local" | "cloud";
 
   describe(): ProviderModel {
     return {
@@ -151,6 +154,7 @@ export abstract class DescribableProvider implements Provider {
       model: this.model,
       reasoningLevels: this.reasoningLevels,
       defaultReasoning: this.defaultReasoning,
+      kind: this.kind,
     };
   }
 
