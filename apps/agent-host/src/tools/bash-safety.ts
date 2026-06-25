@@ -155,10 +155,12 @@ function basename(token: string): string {
 
 function normalizePath(token: string, home: string): string {
   let value = token;
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: matching the literal shell string ${HOME}, not a JS template.
   if (value === "~" || value === "$HOME" || value === "${HOME}") {
     value = home;
   } else if (value.startsWith("~/")) {
     value = home + value.slice(1);
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: matching the literal shell string ${HOME}/, not a JS template.
   } else if (value.startsWith("$HOME/") || value.startsWith("${HOME}/")) {
     value = home + value.slice(value.indexOf("/"));
   }

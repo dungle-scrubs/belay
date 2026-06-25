@@ -22,6 +22,7 @@ export const grepTool: Tool<typeof Params.Type> = {
   description:
     "Search workspace file contents for a JS regular expression. Optionally restrict files with 'glob' (default '**/*'). Returns path:line:text matches.",
   params: Params,
+  readOnly: true,
   execute: (args) =>
     Effect.gen(function* () {
       let regex: RegExp;

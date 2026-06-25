@@ -1,12 +1,15 @@
 import { Effect, Option, Stream } from "effect";
 import type { ChatMessage, ModelEvent, Provider, ProviderError, ToolCall } from "../providers";
-import { executeTool, TOOL_DEFS } from "../tools";
-import { reduceReasoning, trimLargestToolResult } from "./recovery";
+import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
+import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
 
 /** Runaway backstop, NOT the everyday governor: it only bounds a pathological tool loop
  *  that never converges. The real budget is context pressure (CONTEXT_BUDGET_FRACTION below),
  *  so a turn normally stops because it's out of ROOM, never at an arbitrary step count (D-053). */
 const MAX_STEPS = 32;
+/** Max read-only tool calls a single step runs concurrently (D-050). Mutating calls are never
+ *  part of a concurrent run - each is a serial barrier - so this only bounds in-flight reads. */
+const TOOL_CONCURRENCY = 8;
 /** Stop opening new tool rounds once the latest prompt reaches this fraction of the model's
  *  context window, and force a final answer instead. Falls back to MAX_STEPS-only when the
  *  window is unknown (0). This is the governor; MAX_STEPS is the backstop (D-053). */
@@ -14,6 +17,55 @@ const CONTEXT_BUDGET_FRACTION = 0.8;
 /** Per-turn cap on in-loop overflow-recovery adjustments, independent of MAX_STEPS so
  *  recovery can never spin (D-037). */
 const MAX_RECOVERY = 2;
+
+/**
+ * Heuristic: did the model END a turn by ANNOUNCING an imminent action without calling a tool?
+ * A weaker model sometimes trails off ("Let me continue reading the remaining files:") and stops
+ * instead of emitting the next tool batch, which the loop would otherwise accept as a final answer.
+ * Deliberately conservative - it only fires on a clear trailing announcement (a dangling colon, or a
+ * closing "let me read…/I'll continue…" clause), so a genuine final answer is never mistaken for one.
+ * Worst case on a false positive is one wasted nudge step, bounded to once per turn.
+ */
+export function looksUnfinished(text: string): boolean {
+  const trimmed = text.trimEnd();
+  if (trimmed.endsWith(":")) {
+    return true; // "...let me read these files:" - about to list/act, then stopped
+  }
+  const tail = trimmed.slice(-160).toLowerCase();
+  return /\b(let me|i'?ll|i will|now i|next,? i)\b.{0,90}\b(continue|read|look|check|explore|examine|review|proceed|start|dive|go through)\b[^.!?]*$/.test(
+    tail,
+  );
+}
+
+/** One ordered segment of a step's tool batch: a maximal run of consecutive read-only calls
+ *  (run concurrently) OR a single mutating call (a serial barrier). Each entry keeps the call's
+ *  original index so its result commits to the right `conversation` slot in CALL order. */
+type ToolSegment = ReadonlyArray<{ readonly call: ToolCall; readonly index: number }>;
+
+/**
+ * Partitions a step's tool batch into ordered segments for concurrent dispatch (D-050).
+ * Consecutive read-only calls (per `READ_ONLY_TOOLS`) coalesce into one maximal run; every
+ * mutating call breaks the run and forms its own singleton barrier. Segment order preserves
+ * emission order, so a mutating call still executes in place relative to the reads around it.
+ */
+export function partitionToolCalls(calls: readonly ToolCall[]): readonly ToolSegment[] {
+  const segments: { call: ToolCall; index: number }[][] = [];
+  let run: { call: ToolCall; index: number }[] | null = null;
+  calls.forEach((call, index) => {
+    if (READ_ONLY_TOOLS.has(call.name)) {
+      if (!run) {
+        run = [];
+        segments.push(run);
+      }
+      run.push({ call, index });
+    } else {
+      // A mutating call is its own barrier and ends any open read run.
+      segments.push([{ call, index }]);
+      run = null;
+    }
+  });
+  return segments;
+}
 
 /** One event from the agent loop: the shared model-step events (`ModelEvent`: text,
  *  thinking, usage, overflow) forwarded unchanged from the provider, plus the loop-only
@@ -57,6 +109,9 @@ export function runAgent(
   // tool calls). A single nudge often gets it to synthesize; if it stays empty we
   // surface it rather than ending silently.
   let emptyRetried = false;
+  // One retry budget for a turn that ends with text but NO tool call where the text trails off
+  // mid-task ("let me continue reading…") instead of finishing - nudge it once to actually act.
+  let continueRetried = false;
 
   // Graceful overflow recovery (D-034..D-038): in-loop, per-turn, cheap rungs only,
   // bounded so it can never spin. Recovery adjusts the reasoning level and the in-loop
@@ -133,9 +188,7 @@ export function runAgent(
           "You have reached your tool-call budget for this turn. Do not call any more tools. " +
           "Answer the original request now, as completely as you can from what you have already gathered.",
       });
-      const synthReasoning = provider.reasoningLevels.includes("off")
-        ? "off"
-        : provider.reasoningLevels[0];
+      const synthReasoning = cheapestReasoning(provider.reasoningLevels);
       let answer = "";
       const model = provider.stream(conversation, [], synthReasoning).pipe(
         Stream.filterMap((event) => {
@@ -237,6 +290,19 @@ export function runAgent(
               }
               return Stream.succeed<AgentEvent>({ type: "empty" });
             }
+            // Non-empty text, no tool call. Normally this IS the final answer - but if the text
+            // trails off announcing more work it never did, nudge it once to carry it out. If it
+            // still answers without tools after the nudge, accept it (bounded, can't loop).
+            if (!continueRetried && looksUnfinished(assistantText)) {
+              continueRetried = true;
+              conversation.push({ role: "assistant", content: assistantText });
+              conversation.push({
+                role: "user",
+                content:
+                  "You ended by describing work without doing it. Call the tools to carry out what you just described now, or give your final answer - do not announce actions you do not take.",
+              });
+              return step(n);
+            }
             return Stream.empty;
           }
           conversation.push({
@@ -244,29 +310,66 @@ export function runAgent(
             content: assistantText,
             toolCalls: [...toolCalls],
           });
-          const toolRuns = toolCalls.map((call) =>
-            Stream.concat(
-              Stream.succeed<AgentEvent>({ type: "tool_start", call }),
-              Stream.fromEffect(
-                executeTool(call.name, call.arguments, runId).pipe(
-                  Effect.map((result): AgentEvent => {
-                    conversation.push({
-                      role: "tool",
-                      content: result,
-                      toolCallId: call.id,
-                      name: call.name,
-                    });
-                    return { type: "tool_end", call, result };
-                  }),
-                ),
+          // Each call writes its result into an index-keyed slot instead of pushing to
+          // `conversation` on completion: concurrent read children finish in any order, but
+          // the slots commit to history deterministically in CALL order after the batch drains
+          // (so recovery + the next step always see one canonical, call-ordered conversation).
+          const slots: string[] = new Array(toolCalls.length);
+
+          // One call's execution as a Stream: run the tool, store its result in the slot, emit
+          // tool_end. tool_start is emitted separately (hoisted ahead of the merge, in call
+          // order) so the transcript shows every read card in call order even though the
+          // executes overlap; only the result-bearing tool_end rides out in completion order,
+          // which the web tolerates by keying results on call.id (D-050 / M4).
+          const execute = (
+            call: ToolCall,
+            index: number,
+          ): Stream.Stream<AgentEvent, ProviderError> =>
+            Stream.fromEffect(
+              executeTool(call.name, call.arguments, runId).pipe(
+                Effect.map((result): AgentEvent => {
+                  slots[index] = result;
+                  return { type: "tool_end", call, result };
+                }),
               ),
-            ),
-          );
-          const tools = toolRuns.reduce(
-            (acc, one) => Stream.concat(acc, one),
+            );
+
+          // Partition into ordered segments (maximal read-only runs vs single mutating barriers)
+          // and run them back-to-back. Within a read run the executes merge, bounded by
+          // TOOL_CONCURRENCY; a barrier is a one-element merge, so it runs alone. Because the
+          // segments are concatenated, a mutating call never overlaps the reads around it - two
+          // edits to one path apply in call order with no lost update (D-050 / M3).
+          const batch = partitionToolCalls(toolCalls).reduce(
+            (acc, segment) => {
+              const starts = Stream.fromIterable(
+                segment.map(({ call }): AgentEvent => ({ type: "tool_start", call })),
+              );
+              const executes = Stream.mergeAll(
+                segment.map(({ call, index }) => execute(call, index)),
+                { concurrency: TOOL_CONCURRENCY },
+              );
+              return Stream.concat(acc, Stream.concat(starts, executes));
+            },
             Stream.empty as Stream.Stream<AgentEvent, ProviderError>,
           );
-          return Stream.concat(tools, step(n + 1));
+
+          // Commit the slots to `conversation` in CALL order once the whole batch has drained,
+          // then open the next step - so step(n+1) reads a fully-committed, deterministically
+          // ordered conversation regardless of which reads finished first.
+          const commit = Stream.unwrap(
+            Effect.sync(() => {
+              toolCalls.forEach((call, i) => {
+                conversation.push({
+                  role: "tool",
+                  content: slots[i] ?? "",
+                  toolCallId: call.id,
+                  name: call.name,
+                });
+              });
+              return step(n + 1);
+            }),
+          );
+          return Stream.concat(batch, commit);
         }),
       );
 

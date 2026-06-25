@@ -12,5 +12,6 @@ export const readTool: Tool<typeof Params.Type> = {
   name: "read",
   description: "Read a UTF-8 text file and return its contents.",
   params: Params,
+  readOnly: true,
   execute: (args) => tryTool("read", () => readFile(args.path, "utf8")).pipe(Effect.map(cap)),
 };

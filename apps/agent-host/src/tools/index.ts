@@ -62,6 +62,16 @@ export function toParametersJsonSchema(
   return rest;
 }
 
+/**
+ * Names of the tools the loop may run concurrently, derived by filtering `TOOLS` on the
+ * `readOnly` flag - never a hardcoded list, so a new read-only tool joins the set just by
+ * declaring `readOnly: true`. A tool that leaves the flag unset is a mutating serial barrier
+ * and is absent here. The loop partitions a step's tool batch against this set (D-050).
+ */
+export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(
+  TOOLS.filter((tool) => tool.readOnly).map((tool) => tool.name),
+);
+
 /** Tool definitions advertised to the model (parameters derived from each tool's schema). */
 export const TOOL_DEFS = TOOLS.map((tool) => ({
   name: tool.name,

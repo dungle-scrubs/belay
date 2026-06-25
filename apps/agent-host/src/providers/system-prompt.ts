@@ -38,12 +38,14 @@ const CODING_GUIDANCE = [
   "Do not revert, overwrite, or discard the user's changes unless they explicitly ask for that exact operation.",
   "Avoid destructive shell commands such as git reset --hard, git checkout --, git clean, or force push unless the user explicitly requests that operation.",
   "When asked to implement a change, carry it through with edits and appropriate verification before reporting completion.",
+  "Never end a turn by announcing an action you then do not take ('let me read...', 'let me continue...'): in the same step, actually call the tools to do it. Only stop when the task is done or you need the user - and then give a real final answer, not a promise to continue.",
 ] as const;
 
 /** How to pick between this host's tools, and the workspace confinement contract. */
 const TOOL_SELECTION_GUIDANCE = [
   "Prefer read, write, and edit over bash when a dedicated file tool fits the task.",
   "Use grep for exact strings, symbols, error text, or regular expressions, and glob for path or filename discovery.",
+  "Independent read-only lookups (read, glob, grep, web_search) run in parallel when you request several in a single step, so batch them together instead of one at a time; edits, writes, and bash run sequentially, so issue those one per step.",
   "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
   CONFINEMENT_GUIDANCE,
   "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
@@ -63,6 +65,7 @@ const REPO_GUARDRAILS = [
   "When the user names a path or search target, act on it with glob or grep instead of asking for clarification.",
   "Use '.' or a real existing path for the workspace root; never invent placeholder paths like /path/to/repo.",
   "For codebase structure reviews, begin from existing top-level files like README.md or AGENTS.md; do not assume directories such as src/ exist.",
+  "Do not start discovery with the broad glob '**/*'; it returns a capped, partial slice. Begin with top-level files or a targeted pattern (a subdirectory or extension, e.g. src/**/*.ts) and widen only as needed.",
 ] as const;
 
 /**

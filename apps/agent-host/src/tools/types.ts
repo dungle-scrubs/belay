@@ -22,5 +22,12 @@ export interface Tool<A = unknown> {
   // wire but present after decode), so it is intentionally erased here.
   // biome-ignore lint/suspicious/noExplicitAny: the schema's Encoded type is erased; only A matters.
   readonly params: Schema.Schema<A, any>;
+  /**
+   * Whether the tool only reads state and never mutates the workspace. Defaults to false
+   * when unset: an unflagged tool is treated as a mutating serial barrier. The agent loop
+   * runs a maximal run of `readOnly` calls concurrently, but executes any unflagged tool
+   * alone in emission order. Only set this `true` for a tool with no observable side effects.
+   */
+  readonly readOnly?: boolean;
   execute(args: A): Effect.Effect<string, ToolError>;
 }

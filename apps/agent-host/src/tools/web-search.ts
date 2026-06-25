@@ -66,6 +66,7 @@ export const webSearchTool: Tool<typeof Params.Type> = {
     "BRAVE_API_KEY or SERPER_API_KEY in the host environment. Returns JSON: " +
     "{provider, query, results: [{title, url, snippet, published}]}.",
   params: Params,
+  readOnly: true,
   execute: (args) => {
     const { query, count, freshness } = args;
     return webSearch({ query, count, freshness }).pipe(
