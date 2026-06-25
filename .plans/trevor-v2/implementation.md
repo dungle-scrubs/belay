@@ -101,7 +101,7 @@ what V2's scope cuts changed.
 | **Participant** | Any client attached to a Richter session (host, browser, observer) | Capability-scoped (D-019) |
 | **Provider** | Routable target (LM Studio local, Codex/pi-ai cloud) | <!-- D-032 --> LM Studio + Codex/pi-ai only |
 | **Adapter** | Transport to reach a provider (OpenAI-compat HTTP, SDK, …) - never collapse with provider | - |
-| **Routing** | Selection of a model for a turn | <!-- D-032 --> Minimal: main/ghost as ordered model arrays, tried in order, offline→local. No engine. |
+| **Routing** | Selection of a model for a turn | <!-- D-032 --> Minimal: main/ghost as ordered model arrays, tried in order, offline->local. No engine. <!-- D-060 --> "Offline" means host-observed WAN/cloud reachability failure, not just browser `navigator.onLine` or a lost local host/session socket. |
 | **Work kind** | `chat`, `plan`, `analysis`, `implement`, `review` | <!-- D-039 --> Defined but **inert** in V2 - not wired to routing/sampling/prompts; revisit later |
 | **Execution mode** | `direct`, `delegate_inline`, `delegate_background` | <!-- D-047 --> `direct` now; **inline (sync) + background (async)** being built (D-047); teams deferred |
 | **Tool** | Executable capability owned by a run (read, edit, bash, rg, …) | - |
@@ -496,16 +496,79 @@ to the main turn (a librarian who reads the chapter around the page and hands ba
 - **Depends on:** the subagents feature (isolation) + the D-042 fold manifest (anchors). Distinct from the
   §7 backlog "Code retrieval / search" row, which searches the *codebase*, not the conversation log.
 
+### Deferred: WAN reachability + offline local fallback <!-- D-060 -->
+
+This is the concrete version of the old "offline detection & recovery" backlog item. It is **not shipped yet**:
+today the app can observe local session transport status, live host presence, and provider-stream failures, but it
+does not proactively know whether the host can reach the public internet beyond the LAN before starting a cloud
+turn.
+
+- <!-- D-060 --> **Host-owned WAN status, not browser-owned.** The host decides whether cloud is reachable,
+  because the host is the process that calls pi-ai/cloud providers. Browser `navigator.onLine` is at most a UI hint:
+  it can report a network interface while DNS/WAN/captive portal is broken, and in remote/multi-device setups it
+  describes the browser machine, not necessarily the host machine.
+- **Separate local transport from internet reachability.** A closed browser/session WebSocket, a missing host, and
+  WAN outage are different states with different fixes. Do not infer "internet offline" from local session-store or
+  Richter disconnect alone. Keep host presence/status UI separate from cloud reachability notices.
+- **Two checks, two meanings.** Add a host-side connectivity service with (1) a small WAN probe (DNS + HTTPS to
+  configured public endpoints, cached briefly, e.g. 10-30s) and (2) provider-specific reachability from actual
+  provider failures/readiness. WAN online does not imply a given provider is healthy; provider down does not imply
+  the internet is gone.
+- **Pre-turn fallback.** If the selected provider is `kind: "cloud"` and the cached host WAN/cloud status is
+  offline or provider-unreachable, start the turn on the local default provider instead of spending a failed attempt
+  on cloud. Preserve the user's selected provider in preferences; fallback is a per-turn execution decision, not a
+  silent permanent preference rewrite.
+- **Reactive fallback.** If a cloud stream fails mid-turn with `ProviderUnavailable`, retry the same prompt once on
+  the local default provider. Do **not** fallback on `ProviderAuthError`; auth means re-auth or credentials repair,
+  not internet outage. Avoid retry loops by recording the fallback attempt on the run.
+- **User-visible durable notice.** Emit an event such as `assistant.providerFallback { runId, from, to, reason,
+  source }`, where `source` distinguishes `wan_probe`, `provider_unavailable`, and perhaps `manual_override`.
+  The web renders it as an inline Alert before local output streams, so the transcript explains why the model changed.
+- **Doctor/debug surface.** `/doctor` should show host WAN status, last probe time, last probe error, provider
+  reachability/auth classification, and current fallback target. Logs should correlate probe/fallback decisions by
+  run id without dumping credentials or full request payloads.
+- **Validation target.** Tests should cover cloud-selected + WAN-offline pre-turn fallback, cloud stream
+  `ProviderUnavailable` reactive fallback, no fallback for auth errors, local provider no-op, and UI rendering of
+  the durable fallback notice. Manual smoke should include disabling WAN while local LM Studio and the session store
+  remain reachable.
+
+### Later: browser/terminal session manager <!-- D-061 -->
+
+Trevor should support the browser workflow without losing the old terminal ergonomics: from any project directory,
+the user can launch or attach Trevor and land in a browser session whose host is rooted at that directory. This is
+**not shipped yet** and does not change the current `SESSION_ID` + `TREVOR_WORKSPACE` behavior.
+
+- <!-- D-061 --> **Cwd-targeted launch from any terminal directory.** Add a terminal entrypoint (name TBD) that
+  resolves the invoking shell's cwd, creates or reuses a session bound to that absolute directory, starts or attaches
+  the matching host runtime, and opens the web UI directly to that session. The cwd must be recorded as session
+  metadata, not inferred from whatever directory the monorepo dev script happened to use.
+- **Browser-created sessions.** The web UI gains a create-session flow that accepts a target folder, creates a new
+  durable session for that folder, starts the corresponding host runtime through the available supervisor/launcher,
+  and navigates into the session once the host announces `host.online`.
+- **Session navigation.** The UI needs a first-class session list/switcher showing session id, cwd/workspace,
+  host presence, active/queued state, and recent activity. URL `?session=` remains a deep-link mechanism, but not the
+  only way to move between sessions.
+- **Kill/stop from terminal and UI.** Add explicit session termination controls in both surfaces: terminal command(s)
+  to list/open/kill sessions, and UI actions to stop a session's host runtime and mark or archive the browser-visible
+  session. Killing a host is lifecycle management; it must not mutate or delete the durable session log by accident.
+- **Relationship to Phase 3.** This dovetails with the desktop shell's one-host-per-session/cwd model (D-021-D-024),
+  but may ship earlier as a browser-era local launcher/supervisor if that becomes the cleaner bridge. Either way, it
+  must preserve D-014: browser and host still communicate only through the session log; any launcher/supervisor owns
+  lifecycle only.
+
 ### Then: remaining KEEP features not yet built
 
 Sequence as each is picked up (no hard order locked here):
 - **Auth / OAuth login** (`/login` for the cloud providers, PKCE, browser open) + an atomic auth store
   (H-019, H-155).
-- **Offline detection & recovery** (connectivity probe, offline notices, recovery loop) (H-026, H-093).
+- **Offline detection & recovery** is specified above as D-060: host-owned WAN reachability, cloud->local fallback,
+  and durable user notification (H-026, H-093).
 - **`web_search` / `web_fetch`** tools (fallbacks, policy, provenance) (H-113).
 - **`clipboard_write`** tool (H-111).
 - **Settings & preferences** (persistence + web overlay: model/provider, thinking mode) + deeper
   **usage/metrics** surface (H-031, H-034).
+- **Browser/terminal session manager** is specified above as D-061: cwd-targeted terminal launch, browser-created
+  folder sessions, session navigation, and kill/stop from terminal and UI.
 - **Output-style registry** (assistant styles, prompt overlay) (H-164).
 - **Doctor** depth (config/runtime/providers/workspace checks) (H-163).
 - **Capability manifest** (tools + commands + contracts, compact form) (H-156).
@@ -624,3 +687,15 @@ and Trevor V1's `ToolProgressMonitor`: pure per-turn controller, registry-derive
 redacted fingerprints, simple V2-local failure classification, warn-first with opt-in hard stops, and no
 durable Tool Progress Lessons in the first cut. New decisions **D-040…D-058 are authored here in markdown
 and still need syncing into `plan.db`** (canonical store)._
+
+_Updated 2026-06-25: **WAN reachability + offline local fallback** added as D-060. This clarifies that
+"offline" means host-observed public-internet/cloud reachability failure, not browser `navigator.onLine`,
+local session WebSocket closure, or host presence loss. The deferred feature covers host-side WAN/provider
+probes, pre-turn cloud->local fallback, one reactive fallback on `ProviderUnavailable`, no fallback on auth
+errors, a durable `assistant.providerFallback`-style notice, `/doctor` diagnostics, and validation against
+LAN-up/WAN-down scenarios. D-060 is authored here in markdown and still needs syncing into `plan.db`._
+
+_Updated 2026-06-25: **Browser/terminal session manager** added as D-061. This later feature covers
+cwd-targeted launch from any terminal directory, browser-created sessions for a specific folder, session
+navigation/switching, and explicit kill/stop controls from both terminal and UI. D-061 is authored here in
+markdown and still needs syncing into `plan.db` alongside D-040-D-060._

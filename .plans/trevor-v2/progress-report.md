@@ -114,7 +114,7 @@ Source: `apps/web` transcript/panel, `apps/agent-host/src/commands.ts` (`/doctor
 - Completed: 19
 - Remaining: 21
 - Current cutoff blockers: 21 (Phase 1 + Phase 2 M4 /doctor)
-- Accepted/deferred follow-up: 1 (Phase 2 M4: `/doctor` turn-termination reason - needs host-loop state; the `stepLimit` flag is already on the completion event)
+- Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
 > Phase 2 shipped 2026-06-25 ahead of Phase 1 (its silent turn-budget dead-ends were biting:
