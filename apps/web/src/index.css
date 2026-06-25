@@ -83,17 +83,17 @@
 
   /* shadcn base tokens -- dark (Polar Night) */
   --background: 213 16% 12%;
-  --foreground: 213 27% 88%;
+  --foreground: 213 27% 80%;
   --card: 217 16% 15.5%;
-  --card-foreground: 213 27% 88%;
+  --card-foreground: 213 27% 80%;
   --popover: 217 16% 15.5%;
-  --popover-foreground: 213 27% 88%;
+  --popover-foreground: 213 27% 80%;
   --primary: 193 44% 67%;
   --primary-foreground: 213 16% 12%;
   --secondary: 216 15% 19%;
-  --secondary-foreground: 213 27% 88%;
+  --secondary-foreground: 213 27% 80%;
   --muted: 216 15% 19%;
-  --muted-foreground: 213 14% 65%;
+  --muted-foreground: 213 14% 60%;
   --accent: 193 10% 16%;
   --accent-foreground: 193 44% 67%;
   --destructive: 355 52% 65%;
@@ -112,7 +112,7 @@
 
   /* Sidebar */
   --sidebar-background: 217 16% 15.5%;
-  --sidebar-foreground: 213 27% 88%;
+  --sidebar-foreground: 213 27% 80%;
   --sidebar-primary: 193 44% 67%;
   --sidebar-primary-foreground: 213 16% 12%;
   --sidebar-accent: 193 10% 16%;
