@@ -1,6 +1,7 @@
 import { BREAKDOWN_CATEGORIES, type BreakdownPool, type UsageBreakdown } from "@trevor/session";
 import { log } from "../log";
 import type { ChatMessage, Usage } from "../providers";
+import { estimateTokens as estTokens } from "./tokens";
 
 /**
  * Per-turn token-source breakdown - "where does the context go?" Sizes are
@@ -25,8 +26,6 @@ import type { ChatMessage, Usage } from "../providers";
  * so adding a category is one edit and the surfaces cannot drift.
  */
 
-const CHARS_PER_TOKEN = 4;
-const estTokens = (chars: number): number => Math.round(chars / CHARS_PER_TOKEN);
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;
 

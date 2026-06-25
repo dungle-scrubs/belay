@@ -1,5 +1,26 @@
-import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
+import {
+  type ArtifactRef,
+  decodeTrevorEvent,
+  type SessionEvent,
+  type TaskSnapshot,
+} from "@trevor/session";
 import type { ChatMessage } from "../providers";
+import { analyzeBaseline } from "./baseline";
+import { toolCallGrouper } from "./tool-messages";
+
+/**
+ * Renders a compaction fold into one synthetic assistant message: the rolling summary plus
+ * the live task list, clearly labelled so the model reads it as its own distilled progress.
+ * The original goal is pinned as a separate (user) message ahead of this one (see buildHistory).
+ */
+function renderFold(summary: string, tasks: readonly TaskSnapshot[]): string {
+  const parts = [`[Summary of earlier conversation]\n${summary}`];
+  if (tasks.length > 0) {
+    const lines = tasks.map((t) => `- [${t.status}] ${t.subject}`).join("\n");
+    parts.push(`[Current tasks]\n${lines}`);
+  }
+  return parts.join("\n\n");
+}
 
 /**
  * Projects the durable session event log into the host's prompt view: the
@@ -17,8 +38,22 @@ import type { ChatMessage } from "../providers";
  *     completion is dropped (saving it teaches the model empty replies are normal -
  *     the cascade behind silent dead-ends), and a reply with no preceding user turn
  *     is dropped so the prompt always opens on a user message
- *   - user.command "/clear" -> resets the projection to empty from that point
- *   - every other event (assistant.started/delta/thinking, tool.*, host.*) -> ignored
+ *   - tool.started / tool.completed -> RECONSTRUCTED into the conversation: a contiguous run of
+ *     tool.started becomes one `{role:"assistant", toolCalls}` message and the following
+ *     tool.completed become its `{role:"tool"}` results. Tool activity is carried ACROSS turns
+ *     (the mainstream-harness behaviour) - the model keeps what it read until compaction folds it -
+ *     not discarded the moment a turn ends. This is what makes the prompt grow, and therefore what
+ *     compaction (D-040) actually folds.
+ *   - tasks.current -> tracked as the live task-list pin (not a turn of its own)
+ *   - context.compacted -> the cross-turn fold (D-040): replaces the folded prefix with
+ *     the pins (original goal + task list) and the rolling summary, keeping the recent
+ *     post-throughSeq turns verbatim (with their tool results). The latest fold in the chain wins.
+ *   - user.command "/clear" -> resets the projection (and any fold + pins) to empty
+ *   - every other event (assistant.started/delta/thinking, host.*) -> ignored
+ *
+ * Compaction shapes ONLY this prompt projection. The durable log is never mutated and the
+ * UI transcript (transcript.ts) still renders the full history (D-042) - the fold is a
+ * prompt-budget device, not a history rewrite.
  *
  * `selfProducerId` excludes the host's own user.message / user.command echoes
  * (main.ts gates both on `producerId !== PRODUCER_ID`); assistant.completed is
@@ -27,50 +62,90 @@ import type { ChatMessage } from "../providers";
  * It is NOT responsible for scheduling - when a turn runs, deferring a mid-turn
  * prompt, or the one-turn-at-a-time gate all live with the turn machine, not here.
  *
- * Pure and total: the same event log always yields the same messages, which is what
- * makes it the natural home for compaction's prompt-builder (trevor-v2 D-040) - pins
- * + summary substitution + recent-verbatim become one more case in this fold.
+ * Pure and total: the same event log always yields the same messages.
  */
 export function buildHistory(
   events: readonly SessionEvent[],
   options: { readonly selfProducerId?: string } = {},
 ): ChatMessage[] {
   const { selfProducerId } = options;
+  const isSelf = (event: SessionEvent): boolean =>
+    selfProducerId !== undefined && event.producerId === selfProducerId;
+  const toUserTurn = (decoded: { text: string; artifacts: readonly ArtifactRef[] }): ChatMessage =>
+    decoded.artifacts.length
+      ? { role: "user", content: decoded.text, artifacts: decoded.artifacts }
+      : { role: "user", content: decoded.text };
+
+  // Decode the log ONCE. buildHistory runs on every admit, and it walks the log twice (the baseline
+  // analysis, then the projection), so decoding per pass would double the per-admit decode work over
+  // a growing log. Both index into this shared array instead.
+  const decodedEvents = events.map((event) => decodeTrevorEvent(event));
+
+  // The baseline (everything after the last /clear) and, within it, the latest fold plus the pins.
+  // Shared with the compaction planner (analyzeBaseline) so the fold and goal can't drift. The pins
+  // (D-040) re-enter the prompt OUTSIDE the fold: the original goal keeps the model anchored on the
+  // objective after older turns collapse to a summary, and the live task list rides in the fold.
+  const {
+    start: baselineStart,
+    fold,
+    goal: goalPin,
+    tasks,
+  } = analyzeBaseline(events, decodedEvents, selfProducerId);
+  const goal = goalPin ? toUserTurn(goalPin) : null;
+
+  // Pass 2 - project the baseline. When folded, the pins + rolling summary lead, then only the
+  // RECENT turns (seq > throughSeq) are projected verbatim; the summary already represents the
+  // rest. Skipping by seq (not by log position) keeps a turn that arrived AFTER throughSeq but
+  // BEFORE the fold event was written - the blocking-before case - in the recent run. With no
+  // fold, this is the plain projection, byte-for-byte the pre-compaction behaviour.
   const out: ChatMessage[] = [];
-  for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
-    if (!decoded) {
+  if (fold) {
+    if (goal) {
+      out.push(goal);
+    }
+    out.push({ role: "assistant", content: renderFold(fold.summary, tasks) });
+  }
+  const pushUser = (turn: ChatMessage): void => {
+    // Collapse consecutive user turns to the latest: with one-turn-at-a-time dispatch this only
+    // fires for a genuinely abandoned turn (e.g. the host crashed mid-answer) - feed the model
+    // the latest prompt, not two unanswered.
+    if (out[out.length - 1]?.role === "user") {
+      out[out.length - 1] = turn;
+    } else {
+      out.push(turn);
+    }
+  };
+  // Tool-call reconstruction (the shared rule - see toolCallGrouper). out.length > 0 gates a leading
+  // tool-call message so the prompt always opens on a user turn.
+  const tools = toolCallGrouper((message) => out.push(message));
+  for (let index = baselineStart; index < events.length; index += 1) {
+    const event = events[index];
+    const decoded = decodedEvents[index];
+    if (!event || !decoded) {
       continue;
     }
-    const fromSelf = selfProducerId !== undefined && event.producerId === selfProducerId;
+    if (fold && event.seq <= fold.throughSeq) {
+      continue; // folded away - the summary stands in for it
+    }
     if (decoded.type === "user.message") {
-      if (fromSelf) {
+      if (isSelf(event)) {
         continue;
       }
-      const turn: ChatMessage = decoded.artifacts.length
-        ? { role: "user", content: decoded.text, artifacts: decoded.artifacts }
-        : { role: "user", content: decoded.text };
-      // Collapse consecutive user turns to the latest: with one-turn-at-a-time
-      // dispatch this only fires for a genuinely abandoned turn (e.g. the host
-      // crashed mid-answer) - feed the model the latest prompt, not two unanswered.
-      if (out[out.length - 1]?.role === "user") {
-        out[out.length - 1] = turn;
-      } else {
-        out.push(turn);
-      }
+      tools.reset();
+      pushUser(toUserTurn(decoded));
+    } else if (decoded.type === "tool.started") {
+      tools.started(decoded.callId, decoded.name, decoded.arguments);
+    } else if (decoded.type === "tool.completed") {
+      tools.completed(decoded.callId, decoded.name, decoded.result, out.length > 0);
     } else if (decoded.type === "assistant.completed") {
-      // Only a real reply joins the prompt. `.trim()` catches the whitespace-only
-      // case a bare truthiness check would miss. A reply with no preceding user turn
-      // is dropped too: the prompt must open on a user message, so a stray leading
-      // assistant turn (e.g. a clear that landed mid-answer) never reaches the model.
+      tools.reset();
+      // Only a real reply joins the prompt. `.trim()` catches the whitespace-only case a bare
+      // truthiness check would miss. A reply with no preceding user turn is dropped too: the
+      // prompt must open on a user message, so a stray leading assistant turn (e.g. a clear that
+      // landed mid-answer) never reaches the model.
       if (decoded.text.trim() && out.length > 0) {
         out.push({ role: "assistant", content: decoded.text });
       }
-    } else if (decoded.type === "user.command" && !fromSelf && decoded.command === "/clear") {
-      // Reset the baseline so the prompt starts empty after a clear - applied on
-      // replay too, so a reload stays clean. The old events stay in the durable log
-      // but never reach the prompt again.
-      out.length = 0;
     }
   }
   return out;
