@@ -677,6 +677,38 @@ turning the chat input into a giant dropdown.
   each model's detected capabilities; persistence of active/default/recent/pinned models; backward-compatible
   provider selection during migration; and no turn blockage when a catalog refresh is slow or failed.
 
+### Then: provider-outage auto-reconnect recovery <!-- D-076 --> (Phase 4 M3)
+
+Sequenced as **Phase 4 M3** - right after the `@earendil-works/pi-ai` SDK migration (Phase 4 M1/M2),
+built on the maintained SDK's error surface. A provider connection that drops mid-turn is a transient
+fault to retry, not an instant dead end. Today a Codex WebSocket drop (or any non-auth, non-overflow
+stream failure) surfaces terminally as `${provider} unavailable: …` (`providers/errors.ts`) and the user
+must resend; this lets Trevor ride out a transient blip on its own. Sibling to the shipped graceful
+overflow recovery (D-034…D-038): same "adjust-and-continue, communicated, bounded" posture, applied to
+transport faults instead of context pressure.
+
+- <!-- D-076 --> **Scope - auto-retry the current step, bounded.** On a retryable provider outage the
+  agent loop re-runs the current step with bounded exponential backoff (3 attempts, ~300ms·900ms +
+  jitter), then surfaces terminal once the budget is spent. The retry budget is per-step and independent
+  of `MAX_STEPS` and the overflow recovery budget, so recovery cannot spin.
+- <!-- D-077 --> **Classification at the provider boundary.** A single retryable verdict is decided where
+  provider errors are built (the `ProviderErrorClassifier` seam): transient transport faults (WebSocket
+  drop, connection reset, timeout, HTTP 429/5xx) are `retryable`; auth and context-overflow keep their
+  existing dedicated handling (re-auth message / overflow recovery); every other outage stays terminal.
+  The classifier owns the retryable/terminal decision; the loop reads a boolean.
+- <!-- D-078 --> **Safety gate - only retry before output starts.** Auto-retry fires only when the failed
+  attempt emitted no tokens yet (`emitted == 0`). Once any text/thinking/tool-call has streamed, the turn
+  goes terminal and the user resends - a partial stream cannot be transparently resumed, only restarted,
+  which would duplicate output. Interrupts (ESC/cancel) ride the interrupt channel, not the error channel,
+  so they are never retried and cancel stays instant, even during a backoff wait.
+- <!-- D-079 --> **Communicated + observable.** Each retry emits a live `assistant.reconnecting {runId,
+  attempt, detail}` status (sibling to `assistant.recovered`), surfaced in Trevor web as a
+  "reconnecting… (attempt k/3)" marker; the terminal error block is unchanged and appears only when the
+  budget is exhausted or the failure is non-retryable. Correlated by `runId`.
+- **Validation.** Deterministic with `@effect/vitest` + `TestClock` (no real waits) and a fake provider
+  that fails N times then succeeds: a transient drop before the first token recovers transparently; a drop
+  after output goes terminal; an interrupt during backoff cancels cleanly; auth/overflow paths unchanged.
+
 ### Then: remaining KEEP features not yet built
 
 Sequence as each is picked up (no hard order locked here):
