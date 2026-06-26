@@ -2,6 +2,7 @@ import {
   type DoctorArea,
   type DoctorAreaId,
   type DoctorFinding,
+  type DoctorNextAction,
   type DoctorSnapshot,
   type DoctorStatus,
   type InternetSnapshot,
@@ -47,6 +48,7 @@ export interface DoctorProbeInput {
   };
   readonly storage: { readonly home: string; readonly writable: boolean };
   readonly build: DoctorBuildInfo;
+  readonly peripherals: DoctorPeripherals;
   readonly checkedAt: string;
 }
 
@@ -55,6 +57,26 @@ export interface DoctorBuildInfo {
   readonly version: string | null;
   readonly node: string;
   readonly runtime: string;
+}
+
+/**
+ * The lifecycle state of a peripheral subsystem (MCP / LSP / Hooks) the host may integrate (D-073).
+ * `unconfigured` is the steady "not set up" state (not an error); the rest carry an optional
+ * sanitized detail. This is the closed set of states the dashboard renders for these areas.
+ */
+export type PeripheralState =
+  | { readonly kind: "unconfigured" }
+  | { readonly kind: "ready"; readonly detail: string }
+  | { readonly kind: "unavailable"; readonly detail?: string }
+  | { readonly kind: "auth-needed"; readonly detail?: string }
+  | { readonly kind: "error"; readonly detail?: string }
+  | { readonly kind: "timeout"; readonly detail?: string };
+
+/** The peripheral-subsystem states fed to the MCP / LSP / Hooks areas. */
+export interface DoctorPeripherals {
+  readonly mcp: PeripheralState;
+  readonly lsp: PeripheralState;
+  readonly hooks: PeripheralState;
 }
 
 /** Rolls an area's findings into its header status (any error wins, then warn, then ok). */
@@ -244,6 +266,57 @@ function updatesArea(input: DoctorProbeInput): DoctorArea {
   return area("updates", "Updates / Version", version.message, [version, check], facts);
 }
 
+/**
+ * Builds a peripheral-subsystem area (MCP / LSP / Hooks, D-073) from its {@link PeripheralState}.
+ * Maps each state to a status + verdict + next action: `unconfigured`/`timeout` stay `not_checked`
+ * (nothing wrong / degraded, never a false error), `ready` is `ok`, `unavailable`/`auth-needed` warn
+ * with a repair action, and `error` is an error with an inspect action. Pure, so the mapping is
+ * unit-tested for every state.
+ */
+function peripheralArea(id: DoctorAreaId, label: string, state: PeripheralState): DoctorArea {
+  let status: DoctorStatus;
+  let message: string;
+  let nextAction: DoctorNextAction | undefined;
+  switch (state.kind) {
+    case "unconfigured":
+      status = "not_checked";
+      message = `${label} is not configured.`;
+      break;
+    case "ready":
+      status = "ok";
+      message = state.detail;
+      break;
+    case "unavailable":
+      status = "warn";
+      message = state.detail ?? `${label} is configured but unavailable.`;
+      nextAction = { label: `Check the ${label} integration` };
+      break;
+    case "auth-needed":
+      status = "warn";
+      message = state.detail ?? `${label} needs authentication.`;
+      nextAction = { label: `Authenticate ${label}` };
+      break;
+    case "error":
+      status = "error";
+      message = state.detail ?? `${label} reported an error.`;
+      nextAction = { label: `Inspect the ${label} integration` };
+      break;
+    case "timeout":
+      status = "not_checked";
+      message = state.detail ?? `${label} check timed out.`;
+      nextAction = { label: "Re-run /doctor to retry" };
+      break;
+  }
+  const finding: DoctorFinding = {
+    id: `${id}.status`,
+    status,
+    title: label,
+    message,
+    ...(nextAction ? { nextAction } : {}),
+  };
+  return area(id, label, message, [finding]);
+}
+
 /** A `not_checked` placeholder area for a surface this first cut does not probe. */
 function notChecked(id: DoctorAreaId, label: string, verdict: string): DoctorArea {
   return {
@@ -271,9 +344,9 @@ export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
       internetArea(input),
       toolsArea(input),
       notChecked("web", "Web / Docs", "not probed in this build"),
-      notChecked("mcp", "MCP", "no MCP servers configured"),
-      notChecked("lsp", "LSP", "not probed in this build"),
-      notChecked("hooks", "Hooks", "not probed in this build"),
+      peripheralArea("mcp", "MCP", input.peripherals.mcp),
+      peripheralArea("lsp", "LSP", input.peripherals.lsp),
+      peripheralArea("hooks", "Hooks", input.peripherals.hooks),
       storageArea(input),
       workspaceArea(input),
       updatesArea(input),

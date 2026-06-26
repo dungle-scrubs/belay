@@ -231,6 +231,14 @@ export function buildCommandRegistry(): CommandRegistry {
           node: process.version,
           runtime: RUNTIME_KIND.host,
         },
+        // MCP / LSP / Hooks are not integrated in this build, so each reports `unconfigured` (not an
+        // error) - the area builder maps later states (unavailable/auth-needed/error/timeout) once a
+        // real integration feeds them.
+        peripherals: {
+          mcp: { kind: "unconfigured" },
+          lsp: { kind: "unconfigured" },
+          hooks: { kind: "unconfigured" },
+        },
         checkedAt: new Date().toISOString(),
       });
       return JSON.stringify(snapshot);

@@ -6,7 +6,7 @@ import {
   summarizeSnapshot,
 } from "@trevor/session";
 import { test } from "vitest";
-import { buildDoctorSnapshot, type DoctorProbeInput } from "./snapshot";
+import { buildDoctorSnapshot, type DoctorProbeInput, type PeripheralState } from "./snapshot";
 
 /**
  * D-073 M1-M3: the structured doctor.current snapshot construction. Pure over probed facts, so these
@@ -32,6 +32,11 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
     workspace: { cwd: "~/dev/trevorV2", workspace: "~/dev/trevorV2", branch: "main" },
     storage: { home: "~/.trevorV2", writable: true },
     build: { version: "2.0.0", node: "v22.0.0", runtime: "trevor" },
+    peripherals: {
+      mcp: { kind: "unconfigured" },
+      lsp: { kind: "unconfigured" },
+      hooks: { kind: "unconfigured" },
+    },
     checkedAt: "2026-06-26T12:00:00.000Z",
     ...over,
   };
@@ -87,6 +92,51 @@ test("a dev build with no embedded version reports the Updates area as not_check
     "no version + no update check -> not_checked, never ok",
   );
   assert.match(updates?.verdict ?? "", /dev build/i);
+});
+
+test("MCP/LSP/Hooks areas map each peripheral state to the right status + next action", () => {
+  const mcpState = (state: PeripheralState) => {
+    const snap = buildDoctorSnapshot(
+      input({
+        peripherals: { mcp: state, lsp: { kind: "unconfigured" }, hooks: { kind: "unconfigured" } },
+      }),
+    );
+    return snap.areas.find((a) => a.id === "mcp");
+  };
+
+  // unconfigured + timeout stay not_checked (never a false error); ready is ok.
+  assert.equal(mcpState({ kind: "unconfigured" })?.status, "not_checked");
+  assert.equal(mcpState({ kind: "timeout" })?.status, "not_checked");
+  assert.equal(mcpState({ kind: "ready", detail: "2 servers" })?.status, "ok");
+
+  // unavailable + auth-needed warn with a repair action; error is an error with one.
+  const unavailable = mcpState({ kind: "unavailable" });
+  assert.equal(unavailable?.status, "warn");
+  assert.ok(
+    unavailable?.findings?.[0]?.nextAction,
+    "an unavailable peripheral offers a next action",
+  );
+
+  const authNeeded = mcpState({ kind: "auth-needed" });
+  assert.equal(authNeeded?.status, "warn");
+  assert.match(authNeeded?.findings?.[0]?.nextAction?.label ?? "", /[Aa]uthenticate/);
+
+  const errored = mcpState({ kind: "error", detail: "handshake failed" });
+  assert.equal(errored?.status, "error");
+  assert.equal(errored?.findings?.[0]?.message, "handshake failed", "the sanitized detail shows");
+});
+
+test("an error in a peripheral area lifts the whole snapshot to error", () => {
+  const snap = buildDoctorSnapshot(
+    input({
+      peripherals: {
+        mcp: { kind: "unconfigured" },
+        lsp: { kind: "error", detail: "language server crashed" },
+        hooks: { kind: "unconfigured" },
+      },
+    }),
+  );
+  assert.equal(overallStatus(snap), "error", "a peripheral error dominates the overall status");
 });
 
 test("an unreachable local runtime warns, an unreachable cloud provider errors", () => {
