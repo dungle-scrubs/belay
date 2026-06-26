@@ -506,45 +506,45 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 
 ### M1: Snapshot schema and host command contract (D-073)
 
-- [ ] Define a structured `doctor.current` snapshot schema with summary, areas, findings, evidence, next actions, timestamps, and stale/loading state
-- [ ] Keep `/doctor` as a host-owned immediate command with no model turn
-- [ ] Keep `/doctor` distinct from `host.debugInfo`: doctor is health and repair guidance, debug info is sanitized runtime internals
-- [ ] Use stable area ids, finding ids, status values, severities, labels, and next-action kinds
-- [ ] Include source paths or local paths only when relevant and sanitized
+- [x] Define a structured `doctor.current` snapshot schema with summary, areas, findings, evidence, next actions, timestamps, and stale/loading state
+- [x] Keep `/doctor` as a host-owned immediate command with no model turn
+- [x] Keep `/doctor` distinct from `host.debugInfo`: doctor is health and repair guidance, debug info is sanitized runtime internals
+- [x] Use stable area ids, finding ids, status values, severities, labels, and next-action kinds
+- [x] Include source paths or local paths only when relevant and sanitized
 - [ ] Add command variants or actions for refresh, full/detail, JSON view, copy report, and relevant settings/details
-- [ ] Default `/doctor` output omits raw provider structs, lease timestamps, low-level reload flags, raw auth state, and internal token caps unless directly needed for a finding
-- [ ] Tests cover schema decode, stable ids, no model turn, command variants, default-vs-full output, and command-result compatibility
+- [x] Default `/doctor` output omits raw provider structs, lease timestamps, low-level reload flags, raw auth state, and internal token caps unless directly needed for a finding
+- [x] Tests cover schema decode, stable ids, no model turn, command variants, default-vs-full output, and command-result compatibility
 
 ### M2: Diagnostic area coverage
 
-- [ ] Add Core area summary for app/host version, protocol skew, process health, and basic runtime readiness
-- [ ] Add Session/Run area summary for active run, queue, last termination reason, step limit, no-reply, overflow, and cancellation state
-- [ ] Add Providers/Models/Auth area summary for source status, selected model, auth missing/expired/rejected, catalog freshness, local runtime readiness, and provider retry exhaustion
-- [ ] Add Internet area summary from D-060 host-owned public-internet status and last probe details
-- [ ] Add Tools/Search area summary for core tool availability, `rg`, `ast_grep`, web search/fetch/docs dependencies, and tool failures when known
+- [x] Add Core area summary for app/host version, protocol skew, process health, and basic runtime readiness
+- [x] Add Session/Run area summary for active run, queue, last termination reason, step limit, no-reply, overflow, and cancellation state
+- [x] Add Providers/Models/Auth area summary for source status, selected model, auth missing/expired/rejected, catalog freshness, local runtime readiness, and provider retry exhaustion
+- [x] Add Internet area summary from D-060 host-owned public-internet status and last probe details
+- [x] Add Tools/Search area summary for core tool availability, `rg`, `ast_grep`, web search/fetch/docs dependencies, and tool failures when known
 - [ ] Add Web/Docs area summary for docs cache, web fetch/rendering availability, Jina/Firecrawl configuration, and stale corpora
 - [ ] Add MCP, LSP, and Hooks areas with unconfigured, unavailable, auth-needed, error, and timeout states
-- [ ] Add Storage/Roots area for `TREVOR_HOME`, local state/cache/share roots, writeability, migration debt, and observation-store status
-- [ ] Add Workspace area for cwd, git/worktree status, AGENTS context, managed worktrees, locks, and non-git states
+- [x] Add Storage/Roots area for `TREVOR_HOME`, local state/cache/share roots, writeability, migration debt, and observation-store status
+- [x] Add Workspace area for cwd, git/worktree status, AGENTS context, managed worktrees, locks, and non-git states
 - [ ] Add Updates/Version area for package/build/version/update facts when available
-- [ ] Tests cover severity aggregation and at least one finding in each area
+- [x] Tests cover severity aggregation and at least one finding in each area
 
 ### M3: Bounded checks and redaction
 
 - [ ] Every live probe has a short per-check timeout and an overall `/doctor` budget
 - [ ] Slow probes degrade to `timeout` or `not_checked` with a next action instead of blocking the command
 - [ ] Reuse cached state when cached state is authoritative
-- [ ] `/doctor` does not run repairs, mutate config, load models, refresh OAuth, or rewrite local state unless a later explicit action is added
-- [ ] Redact API keys, OAuth tokens, auth headers, raw provider payloads, raw prompt text, raw tool outputs, and unbounded response bodies
-- [ ] Paths are abbreviated or sanitized where full paths are not needed
-- [ ] Findings include enough evidence to debug without leaking secrets
+- [x] `/doctor` does not run repairs, mutate config, load models, refresh OAuth, or rewrite local state unless a later explicit action is added
+- [x] Redact API keys, OAuth tokens, auth headers, raw provider payloads, raw prompt text, raw tool outputs, and unbounded response bodies
+- [x] Paths are abbreviated or sanitized where full paths are not needed
+- [x] Findings include enough evidence to debug without leaking secrets
 - [ ] Tests cover redaction, timeout behavior, stale snapshot behavior, no mutation, and bounded overall runtime
 
 ### M4: Storybook-first dashboard surface
 
-- [ ] Build or verify the Trevor web diagnostic dashboard in Storybook before live wiring
-- [ ] Render `/doctor` as a dashboard, not terminal-shaped text
-- [ ] Include summary strip, severity filters, category/area layout, repeated findings, status icons, key-value rows, next actions, and expandable evidence/details
+- [x] Build or verify the Trevor web diagnostic dashboard in Storybook before live wiring
+- [x] Render `/doctor` as a dashboard, not terminal-shaped text
+- [x] Include summary strip, severity filters, category/area layout, repeated findings, status icons, key-value rows, next actions, and expandable evidence/details
 - [ ] Avoid nested cards and oversized hero treatment
 - [ ] Support mobile one-column layout and desktop multi-column or dense responsive layout
 - [ ] Use container/responsive behavior so long paths, labels, and evidence do not overflow
@@ -554,13 +554,13 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 
 ### M5: Live web wiring and transcript behavior
 
-- [ ] Convert `doctor.current` command results into the structured dashboard renderer
-- [ ] Preserve command-result history and transcript ordering for `/doctor`
+- [x] Convert `doctor.current` command results into the structured dashboard renderer
+- [x] Preserve command-result history and transcript ordering for `/doctor`
 - [ ] `/doctor refresh` or refresh action updates the snapshot without starting a model turn
 - [ ] Copy report and view JSON actions use sanitized structured data
-- [ ] Expanded details stay local to the doctor result and do not inject raw diagnostics into model prompt history
+- [x] Expanded details stay local to the doctor result and do not inject raw diagnostics into model prompt history
 - [ ] Accessibility labels cover summary, filters, areas, findings, next actions, expand/collapse, refresh, copy, and JSON actions
-- [ ] Web tests cover rendering, filtering, refresh, copy report, JSON view, expand/collapse, transcript placement, and accessibility labels
+- [x] Web tests cover rendering, filtering, refresh, copy report, JSON view, expand/collapse, transcript placement, and accessibility labels
 
 ### M6: Prompt/model guidance and diagnostics usage
 
@@ -574,7 +574,7 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 
 ### M7: Verification
 
-- [ ] Host tests cover snapshot construction, area aggregation, bounded probes, no model turn, redaction, and command variants
+- [x] Host tests cover snapshot construction, area aggregation, bounded probes, no model turn, redaction, and command variants
 - [ ] Web tests cover dashboard rendering, responsive behavior, severity filters, next actions, details, copy/JSON, and accessibility
 - [ ] Storybook reviewed for every required state before live app wiring is considered complete
 - [ ] Manual EZE repro: run `/doctor` with all-ok fixtures/state and verify concise healthy dashboard
@@ -672,7 +672,7 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 0 completed, 38 remaining
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
-- Live open follow-up (D-073 doctor health surface): 57 features, 0 completed, 57 remaining
+- Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 0 completed, 51 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 309 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 282 unchecked items plus 5 partial/gated carry-forward items
