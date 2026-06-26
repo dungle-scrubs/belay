@@ -115,7 +115,7 @@ what V2's scope cuts changed.
 | **Early transcript layout** | Browser transcript behavior before the conversation overflows the viewport | <!-- D-086 --> New/short sessions start at the top and grow downward; live-bottom following begins once content can actually scroll |
 | **Assistant output style** | Named presentation overlay for response shape, density, and structure | <!-- D-072 --> Additive prompt overlay only; must not change model routing, work kind, execution mode, tool access, agent selection, or validation policy |
 | **Doctor snapshot** | Structured host health report with areas, checks, findings, evidence, and next actions | <!-- D-073 --> `/doctor` should render actionable diagnostics, not raw host/debug state dumps |
-| **Capability manifest** | Registry-derived self-description of Trevor tools, commands, contracts, agents, skills, and runtime surfaces | <!-- D-074 --> Full manifest for humans/clients/export; compact scoped manifest for model/subagent context; never a permission system or giant prompt dump |
+| **Capability manifest** | Registry-derived self-description of Trevor tools, commands, contracts, agents, skills, runtime surfaces, and the `trevor-expert` explainer skill | <!-- D-074 --> Full manifest for humans/clients/export; compact scoped manifest for model/subagent context; deterministic source for Trevor explanation surfaces; never a permission system or giant prompt dump |
 | **Loop** | Recurring/cadence work spec with bounds, lifecycle, runner, controls, and confirmation | <!-- D-067 --> A host feature that works headlessly through commands/session protocol; Trevor web owns the rich helper UI |
 | **Web fetch** | Host-owned read-only URL content fetcher that turns an explicit public URL into bounded attributable content | <!-- D-068 --> `web_search` already exists; deferred work is `web_fetch`, with static-first fetching, direct Jina Reader fallback for JS-blocked/thin pages, and Firecrawl only as the configured last resort |
 | **Filesystem root** | One of Trevor's host-local roots for config, state, cache, share, or external auth | <!-- D-069 --> New work must use the clarified root taxonomy instead of inventing ad hoc dotdirs |
@@ -1066,18 +1066,81 @@ and does not change the current manual `SESSION_ID` + `TREVOR_WORKSPACE` behavio
 - **Browser-created sessions.** The web UI gains a create-session flow that accepts a target folder, creates a new
   durable session for that folder, starts the corresponding host runtime through the available supervisor/launcher,
   and navigates into the session once the host announces `host.online`.
-- **Session navigation.** The UI needs a first-class session list/switcher showing session id, cwd/workspace,
-  host presence, active/queued state, and recent activity. URL `?session=` remains a deep-link mechanism, but not the
-  only way to move between sessions.
+- **Session navigation sidebar is now specified by D-093.** The UI needs a first-class left-sidebar
+  session list showing current-project sessions, live activity, and recency. URL `?session=` remains a deep-link
+  mechanism, but not the only way to move between sessions.
 - **Explicit resume is now specified by D-090.** Resuming a durable session is a user-selected command/list flow,
   not an implicit cwd lookup or default browser reload behavior. D-061 keeps the broader session manager
   lifecycle, while D-090 is the near-term resume slice.
-- **Kill/stop from terminal and UI.** Add explicit session termination controls in both surfaces: terminal command(s)
-  to list/open/kill sessions, and UI actions to stop a session's host runtime and mark or archive the browser-visible
-  session. Killing a host is lifecycle management; it must not mutate or delete the durable session log by accident.
+- **Session lifecycle controls are now specified by D-094.** Cancel remains the ordinary UI action for active
+  work. Stop, kill, archive, unarchive, list, and open are lifecycle/management controls, exposed first through
+  CLI and debug-mode UI rather than normal chat/sidebar controls. Lifecycle operations must not delete durable
+  session logs unless an explicit future archive-browser delete action does so with confirmation.
 - **Relationship to Phase 3.** This dovetails with the desktop shell's one-host-per-session/cwd model (D-021-D-024),
   but now ships through the browser-era launcher/supervisor path in D-085. It must preserve D-014: browser and host
   still communicate only through the session log; any launcher/supervisor owns lifecycle only.
+
+### Soon: session navigation sidebar - current project only <!-- D-093 -->
+
+This is the first concrete remaining slice of D-061 after the shipped launcher (D-085), shared command modal
+(D-089), explicit resume (D-090), and managed worktree switcher (D-091). It makes session switching a normal
+browser navigation surface instead of treating every session change as a resume action.
+
+- <!-- D-093 --> **Left-sidebar session navigator, Storybook-first.** Build the sidebar surface in Storybook
+  before app wiring. Use a dashboard-style icon in the upper-left as the entry point for focusing or opening the
+  session navigator. This is not a landing page and not a separate global dashboard.
+- **Current project only.** The sidebar lists sessions for the current project/root only. It must not show other
+  projects in the current working directory context, and it must not inherit any global-session search behavior
+  from resume unless the user explicitly asks for that later.
+- **Recency order, no grouping.** Sort sessions by most recent activity in the current project. Do not add project
+  grouping for this cut. Rows should show enough identity to distinguish sessions: title or first prompt, branch
+  or worktree when known, live/running/queued/settled state, and last activity.
+- **Live activity across sessions.** A session that is running, queued, or recently settled remains visible while
+  the user is viewing another session. The row should show that work is happening or when it last settled.
+- **Relative time policy.** Use relative time in seconds, minutes, hours, days, and weeks. Never render months.
+  Render week-based labels through 10 weeks; older than that uses a specific date.
+- **Stale/inactive host state.** Avoid exposing "no-host session" as user-facing vocabulary. If a durable session
+  has history but no currently attached host, show it as stale or inactive and make its runnable limitations clear.
+- **Switch semantics.** Selecting a session uses the same safe switch path as D-090: no transcript merge, reset
+  draft/queue/session-scoped state, keep URL deep-linking, and block or disable switching while the current session
+  has active execution.
+- **Resume relationship.** `/resume` can remain the keyboard/search command view over the same current-project
+  inventory and switch action. The sidebar is the everyday visual navigation surface; resume is the explicit
+  command/search entry point.
+- **Validation target.** Tests and stories should cover empty, current session, many sessions, long titles,
+  running, queued, settled, stale/inactive, recent seconds/minutes/hours/days/weeks, date fallback, active-run
+  switch blocking, no cross-project rows, and no transcript/draft/queue leakage on switch.
+
+### Soon: session lifecycle controls - stop, kill, archive <!-- D-094 -->
+
+This is the D-061 lifecycle-management slice that sits beside the D-093 sidebar navigator. It defines what it
+means to cancel active work, stop a session host, force-kill a wedged host, and hide a durable session from normal
+lists without deleting its history.
+
+- <!-- D-094 --> **Cancel stays the normal UI action.** Escape or the existing cancel affordance cancels the
+  active turn/work item and leaves the host attached to the session, ready for the next prompt. Cancel is not
+  session shutdown.
+- **Stop is graceful session-level shutdown.** Stop cancels active work, clears queued work for that session, asks
+  the host to shut down cleanly, releases its runtime/lease/ownership record, and keeps the durable Richter log.
+  A passive browser disconnect is not stop.
+- **Kill is forceful host termination.** Kill is the escalation path for a wedged or unresponsive host. It keeps
+  the durable session log but may leave an in-flight turn with an aborted or unknown terminal state if the host
+  cannot write a clean cancellation event.
+- **Archive is metadata hiding, not deletion.** Archive sets an `archived` flag on durable session metadata.
+  Archived sessions disappear from the normal sidebar, current-project navigation, and default resume/list views.
+  They remain in Richter and require explicit unarchive before normal opening/use.
+- **Archive browser/delete deferred.** Archived sessions can be viewed through an explicit archive browser/filter
+  or CLI archived list. Permanent delete is only allowed from an archive browser later, with strong confirmation,
+  and deletes the durable session log from Richter.
+- **Primary UI boundary.** Normal UI should not expose stop, kill, or archive as ordinary row/chat actions in the
+  first cut; debug-mode UI may expose them. D-093 only needs to respect archived filtering.
+- **CLI surface.** Provide `trevor list`, `trevor list --archived`, `trevor open <session>`,
+  `trevor archive <session>`, `trevor unarchive <session>`, `trevor stop <session>`, and
+  `trevor kill <session>`. `open` is resume-like: it opens the browser and starts or attaches the matching host
+  when possible.
+- **Validation target.** Tests should cover cancel vs stop, stop canceling active and queued work without deleting
+  history, kill preserving logs while terminating a host, archive/unarchive filtering, CLI list/open/archive/
+  unarchive/stop/kill behavior, debug-only UI exposure, and D-093 excluding archived rows by default.
 
 ### Deferred: provider auth/catalog + full model chooser <!-- D-065 -->
 
@@ -1097,8 +1160,8 @@ turning the chat input into a giant dropdown.
 - **Source state is explicit.** Local sources report runtime reachable/unreachable, discovered/manual,
   loaded/loading/available when known, and local context/capability metadata. OAuth sources report needs
   sign-in, connected, expired, refresh failed, and subscription/catalog unavailable. Gateway and direct-key
-  sources report needs key, configured by env, configured by stored key, key rejected, catalog fetch failed,
-  stale catalog, and catalog refresh in progress.
+  sources report needs key, configured by host auth JSON, key rejected, catalog fetch failed, stale catalog,
+  and catalog refresh in progress.
 - **Host owns source status and catalog freshness.** The browser must not hardcode model lists or infer auth
   truth locally. The host announces source summaries and serves model catalog queries. Refresh triggers:
   host start, login/logout/key changes, manual refresh, and provider-specific TTL expiry. Catalog refresh is
@@ -1117,19 +1180,29 @@ turning the chat input into a giant dropdown.
   levels. The chooser and sidebar may only present supported choices. If a model supports disabling reasoning,
   `off` is a valid explicit value. Persist the selected/default reasoning per model reference where possible,
   with a source/model default value when no explicit per-model value exists.
-- **Current sidebar behavior remains.** The sidebar keeps showing the active model name, and the thinking
-  level/toggle/switcher remains underneath that model name. Clicking the model name opens the richer model
-  chooser by replacing the chat area on the left with a responsive chooser surface. This plan does not encode
-  further visual design.
+- **Sidebar entry is a split control.** The sidebar keeps showing the active model name, and the thinking
+  level/toggle/switcher remains underneath that model name. The larger left side of the active-model control
+  opens the full chooser by replacing the transcript/prompt area with the responsive source overview/detail
+  surface. The right-side chevron keeps the existing small popup behavior, but narrows it to a quick
+  categorized picker of recently used models only; it must not become the large catalog browser. Both clickable
+  regions should use `cursor-pointer`, and a visible vertical divider separates the chevron quick-popup region
+  from the larger full-chooser region.
 - **Chooser actions are source-aware.** Depending on source/auth state, actions include sign in, re-login,
-  add/update API key, refresh catalog, open local runtime/setup instructions, use model, set default, pin/unpin,
-  and remove/disable a manual source. Auth/setup failures are visible for that source without blocking browsing
-  other configured sources.
+  provider-code/device-code flow steps, refresh catalog, open local runtime/setup instructions, use model, set
+  default, pin/unpin, and remove/disable a manual source. Auth/setup failures are visible for that source without
+  blocking browsing other configured sources.
+- **No key entry in the chooser.** API keys, env-derived credentials, and direct-provider secrets live in the
+  host-owned auth JSON store, not in the model chooser UI. The chooser may show missing/rejected/stale auth
+  states, provide OAuth or provider-code links, accept non-key flow codes when the provider protocol requires
+  them, refresh host auth state, and point to setup instructions, but it must not render an API-key paste form.
 - **Preferences and wire events must carry both model and reasoning.** Keep backward compatibility with the
   current `provider` string during migration, but move toward a stable selected-model contract:
   `{sourceId, modelId, reasoning}` on user turns and host preferences. The host resolves that to the actual
   provider adapter and request options. Persist the active model, default model, recent models, pinned models,
   and per-model reasoning selection in the session/user preference layer.
+- **First cut is one active chat model.** This chooser selects the single active model source for normal chat
+  turns. Future role-specific model assignment - autocomplete ghost text, compaction, summarization, subagents,
+  or background helpers - is deferred and must not expand this first-cut chooser into a routing or policy engine.
 - **Use pi-ai where it owns the problem, wrap where Trevor owns product behavior.** After the SDK migration to
   `@earendil-works/pi-ai`, use its provider factories, auth resolution, OAuth refresh, credential-store
   contract, generated model metadata, dynamic-provider hooks, and reasoning capability helpers where they fit.
@@ -1142,7 +1215,8 @@ turning the chat input into a giant dropdown.
   catalog refresh a turn-start blocker. Do not render every gateway model in a single popup.
 - **Validation required.** Tests/evals must cover: thousands of gateway models without rendering/sending all
   rows eagerly; search and filters across source types; OAuth signed-in/signed-out/expired states; direct-key
-  configured/missing/rejected states; local runtime offline/online states; reasoning choices constrained to
+  configured/missing/rejected states from the host auth JSON store; no API-key paste form in the chooser; local
+  runtime offline/online states; reasoning choices constrained to
   each model's detected capabilities; persistence of active/default/recent/pinned models; backward-compatible
   provider selection during migration; and no turn blockage when a catalog refresh is slow or failed.
 
@@ -1174,6 +1248,11 @@ transport faults instead of context pressure.
   attempt, detail}` status (sibling to `assistant.recovered`), surfaced in Trevor web as a
   "reconnecting… (attempt k/3)" marker; the terminal error block is unchanged and appears only when the
   budget is exhausted or the failure is non-retryable. Correlated by `runId`.
+- **Unknown-shape observation capture.** Provider failure shapes that are unknown or low-confidence are stored as
+  redacted, deduped observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so the classifier can
+  improve over time. The record keeps provider/source/model, phase, status/code fields, sanitized message,
+  top-level shape/field names, output-started flag, classifier verdict, retry decision, and a fingerprint. It
+  never stores prompts, API keys, auth headers, raw response bodies, or raw tool outputs by default.
 - **Validation.** Deterministic with `@effect/vitest` + `TestClock` (no real waits) and a fake provider
   that fails N times then succeeds: a transient drop before the first token recovers transparently; a drop
   after output goes terminal; an interrupt during backoff cancels cleanly; auth/overflow paths unchanged.
@@ -1205,6 +1284,19 @@ Sequence as each is picked up (no hard order locked here):
   **usage/metrics** surface remains separate (H-031, H-034).
 - **Browser/terminal session manager** is specified above as D-061: cwd-targeted terminal launch, browser-created
   folder sessions, session navigation, and kill/stop from terminal and UI.
+- **Session navigation sidebar** is specified above as D-093: current-project-only left-sidebar session
+  navigation, upper-left dashboard icon, recency ordering, live activity rows, relative time policy, and shared
+  switch semantics with resume.
+- **Session lifecycle controls** are specified above as D-094: cancel vs stop vs kill semantics, archive/unarchive
+  metadata, CLI list/open/archive/unarchive/stop/kill, debug-only lifecycle UI, and normal UI archive filtering.
+- **Headless CLI / TypeScript SDK / harness** is deferred below as D-095: Trevor is already headless-capable at
+  the transport/runtime layer, but a first-class CLI, TypeScript SDK, and code-harness API need later discussion
+  before decomposition.
+- **Local observation corpus / classifier learning** is deferred below as D-096: provider failure observations
+  are the first concrete use, with later expansion to tool-result patterns, repeated calls, attempts-to-goal
+  signals, prompt/harness guidance, and possible future task classification.
+- **Vim motions in UI/UX** is deferred below as D-097: evaluate `vimeejs/vimee` and start small with prompt input
+  motions before broader UI adoption.
 - **Prompt composer recovery/history** is specified above as D-083/D-084: debounced tab-local draft
   persistence plus terminal-style Up-arrow/Down-arrow prompt recall for submitted prompts and bang shell
   commands.
@@ -1295,6 +1387,9 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Subagents: teams, verifier, bounded child, mutating background agents** | H-165 | general-purpose + explorer + ephemeral definitions + inline/async read-only background **promoted to §6 (D-045…D-049)**; multi-agent **teams**, the **verifier** flavor, **bounded-child**, and mutating background agents remain future. Mutating background agents depend on managed worktrees + cwd locks + merge protocol |
 | **Shell interpolation (commands)** | H-175 | done for skills; extend `!cmd` / ` ```! ` to command files, same gating |
 | **`shell.promote`** | H-035 | auto-promote-on-timeout: route bash/`/shell` through the supervisor and adopt a command that outlives its timeout as a tracked `pN` job. Sequenced after the Tasks tool (which is done) |
+| **Headless CLI / TypeScript SDK / harness** | new | <!-- D-095 --> deferred discussion. V2 is currently headless-capable at the session transport and host-runtime layer, but the productized access surface is not designed yet. Later discussion must cover CLI commands, TypeScript package boundaries, launch/attach semantics, prompt streaming, session inventory/lifecycle, artifact upload, cancellation, safety, and test-harness ergonomics. This is separate from the dropped single-prompt `SDK ask()` shortcut and does not reintroduce that API by default |
+| **Local observation corpus / classifier learning** | new | <!-- D-096 --> deferred pattern. Store redacted, deduped unclassified observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so Trevor can improve classifiers and harness guidance over time. Provider failure observations from D-076 are the first use; later candidates include tool-result patterns, repeated tool calls, number of attempts to reach a goal, prompt/harness guidance signals, and possible model task classification. Observations are inspectable on demand and never automatically injected into prompts |
+| **Vim motions in UI/UX** | new | <!-- D-097 --> deferred discussion. Evaluate https://github.com/vimeejs/vimee for adding Vim-style motions to Trevor UI/UX, starting small with the prompt input before considering broader navigation or editing surfaces |
 
 **LSP posture (deferred).** <!-- D-063 --> LSP remains unsequenced. When picked up, it should be an
 intentional navigation and problem-solving aid, not a real-time side channel. The host may keep language
@@ -1705,13 +1800,21 @@ The first V2 capability manifest implementation should include:
 - **Client/UI usage.** Trevor web may use the full structured manifest to power capability/help surfaces,
   command discovery, tool lists, agent/skill listings, and debug/export screens. UI should render from the
   structured data rather than scraping prompt text or duplicating hardcoded lists.
+- **`trevor-expert` consumer.** The capability manifest should be the deterministic substrate for a
+  public-facing internal `trevor-expert` skill that answers "how does Trevor work?" from host-generated
+  output instead of stale prose. The skill may use trusted, bounded shell interpolation to embed read-only
+  host exports such as compact/full manifests, Doctor summaries, registry excerpts, version/protocol details,
+  and source provenance. It must not scrape arbitrary files, grant permissions, mutate state, start work,
+  bypass slash/tool authority, or become another giant prompt dump. Default turns should only know that this
+  explainer exists; full explanatory detail is loaded on demand through the skill/discovery path.
 - **Versioning and provenance.** Include manifest version, generated time, host build/version when known,
   workspace/cwd when relevant, source registries/provenance, and truncation/scope metadata. Unknown or
   unavailable registry sections should be represented explicitly instead of omitted silently.
 - **Validation required.** Tests/evals must cover registry-derived tool and command inclusion, debug-only or
   hidden capability filtering, compact token budget, no full-catalog prompt dumps, dynamic MCP/provider/docs
-  summarization, JSON export stability, subagent prompt inclusion only when scoped, client rendering from the
-  structured payload, and drift tests proving the manifest changes when source registries change.
+  summarization, JSON export stability, `trevor-expert` using only bounded read-only deterministic exports,
+  subagent prompt inclusion only when scoped, client rendering from the structured payload, and drift tests
+  proving the manifest changes when source registries change.
 
 **Discovery registry + progressive skill drill-in (deferred).** <!-- D-075 --> Carry forward Trevor V1's
 registry shape while preserving the useful current V2 behavior where the model knows that skills exist from
@@ -1724,6 +1827,10 @@ The first V2 discovery implementation should include:
   and blurbs, then loads one full body. The target keeps the ambient awareness advantage, but replaces the
   single-tool-description roster with structured prompt context plus list/view tools. D-087 defines the
   project-local plus global/configured root order that this registry must read from.
+- **First implementation slice is skills only.** The first cut should build the host-owned skill registry,
+  ambient skill roster, `skills_list`, and `skill_view` before broadening to slash-command, command-family, or
+  agent discovery. The registry data model should still be shaped so those later resource types can join
+  without a rewrite.
 - **Hybrid skill awareness contract.** Tool-enabled turns should receive a compact `Available skills` roster:
   skill id, short description, and optional trigger summary, capped and explicitly marked when truncated. The
   model must not be left in a state where it has to guess that skills exist before it can ask for them.
@@ -1880,11 +1987,12 @@ The first V2 loop implementation should carry forward V1's explicit command surf
   health areas with status, evidence, and next actions; raw internals stay in detail/debug surfaces; probes are
   explicit, time-bounded, non-mutating, and degrade to `not_checked`/`timeout`; Storybook fixtures prove the
   web layout before runtime wiring.
-- **Capability manifests can bloat prompts or become stale docs (D-074).** A manifest that is handwritten or
-  injected whole into normal turns becomes stale and expensive; a manifest treated as authorization blurs the
-  tool boundary. Mitigation: derive it from registries, version it, expose full/export forms separately from
-  compact scoped model context, summarize huge dynamic catalogs, and keep execution authority at the existing
-  tool/command/agent boundaries.
+- **Capability manifests and `trevor-expert` can bloat prompts or become stale docs (D-074).** A manifest or
+  explainer skill that is handwritten or injected whole into normal turns becomes stale and expensive; a
+  manifest treated as authorization blurs the tool boundary. Mitigation: derive it from registries, version
+  it, expose full/export forms separately from compact scoped model context, summarize huge dynamic catalogs,
+  make `trevor-expert` read deterministic host exports through bounded read-only calls, and keep execution
+  authority at the existing tool/command/agent boundaries.
 - **Loop can become UI-coupled or unbounded recurring work (D-067).** If `/loop` exists only as a rich web
   helper, it becomes a UI macro instead of a host feature; if loops can start from prose without confirmation
   or without explicit bounds, they can create surprising repeated work. Mitigation: the host owns the
@@ -2033,6 +2141,12 @@ agents, skills, MCP summaries, LSP/web/docs status, hooks, and runtime surfaces 
 system or giant prompt dump. Dynamic catalogs are summarized and queried explicitly. D-074 is authored here in
 markdown and still needs syncing into `plan.db` alongside D-040-D-073._
 
+_Updated 2026-06-26: **Capability manifest** refined with the `trevor-expert` consumer. `trevor-expert` is a
+public-facing internal skill that explains how Trevor works from deterministic host-generated output, such as
+bounded manifest, Doctor, registry, version, protocol, and provenance exports. Shell interpolation is allowed
+only for trusted read-only host commands with bounded output; the skill does not mutate state, grant
+permissions, start work, bypass command/tool authority, or dump full inventories into ordinary turns._
+
 _Updated 2026-06-25: **Discovery registry + progressive skill drill-in** added as D-075. The deferred V2
 feature carries forward Trevor V1's useful discovery shape while preserving current V2's ambient skill
 awareness: every tool-enabled turn gets a compact skill roster, but searchable skill metadata and full bodies
@@ -2040,6 +2154,11 @@ move behind `skills_list(query?, limit?)` and `skill_view(skillId)`. The host ow
 commands, command families, and later agents; Trevor web renders structured read models instead of scanning or
 duplicating inventories. D-075 is authored here in markdown and still needs syncing into `plan.db` alongside
 D-040-D-074._
+
+_Updated 2026-06-26: **Discovery registry + progressive skill drill-in** clarified for first-cut scope. The
+first implementation slice is skills only: host-owned skill registry, compact ambient roster, `skills_list`,
+and `skill_view`. Slash-command, command-family, and agent discovery remain later extensions over the same
+registry shape rather than first-cut scope._
 
 _Updated 2026-06-26: **Prompt shell lane** added and promoted as D-082. Leading `!` in the prompt composer
 runs immediately through the protected host shell path and renders as a dedicated user-visible shell transcript
@@ -2091,3 +2210,45 @@ host-owned public-internet status only: `online`/`offline`/`unknown` plus transi
 public probes cached around 30 seconds, latest snapshot on `host.online`, refresh updates on `host.internet`,
 advisory UI near model/source selection, `/doctor` diagnostics, and no automatic local/cloud fallback or routing.
 D-060 still needs syncing into `plan.db` alongside D-040-D-092._
+
+_Updated 2026-06-26: **Session navigation sidebar** added as D-093, a concrete remaining D-061 slice. It is a
+Storybook-first left-sidebar session navigator opened or focused from an upper-left dashboard icon, scoped to the
+current project only, ordered by recency without grouping, showing live running/queued/settled activity across
+sessions, using seconds/minutes/hours/days/weeks relative time with no months and date fallback after 10 weeks,
+and sharing safe switch semantics with resume. D-093 is authored here in markdown and still needs syncing into
+`plan.db` alongside D-040-D-092._
+
+_Updated 2026-06-26: **Session lifecycle controls** added as D-094, another concrete D-061 slice. Cancel remains
+the normal UI action for active work; stop gracefully cancels active work, clears queued work, shuts down the host,
+and keeps the durable log; kill force-terminates a wedged host while preserving history; archive/unarchive are
+metadata hiding/restoring actions, not deletion; permanent delete is deferred to a future archive browser. The
+first control surface is CLI plus debug-mode UI, with normal UI limited to filtering archived sessions out of the
+main sidebar/resume views. D-094 is authored here in markdown and still needs syncing into `plan.db` alongside
+D-040-D-093._
+
+_Updated 2026-06-26: **Headless CLI / TypeScript SDK / harness** added to the unsequenced backlog as D-095.
+Trevor is already headless-capable at the transport/runtime layer, but the first-class CLI, TypeScript SDK, and
+code-harness API remain a later discussion before decomposition. This is explicitly separate from the dropped
+single-prompt `SDK ask()` shortcut. D-095 is authored here in markdown and still needs syncing into `plan.db`
+alongside D-040-D-094._
+
+_Updated 2026-06-26: **Provider auth/catalog + full model chooser** (D-065) clarified before decomposition.
+The chooser is source/model selection for one active chat model, not routing. The UI replaces the transcript and
+prompt area while sidebars may remain visible, supports source-overview and source-detail views, and can show
+OAuth/provider-code flow actions. API keys, env-derived credentials, and direct-provider secrets live in the
+host-owned auth JSON store and are never pasted into the chooser. The sidebar model control is split: the
+larger left side opens the full chooser, while the right chevron keeps a small categorized popup limited to
+recently used models. Both hit targets should use `cursor-pointer`, with a visible vertical divider between
+the quick-popup chevron and full-chooser regions._
+
+_Updated 2026-06-26: **Provider-outage auto-reconnect recovery** (D-076-D-079) clarified before decomposition.
+Provider adapters normalize inconsistent OAuth, SDK, gateway, direct API, and local-runtime failures into
+Trevor's typed failure taxonomy; unknown or low-confidence provider failure shapes are captured as redacted,
+deduped observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so classifier rules can be improved
+from real evidence without storing prompts, secrets, auth headers, raw response bodies, or raw tool outputs._
+
+_Updated 2026-06-26: **Local observation corpus / classifier learning** added to the unsequenced backlog as
+D-096. Provider failure observations are the first concrete use, but the broader deferred pattern also covers
+tool-result patterns, repeated tool calls, attempts-to-goal signals, prompt/harness guidance, and possible future
+task classification. **Vim motions in UI/UX** added to the unsequenced backlog as D-097, starting later with
+prompt input motions and evaluating `vimeejs/vimee` before broader UI adoption._

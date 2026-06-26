@@ -6,9 +6,12 @@
 
 > **Scope.** This report tracks open or partial/gated work only. When an item or section is fully
 > completed, move its detailed checklist to the done archive and leave only a summary/reference here.
-> Current focus: D-044 session recall, D-092 image attachment UX, and D-060 internet connectivity
-> awareness. Later roadmap items stay sequenced in the canonical implementation plan and are decomposed
-> here only when picked up.
+> Current focus: Next-Up: session recall
+> Decomposed open sections: D-044 session recall, D-092 image attachment UX, D-060 internet connectivity
+> awareness, D-093 session navigation sidebar, D-094 session lifecycle controls, and D-065 provider
+> auth/catalog + full model chooser, D-076-D-079 provider-outage auto-reconnect recovery, and D-073 doctor
+> health surface. Later roadmap items stay sequenced in the canonical implementation plan and are decomposed here
+> only when picked up.
 
 ## Archived Completed Work
 
@@ -242,10 +245,497 @@ Source: future host connectivity service, `apps/agent-host/src/main.ts`, `packag
 - [ ] Web tests cover the Storybook-backed advisory states and cloud/local selected-model differences
 - [ ] Manual EZE repro: simulate LAN-up/WAN-down or failed public probes, verify advisory UI and `/doctor`, and verify local/cloud model selection is unchanged
 
+## Next-Up: session navigation sidebar
+
+D-093 is captured in the implementation plan as the first-class session navigation slice of D-061. This is not
+browser-created sessions, stop/kill/archive controls, or the broader host lifecycle model. It is the everyday
+left-sidebar surface for switching among current-project sessions, while `/resume` remains the explicit
+keyboard/search entry point over the same inventory and switch action. Source: existing D-090 session inventory
+and switch path, `packages/session/src/inventory.ts`, `apps/web/src/App.tsx`,
+`apps/web/src/components/panel/SidePanel.tsx`, future sidebar session-list components/stories, and session
+transport activity folding (D-093).
+
+### M1: Storybook-first sidebar surface (D-093)
+
+- [ ] Build the session navigation sidebar in Storybook before app wiring
+- [ ] Add an upper-left dashboard-style icon entry point that opens or focuses the session navigator
+- [ ] Keep the surface in the left-hand sidebar rather than a landing page, full dashboard, or command-only modal
+- [ ] Show the current selected session with a stable selected state
+- [ ] Rows show title or first prompt, branch or worktree when known, activity state, and last activity
+- [ ] Stories cover empty, current-only, many sessions, long titles, long cwd/branch, narrow viewport, and tall lists
+- [ ] Keep row heights, icon buttons, and labels stable so live status changes do not resize the sidebar
+- [ ] Storybook uses production-shaped `SessionSummary` fixtures instead of story-only row data
+
+### M2: Current-project inventory and scope
+
+- [ ] Reuse the D-090 session inventory/read model where possible instead of inventing a second data path
+- [ ] Filter the sidebar list to the current project/root only
+- [ ] Do not show other project sessions in the current working directory context
+- [ ] Sort sessions by most recent activity, with no grouping in this cut
+- [ ] Represent stale or inactive host state without exposing "no-host session" as user-facing vocabulary
+- [ ] Empty and load-error states make clear that the list is scoped to the current project
+- [ ] Tests prove cross-project sessions are excluded even when they are more recent
+- [ ] Tests prove recency sorting within the current project
+
+### M3: Live activity and recency projection
+
+- [ ] Show running, queued, and settled states in session rows
+- [ ] Keep activity visible for a session while the user is viewing another session
+- [ ] Update session row activity from durable events and live host/session presence without requiring transcript merge
+- [ ] Show when a session last settled after running work completes
+- [ ] Format relative time in seconds, minutes, hours, days, and weeks
+- [ ] Never render months in relative time
+- [ ] Render week labels through 10 weeks, then switch to a specific date
+- [ ] Tests cover running, queued, settled, seconds/minutes/hours/days/weeks, and date fallback
+
+### M4: Navigation and safety semantics
+
+- [ ] Selecting a session navigates to that durable session id through the same safe switch path as resume
+- [ ] URL `?session=` remains a deep link and stays in sync with sidebar selection
+- [ ] Switching never merges another session transcript into the current view
+- [ ] Switching resets browser-local draft, queue, prompt-history navigation state, and session-scoped UI state
+- [ ] Active execution in the current session blocks or disables switching with a clear reason
+- [ ] Stale or inactive sessions open with visible limitations if no runnable host is attached
+- [ ] Switching does not publish a command result or model-visible event into either session
+- [ ] Tests cover switch, cancel/no-op, active-run block, stale/inactive selection, and no transcript/draft/queue leakage
+
+### M5: Resume relationship and verification
+
+- [ ] Keep `/resume` as an explicit keyboard/search command entry point, not the everyday visual session list
+- [ ] Back `/resume` and sidebar navigation with the same current-project inventory and switch action
+- [ ] Do not widen the sidebar or resume command view to global cross-project search in this slice
+- [ ] Storybook covers the sidebar alongside the existing resume command modal relationship
+- [ ] Web tests cover the dashboard icon entry point, sidebar row rendering, selection, and keyboard accessibility
+- [ ] Manual EZE repro: start or queue work in one current-project session, switch to another, and verify the sidebar shows live activity plus settled relative time
+- [ ] Manual EZE repro: verify sessions from another project never appear in the current project's sidebar list
+
+## Next-Up: session lifecycle controls
+
+D-094 is captured in the implementation plan as the lifecycle-control slice of D-061. It defines cancel vs stop
+vs kill, archive vs delete, and the CLI/debug control surface. Normal UI keeps Escape/cancel as the ordinary
+active-work action; stop, kill, archive, and unarchive are management operations, not primary chat/sidebar
+commands. Source: launcher/host registry, session-store/Richter metadata, current cancel/interrupt flow,
+`apps/trevor-cli`, host lifecycle ownership records, debug UI command surface, and D-093 sidebar filtering (D-094).
+
+### M1: Cancel, stop, and kill semantics (D-094)
+
+- [ ] Define cancel as active-work cancellation that leaves the host attached and ready for another prompt
+- [ ] Define stop as graceful session-level shutdown
+- [ ] Stop cancels active work and records a clean terminal cancellation where possible
+- [ ] Stop clears queued work for that session
+- [ ] Stop asks the host to shut down cleanly and release runtime, lease, and ownership state
+- [ ] Passive browser disconnect does not stop the host
+- [ ] Define kill as force termination for a wedged or unresponsive host
+- [ ] Kill preserves durable history, while any in-flight turn may end as aborted or unknown if the host cannot write a clean event
+
+### M2: Archive metadata and visibility
+
+- [ ] Add or use a durable archived flag on session metadata rather than encoding archive state in transcript text
+- [ ] Archive hides a session from the main UI, session sidebar, and normal current-project navigation
+- [ ] Archived sessions are excluded from the default resume/current-project command view
+- [ ] Archived sessions remain in Richter and are not deleted by archive
+- [ ] Unarchive is required before normal opening or use from the main UI
+- [ ] Archived sessions can be discovered only through an explicit archive filter, archive browser, or CLI archived list
+- [ ] Permanent delete is deferred to an archive browser with strong confirmation
+- [ ] D-093 sidebar respects archived filtering and never shows archived rows by default
+
+### M3: CLI lifecycle surface
+
+- [ ] `trevor list` shows non-archived current-project sessions by default
+- [ ] `trevor list --archived` shows archived sessions for the current project
+- [ ] `trevor open <session>` opens or resumes the selected session in the browser
+- [ ] `trevor open <session>` starts or attaches the matching host when possible
+- [ ] `trevor archive <session>` sets the archived flag without deleting the durable log
+- [ ] `trevor unarchive <session>` clears the archived flag
+- [ ] `trevor stop <session>` performs graceful session shutdown, including active and queued work handling
+- [ ] `trevor kill <session>` force terminates the session host runtime
+
+### M4: UI and debug boundaries
+
+- [ ] Normal UI keeps Escape/cancel as the primary active-work control
+- [ ] Normal sidebar rows do not expose stop, kill, or archive as ordinary actions
+- [ ] Debug mode may expose stop, kill, archive, and unarchive controls
+- [ ] Debug stop/kill controls are gated or confirmed and clearly describe lifecycle effects
+- [ ] Stale or inactive status is visible without implying the user must stop or kill anything
+- [ ] Normal UI filters archived sessions out of D-093 and D-090 surfaces
+- [ ] Web tests assert stop, kill, and archive controls are absent from the normal sidebar
+
+### M5: Verification
+
+- [ ] Tests prove cancel and stop are different lifecycle operations
+- [ ] Tests prove stop cancels active work, clears queued work, releases the host, and keeps the durable log
+- [ ] Tests prove kill force terminates the host while preserving durable history
+- [ ] Tests prove archive and unarchive update metadata and filtering without deleting logs
+- [ ] Tests cover CLI list, list --archived, open, archive, unarchive, stop, and kill
+- [ ] Tests cover debug-only UI exposure and normal-UI absence of lifecycle controls
+- [ ] Manual EZE repro: cancel a turn, stop a session, archive/unarchive it, and verify the sidebar/resume filtering plus durable history behavior
+
+## Next-Up: provider auth/catalog + full model chooser
+
+D-065 is captured in the implementation plan as the full model-source and catalog chooser. This is not routing:
+the first cut selects one active chat model source only. The full chooser replaces the transcript and prompt
+area while sidebars may remain visible, and the current sidebar select becomes a split control: the larger left
+region opens the full chooser, while the right chevron keeps a small categorized recent-model popup. Direct API
+keys and env-derived secrets are owned by the host auth JSON store and are never pasted into the chooser. Source:
+`packages/session/src/protocol.ts`, `apps/web/src/session/use-session.ts`, `apps/web/src/components/panel/SidePanel.tsx`,
+future model-source/catalog read models, `apps/agent-host/src/providers`, pi-ai auth/catalog integration, and
+Storybook chooser fixtures (D-065).
+
+### M1: Source and catalog domain contract (D-065)
+
+- [ ] Define model sources as the product unit above provider adapters
+- [ ] Define source types for local runtimes, OAuth subscriptions, gateway catalogs, and direct API-key providers
+- [ ] Define stable model references as `{ sourceId, modelId }` plus selected reasoning
+- [ ] Define source summaries with status, model count, auth state, catalog freshness, and available actions
+- [ ] Define catalog entries with display name, source, local/cloud kind, capabilities, context length, pricing/cost tier when known, aliases, and freshness
+- [ ] Keep the host as the source of truth for source status, auth state, and catalog freshness
+- [ ] Keep browser hardcoded model lists out of the source/catalog contract
+- [ ] Preserve backward compatibility with the current `provider` string during migration
+- [ ] Tests cover source type decoding, source-state projection, catalog entry decoding, and provider-string compatibility
+
+### M2: Storybook-first full chooser surface
+
+- [ ] Build the full model chooser in Storybook before live app wiring
+- [ ] Render the chooser in the transcript + prompt space, not as the small sidebar popup
+- [ ] Keep left and right sidebars able to remain visible while the chooser is open
+- [ ] Use container queries so the chooser adapts to the space left after sidebars, not only viewport width
+- [ ] Build a source overview grouped by local, cloud subscription, direct API, and gateway catalog
+- [ ] Source rows show status, model count, available action, and click-through affordance
+- [ ] Clicking a source opens a narrowed source-detail view with back navigation
+- [ ] Source-detail view shows source identity, status, auth/setup action, search, filters, and model rows
+- [ ] Storybook states cover wide, narrow, both sidebars visible, long labels, empty, loading, stale, error, and many-source layouts
+
+### M3: Sidebar split control and quick recent picker
+
+- [ ] Split the active-model sidebar control into a larger full-chooser region and a right chevron region
+- [ ] Clicking the larger left region opens the full chooser
+- [ ] Clicking the right chevron opens the small quick picker
+- [ ] Both clickable regions use `cursor-pointer`
+- [ ] Add a visible vertical divider between the quick-popup chevron region and the full-chooser region
+- [ ] Keep the quick picker small and categorized
+- [ ] Limit the quick picker to recently used models instead of the full catalog
+- [ ] Selecting from the quick picker uses the same selected-model contract as the full chooser
+- [ ] Web tests cover split hit targets, keyboard/focus behavior, quick-popper contents, and full-chooser opening
+
+### M4: Source detail browsing and large catalog behavior
+
+- [ ] Add a host-backed catalog query path with search text, filters, caps, and cursor or pagination support
+- [ ] Never send every gateway model to the browser on every `host.online`
+- [ ] Support filters for source, provider/family, configured-only, tools, vision, reasoning, local/cloud, context size, recent, pinned, and recommended
+- [ ] Virtualize or otherwise bound long model lists in the UI
+- [ ] Model rows show capability tags, context size, auth/availability status, catalog freshness, and supported reasoning levels
+- [ ] Local source detail shows runtime reachable/unreachable, discovered/manual entries, and loaded/loading/available state when known
+- [ ] Gateway and direct-provider source details show catalog loading, stale catalog, fetch failure, and retry states
+- [ ] Empty states distinguish no configured models, no search matches, unavailable catalog, and source auth needed
+- [ ] Tests cover thousands of models, filtering, pagination/cursoring, stale catalog, and bounded rendering
+
+### M5: Auth, setup, and no-secret UI boundary
+
+- [ ] OAuth subscription sources expose sign-in and re-login actions through host-owned flows
+- [ ] Provider-code or device-code flows can show links and accept non-key codes when the provider protocol requires it
+- [ ] Direct API keys, env-derived credentials, and provider secrets live in the host auth JSON store
+- [ ] The chooser never renders an API-key paste form
+- [ ] Direct-provider rows show missing, configured, rejected, stale, and refresh states from the host auth JSON store
+- [ ] Source detail can refresh auth/catalog state without blocking browsing other sources
+- [ ] Local runtimes expose setup/open-runtime guidance without pretending to own local runtime installation
+- [ ] Auth/setup failures remain scoped to that source and do not block browsing or selecting unrelated configured sources
+- [ ] Tests cover OAuth signed-in/signed-out/expired, provider-code flow, host auth JSON states, and absence of API-key input fields
+
+### M6: Selection, reasoning, preferences, and execution
+
+- [ ] First cut selects one active chat model only
+- [ ] Do not add routing, prompt-intent model choice, connectivity-based switching, or provider-failure auto-switching
+- [ ] Defer role-specific model assignment for autocomplete ghost text, compaction, summarization, subagents, and background helpers
+- [ ] Persist active model, default model, recent models, pinned models, and per-model reasoning selection
+- [ ] Reasoning choices are constrained by the selected model's detected reasoning surface
+- [ ] Support `off` when the selected model supports disabling reasoning
+- [ ] Selecting a model updates both model reference and reasoning preference without losing current sidebar behavior
+- [ ] User turn events move toward `{ sourceId, modelId, reasoning }` while preserving legacy provider compatibility during migration
+- [ ] Tests cover active/default/recent/pinned persistence, reasoning constraints, legacy provider compatibility, and no routing side effects
+
+### M7: Verification
+
+- [ ] Storybook reviewed before live wiring for source overview, source detail, auth states, quick picker, split sidebar control, and responsive widths
+- [ ] Web tests cover the main chooser surface, source-detail navigation, responsive container behavior, split-control cursor/divider affordance, and accessibility labels
+- [ ] Host tests cover source summaries, catalog queries, auth JSON status projection, catalog freshness, and source-scoped errors
+- [ ] Protocol tests cover new source/catalog payloads, legacy provider decode, selected-model persistence, and query result caps
+- [ ] Redaction tests prove keys, tokens, auth headers, and raw secret values never render in chooser state or logs
+- [ ] Manual EZE repro: open full chooser from the sidebar label area, choose a local model, and verify a normal chat turn uses it
+- [ ] Manual EZE repro: open the chevron quick picker and verify it shows only categorized recent models
+- [ ] Manual EZE repro: show an OAuth expired source, re-login or provider-code flow, and verify no API-key paste form appears
+
+## Next-Up: provider-outage auto-reconnect recovery
+
+D-076-D-079 are captured in the implementation plan as bounded retry for transient provider outages. This is not
+model routing and not provider fallback: Trevor retries the current model step only when the provider failure is
+classified retryable and no text, thinking, or tool call has streamed yet. The implementation should use Effect's
+typed error channel, structured concurrency, and deterministic schedules; provider adapters normalize inconsistent
+OAuth, SDK, gateway, direct API, and local runtime failures into Trevor's taxonomy. Unknown or low-confidence
+provider failure shapes are recorded as redacted, deduped observations under `TREVOR_HOME` (default
+`~/.trevorV2`) so classifier rules can improve later. Source: `apps/agent-host/src/providers/errors.ts`,
+`apps/agent-host/src/providers/error-classifier.ts`, `apps/agent-host/src/providers/pi-ai.ts`,
+`apps/agent-host/src/turn.ts`, `apps/agent-host/src/agent/loop.ts`, `packages/session/src/protocol.ts`,
+future provider-observation store, and `@effect/vitest` fake-provider tests (D-076-D-079).
+
+### M1: Provider failure taxonomy and typed error contract (D-076-D-077)
+
+- [ ] Replace or extend the retryable boolean with a normalized provider-failure classification where needed
+- [ ] Classifications distinguish auth, transient transport, rate limited, provider overloaded, provider unavailable, local runtime unavailable, model unavailable, quota/billing, request rejected, context overflow, and unknown provider failure
+- [ ] Each classified failure carries provider/source/model identity, phase, sanitized detail, retry policy, user action, and redacted evidence
+- [ ] Keep provider failures in the Effect typed error channel through the provider and agent loop boundary
+- [ ] Preserve `ProviderAuthError` and context-overflow behavior as dedicated non-retry paths
+- [ ] Unknown or low-confidence provider failures default to non-retryable unless strongly classified otherwise
+- [ ] Unit tests cover typed classification for auth, overflow, transient transport, rate limit, local runtime unavailable, gateway upstream unavailable, and unknown failures
+- [ ] Unit tests prove raw SDK/API/local errors never leak secrets through the typed error payload
+
+### M2: Provider-boundary normalization
+
+- [ ] Normalize pi-ai stream event errors before they reach the turn loop
+- [ ] Normalize thrown SDK errors, event errors, HTTP-like errors, and plain string errors through the same classifier seam
+- [ ] Use structured provider fields when available before falling back to sanitized message matching
+- [ ] Preserve retry-after, HTTP status, SDK error code/type, provider request id, gateway/upstream source, and local runtime error class when available
+- [ ] Codex/OpenAI OAuth failures classify as auth or refresh/sign-in needed, not retryable transport
+- [ ] Direct API-key failures classify as missing/rejected/quota/billing/request-rejected where evidence supports it
+- [ ] Gateway providers preserve whether the failure came from the gateway or an upstream model provider when known
+- [ ] Local providers distinguish runtime unreachable, model not loaded, model load failure, context-window mismatch, and transient stream interruption
+- [ ] Tests cover Codex/OAuth, Anthropic-like OAuth, direct API-key, gateway, and local runtime shaped failures using sanitized fixtures
+
+### M3: Effect retry schedule and output-start safety gate
+
+- [ ] Implement retry with Effect schedules or equivalent Effect-native structured concurrency
+- [ ] Use a bounded per-step retry budget of three attempts with exponential backoff and jitter
+- [ ] Keep retry budget independent of `MAX_STEPS`, overflow recovery budget, and turn queue state
+- [ ] Track whether any text, thinking, tool call, or tool execution has started for the failed attempt
+- [ ] Retry only when classified retryable and no output/tool activity has started
+- [ ] Do not retry after partial text, thinking, tool call, or tool result activity because replay would duplicate work
+- [ ] User cancel or fiber interruption bypasses retry and stays instant, including during a backoff sleep
+- [ ] Tests use `@effect/vitest` and `TestClock` or equivalent fake time so retry timing is deterministic
+- [ ] Tests cover pre-output retry success, exhausted retries, partial-output terminal failure, and cancel during backoff
+
+### M4: User-visible reconnecting events and transcript rendering
+
+- [ ] Emit `assistant.reconnecting` for each retry attempt with run id, attempt number, and sanitized detail
+- [ ] Keep reconnecting events correlated with the active run id
+- [ ] Flush pending text/thinking buffers before publishing reconnecting status
+- [ ] Render reconnecting as a live status marker in the transcript or turn surface
+- [ ] Terminal error block remains unchanged when retry budget is exhausted or the failure is non-retryable
+- [ ] Do not emit reconnecting for auth failures, context overflow, user cancel, or unknown non-retryable failures
+- [ ] Web tests cover reconnecting rendering, multiple attempts, exhausted retry, non-retryable terminal error, and cancellation
+
+### M5: Redacted provider observation store
+
+- [ ] Add a provider-failure observation store under `TREVOR_HOME` defaulting to `~/.trevorV2`
+- [ ] Store unknown or low-confidence provider failure shapes as redacted, deduped observations
+- [ ] Observation records include provider/source/model, auth mode, phase, status/code fields, sanitized message, top-level shape/field names, output-started flag, classifier verdict, retry decision, and fingerprint
+- [ ] Deduplicate observations by stable fingerprint and track first seen, last seen, and count
+- [ ] Do not store prompts, API keys, auth headers, raw response bodies, raw tool outputs, or raw provider payloads by default
+- [ ] Observation writes are best effort and never fail the user turn
+- [ ] `/doctor` or debug detail can report counts and fingerprints for unclassified provider observations without exposing secrets
+- [ ] Tests cover redaction, dedupe, best-effort write failure, and `TREVOR_HOME` path override behavior
+
+### M6: Doctor/debug surfaces and boundary observability
+
+- [ ] Provider adapters expose inspectable debug info for last classified failure without leaking secrets
+- [ ] Structured logs record provider failure classification, retry decision, attempt number, source/model, phase, and fingerprint
+- [ ] Debug logs can include richer sanitized shape metadata behind a verbose provider/debug scope
+- [ ] `/doctor` distinguishes provider auth failure, internet reachability, provider outage, local runtime status, and unknown provider failure shapes
+- [ ] `/doctor` shows retry exhaustion separately from non-retryable terminal provider failures
+- [ ] Observation diagnostics are available on demand and are never injected into normal model prompts automatically
+- [ ] Tests cover doctor/debug output redaction, retry exhaustion reporting, and unknown-shape counts
+
+### M7: Verification
+
+- [ ] Fake provider fails N times before first token and then succeeds without user resend
+- [ ] Fake provider fails after first text/thinking/tool call and does not retry
+- [ ] Fake provider auth failure surfaces re-auth/actionable failure without retry
+- [ ] Fake provider context overflow still follows overflow recovery and does not use outage retry
+- [ ] Fake provider rate-limit or transient outage exhausts retry budget and surfaces a terminal error
+- [ ] Local-provider unreachable/runtime-not-running case is classified and observed without pretending it is an internet outage
+- [ ] Redaction tests prove prompts, keys, tokens, auth headers, and raw bodies do not enter logs, events, or observation records
+- [ ] Manual EZE repro: simulate a pre-output transient stream drop and verify reconnecting status plus automatic recovery
+- [ ] Manual EZE repro: simulate a new unknown provider error shape and verify a redacted observation appears under `~/.trevorV2`
+
+## Next-Up: doctor health surface
+
+D-073 is captured in the implementation plan as a structured V1-inspired `/doctor` health surface. `/doctor`
+remains a host-owned immediate command with no model turn, but the default result should become a health and
+repair dashboard rather than a raw debug dump. It should answer what is healthy, degraded, or broken; what
+evidence supports that; and what the user can do next. Raw internals remain available only through debug/detail
+surfaces such as full/json/detail output. Source: `apps/agent-host/src/commands.ts`,
+`apps/agent-host/src/main.ts`, `apps/web/src/commands/doctor.ts`,
+`apps/web/src/components/chat/doctor/*`, provider debug info, session/run diagnostics, D-060 internet status,
+D-065 source/auth/catalog state, D-076 provider-failure observations, and Storybook `doctor.current` fixtures
+(D-073).
+
+### M1: Snapshot schema and host command contract (D-073)
+
+- [ ] Define a structured `doctor.current` snapshot schema with summary, areas, findings, evidence, next actions, timestamps, and stale/loading state
+- [ ] Keep `/doctor` as a host-owned immediate command with no model turn
+- [ ] Keep `/doctor` distinct from `host.debugInfo`: doctor is health and repair guidance, debug info is sanitized runtime internals
+- [ ] Use stable area ids, finding ids, status values, severities, labels, and next-action kinds
+- [ ] Include source paths or local paths only when relevant and sanitized
+- [ ] Add command variants or actions for refresh, full/detail, JSON view, copy report, and relevant settings/details
+- [ ] Default `/doctor` output omits raw provider structs, lease timestamps, low-level reload flags, raw auth state, and internal token caps unless directly needed for a finding
+- [ ] Tests cover schema decode, stable ids, no model turn, command variants, default-vs-full output, and command-result compatibility
+
+### M2: Diagnostic area coverage
+
+- [ ] Add Core area summary for app/host version, protocol skew, process health, and basic runtime readiness
+- [ ] Add Session/Run area summary for active run, queue, last termination reason, step limit, no-reply, overflow, and cancellation state
+- [ ] Add Providers/Models/Auth area summary for source status, selected model, auth missing/expired/rejected, catalog freshness, local runtime readiness, and provider retry exhaustion
+- [ ] Add Internet area summary from D-060 host-owned public-internet status and last probe details
+- [ ] Add Tools/Search area summary for core tool availability, `rg`, `ast_grep`, web search/fetch/docs dependencies, and tool failures when known
+- [ ] Add Web/Docs area summary for docs cache, web fetch/rendering availability, Jina/Firecrawl configuration, and stale corpora
+- [ ] Add MCP, LSP, and Hooks areas with unconfigured, unavailable, auth-needed, error, and timeout states
+- [ ] Add Storage/Roots area for `TREVOR_HOME`, local state/cache/share roots, writeability, migration debt, and observation-store status
+- [ ] Add Workspace area for cwd, git/worktree status, AGENTS context, managed worktrees, locks, and non-git states
+- [ ] Add Updates/Version area for package/build/version/update facts when available
+- [ ] Tests cover severity aggregation and at least one finding in each area
+
+### M3: Bounded checks and redaction
+
+- [ ] Every live probe has a short per-check timeout and an overall `/doctor` budget
+- [ ] Slow probes degrade to `timeout` or `not_checked` with a next action instead of blocking the command
+- [ ] Reuse cached state when cached state is authoritative
+- [ ] `/doctor` does not run repairs, mutate config, load models, refresh OAuth, or rewrite local state unless a later explicit action is added
+- [ ] Redact API keys, OAuth tokens, auth headers, raw provider payloads, raw prompt text, raw tool outputs, and unbounded response bodies
+- [ ] Paths are abbreviated or sanitized where full paths are not needed
+- [ ] Findings include enough evidence to debug without leaking secrets
+- [ ] Tests cover redaction, timeout behavior, stale snapshot behavior, no mutation, and bounded overall runtime
+
+### M4: Storybook-first dashboard surface
+
+- [ ] Build or verify the Trevor web diagnostic dashboard in Storybook before live wiring
+- [ ] Render `/doctor` as a dashboard, not terminal-shaped text
+- [ ] Include summary strip, severity filters, category/area layout, repeated findings, status icons, key-value rows, next actions, and expandable evidence/details
+- [ ] Avoid nested cards and oversized hero treatment
+- [ ] Support mobile one-column layout and desktop multi-column or dense responsive layout
+- [ ] Use container/responsive behavior so long paths, labels, and evidence do not overflow
+- [ ] Storybook states cover all-ok, mixed warnings/errors, many findings, all not-checked, loading/refreshing, stale snapshot, long paths, mobile, tablet, and desktop widths
+- [ ] Storybook states cover provider auth missing, local runtime unreachable, cloud unreachable, internet disconnected, MCP auth-needed/error, LSP missing/diagnostic warning, hooks slow/trust changed, docs stale, storage root invalid, and workspace not Git
+- [ ] Visual review verifies errors, warnings, and next actions stay visible at narrow and wide widths
+
+### M5: Live web wiring and transcript behavior
+
+- [ ] Convert `doctor.current` command results into the structured dashboard renderer
+- [ ] Preserve command-result history and transcript ordering for `/doctor`
+- [ ] `/doctor refresh` or refresh action updates the snapshot without starting a model turn
+- [ ] Copy report and view JSON actions use sanitized structured data
+- [ ] Expanded details stay local to the doctor result and do not inject raw diagnostics into model prompt history
+- [ ] Accessibility labels cover summary, filters, areas, findings, next actions, expand/collapse, refresh, copy, and JSON actions
+- [ ] Web tests cover rendering, filtering, refresh, copy report, JSON view, expand/collapse, transcript placement, and accessibility labels
+
+### M6: Prompt/model guidance and diagnostics usage
+
+- [ ] Model guidance treats `/doctor` output as host diagnostics when the user asks about Trevor health, setup, provider readiness, tool availability, or why a turn failed
+- [ ] The model does not call `/doctor` as routine context gathering for ordinary coding work
+- [ ] Doctor output can explain provider auth/catalog issues from D-065 without exposing secrets
+- [ ] Doctor output can explain internet status from D-060 without conflating it with host/session connectivity
+- [ ] Doctor output can explain provider-outage retry exhaustion and unknown provider observation counts from D-076
+- [ ] Doctor output can explain archived/stale/inactive session states from D-093/D-094 when available
+- [ ] Tests or evals cover model guidance, no routine doctor calls, and correct distinction between health areas
+
+### M7: Verification
+
+- [ ] Host tests cover snapshot construction, area aggregation, bounded probes, no model turn, redaction, and command variants
+- [ ] Web tests cover dashboard rendering, responsive behavior, severity filters, next actions, details, copy/JSON, and accessibility
+- [ ] Storybook reviewed for every required state before live app wiring is considered complete
+- [ ] Manual EZE repro: run `/doctor` with all-ok fixtures/state and verify concise healthy dashboard
+- [ ] Manual EZE repro: simulate provider auth missing, internet offline, local runtime unavailable, and unknown provider observations, then verify actionable findings
+- [ ] Manual EZE repro: verify `/doctor full` or JSON/detail view exposes sanitized evidence while default view stays readable
+- [ ] Manual EZE repro: verify `/doctor` never triggers a model turn and does not mutate config or local state
+
+## Next-Up: discovery registry + progressive skill drill-in
+
+D-075 is captured in the implementation plan as a host-owned discovery protocol for skills first, later
+extensible to slash commands, command families, and agents. The first cut keeps ambient skill awareness so the
+model knows skills exist, but moves full skill bodies behind explicit drill-in tools. Source:
+skill discovery roots from D-087, existing skill loading/parsing behavior, shell interpolation support,
+agent/delegate skill validation, future `skills_list(query?, limit?)`, future `skill_view(skillId)`, and
+registry-derived capability manifest D-074.
+
+### M1: Skill registry source of truth
+
+- [ ] Define the host-owned skill registry read model for skill id, name, description, triggers, source path, root kind, status, and provenance
+- [ ] Read skills from the D-087 project-local, global, and configured root order
+- [ ] Preserve selected versus shadowed skill provenance when duplicate skill ids exist
+- [ ] Represent disabled, malformed, missing, and truncated skills explicitly instead of silently dropping them
+- [ ] Preserve existing skill body parsing and shell interpolation behavior unless intentionally superseded by this registry
+- [ ] Do not let Trevor web scan the filesystem or invent its own skill inventory
+- [ ] Unit tests cover root ordering, duplicate ids, disabled skills, malformed skills, and provenance fields
+- [ ] Unit tests prove registry output changes when source skill metadata changes
+
+### M2: Compact ambient skill roster
+
+- [ ] Build a compact `Available skills` roster from the registry for tool-enabled turns
+- [ ] Include skill id, short description, and optional trigger summary in the ambient roster
+- [ ] Keep the ambient roster capped and budgeted
+- [ ] Mark roster truncation explicitly with counts or continuation metadata
+- [ ] Ensure the model can know relevant skills exist without loading full skill bodies
+- [ ] Do not put full skill bodies or huge dynamic inventories into normal prompts
+- [ ] Prompt tests cover relevant-skill awareness from the compact roster
+- [ ] Prompt tests cover truncated roster behavior without speculative all-skill loading
+
+### M3: `skills_list` searchable metadata tool
+
+- [ ] Add `skills_list(query?, limit?)` over compact registry metadata
+- [ ] Return ids, descriptions, trigger summaries, source/provenance, status, match counts, and truncation metadata
+- [ ] Search across id, name, description, trigger summary, and relevant metadata fields
+- [ ] Enforce default and maximum limits so list results cannot bloat prompt context
+- [ ] Keep `skills_list` read-only and UI-agnostic
+- [ ] Handle empty query, no matches, disabled-only matches, malformed entries, and truncated matches clearly
+- [ ] Tests cover search ranking, limits, truncation, disabled/malformed entries, and no full-body return
+- [ ] Tests cover non-web clients calling `skills_list` without Trevor web involvement
+
+### M4: `skill_view` full-body drill-in tool
+
+- [ ] Add `skill_view(skillId)` for loading exactly one selected skill body
+- [ ] Include full body, metadata, source/provenance, selected/shadowed status, and parse diagnostics when available
+- [ ] Reject unknown skill ids with a structured not-found result
+- [ ] Reject or clearly mark disabled skills without pretending they are usable
+- [ ] Do not auto-load neighboring, related, or all matching skill bodies
+- [ ] Preserve existing security and trust gates for shell interpolation inside skill bodies
+- [ ] Tests cover one-body loading, unknown id, disabled id, shadowed provenance, parse diagnostics, and interpolation gating
+
+### M5: Prompt guidance and model behavior
+
+- [ ] Tell the model to call `skill_view` when a visible skill clearly matches the user request
+- [ ] Tell the model to call `skills_list(query)` when the compact roster is missing, truncated, too broad, or insufficient
+- [ ] Tell the model to load only the specific skill intended for use
+- [ ] Tell the model not to call `skill_view` for every listed skill
+- [ ] Tell the model not to treat skills as mandatory when ordinary repository context and tools are enough
+- [ ] Evals cover a relevant listed skill being opened exactly once
+- [ ] Evals cover ordinary coding work proceeding without unnecessary skill loading
+
+### M6: Compatibility and future registry shape
+
+- [ ] Keep the existing `skill(name)` tool temporarily as an alias or compatibility shim if needed
+- [ ] Define migration behavior from `skill(name)` to `skills_list` plus `skill_view`
+- [ ] Shape registry records so slash commands, command families, and agents can join later without changing the skill contract
+- [ ] Do not include slash-command, command-family, or agent discovery in the first implementation slice
+- [ ] Expose the skill registry in a way D-074 capability manifests and `trevor-expert` can consume deterministically
+- [ ] Tests cover compatibility alias behavior or its intentional removal
+- [ ] Tests prove future resource-type fields do not leak bogus command or agent rows into the skills-only first cut
+
+### M7: UI and verification
+
+- [ ] If Trevor web renders skill discovery, build the discovery/list/detail states in Storybook before live wiring
+- [ ] UI renders from host read models only
+- [ ] Storybook covers compact roster, list search, no matches, disabled/malformed skills, truncated results, selected skill detail, and long descriptions
+- [ ] Web tests cover read-model rendering without filesystem scans if a web surface is added
+- [ ] Manual EZE repro: ask for a task matching a visible skill and verify the model opens only that skill
+- [ ] Manual EZE repro: ask about an unclear skill area and verify the model searches metadata before viewing one skill
+
 ## Summary
 - Archived completed checklist detail: [progress-report-done.md](./progress-report-done.md)
 - Live open follow-up (D-044 session recall): 38 features, 0 completed, 38 remaining
 - Live open follow-up (D-092 image attachment UX): 53 features, 0 completed, 53 remaining
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 0 completed, 40 remaining
+- Live open follow-up (D-093 session navigation sidebar): 39 features, 0 completed, 39 remaining
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 0 completed, 38 remaining
+- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
+- Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
+- Live open follow-up (D-073 doctor health surface): 57 features, 0 completed, 57 remaining
+- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 0 completed, 51 remaining
 - Partial/gated carry-forward from archived D-088-D-091: 4 items
-- Remaining implementable work in this report: 131 unchecked items plus 4 partial/gated carry-forward items
+- Remaining implementable work in this report: 435 unchecked items plus 4 partial/gated carry-forward items
