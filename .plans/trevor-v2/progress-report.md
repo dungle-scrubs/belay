@@ -218,12 +218,12 @@ transport activity folding (D-093).
 
 - [ ] Show running, queued, and settled states in session rows
 - [ ] Keep activity visible for a session while the user is viewing another session
-- [ ] Update session row activity from durable events and live host/session presence without requiring transcript merge
-- [ ] Show when a session last settled after running work completes
-- [ ] Format relative time in seconds, minutes, hours, days, and weeks
-- [ ] Never render months in relative time
-- [ ] Render week labels through 10 weeks, then switch to a specific date
-- [ ] Tests cover running, queued, settled, seconds/minutes/hours/days/weeks, and date fallback
+- [x] Update session row activity from durable events and live host/session presence without requiring transcript merge
+- [x] Show when a session last settled after running work completes
+- [x] Format relative time in seconds, minutes, hours, days, and weeks
+- [x] Never render months in relative time
+- [x] Render week labels through 10 weeks, then switch to a specific date
+- [x] Tests cover running, queued, settled, seconds/minutes/hours/days/weeks, and date fallback
 
 ### M4: Navigation and safety semantics
 
@@ -668,11 +668,11 @@ registry-derived capability manifest D-074.
 - Shipped (archived): D-044 session recall - 38 features, 37 completed, 1 gated manual EZE repro
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
-- Live open follow-up (D-093 session navigation sidebar): 39 features, 16 completed, 23 remaining (M1 surface + M2 scope)
+- Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 10 completed, 28 remaining (M2 archive metadata + sidebar filtering; M3 list/archive/unarchive CLI)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 35 completed, 16 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 221 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 215 unchecked items plus 5 partial/gated carry-forward items
