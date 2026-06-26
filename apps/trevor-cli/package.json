@@ -1,0 +1,20 @@
+{
+  "name": "@trevor/cli",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "trevor": "./bin/trevor.mjs"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsgo --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@trevor/session": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

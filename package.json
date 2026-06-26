@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "concurrently -k -n store,blob,host,web -c blue,magenta,green,cyan \"pnpm --filter @trevor/session-store dev\" \"pnpm --filter @trevor/blob-store dev\" \"pnpm --filter @trevor/agent-host dev\" \"pnpm --filter @trevor/web dev\"",
     "dev:web": "pnpm --filter @trevor/web dev",
+    "trevor": "pnpm --filter @trevor/cli start",
     "build": "pnpm -r build",
     "lint": "biome check .",
     "format": "biome check --write .",

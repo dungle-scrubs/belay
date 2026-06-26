@@ -37,3 +37,40 @@ export type ProducerId = (typeof PRODUCER_IDS)[keyof typeof PRODUCER_IDS];
  */
 export const HOST_ROLE = { leader: "leader", standby: "standby" } as const;
 export type HostRole = (typeof HOST_ROLE)[keyof typeof HOST_ROLE];
+
+/**
+ * A pure, dependency-free 32-bit FNV-1a hash, rendered as 8 lowercase hex chars. Used to make a
+ * project's session id collision-resistant on the full path (two repos sharing a basename still get
+ * distinct ids). Deliberately NOT a crypto hash: this module is bundled into the browser, so it must
+ * stay free of `node:crypto`; FNV-1a is more than enough to separate local project directories.
+ */
+export function shortHash(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * Derives a stable, URL-safe session id from a canonical (absolute, resolved) project root: a
+ * human-readable slug of the directory basename plus the short path hash. The slug strips everything
+ * but lowercase alphanumerics (collapsing the rest to single dashes), so the id can never contain a
+ * slash, space, or other character that would break a `?session=<id>` URL or a storage key. Stable
+ * for a given root (the launcher reopens the same project into the same session) and distinct across
+ * roots (the hash separates same-named directories under different parents). Source: D-085.
+ */
+export function projectSessionId(root: string): string {
+  const base =
+    root
+      .split(/[/\\]+/)
+      .filter(Boolean)
+      .pop() ?? "project";
+  const slug =
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "project";
+  return `${slug}-${shortHash(root)}`;
+}
