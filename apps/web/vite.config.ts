@@ -20,6 +20,11 @@ export default defineConfig({
   },
   plugins: [react(), tailwindcss()],
   server: {
+    // Bind IPv4 loopback explicitly. Vite's default host ("localhost") resolves to ::1 (IPv6) only on
+    // macOS, so a client hitting 127.0.0.1 (the reserved-port convention in ~/.agents/PORTS.md, what
+    // the `trevor` launcher opens, and what the proxy target uses) gets ECONNREFUSED even though Vite
+    // is "up". Pinning 127.0.0.1 makes the bind address match every consumer.
+    host: "127.0.0.1",
     port: 17420,
     strictPort: true,
     proxy: {
