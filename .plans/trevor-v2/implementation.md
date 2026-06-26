@@ -792,6 +792,143 @@ project-local root.
   agent/delegate allow-list validation against the effective registry, and shell interpolation staying off by
   default for project-local skills.
 
+### Soon: sidebar git identity - branch/ahead/behind/dirty <!-- D-088 -->
+
+The sidebar should show the workspace identity the user needs before choosing a session or worktree. The
+current working directory remains the primary line. The current Git branch/status belongs directly underneath
+it, not mixed into the same row and not deferred to the worktree switcher.
+
+V1 comparison: V1 already models workspace git state as branch, dirty, ahead, behind, and worktree state. Its
+header rendering uses the compact `branch*`, `↑N`, and `↓N` vocabulary. That is the right product shape to
+carry forward, while moving it from the terminal header into the browser sidebar.
+
+V2 comparison: V2 already announces `branch?: string` on `host.online` and the side panel can render a branch
+string next to the workspace. It does not yet send ahead/behind/dirty status, does not refresh status after
+changes, and does not place the branch underneath the current working directory.
+
+- <!-- D-088 --> **Storybook-first sidebar git identity.** Build the side-panel workspace block in Storybook
+  first, using production sidebar components and fixture data. Stories must cover clean branch, dirty branch,
+  ahead-only, behind-only, diverged, detached HEAD, no upstream, non-git cwd, long path, and long branch names.
+- **Display contract.** The cwd/workspace line is first. The branch line is second. Dirty appends `*` to the
+  branch name. Ahead and behind render as `↑N` and `↓N`. If there is no branch, show a detached label when a
+  commit can be found; if there is no Git repository, omit the branch line or show a subdued non-git state in
+  the Storybook-approved layout.
+- **Host-owned git status.** The host computes git status for its effective cwd/workspace: branch or detached
+  commit, dirty boolean, ahead count, behind count, upstream presence, and whether the cwd is a Git worktree.
+  Dirty means `git status --porcelain` has any tracked or untracked changes. Ahead/behind are relative to
+  upstream when upstream exists.
+- **Protocol shape.** Replace or extend the current `host.online.branch` string with a richer optional git
+  object, keeping decode tolerant of old events. The UI should derive the display label from structured fields,
+  not parse a preformatted string.
+- **Refresh semantics.** Status should be announced on host startup and after host-owned operations that may
+  change the repository state. A later file-watcher can improve freshness, but the first cut should avoid
+  constant polling and must not block prompt flow on Git commands.
+- **Validation target.** Tests should cover protocol round-trip/decode compatibility, git-status collection in
+  clean/dirty/ahead/behind/detached/non-git fixtures, sidebar rendering states, long-label truncation, and no
+  overlap with the context meter or model controls.
+
+### Soon: shared command modal foundation <!-- D-089 -->
+
+Resume and worktree switching should feel like one interaction family, not two unrelated modals. The common
+surface is a Storybook-first shadcn `Command`-based modal that owns search, keyboard navigation, highlighted
+selection, disabled rows, empty state, footer hints, and the visual rhythm shown in the worktree concept image.
+
+V1 comparison: V1 has separate resume/session and worktree overlays with rich keyboardable lists. The useful
+part is the high-signal modal pattern, not the terminal rendering code.
+
+V2 comparison: V2 already has shadcn UI primitives and Storybook. It does not yet have an app-level command
+modal pattern for session/workspace choices, and the resume/worktree features should not each invent one.
+
+- <!-- D-089 --> **One Storybook-first command modal foundation.** Build a reusable command-modal component
+  around shadcn `Command`, `Dialog`, and existing Trevor tokens before wiring any live resume or worktree
+  behavior. The component must be production code with stories, not a story-only mock.
+- **Typed row model, domain-specific consumers.** The shared layer owns presentation and interactions. Resume
+  and worktree consumers pass typed rows, status metadata, disabled reasons, and actions. Do not collapse
+  resume sessions and worktrees into one overloaded domain model.
+- **Concept-matching layout.** The modal is centered, has an input/header row, an escape hint, rows with a
+  current/health marker, primary label, subdued metadata, right-aligned status, selected-row highlight, and a
+  footer with keyboard hints. Worktree stories should match the provided concept closely before app wiring.
+- **Interaction contract.** Arrow keys navigate, Enter selects, Escape closes, search filters rows without
+  resizing the shell, disabled rows remain visible with a reason, and the selected row stays visible while the
+  list scrolls.
+- **Approval gate.** Resume and worktree integration wait until the Storybook command modal states are approved.
+  The first live feature using it must not fork the visual or keyboard behavior.
+- **Validation target.** Stories and tests should cover default, selected, disabled, empty, loading, long label,
+  narrow viewport, many rows, keyboard navigation, search filtering, footer hint rendering, and accessible names.
+
+### Soon: explicit resume command/list <!-- D-090 -->
+
+Fresh sessions are the default. Resume is an explicit user action that selects an existing durable session; it is
+not inferred from cwd, clear, or cd.
+
+V1 comparison: V1 supports an explicit `/resume` overlay and startup `--resume` path, and its tests distinguish
+choosing a previous session from replaying stale transcript into the current view. V2 should keep the explicit
+choice but implement it through the browser/Richter/session-store architecture.
+
+V2 comparison: V2 now has durable session logs, project launch, `/clear` creating a fresh session, `/cd`
+switching to a fresh session for another directory, and `session.switch` for host-authored handoff. It lacks a
+session inventory/read model, a browser resume chooser, and lifecycle logic to ensure the selected session has
+the right host.
+
+- <!-- D-090 --> **Resume is explicit only.** `/resume` and its UI affordance open a session chooser. No cwd
+  navigation, project launch, clear, or browser reload auto-loads prior history unless the user selects a
+  session to resume.
+- **Current project first, global searchable.** The default list is scoped to sessions for the current project
+  or cwd when known. Search can find all sessions. Rows show session id/title, cwd/workspace, branch/status
+  when known, created/updated time, host presence, active/queued state, and recent activity.
+- **Host-controlled inventory.** The host or launcher/supervisor owns session discovery and lifecycle metadata.
+  The browser renders a read model and sends a selected session id; it does not scan local state directly.
+- **Use the shared command modal.** The resume chooser is a D-089 consumer. Build its fixture states in
+  Storybook first: current project rows, global-search results, empty, stale host, active host, queued/running,
+  long session names, and disabled/switch-blocked rows.
+- **Switch semantics.** Selecting a session navigates the browser to that durable session, resets repo-scoped
+  prompt state, clears browser-local drafts/queues for the old session, and ensures or reuses the matching host
+  through the launcher/supervisor path. It must never merge transcripts or replay selected history into the old
+  session.
+- **Validation target.** Tests should cover no implicit resume, inventory ordering/scope, global search,
+  selected-session navigation, stale/dead host handling, active-run blocking or disabled state, draft/queue
+  isolation, and exact durable log replay for the selected session only.
+
+### Soon: managed worktrees and workspace switcher <!-- D-091 -->
+
+Managed worktrees create isolated workspaces for parallel work under Trevor control. The worktree switcher is a
+Storybook-first consumer of the shared command modal, visually grouping the baseline checkout and Trevor-managed
+worktrees for one base repo.
+
+V1 comparison: V1 has a worktree overlay, slash commands for worktree switching, workspace git status, and
+smoke coverage around worktree behavior. It also carries substantial safety machinery around workspace
+switching. V2 should carry forward the safety posture while using browser sessions, host lifecycle, and the
+shared command-modal pattern.
+
+V2 comparison: V2 now has fresh-session `/clear`, `/cd` workspace switching, host-announced cwd/workspace, and
+sidebar branch status as D-088. It lacks a Trevor-owned worktree registry, managed worktree creation, visual
+grouping by base repo, cwd-level advisory locks, and merge/reconcile/delete flows.
+
+- <!-- D-091 --> **Managed worktrees live under Trevor state.** Trevor-created worktrees are recorded in a
+  registry under local state and placed under `~/.trevorV2/.worktrees/<repo-hash>/<branch-slug>-<id>` or an
+  equivalent grouped path. The registry records base repo identity, base path, worktree path, branch, base
+  commit, current commit when known, associated session id, created/updated time, and status.
+- **Create/open/switch flow.** From a base repo, Trevor can create a managed worktree and make it the current
+  cwd/workspace/session target. Existing managed worktrees can be opened or switched to without recreating
+  them. The baseline checkout remains visible as the baseline row.
+- **Use the shared command modal.** The worktree switcher is a D-089 consumer. Build the switcher in Storybook
+  first using the provided concept: baseline, active worktree, clean, dirty, ahead/behind, idle, agents running,
+  needs-you, rebase conflict, disabled switching, empty, and many rows.
+- **Visual grouping.** Rows are grouped by base repo and show branch/worktree name, dirty/ahead/behind deltas,
+  current marker, host presence, agent count or activity, conflict/needs-user state, and whether the row is the
+  baseline checkout.
+- **Switch safety.** Switching is blocked while host-owned execution is active in the current workspace. Cwd-level
+  advisory locks prevent two Trevor-owned mutating hosts from acting on the same directory. Switching resets
+  repo-scoped prompt state, drafts, queues, live task state, and host context so execution cannot leak across
+  workspaces.
+- **Merge/reconcile/delete.** The first slice may stop at create/list/switch, but the feature plan includes a
+  later merge/reconcile/delete milestone: inspect diff, merge or rebase back to the base repo, surface
+  conflicts, and require confirmation before deleting dirty or conflicted worktrees.
+- **Validation target.** Tests should cover registry persistence, path hashing/grouping, Git worktree creation,
+  switch handoff, active-run blocking, cwd-lock contention, dirty/conflict display, baseline/worktree grouping,
+  no transcript/prompt leakage across switches, and merge/delete confirmation behavior when that milestone is
+  implemented.
+
 ### Deferred (after Phase 5 search-tool upgrade): session recall <!-- D-044 -->
 
 On-demand retrieval of detail compaction folded away - "search my own past." Possible only because the full
@@ -860,6 +997,9 @@ and does not change the current manual `SESSION_ID` + `TREVOR_WORKSPACE` behavio
 - **Session navigation.** The UI needs a first-class session list/switcher showing session id, cwd/workspace,
   host presence, active/queued state, and recent activity. URL `?session=` remains a deep-link mechanism, but not the
   only way to move between sessions.
+- **Explicit resume is now specified by D-090.** Resuming a durable session is a user-selected command/list flow,
+  not an implicit cwd lookup or default browser reload behavior. D-061 keeps the broader session manager
+  lifecycle, while D-090 is the near-term resume slice.
 - **Kill/stop from terminal and UI.** Add explicit session termination controls in both surfaces: terminal command(s)
   to list/open/kill sessions, and UI actions to stop a session's host runtime and mark or archive the browser-visible
   session. Killing a host is lifecycle management; it must not mutate or delete the durable session log by accident.
@@ -1000,6 +1140,14 @@ Sequence as each is picked up (no hard order locked here):
   start/reuse the matching host, and avoid manual `SESSION_ID`/`TREVOR_WORKSPACE` wiring.
 - **Early transcript layout** is specified above as D-086: new/short browser sessions start at the top and grow
   downward until content overflows, then live-bottom following takes over.
+- **Sidebar git identity** is specified above as D-088: Storybook-first cwd/branch display in the sidebar,
+  with branch, dirty `*`, ahead/behind deltas, detached/non-git states, and host-owned structured git status.
+- **Shared command modal foundation** is specified above as D-089: a reusable shadcn `Command` modal pattern
+  for resume and worktree switching, built and approved in Storybook before live integration.
+- **Explicit resume** is specified above as D-090: `/resume` and UI session selection are explicit only, current
+  project first with global search, and never inferred from cwd, clear, cd, or reload.
+- **Managed worktrees** is specified above as D-091: Trevor-owned worktree registry, Storybook-first switcher,
+  create/list/switch flow, cwd locks, safety boundaries, and later merge/reconcile/delete.
 - **Output-style registry** is specified below as D-072: V1-compatible assistant styles as additive
   presentation prompt overlays, exposed through settings and `/style` without task/routing semantics (H-164).
 - **Doctor health surface** is specified below as D-073: V1-compatible structured diagnostics, rendered in
@@ -1058,7 +1206,7 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **`docs` tool** | new | <!-- D-070 --> deferred. Higher-level documentation lookup/cache tool over `web_fetch`; stores normalized docs corpora in `~/.local/state/trevor/docs`, treats entries as stale after 24 hours, and refreshes intentionally |
 | **Tangents** | H-030 | lateral exploration side-threads |
 | **Bounded-child + takeover** | H-024, H-025, H-086 | host-owned constrained helpers + route escalation/takeover |
-| **Managed worktrees + cwd locks + merge protocol** | H-140 | stable per-session git worktrees (paths/branches/hashes), cwd-level advisory locks, and a merge/reconciliation protocol; prerequisite for mutating background subagents |
+| **Managed worktrees + cwd locks + merge protocol** | H-140 | <!-- D-091 --> promoted to §6. Stable per-session git worktrees (paths/branches/hashes), cwd-level advisory locks, and a merge/reconciliation protocol remain prerequisite for mutating background subagents |
 | **Code retrieval / search** | H-112, H-138, H-139 | code_search/code_index/project_retrieve/source_recall + retrieval daemon |
 | **Archive tools** | H-114 | archive_read / archive_unpack + validators / media processors |
 | **`video_inspect`** | H-115 | frame extraction from video |
@@ -1837,3 +1985,13 @@ _Updated 2026-06-26: **Project-local skill roots** added as D-087. V2 should dis
 skills without global installation. Project-local skills override broader skills by id, while `/skills` and the
 future D-075 `skills_list`/`skill_view` surfaces retain source and shadowing provenance. D-087 is authored here
 in markdown and still needs syncing into `plan.db` alongside D-040-D-086._
+
+_Updated 2026-06-26: **Sidebar git identity** added as D-088, showing cwd plus structured branch, dirty,
+ahead, and behind state in the sidebar after Storybook approval. **Shared command modal foundation** added as
+D-089, using shadcn `Command` as the approved Storybook-first pattern for both resume and worktree switching.
+**Explicit resume** added as D-090: session history is selected explicitly through `/resume` or UI,
+current-project first with global search, and never loaded implicitly by cwd, clear, cd, or reload. **Managed
+worktrees** added and promoted from H-140 as D-091: Trevor-managed worktrees under local state, a
+Storybook-first switcher, create/list/switch flow, cwd locks, safety boundaries, and later
+merge/reconcile/delete. D-088-D-091 are authored here in markdown and still need syncing into `plan.db`
+alongside D-040-D-087._

@@ -5,25 +5,28 @@
 > mark a milestone complete until every current-cutoff checkbox under it is
 > checked.
 
-> **Scope.** This report tracks the active implementation cutoff and the next sequenced feature.
+> **Scope.** This report tracks the active implementation cutoff and the next sequenced work.
 > Phases 1-7 are shipped: concurrent read-only tool execution (D-050), graceful
 > turn-budget termination (D-051…D-053), cross-turn compaction (D-040…D-043),
 > provider SDK migration plus outage auto-reconnect (D-076…D-079), subagents
 > (D-045…D-049), search-tool upgrade (D-062), and nested AGENTS.md context files
-> (D-080…D-081). Phase 8 is now the active cutoff: prompt shell lane for leading
+> (D-080…D-081). Phase 8 is shipped: prompt shell lane for leading
 > `!` (D-082). The output is user-visible only and prompt-invisible for this first
 > cut. Prompt composer draft persistence and Up-arrow history recall are captured
 > as the first next-up item after Phase 8 (D-083…D-084). The next-up queue also
 > includes the `trevor` project launcher (D-085), early transcript top-down growth
-> (D-086), and project-local skill roots from `<cwd>/.agents/skills` (D-087).
-> Later roadmap items (session recall D-044, WAN fallback D-060,
-> session manager D-061, git functionality, …) stay sequenced in §6 and are
-> decomposed here when picked up.
+> (D-086), and project-local skill roots from `<cwd>/.agents/skills` (D-087);
+> those queued follow-ups are shipped. The next sequenced queue is sidebar git
+> identity (D-088), the shared shadcn command modal foundation (D-089), explicit
+> resume (D-090), and managed worktrees (D-091). Later roadmap items (session
+> recall D-044, WAN fallback D-060, remaining session manager D-061 work, …) stay
+> sequenced in §6 and are decomposed here when picked up.
 
-> Current focus: Phase 8 - prompt shell lane. The work starts Storybook-first with
-> the prompt input color/state change for leading `!`, then adds protocol events,
-> host execution through the existing protected `runShell` path, dedicated transcript
-> rendering, and tests proving the shell result is not sent to the model context.
+> Current focus: D-088 sidebar git identity, then D-089 shared command modal,
+> D-090 explicit resume, and D-091 managed worktrees. Each UI surface starts
+> Storybook-first. Sidebar git identity shows cwd plus branch/dirty/ahead/behind
+> before resume/worktree work. The shared command modal is approved in Storybook
+> before either resume or worktree switching is wired into the app.
 > Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3); Phase 5 M1-M5
 > (inline + background subagents); Phase 6 (ripgrep `grep` + read-only `ast_grep`);
 > Phase 7 (nested AGENTS.md context files); Phase 2 M4 (`/doctor` turn-termination
@@ -587,6 +590,204 @@ future D-075 `skills_list`/`skill_view` registry surfaces (D-087).
 - [x] Unit tests: `/skills` empty (lists roots) + list (source tags) output and `skill(name)` expansion from the project root
 - [x] Unit test: a project-local skill body does NOT auto-run shell interpolation while the gate is off (the `!` line survives verbatim)
 
+## Next-Up: sidebar git identity
+
+D-088 is captured in the implementation plan as the first new item before resume/worktrees. The current working
+directory stays visible in the sidebar, and the current Git branch/status moves underneath it as structured
+workspace identity: `branch*`, `↑N`, and `↓N`. V1 already had branch/dirty/ahead/behind/worktree state in its
+header model; V2 currently sends only `branch?: string` on `host.online` and renders it inline next to the
+workspace. Source: `apps/web/src/components/panel/SidePanel.tsx`, `apps/web/src/components/panel/SidePanel.stories.tsx`,
+`apps/web/src/derive.ts`, `apps/agent-host/src/workspace-switch.ts`, `apps/agent-host/src/main.ts`,
+`packages/session/src/protocol.ts` (D-088).
+
+### M1: Storybook sidebar states first (D-088)
+
+- [ ] Extract or refine the side-panel workspace block so cwd and git status can be fixture-driven without a live host
+- [ ] Render cwd/current working directory as the first line in the block
+- [ ] Render the branch/status line underneath cwd, using `branch*`, `↑N`, and `↓N`
+- [ ] Storybook states: clean branch, dirty branch, ahead-only, behind-only, diverged, detached HEAD, no upstream, non-git cwd, long path, and long branch
+- [ ] Keep dimensions stable: long paths/branches truncate without overlapping the context meter, tabs, or model controls
+
+### M2: Host-owned structured git status
+
+- [ ] Add a structured git status read model: branch, detached commit label, dirty, ahead, behind, upstream presence, and worktree boolean
+- [ ] Collect status from the effective host cwd/workspace with argv-based Git commands, not shell parsing
+- [ ] Define dirty as any `git status --porcelain` output, including untracked files
+- [ ] Compute ahead/behind against upstream only when upstream exists
+- [ ] Treat non-git cwd and Git command failures as an absent or degraded status, not a host startup failure
+- [ ] Unit tests cover clean, dirty, ahead, behind, diverged, detached, no-upstream, and non-git fixtures
+
+### M3: Protocol and app wiring
+
+- [ ] Extend `host.online` with the structured git object while keeping old `branch?: string` decode tolerant
+- [ ] Derive sidebar git state from structured fields, not a preformatted host string
+- [ ] Pass cwd/workspace and git status into `SidePanel` as presentation props
+- [ ] Refresh git status after host-owned operations that can change repository state, without polling constantly
+- [ ] Web tests cover rendering, decode compatibility, truncation, and empty/non-git display
+
+### M4: Verification
+
+- [ ] Storybook reviewed for all sidebar git states before app wiring is considered complete
+- [ ] Unit/web tests pass for protocol, host git status, and sidebar rendering
+- [ ] Manual EZE repro: dirty file, ahead/behind branch, detached HEAD, and non-git cwd produce the expected sidebar line
+
+## Next-Up: shared command modal foundation
+
+D-089 is captured in the implementation plan as the shared Storybook-first modal pattern for both explicit
+resume and managed worktree switching. It uses shadcn `Command` and the existing dialog/tokens so resume and
+worktree flows share keyboard behavior, search, row layout, disabled states, and footer hints. Source:
+`apps/web/src/components/ui/command.tsx`, `apps/web/src/components/ui/dialog.tsx`, future command-modal
+component/stories, future resume/worktree consumers (D-089).
+
+### M1: Reusable command modal shell (D-089)
+
+- [ ] Build the modal shell around shadcn `Command` and existing dialog primitives
+- [ ] Keep it production code with Storybook fixtures, not a story-only prototype
+- [ ] Support title/input header, escape hint, scrollable row list, selected row, right-side status, and footer hints
+- [ ] Define a typed generic row contract for label, metadata, marker, status, disabled reason, keywords, and action id
+- [ ] Keep resume rows and worktree rows as separate domain adapters over the shared presentation contract
+- [ ] Expose controlled open/search/selection props so live consumers can own command execution
+
+### M2: Storybook visual states first
+
+- [ ] Default command modal matching the provided centered concept
+- [ ] Worktree-style rows: baseline, active row, agents-running, needs-you, idle, dirty, ahead/behind, and conflict states
+- [ ] Resume-style rows: current project sessions, global search result, stale host, active host, queued/running, and old session
+- [ ] Empty, loading, disabled-row, many-rows, long-label, and narrow-viewport stories
+- [ ] Selected row highlight fills the row without resizing the shell
+- [ ] Footer hints cover navigate, switch/resume, open in split where supported, and close
+- [ ] Modal width/height remain stable while search filters rows
+
+### M3: Interaction and accessibility
+
+- [ ] ArrowUp/ArrowDown navigate visible enabled rows
+- [ ] Enter selects the highlighted enabled row and returns its action id to the consumer
+- [ ] Escape closes the modal without firing an action
+- [ ] Search filters by label, metadata, status, and keywords without mutating the source rows
+- [ ] Disabled rows remain visible, focusable or skipped by a decided rule, and expose their disabled reason accessibly
+
+### M4: Approval gate and tests
+
+- [ ] Component tests cover keyboard navigation, filtering, disabled behavior, empty state, and selection callback
+- [ ] Stories cover resume and worktree fixture sets before either live feature wires it into the app
+- [ ] Storybook approval is recorded as the gate for D-090 and D-091 app integration
+- [ ] No second bespoke resume/worktree modal is introduced during later wiring
+
+## Next-Up: explicit resume
+
+D-090 is captured in the implementation plan as explicit session selection. Fresh sessions remain the default
+after `clear`, `/cd`, reload, and project launch. `/resume` or the matching UI affordance opens a host-controlled
+session list using the shared command modal. Source: session-store/Richter session APIs, launcher/host registry,
+`packages/session/src/protocol.ts`, `apps/web/src/App.tsx`, future resume command modal stories (D-090).
+
+### M1: Session inventory/read model (D-090)
+
+- [ ] Define the session summary read model: session id/title, cwd/workspace, project/base repo, git status when known, created/updated time, event count, host presence, active/queued state, and recent activity
+- [ ] Host or launcher/supervisor owns inventory discovery; the browser consumes a read model and does not scan local state directly
+- [ ] Current project sessions sort first by recent activity
+- [ ] Global search can find sessions outside the current project
+- [ ] Stale/dead host state is represented distinctly from no host
+- [ ] Inventory API degrades with a visible empty/error state instead of silently hiding resume
+
+### M2: Storybook resume chooser first
+
+- [ ] Use the D-089 command modal foundation for resume rows
+- [ ] Stories cover current-project list, global search results, empty list, inventory error, active host, stale host, queued/running, disabled/switch-blocked, and long session labels
+- [ ] Row metadata shows enough cwd/session identity to avoid selecting the wrong durable log
+- [ ] Recent activity and host status are visible but subdued compared with the primary label
+- [ ] Disabled rows explain why they cannot be resumed
+- [ ] Storybook approval is required before `/resume` app wiring
+
+### M3: `/resume` command and UI entry
+
+- [ ] Add `/resume` as a host/UI command that opens the resume chooser, not as a model turn
+- [ ] Add a sidebar or command affordance that opens the same chooser
+- [ ] URL `?session=` remains a deep link but is not the only navigation path
+- [ ] Choosing a row publishes or invokes a host-controlled session switch action
+- [ ] Cancel/escape leaves the current session untouched
+- [ ] Command output never injects old transcript content into the current session
+
+### M4: Resume switch semantics
+
+- [ ] Selecting a session navigates the browser to that durable session id
+- [ ] The selected session's transcript is replayed as that session, never merged into the old view
+- [ ] Browser-local drafts, prompt history navigation state, send queue, and repo-scoped prompt state reset for the old session
+- [ ] Launcher/supervisor ensures or reuses the matching host for the selected session/workspace
+- [ ] Active execution in the current session blocks or disables switching according to the shared safety rule
+- [ ] Reload, `clear`, `/cd`, and ordinary project launch do not auto-resume any prior history
+
+### M5: Verification
+
+- [ ] Tests prove no implicit resume by cwd, reload, clear, or cd
+- [ ] Tests prove current-project-first ordering and global search
+- [ ] Tests prove exact selected-session replay and no old-session transcript bleed
+- [ ] Tests cover stale host handling, active-run disabled state, queue/draft isolation, and cancel behavior
+
+## Next-Up: managed worktrees
+
+D-091 is captured in the implementation plan and promoted from H-140. Trevor-managed worktrees live under
+Trevor local state, are visually grouped by base repo, and switch through the shared command modal after
+Storybook approval. This feature is the prerequisite safety layer for future mutating background subagents.
+Source: future worktree registry, `apps/agent-host/src/workspace-switch.ts`, launcher/host registry, Git CLI
+helpers, `apps/web` command modal consumers, `packages/session/src/protocol.ts` (D-091).
+
+### M1: Registry and storage model (D-091)
+
+- [ ] Store Trevor-created worktrees under `~/.trevorV2/.worktrees/<repo-hash>/<branch-slug>-<id>` or an equivalent grouped path
+- [ ] Registry records base repo identity, base path, worktree path, branch, base commit, current commit when known, session id, created time, updated time, and status
+- [ ] Base repo identity is stable across cwd spelling, symlinks, and nested paths
+- [ ] Registry reads tolerate missing/deleted paths and surface stale entries
+- [ ] Path hashing avoids leaking full project paths into directory names while preserving grouping
+- [ ] Unit tests cover registry persistence, path grouping, stale entries, and identity stability
+- [ ] Storage location follows the current Trevor local-state convention until the root taxonomy migration lands
+
+### M2: Storybook worktree switcher first
+
+- [ ] Use the D-089 command modal foundation for the worktree switcher
+- [ ] Match the provided concept: centered modal, input header, baseline row, selected highlight, right-aligned status, and footer hints
+- [ ] Stories cover baseline checkout, active worktree, clean, dirty, ahead/behind, idle, agents running, needs-you, rebase conflict, disabled switching, empty, and many rows
+- [ ] Rows show branch/worktree name, dirty/ahead/behind deltas, current marker, host presence, agent count or activity, and conflict/attention state
+- [ ] Base repo grouping is visible when multiple base repos appear in fixture data
+- [ ] Long branch names and many statuses do not resize the modal or overlap text
+- [ ] Storybook approval is required before live worktree switching is wired
+
+### M3: Create, open, and switch flow
+
+- [ ] Add host-owned create-managed-worktree action from the current base repo
+- [ ] Create a Git worktree with a safe branch/path policy and record it in the registry
+- [ ] Associate each managed worktree with a durable Trevor session id
+- [ ] Opening an existing managed worktree reuses its path/session instead of recreating it
+- [ ] Switching makes the worktree path the new current cwd/workspace/session target
+- [ ] Baseline checkout remains available as the baseline row
+- [ ] Missing path or invalid Git state yields a visible blocked/repair state, not a silent fallback
+
+### M4: Safety and isolation
+
+- [ ] Switching is blocked while host-owned execution is active in the current workspace
+- [ ] Cwd-level advisory locks prevent two Trevor-owned mutating hosts from acting on the same directory
+- [ ] Switch handoff resets repo-scoped prompt state, drafts, send queue, task state, and lazy below-cwd context
+- [ ] Host replacement/reuse follows the same session lifecycle boundary as `/cd` and resume
+- [ ] Worktree switch never loads another worktree's transcript unless the selected row's session is explicitly opened
+- [ ] Background/read-only agents cannot mutate worktree state in this cut
+- [ ] `/doctor` or equivalent diagnostics surface lock/worktree/session mismatches
+
+### M5: Merge, reconcile, delete, archive
+
+- [ ] Add diff/status inspection for a managed worktree relative to its base repo
+- [ ] Add merge or rebase-back flow with conflict reporting
+- [ ] Add delete/archive action for clean worktrees
+- [ ] Dirty, conflicted, running, or unpushed worktrees require confirmation before destructive cleanup
+- [ ] Registry cleanup reconciles deleted/missing worktree paths
+- [ ] Merge/reconcile can ship after create/list/switch but remains part of the D-091 feature plan
+
+### M6: Verification
+
+- [ ] Tests cover Git worktree creation, registry updates, and switch handoff
+- [ ] Tests cover active-run blocking, cwd-lock contention, and stale registry entries
+- [ ] Tests cover baseline/worktree grouping and status display
+- [ ] Tests prove no prompt/transcript/queue/context leakage across worktree switches
+- [ ] Smoke test covers create, switch, switch back to baseline, dirty display, and blocked switching while running
+
 ## Summary
 - Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
 - Phase 2 (turn-budget termination): 20 features, 20 completed, 0 remaining ✅ (M4 `/doctor` turn-termination reason shipped)
@@ -605,12 +806,17 @@ future D-075 `skills_list`/`skill_view` registry surfaces (D-087).
   - D-085 project launcher: 25 ✅ (`trevor` CLI in `apps/trevor-cli`: project/session resolution, shared-service readiness, host reuse/spawn behind a per-session lock, browser handoff, secret-free status)
   - D-086 early transcript layout: 18 ✅ (top-down normal-flow well + bottom-tolerance follow, fixtures)
   - D-087 project-local skill roots: 15 ✅ (`<workspace>/.agents/skills` first, then global; override + no-tombstone, provenance, `/skills` roots/source)
+- Next sequenced queue (D-088-D-091): 108 features, 0 completed, 108 remaining
+  - D-088 sidebar git identity: 19 remaining (Storybook sidebar states first, host-owned structured git status, protocol/app wiring, verification)
+  - D-089 shared command modal foundation: 22 remaining (shadcn `Command` modal shell, Storybook visual states, interaction/accessibility, approval gate)
+  - D-090 explicit resume: 28 remaining (session inventory, Storybook resume chooser, `/resume` command/UI entry, switch semantics, verification)
+  - D-091 managed worktrees: 39 remaining (registry/storage, Storybook switcher, create/open/switch, safety/isolation, merge/reconcile/delete, verification)
 - Phase 4 (provider SDK migration + outage auto-reconnect): 18, all shipped ✅
 - Phase 5 (subagents): ~39/41 shipped (inline + background delegation); ~2 remaining are the fork-dependent M2 forkability bullets (blocked on the unimplemented D-025…D-029 fork feature) + minor refinements
 - Phase 6 (search-tool upgrade: ripgrep `grep` + read-only `ast_grep`): 14, all shipped ✅
 - Phase 7 (nested AGENTS.md context files, D-080 + D-081 single-sourced `TREVOR_HOME`): 17, all shipped ✅ (eager up-tree + lazy below-cwd, keyed on AGENTS.md, with /doctor surfacing)
 - Phase 8 (prompt shell lane, D-082): 20/20 shipped ✅ (leading `!` runs a host shell command through the protected `runShell` path, rendered as a terminal block, prompt-invisible this cut)
-- Remaining implementable work: NONE in the active cutoff or the next-up queue — only the fork-blocked Phase 5 bullets (D-025…D-029) and minor Phase 5 refinements remain, both outside this cutoff
+- Remaining implementable work: 108 unchecked items in D-088-D-091, plus the fork-blocked Phase 5 work (D-025…D-029) and minor Phase 5 refinements outside this cutoff
 - Superseded/obsolete checklist debt: 0
 - Full suite at completion: typecheck green across all 9 packages; 428 unit/web/integration tests pass (1 gated skip); biome lint clean (6 pre-existing warnings + 1 info)
 
@@ -647,6 +853,10 @@ future D-075 `skills_list`/`skill_view` registry surfaces (D-087).
 > no disable-tombstones, provenance, and `/skills` root/source reporting). Composer note (2026-06-26):
 > the shell lane's visual treatment is orange (not green) and swaps the composer's attach `+` for a
 > shell glyph in place (no top chip), so typing a leading `!` never reflows the composer height; all
-> Storybook stories are centered in the canvas via the global preview decorator. With these, the active
-> cutoff and every queued follow-up are complete; only the fork-blocked Phase 5 work (D-025…D-029)
-> remains, outside this cutoff.
+> Storybook stories are centered in the canvas via the global preview decorator. With these, the old active
+> cutoff and D-083…D-087 queue are complete.
+>
+> New queue added 2026-06-26: D-088 sidebar git identity, D-089 shared shadcn command modal foundation,
+> D-090 explicit resume, and D-091 managed worktrees. All UI-bearing work starts Storybook-first. Sidebar git
+> identity precedes resume/worktrees; the shared command modal must be approved in Storybook before resume or
+> worktree integration lands.
