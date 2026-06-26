@@ -21,10 +21,11 @@
 > D-060, session manager D-061, …) stay sequenced in §6 and are decomposed here when
 > picked up.
 
-> Current focus: Phase 5 - subagents. M1 (discovery) + M2 (isolated child session + link) + M3
->   inline delegation are shipped end-to-end; `delegate_background` + M4 (web surfacing / `/doctor`)
->   + M5 (ephemeral agents) remain.
-> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1-M3-inline.
+> Current focus: Phase 5 - subagents shipped end-to-end for the INLINE path: M1 discovery, M2
+>   isolated child session + `delegated.to` link, M3 inline delegation, M4 web surfacing + `/doctor`,
+>   M5 inline ephemeral agents. Remaining: `delegate_background` (+ caps), the fork-dependent
+>   forkability bullets, and a few refinements (see the milestone notes). Then Phase 6 (search tools).
+> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1-M5 (inline path).
 > Notes: (1) the fork machinery (D-025…D-029) referenced by M2 is NOT in the codebase yet, so the
 >   "independently forkable / forking copies the frozen result" properties are forward-looking -
 >   `delegated.to.result` already carries the frozen result for when fork lands. (2) Delegation runs
@@ -285,18 +286,18 @@ Source: `apps/web/src/transcript.ts`, `apps/web/src/components/chat/message.tsx`
 - [ ] `/doctor` reports active child delegations, depth policy, and active background-child count/cap
 - [ ] Manual repro: a general-purpose inline delegation distills a multi-step subtask into one parent tool result; an explorer fan-out reads files without leaking parent context
 
-### M5: Ephemeral model-minted agents
-Source: `apps/agent-host/src/tools/delegate.ts`, `apps/agent-host/src/agents.ts`, `packages/session/src/protocol.ts`, `apps/web/src/transcript.ts`
+### M5: Ephemeral model-minted agents ✅ (inline)
+Source: `apps/agent-host/src/agent/delegate.ts`, `apps/agent-host/src/agents.ts`
 
-- [ ] `delegate_inline` / `delegate_background` accept either a discovered agent id or an inline ephemeral definition
-- [ ] An ephemeral definition is `{ description, instructions, tools, skills? }`; execution mode is implied by the delegation tool and recorded with the run
-- [ ] Ephemeral definitions are runtime-only: no file is written, no reusable registry entry is created, and the definition is snapshotted into the child session for audit/replay
-- [ ] The host validates `tools` and `skills` against their registries before starting the child; unknown names and policy-forbidden names are rejected with a structured tool error
-- [ ] The child prompt loads only the selected tool schemas and skill names/descriptions; a skill body is loaded only if the child later chooses to use that accessible skill
-- [ ] Ephemeral children use the same isolated child session, `delegatedTo` link, cancellation, fold-back, and parent-fork behavior as discovered agents
-- [ ] The web renders ephemeral delegations as linked child blocks with their selected tool/skill contract, distinct from named reusable agents
-- [ ] Unit tests cover invalid ephemeral specs, no unlisted tool/skill access, no implicit parent transcript leak, and forked parents preserving the frozen result without re-running the child
-- [ ] Unit test: an ephemeral definition cannot re-enable delegation tools or bypass the depth-1 policy
+- [x] `delegate_inline` accepts either a discovered `agent` id or an inline `define` ephemeral definition (`delegate_background` follow-on inherits this)
+- [x] An ephemeral definition is `{ description, instructions, tools?, skills? }`; inline mode is implied by the tool
+- [x] Ephemeral definitions are runtime-only: no file written, no registry entry (`source: "ephemeral"`); the `delegated.to` link records `agent: "ephemeral"` (a full contract snapshot INTO the child session is a refinement)
+- [x] The host validates `tools` and `skills` against the live registries before starting the child; unknown tools/skills and policy-forbidden delegation tools are rejected with a structured `error: …` (never silently dropped)
+- [x] The child is offered only its allow-listed tools (`toolNames` restricts what's offered + run); a runtime allow-list gate on the `skill` tool body-loading is a refinement
+- [x] Ephemeral children use the same isolated child session, `delegated.to` link, fold-back, and depth-1 (no capability) as discovered agents (cancellation/parent-fork inherit the discovered path; fork is blocked on the unimplemented fork feature)
+- [~] Distinct web rendering of the ephemeral tool/skill contract — renders as the same linked block with `agent: ephemeral` (a contract-detail view is a refinement)
+- [x] Unit tests: invalid ephemeral specs (missing description/instructions, unknown tool, unknown skill), no unlisted tool access, no parent leak (shared isolation test); a forked-parent test is blocked on the unimplemented fork feature
+- [x] Unit test: an ephemeral definition cannot re-enable delegation tools (rejected) or bypass depth-1 (the child is given no capability)
 
 ## Accepted/Deferred Follow-up: Phase 6: Search-tool upgrade
 
@@ -333,7 +334,7 @@ Source: `apps/agent-host/src/tools/ast-grep.ts` (new), shared search-process hel
 - Phase 2 (turn-budget termination): 20 features, 19 completed, 1 remaining
 - Phase 3 (cross-turn compaction): 27 features, 27 completed, 0 remaining
 - Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
-- Phase 5 (subagents): 41 features, ~22 completed (M1 discovery + M2 isolated child session/link + M3 inline delegation), ~19 remaining (`delegate_background` + caps, M4 web surfacing/`/doctor`, M5 ephemeral agents; plus the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature)
+- Phase 5 (subagents): 41 features, ~33 completed (M1 discovery + M2 isolated child session/link + M3 inline delegation + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~8 remaining (`delegate_background` + its caps/read-only clamp + late-result tracking; the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
 - Phase 6 (search-tool upgrade, accepted/deferred after subagents): 14 features, 0 completed, 14 remaining (decomposed, not started)
 - Total features: 67
 - Completed: 66

@@ -39,7 +39,9 @@ export interface AgentDefinition {
   /** Read-only flavor: the resolved tool set is clamped to the read-only tools (no write/edit/
    *  multi_edit/bash or any other mutating tool), whatever `tools` lists. */
   readonly readOnly?: boolean;
-  readonly source: "built-in" | "user";
+  /** Where this definition came from: a built-in flavor, a discovered user file, or a runtime
+   *  model-minted ("ephemeral") definition that lives only for the duration of one delegation. */
+  readonly source: "built-in" | "user" | "ephemeral";
 }
 
 /** What host.online announces per agent so the model can pick one by description (no body). */

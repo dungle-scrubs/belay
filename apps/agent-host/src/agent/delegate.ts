@@ -4,6 +4,8 @@ import type { AgentDefinition } from "../agents";
 import { resolveAgentTools } from "../agents";
 import type { ChatMessage, Provider, ToolDef } from "../providers";
 import { Emit } from "../services";
+import { discoverSkills } from "../skills";
+import { TOOL_DEFS } from "../tools";
 import { publishTurn } from "../turn";
 import type { DelegateCapability } from "./loop";
 
@@ -139,11 +141,11 @@ export async function runDelegatedChild(
   return { childSessionId, result, failed };
 }
 
-// --- the delegation tool surface (D-048): delegate_inline, exposed to the parent model ---
+// --- the delegation tool surface (D-048/D-049): delegate_inline, exposed to the parent model ---
 
 /** The one delegation tool (inline) the model can call. `delegate_background` (async, read-only,
  *  capped) is the immediate follow-on. The agent inventory rides the description so the model picks
- *  a valid id; the host validates it again at run time. */
+ *  a valid id; the host validates it again at run time. A one-off agent can be `define`d inline. */
 export function buildDelegationDefs(agents: readonly AgentDefinition[]): ToolDef[] {
   const inventory = agents.map((a) => `- ${a.id}: ${a.description}`).join("\n");
   return [
@@ -152,20 +154,43 @@ export function buildDelegationDefs(agents: readonly AgentDefinition[]): ToolDef
       description:
         "Delegate a focused subtask to a subagent that runs in its OWN isolated context (it sees " +
         "only the task you give it, not your conversation) and returns a single distilled result. " +
-        "Blocks until the subagent finishes, then you get its final message as the tool result. Use " +
-        "it to hand off a self-contained investigation or multi-step subtask whose intermediate " +
-        `steps you don't need to see. Available agents:\n${inventory}`,
+        "Blocks until the subagent finishes, then you get its final message as the tool result. Pass " +
+        "either `agent` (a discovered agent id) or `define` (a one-off ephemeral agent). Use it to " +
+        "hand off a self-contained investigation or multi-step subtask whose intermediate steps you " +
+        `don't need to see. Available agents:\n${inventory}`,
       parameters: {
         type: "object",
         properties: {
-          agent: { type: "string", description: "The subagent id to delegate to (from the list)" },
+          agent: {
+            type: "string",
+            description: "A discovered subagent id from the list (omit if using `define`)",
+          },
+          define: {
+            type: "object",
+            description: "An inline one-off subagent contract (omit if using `agent`)",
+            properties: {
+              description: { type: "string", description: "What this one-off agent is for" },
+              instructions: { type: "string", description: "The agent's system instructions" },
+              tools: {
+                type: "array",
+                items: { type: "string" },
+                description: "Tool allow-list (names from the tool registry); omit for all tools",
+              },
+              skills: {
+                type: "array",
+                items: { type: "string" },
+                description: "Skill allow-list (discovered skill ids); omit for all skills",
+              },
+            },
+            required: ["description", "instructions"],
+          },
           task: {
             type: "string",
             description:
               "The complete, self-contained task for the subagent - it sees ONLY this, never your conversation, so include all the context it needs.",
           },
         },
-        required: ["agent", "task"],
+        required: ["task"],
       },
     },
   ];
@@ -173,12 +198,40 @@ export function buildDelegationDefs(agents: readonly AgentDefinition[]): ToolDef
 
 const DELEGATION_TOOL_NAMES: ReadonlySet<string> = new Set(["delegate_inline"]);
 
-function parseDelegateArgs(raw: string): { agent?: string; task?: string } {
+interface EphemeralSpec {
+  readonly description: string;
+  readonly instructions: string;
+  readonly tools?: readonly string[];
+  readonly skills?: readonly string[];
+}
+
+interface DelegateArgs {
+  readonly agent?: string;
+  readonly task?: string;
+  readonly define?: EphemeralSpec;
+}
+
+function strArray(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : undefined;
+}
+
+function parseDelegateArgs(raw: string): DelegateArgs {
   try {
-    const parsed = JSON.parse(raw || "{}") as Record<string, unknown>;
+    const p = JSON.parse(raw || "{}") as Record<string, unknown>;
+    const d = p.define as Record<string, unknown> | undefined;
+    const define =
+      d && typeof d === "object"
+        ? {
+            description: typeof d.description === "string" ? d.description : "",
+            instructions: typeof d.instructions === "string" ? d.instructions : "",
+            tools: strArray(d.tools),
+            skills: strArray(d.skills),
+          }
+        : undefined;
     return {
-      agent: typeof parsed.agent === "string" ? parsed.agent : undefined,
-      task: typeof parsed.task === "string" ? parsed.task : undefined,
+      agent: typeof p.agent === "string" ? p.agent : undefined,
+      task: typeof p.task === "string" ? p.task : undefined,
+      define,
     };
   } catch {
     return {};
@@ -186,11 +239,73 @@ function parseDelegateArgs(raw: string): { agent?: string; task?: string } {
 }
 
 /**
+ * Resolves a delegation call to the agent it runs: a discovered id, or a runtime-only ("ephemeral")
+ * definition the model minted inline (D-049). An ephemeral contract is validated STRICTLY against the
+ * live registries before it runs - unknown tools/skills and policy-forbidden delegation tools are
+ * rejected with a structured error, never silently dropped - and is runtime-only (no file written, no
+ * registry entry). Either way the resolved agent gets the same isolation, allow-list, and depth-1
+ * (no delegation capability) as a discovered one.
+ */
+function resolveDelegationAgent(
+  args: DelegateArgs,
+  agents: readonly AgentDefinition[],
+  registry: { readonly tools: ReadonlySet<string>; readonly skills: ReadonlySet<string> },
+): { agent: AgentDefinition } | { error: string } {
+  if (args.define) {
+    const d = args.define;
+    if (!d.description.trim()) {
+      return { error: 'error: an ephemeral agent needs a "description"' };
+    }
+    if (!d.instructions.trim()) {
+      return { error: 'error: an ephemeral agent needs "instructions"' };
+    }
+    const tools = d.tools ?? ["*"];
+    if (!tools.includes("*")) {
+      const forbidden = tools.filter((t) => DELEGATION_TOOL_NAMES.has(t));
+      if (forbidden.length) {
+        return {
+          error: `error: an ephemeral agent may not use delegation tools (${forbidden.join(", ")})`,
+        };
+      }
+      const unknown = tools.filter((t) => !registry.tools.has(t));
+      if (unknown.length) {
+        return { error: `error: unknown tool(s) for the ephemeral agent: ${unknown.join(", ")}` };
+      }
+    }
+    if (d.skills && !d.skills.includes("*")) {
+      const unknown = d.skills.filter((s) => !registry.skills.has(s));
+      if (unknown.length) {
+        return { error: `error: unknown skill(s) for the ephemeral agent: ${unknown.join(", ")}` };
+      }
+    }
+    return {
+      agent: {
+        id: "ephemeral",
+        description: d.description.trim(),
+        tools,
+        skills: d.skills,
+        body: d.instructions,
+        source: "ephemeral",
+      },
+    };
+  }
+  if (args.agent) {
+    const found = agents.find((a) => a.id === args.agent);
+    if (!found) {
+      const ids = agents.map((a) => a.id).join(", ") || "(none)";
+      return { error: `error: unknown agent "${args.agent}". Available: ${ids}` };
+    }
+    return { agent: found };
+  }
+  return { error: 'error: delegate requires an "agent" id or an inline "define"' };
+}
+
+/**
  * Binds the delegation capability the loop injects into a PARENT turn: the offered tool defs plus a
- * runner that validates the call, runs the child end to end (runDelegatedChild), and returns the
- * model-facing result string. A child turn is NOT given this, so a child can neither see nor invoke
- * delegation (depth-1, D-048). Validation failures (unknown agent, empty task) return a structured
- * `error: …` string the model can read and recover from, never an exception.
+ * runner that resolves the call (discovered or ephemeral, strictly validated), runs the child end to
+ * end (runDelegatedChild), and returns the model-facing result. A child turn is NOT given this, so a
+ * child can neither see nor invoke delegation (depth-1, D-048). Validation failures return a
+ * structured `error: …` string the model can read and recover from, never an exception.
  */
 export function buildDelegateCapability(
   ctx: DelegationContext,
@@ -202,32 +317,33 @@ export function buildDelegateCapability(
     readonly mintRunId: () => string;
   },
 ): DelegateCapability {
+  // The live registries an ephemeral contract is validated against (D-049).
+  const registry = {
+    tools: new Set(TOOL_DEFS.map((t) => t.name)),
+    skills: new Set(discoverSkills().map((s) => s.id)),
+  };
   return {
     defs: buildDelegationDefs(params.agents),
     names: DELEGATION_TOOL_NAMES,
     run: async (_name, argsJson) => {
-      const { agent: agentId, task } = parseDelegateArgs(argsJson);
-      if (!agentId) {
-        return 'error: delegate requires an "agent" id';
-      }
-      const agent = params.agents.find((a) => a.id === agentId);
-      if (!agent) {
-        const ids = params.agents.map((a) => a.id).join(", ") || "(none)";
-        return `error: unknown agent "${agentId}". Available: ${ids}`;
-      }
-      if (!task?.trim()) {
+      const args = parseDelegateArgs(argsJson);
+      if (!args.task?.trim()) {
         return 'error: delegate requires a non-empty "task"';
       }
+      const resolved = resolveDelegationAgent(args, params.agents, registry);
+      if ("error" in resolved) {
+        return resolved.error;
+      }
       const out = await runDelegatedChild(ctx, {
-        agent,
-        task,
+        agent: resolved.agent,
+        task: args.task,
         provider: params.provider,
         parentRunId: params.parentRunId,
         childRunId: params.mintRunId(),
         mode: "inline",
       });
       if (out.failed) {
-        return `The "${agentId}" subagent failed before finishing${out.result ? `: ${out.result}` : "."}`;
+        return `The "${resolved.agent.id}" subagent failed before finishing${out.result ? `: ${out.result}` : "."}`;
       }
       return out.result.trim() || "(the subagent returned no result)";
     },

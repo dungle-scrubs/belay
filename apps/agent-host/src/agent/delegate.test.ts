@@ -283,3 +283,87 @@ test("the capability validates the agent id and a non-empty task with structured
     /non-empty "task"/,
   );
 });
+
+// --- M5: ephemeral model-minted agents (D-049) ---
+
+function capability(transport: SessionTransport, provider: Provider) {
+  return buildDelegateCapability(context(transport), {
+    provider,
+    parentRunId: "rp",
+    agents: [EXPLORER],
+    mintRunId: () => "rc",
+  });
+}
+
+test("an inline ephemeral `define` runs a one-off agent and folds its result back", async () => {
+  const t = fakeTransport();
+  const cap = capability(t.transport, answeringProvider("ephemeral did it"));
+  const out = await cap.run(
+    "delegate_inline",
+    JSON.stringify({
+      define: { description: "one-off", instructions: "do the thing", tools: ["read", "grep"] },
+      task: "go",
+    }),
+  );
+  assert.equal(out, "ephemeral did it");
+  const link = (t.published.get("parent-session") ?? []).find((e) => e.type === "delegated.to")
+    ?.payload as Record<string, unknown>;
+  assert.equal(link.agent, "ephemeral", "the link records it as an ephemeral agent");
+});
+
+test("an ephemeral define is validated strictly against the registry", async () => {
+  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  assert.match(
+    await cap.run(
+      "delegate_inline",
+      JSON.stringify({
+        define: { description: "x", instructions: "y", tools: ["read", "nope"] },
+        task: "go",
+      }),
+    ),
+    /unknown tool\(s\).*nope/,
+    "an unknown tool is rejected, not silently dropped",
+  );
+  assert.match(
+    await cap.run(
+      "delegate_inline",
+      JSON.stringify({
+        define: { description: "x", instructions: "y", tools: ["delegate_inline"] },
+        task: "go",
+      }),
+    ),
+    /may not use delegation tools/,
+    "an ephemeral agent cannot re-enable delegation (depth-1)",
+  );
+  assert.match(
+    await cap.run(
+      "delegate_inline",
+      JSON.stringify({
+        define: { description: "x", instructions: "y", skills: ["no-such-skill"] },
+        task: "go",
+      }),
+    ),
+    /unknown skill\(s\).*no-such-skill/,
+    "an unknown skill is rejected",
+  );
+});
+
+test("an ephemeral define needs a description and instructions", async () => {
+  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  assert.match(
+    await cap.run("delegate_inline", JSON.stringify({ define: { instructions: "y" }, task: "go" })),
+    /needs a "description"/,
+  );
+  assert.match(
+    await cap.run("delegate_inline", JSON.stringify({ define: { description: "x" }, task: "go" })),
+    /needs "instructions"/,
+  );
+});
+
+test("a call with neither agent nor define is a structured error", async () => {
+  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  assert.match(
+    await cap.run("delegate_inline", JSON.stringify({ task: "go" })),
+    /requires an "agent" id or an inline "define"/,
+  );
+});
