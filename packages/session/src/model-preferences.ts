@@ -124,6 +124,37 @@ export function reasoningForModel(prefs: ModelPreferences, ref: ModelRef): strin
   return prefs.reasoningByModel[modelRefKey(ref)] ?? ref.reasoning ?? null;
 }
 
+/** One source's row in the quick picker: its source id and the recent models under it (newest first). */
+export interface QuickPickerGroup {
+  readonly sourceId: string;
+  readonly models: readonly ModelRef[];
+}
+
+/**
+ * The quick-picker model list (D-065 M3): the RECENTLY-USED models only (never the full catalog),
+ * newest first, grouped by source so the small chevron popup stays categorized and compact. Bounded
+ * by `limit` (the recent list is already capped, so the popup can never grow to catalog size). Pure,
+ * so the recency + grouping are unit-tested; selecting a row reuses {@link selectModel}, the same
+ * contract the full chooser uses.
+ */
+export function quickPickerModels(
+  prefs: ModelPreferences,
+  limit = RECENT_LIMIT,
+): QuickPickerGroup[] {
+  const order: string[] = [];
+  const bySource = new Map<string, ModelRef[]>();
+  for (const ref of prefs.recent.slice(0, Math.max(0, limit))) {
+    let group = bySource.get(ref.sourceId);
+    if (!group) {
+      group = [];
+      bySource.set(ref.sourceId, group);
+      order.push(ref.sourceId);
+    }
+    group.push(ref);
+  }
+  return order.map((sourceId) => ({ sourceId, models: bySource.get(sourceId) ?? [] }));
+}
+
 const asRecord = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" ? (v as Record<string, unknown>) : {};
 

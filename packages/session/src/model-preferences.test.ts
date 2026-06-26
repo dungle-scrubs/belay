@@ -7,6 +7,7 @@ import {
   type ModelPreferences,
   modelRefKey,
   pinModel,
+  quickPickerModels,
   RECENT_LIMIT,
   reasoningForModel,
   selectModel,
@@ -143,6 +144,35 @@ test("selectModel has no routing side effects - only active/recent/reasoning cha
     "reasoningByModel",
     "recent",
   ]);
+});
+
+test("quickPickerModels groups the recent models by source, newest first, never the full catalog", () => {
+  const s = surface(["low"], "low");
+  let prefs: ModelPreferences = EMPTY_PREFERENCES;
+  // Select across two sources; recency is newest-first within the recent list.
+  for (const r of [ref("qwen", "a"), ref("openai", "b"), ref("qwen", "c")]) {
+    prefs = selectModel(prefs, r, s);
+  }
+  // recent (newest first) = [qwen/c, openai/b, qwen/a]; grouped preserving first-seen source order.
+  const groups = quickPickerModels(prefs);
+  assert.deepEqual(
+    groups.map((g) => [g.sourceId, g.models.map((m) => m.modelId)]),
+    [
+      ["qwen", ["c", "a"]],
+      ["openai", ["b"]],
+    ],
+  );
+});
+
+test("quickPickerModels stays small - bounded by the limit, empty when nothing is recent", () => {
+  assert.deepEqual(quickPickerModels(EMPTY_PREFERENCES), []);
+  const s = surface(["low"], "low");
+  let prefs: ModelPreferences = EMPTY_PREFERENCES;
+  for (let i = 0; i < 5; i += 1) {
+    prefs = selectModel(prefs, ref("src", `m${i}`), s);
+  }
+  const total = quickPickerModels(prefs, 2).reduce((n, g) => n + g.models.length, 0);
+  assert.equal(total, 2, "the popup is bounded by the limit, not the full recent list");
 });
 
 test("decodeModelPreferences drops unusable entries and re-caps recent", () => {
