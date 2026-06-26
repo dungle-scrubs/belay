@@ -526,7 +526,7 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 - [ ] Add MCP, LSP, and Hooks areas with unconfigured, unavailable, auth-needed, error, and timeout states
 - [x] Add Storage/Roots area for `TREVOR_HOME`, local state/cache/share roots, writeability, migration debt, and observation-store status
 - [x] Add Workspace area for cwd, git/worktree status, AGENTS context, managed worktrees, locks, and non-git states
-- [ ] Add Updates/Version area for package/build/version/update facts when available
+- [x] Add Updates/Version area for package/build/version/update facts when available
 - [x] Tests cover severity aggregation and at least one finding in each area
 
 ### M3: Bounded checks and redaction
@@ -672,7 +672,7 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 15 completed, 47 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
-- Live open follow-up (D-073 doctor health surface): 57 features, 31 completed, 26 remaining
+- Live open follow-up (D-073 doctor health surface): 57 features, 32 completed, 25 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 177 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 176 unchecked items plus 5 partial/gated carry-forward items
