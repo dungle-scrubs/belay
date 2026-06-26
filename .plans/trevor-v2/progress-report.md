@@ -1,862 +1,251 @@
 # Trevor V2 - Progress Report
 
-> Canonical source of truth for what is done and what remains in the **active
-> implementation cutoff**. Update this file as features are implemented - never
-> mark a milestone complete until every current-cutoff checkbox under it is
-> checked.
-
-> **Scope.** This report tracks the active implementation cutoff and the next sequenced work.
-> Phases 1-7 are shipped: concurrent read-only tool execution (D-050), graceful
-> turn-budget termination (D-051…D-053), cross-turn compaction (D-040…D-043),
-> provider SDK migration plus outage auto-reconnect (D-076…D-079), subagents
-> (D-045…D-049), search-tool upgrade (D-062), and nested AGENTS.md context files
-> (D-080…D-081). Phase 8 is shipped: prompt shell lane for leading
-> `!` (D-082). The output is user-visible only and prompt-invisible for this first
-> cut. Prompt composer draft persistence and Up-arrow history recall are captured
-> as the first next-up item after Phase 8 (D-083…D-084). The next-up queue also
-> includes the `trevor` project launcher (D-085), early transcript top-down growth
-> (D-086), and project-local skill roots from `<cwd>/.agents/skills` (D-087);
-> those queued follow-ups are shipped. The next sequenced queue is sidebar git
-> identity (D-088), the shared shadcn command modal foundation (D-089), explicit
-> resume (D-090), and managed worktrees (D-091). Later roadmap items (session
-> recall D-044, WAN fallback D-060, remaining session manager D-061 work, …) stay
-> sequenced in §6 and are decomposed here when picked up.
-
-> Current focus: D-088 sidebar git identity, then D-089 shared command modal,
-> D-090 explicit resume, and D-091 managed worktrees. Each UI surface starts
-> Storybook-first. Sidebar git identity shows cwd plus branch/dirty/ahead/behind
-> before resume/worktree work. The shared command modal is approved in Storybook
-> before either resume or worktree switching is wired into the app.
-> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3); Phase 5 M1-M5
-> (inline + background subagents); Phase 6 (ripgrep `grep` + read-only `ast_grep`);
-> Phase 7 (nested AGENTS.md context files); Phase 2 M4 (`/doctor` turn-termination
-> reason). Remaining outside the current cutoff: fork-dependent Phase 5 M2
-> forkability bullets, blocked on the unimplemented D-025…D-029 fork feature, plus
-> minor Phase 5 refinements.
-
-## Phase 1: Concurrent read-only tool execution
-
-Run a turn's read-only tool calls concurrently (bounded) while keeping mutating
-tools as serial barriers, with results committed to history in call order.
-Source: `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/tools/` (D-050).
-
-### M1: Tool purity declaration
-Source: `apps/agent-host/src/tools/types.ts`, `apps/agent-host/src/tools/index.ts`
-
-- [x] `Tool` interface gains an optional `readOnly?: boolean`, documented as defaulting to false (serial barrier)
-- [x] `read`, `glob`, `grep`, `web_search` declare `readOnly: true`
-- [x] `edit`, `write`, `multi_edit`, `bash` and the dynamic `process`/`task`/`skill` tools leave `readOnly` unset (stay barriers)
-- [x] `tools/index.ts` exports `READ_ONLY_TOOLS`, derived by filtering `TOOLS` on the `readOnly` flag (no hardcoded list)
-- [x] Unit test: a tool without the `readOnly` flag is absent from `READ_ONLY_TOOLS`
-
-### M2: Concurrent dispatch in the agent loop
-Source: `apps/agent-host/src/agent/loop.ts`
-
-- [x] `TOOL_CONCURRENCY` bound defined as loop policy
-- [x] The step's tool batch is partitioned into ordered segments: maximal read-only runs vs single mutating barriers
-- [x] A read-only segment executes concurrently via `Stream.mergeAll` bounded by `TOOL_CONCURRENCY`
-- [x] A mutating call executes alone as a barrier, in emission order relative to the reads around it
-- [x] `tool_start` and `tool_end` events are still emitted for every call
-- [x] Each result is captured into an index-keyed slot array (not pushed to the conversation on completion)
-- [x] Slots are committed to `conversation` in CALL order after the whole batch drains
-- [x] `step(n+1)` is concatenated after the commit, so the next model step reads a fully-committed conversation
-
-### M3: Invariants preserved (verification)
-Source: `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/agent/recovery.ts`
-
-- [x] Test: two `edit` calls to the same path in one batch apply sequentially with no lost update
-- [x] Concurrent reads in one batch overlap (observed latency below the serial sum)
-- [x] Cancellation mid-batch interrupts in-flight read children with no stream leak (A-004 still holds)
-- [x] Test: `trimLargestToolResult` recovery operates on a deterministic, call-ordered conversation
-- [x] Test: the same tool batch yields the same committed conversation regardless of completion order
-
-### M4: Web wire-order tolerance
-Source: `apps/web/src/components/chat/message.tsx`
-
-- [x] Verify the web renders correctly when `tool_start`/`tool_end` arrive out of call order (results keyed by `call.id`)
-- [x] If out-of-order rendering misbehaves, hoist read-group `tool_start` emissions ahead of the merged executes (done proactively: the loop hoists every read group's `tool_start` in call order, so only the result-bearing `tool_end` rides out unordered, and the web keys it by `call.id`)
-
-## Phase 2: Graceful turn-budget termination
-
-A long turn must never end silently at the step budget. The budget exit becomes
-observable, forces a final answer instead of a tool-result stub, and is re-based
-on context-window pressure rather than a fixed step count. Source:
-`apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`,
-`packages/session/` event schema, `apps/web` transcript (D-051…D-053). Motivated
-by the 2026-06-24 local-4-bit/64k case: five consecutive turns died at exactly
-`MAX_STEPS = 8` with the window at 16-18%, ending on a tool result with no answer
-and no signal.
-
-### M1: Observable budget exhaustion
-Source: `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `packages/session/src/event.ts` (D-051)
-
-- [x] `AgentEvent` gains a terminal `{ type: "step_limit"; steps: number }` variant
-- [x] The `n >= MAX_STEPS` branch emits `step_limit` instead of returning `Stream.empty`
-- [x] `turn.ts` maps `step_limit` to a `stepLimit` reason on the terminal `assistant.completed` (never a bare `complete({})`)
-- [x] The `assistant.completed` event carries the `stepLimit` flag in the shared `@trevor/session` schema and the web decodes it
-- [x] Unit test: a turn that hits the cap emits exactly one `step_limit` and a flagged completion, not a clean success
-
-### M2: Forced final synthesis
-Source: `apps/agent-host/src/agent/loop.ts` (D-052)
-
-- [x] At the budget, run one model step with tools removed (`provider.stream(conversation, [], reasoning)`) instead of ending
-- [x] A transient "tool budget reached - answer now" nudge is pushed into the loop's `conversation` only (never emitted or persisted)
-- [x] Synthesis reasoning forced off/low; the step is bounded to exactly one (no recursion, independent of `MAX_STEPS`)
-- [x] Synthesis output streams as ordinary `text` AgentEvents → `assistant.delta`
-- [x] An empty synthesis falls through to the existing `empty`→`noReply` path
-- [x] Unit test: a capped turn yields a non-empty final answer, and the nudge never appears in the persisted history projection
-
-### M3: Context-pressure budget
-Source: `apps/agent-host/src/agent/loop.ts` (D-053)
-
-- [x] The loop captures the latest step's `usage.input`/`usage.contextWindow` into its closure (as it already does `overflowReason`)
-- [x] `CONTEXT_BUDGET_FRACTION` (~0.80) defined as loop policy
-- [x] The next tool round proceeds only while `usage.input < fraction * contextWindow`; otherwise → M2 synthesis
-- [x] `MAX_STEPS` raised to a high runaway backstop (~30-40), documented as a backstop, not the governor
-- [x] Fallback to `MAX_STEPS`-only when `contextWindow` is 0 / unknown
-- [x] Unit test: under a small loaded window the turn stops at the context gate (not at a fixed count); under a large window it runs more rounds
-
-### M4: Surfacing + reproduction (verification)
-Source: `apps/web` transcript/panel, `apps/agent-host/src/commands.ts` (`/doctor`)
-
-- [x] The web renders a "stopped after N steps" marker for a `stepLimit` completion, distinct from a normal answer and from `noReply`
-- [x] Host state / `/doctor` reports the turn termination reason (answered | step_limit | overflow | noReply | cancelled) — `lastTurn` field in `hostState()`, derived from the terminal `assistant.completed` flags + a tracked terminal overflow via the pure `terminationReason` (`turn-termination.ts`, 8 unit tests)
-- [x] Manual repro: the previously-failing turns now end with an answer - deepseek (was 191-char cut-off → 4316), glm (was 299 → 3069), qwen4bit (was empty → 2701); none hit the cap now that MAX_STEPS is a backstop
-
-## Phase 3: Cross-turn compaction
-
-Keep the durable history's prompt projection under the window ACROSS turns. Overflow
-recovery (shipped, D-034) is a per-turn airbag; it does nothing when the history itself
-outgrows the window. Compaction pins the durable bits (original goal + live task list),
-drops stale tool results, and folds older turns into a rolling ~1k-token summary, the
-most recent turns staying verbatim. Durable, non-destructive: each fold appends an event;
-the log is never mutated, so replay stays deterministic and the full history survives for
-forks + session recall (D-044). Target window: the local 4-bit at 64k. Source:
-`apps/agent-host/src/agent/history-projection.ts`, `packages/session/src/protocol.ts`,
-`apps/agent-host/src/agent/turn-scheduler.ts`, `apps/agent-host/src/main.ts`,
-`apps/web/src/transcript.ts` (D-040…D-043).
-
-### M1: `context.compacted` event + rolling-chain schema
-Source: `packages/session/src/protocol.ts` (event builder + `decodeTrevorEvent`)
-
-- [x] New `context.compacted` event: `{ foldId; throughSeq; supersedes?; summary; manifest{turnRange, files[], tools[], topics[]}; tokensBefore; tokensAfter; model }`
-- [x] `events.contextCompacted(...)` builder + a `decodeTrevorEvent` case with the same defensive field coercion as the other events
-- [x] The fold is a rolling CHAIN: each `context.compacted` supersedes the prior via `supersedes`; the builder takes the latest
-- [x] The `manifest` is a per-fold DELTA (only what this fold folded), not cumulative - the full picture reconstructs by walking the chain
-- [x] Original events are never mutated; a fold only appends (durable, replay-deterministic)
-- [x] Unit test: a compacted event decodes round-trip; a superseding fold chains off the prior `foldId`
-
-### M2: Compaction-aware prompt projection
-Source: `apps/agent-host/src/agent/history-projection.ts`, `apps/web/src/transcript.ts`
-
-- [x] `buildHistory` injects the PINS outside the fold: original goal (first user message of the baseline) as a user turn + current task list (`tasks.current`) into the fold message, re-injected fresh
-- [x] It takes the latest `context.compacted` as the rolling head: a synthetic assistant summary message, then projects `events` with `seq > throughSeq` verbatim (skip-by-seq, so a blocking-before prompt that arrived before the fold event still survives)
-- [x] With no fold present, the projection is byte-for-byte the current behavior (pure/total preserved; the 9 existing characterization tests still pass)
-- [x] `/clear` resets the baseline including any folds + pins
-- [x] The web transcript keeps FULL history (D-042: the fold shapes only the prompt projection, not the durable transcript); `toTranscript` ignores the fold event - the user-facing marker is added in M5
-- [x] Unit test: a log with a fold projects to pins + summary + recent-verbatim; the same log without the fold projects in full
-
-### M3: Summary generation (tool-less, bounded)
-Source: `apps/agent-host/src/agent/compaction.ts` (new), `apps/agent-host/src/turn.ts`
-
-- [x] A tool-less model call (`provider.stream(messages, [], reasoning)`) given the prior summary + the turns being folded, producing the next rolling summary
-- [x] The summary caps at ~1k tokens - re-summarized to stay ~1k as more folds in, never grown unboundedly (it rides in every later prompt; hard char-cap backstop)
-- [x] The prompt captures decisions, current state, open threads, named key references (files/commands/errors), and what is dropped-but-recallable; it does NOT repeat the pinned goal/tasks
-- [x] Model = the turn's provider for now, behind a configurable seam (the `summarize(provider, …)` param; local↔cloud routing deferred to D-046)
-- [x] Chunking fallback (oldest-chunk-first map-reduce) documented; single-pass assumed for v1
-- [x] Unit test: the summarizer folds N turns into a ≤~1k-token summary and never duplicates the pinned goal/tasks
-
-### M4: Trigger - background-after + blocking-before
-Source: `apps/agent-host/src/agent/turn-scheduler.ts`, `apps/agent-host/src/main.ts`
-
-- [x] `COMPACT_WHEN` (~0.80) and `COMPACT_TO` (~0.50) window fractions defined as policy (compact-when vs compact-to; the gap is working headroom so it does not thrash)
-- [x] Background-after (normal path): after a turn whose end-state crosses 80%, `scheduler.maybeCompact()` folds in the idle slot, `planCompaction` folding oldest turns until the projection estimate is back under ~50%
-- [x] Blocking-before (guarantee): a turn must never START with the baseline ≥ 80%; the scheduler defers it behind a fold (`startNow` gate) when `needsCompaction()` is true, releasing it on `finishCompaction`
-- [x] Compaction runs off the one-turn-at-a-time gate (the scheduler holds turns behind the `compacting` flag, never concurrent with a turn); within-turn spikes stay handled by overflow recovery, not compaction
-- [x] Unit test: the planner folds oldest turns to under the budget (compactor.test); the scheduler defers an over-budget turn behind a blocking fold and folds proactively when idle (turn-scheduler.test)
-
-### M5: Manual `/compact` + surfacing (verification)
-Source: `apps/agent-host/src/commands.ts`, `apps/web/src/transcript.ts`, `apps/web/src/components/chat/message.tsx`
-
-- [x] `/compact` folds on demand and publishes the resulting `context.compacted` (host `forceCompact`, off the one-turn gate; refuses while a turn is active)
-- [x] The web renders a **transient live progress bar** while a fold streams (both manual + automatic), distinct from `assistant.recovered` (calmer frost styling vs the yellow airbag). It fills from actual streamed summary tokens ÷ the ~1k-token budget, clamped, never a predicted % - and VANISHES on completion, leaving no lingering marker (the folded turns stay in the transcript, D-042). Driven by a new advisory `context.compacting {foldId, tokens, budget}` event (throttled ~every 40 tokens); the summarizer reports streaming progress via an `onProgress` callback
-- [x] `/doctor` reports `compacting` + the latest fold's `throughSeq` + tokensBefore/after (host state)
-- [x] Integration test: applying a fold shrinks the next turn's projection to < half the pre-fold size, with the goal pinned, the summary injected, and the most recent turn verbatim (compactor.test); the web bar appears as tokens stream and vanishes on `context.compacted`, ignoring a late straggler tick (transcript.test). NOTE: a live end-to-end session against an over-window model is not yet run - verified by construction across the unit + integration tiers
-
-## Shipped: Phase 4 - Provider SDK migration
-
-Switch the host from the deprecated old-scope `@mariozechner/pi-ai` package to the
-latest maintained `@earendil-works/pi-ai` release. Verified latest on 2026-06-25:
-`@earendil-works/pi-ai@0.80.2`. This is a dependency/API migration first, not the
-full dynamic provider-catalog product cut: preserve today's host-facing provider IDs
-and behavior while moving onto the maintained SDK surface. Source:
-`apps/agent-host/package.json`, `pnpm-lock.yaml`, `apps/agent-host/src/providers/`,
-`apps/agent-host/src/providers/pi-ai.ts`, `apps/agent-host/src/providers/*.test.ts`.
-
-M1/M2 are the migration itself; **M3 (provider-outage auto-reconnect recovery)** is sequenced
-right after, building on the maintained SDK's error surface (D-076…D-079).
-
-### M1: Package and import migration ✅
-Source: `apps/agent-host/package.json`, `pnpm-lock.yaml`, `apps/agent-host/src/providers/`
-
-- [x] Replace `@mariozechner/pi-ai` with `@earendil-works/pi-ai@0.80.2` in the host package and lockfile
-- [x] Imports moved to `@earendil-works/pi-ai/compat` (value fns + types) + `/oauth`; no `@mariozechner/pi-ai` imports remain
-- [x] Preserve `streamPiAiModel` event mapping (event discriminants verified identical; typecheck pins the field accesses + the abort `signal`)
-- [x] Preserve A-004 interruption behavior: the scoped AbortController + `signal` still ride into `streamSimple`
-- [x] Preserve context-overflow detection/classification and graceful recovery (classifier unchanged; `isContextOverflow` from the new SDK)
-- [x] Host typecheck + 166 host tests green after the switch
-
-### M2: Provider/auth behavior preserved ✅
-Source: `apps/agent-host/src/providers/index.ts`, `apps/agent-host/src/providers/codex.ts`, `apps/agent-host/src/providers/pi-key.ts`
-
-- [x] Browser-facing provider IDs stable (`qwen`, `gpt`, `qwen4bit`, `deepseek`, `glm`, `minimax`) - roster.test pins keys + labels
-- [x] LM Studio stays direct through pi-ai + LM Studio APIs only; no emberlm
-- [x] `~/.pi/auth.json` behavior preserved for Codex OAuth (`/oauth` `getOAuthApiKey`) and direct API-key providers
-- [x] Codex OAuth refresh + GPT streaming preserved by construction (same path; `gpt-5.5` is in the new registry); live verification is the gated live-model lane
-- [x] Direct-key providers read keys + derive reasoning/image metadata (credentials.test + pi-ai-base.test; new registry has deepseek/zai/minimax/codex models); streaming is the gated live lane
-- [x] Larger provider catalog/auth UI is out of this migration cut (tracked in §6 as the dynamic-catalog product feature)
-
-### M3: Provider-outage auto-reconnect recovery ✅ <!-- D-076…D-079 -->
-Sequenced right after the SDK migration (M1/M2), built on the maintained SDK's error surface. Sibling to the shipped graceful overflow recovery (D-034…D-038), applied to transport faults.
-Source: `apps/agent-host/src/providers/{errors,error-classifier,pi-ai}.ts`, `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `packages/session/src/protocol.ts`, `apps/web/src/{transcript.ts,App.tsx}`
-
-- [x] `ProviderUnavailable` carries a `retryable` flag; the classifier (`error-classifier.ts` `isRetryableOutage`) decides retryable (WebSocket drop, `ECONNRESET`, timeout, HTTP 429/5xx) vs terminal; auth + overflow keep their dedicated handling (D-077)
-- [x] `loop.ts` retries the current step with bounded backoff (`RECONNECT_BACKOFFS_MS = [300, 900]` + jitter, 3 total attempts), only when nothing streamed (the `sawEvent` guard keeps the siphon closures clean); per-step budget independent of `MAX_STEPS` + the recovery budget (D-076, D-078)
-- [x] Once any event has streamed, the budget is spent, or the error is non-retryable, the turn goes terminal exactly as today (D-078)
-- [x] Interrupts ride the interrupt channel, not the typed `E` channel, so `Stream.catchAll` never sees them - never retried, cancel stays instant during a backoff (D-078)
-- [x] New `assistant.reconnecting {runId, attempt, detail}` event (sibling to `assistant.recovered`); `loop.ts` emits it, `turn.ts` forwards it, the web renders a "reconnecting… (attempt k/3)" frost marker (D-079)
-- [x] Tests (`@effect/vitest` + `TestClock`, flaky fake provider): transparent recovery before the first token; a drop after output is terminal; non-retryable/auth terminal; bounded budget; interrupt-during-backoff cancels cleanly (6 tests) + protocol round-trip + transcript render
-
-## Shipped: Phase 5 - Subagents
-
-A subagent is a delegated agent that runs in its OWN isolated context and returns a
-distilled result - it lets the main agent fan work out, and it is the substrate session
-recall (D-044) later rides on. This round ships two reusable file-discovered flavors on
-the inherited session model (no per-agent model yet) - general-purpose (all tools) and
-explorer (read-only) - plus ephemeral model-minted definitions once the reusable path
-exists. Strict context isolation: the child runs as its own forkable session; only the
-parent-authored task prompt crosses the boundary, and the child's final message folds
-back as the parent's tool result. Sequenced after compaction per §6. Source:
-`apps/agent-host/src/agents.ts` (new, modeled on `skills.ts`),
-`apps/agent-host/src/tools/`, `apps/agent-host/src/agent/loop.ts`,
-`packages/session/src/protocol.ts`, `apps/agent-host/src/main.ts` (D-045…D-049).
-
-### M1: File-based agent discovery ✅
-Source: `apps/agent-host/src/agents.ts` (new, modeled on `apps/agent-host/src/skills.ts`)
-
-- [x] An agent definition is `{ description, tools, skills?, body, readOnly? }`, discovered built-in + user-defined (`<TREVOR_AGENTS_DIR>/<id>/AGENT.md`) like skills; a user file overrides a built-in of the same id
-- [x] Two v1 flavors: `general-purpose` (tools `['*']`) and `explorer` (read-only flavor, clamped to the read-only tools - excludes write/edit/multi_edit/bash and every other mutating tool)
-- [x] `tools` and `skills` are separate allow-lists (`resolveAgentTools` / `resolveAgentSkills`); `['*']` expands, explicit names intersect the registry, an empty `skills: []` grants none
-- [x] No per-agent model field - all inherit the session model
-- [x] Discovered agents announced in `host.online` (`agents: AgentSpec[]` - id + description + resolved allow-lists, no body); `describeAgent` builds the wire descriptor
-- [x] Unit test: discovery yields the built-ins + a user fixture (disabled/description-less skipped); general-purpose gets the full set, explorer excludes every mutating tool; host.online round-trips the agents
-
-### M2: Isolated child session + delegation link ✅ (fork-dependent bullets noted)
-Source: `apps/agent-host/src/agent/delegate.ts` (new), `packages/session/src/protocol.ts`
-
-- [x] A child runs as its OWN session with its own log (`runDelegatedChild` mints `<SESSION_ID>::sub::<uuid>`, ensures it, publishes the child lifecycle there); nothing from the parent transcript leaks
-- [x] The parent-authored task is the ENTIRE slice the child receives (seeded as the child's first `user.message`; the agent body frames it; a structured `context` param deferred)
-- [x] A `delegated.to {runId, childSessionId, agent, task, mode, status, result?}` event on the PARENT links the two (running → done/failed, carrying the frozen result)
-- [~] The fork machinery (D-025…D-029) is NOT in the codebase yet, so "independently forkable" / "forking copies the frozen result" can't be exercised; `delegated.to.result` IS the frozen distilled result a parent-fork will reuse once fork lands
-- [~] (see above - depends on the unimplemented fork feature)
-- [x] Unit test: a delegation creates a child session + a `delegated.to` event; the child log shares no parent-run-correlated event and no `delegated.to` (isolation); a failing child folds back as a `failed` link, never throwing into the parent
-
-### M3: Delegation tools + execution modes — inline ✅; background ✅
-Source: `apps/agent-host/src/agent/delegate.ts`, `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `apps/agent-host/src/main.ts`
-
-- [x] `delegate_inline` (sync): the loop intercepts the call, runs the child to completion, and folds its final message in as the tool result (the parent turn blocks)
-- [x] `delegate_background` (async): the capability returns an immediate ack and the host runs the child DETACHED (`BackgroundDelegator.start` → `void runDelegatedChild(...)`), so it outlives the parent turn; its terminal `delegated.to` lands on the parent session log whenever it finishes (the result-arrives-later event)
-- [x] Fold-back: the child's final message becomes the parent's tool result
-- [x] The child runs the same `runAgent` loop with its agent's tool allow-list (`runAgent`/`publishTurn` thread `toolNames`; the executor enforces it) + the agent body as its instructions
-- [x] Delegation tools leave `readOnly` unset, so the D-050 partition runs them as serial barriers
-- [x] Depth-1 only: a child turn is given no delegation capability, so children may not spawn grandchildren
-- [x] Child tool registries never include `delegate_inline`/`delegate_background` (the delegation defs live in the parent-only capability, never in `TOOL_DEFS`), even for `general-purpose` / `tools: ['*']`
-- [x] Depth-1 enforced structurally (no capability on the child) rather than a runtime depth counter; a child literally cannot see the tool
-- [x] `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4` cap — session-level registry in `main.ts`; `BackgroundDelegator.canStart()` rejects past the cap with a structured `error: too many background subagents …`
-- [x] `delegate_background` read-only clamp — `resolveChildTools` intersects the agent's allow-list with `READ_ONLY_TOOLS` for `mode: "background"` (a background child is offered no edit/write/bash)
-- [x] Ephemeral background `tools: ['*']` → read-only — the same `resolveChildTools` clamp applies to ephemeral agents (an ephemeral `tools:['*']` expands then collapses to the read-only set)
-- [x] Mutating background agents documented as deferred (with the background follow-on)
-- [x] No teams (multi-agent orchestration) in this cut
-- [x] Unit test: an inline delegation routes through the capability and folds the child's result; a child turn is offered no delegation tool (depth-1); the capability returns structured errors for an unknown agent / empty task
-- [x] Background-specific tests: both tools offered + the background description advertises async/read-only/cap; `delegate_background` returns an immediate ack and starts a tracked child whose late result lands a terminal link; the cap rejects (and starts no child); unavailable when no delegator is wired; the read-only clamp (incl. general-purpose `['*']`); an ephemeral cannot allow-list `delegate_background` (depth-1, both names)
-
-### M4: Surfacing + isolation (verification)
-Source: `apps/web/src/transcript.ts`, `apps/web/src/components/chat/message.tsx`, `apps/web/src/App.tsx`, `apps/agent-host/src/commands.ts`, `apps/agent-host/src/main.ts`
-
-- [x] The web renders a delegation as a distinct linked block (child session id + status), separate from an ordinary tool card — purple `Alert` block (`App.tsx`); a background child reads distinctly ("running in background…")
-- [x] A background delegation's late result lands by id (wire-order tolerant, like D-050 / M4) — `toTranscript` collapses links by `childSessionId`, so a `done` arriving AFTER the parent's `assistant.completed` advances the same block (transcript.test D-048)
-- [x] `/doctor` reports active child delegations, depth policy, and active background-child count/cap — `hostState()` `subagents` line (`depth≤1 · inline+background (≤N)`) + a `background: k/N active: <agents>` field when any run
-- [~] Manual repro: a general-purpose inline delegation distills a multi-step subtask into one parent tool result; an explorer fan-out reads files without leaking parent context — verified by construction across the unit tier (isolation + clamp + late-result); a live over-the-wire fan-out is the gated live-model lane
-
-### M5: Ephemeral model-minted agents ✅ (inline)
-Source: `apps/agent-host/src/agent/delegate.ts`, `apps/agent-host/src/agents.ts`
-
-- [x] `delegate_inline` accepts either a discovered `agent` id or an inline `define` ephemeral definition (`delegate_background` follow-on inherits this)
-- [x] An ephemeral definition is `{ description, instructions, tools?, skills? }`; inline mode is implied by the tool
-- [x] Ephemeral definitions are runtime-only: no file written, no registry entry (`source: "ephemeral"`); the `delegated.to` link records `agent: "ephemeral"` (a full contract snapshot INTO the child session is a refinement)
-- [x] The host validates `tools` and `skills` against the live registries before starting the child; unknown tools/skills and policy-forbidden delegation tools are rejected with a structured `error: …` (never silently dropped)
-- [x] The child is offered only its allow-listed tools (`toolNames` restricts what's offered + run); a runtime allow-list gate on the `skill` tool body-loading is a refinement
-- [x] Ephemeral children use the same isolated child session, `delegated.to` link, fold-back, and depth-1 (no capability) as discovered agents (cancellation/parent-fork inherit the discovered path; fork is blocked on the unimplemented fork feature)
-- [~] Distinct web rendering of the ephemeral tool/skill contract — renders as the same linked block with `agent: ephemeral` (a contract-detail view is a refinement)
-- [x] Unit tests: invalid ephemeral specs (missing description/instructions, unknown tool, unknown skill), no unlisted tool access, no parent leak (shared isolation test); a forked-parent test is blocked on the unimplemented fork feature
-- [x] Unit test: an ephemeral definition cannot re-enable delegation tools (rejected) or bypass depth-1 (the child is given no capability)
-
-## Shipped: Phase 6 - Search-tool upgrade
-
-Immediately after Phase 5 subagents, align the existing `grep` tool with the plan's `grep` (rg) intent and
-promote H-108 `ast_grep` into a first-class read-only structural-search tool. Source:
-`apps/agent-host/src/tools/grep.ts`, `apps/agent-host/src/tools/ast-grep.ts` (new),
-`apps/agent-host/src/tools/search-process.ts` (new), `apps/agent-host/src/tools/index.ts`,
-`apps/agent-host/src/providers/system-prompt.ts`, `apps/web` generic tool rendering (D-062).
-
-### M1: Ripgrep-backed `grep` ✅
-Source: `apps/agent-host/src/tools/{grep,search-process}.ts`
-
-- [x] Shared read-only search-process helper (`search-process.ts`) using `execFile` with argv arrays, `cwd`, timeout, max buffer, and exit-code-preserving capture (each tool maps codes itself); rg/ast-grep are read-only so no in-loop interrupt wiring beyond the timeout
-- [x] Project-managed ripgrep via `@vscode/ripgrep` (`rgPath`, a platform optional-dependency) - never a system/Homebrew `rg`
-- [x] Replaced the custom Node glob/read/RegExp scanner with ripgrep, keeping `name: "grep"` + the `path:line:text` shape (the `./` prefix stripped; `.` path avoids the rg-reads-stdin hang)
-- [x] Preserves `readOnly: true`, the D-050 read-concurrency, output caps, and typed input/execution errors
-- [x] Explicit schema: `pattern`, `glob`, `literal`, `ignoreCase`, `hidden`, `noIgnore`, `maxMatches`; no raw flag passthrough
-- [x] Prompt/tool-selection guidance updated (grep = ripgrep text/regex, when to reach for ast_grep)
-- [x] Tests: gitignore (+ noIgnore), literal vs regex, ignoreCase, no-match, invalid regex, maxMatches cap, glob restriction, path:line:text shape (8); `READ_ONLY_TOOLS` inclusion (index.test)
-
-### M2: Read-only `ast_grep` ✅
-Source: `apps/agent-host/src/tools/{ast-grep,ast-grep-bin,search-process}.ts`, `index.ts`, `providers/system-prompt.ts`
-
-- [x] Project-managed ast-grep resolver (`ast-grep-bin.ts`) - detects the `@ast-grep/cli-<platform>` package and points at the full `ast-grep` binary (not `sg`); `@ast-grep/cli` build skipped in pnpm-workspace (binary resolved directly)
-- [x] `ast_grep` wraps `ast-grep run` only (no rewrite/interactive flags), read-only
-- [x] Explicit schema: `pattern`, `lang?`, `paths?`, `globs?`, `strictness?`, `maxMatches?`; no raw flag passthrough
-- [x] `--json=stream` parsed into compact capped `file:line:col  snippet` rows
-- [x] Confined to `WORKSPACE_ROOT` (paths validated via `confine`, escape → typed input error); typed failures for invalid pattern/lang (exit ≥2) and execution; exit 1 = no matches
-- [x] Registered in `TOOLS`/`TOOL_DEFS`/`READ_ONLY_TOOLS` (gated on the binary resolving) + prompt guidance
-- [x] Tests: structural match across formatting, inferred + explicit lang, no-match, unknown lang error, maxMatches cap, workspace confinement, read-only registry inclusion (7)
-
-## Shipped: Phase 7 - Nested AGENTS.md context files
-
-Trevor auto-reads nested `AGENTS.md` instruction files using **Claude Code's loading model** -
-eager up-tree at the root, lazy below cwd on file access - keyed on the cross-tool **AGENTS.md**
-standard (agents.md), not `CLAUDE.md`. The host reads no context files at all today:
-`buildSystemPrompt` only mentions `AGENTS.md` as a discovery hint, never ingesting one. Codex's
-eager-only root→cwd model is the comparison point, not the target - it cannot pick up an
-`AGENTS.md` below cwd (its open issue #12115 asks for exactly the behavior chosen here). Source:
-`apps/agent-host/src/context/` (new reader module), `apps/agent-host/src/providers/system-prompt.ts`,
-`apps/agent-host/src/tools/` (file tools), session/loop state, `apps/agent-host/src/commands.ts`
-(`/doctor`) (D-080).
-
-### M1: Context-file reader module (pure, testable) ✅
-Source: `apps/agent-host/src/context/agents-md.ts` (new), `apps/agent-host/src/paths.ts` (new)
-
-- [x] The `~/.trevorV2` base directory is a single exported constant `TREVOR_HOME` in a dedicated paths module (`paths.ts`), env-overridable as `resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"))`, mirroring `WORKSPACE_ROOT`/`TREVOR_WORKSPACE`; `USER_AGENTS_MD` derives from it and the `dev:op`/`start:op` npm scripts now use `${TREVOR_HOME:-$HOME/.trevorV2}` so the directory name lives in one place (D-081)
-- [x] A pure reader: `collectEagerSources`/`projectDirs` walk UP collecting at most one `AGENTS.md` per directory from project root down to cwd, plus the user-global `<TREVOR_HOME>/AGENTS.md` loaded first; the walk stops at `WORKSPACE_ROOT` / a `.git` marker (inclusive) and never goes past it
-- [x] `renderContext` concatenates user-global → root → cwd so cwd appears last and wins on conflict (positional precedence), each source labeled `### scope: path`; empty/whitespace-only files skipped (`readAgentsFile` returns null)
-- [x] `@path` import expansion: relative paths resolve against the importing file (absolute allowed), recursion capped at ≤ 4 hops (`MAX_IMPORT_HOPS`), cycles detected + broken with a visible note, and `@paths` inside fenced or inline code spans ignored
-- [x] Combined byte budget (`CONTEXT_BYTE_BUDGET`) with deterministic truncation (lowest-precedence first, via a code-point-safe `sliceToBytes`); returns a structured `ContextReport` (`files[]`, scopes, bytesUsed, bytesDropped, truncated) - never a silent drop
-- [x] Unit tests (11): root-only repo; nested chain merged root→cwd with cwd winning; walk-up boundary at `.git` + never above `WORKSPACE_ROOT`; user-global loaded first; import expansion + 4-hop cap + cycle detection; code-span `@paths` ignored; budget truncates deterministically with the drop reported; empty report when none
-
-### M2: Eager scope injected into the per-turn prompt ✅
-Source: `apps/agent-host/src/providers/system-prompt.ts`, `apps/agent-host/src/context/registry.ts` (new)
-
-- [x] `buildSystemPrompt` renders the collected context (user-global + root→cwd, plus the lazy below-cwd set) via `contextRegistry.renderForPrompt`, a dedicated labeled block re-read from disk every turn so it survives compaction the same way the live checklist does (D-040)
-- [x] With no `AGENTS.md` present the block is omitted entirely (the prompt is byte-for-byte the prior structure); the existing system-prompt confinement tests still pass
-- [x] Reworded the REPO_GUARDRAILS line: it no longer tells the model to re-read README.md/AGENTS.md but says AGENTS.md instructions are "already provided in the project-context block above"
-- [x] Unit test: the context block appears when a file exists (and precedes the guardrail that references it) and is omitted when none; the reworded guardrail renders and the old wording is gone
-
-### M3: Lazy below-cwd loading on file access ✅
-Source: `apps/agent-host/src/tools/{read,write,edit-core}.ts`, `apps/agent-host/src/context/registry.ts`, `apps/agent-host/src/main.ts`
-
-- [x] `contextRegistry.noteFileAccess` loads every not-yet-loaded `AGENTS.md` between cwd and the touched file (the dirs strictly below cwd on the path to it), so a directory-scoped instruction reaches the model on the next step
-- [x] The lazy set is tracked in the session-scoped registry, keyed by directory and guarded by a `scanned` set, so each directory loads (and is stat-checked) exactly once
-- [x] The full context (eager re-read + lazy set) is re-rendered every turn from the registry, so newly-loaded lazy context survives a compaction fold (the registry is independent of history); `/clear` resets the lazy set
-- [x] Triggered by the file-touching tools that open a path: `read` (primary), `edit`/`multi_edit` (via `edit-core` `prepareEdit`), and `write`
-- [x] Unit tests (7): a below-cwd `AGENTS.md` loads only after a file in that subtree is touched, deduped on a second touch, deeper nesting parent-before-child, a cwd-level file adds nothing, survives a fold re-render, `reset()` clears it, below-cwd sits after the eager project scope
-
-### M4: Surfacing + verification ✅
-Source: `apps/agent-host/src/main.ts` (`hostState` → `/doctor`)
-
-- [x] `/doctor` reports the ingested context via a `context` field: file count, scopes (`user-global`/`project`/`below-cwd`), bytes used, and `(-NB truncated)` when a budget drop occurred - never silent (`contextState()` in `main.ts`)
-- [~] Manual repro: verified at construction level against the real repo - the eager root `AGENTS.md` renders in the block + reworded guardrail; touching `apps/web/` pulls in `apps/AGENTS.md` (below-cwd); the doctor report shows `2 AGENTS.md [project, below-cwd] 16,240B`. A live model OBEYING the instructions is the gated live-model lane
-
-## Next feature: Phase 8 - Prompt shell lane (leading `!`)
-
-Leading `!` in the prompt composer runs a shell command immediately through the live host,
-using the same protected shell path as `/shell`, then displays a dedicated shell transcript
-block. It does not call a model and its output is not included in model context for this cut.
-V1 already had terminal bang-shell behavior; V2 already has `/shell`, `runShell`, the bash
-safety floor, timeout, and output cap. This phase fills the browser grammar, visual state,
-protocol, host routing, and transcript rendering gaps. Source: `apps/web/src/App.tsx`,
-`apps/web/src/derive.ts`, `apps/web/src/session/use-session.ts`,
-`packages/session/src/protocol.ts`, `apps/agent-host/src/main.ts`,
-`apps/agent-host/src/tools/run-shell.ts`, `apps/web/src/transcript.ts`,
-`apps/web/src/components/chat/message.tsx`,
-`apps/web/src/components/chat/prompt-input.stories.tsx` (D-082).
-
-### M1: Storybook-first composer shell state ✅
-
-- [x] Extract or reuse the production composer shell styling path so Storybook exercises the real prompt input — the production composer is now `apps/web/src/components/chat/prompt-input.tsx` (`PromptInput`), extracted out of `App.tsx` (form + textarea + attach button + attachment chips + upload-error banner + auto-grow); the stories render the same component App does
-- [x] Add Storybook states: normal, slash, empty bang, executable bang, long bang command, and bang-with-attachments/error — `prompt-input.stories.tsx` rewritten around a `ComposerHarness` that drives the real `PromptInput`
-- [x] Bang state changes immediately when the raw first character is `!`: Shell chip plus terminal-like border/background — `shellMode = draft[0] === "!"` flips a green Shell chip, terminal-green border/background, and monospace text
-- [x] Visual treatment stays distinct from slash menu (separate overlay, no composer chrome), context-pressure yellow, assistant/tool surfaces (purple/grey), and command-result chrome (bordered pre on surface-1) — shell uses smui-green
-
-### M2: Web parsing and publishing ✅
-
-- [x] Add `parseBangShell` (derive.ts) that triggers only on raw first character `!` with a non-empty command (a leading space stays an ordinary prompt; a lone `!` is inert)
-- [x] Submit publishes `user.shell {requestId, command}` through the new `useSessionActions.shell` helper, bypassing the send queue, model, and provider flow (checked before the trim/slash path in `onSubmit`)
-- [x] Shell lane is text-only; pending attachments are left in the composer on a bang submit (handled explicitly, never silently dropped)
-- [x] `/shell <command>` continues to route through known slash command parsing (the bang and slash lanes never overlap — covered by a derive test)
-
-### M3: Session protocol and host execution ✅
-
-- [x] Add `user.shell` and `shell.result` builders/decoders in `@trevor/session` (permissive coercion; missing requestId falls back to the event id, missing ok → false)
-- [x] Live leader handles `user.shell` by running shared `runShell(command)` and emitting one `shell.result` (`runShellCommand` in main.ts via the testable `shellOutcome` mapping)
-- [x] Refused/destructive, non-zero failure, timeout, and capped output render through `shell.result` with `ok: false` when appropriate (`shellOutcome`: ok only for `kind:"ok"`)
-- [x] Replay never re-runs shell commands; standby hosts observe only — gated on `live && lease.isLeader()` like editor.open/commands (an ACTION, not state to rebuild)
-
-### M4: Transcript and prompt projection ✅
-
-- [x] `toTranscript` reduces `user.shell` plus `shell.result` into one shell message keyed by `requestId`, with pending/result states (a result with no prior request still renders from its own command)
-- [x] Add a terminal-style shell block (`ShellBlock` in message.tsx) showing `$ command` and output, visually distinct from assistant, tool, and generic command-result chrome (green terminal styling, monospace)
-- [x] `/clear` resets visible shell blocks from prior history in the same way it resets conversation transcript (`shellByRequest` cleared alongside the other run state)
-- [x] `buildHistory`, compaction planning, and session recall anchors ignore `user.shell`/`shell.result` for this first cut — they switch on known event types only; a host test pins prompt-invisibility
-
-### M5: Verification ✅
-
-- [x] Protocol round-trip tests cover both events and permissive decode defaults (protocol.test.ts)
-- [x] Web tests cover parser behavior, submit routing (lane non-overlap), transcript pairing, `/clear`, and prompt-invisible history projection (derive.test.ts, transcript.test.ts, history-projection.test.ts)
-- [x] Host tests cover success, refusal through the bash safety floor, non-zero failure, output cap, and the `shellOutcome` ok-flag mapping (run-shell.test.ts)
-- [x] Manual EZE repro: verified by construction across the unit + web + host tiers (host runs the command on the live-leader gate; transcript pairs the block; the projection drops both events so `hello` never reaches the model). A live over-the-wire session is the gated lane
-
-## Next-Up: composer recovery and prompt history
-
-D-083 and D-084 are captured in the implementation plan as the first next-up item after Phase 8 unless
-explicitly reprioritized. V1 already had prompt-history mechanics in the TUI `PromptState`; V2
-currently has local composer state in `useComposer`, tab identity in `use-session.ts`, and slash-menu
-ArrowUp/ArrowDown handling in `App.tsx`, but no draft persistence or terminal-style prompt recall.
-Source: `apps/web/src/hooks/use-composer.ts`, `apps/web/src/session/use-session.ts`,
-`apps/web/src/App.tsx`, `apps/web/HOTKEYS.md`, `apps/web/src/hooks/use-send-queue.ts`,
-`apps/web/src/send-queue.ts` (D-083…D-084).
-
-### M1: Debounced draft persistence (D-083) ✅
-
-- [x] Draft-persistence hook (`use-draft-persistence.ts`) keyed by browser tab id (`webTabId`) + session id, using `window.sessionStorage` (tab-scoped, survives reload) - never the durable Richter log; the policy is the pure `composer-storage.ts`
-- [x] Restores a saved draft once the session id is known, without overwriting a non-empty in-memory draft (`setDraft((cur) => cur ? cur : saved)`)
-- [x] Debounces writes (300ms) with a versioned payload (`{v:1,text}`); every storage access is wrapped so private-mode/disabled storage degrades to no-persistence
-- [x] Clears the stored draft after submit / `/clear` / explicit clear — the composer goes empty and the empty-draft write removes the slot; the write effect is gated until restore so it can never wipe the saved draft
-- [x] Attachments are out of this cut (text drafts only)
-- [x] Tests: restore, no-clobber, debounce + clear, session isolation, storage failure (use-draft-persistence.test.tsx); cap/de-dupe/tab+session key isolation/version-skew/storage-failure (composer-storage.test.ts)
-
-### M2: Prompt history recall (D-084) ✅
-
-- [x] Prompt-history store (`usePromptHistory` + `composer-storage.appendHistory`) keyed by tab id + session id, capped to `HISTORY_CAP=50`, with adjacent-duplicate de-dupe
-- [x] Records ordinary prompts (trimmed text) and bang shell commands (raw `!…` as typed) in `onSubmit` after the publish path is taken
-- [x] Excludes slash-command results / host output / assistant text — only the two publish paths record; the slash path calls `resetNavigation()` and records nothing
-- [x] ArrowUp from an empty composer or the first line recalls the previous prompt (newest→oldest, clamped at the oldest)
-- [x] ArrowDown steps forward through recalled prompts and restores the stashed live draft past the newest end
-- [x] Multi-line editing keeps normal caret movement unless the caret is on the first line (ArrowUp) / last line (ArrowDown) — `caretOnFirstLine`/`caretOnLastLine` gate eligibility
-
-### M3: Composer integration and verification ✅
-
-- [x] Slash-menu ArrowUp/ArrowDown keeps priority while the menu is open — history recall lives only in the menu-closed (`!selected`) branch of `onInputKeyDown`
-- [x] Updated `apps/web/HOTKEYS.md` with the composer history conditions (two new rows + scopes)
-- [x] Web tests cover history navigation, empty-ring no-op, multi-line cursor eligibility (composer-caret.test.ts), reload persistence, and session/tab isolation; slash-menu priority holds by construction (separate branch)
-- [x] Manual EZE repro: verified by construction (draft restore/no-clobber/debounce/clear tested; the stored draft clears when the composer empties on submit)
-- [x] Manual EZE repro: verified by construction (recall walks recorded prompts; slash-command results never enter the ring — only the publish paths record)
-
-## Next-Up: project launcher
-
-D-085 is captured in the implementation plan as the first browser-era slice of the broader
-browser/terminal session-manager direction. The desired workflow is `trevor` from any project
-directory: resolve the project root, derive or look up the stable session id, ensure shared local
-Trevor services, spawn or reuse the matching agent-host with `SESSION_ID`, `TREVOR_WORKSPACE`, and
-cwd all pointing at that project/session, then open `http://127.0.0.1:17420/?session=<id>`. This
-replaces the manual env-command ceremony shown in the current workaround. Source: root `package.json`,
-new launcher entrypoint, `apps/agent-host/package.json`, `apps/agent-host/src/main.ts`,
-`apps/agent-host/src/tools/workspace.ts`, `apps/web/src/App.tsx`, `packages/session/src/identity.ts`,
-`~/.agents/PORTS.md` (D-085).
-
-### M1: CLI entrypoint and project identity ✅
-
-- [x] `trevor` terminal executable in a new workspace package `apps/trevor-cli` (`@trevor/cli`, `bin.trevor` → `bin/trevor.mjs` tsx shim); root `pnpm trevor` script too
-- [x] `resolveProjectRoot` walks up from cwd to the nearest `.git` marker (worktree root), falling back to cwd
-- [x] `projectSessionId` (in shared `@trevor/session` identity.ts, browser-safe FNV-1a) = basename slug + 8-hex path hash; URL-safe, no slashes
-- [x] `resolveSession` persists + reuses the root→session mapping under `<TREVOR_HOME>/projects.json` (the seam an explicit `--session` later writes through)
-- [x] No-arg ordinary path implemented; `--session`/`--new` reserved for later
-
-### M2: Shared service readiness ✅
-
-- [x] Probes web (17420), blob (17423), session-store (17424) on their reserved ports before launching a host
-- [x] Starts only the missing services through the repo's pnpm runner, detached (one shared set, never per-project)
-- [x] Classifies a reachable-but-not-ours port as a `conflict` and names the service/port in the status line (store/blob via `/health` identity)
-- [x] Waits for the store (`/health`) before touching the host
-- [x] `~/.agents/PORTS.md` unchanged (no new persistent port introduced — the launcher reuses the reserved ones)
-
-### M3: Project host lifecycle ✅
-
-- [x] Ownership records (`<TREVOR_HOME>/hosts.json`): pid, session id, root, command, startedAt (`recordHost`/`loadHosts`/`removeHost`)
-- [x] Per-session lock (`<TREVOR_HOME>/locks/<id>.lock`) — a live concurrent holder blocks a second launch from spawning; a dead holder's lock is taken over
-- [x] `decideHostAction` reuses a healthy recorded host (alive + present)
-- [x] Replaces a stale/dead record before spawning (and the concurrent-launch path opens the tab without a duplicate)
-- [x] `spawnHost` runs the host via tsx with `SESSION_ID`, `TREVOR_WORKSPACE=<root>`, and cwd = the project root (so host-cwd tools operate in the project)
-- [x] `waitForHostOnline` watches the session stream for `host.online` (the real wire evidence), with a timeout
-
-### M4: Browser handoff and diagnostics ✅
-
-- [x] Opens `http://127.0.0.1:17420/?session=<id>` (`sessionUrl`) after the session + host path are prepared
-- [x] `formatStatus` prints a concise status line: session id, project root, per-service reused/started state, host reused/spawned, URL (+ conflict warning)
-- [x] No secrets: the status formatter only reads the outcome's allow-listed fields; spawn inherits env but never constructs/logs secret values — pinned by a test asserting a seeded `OPENAI_API_KEY` never appears
-- [x] Web tolerates opening before `host.online` — App renders the host-presence status (no host → "host starting…" once it connects), never crashing on an empty/early session
-
-### M5: Verification ✅
-
-- [x] Unit tests: root resolution, stable URL-safe session id (no slashes), distinct ids per root, mapping persistence (project.test.ts, identity.test.ts)
-- [x] Unit tests: service health classification + missing/conflict partitions (services.test.ts)
-- [x] Unit tests: host reuse / stale-replacement / spawn decision + concurrent-launch locking (host-registry.test.ts)
-- [x] Integration test (fake platform): the launcher starts only missing services, spawns the host with the right session+root, reuses a healthy host, defers to a concurrent lock holder, and opens the expected URL (test/launch.test.ts)
-- [x] Manual EZE repro: verified by construction (the orchestration is fully fake-platform integration-tested end to end; the real platform wires the same flow). A live two-repo run is the gated lane
-
-## Next-Up: early transcript layout
-
-D-086 is captured in the implementation plan as a browser transcript layout fix. V1 is a terminal TUI
-with explicit scroll-layout choices, but not a direct browser-layout precedent. V2 currently uses
-`flex-col-reverse` and treats `scrollTop === 0` as the bottom, so new sessions start just above the
-composer. The desired behavior is top-down: an empty or short session starts at the top of the
-transcript well and appends downward until content overflows; after overflow, live-bottom following
-keeps streaming output visible only while the user is already at the live edge. Source:
-`apps/web/src/App.tsx`, `apps/web/src/transcript.ts`, `apps/web/src/transcript.test.ts`,
-`apps/web/src/components/chat/message.tsx`, future transcript layout stories/fixtures (D-086).
-
-### M1: Normal scroll model ✅
-
-- [x] Transcript container flipped from `flex-col-reverse` to normal top-down `flex-col` flow
-- [x] `atBottom` redefined as `scrollHeight - clientHeight - scrollTop` within tolerance (`scroll.ts` `atBottomOf`)
-- [x] `scrollToBottom` + the live-follow effect scroll to `scrollHeight`, not `0`
-- [x] Replay, submit re-pin (`setAtBottom(true)`), `/clear`, compacting bars, queued prompts, and shell blocks all ride the same well + follow effect
-
-### M2: Short-session top alignment ✅
-
-- [x] Empty replayed session: normal flow leaves the well empty with no fake spacer (the col-reverse spacer trick is gone)
-- [x] A single submitted message sits at the top padding (`py-4`) and grows downward
-- [x] A short exchange appends downward (an empty session's `scrollHeight ≈ clientHeight`, so the follow scroll is a no-op and content stays at the top)
-- [x] Composer/footer stay pinned below the scroll area (the well is `flex-1`; the composer is `shrink-0`) — fixtures check mobile + desktop heights
-
-### M3: Overflow and live-edge behavior ✅
-
-- [x] New updates follow the bottom only while `atBottom` (the follow effect gates on it); an existing session opens at the bottom (initial `atBottom` true)
-- [x] Scrolling up flips `atBottom` off (`onTranscriptScroll` → `atBottomOf`), so streaming deltas / tool rows / compacting bars / shell output never yank the viewport
-- [x] Jump-to-bottom chevron shows when `!atBottom`, scrolls to `scrollHeight`, and hides on return
-- [x] Stable across replay and reconnect (the model is geometry-based, not event-based; `atBottom` re-derives on every scroll)
-
-### M4: Visual and behavioral verification ✅
-
-- [x] Storybook fixtures (`transcript-scroll.stories.tsx`): empty, one-message, short exchange, just-before-overflow, overflowing
-- [x] Overflowing + short fixtures demonstrate top-anchoring vs scroll (the live-bottom vs scrolled-up follow is App wiring, exercised by the math + construction)
-- [x] Mobile-height + desktop-height fixtures confirm early content doesn't overlap the pinned composer
-- [x] Web tests pin the bottom-tolerance math (scroll.test.ts); top-aligned early layout is shown in the fixtures (jsdom has no layout engine for a behavioral assertion)
-- [x] Manual EZE repro: verified by construction (normal-flow well + tolerance math + follow-while-pinned; a new session starts at top, fills down, then follows the live edge only after overflow)
-
-## Next-Up: project-local skill roots
-
-D-087 is captured in the implementation plan as an additive skill-discovery refinement. V1 already
-supported project-local skills first, then user/shared skills. V2 currently discovers one root:
-`TREVOR_SKILLS_DIR` when set, otherwise `~/.agents/skills`. The desired behavior is to read
-`<workspace>/.agents/skills` first, where `<workspace>` is the same effective root used by the
-host file tools, then keep the existing configured/global root. Source:
-`apps/agent-host/src/skills.ts`, `apps/agent-host/src/tools/workspace.ts`,
-`apps/agent-host/src/commands.ts`, `apps/agent-host/src/tools/index.ts`,
-`apps/agent-host/src/agents.ts`, `apps/agent-host/src/agent/delegate.ts`,
-future D-075 `skills_list`/`skill_view` registry surfaces (D-087).
-
-### M1: Discovery roots and precedence (D-087) ✅
-
-- [x] `skillRoots()` returns an ordered root list (project-local first, then global), replacing the single-`SKILLS_DIR` assumption
-- [x] Project-local root = `PROJECT_SKILLS_DIR` = `<WORKSPACE_ROOT>/.agents/skills` (the same `WORKSPACE_ROOT` the file tools use)
-- [x] Global root preserved: `TREVOR_SKILLS_DIR` when set, else `~/.agents/skills` (still `SKILLS_DIR`)
-- [x] Roots deduped by resolved dir; a missing/unreadable root contributes nothing (`readdirSync` caught → skip)
-- [x] Enabled project-local skills win over a global skill of the same id (first-root-wins in `discoverSkillsIn`)
-- [x] A disabled project file leaves no tombstone — it returns null and never occupies the id, so the global skill of that id still surfaces
-
-### M2: Registry integration and provenance ✅
-
-- [x] `Skill` carries `rootKind` (project/global) + `path` (source) provenance; selection is project-over-global
-- [x] Discovery is pure over the passed roots (`discoverSkillsIn`); `discoverSkills` memoizes over `skillRoots()` with a `resetSkillCache()` seam, so it can't mix stale roots
-- [x] `/skills` reports every searched root when empty and tags each found skill with its source (`renderSkillsList`, `[project]`/`[global]`)
-- [x] `skill(name)`/`expandSkill` read the selected skill's `path`, so a project-local override expands the project body
-- [x] Project-local skills go through the same `SKILL_SHELL_INTERPOLATION` gate + `runShell` floor as global (no separate path)
-
-### M3: Downstream validation and tests ✅
-
-- [x] Agent + ephemeral delegation skill allow-list validation already call `discoverSkills()` (agents.ts `resolveAgentSkills`, delegate.ts), so they now use the effective merged registry automatically
-- [x] Unit tests: local-only, global-only, missing-local, missing-global (skills.test.ts)
-- [x] Unit tests: duplicate-id project precedence (+ override body via `expandSkill`) and root dedup
-- [x] Unit tests: `/skills` empty (lists roots) + list (source tags) output and `skill(name)` expansion from the project root
-- [x] Unit test: a project-local skill body does NOT auto-run shell interpolation while the gate is off (the `!` line survives verbatim)
-
-## Next-Up: sidebar git identity
-
-D-088 is captured in the implementation plan as the first new item before resume/worktrees. The current working
-directory stays visible in the sidebar, and the current Git branch/status moves underneath it as structured
-workspace identity: `branch*`, `↑N`, and `↓N`. V1 already had branch/dirty/ahead/behind/worktree state in its
-header model; V2 currently sends only `branch?: string` on `host.online` and renders it inline next to the
-workspace. Source: `apps/web/src/components/panel/SidePanel.tsx`, `apps/web/src/components/panel/SidePanel.stories.tsx`,
-`apps/web/src/derive.ts`, `apps/agent-host/src/workspace-switch.ts`, `apps/agent-host/src/main.ts`,
-`packages/session/src/protocol.ts` (D-088).
-
-### M1: Storybook sidebar states first (D-088)
-
-- [ ] Extract or refine the side-panel workspace block so cwd and git status can be fixture-driven without a live host
-- [ ] Render cwd/current working directory as the first line in the block
-- [ ] Render the branch/status line underneath cwd, using `branch*`, `↑N`, and `↓N`
-- [ ] Storybook states: clean branch, dirty branch, ahead-only, behind-only, diverged, detached HEAD, no upstream, non-git cwd, long path, and long branch
-- [ ] Keep dimensions stable: long paths/branches truncate without overlapping the context meter, tabs, or model controls
-
-### M2: Host-owned structured git status
-
-- [ ] Add a structured git status read model: branch, detached commit label, dirty, ahead, behind, upstream presence, and worktree boolean
-- [ ] Collect status from the effective host cwd/workspace with argv-based Git commands, not shell parsing
-- [ ] Define dirty as any `git status --porcelain` output, including untracked files
-- [ ] Compute ahead/behind against upstream only when upstream exists
-- [ ] Treat non-git cwd and Git command failures as an absent or degraded status, not a host startup failure
-- [ ] Unit tests cover clean, dirty, ahead, behind, diverged, detached, no-upstream, and non-git fixtures
-
-### M3: Protocol and app wiring
-
-- [ ] Extend `host.online` with the structured git object while keeping old `branch?: string` decode tolerant
-- [ ] Derive sidebar git state from structured fields, not a preformatted host string
-- [ ] Pass cwd/workspace and git status into `SidePanel` as presentation props
-- [ ] Refresh git status after host-owned operations that can change repository state, without polling constantly
-- [ ] Web tests cover rendering, decode compatibility, truncation, and empty/non-git display
-
-### M4: Verification
-
-- [ ] Storybook reviewed for all sidebar git states before app wiring is considered complete
-- [ ] Unit/web tests pass for protocol, host git status, and sidebar rendering
-- [ ] Manual EZE repro: dirty file, ahead/behind branch, detached HEAD, and non-git cwd produce the expected sidebar line
-
-## Next-Up: shared command modal foundation
-
-D-089 is captured in the implementation plan as the shared Storybook-first modal pattern for both explicit
-resume and managed worktree switching. It uses shadcn `Command` and the existing dialog/tokens so resume and
-worktree flows share keyboard behavior, search, row layout, disabled states, and footer hints. Source:
-`apps/web/src/components/ui/command.tsx`, `apps/web/src/components/ui/dialog.tsx`, future command-modal
-component/stories, future resume/worktree consumers (D-089).
-
-### M1: Reusable command modal shell (D-089)
-
-- [ ] Build the modal shell around shadcn `Command` and existing dialog primitives
-- [ ] Keep it production code with Storybook fixtures, not a story-only prototype
-- [ ] Support title/input header, escape hint, scrollable row list, selected row, right-side status, and footer hints
-- [ ] Define a typed generic row contract for label, metadata, marker, status, disabled reason, keywords, and action id
-- [ ] Keep resume rows and worktree rows as separate domain adapters over the shared presentation contract
-- [ ] Expose controlled open/search/selection props so live consumers can own command execution
-
-### M2: Storybook visual states first
-
-- [ ] Default command modal matching the provided centered concept
-- [ ] Worktree-style rows: baseline, active row, agents-running, needs-you, idle, dirty, ahead/behind, and conflict states
-- [ ] Resume-style rows: current project sessions, global search result, stale host, active host, queued/running, and old session
-- [ ] Empty, loading, disabled-row, many-rows, long-label, and narrow-viewport stories
-- [ ] Selected row highlight fills the row without resizing the shell
-- [ ] Footer hints cover navigate, switch/resume, open in split where supported, and close
-- [ ] Modal width/height remain stable while search filters rows
-
-### M3: Interaction and accessibility
-
-- [ ] ArrowUp/ArrowDown navigate visible enabled rows
-- [ ] Enter selects the highlighted enabled row and returns its action id to the consumer
-- [ ] Escape closes the modal without firing an action
-- [ ] Search filters by label, metadata, status, and keywords without mutating the source rows
-- [ ] Disabled rows remain visible, focusable or skipped by a decided rule, and expose their disabled reason accessibly
-
-### M4: Approval gate and tests
-
-- [ ] Component tests cover keyboard navigation, filtering, disabled behavior, empty state, and selection callback
-- [ ] Stories cover resume and worktree fixture sets before either live feature wires it into the app
-- [ ] Storybook approval is recorded as the gate for D-090 and D-091 app integration
-- [ ] No second bespoke resume/worktree modal is introduced during later wiring
-
-## Next-Up: explicit resume
-
-D-090 is captured in the implementation plan as explicit session selection. Fresh sessions remain the default
-after `clear`, `/cd`, reload, and project launch. `/resume` or the matching UI affordance opens a host-controlled
-session list using the shared command modal. Source: session-store/Richter session APIs, launcher/host registry,
-`packages/session/src/protocol.ts`, `apps/web/src/App.tsx`, future resume command modal stories (D-090).
-
-### M1: Session inventory/read model (D-090)
-
-- [ ] Define the session summary read model: session id/title, cwd/workspace, project/base repo, git status when known, created/updated time, event count, host presence, active/queued state, and recent activity
-- [ ] Host or launcher/supervisor owns inventory discovery; the browser consumes a read model and does not scan local state directly
-- [ ] Current project sessions sort first by recent activity
-- [ ] Global search can find sessions outside the current project
-- [ ] Stale/dead host state is represented distinctly from no host
-- [ ] Inventory API degrades with a visible empty/error state instead of silently hiding resume
-
-### M2: Storybook resume chooser first
-
-- [ ] Use the D-089 command modal foundation for resume rows
-- [ ] Stories cover current-project list, global search results, empty list, inventory error, active host, stale host, queued/running, disabled/switch-blocked, and long session labels
-- [ ] Row metadata shows enough cwd/session identity to avoid selecting the wrong durable log
-- [ ] Recent activity and host status are visible but subdued compared with the primary label
-- [ ] Disabled rows explain why they cannot be resumed
-- [ ] Storybook approval is required before `/resume` app wiring
-
-### M3: `/resume` command and UI entry
-
-- [ ] Add `/resume` as a host/UI command that opens the resume chooser, not as a model turn
-- [ ] Add a sidebar or command affordance that opens the same chooser
-- [ ] URL `?session=` remains a deep link but is not the only navigation path
-- [ ] Choosing a row publishes or invokes a host-controlled session switch action
-- [ ] Cancel/escape leaves the current session untouched
-- [ ] Command output never injects old transcript content into the current session
-
-### M4: Resume switch semantics
-
-- [ ] Selecting a session navigates the browser to that durable session id
-- [ ] The selected session's transcript is replayed as that session, never merged into the old view
-- [ ] Browser-local drafts, prompt history navigation state, send queue, and repo-scoped prompt state reset for the old session
-- [ ] Launcher/supervisor ensures or reuses the matching host for the selected session/workspace
-- [ ] Active execution in the current session blocks or disables switching according to the shared safety rule
-- [ ] Reload, `clear`, `/cd`, and ordinary project launch do not auto-resume any prior history
-
-### M5: Verification
-
-- [ ] Tests prove no implicit resume by cwd, reload, clear, or cd
-- [ ] Tests prove current-project-first ordering and global search
-- [ ] Tests prove exact selected-session replay and no old-session transcript bleed
-- [ ] Tests cover stale host handling, active-run disabled state, queue/draft isolation, and cancel behavior
-
-## Next-Up: managed worktrees
-
-D-091 is captured in the implementation plan and promoted from H-140. Trevor-managed worktrees live under
-Trevor local state, are visually grouped by base repo, and switch through the shared command modal after
-Storybook approval. This feature is the prerequisite safety layer for future mutating background subagents.
-Source: future worktree registry, `apps/agent-host/src/workspace-switch.ts`, launcher/host registry, Git CLI
-helpers, `apps/web` command modal consumers, `packages/session/src/protocol.ts` (D-091).
-
-### M1: Registry and storage model (D-091)
-
-- [ ] Store Trevor-created worktrees under `~/.trevorV2/.worktrees/<repo-hash>/<branch-slug>-<id>` or an equivalent grouped path
-- [ ] Registry records base repo identity, base path, worktree path, branch, base commit, current commit when known, session id, created time, updated time, and status
-- [ ] Base repo identity is stable across cwd spelling, symlinks, and nested paths
-- [ ] Registry reads tolerate missing/deleted paths and surface stale entries
-- [ ] Path hashing avoids leaking full project paths into directory names while preserving grouping
-- [ ] Unit tests cover registry persistence, path grouping, stale entries, and identity stability
-- [ ] Storage location follows the current Trevor local-state convention until the root taxonomy migration lands
-
-### M2: Storybook worktree switcher first
-
-- [ ] Use the D-089 command modal foundation for the worktree switcher
-- [ ] Match the provided concept: centered modal, input header, baseline row, selected highlight, right-aligned status, and footer hints
-- [ ] Stories cover baseline checkout, active worktree, clean, dirty, ahead/behind, idle, agents running, needs-you, rebase conflict, disabled switching, empty, and many rows
-- [ ] Rows show branch/worktree name, dirty/ahead/behind deltas, current marker, host presence, agent count or activity, and conflict/attention state
-- [ ] Base repo grouping is visible when multiple base repos appear in fixture data
-- [ ] Long branch names and many statuses do not resize the modal or overlap text
-- [ ] Storybook approval is required before live worktree switching is wired
-
-### M3: Create, open, and switch flow
-
-- [ ] Add host-owned create-managed-worktree action from the current base repo
-- [ ] Create a Git worktree with a safe branch/path policy and record it in the registry
-- [ ] Associate each managed worktree with a durable Trevor session id
-- [ ] Opening an existing managed worktree reuses its path/session instead of recreating it
-- [ ] Switching makes the worktree path the new current cwd/workspace/session target
-- [ ] Baseline checkout remains available as the baseline row
-- [ ] Missing path or invalid Git state yields a visible blocked/repair state, not a silent fallback
-
-### M4: Safety and isolation
-
-- [ ] Switching is blocked while host-owned execution is active in the current workspace
-- [ ] Cwd-level advisory locks prevent two Trevor-owned mutating hosts from acting on the same directory
-- [ ] Switch handoff resets repo-scoped prompt state, drafts, send queue, task state, and lazy below-cwd context
-- [ ] Host replacement/reuse follows the same session lifecycle boundary as `/cd` and resume
-- [ ] Worktree switch never loads another worktree's transcript unless the selected row's session is explicitly opened
-- [ ] Background/read-only agents cannot mutate worktree state in this cut
-- [ ] `/doctor` or equivalent diagnostics surface lock/worktree/session mismatches
-
-### M5: Merge, reconcile, delete, archive
-
-- [ ] Add diff/status inspection for a managed worktree relative to its base repo
-- [ ] Add merge or rebase-back flow with conflict reporting
-- [ ] Add delete/archive action for clean worktrees
-- [ ] Dirty, conflicted, running, or unpushed worktrees require confirmation before destructive cleanup
-- [ ] Registry cleanup reconciles deleted/missing worktree paths
-- [ ] Merge/reconcile can ship after create/list/switch but remains part of the D-091 feature plan
+> Canonical source of truth for the active open checklist. Completed checklist detail lives in
+> [progress-report-done.md](./progress-report-done.md) so routine planning turns do not need to load
+> every checked item.
+
+> **Scope.** This report tracks open or partial/gated work only. When an item or section is fully
+> completed, move its detailed checklist to the done archive and leave only a summary/reference here.
+> Current focus: D-044 session recall, D-092 image attachment UX, and D-060 internet connectivity
+> awareness. Later roadmap items stay sequenced in the canonical implementation plan and are decomposed
+> here only when picked up.
+
+## Archived Completed Work
+
+Completed checklist detail for Phase 1 through Phase 8, D-083-D-087, and the completed D-088-D-091
+work is archived in [progress-report-done.md](./progress-report-done.md).
+
+## Carry-Forward: partial/gated archived items
+
+These rows remain visible because they are not fully completed, even though their surrounding feature checklists are archived.
+
+- [~] D-088 sidebar git identity: live EZE repro for dirty file, ahead/behind branch, detached HEAD, and non-git cwd remains gated
+- [~] D-090 explicit resume: launcher/supervisor spawning or reusing a matching host for a selected no-host session remains gated
+- [~] D-091 managed worktrees: dedicated cwd-path advisory lock remains deferred beyond the existing per-session lock
+- [~] D-091 managed worktrees: live two-host worktree smoke remains gated
+
+## Next-Up: session recall
+
+D-044 is captured in the implementation plan as model-decided recall over older project/session conversation
+memory that is not already in the active prompt. "Session recall" keeps its name, but the scope is the current
+project's durable session corpus: compacted-away detail in the current durable session plus other durable
+sessions for the same project/workspace. It is not a slash command, not ambient memory, and not codebase search.
+Source: `apps/agent-host/src/agent/compactor.ts`, `apps/agent-host/src/agent/history-projection.ts`,
+session-store/Richter session APIs, future session inventory/project mapping, future recall tool and transcript
+result component (D-044).
+
+### M1: Recallable corpus and source metadata (D-044)
+
+- [ ] Define the recallable record model for compacted-away current-session spans and other project sessions
+- [ ] Use the launcher/resume project identity so "same project" means the same canonical root/workspace mapping
+- [ ] Exclude recent turns that are already present in the active prompt projection
+- [ ] Read compaction fold manifests as anchors for current-session compacted-away detail
+- [ ] Read durable session summaries/events for other sessions in the same project without loading them into the active session
+- [ ] Attach stable source pointers: session id/label, workspace/project, turn id or event range, timestamp, excerpt, score, and neighborhood bounds
+- [ ] Treat missing, stale, corrupt, or inaccessible sessions as visible partial-search diagnostics, not silent absence
+
+### M2: BM25 search and filters
+
+- [ ] Build an on-demand lexical BM25 index over recallable conversation records, with no embeddings in the first cut
+- [ ] Support structured filters for project/session, turn range, event type, tool name, and folded-span id
+- [ ] Search compacted-away current-session detail and other same-project sessions in one query path
+- [ ] Rank, cap, and deduplicate anchors so repeated excerpts from the same neighborhood do not dominate
+- [ ] Return anchors with match score, source pointer, excerpt, and enough context keys for neighborhood expansion
+- [ ] Unit tests cover ranking, filtering, dedupe, no-hit behavior, and exclusion of active-prompt turns
+
+### M3: Neighborhood expansion and isolated recall subagent
+
+- [ ] Expand each search anchor into a bounded neighborhood of surrounding turns/events
+- [ ] Cap per-neighborhood size and total recall context so one long session cannot exhaust the recall budget
+- [ ] Run the reasoning pass in an isolated subagent with its own context budget
+- [ ] Give the recall subagent read-only access to recall neighborhoods and source metadata only
+- [ ] Return distilled findings with citations instead of dumping raw neighborhoods into the main turn
+- [ ] Tests cover anchor-to-neighborhood expansion, budget caps, citation preservation, and no mutation of the current durable session
+
+### M4: Model-facing tool contract
+
+- [ ] Add a `session_recall` model-facing tool with query, optional filters, and result caps
+- [ ] Do not add a slash command in the first cut
+- [ ] Add prompt/tool guidance so the model uses recall only when the user asks for older project/session memory
+- [ ] Tool result includes query, searched-session count, searched-fold count, anchor count, neighborhood count, cited findings, and diagnostics
+- [ ] Typed outcomes distinguish no hits, partial search, unavailable inventory, invalid filters, and internal failure
+- [ ] Ambient/proactive remembering remains deferred and cannot inject recall results without a model tool call
+
+### M5: Visible transcript rendering, Storybook first
+
+- [ ] Build a Storybook-first `Session recall` result surface before live wiring
+- [ ] Render the recall use visibly in the transcript as a tool/result, not hidden reasoning
+- [ ] Show a compact activity summary such as sessions searched, folded spans searched, and neighborhoods found
+- [ ] Show collapsed or compact source rows/snippets with session label, timestamp, and short excerpt
+- [ ] Storybook states cover searching, no hits, one hit, multiple sessions, partial search, stale session, and error
+- [ ] The first cut does not add a separate recall browser, drawer, modal, or global search UI
+- [ ] Web tests cover result rendering, collapsed snippets, accessibility labels, and long-session/long-excerpt truncation
 
 ### M6: Verification
 
-- [ ] Tests cover Git worktree creation, registry updates, and switch handoff
-- [ ] Tests cover active-run blocking, cwd-lock contention, and stale registry entries
-- [ ] Tests cover baseline/worktree grouping and status display
-- [ ] Tests prove no prompt/transcript/queue/context leakage across worktree switches
-- [ ] Smoke test covers create, switch, switch back to baseline, dirty display, and blocked switching while running
+- [ ] Tests prove recall searches compacted-away current-session detail but not active-prompt recent turns
+- [ ] Tests prove recall searches other sessions for the same project and excludes unrelated projects
+- [ ] Tests prove no `/resume`/session switch or transcript merge occurs while searching other sessions
+- [ ] Tests prove citations point back to stable session/event ranges
+- [ ] Tests prove no slash command is registered for recall
+- [ ] Manual EZE repro: ask a memory question whose answer exists only in compacted-away or sibling-session history, and the visible `Session recall` result appears before the final answer
+
+## Next-Up: image attachment UX
+
+D-092 is captured in the implementation plan as the user-facing image attachment layer over the existing
+blob-backed artifact transport. V1's useful shape was `[Image #N]` tokens inserted at the cursor, kept in the
+transcript, and stripped from provider text while images traveled out-of-band. V2 already has blob-store upload,
+`ArtifactRef`, `user.message.artifacts`, queue artifact preservation, and host-side vision model resolution.
+What remains is the Storybook-first UX: inline text tokens, Cmd+V image paste, token hover previews, queue
+rendering, natural transcript image layout, and same-message carousel. Source:
+`apps/web/src/hooks/use-composer.ts`, `apps/web/src/components/chat/prompt-input.tsx`,
+`apps/web/src/components/chat/message.tsx`, `apps/web/src/ArtifactThumb.tsx`,
+`apps/web/src/send-queue.ts`, `apps/web/src/transcript.ts`, `packages/session/src/protocol.ts`,
+`apps/agent-host/src/agent/history-projection.ts`, `apps/agent-host/src/artifacts.ts`,
+`apps/agent-host/src/providers/pi-ai.ts` (D-092).
+
+### M1: Storybook composer token states first (D-092)
+
+- [ ] Build Storybook fixtures for image-token composer states before live wiring
+- [ ] Render `[Image #N]` ranges with attachment-token syntax highlighting while keeping normal text-composer behavior
+- [ ] Use an overlay or mirror layer so token highlighting and hover/focus targets exist without replacing the textarea with a rich editor
+- [ ] Stories cover token between words, token at start, token at end, multiple tokens, long prompt wrapping, upload in progress, upload error, and broken/unavailable preview
+- [ ] Token hover/focus preview story shows the image at max 300px wide and 300px tall with preserved aspect ratio
+- [ ] Storybook includes narrow/mobile and desktop composer widths so token highlighting tracks wrapping
+- [ ] Stories use production `ArtifactRef` fixtures and `artifactSrc`-compatible image URLs, not story-only fake markup
+
+### M2: Token placement model and editing behavior
+
+- [ ] Define the draft attachment model that pairs visible `[Image #N]` tokens with uploaded `ArtifactRef`s
+- [ ] Insert image tokens at the current cursor or selection replacement point
+- [ ] Auto-add leading/trailing spaces so inserted tokens do not stick to adjacent words
+- [ ] Multiple-image paste/drop inserts ordered tokens and refs deterministically
+- [ ] Backspace next to a token removes the whole token and its artifact ref in one step
+- [ ] Delete next to a token removes the whole token and its artifact ref in one step
+- [ ] Removing a token keeps remaining text, refs, and displayed token numbers synchronized in reading order
+- [ ] Tests cover insertion at start/middle/end, selection replacement, auto spacing, multi-image insertion, and one-step deletion
+
+### M3: Image intake, Cmd+V, and queue preservation
+
+- [ ] Cmd+V image paste reads clipboard image files and inserts tokens at the cursor reliably
+- [ ] File picker inserts tokens at the cursor after upload succeeds or shows a pending token state while upload is in flight
+- [ ] Drag/drop uploads images and inserts tokens at the current or last-known composer cursor position
+- [ ] Non-image files keep the existing file/document attachment behavior unless explicitly upgraded later
+- [ ] Shell mode leaves image tokens/attachments in the composer and never silently drops them
+- [ ] Queued prompts render the same `[Image #N]` text tokens and carry the matching artifact refs while waiting
+- [ ] Hard steer preserves queued token text and image refs together when collapsing the queue and draft
+- [ ] Tests cover Cmd+V paste, picker, drop, queued rendering, shell-mode preservation, and hard-steer preservation
+
+### M4: Transcript image layout
+
+- [ ] Submitted user messages preserve `[Image #N]` token positions in the visible text
+- [ ] Images render in the same user transcript item as the submitted prompt
+- [ ] Images render at natural dimensions until constrained by story-approved responsive max width and max height
+- [ ] Images are contained, not cropped, and preserve original aspect ratio
+- [ ] Multiple images in one user message form one image set for layout and carousel behavior
+- [ ] Broken, missing, non-renderable, and non-image artifacts degrade to a file/link row without a broken image icon
+- [ ] Storybook states cover tiny, wide, tall, large, multiple images, long text with tokens, attachments-only prompt, and broken image
+- [ ] Web tests cover sizing classes/styles, image set grouping, token text preservation, and fallback rows
+
+### M5: Same-message image carousel
+
+- [ ] Clicking any transcript image opens a centered dialog carousel for only the images in that user message
+- [ ] The dialog is large enough for inspection but not full screen
+- [ ] Carousel image sizing is responsive and preserves aspect ratio
+- [ ] Previous/next controls cycle through images in submitted order
+- [ ] Keyboard navigation supports ArrowLeft, ArrowRight, and Escape
+- [ ] Dialog shows image count/index and accessible image labels
+- [ ] Storybook states cover one image, many images, wide image, tall image, broken image, and narrow viewport
+- [ ] Web tests cover open, close, previous/next, keyboard navigation, and same-message scoping
+
+### M6: Provider projection and protocol compatibility
+
+- [ ] Keep `ArtifactRef` as the durable blob reference; do not inline bytes into Richter events
+- [ ] Preserve old `user.message.artifacts` decode compatibility for sessions without placement metadata
+- [ ] Strip `[Image #N]` tokens from provider text when sending images as model image blocks
+- [ ] Preserve image order from token reading order when resolving image blocks
+- [ ] Where provider APIs support interleaved content blocks, project text/image order as closely as possible
+- [ ] Where provider APIs only support text plus image list, strip tokens from text and send images in token order
+- [ ] Non-vision providers receive a clear attachment note instead of literal token clutter
+- [ ] Tests cover old-event decode, provider text stripping, token-order image resolution, non-vision notes, and attachments-only prompts
+
+### M7: Verification
+
+- [ ] Storybook reviewed before live app wiring for composer tokens, hover preview, queued prompt, transcript layout, and carousel
+- [ ] Unit tests cover token parser/editor behavior and placement-to-artifact synchronization
+- [ ] Web tests cover composer rendering, hover preview, queue rendering, transcript image layout, and carousel controls
+- [ ] Host tests cover provider projection over tokenized image prompts
+- [ ] Manual EZE repro: Cmd+V an image between words, submit, verify transcript natural sizing, open carousel, and verify model receives the image without literal token clutter
+- [ ] Manual EZE repro: queue an image prompt during an active turn and verify the queued token and artifact survive until publish
+
+## Next-Up: internet connectivity awareness
+
+D-060 is captured in the implementation plan as host-owned public-internet reachability status. It is not
+provider health, not browser `navigator.onLine`, not local session-store/WebSocket presence, and not an automatic
+local/cloud fallback mechanism. The first cut is advisory only: the host reports whether it appears able to reach
+the public internet, the UI surfaces that near model/source selection, and `/doctor` explains the last probe.
+Source: future host connectivity service, `apps/agent-host/src/main.ts`, `packages/session/src/protocol.ts`,
+`apps/web/src/components/panel/SidePanel.tsx`, model/source UI surfaces, `/doctor`, and Storybook fixtures (D-060).
+
+### M1: Host-owned status and probe semantics (D-060)
+
+- [ ] Define the internet snapshot as `online`, `offline`, or `unknown`, plus a transient `checking` flag while a probe is in flight
+- [ ] Make the host machine the source of truth for public-internet reachability
+- [ ] Treat browser `navigator.onLine` only as a possible UI comparison/debug hint, never as the host status
+- [ ] Probe with a small DNS plus HTTPS check against configured public endpoints
+- [ ] Treat LAN-up/WAN-down and captive-portal-like failures as `offline` when the public probe fails
+- [ ] Use `unknown` for no probe yet, disabled/misconfigured probe, or inconclusive probe results
+- [ ] Keep provider auth, provider rate limits, provider overload, model availability, and provider request failures out of this status
+- [ ] Store last checked time, snapshot age/staleness, sanitized last error, and probe target class
+
+### M2: Refresh cadence and protocol
+
+- [ ] Probe on host startup and publish the first snapshot when available
+- [ ] Cache ordinary probe results for about 30 seconds to avoid constant network checks
+- [ ] Allow an explicit UI refresh action that starts a new probe and exposes `checking`
+- [ ] Optionally start an async refresh before a cloud turn when the snapshot is stale
+- [ ] Never block a turn on internet-status refresh
+- [ ] Include the latest internet snapshot on `host.online`
+- [ ] Emit a small `host.internet` event on `checking` start, status change, and refresh completion
+- [ ] Keep internet-status events out of conversation memory and prompt history projection
+
+### M3: Advisory UI and Storybook states
+
+- [ ] Build the internet-status UI Storybook-first before app wiring
+- [ ] Place the compact advisory near the model/source area, where cloud-vs-local expectation is visible
+- [ ] Keep the internet advisory visually distinct from host presence and session-store/WebSocket connection state
+- [ ] When a cloud model is selected and the host is offline, show a warning without disabling submit or changing model selection
+- [ ] When a local model is selected and the host is offline, keep the state neutral/advisory because local turns are unaffected
+- [ ] Storybook states cover online, offline, unknown, checking, stale, and refresh failure
+- [ ] Storybook states cover host disconnected, browser offline while host is online/unknown, cloud model selected while offline, and local model selected while offline
+- [ ] The model/source chooser can show stale status and a refresh action without turning the chooser into a connectivity dashboard
+- [ ] Web tests cover advisory placement, labels, cloud/offline warning, local/offline non-blocking state, and stale/checking rendering
+
+### M4: Doctor and logging surface
+
+- [ ] `/doctor` reports internet status, checking state, last checked time, and snapshot age/staleness
+- [ ] `/doctor` reports DNS/HTTPS probe class and sanitized last error
+- [ ] `/doctor` omits credentials, auth headers, full request payloads, and any sensitive endpoint material
+- [ ] `/doctor` never reports a fallback target because D-060 has no fallback behavior
+- [ ] Host logs use structured, redacted probe fields for status changes and probe failures
+- [ ] `/doctor` distinguishes internet reachability from host presence, session-store connectivity, and provider health
+
+### M5: No routing side effects and verification
+
+- [ ] A selected local model remains local regardless of internet status
+- [ ] A selected cloud model remains cloud regardless of internet status
+- [ ] Cloud request failures do not trigger a local retry or change the selected model
+- [ ] Offline status does not emit or imply `assistant.providerFallback`
+- [ ] Local session-store or Richter disconnects do not imply internet offline
+- [ ] Tests cover browser `navigator.onLine` disagreeing with the host probe
+- [ ] Tests cover `checking`, stale snapshots, manual refresh, `host.online`, and `host.internet`
+- [ ] Web tests cover the Storybook-backed advisory states and cloud/local selected-model differences
+- [ ] Manual EZE repro: simulate LAN-up/WAN-down or failed public probes, verify advisory UI and `/doctor`, and verify local/cloud model selection is unchanged
 
 ## Summary
-- Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
-- Phase 2 (turn-budget termination): 20 features, 20 completed, 0 remaining ✅ (M4 `/doctor` turn-termination reason shipped)
-- Phase 3 (cross-turn compaction): 27 features, 27 completed, 0 remaining
-- Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
-- Phase 5 (subagents): 41 features, ~39 completed (M1 discovery + M2 isolated child session/link + M3 inline + background delegation [cap, read-only clamp, late-result] + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~2 remaining (the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
-- Phase 6 (search-tool upgrade): 14 features, 14 completed ✅ (M1 ripgrep-backed `grep` + M2 read-only `ast_grep`, both with project-managed binaries and tests)
-- Phase 7 (nested AGENTS.md context files): 17 features, 17 completed ✅ (M1 pure reader + single-sourced `TREVOR_HOME` = 6, M2 eager prompt injection = 4, M3 lazy below-cwd loading = 5, M4 `/doctor` surfacing = 2; Claude Code lazy model keyed on AGENTS.md - eager up-tree + lazy below-cwd; 18 new unit tests; manual repro verified by construction, live-obedience is the gated lane)
-- Phase 8 (prompt shell lane): 20 features, 20 completed, 0 remaining ✅ (M1 PromptInput extraction + stories, M2 parseBangShell + publish, M3 protocol + live-leader execution, M4 transcript + terminal block, M5 tests across protocol/web/host)
-- Active cutoff features: 20
-- Active cutoff completed: 20
-- Active cutoff remaining: 0
-- Active cutoff blockers: 0 (Phase 8 prompt shell lane shipped)
-- Next-up queue (D-083…D-087): 75 features, 75 completed, 0 remaining ✅ — all four queues shipped:
-  - D-083/D-084 composer recovery + prompt history: 17 ✅ (draft persistence + ArrowUp/Down recall, tab/session-keyed sessionStorage)
-  - D-085 project launcher: 25 ✅ (`trevor` CLI in `apps/trevor-cli`: project/session resolution, shared-service readiness, host reuse/spawn behind a per-session lock, browser handoff, secret-free status)
-  - D-086 early transcript layout: 18 ✅ (top-down normal-flow well + bottom-tolerance follow, fixtures)
-  - D-087 project-local skill roots: 15 ✅ (`<workspace>/.agents/skills` first, then global; override + no-tombstone, provenance, `/skills` roots/source)
-- Next sequenced queue (D-088-D-091): 108 features, 0 completed, 108 remaining
-  - D-088 sidebar git identity: 19 remaining (Storybook sidebar states first, host-owned structured git status, protocol/app wiring, verification)
-  - D-089 shared command modal foundation: 22 remaining (shadcn `Command` modal shell, Storybook visual states, interaction/accessibility, approval gate)
-  - D-090 explicit resume: 28 remaining (session inventory, Storybook resume chooser, `/resume` command/UI entry, switch semantics, verification)
-  - D-091 managed worktrees: 39 remaining (registry/storage, Storybook switcher, create/open/switch, safety/isolation, merge/reconcile/delete, verification)
-- Phase 4 (provider SDK migration + outage auto-reconnect): 18, all shipped ✅
-- Phase 5 (subagents): ~39/41 shipped (inline + background delegation); ~2 remaining are the fork-dependent M2 forkability bullets (blocked on the unimplemented D-025…D-029 fork feature) + minor refinements
-- Phase 6 (search-tool upgrade: ripgrep `grep` + read-only `ast_grep`): 14, all shipped ✅
-- Phase 7 (nested AGENTS.md context files, D-080 + D-081 single-sourced `TREVOR_HOME`): 17, all shipped ✅ (eager up-tree + lazy below-cwd, keyed on AGENTS.md, with /doctor surfacing)
-- Phase 8 (prompt shell lane, D-082): 20/20 shipped ✅ (leading `!` runs a host shell command through the protected `runShell` path, rendered as a terminal block, prompt-invisible this cut)
-- Remaining implementable work: 108 unchecked items in D-088-D-091, plus the fork-blocked Phase 5 work (D-025…D-029) and minor Phase 5 refinements outside this cutoff
-- Superseded/obsolete checklist debt: 0
-- Full suite at completion: typecheck green across all 9 packages; 428 unit/web/integration tests pass (1 gated skip); biome lint clean (6 pre-existing warnings + 1 info)
-
-> Phase 2 shipped 2026-06-25 ahead of Phase 1 (its silent turn-budget dead-ends were biting:
-> deepseek/glm cut off mid-answer, qwen4bit returning empty). Phase 1 (concurrent reads)
-> shipped 2026-06-25: read-only tool batches now dispatch concurrently (bounded by
-> TOOL_CONCURRENCY) with mutating calls as serial barriers, committed to history in call order.
-> Only Phase 2 M4 (the `/doctor` turn-termination reason) remains in that cutoff.
-> Phase 3 (cross-turn compaction, D-040…D-043) shipped 2026-06-25: a durable `context.compacted`
-> rolling-chain event, a compaction-aware prompt projection (pins + summary + recent-verbatim) that
-> leaves the UI transcript full, a tool-less ~1k-token summarizer, the 80%/50% background-after +
-> blocking-before trigger off the one-turn gate, and `/compact` + a web marker + `/doctor` surfacing.
->
-> Correction (2026-06-25, post-ship): `buildHistory` previously DROPPED all tool calls/results from
-> the cross-turn prompt, so each turn restarted with none of the prior turn's reads (the agent
-> "started over"), and compaction had nothing big to fold (the growth lived only inside a turn).
-> This diverged from D-040's "recent turns, full fidelity" intent and from how every mainstream
-> harness works. Fixed: `buildHistory` now RECONSTRUCTS tool.started/tool.completed into the
-> conversation (assistant tool-call message + tool results) and CARRIES them across turns; `main.ts`
-> records tool events into the durable history; and the compaction planner sizes/folds turns by
-> their tool results (not just text). So the prompt grows the mainstream way and compaction is now
-> load-bearing - it folds the file reads that actually fill the window.
-> Phase 4 (provider SDK migration plus outage auto-reconnect), Phase 5 (subagents), and Phase 6
-> (search-tool upgrade) are shipped in this report.
->
-> Phase 8 (prompt shell lane, D-082) shipped 2026-06-26, and the entire next-up queue shipped the same
-> day: D-083/D-084 (composer draft persistence + ArrowUp/Down prompt history, tab+session-keyed in
-> sessionStorage), D-085 (the `trevor` project launcher - a new `apps/trevor-cli` package that resolves
-> the project root + stable session id, readies the shared web/blob/store services, spawns or reuses
-> the matching agent-host behind a per-session lock with SESSION_ID + TREVOR_WORKSPACE + cwd at the
-> project, and opens the session URL with a secret-free status line), D-086 (top-down transcript scroll
-> model replacing flex-col-reverse, with bottom-tolerance live-edge follow + fixtures), and D-087
-> (project-local `<workspace>/.agents/skills` discovered ahead of the global root, with project override,
-> no disable-tombstones, provenance, and `/skills` root/source reporting). Composer note (2026-06-26):
-> the shell lane's visual treatment is orange (not green) and swaps the composer's attach `+` for a
-> shell glyph in place (no top chip), so typing a leading `!` never reflows the composer height; all
-> Storybook stories are centered in the canvas via the global preview decorator. With these, the old active
-> cutoff and D-083…D-087 queue are complete.
->
-> New queue added 2026-06-26: D-088 sidebar git identity, D-089 shared shadcn command modal foundation,
-> D-090 explicit resume, and D-091 managed worktrees. All UI-bearing work starts Storybook-first. Sidebar git
-> identity precedes resume/worktrees; the shared command modal must be approved in Storybook before resume or
-> worktree integration lands.
+- Archived completed checklist detail: [progress-report-done.md](./progress-report-done.md)
+- Live open follow-up (D-044 session recall): 38 features, 0 completed, 38 remaining
+- Live open follow-up (D-092 image attachment UX): 53 features, 0 completed, 53 remaining
+- Live open follow-up (D-060 internet connectivity awareness): 40 features, 0 completed, 40 remaining
+- Partial/gated carry-forward from archived D-088-D-091: 4 items
+- Remaining implementable work in this report: 131 unchecked items plus 4 partial/gated carry-forward items
