@@ -1,9 +1,17 @@
+import { homedir } from "node:os";
 import { basename } from "node:path";
 import { events, type SessionSummary, streamTransport } from "@trevor/session";
 import { nodeFs } from "./fs";
 import { loadHosts, removeHost } from "./host-registry";
 import { formatStatus, launch } from "./launch";
-import { type HostControlIo, type LifecycleIo, runArchive, runList, runStop } from "./lifecycle";
+import {
+  type HostControlIo,
+  type LifecycleIo,
+  resolveOpenTarget,
+  runArchive,
+  runList,
+  runStop,
+} from "./lifecycle";
 import { nodePlatform } from "./platform";
 import { resolveProjectRoot, TREVOR_HOME } from "./project";
 import { RESERVED_PORTS } from "./services";
@@ -89,6 +97,7 @@ Usage:
   trevor                       Resolve the project (nearest git root), ready the shared services,
                                reuse-or-spawn the matching agent-host, and open in the browser.
   trevor list [--archived]     List this project's sessions (active by default; --archived for filed).
+  trevor open <session>        Open/resume a session by id (spawn-or-attach its host) in the browser.
   trevor archive <session>     Archive a session (hides it from the default views; keeps its log).
   trevor unarchive <session>   Unarchive a session.
   trevor stop <session>        Gracefully shut down the session's host (SIGTERM); keeps its log.
@@ -97,6 +106,53 @@ Usage:
   trevor --help                Show this help.
   trevor --version             Show the launcher version.
 `;
+
+/**
+ * Runs the launcher behind the startup spinner and prints the secret-free status line. The live
+ * spinner is on stderr for the several seconds of startup; the final status block prints to stdout
+ * after it succeeds, so piping `trevor` still yields a clean machine-readable summary.
+ */
+async function launchWith(options: {
+  readonly debug?: boolean;
+  readonly session?: { sessionId: string; root: string };
+}): Promise<void> {
+  const spinner = createSpinner();
+  spinner.step(options.session ? "opening session…" : "starting Trevor…");
+  try {
+    const outcome = await launch(nodePlatform({ step: (text) => spinner.step(text) }), options);
+    spinner.succeed("Trevor ready");
+    process.stdout.write(`${formatStatus(outcome)}\n`);
+  } catch (error) {
+    spinner.fail("Trevor failed to start");
+    throw error;
+  }
+}
+
+/**
+ * Runs `trevor open <session>` (D-094 M3): resolve the requested session from the store inventory to
+ * its workspace root, then launch it (spawn-or-attach the matching host + open the browser). A
+ * missing/unknown id prints a clear message and does not launch.
+ */
+async function runOpen(sessionId: string): Promise<void> {
+  const id = sessionId.trim();
+  if (!id) {
+    process.stdout.write("usage: trevor open <session>\n");
+    return;
+  }
+  let summaries: readonly SessionSummary[];
+  try {
+    summaries = await lifecycleIo().fetchSessions();
+  } catch (error) {
+    process.stdout.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return;
+  }
+  const target = resolveOpenTarget(summaries, id, homedir());
+  if ("error" in target) {
+    process.stdout.write(`${target.error}\n`);
+    return;
+  }
+  await launchWith({ session: target });
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -108,25 +164,19 @@ async function main(): Promise<void> {
     process.stdout.write("trevor v2 (trevorV2 launcher)\n");
     return;
   }
+  // `trevor open <session>` is a launch variant (spinner + full platform), handled before the
+  // print-only lifecycle subcommands.
+  if (args[0] === "open") {
+    await runOpen(args[1] ?? "");
+    return;
+  }
   // Session-lifecycle subcommands (D-094) run against the local store and print, without launching.
   const sub = await runSubcommand(args);
   if (sub !== null) {
     process.stdout.write(`${sub}\n`);
     return;
   }
-  const debug = args.includes("--debug");
-  // Live spinner on stderr for the several seconds of startup; the final status block prints to
-  // stdout after it succeeds, so piping `trevor` still yields a clean machine-readable summary.
-  const spinner = createSpinner();
-  spinner.step("starting Trevor…");
-  try {
-    const outcome = await launch(nodePlatform({ step: (text) => spinner.step(text) }), { debug });
-    spinner.succeed("Trevor ready");
-    process.stdout.write(`${formatStatus(outcome)}\n`);
-  } catch (error) {
-    spinner.fail("Trevor failed to start");
-    throw error;
-  }
+  await launchWith({ debug: args.includes("--debug") });
 }
 
 main().catch((error: unknown) => {

@@ -84,11 +84,17 @@ export function sessionUrl(sessionId: string): string {
 
 export async function launch(
   platform: LaunchPlatform,
-  options: { readonly debug?: boolean } = {},
+  options: {
+    readonly debug?: boolean;
+    /** `trevor open <session>` (D-094 M3): launch this exact session at its root, instead of
+     *  resolving the session from the current project directory. */
+    readonly session?: { readonly sessionId: string; readonly root: string };
+  } = {},
 ): Promise<LaunchOutcome> {
   platform.reporter.step("resolving project…");
-  const root = resolveProjectRoot(platform.cwd, platform.fs);
-  const sessionId = resolveSession(platform.fs, platform.home, root, platform.now());
+  const root = options.session?.root ?? resolveProjectRoot(platform.cwd, platform.fs);
+  const sessionId =
+    options.session?.sessionId ?? resolveSession(platform.fs, platform.home, root, platform.now());
   const url = sessionUrl(sessionId);
 
   // 1. Shared services: probe the reserved ports, start the missing ones (never one set per project),

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import type { SessionSummary } from "@trevor/session";
 import { test } from "vitest";
 import {
+  expandHome,
   type LifecycleIo,
   renderSessions,
+  resolveOpenTarget,
   runArchive,
   runList,
   runStop,
@@ -161,4 +163,47 @@ test("runStop on a dead-process record cleans up the stale record without signal
   assert.ok(runStop(io, "s1", false).includes("already gone"));
   assert.equal(signalled.length, 0, "no signal to a dead/unrelated pid");
   assert.deepEqual(removed, ["s1"], "the stale record is cleaned up");
+});
+
+test("expandHome expands a leading ~ against home and leaves absolute paths alone", () => {
+  assert.equal(expandHome("~/dev/trevorV2", "/Users/kevin"), "/Users/kevin/dev/trevorV2");
+  assert.equal(expandHome("~", "/Users/kevin"), "/Users/kevin");
+  assert.equal(expandHome("/abs/path", "/Users/kevin"), "/abs/path");
+  assert.equal(expandHome("relative", "/Users/kevin"), "relative", "a non-~ path is untouched");
+});
+
+test("resolveOpenTarget resolves a known session to its expanded workspace root", () => {
+  const list = [
+    summary({ sessionId: "s1", workspace: "~/dev/trevorV2" }),
+    summary({ sessionId: "s2", workspace: "~/dev/other" }),
+  ];
+  assert.deepEqual(resolveOpenTarget(list, "s1", "/Users/kevin"), {
+    sessionId: "s1",
+    root: "/Users/kevin/dev/trevorV2",
+  });
+});
+
+test("resolveOpenTarget falls back to cwd when workspace is null", () => {
+  const list = [summary({ sessionId: "s1", workspace: null, cwd: "~/dev/x" })];
+  assert.deepEqual(resolveOpenTarget(list, "s1", "/home/u"), {
+    sessionId: "s1",
+    root: "/home/u/dev/x",
+  });
+});
+
+test("resolveOpenTarget reports a missing id, an unknown session, and a session with no workspace", () => {
+  const list = [summary({ sessionId: "s1" })];
+  assert.ok("error" in resolveOpenTarget(list, "", "/h"), "empty id is a usage error");
+  const unknown = resolveOpenTarget(list, "ghost", "/h");
+  assert.ok("error" in unknown && unknown.error.includes("ghost"));
+  assert.ok(
+    "error" in unknown && unknown.error.includes("trevor list"),
+    "points to the list command",
+  );
+  const noRoot = resolveOpenTarget(
+    [summary({ sessionId: "x", workspace: null, cwd: null })],
+    "x",
+    "/h",
+  );
+  assert.ok("error" in noRoot && noRoot.error.includes("no recorded workspace"));
 });

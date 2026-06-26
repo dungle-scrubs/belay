@@ -109,3 +109,46 @@ export function runStop(io: HostControlIo, sessionId: string, kill: boolean): st
     ? `Killed the host for ${sessionId} (pid ${record.pid}).`
     : `Stopping the host for ${sessionId} (pid ${record.pid})…`;
 }
+
+/** Where `trevor open <session>` should launch: the session id + its absolute workspace root. */
+export interface OpenTarget {
+  readonly sessionId: string;
+  readonly root: string;
+}
+
+/** Expands a leading `~` in an abbreviated path against `home` (e.g. `~/dev/x` → `<home>/dev/x`). */
+export function expandHome(dir: string, home: string): string {
+  if (dir === "~") {
+    return home;
+  }
+  return dir.startsWith("~/") ? home + dir.slice(1) : dir;
+}
+
+/**
+ * Resolves `trevor open <session>` (D-094 M3) against the store inventory: the requested session's
+ * absolute workspace root (so the launcher can spawn-or-attach a host pointed at it), or a clear
+ * message when the id is missing, unknown, or has no recorded workspace. Pure over the injected
+ * inventory + home, so it is unit-tested without the store; `main.ts` then drives the real launch.
+ */
+export function resolveOpenTarget(
+  summaries: readonly SessionSummary[],
+  sessionId: string,
+  home: string,
+): OpenTarget | { readonly error: string } {
+  if (!sessionId) {
+    return { error: "usage: trevor open <session>" };
+  }
+  const summary = summaries.find((s) => s.sessionId === sessionId);
+  if (!summary) {
+    return {
+      error: `No session "${sessionId}" found. Run \`trevor list\` to see this project's sessions.`,
+    };
+  }
+  const dir = summary.workspace ?? summary.cwd;
+  if (!dir) {
+    return {
+      error: `Session "${sessionId}" has no recorded workspace, so it can't be opened directly.`,
+    };
+  }
+  return { sessionId, root: expandHome(dir, home) };
+}
