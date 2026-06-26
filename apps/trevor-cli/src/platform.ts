@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, openSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,13 +72,29 @@ async function probeService(name: ServiceName, port: number): Promise<ServicePro
   }
 }
 
+/**
+ * Opens (append) a log file under `<TREVOR_HOME>/logs/<name>.log` and returns its fd, so a detached
+ * child's stdout/stderr is captured instead of discarded - the launcher spawns everything detached,
+ * and without this a crash or a stalled stream leaves NO trace (the stuck-turn diagnosis had to read
+ * the SQLite event log directly). Falls back to "ignore" if the log can't be opened.
+ */
+function logFd(name: string): number | "ignore" {
+  try {
+    mkdirSync(join(TREVOR_HOME, "logs"), { recursive: true });
+    return openSync(join(TREVOR_HOME, "logs", `${name}.log`), "a");
+  } catch {
+    return "ignore";
+  }
+}
+
 /** Spawns a shared service detached through the repo's pnpm runner, so it outlives this launcher
- *  and only one set exists across projects. */
+ *  and only one set exists across projects. Its output goes to `<TREVOR_HOME>/logs/<name>.log`. */
 function startService(name: ServiceName): Promise<void> {
+  const out = logFd(name);
   const child = spawn("pnpm", ["--filter", SERVICE_FILTERS[name], "dev"], {
     cwd: repoRoot(),
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", out, out],
   });
   child.unref();
   return Promise.resolve();
@@ -168,10 +184,12 @@ async function spawnHost(opts: { sessionId: string; root: string }): Promise<Spa
   const require = createRequire(import.meta.url);
   const tsxCli = require.resolve("tsx/cli");
   const hostMain = join(repoRoot(), "apps", "agent-host", "src", "main.ts");
+  // Capture the host's logs per session (it's detached, so its output would otherwise vanish).
+  const out = logFd(`host-${opts.sessionId}`);
   const child: ChildProcess = spawn(process.execPath, [tsxCli, hostMain], {
     cwd: opts.root,
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", out, out],
     env: {
       ...process.env,
       SESSION_ID: opts.sessionId,
