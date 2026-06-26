@@ -349,8 +349,8 @@ Storybook chooser fixtures (D-065).
 - [ ] Clicking the right chevron opens the small quick picker
 - [ ] Both clickable regions use `cursor-pointer`
 - [ ] Add a visible vertical divider between the quick-popup chevron region and the full-chooser region
-- [ ] Keep the quick picker small and categorized
-- [ ] Limit the quick picker to recently used models instead of the full catalog
+- [x] Keep the quick picker small and categorized
+- [x] Limit the quick picker to recently used models instead of the full catalog
 - [ ] Selecting from the quick picker uses the same selected-model contract as the full chooser
 - [ ] Web tests cover split hit targets, keyboard/focus behavior, quick-popper contents, and full-chooser opening
 
@@ -670,9 +670,9 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 38 completed, 2 remaining (explicit-UI-refresh wiring, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 25 completed, 13 remaining (M1 semantics; M2 archive; M3 CLI complete)
-- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 15 completed, 47 remaining
+- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 17 completed, 45 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 35 completed, 22 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 170 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 168 unchecked items plus 5 partial/gated carry-forward items
