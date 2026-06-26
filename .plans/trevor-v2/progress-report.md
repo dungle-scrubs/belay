@@ -648,11 +648,11 @@ registry-derived capability manifest D-074.
 
 - [x] Keep the existing `skill(name)` tool temporarily as an alias or compatibility shim if needed
 - [ ] Define migration behavior from `skill(name)` to `skills_list` plus `skill_view`
-- [ ] Shape registry records so slash commands, command families, and agents can join later without changing the skill contract
+- [x] Shape registry records so slash commands, command families, and agents can join later without changing the skill contract
 - [x] Do not include slash-command, command-family, or agent discovery in the first implementation slice
 - [x] Expose the skill registry in a way D-074 capability manifests and `trevor-expert` can consume deterministically
 - [x] Tests cover compatibility alias behavior or its intentional removal
-- [ ] Tests prove future resource-type fields do not leak bogus command or agent rows into the skills-only first cut
+- [x] Tests prove future resource-type fields do not leak bogus command or agent rows into the skills-only first cut
 
 ### M7: UI and verification
 
@@ -673,6 +673,6 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
-- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 39 completed, 12 remaining
+- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 199 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 197 unchecked items plus 5 partial/gated carry-forward items
