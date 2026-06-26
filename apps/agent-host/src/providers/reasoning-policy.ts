@@ -66,3 +66,19 @@ export function reasoningEffortFor<TApi extends Api>(
   // Any real level: pi-ai's per-model clamp (stream() then remaps it via the model's thinkingLevelMap).
   return clampThinkingLevel(model, level as ThinkingLevel);
 }
+
+/**
+ * The reasoning fields to SPREAD into pi-ai's `stream()` options for `level` on `model`: either
+ * `{ reasoningEffort }` or `{}`. The omit is itself a policy decision, not pi-ai's concern - when
+ * `reasoningEffortFor` returns undefined (an absent level, or "off" on a toggle adapter), the
+ * parameter must be left OFF the request entirely. Spreading an explicit `reasoningEffort: undefined`
+ * instead would, on a toggle adapter, read as a present-but-falsy effort - so keeping it absent is
+ * what actually disables reasoning there. pi-ai.ts just spreads the result.
+ */
+export function reasoningStreamFields<TApi extends Api>(
+  model: Model<TApi>,
+  level: string | undefined,
+): { reasoningEffort?: string } {
+  const reasoningEffort = reasoningEffortFor(model, level);
+  return reasoningEffort !== undefined ? { reasoningEffort } : {};
+}

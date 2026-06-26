@@ -17,7 +17,7 @@ import {
   promptTooBig,
 } from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
-import { reasoningEffortFor } from "./reasoning-policy";
+import { reasoningStreamFields } from "./reasoning-policy";
 import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
 
@@ -168,11 +168,12 @@ async function* piAiEvents<TApi extends Api>(
     }
   };
   // signal rides into stream() so an interrupt (which aborts it - see streamPiAiModel)
-  // closes the underlying request: upstream cancel where the adapter supports it.
-  const reasoningEffort = reasoningEffortFor(model, options.reasoning);
+  // closes the underlying request: upstream cancel where the adapter supports it. The reasoning
+  // fields (effort, or nothing) come from the policy seam - it owns the omit too (see its doc).
+  const reasoningFields = reasoningStreamFields(model, options.reasoning);
   const streamOptions = {
     apiKey: options.apiKey,
-    ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
+    ...reasoningFields,
     signal: options.signal,
   };
   debug("pi-ai", "stream", {
@@ -180,7 +181,7 @@ async function* piAiEvents<TApi extends Api>(
     messages: messages.length,
     tools: tools.length,
     reasoning: options.reasoning,
-    reasoningEffort,
+    reasoningEffort: reasoningFields.reasoningEffort,
     contextWindow: options.contextWindow,
   });
   for await (const event of stream(model, context, streamOptions)) {
