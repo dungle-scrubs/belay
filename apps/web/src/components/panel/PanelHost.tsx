@@ -12,6 +12,7 @@ import {
   ThinkingMessage,
   WorkingIndicator,
 } from "@/components/chat/message";
+import { MessageAttachments } from "@/components/chat/message-attachments";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { ToolMessage } from "@/components/chat/tool-message";
 import { SidePanel } from "@/components/panel/SidePanel";
@@ -441,11 +442,7 @@ export function PanelHost(props: {
                       >
                         {message.text ? <Md text={message.text} /> : null}
                         {message.artifacts.length ? (
-                          <div className="flex flex-wrap gap-2">
-                            {message.artifacts.map((ref) => (
-                              <ArtifactThumb key={ref.hash} artifact={ref} />
-                            ))}
-                          </div>
+                          <MessageAttachments artifacts={message.artifacts} />
                         ) : null}
                       </div>
                     );
