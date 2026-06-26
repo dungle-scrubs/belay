@@ -1,5 +1,6 @@
 import { Either } from "effect";
 import { decodeStreamEnvelope } from "./envelope";
+import { encodeStreamParams } from "./identity";
 import type {
   ConnectSessionOptions,
   PublishInput,
@@ -7,6 +8,13 @@ import type {
   SessionIdentity,
   SessionTransport,
 } from "./transport";
+
+/**
+ * The stream-param codec (the URL identity + cursor wire contract) is owned beside the
+ * identity vocabulary it serializes; re-exported here for API continuity, so the client
+ * builder below and the store both read it from one place (see ./identity).
+ */
+export { decodeStreamParams, encodeStreamParams } from "./identity";
 
 /**
  * The default session transport: a `SessionTransport` over HTTP + WebSocket,
@@ -24,49 +32,6 @@ import type {
  * policy (the host loops on close; the web relies on React effect re-runs), since
  * each owns different per-connection state.
  */
-
-/**
- * Encodes the participant identity + replay cursor as the `/sessions/{id}/stream`
- * query params, and `decodeStreamParams` reads them back. The builder (here) and the
- * server's parser share this one codec so a renamed/added param can't silently desync
- * them - the store would otherwise read an empty string and drop the host from
- * presence. NOTE: these names are also the wire contract the external Richter service
- * implements, so a participant reaches either backend unchanged; centralizing removes
- * client<->local-store drift but does NOT make the names free to rename unilaterally.
- */
-export function encodeStreamParams(identity: SessionIdentity, afterSeq: number): URLSearchParams {
-  const params = new URLSearchParams();
-  params.set("after", String(afterSeq));
-  params.set("capabilities", JSON.stringify(identity.capabilities ?? {}));
-  params.set("displayName", identity.displayName);
-  params.set("instanceId", identity.instanceId);
-  params.set("participantId", identity.participantId);
-  params.set("runtimeKind", identity.runtimeKind);
-  return params;
-}
-
-/** Parses the stream query params back into an identity + cursor (see encodeStreamParams). */
-export function decodeStreamParams(params: URLSearchParams): {
-  readonly identity: SessionIdentity;
-  readonly afterSeq: number;
-} {
-  let capabilities: Record<string, unknown> = {};
-  try {
-    capabilities = JSON.parse(params.get("capabilities") ?? "{}") as Record<string, unknown>;
-  } catch {
-    capabilities = {};
-  }
-  return {
-    afterSeq: Number(params.get("after") ?? 0) || 0,
-    identity: {
-      displayName: params.get("displayName") ?? "",
-      runtimeKind: params.get("runtimeKind") ?? "",
-      instanceId: params.get("instanceId") ?? "",
-      participantId: params.get("participantId") ?? "",
-      capabilities,
-    },
-  };
-}
 
 /** Builds the participant stream URL (ws/wss), with the identity query params. */
 function streamUrl(

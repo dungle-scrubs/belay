@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type Server } from "node:http";
+import { cors, json, readJson } from "@trevor/server-kit";
 import {
   decodeStreamParams,
   frames,
@@ -38,33 +39,8 @@ const EVENTS_PATH = /^\/sessions\/([^/]+)\/events$/;
 // now" - so a browser (RUNTIME_KIND.web) joining never counts as a host.
 const HOST_RUNTIME = RUNTIME_KIND.host;
 
-/** Permissive CORS: the browser (trevor-web :17420) reads/writes cross-origin, no credentials. */
-function cors(res: ServerResponse): void {
-  res.setHeader("access-control-allow-origin", "*");
-  res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
-  res.setHeader("access-control-allow-headers", "content-type");
-}
-
-function json(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { "content-type": "application/json" });
-  res.end(JSON.stringify(body));
-}
-
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => {
-      const raw = Buffer.concat(chunks).toString("utf8");
-      try {
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch (err) {
-        reject(err);
-      }
-    });
-    req.on("error", reject);
-  });
-}
+// The browser (trevor-web :17420) reads/writes cross-origin; the store serves GET/POST.
+const CORS_METHODS = "GET, POST, OPTIONS";
 
 /** Creates the session-store server backed by the SQLite log at `dbPath` (not listening). */
 export function createSessionStore(dbPath: string): Server {
@@ -144,7 +120,7 @@ export function createSessionStore(dbPath: string): Server {
     broadcast(sessionId, frames.presence(hostsOf(sessionId)));
 
   const server = createServer((req, res) => {
-    cors(res);
+    cors(res, CORS_METHODS);
     const method = req.method ?? "GET";
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
 
@@ -204,7 +180,10 @@ export function createSessionStore(dbPath: string): Server {
           );
           // The event "returns over the stream": fan out to every subscriber,
           // including the publisher's own socket (matching the Richter round-trip).
-          broadcast(sessionId, frames.event(stored));
+          // The log owns the wire framing (D-023); the server just fans out the frame.
+          for (const frame of log.readFrames(sessionId, stored.seq - 1)) {
+            broadcast(sessionId, frame);
+          }
           json(res, 201, { ok: true, seq: stored.seq });
         })
         .catch(() => json(res, 400, { error: "invalid JSON body" }));
@@ -234,9 +213,10 @@ export function createSessionStore(dbPath: string): Server {
 
     // Synchronous replay-then-subscribe: the node:sqlite reads and the subscribe
     // are all synchronous on the single event-loop thread, so no append can
-    // interleave between the replay snapshot and joining the live fan-out.
-    for (const event of log.readAfter(sessionId, afterSeq)) {
-      socket.send(JSON.stringify(frames.event(event)));
+    // interleave between the replay snapshot and joining the live fan-out. The log
+    // owns the wire framing (D-023); the server just sends the frames verbatim.
+    for (const frame of log.readFrames(sessionId, afterSeq)) {
+      socket.send(JSON.stringify(frame));
     }
     socket.send(JSON.stringify(frames.replayComplete()));
     subscribe(sessionId, socket);

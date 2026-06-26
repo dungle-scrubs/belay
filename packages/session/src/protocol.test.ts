@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
-import { decodeTrevorEvent, events, type TrevorEventInput } from "./protocol";
+import { decodeTrevorEvent, events, LIFECYCLE_TYPES, type TrevorEventInput } from "./protocol";
 
 /**
  * The protocol is the single source of truth shared by host and web: `events.*` builds
@@ -361,6 +361,27 @@ test("shell.result coerces a missing ok to false and a missing requestId to the 
   assert.equal(decoded.output, "");
 });
 
+test("events.raw stamps the same TrevorEventInput envelope as the typed builders (D-025)", () => {
+  // A forward-compat / arbitrary event built by hand vs. through events.raw: the builder
+  // must produce the identical `{ type, payload }` shape the typed constructors yield, so the
+  // test path shares the production envelope pipeline rather than re-spelling the input shape.
+  const type = "future.thing";
+  const payload = { foo: "bar", n: 1 };
+  const built = events.raw(type, payload);
+  assert.deepEqual(built, { type, payload });
+
+  // The same shape a typed builder yields: events.raw of a known type/payload must equal the
+  // typed constructor for that event (same fields, same structure).
+  const typed = events.assistantDelta({ runId: "r", text: "hi" });
+  const viaRaw = events.raw(typed.type, typed.payload);
+  assert.deepEqual(viaRaw, typed);
+
+  // And it still rides the real consume side: a raw arbitrary type decodes to null (forward-compat),
+  // while a raw payload for a known type decodes exactly as the typed builder would.
+  assert.equal(decodeTrevorEvent(stored(built)), null);
+  assert.deepEqual(decodeTrevorEvent(stored(viaRaw)), decodeTrevorEvent(stored(typed)));
+});
+
 test("a malformed context.compacted manifest coerces to empty arrays, never throws", () => {
   const decoded = decodeTrevorEvent(
     stored({ type: "context.compacted", payload: { summary: "s", manifest: "nope" } }),
@@ -373,4 +394,18 @@ test("a malformed context.compacted manifest coerces to empty arrays, never thro
     tools: [],
     topics: [],
   });
+});
+
+test("LIFECYCLE_TYPES names exactly the lifecycle events, drawn from their constructors (D-032)", () => {
+  // The inventory's per-session activity signal reads these; pinning the set here keeps the
+  // protocol the single source - adding a lifecycle event must update this list, not a literal
+  // buried in session-store. Each entry must be a real emit-side event type.
+  assert.deepEqual(LIFECYCLE_TYPES, ["assistant.started", "assistant.completed", "user.command"]);
+  assert.equal(LIFECYCLE_TYPES.length, new Set(LIFECYCLE_TYPES).size);
+  assert.equal(
+    events.assistantStarted({ runId: "r", warm: false, model: "m", provider: "p" }).type,
+    LIFECYCLE_TYPES[0],
+  );
+  assert.equal(events.assistantCompleted({ runId: "r", text: "x" }).type, LIFECYCLE_TYPES[1]);
+  assert.equal(events.userCommand({ command: "/x", args: "" }).type, LIFECYCLE_TYPES[2]);
 });

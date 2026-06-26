@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { startServer } from "@trevor/server-kit";
 import { createSessionStore } from "./server";
 
 /**
@@ -13,6 +14,9 @@ import { createSessionStore } from "./server";
 const PORT = Number(process.env.SESSION_STORE_PORT ?? 17424);
 const DB_PATH = process.env.SESSION_STORE_DB ?? join(homedir(), ".trevor", "sessions.db");
 
-createSessionStore(DB_PATH).listen(PORT, () => {
-  console.log(`[session-store] listening on http://127.0.0.1:${PORT} (db: ${DB_PATH})`);
+startServer(createSessionStore(DB_PATH), {
+  port: PORT,
+  onListen: (port) => {
+    console.log(`[session-store] listening on http://127.0.0.1:${port} (db: ${DB_PATH})`);
+  },
 });

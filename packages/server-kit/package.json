@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/test-kit",
+  "name": "@trevor/server-kit",
   "private": true,
   "type": "module",
   "exports": {
@@ -8,12 +8,6 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsgo --noEmit -p tsconfig.json"
-  },
-  "dependencies": {
-    "@trevor/blob-store": "workspace:*",
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/session": "workspace:*",
-    "@trevor/session-store": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

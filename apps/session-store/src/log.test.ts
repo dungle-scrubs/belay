@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { frames } from "@trevor/session";
 import { test } from "vitest";
 import { SessionLog } from "./log";
 
@@ -52,6 +53,29 @@ test("readAfter returns events with seq > cursor, in order, payload preserved", 
   assert.equal(log.readAfter("s1", 3).length, 0);
 });
 
+test("readFrames is readAfter mapped through frames.event - same frames, order, cursor", () => {
+  const log = new SessionLog(":memory:");
+  log.append("s1", { type: "a", producerId: "host", payload: { n: 1 } }, "e1", at);
+  log.append("s1", { type: "b", producerId: "host", payload: { n: 2 } }, "e2", at);
+  log.append("s1", { type: "c", producerId: "host", payload: { n: 3 } }, "e3", at);
+
+  // readFrames returns ready-to-send wire frames - exactly readAfter mapped through frames.event.
+  for (const cursor of [0, 1, 2, 3]) {
+    assert.deepEqual(
+      log.readFrames("s1", cursor),
+      log.readAfter("s1", cursor).map((e) => frames.event(e)),
+    );
+  }
+
+  // Spot-check the shape: each is a wire `{op:"event", event}` frame, in seq order.
+  const all = log.readFrames("s1", 0);
+  assert.deepEqual(
+    all.map((f) => (f.op === "event" ? f.event.seq : null)),
+    [1, 2, 3],
+  );
+  assert.equal(all[0]?.op, "event");
+});
+
 test("inventory() gathers per-session aggregates + the title/host/lifecycle source events", () => {
   const log = new SessionLog(":memory:");
   // s1: a user message, two host.online (latest wins), a started run, an empty session s2.
@@ -99,4 +123,27 @@ test("inventory() gathers per-session aggregates + the title/host/lifecycle sour
   assert.equal(s2?.eventCount, 0);
   assert.equal(s2?.hostOnline, null);
   assert.equal(s2?.firstUser, null);
+});
+
+test("inventory() lifecycle slice picks exactly the protocol's LIFECYCLE_TYPES, in seq order", () => {
+  const log = new SessionLog(":memory:");
+  // A spread of lifecycle + non-lifecycle events: only assistant.started/completed and
+  // user.command are lifecycle; everything else (deltas, tool calls, host beats) is noise.
+  log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at);
+  log.append("s1", { type: "assistant.started", producerId: "host", payload: {} }, "e2", at);
+  log.append("s1", { type: "assistant.delta", producerId: "host", payload: {} }, "e3", at);
+  log.append("s1", { type: "tool.started", producerId: "host", payload: {} }, "e4", at);
+  log.append("s1", { type: "assistant.completed", producerId: "host", payload: {} }, "e5", at);
+  log.append("s1", { type: "host.beat", producerId: "host", payload: {} }, "e6", at);
+  log.append("s1", { type: "user.command", producerId: "web", payload: {} }, "e7", at);
+
+  const s1 = log.inventory().find((r) => r.sessionId === "s1");
+  assert.deepEqual(
+    s1?.lifecycle.map((e) => e.type),
+    ["assistant.started", "assistant.completed", "user.command"],
+  );
+  assert.deepEqual(
+    s1?.lifecycle.map((e) => e.seq),
+    [2, 5, 7],
+  );
 });

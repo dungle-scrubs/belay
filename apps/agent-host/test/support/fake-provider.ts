@@ -1,4 +1,4 @@
-import type { SessionTransport, TrevorEventInput } from "@trevor/session";
+import { events, type SessionTransport, type TrevorEventInput } from "@trevor/session";
 import { Effect, Layer, Stream } from "effect";
 import type { ChatMessage, Provider, ProviderError, ProviderEvent } from "../../src/providers";
 import { Emit } from "../../src/services";
@@ -114,9 +114,12 @@ export function transportEmit(
 ): Layer.Layer<Emit> {
   return Layer.succeed(Emit, {
     publish: (event) =>
-      Effect.promise(() =>
-        transport.publishEvent(sessionId, { type: event.type, producerId, payload: event.payload }),
-      ),
+      Effect.promise(() => {
+        // Re-stamp the input through the protocol builder (events.raw) so the publish frame's
+        // `{ type, payload }` shares the production envelope pipeline instead of being hand-spread.
+        const input = events.raw(event.type, event.payload);
+        return transport.publishEvent(sessionId, { ...input, producerId });
+      }),
   });
 }
 

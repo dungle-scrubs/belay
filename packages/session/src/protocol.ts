@@ -462,7 +462,26 @@ export const events = {
       ...(p.worktrees ? { worktrees: p.worktrees } : {}),
     },
   }),
+  /**
+   * Escape hatch for an arbitrary `{ type, payload }`: the same envelope every typed builder
+   * above yields, with the type/payload chosen at the call site instead of fixed. Tests use it
+   * to emit forward-compat / not-yet-typed events through the production input pipeline rather
+   * than hand-spelling the shape; it is NOT a substitute for a typed builder on the emit path.
+   */
+  raw: (type: string, payload: Record<string, unknown>): TrevorEventInput => ({ type, payload }),
 } as const;
+
+/**
+ * The lifecycle event types the inventory reads for a session's activity signal (D-032): the
+ * starts/completions of model turns plus the immediate user commands. Owned here beside the
+ * event constructors so a new lifecycle event is added once - typed as DecodedEvent["type"]
+ * so an entry can only ever be a real protocol event name, never a free-typed string.
+ */
+export const LIFECYCLE_TYPES = [
+  "assistant.started",
+  "assistant.completed",
+  "user.command",
+] as const satisfies readonly DecodedEvent["type"][];
 
 // --- consume side: permissive coercion + discriminated decode ---
 

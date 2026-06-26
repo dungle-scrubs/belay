@@ -1,10 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { InventoryRow, PublishInput, SessionEvent } from "@trevor/session";
-
-/** The lifecycle event types the inventory reads for the per-session activity signal. */
-const LIFECYCLE_TYPES = ["assistant.started", "assistant.completed", "user.command"] as const;
+import type { InventoryRow, PublishInput, SessionEvent, StreamEnvelope } from "@trevor/session";
+import { frames, LIFECYCLE_TYPES } from "@trevor/session";
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
@@ -189,5 +187,15 @@ export class SessionLog {
       )
       .all(sessionId, afterSeq) as unknown as EventRow[];
     return rows.map(rowToEvent);
+  }
+
+  /**
+   * The replay (seq > afterSeq) as ready-to-send WIRE FRAMES, in seq order. The log owns the
+   * wire framing (D-023): it wraps each replayed event in the `event` frame so the server can
+   * fan out the result verbatim without knowing the frame schema. Frame/schema changes localize
+   * here rather than leaking to the transport.
+   */
+  readFrames(sessionId: string, afterSeq: number): StreamEnvelope[] {
+    return this.readAfter(sessionId, afterSeq).map((event) => frames.event(event));
   }
 }

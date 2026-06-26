@@ -84,6 +84,9 @@ importers:
 
   apps/session-store:
     dependencies:
+      '@trevor/server-kit':
+        specifier: workspace:*
+        version: link:../../packages/server-kit
       '@trevor/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -273,6 +276,15 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/server-kit:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.0.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/session:
     dependencies:
       effect:
@@ -291,6 +303,9 @@ importers:
       '@trevor/blob-store':
         specifier: workspace:*
         version: link:../../apps/blob-store
+      '@trevor/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
       '@trevor/session':
         specifier: workspace:*
         version: link:../session

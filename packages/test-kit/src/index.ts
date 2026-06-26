@@ -1,9 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBlobServer } from "@trevor/blob-store/server";
+import { type RunningServer, startServer } from "@trevor/server-kit";
 import {
   type SessionEvent,
   type SessionIdentity,
@@ -16,44 +15,24 @@ import { createSessionStore } from "@trevor/session-store/server";
  * The generic test harness shared by every integration and e2e test (see repo-root
  * AGENTS.md "Testing"): boot a real session-store / blob-store on an ephemeral port
  * against a throwaway backing store, build a transport, and poll for async conditions.
- * It owns lifecycle so a test never hardcodes a port or leaks a temp dir. Host-typed
- * helpers (the fake provider, the turn driver) live with the host under
- * `apps/agent-host/test/support` so this package stays free of the host's dependencies.
+ * The listen/teardown lifecycle is @trevor/server-kit's `startServer` (the same path
+ * production binds through); this harness just supplies the throwaway backing store and
+ * its cleanup. Host-typed helpers (the fake provider, the turn driver) live with the
+ * host under `apps/agent-host/test/support` so this package stays free of the host's
+ * dependencies.
  */
 
 const DEFAULT_BLOB_MAX_BYTES = 25 * 1024 * 1024;
 
-/** A service bound to an ephemeral loopback port, with its own teardown. */
-export interface RunningServer {
-  readonly url: string;
-  readonly port: number;
-  close(): Promise<void>;
-}
-
-function startHttp(server: Server): Promise<number> {
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve((server.address() as AddressInfo).port));
-  });
-}
-
-function closeHttp(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.close((err) => (err ? reject(err) : resolve()));
-  });
-}
+// Re-exported so tests type their fixtures off the harness without reaching into the kit.
+export type { RunningServer } from "@trevor/server-kit";
 
 /**
  * Boot a session-store on an ephemeral port. Defaults to an in-memory SQLite database;
  * pass a file path to exercise on-disk persistence (e.g. a restart test).
  */
-export async function startSessionStore(dbPath = ":memory:"): Promise<RunningServer> {
-  const server = createSessionStore(dbPath);
-  const port = await startHttp(server);
-  return {
-    url: `http://127.0.0.1:${port}`,
-    port,
-    close: () => closeHttp(server),
-  };
+export function startSessionStore(dbPath = ":memory:"): Promise<RunningServer> {
+  return startServer(createSessionStore(dbPath), { port: 0 });
 }
 
 /**
@@ -67,12 +46,11 @@ export async function startBlobStore(opts?: {
   const ownsRoot = opts?.root === undefined;
   const root = opts?.root ?? mkdtempSync(join(tmpdir(), "trevor-blob-"));
   const server = createBlobServer(root, opts?.maxBytes ?? DEFAULT_BLOB_MAX_BYTES);
-  const port = await startHttp(server);
+  const running = await startServer(server, { port: 0 });
   return {
-    url: `http://127.0.0.1:${port}`,
-    port,
+    ...running,
     close: async () => {
-      await closeHttp(server);
+      await running.close();
       if (ownsRoot) {
         rmSync(root, { recursive: true, force: true });
       }
