@@ -6,7 +6,9 @@
 
 > **Scope.** This report tracks open or partial/gated work only. When an item or section is fully
 > completed, move its detailed checklist to the done archive and leave only a summary/reference here.
-> Current focus: Next-Up: image attachment UX
+> Current focus: Next-Up: doctor health surface (D-073). Recently progressed: D-092 image attachment
+> UX (M1-M6 done; M3 commit pending owner App.tsx; manual EZE repros open) and D-060 internet
+> connectivity (M1-M5 done bar explicit-UI-refresh wiring, structured probe logs, and the manual repro).
 > Decomposed open sections: D-092 image attachment UX, D-060 internet connectivity
 > awareness, D-093 session navigation sidebar, D-094 session lifecycle controls, and D-065 provider
 > auth/catalog + full model chooser, D-076-D-079 provider-outage auto-reconnect recovery, and D-073 doctor
@@ -44,75 +46,75 @@ rendering, natural transcript image layout, and same-message carousel. Source:
 
 ### M1: Storybook composer token states first (D-092)
 
-- [ ] Build Storybook fixtures for image-token composer states before live wiring
-- [ ] Render `[Image #N]` ranges with attachment-token syntax highlighting while keeping normal text-composer behavior
-- [ ] Use an overlay or mirror layer so token highlighting and hover/focus targets exist without replacing the textarea with a rich editor
-- [ ] Stories cover token between words, token at start, token at end, multiple tokens, long prompt wrapping, upload in progress, upload error, and broken/unavailable preview
-- [ ] Token hover/focus preview story shows the image at max 300px wide and 300px tall with preserved aspect ratio
-- [ ] Storybook includes narrow/mobile and desktop composer widths so token highlighting tracks wrapping
-- [ ] Stories use production `ArtifactRef` fixtures and `artifactSrc`-compatible image URLs, not story-only fake markup
+- [x] Build Storybook fixtures for image-token composer states before live wiring
+- [x] Render `[Image #N]` ranges with attachment-token syntax highlighting while keeping normal text-composer behavior
+- [x] Use an overlay or mirror layer so token highlighting and hover/focus targets exist without replacing the textarea with a rich editor
+- [x] Stories cover token between words, token at start, token at end, multiple tokens, long prompt wrapping, upload in progress, upload error, and broken/unavailable preview
+- [x] Token hover/focus preview story shows the image at max 300px wide and 300px tall with preserved aspect ratio
+- [x] Storybook includes narrow/mobile and desktop composer widths so token highlighting tracks wrapping
+- [x] Stories use production `ArtifactRef` fixtures and `artifactSrc`-compatible image URLs, not story-only fake markup
 
 ### M2: Token placement model and editing behavior
 
-- [ ] Define the draft attachment model that pairs visible `[Image #N]` tokens with uploaded `ArtifactRef`s
-- [ ] Insert image tokens at the current cursor or selection replacement point
-- [ ] Auto-add leading/trailing spaces so inserted tokens do not stick to adjacent words
-- [ ] Multiple-image paste/drop inserts ordered tokens and refs deterministically
-- [ ] Backspace next to a token removes the whole token and its artifact ref in one step
-- [ ] Delete next to a token removes the whole token and its artifact ref in one step
-- [ ] Removing a token keeps remaining text, refs, and displayed token numbers synchronized in reading order
-- [ ] Tests cover insertion at start/middle/end, selection replacement, auto spacing, multi-image insertion, and one-step deletion
+- [x] Define the draft attachment model that pairs visible `[Image #N]` tokens with uploaded `ArtifactRef`s
+- [x] Insert image tokens at the current cursor or selection replacement point
+- [x] Auto-add leading/trailing spaces so inserted tokens do not stick to adjacent words
+- [x] Multiple-image paste/drop inserts ordered tokens and refs deterministically
+- [x] Backspace next to a token removes the whole token and its artifact ref in one step
+- [x] Delete next to a token removes the whole token and its artifact ref in one step
+- [x] Removing a token keeps remaining text, refs, and displayed token numbers synchronized in reading order
+- [x] Tests cover insertion at start/middle/end, selection replacement, auto spacing, multi-image insertion, and one-step deletion
 
 ### M3: Image intake, Cmd+V, and queue preservation
 
-- [ ] Cmd+V image paste reads clipboard image files and inserts tokens at the cursor reliably
-- [ ] File picker inserts tokens at the cursor after upload succeeds or shows a pending token state while upload is in flight
-- [ ] Drag/drop uploads images and inserts tokens at the current or last-known composer cursor position
-- [ ] Non-image files keep the existing file/document attachment behavior unless explicitly upgraded later
-- [ ] Shell mode leaves image tokens/attachments in the composer and never silently drops them
-- [ ] Queued prompts render the same `[Image #N]` text tokens and carry the matching artifact refs while waiting
-- [ ] Hard steer preserves queued token text and image refs together when collapsing the queue and draft
-- [ ] Tests cover Cmd+V paste, picker, drop, queued rendering, shell-mode preservation, and hard-steer preservation
+- [x] Cmd+V image paste reads clipboard image files and inserts tokens at the cursor reliably
+- [x] File picker inserts tokens at the cursor after upload succeeds or shows a pending token state while upload is in flight
+- [x] Drag/drop uploads images and inserts tokens at the current or last-known composer cursor position
+- [x] Non-image files keep the existing file/document attachment behavior unless explicitly upgraded later
+- [x] Shell mode leaves image tokens/attachments in the composer and never silently drops them
+- [x] Queued prompts render the same `[Image #N]` text tokens and carry the matching artifact refs while waiting
+- [x] Hard steer preserves queued token text and image refs together when collapsing the queue and draft
+- [x] Tests cover Cmd+V paste, picker, drop, queued rendering, shell-mode preservation, and hard-steer preservation
 
 ### M4: Transcript image layout
 
-- [ ] Submitted user messages preserve `[Image #N]` token positions in the visible text
-- [ ] Images render in the same user transcript item as the submitted prompt
-- [ ] Images render at natural dimensions until constrained by story-approved responsive max width and max height
-- [ ] Images are contained, not cropped, and preserve original aspect ratio
-- [ ] Multiple images in one user message form one image set for layout and carousel behavior
-- [ ] Broken, missing, non-renderable, and non-image artifacts degrade to a file/link row without a broken image icon
-- [ ] Storybook states cover tiny, wide, tall, large, multiple images, long text with tokens, attachments-only prompt, and broken image
-- [ ] Web tests cover sizing classes/styles, image set grouping, token text preservation, and fallback rows
+- [x] Submitted user messages preserve `[Image #N]` token positions in the visible text
+- [x] Images render in the same user transcript item as the submitted prompt
+- [x] Images render at natural dimensions until constrained by story-approved responsive max width and max height
+- [x] Images are contained, not cropped, and preserve original aspect ratio
+- [x] Multiple images in one user message form one image set for layout and carousel behavior
+- [x] Broken, missing, non-renderable, and non-image artifacts degrade to a file/link row without a broken image icon
+- [x] Storybook states cover tiny, wide, tall, large, multiple images, long text with tokens, attachments-only prompt, and broken image
+- [x] Web tests cover sizing classes/styles, image set grouping, token text preservation, and fallback rows
 
 ### M5: Same-message image carousel
 
-- [ ] Clicking any transcript image opens a centered dialog carousel for only the images in that user message
-- [ ] The dialog is large enough for inspection but not full screen
-- [ ] Carousel image sizing is responsive and preserves aspect ratio
-- [ ] Previous/next controls cycle through images in submitted order
-- [ ] Keyboard navigation supports ArrowLeft, ArrowRight, and Escape
-- [ ] Dialog shows image count/index and accessible image labels
-- [ ] Storybook states cover one image, many images, wide image, tall image, broken image, and narrow viewport
-- [ ] Web tests cover open, close, previous/next, keyboard navigation, and same-message scoping
+- [x] Clicking any transcript image opens a centered dialog carousel for only the images in that user message
+- [x] The dialog is large enough for inspection but not full screen
+- [x] Carousel image sizing is responsive and preserves aspect ratio
+- [x] Previous/next controls cycle through images in submitted order
+- [x] Keyboard navigation supports ArrowLeft, ArrowRight, and Escape
+- [x] Dialog shows image count/index and accessible image labels
+- [x] Storybook states cover one image, many images, wide image, tall image, broken image, and narrow viewport
+- [x] Web tests cover open, close, previous/next, keyboard navigation, and same-message scoping
 
 ### M6: Provider projection and protocol compatibility
 
-- [ ] Keep `ArtifactRef` as the durable blob reference; do not inline bytes into Richter events
-- [ ] Preserve old `user.message.artifacts` decode compatibility for sessions without placement metadata
-- [ ] Strip `[Image #N]` tokens from provider text when sending images as model image blocks
-- [ ] Preserve image order from token reading order when resolving image blocks
-- [ ] Where provider APIs support interleaved content blocks, project text/image order as closely as possible
-- [ ] Where provider APIs only support text plus image list, strip tokens from text and send images in token order
-- [ ] Non-vision providers receive a clear attachment note instead of literal token clutter
-- [ ] Tests cover old-event decode, provider text stripping, token-order image resolution, non-vision notes, and attachments-only prompts
+- [x] Keep `ArtifactRef` as the durable blob reference; do not inline bytes into Richter events
+- [x] Preserve old `user.message.artifacts` decode compatibility for sessions without placement metadata
+- [x] Strip `[Image #N]` tokens from provider text when sending images as model image blocks
+- [x] Preserve image order from token reading order when resolving image blocks
+- [x] Where provider APIs support interleaved content blocks, project text/image order as closely as possible
+- [x] Where provider APIs only support text plus image list, strip tokens from text and send images in token order
+- [x] Non-vision providers receive a clear attachment note instead of literal token clutter
+- [x] Tests cover old-event decode, provider text stripping, token-order image resolution, non-vision notes, and attachments-only prompts
 
 ### M7: Verification
 
-- [ ] Storybook reviewed before live app wiring for composer tokens, hover preview, queued prompt, transcript layout, and carousel
-- [ ] Unit tests cover token parser/editor behavior and placement-to-artifact synchronization
-- [ ] Web tests cover composer rendering, hover preview, queue rendering, transcript image layout, and carousel controls
-- [ ] Host tests cover provider projection over tokenized image prompts
+- [x] Storybook reviewed before live app wiring for composer tokens, hover preview, queued prompt, transcript layout, and carousel
+- [x] Unit tests cover token parser/editor behavior and placement-to-artifact synchronization
+- [x] Web tests cover composer rendering, hover preview, queue rendering, transcript image layout, and carousel controls
+- [x] Host tests cover provider projection over tokenized image prompts
 - [ ] Manual EZE repro: Cmd+V an image between words, submit, verify transcript natural sizing, open carousel, and verify model receives the image without literal token clutter
 - [ ] Manual EZE repro: queue an image prompt during an active turn and verify the queued token and artifact survive until publish
 
@@ -127,57 +129,57 @@ Source: future host connectivity service, `apps/agent-host/src/main.ts`, `packag
 
 ### M1: Host-owned status and probe semantics (D-060)
 
-- [ ] Define the internet snapshot as `online`, `offline`, or `unknown`, plus a transient `checking` flag while a probe is in flight
-- [ ] Make the host machine the source of truth for public-internet reachability
-- [ ] Treat browser `navigator.onLine` only as a possible UI comparison/debug hint, never as the host status
-- [ ] Probe with a small DNS plus HTTPS check against configured public endpoints
-- [ ] Treat LAN-up/WAN-down and captive-portal-like failures as `offline` when the public probe fails
-- [ ] Use `unknown` for no probe yet, disabled/misconfigured probe, or inconclusive probe results
-- [ ] Keep provider auth, provider rate limits, provider overload, model availability, and provider request failures out of this status
-- [ ] Store last checked time, snapshot age/staleness, sanitized last error, and probe target class
+- [x] Define the internet snapshot as `online`, `offline`, or `unknown`, plus a transient `checking` flag while a probe is in flight
+- [x] Make the host machine the source of truth for public-internet reachability
+- [x] Treat browser `navigator.onLine` only as a possible UI comparison/debug hint, never as the host status
+- [x] Probe with a small DNS plus HTTPS check against configured public endpoints
+- [x] Treat LAN-up/WAN-down and captive-portal-like failures as `offline` when the public probe fails
+- [x] Use `unknown` for no probe yet, disabled/misconfigured probe, or inconclusive probe results
+- [x] Keep provider auth, provider rate limits, provider overload, model availability, and provider request failures out of this status
+- [x] Store last checked time, snapshot age/staleness, sanitized last error, and probe target class
 
 ### M2: Refresh cadence and protocol
 
-- [ ] Probe on host startup and publish the first snapshot when available
-- [ ] Cache ordinary probe results for about 30 seconds to avoid constant network checks
+- [x] Probe on host startup and publish the first snapshot when available
+- [x] Cache ordinary probe results for about 30 seconds to avoid constant network checks
 - [ ] Allow an explicit UI refresh action that starts a new probe and exposes `checking`
-- [ ] Optionally start an async refresh before a cloud turn when the snapshot is stale
-- [ ] Never block a turn on internet-status refresh
-- [ ] Include the latest internet snapshot on `host.online`
-- [ ] Emit a small `host.internet` event on `checking` start, status change, and refresh completion
-- [ ] Keep internet-status events out of conversation memory and prompt history projection
+- [x] Optionally start an async refresh before a cloud turn when the snapshot is stale
+- [x] Never block a turn on internet-status refresh
+- [x] Include the latest internet snapshot on `host.online`
+- [x] Emit a small `host.internet` event on `checking` start, status change, and refresh completion
+- [x] Keep internet-status events out of conversation memory and prompt history projection
 
 ### M3: Advisory UI and Storybook states
 
-- [ ] Build the internet-status UI Storybook-first before app wiring
-- [ ] Place the compact advisory near the model/source area, where cloud-vs-local expectation is visible
-- [ ] Keep the internet advisory visually distinct from host presence and session-store/WebSocket connection state
-- [ ] When a cloud model is selected and the host is offline, show a warning without disabling submit or changing model selection
-- [ ] When a local model is selected and the host is offline, keep the state neutral/advisory because local turns are unaffected
-- [ ] Storybook states cover online, offline, unknown, checking, stale, and refresh failure
-- [ ] Storybook states cover host disconnected, browser offline while host is online/unknown, cloud model selected while offline, and local model selected while offline
-- [ ] The model/source chooser can show stale status and a refresh action without turning the chooser into a connectivity dashboard
-- [ ] Web tests cover advisory placement, labels, cloud/offline warning, local/offline non-blocking state, and stale/checking rendering
+- [x] Build the internet-status UI Storybook-first before app wiring
+- [x] Place the compact advisory near the model/source area, where cloud-vs-local expectation is visible
+- [x] Keep the internet advisory visually distinct from host presence and session-store/WebSocket connection state
+- [x] When a cloud model is selected and the host is offline, show a warning without disabling submit or changing model selection
+- [x] When a local model is selected and the host is offline, keep the state neutral/advisory because local turns are unaffected
+- [x] Storybook states cover online, offline, unknown, checking, stale, and refresh failure
+- [x] Storybook states cover host disconnected, browser offline while host is online/unknown, cloud model selected while offline, and local model selected while offline
+- [x] The model/source chooser can show stale status and a refresh action without turning the chooser into a connectivity dashboard
+- [x] Web tests cover advisory placement, labels, cloud/offline warning, local/offline non-blocking state, and stale/checking rendering
 
 ### M4: Doctor and logging surface
 
-- [ ] `/doctor` reports internet status, checking state, last checked time, and snapshot age/staleness
-- [ ] `/doctor` reports DNS/HTTPS probe class and sanitized last error
-- [ ] `/doctor` omits credentials, auth headers, full request payloads, and any sensitive endpoint material
-- [ ] `/doctor` never reports a fallback target because D-060 has no fallback behavior
+- [x] `/doctor` reports internet status, checking state, last checked time, and snapshot age/staleness
+- [x] `/doctor` reports DNS/HTTPS probe class and sanitized last error
+- [x] `/doctor` omits credentials, auth headers, full request payloads, and any sensitive endpoint material
+- [x] `/doctor` never reports a fallback target because D-060 has no fallback behavior
 - [ ] Host logs use structured, redacted probe fields for status changes and probe failures
-- [ ] `/doctor` distinguishes internet reachability from host presence, session-store connectivity, and provider health
+- [x] `/doctor` distinguishes internet reachability from host presence, session-store connectivity, and provider health
 
 ### M5: No routing side effects and verification
 
-- [ ] A selected local model remains local regardless of internet status
-- [ ] A selected cloud model remains cloud regardless of internet status
-- [ ] Cloud request failures do not trigger a local retry or change the selected model
-- [ ] Offline status does not emit or imply `assistant.providerFallback`
-- [ ] Local session-store or Richter disconnects do not imply internet offline
-- [ ] Tests cover browser `navigator.onLine` disagreeing with the host probe
-- [ ] Tests cover `checking`, stale snapshots, manual refresh, `host.online`, and `host.internet`
-- [ ] Web tests cover the Storybook-backed advisory states and cloud/local selected-model differences
+- [x] A selected local model remains local regardless of internet status
+- [x] A selected cloud model remains cloud regardless of internet status
+- [x] Cloud request failures do not trigger a local retry or change the selected model
+- [x] Offline status does not emit or imply `assistant.providerFallback`
+- [x] Local session-store or Richter disconnects do not imply internet offline
+- [x] Tests cover browser `navigator.onLine` disagreeing with the host probe
+- [x] Tests cover `checking`, stale snapshots, manual refresh, `host.online`, and `host.internet`
+- [x] Web tests cover the Storybook-backed advisory states and cloud/local selected-model differences
 - [ ] Manual EZE repro: simulate LAN-up/WAN-down or failed public probes, verify advisory UI and `/doctor`, and verify local/cloud model selection is unchanged
 
 ## Next-Up: session navigation sidebar
@@ -664,8 +666,8 @@ registry-derived capability manifest D-074.
 ## Summary
 - Archived completed checklist detail: [progress-report-done.md](./progress-report-done.md)
 - Shipped (archived): D-044 session recall - 38 features, 37 completed, 1 gated manual EZE repro
-- Live open follow-up (D-092 image attachment UX): 53 features, 0 completed, 53 remaining
-- Live open follow-up (D-060 internet connectivity awareness): 40 features, 0 completed, 40 remaining
+- Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros; M3 implemented, commit pending owner App.tsx)
+- Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 0 completed, 39 remaining
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 0 completed, 38 remaining
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
@@ -673,4 +675,4 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-073 doctor health surface): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 0 completed, 51 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 397 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 309 unchecked items plus 5 partial/gated carry-forward items
