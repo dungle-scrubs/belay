@@ -122,7 +122,7 @@ export function App() {
   const { draft, setDraft, attachments, setAttachments, inputRef } = composer;
 
   const stream = useSession(sessionId);
-  const { events, status, replayed, presence } = stream;
+  const { events, presence, replayed, replayThroughSeq, status } = stream;
   const { publish, cancel, command, shell, openInEditor } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
@@ -135,7 +135,13 @@ export function App() {
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
   const transcript = useMemo(() => toTranscript(events), [events]);
-  const switchTarget = useMemo(() => latestSessionSwitch(events), [events]);
+  const switchTarget = useMemo(
+    () =>
+      replayThroughSeq === null
+        ? null
+        : latestSessionSwitch(events, { afterSeq: replayThroughSeq }),
+    [events, replayThroughSeq],
+  );
   useEffect(() => {
     if (switchTarget && switchTarget !== target) {
       navigateToSession(switchTarget);

@@ -175,6 +175,37 @@ export interface LiveCall {
   readonly breakdown?: UsageBreakdown;
 }
 
+const CHARS_PER_TOKEN = 4;
+
+function estimatedBreakdownInputTokens(breakdown: UsageBreakdown | undefined): number | undefined {
+  if (!breakdown) {
+    return undefined;
+  }
+
+  const input = breakdown.input;
+  return Math.round(
+    (input.systemAndTools +
+      input.userText +
+      input.assistantText +
+      input.toolCallArgs +
+      input.toolResults +
+      input.imagesBase64) /
+      CHARS_PER_TOKEN,
+  );
+}
+
+function displayInputTokens(
+  usage: Usage | undefined,
+  breakdown: UsageBreakdown | undefined,
+): number | undefined {
+  const estimated = estimatedBreakdownInputTokens(breakdown);
+  if (!usage) {
+    return estimated;
+  }
+
+  return estimated === undefined ? usage.input : Math.max(usage.input, estimated);
+}
+
 /**
  * The in-flight snapshot for the panel: the newest `assistant.progress` from a turn
  * that hasn't completed yet, or `undefined` once the latest turn has finished (so
@@ -631,7 +662,8 @@ export function panelModel(
         : m.breakdown;
     }
     if (m.usage) {
-      contextTokens = (contextTokens ?? 0) + m.usage.input + m.usage.output;
+      const inputTokens = displayInputTokens(m.usage, m.breakdown) ?? m.usage.input;
+      contextTokens = (contextTokens ?? 0) + inputTokens + m.usage.output;
     }
   }
 
@@ -659,12 +691,14 @@ export function panelModel(
   // The in-flight call wins for Request data while a turn streams; else the completed call.
   const live = liveCallFrom(events);
   const previewFold = !live && foldAfter !== undefined;
-  const ctxUsed = previewFold ? foldAfter : (live?.usage.input ?? lastCall?.usage?.input);
+  const liveInput = displayInputTokens(live?.usage, live?.breakdown);
+  const lastInput = displayInputTokens(lastCall?.usage, lastCall?.breakdown);
+  const ctxUsed = previewFold ? foldAfter : (liveInput ?? lastInput);
   const ctxMax = live?.usage.contextWindow ?? lastCall?.usage?.contextWindow;
   const totalTokens = live
-    ? live.usage.input + live.usage.output
+    ? (liveInput ?? live.usage.input) + live.usage.output
     : lastCall?.usage
-      ? lastCall.usage.input + lastCall.usage.output
+      ? (lastInput ?? lastCall.usage.input) + lastCall.usage.output
       : undefined;
   const breakdown = live?.breakdown ?? lastCall?.breakdown;
 

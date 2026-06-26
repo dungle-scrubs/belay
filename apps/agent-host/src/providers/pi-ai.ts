@@ -260,18 +260,20 @@ async function* piAiEvents<TApi extends Api>(
         },
       };
     } else if (event.type === "done") {
-      // usage is initialized by pi-ai, but guard anyway: a missing one must never
-      // crash the turn (that surfaced as a silent empty answer).
+      // Some providers report cached/billable input here, which can be lower than the full prompt
+      // context. Budgeting and the ctx meter need the full prompt floor.
       const usage = event.message?.usage;
+      const input = Math.max(usage?.input ?? 0, promptTokensEst);
       debug("pi-ai", "done", {
         stopReason: event.message?.stopReason,
         input: usage?.input,
+        inputFloor: input,
         output: usage?.output,
       });
       yield {
         type: "usage",
         usage: {
-          input: usage?.input ?? 0,
+          input,
           output: usage?.output ?? 0,
           contextWindow: options.contextWindow,
           genMs: Date.now() - (generationAt || requestAt),

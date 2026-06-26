@@ -86,6 +86,8 @@ test("fmtTokens and fmtCtx render compact counts", () => {
   assert.equal(fmtTokens(812), "812");
   assert.equal(fmtTokens(1000), "1.0k");
   assert.equal(fmtCtx(8192), "8k");
+  assert.equal(fmtCtx(1_000_000), "1M");
+  assert.equal(fmtCtx(1_500_000), "1.5M");
   assert.equal(fmtCtx(512), "512");
   assert.equal(fmtCtx(0), "?");
 });
@@ -156,6 +158,23 @@ test("latestSessionSwitch returns the newest host-authored session target", () =
       evt("session.switch", { sessionId: "trevor-20260626-010204z-bbbbbbbb", reason: "clear" }),
     ]),
     "trevor-20260626-010204z-bbbbbbbb",
+  );
+});
+
+test("latestSessionSwitch ignores replayed handoffs when scoped after replay", () => {
+  const historical = evt("session.switch", {
+    sessionId: "opchain-20260626-112204z-8d63eb6b",
+    reason: "cd",
+  });
+  const live = evt("session.switch", {
+    sessionId: "opchain-20260626-125838z-34a7fc20",
+    reason: "cd",
+  });
+
+  assert.equal(latestSessionSwitch([historical], { afterSeq: historical.seq }), null);
+  assert.equal(
+    latestSessionSwitch([historical, live], { afterSeq: historical.seq }),
+    "opchain-20260626-125838z-34a7fc20",
   );
 });
 

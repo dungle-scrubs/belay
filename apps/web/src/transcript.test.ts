@@ -493,6 +493,58 @@ test("panelModel uses progress snapshots after replay completes", () => {
   assert.deepEqual(panel.breakdown, breakdown);
 });
 
+test("panelModel floors ctx usage at the request breakdown estimate", () => {
+  const lowUsage = {
+    input: 756,
+    output: 21_266,
+    contextWindow: 1_000_000,
+    genMs: 1_000,
+  };
+  const deepseekBreakdown: UsageBreakdown = {
+    input: {
+      systemAndTools: 30_000,
+      userText: 20,
+      assistantText: 0,
+      toolCallArgs: 0,
+      toolResults: 260_000,
+      imagesBase64: 0,
+      imageCount: 0,
+      byTool: { read: 260_000 },
+    },
+    output: { thinking: 70_000, answer: 1_000, toolCallArgs: 0 },
+  };
+  const log = [
+    ev(
+      1,
+      events.assistantStarted({ runId: "r1", model: "deepseek", provider: "deepseek", warm: true }),
+    ),
+    ev(2, events.assistantProgress({ runId: "r1", usage: lowUsage, breakdown: deepseekBreakdown })),
+  ];
+  const expectedInput = Math.round((30_000 + 20 + 260_000) / 4);
+
+  const panel = panelModel(toTranscript(log), log, { replayed: true });
+
+  assert.equal(panel.ctxUsed, expectedInput);
+  assert.equal(panel.ctxMax, lowUsage.contextWindow);
+  assert.equal(panel.totalTokens, expectedInput + lowUsage.output);
+  assert.deepEqual(panel.breakdown, deepseekBreakdown);
+
+  const completedLog = [
+    ...log,
+    ev(
+      3,
+      events.assistantCompleted({
+        runId: "r1",
+        text: "done",
+        usage: lowUsage,
+        breakdown: deepseekBreakdown,
+      }),
+    ),
+  ];
+  const completedPanel = panelModel(toTranscript(completedLog), completedLog, { replayed: true });
+  assert.equal(completedPanel.contextTokens, expectedInput + lowUsage.output);
+});
+
 test("D-082: user.shell + shell.result reduce to one shell block (pending -> done)", () => {
   const pending = toTranscript([
     ev(1, events.userShell({ requestId: "rq1", command: "printf hello" })),

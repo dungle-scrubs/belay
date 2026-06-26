@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, test } from "vitest";
+import type { AgentDefinition } from "./agents";
 
 /**
  * Subagent discovery + allow-list resolution (M1 / D-045). TREVOR_AGENTS_DIR points at a temp
@@ -46,7 +47,13 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const byId = () => new Map(discoverAgents().map((a) => [a.id, a]));
+const byId = (): Map<string, AgentDefinition> => new Map(discoverAgents().map((a) => [a.id, a]));
+
+function requireAgent(agents: ReadonlyMap<string, AgentDefinition>, id: string): AgentDefinition {
+  const agent = agents.get(id);
+  assert.ok(agent, `expected agent ${id}`);
+  return agent;
+}
 
 test("discovery yields the two built-ins plus the user fixture; disabled/description-less are skipped", () => {
   const agents = byId();
@@ -60,13 +67,13 @@ test("discovery yields the two built-ins plus the user fixture; disabled/descrip
 
 test("general-purpose resolves to the full tool set; explorer is clamped read-only", () => {
   const agents = byId();
-  const general = resolveAgentTools(agents.get("general-purpose")!);
+  const general = resolveAgentTools(requireAgent(agents, "general-purpose"));
   // The full registry includes the mutating tools.
   for (const t of ["read", "write", "edit", "multi_edit", "bash", "glob", "grep"]) {
     assert.ok(general.includes(t), `general-purpose can use ${t}`);
   }
 
-  const explorer = resolveAgentTools(agents.get("explorer")!);
+  const explorer = resolveAgentTools(requireAgent(agents, "explorer"));
   for (const mut of ["write", "edit", "multi_edit", "bash"]) {
     assert.ok(!explorer.includes(mut), `explorer excludes the mutating tool ${mut}`);
   }
@@ -76,7 +83,7 @@ test("general-purpose resolves to the full tool set; explorer is clamped read-on
 });
 
 test("a user agent's explicit tool allow-list is honored (and unknown names dropped)", () => {
-  const researcher = byId().get("researcher")!;
+  const researcher = requireAgent(byId(), "researcher");
   assert.deepEqual([...resolveAgentTools(researcher)].sort(), ["grep", "read", "web_search"]);
   // The description's "Triggers:" tail is collapsed into one tidy line.
   assert.equal(researcher.description, "A web + file researcher. Triggers: research, look up.");
@@ -84,14 +91,18 @@ test("a user agent's explicit tool allow-list is honored (and unknown names drop
 
 test("an empty skills allow-list grants no skills; omitted/[*] grants all discovered", () => {
   const agents = byId();
-  assert.deepEqual(resolveAgentSkills(agents.get("researcher")!), [], "explicit [] = no skills");
+  assert.deepEqual(
+    resolveAgentSkills(requireAgent(agents, "researcher")),
+    [],
+    "explicit [] = no skills",
+  );
   // The built-ins use ['*'] = every discovered skill (whatever the machine has, possibly none).
-  const all = resolveAgentSkills(agents.get("general-purpose")!);
+  const all = resolveAgentSkills(requireAgent(agents, "general-purpose"));
   assert.ok(Array.isArray(all));
 });
 
 test("describeAgent is the wire descriptor: id + description + resolved allow-lists, no body", () => {
-  const spec = describeAgent(byId().get("explorer")!);
+  const spec = describeAgent(requireAgent(byId(), "explorer"));
   assert.equal(spec.id, "explorer");
   assert.ok(spec.description.length > 0);
   assert.ok(!("body" in spec), "the system prompt body never rides the wire");

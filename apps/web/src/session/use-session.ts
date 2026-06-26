@@ -113,14 +113,19 @@ export function ensureSession(sessionId: string): Promise<string> {
 
 export interface SessionStream {
   readonly events: readonly SessionEvent[];
-  readonly status: ConnectionStatus;
-  readonly replayed: boolean;
   /**
    * The hosts connected to the session right now, as the backend's live transport reports it - or null
    * when the backend never reports presence (e.g. Richter), so callers can fall back to the event-log
    * view instead of reading null as "no host".
    */
   readonly presence: readonly HostPresence[] | null;
+  readonly replayed: boolean;
+  /**
+   * Highest seq received during initial replay. Null means the replay boundary is not known yet.
+   * Consumers with live-only side effects use this to ignore durable history on page load.
+   */
+  readonly replayThroughSeq: number | null;
+  readonly status: ConnectionStatus;
 }
 
 /** Subscribes to a session: replay-then-tail into state. The read side of the session boundary. */
@@ -128,6 +133,7 @@ export function useSession(sessionId: string | null): SessionStream {
   const [events, setEvents] = useState<readonly SessionEvent[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [replayed, setReplayed] = useState(false);
+  const [replayThroughSeq, setReplayThroughSeq] = useState<number | null>(null);
   const [presence, setPresence] = useState<readonly HostPresence[] | null>(null);
 
   useEffect(() => {
@@ -135,11 +141,13 @@ export function useSession(sessionId: string | null): SessionStream {
       setEvents([]);
       setStatus("connecting");
       setReplayed(false);
+      setReplayThroughSeq(null);
       setPresence(null);
       return;
     }
     setEvents([]);
     setReplayed(false);
+    setReplayThroughSeq(null);
     setPresence(null);
     // Buffer the replay burst, commit once. A reload streams the WHOLE history (10k+ events for a
     // long session) as individual onEvent calls. Appending each straight to state would fire one
@@ -162,7 +170,9 @@ export function useSession(sessionId: string | null): SessionStream {
       },
       onReplayComplete: () => {
         replaying = false;
-        setEvents(replayBuffer.slice());
+        const replayedEvents = replayBuffer.slice();
+        setEvents(replayedEvents);
+        setReplayThroughSeq(replayedEvents.at(-1)?.seq ?? 0);
         setReplayed(true);
       },
       onStatus: setStatus,
@@ -171,7 +181,7 @@ export function useSession(sessionId: string | null): SessionStream {
     return () => connection.close();
   }, [sessionId]);
 
-  return { events, status, replayed, presence };
+  return { events, presence, replayed, replayThroughSeq, status };
 }
 
 // --- write side: publishing user intents ---

@@ -14,13 +14,13 @@ import {
 /** The last value `pick` yields over the decoded log (the newest snapshot), else undefined. */
 function latest<T>(
   events: readonly SessionEvent[],
-  pick: (decoded: DecodedEvent) => T | undefined,
+  pick: (decoded: DecodedEvent, event: SessionEvent) => T | undefined,
 ): T | undefined {
   let result: T | undefined;
 
   for (const event of events) {
     const decoded = decodeTrevorEvent(event);
-    const value = decoded ? pick(decoded) : undefined;
+    const value = decoded ? pick(decoded, event) : undefined;
     if (value !== undefined) {
       result = value;
     }
@@ -71,10 +71,15 @@ export function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
-/** Compact context window: 8192 -> "8k", 0/unknown -> "?". */
+/** Compact context window: 8192 -> "8k", 1000000 -> "1M", 0/unknown -> "?". */
 export function fmtCtx(n: number): string {
   if (n <= 0) {
     return "?";
+  }
+
+  if (n >= 1_000_000) {
+    const millions = n / 1_000_000;
+    return Number.isInteger(millions) ? `${millions}M` : `${millions.toFixed(1)}M`;
   }
 
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
@@ -279,11 +284,20 @@ export function worktreesFrom(events: readonly SessionEvent[]): WorktreeSummary[
   return [...(latest(events, (d) => (d.type === "host.online" ? d.worktrees : undefined)) ?? [])];
 }
 
-/** The newest host-authored session handoff target, if this log asks the browser to move. */
-export function latestSessionSwitch(events: readonly SessionEvent[]): string | null {
+interface LatestSessionSwitchOptions {
+  readonly afterSeq?: number;
+}
+
+/** The newest host-authored session handoff target, optionally scoped after a replay boundary. */
+export function latestSessionSwitch(
+  events: readonly SessionEvent[],
+  options: LatestSessionSwitchOptions = {},
+): string | null {
+  const afterSeq = options.afterSeq ?? Number.NEGATIVE_INFINITY;
   return (
-    latest(events, (d) => (d.type === "session.switch" && d.sessionId ? d.sessionId : undefined)) ??
-    null
+    latest(events, (d, event) =>
+      d.type === "session.switch" && d.sessionId && event.seq > afterSeq ? d.sessionId : undefined,
+    ) ?? null
   );
 }
 
