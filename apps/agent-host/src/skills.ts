@@ -8,13 +8,17 @@ import { ToolInputError } from "./tools/errors";
 import { renderShell, runShell } from "./tools/run-shell";
 import { cap } from "./tools/shared";
 import type { Tool } from "./tools/types";
+import { WORKSPACE_ROOT } from "./tools/workspace";
 
 /**
  * Skill discovery + progressive disclosure.
  *
- * A skill is a `<SKILLS_DIR>/<id>/SKILL.md`: YAML frontmatter (name, description,
- * optional `meta` with an icon) followed by a markdown instruction body. The dir is
- * configurable and defaults to the shared agent skill library.
+ * A skill is a `<root>/<id>/SKILL.md`: YAML frontmatter (name, description, optional `meta` with an
+ * icon) followed by a markdown instruction body. Skills are discovered across an ORDERED list of
+ * roots (D-087), highest precedence first: the PROJECT-LOCAL `<workspace>/.agents/skills`, then the
+ * configured/global root (`TREVOR_SKILLS_DIR`, else `~/.agents/skills`). An enabled project-local
+ * skill shadows a global one with the same id; a disabled project file is simply absent (it leaves no
+ * tombstone, so the global skill of that id still surfaces).
  *
  * Progressive disclosure rides on the `skill` tool: its description lists every
  * skill's id + blurb (level 1, always in context), and `skill(name)` returns one
@@ -25,22 +29,50 @@ import type { Tool } from "./tools/types";
  * the bash tool uses. Off by default because it executes commands at load time.
  */
 
-/** Configurable skills root; one skill per `<dir>/<id>/SKILL.md`. */
+/** The configured/global skills root: TREVOR_SKILLS_DIR when set, else ~/.agents/skills. */
 export const SKILLS_DIR = resolve(
   process.env.TREVOR_SKILLS_DIR ?? join(homedir(), ".agents", "skills"),
 );
+
+/** The project-local skills root: `<workspace>/.agents/skills`, the same workspace authority the
+ *  file tools (read/write/bash, edit confinement) use. */
+export const PROJECT_SKILLS_DIR = resolve(WORKSPACE_ROOT, ".agents", "skills");
 
 /** Skill shell-interpolation is opt-in (it runs commands when a skill is loaded). */
 export const SKILL_SHELL_INTERPOLATION =
   process.env.TREVOR_SKILL_SHELL === "1" || process.env.TREVOR_SKILL_SHELL === "true";
 
-/** One discovered skill. `icon` comes from the frontmatter `meta.icon`. */
+/** Which root a discovered skill came from: a project-local skill shadows a global one of the same id. */
+export type SkillRootKind = "project" | "global";
+
+/** One searched skill root, with its precedence kind. */
+export interface SkillRoot {
+  readonly kind: SkillRootKind;
+  readonly dir: string;
+}
+
+/**
+ * The ordered skill roots, highest precedence first: the project-local `<workspace>/.agents/skills`,
+ * then the configured/global root. Deduplicated by resolved dir - when the workspace IS the global
+ * root, only one entry remains, so a root is never searched (or counted) twice.
+ */
+export function skillRoots(): SkillRoot[] {
+  const roots: SkillRoot[] = [{ kind: "project", dir: PROJECT_SKILLS_DIR }];
+  if (SKILLS_DIR !== PROJECT_SKILLS_DIR) {
+    roots.push({ kind: "global", dir: SKILLS_DIR });
+  }
+  return roots;
+}
+
+/** One discovered skill. `icon` comes from the frontmatter `meta.icon`; `rootKind` is its provenance. */
 export interface Skill {
   readonly id: string;
   readonly name: string;
   readonly description: string;
   readonly icon?: string;
   readonly path: string;
+  /** Which root the SELECTED skill came from (project-local overrides global). */
+  readonly rootKind: SkillRootKind;
 }
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
@@ -75,7 +107,7 @@ const trimStr = (value: unknown): string | undefined =>
   typeof value === "string" ? value.trim() : undefined;
 
 /** Builds a Skill from a SKILL.md, or null if its frontmatter disables it. */
-function toSkill(id: string, path: string, text: string): Skill | null {
+function toSkill(id: string, path: string, text: string, rootKind: SkillRootKind): Skill | null {
   const { data } = parseFrontmatter(text);
 
   if (data.disabled === true) {
@@ -92,71 +124,87 @@ function toSkill(id: string, path: string, text: string): Skill | null {
     description: (trimStr(data.description) ?? "").replace(/\s+/g, " ").trim(),
     icon: trimStr(meta.icon),
     path,
+    rootKind,
   };
+}
+
+/**
+ * Discovers skills across the ordered roots (project-local first, then global), selecting the first
+ * enabled skill for each id - so a project-local skill OVERRIDES a global one of the same id, and a
+ * disabled project file leaves no tombstone (the global skill of that id still wins). A missing or
+ * unreadable root contributes nothing. Pure over the passed roots, so the precedence + override rules
+ * are unit-tested with temp dirs (the memoized `discoverSkills` wraps it over the default roots).
+ */
+export function discoverSkillsIn(roots: readonly SkillRoot[]): Skill[] {
+  const byId = new Map<string, Skill>();
+  for (const root of roots) {
+    let entries: string[];
+    try {
+      entries = readdirSync(root.dir);
+    } catch {
+      continue; // missing / unreadable root: nothing from here
+    }
+    for (const entry of entries.sort()) {
+      // A higher-precedence root already selected this id (entry === id), so skip without reading.
+      // A DISABLED file in a higher root never reached `byId`, so its id stays open for a lower root.
+      if (entry.startsWith(".") || byId.has(entry)) {
+        continue;
+      }
+      const path = join(root.dir, entry, "SKILL.md");
+      try {
+        // No statSync pre-check: readFileSync throws (caught below) when the entry is a plain file or
+        // a dir without a SKILL.md, which is exactly what we skip.
+        const skill = toSkill(entry, path, readFileSync(path, "utf8"), root.kind);
+        if (skill) {
+          byId.set(skill.id, skill);
+        }
+      } catch {
+        // No readable SKILL.md here - skip it.
+      }
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 let cache: Skill[] | null = null;
 
-/** Discovers skills under SKILLS_DIR (memoized; a missing dir yields no skills). */
+/** Discovers skills across the effective roots (memoized; a missing root yields no skills). */
 export function discoverSkills(): readonly Skill[] {
-  if (cache) {
-    return cache;
+  if (!cache) {
+    cache = discoverSkillsIn(skillRoots());
   }
+  return cache;
+}
 
-  const skills: Skill[] = [];
+/** Clears the discovery memo - for tests that vary the roots/fixtures between cases. */
+export function resetSkillCache(): void {
+  cache = null;
+}
 
-  let entries: string[];
-
-  try {
-    entries = readdirSync(SKILLS_DIR);
-  } catch {
-    cache = [];
-    return cache;
+/**
+ * Renders the `/skills` output: every discovered skill with its source root, or - when the library is
+ * empty - the full list of roots that were searched (so an empty result is never silent about where
+ * it looked). Pure over the skills + roots, so the command's output is unit-tested directly.
+ */
+export function renderSkillsList(skills: readonly Skill[], roots: readonly SkillRoot[]): string {
+  if (!skills.length) {
+    return `No skills found. Searched: ${roots.map((r) => `${r.dir} (${r.kind})`).join(", ")}.`;
   }
-
-  for (const entry of entries.sort()) {
-    if (entry.startsWith(".")) {
-      continue;
-    }
-
-    const path = join(SKILLS_DIR, entry, "SKILL.md");
-
-    try {
-      // No statSync pre-check: readFileSync throws (caught below) when the entry is
-      // a plain file or a dir without a SKILL.md, which is exactly what we skip.
-      const skill = toSkill(entry, path, readFileSync(path, "utf8"));
-
-      if (skill) {
-        skills.push(skill);
-      }
-    } catch {
-      // No readable SKILL.md here - skip it.
-    }
-  }
-
-  cache = skills;
-
-  return skills;
+  return skills
+    .map((s) => `${s.icon ? `${s.icon} ` : ""}${s.id} [${s.rootKind}] - ${s.description}`)
+    .join("\n");
 }
 
 /**
  * The `/skills` immediate command, owned here so commands.ts no longer reaches into skill-discovery
- * internals (SKILLS_DIR / discoverSkills): it lists every discovered skill, or says where it looked
- * when the library is empty. Registered from commands.ts as one line. Reads no runtime context.
+ * internals: it lists every discovered skill with its source root, or reports every searched root when
+ * the library is empty. Registered from commands.ts as one line. Reads no runtime context.
  */
 export function buildSkillCommand(): Command {
   return {
     spec: { name: "/skills", summary: "List discovered skills" },
     select: () => undefined,
-    run: () => {
-      const skills = discoverSkills();
-      if (!skills.length) {
-        return `No skills found in ${SKILLS_DIR}.`;
-      }
-      return skills
-        .map((s) => `${s.icon ? `${s.icon} ` : ""}${s.id} - ${s.description}`)
-        .join("\n");
-    },
+    run: () => renderSkillsList(discoverSkills(), skillRoots()),
   };
 }
 
