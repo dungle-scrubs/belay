@@ -256,14 +256,14 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 
 ### M1: Cancel, stop, and kill semantics (D-094)
 
-- [ ] Define cancel as active-work cancellation that leaves the host attached and ready for another prompt
-- [ ] Define stop as graceful session-level shutdown
-- [ ] Stop cancels active work and records a clean terminal cancellation where possible
-- [ ] Stop clears queued work for that session
-- [ ] Stop asks the host to shut down cleanly and release runtime, lease, and ownership state
-- [ ] Passive browser disconnect does not stop the host
-- [ ] Define kill as force termination for a wedged or unresponsive host
-- [ ] Kill preserves durable history, while any in-flight turn may end as aborted or unknown if the host cannot write a clean event
+- [x] Define cancel as active-work cancellation that leaves the host attached and ready for another prompt
+- [x] Define stop as graceful session-level shutdown
+- [x] Stop cancels active work and records a clean terminal cancellation where possible
+- [x] Stop clears queued work for that session
+- [x] Stop asks the host to shut down cleanly and release runtime, lease, and ownership state
+- [x] Passive browser disconnect does not stop the host
+- [x] Define kill as force termination for a wedged or unresponsive host
+- [x] Kill preserves durable history, while any in-flight turn may end as aborted or unknown if the host cannot write a clean event
 
 ### M2: Archive metadata and visibility
 
@@ -284,8 +284,8 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 - [ ] `trevor open <session>` starts or attaches the matching host when possible
 - [x] `trevor archive <session>` sets the archived flag without deleting the durable log
 - [x] `trevor unarchive <session>` clears the archived flag
-- [ ] `trevor stop <session>` performs graceful session shutdown, including active and queued work handling
-- [ ] `trevor kill <session>` force terminates the session host runtime
+- [x] `trevor stop <session>` performs graceful session shutdown, including active and queued work handling
+- [x] `trevor kill <session>` force terminates the session host runtime
 
 ### M4: UI and debug boundaries
 
@@ -669,10 +669,10 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
-- Live open follow-up (D-094 session lifecycle controls): 38 features, 10 completed, 28 remaining (M2 archive metadata + sidebar filtering; M3 list/archive/unarchive CLI)
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 20 completed, 18 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 35 completed, 16 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 215 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 205 unchecked items plus 5 partial/gated carry-forward items
