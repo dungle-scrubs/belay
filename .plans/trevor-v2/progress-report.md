@@ -5,43 +5,31 @@
 > mark a milestone complete until every current-cutoff checkbox under it is
 > checked.
 
-> **Scope.** This report tracks the near-term cutoff and the next sequenced feature.
-> **Phase 1 - concurrent read-only tool execution** (D-050), **Phase 2 - graceful
-> turn-budget termination** (D-051…D-053), and **Phase 3 - cross-turn compaction**
-> (D-040…D-043) are shipped except one trailing item (Phase 2 M4 `/doctor`). **Phase
-> 4 - provider SDK migration** is the next task before subagents: switch the host
-> from deprecated `@mariozechner/pi-ai@0.73.1` to the latest maintained
-> `@earendil-works/pi-ai` release, verified 2026-06-25 as `0.80.2`.
-> **Phase 5 - subagents** (D-045…D-049) remains decomposed below as
-> accepted/deferred follow-up after the provider migration and includes both reusable
-> file-defined agents and runtime-minted ephemeral definitions. **Phase 6 -
-> search-tool upgrade** (D-062) is decomposed below as the immediately-after-subagents
-> follow-up: `grep` becomes ripgrep-backed and H-108 `ast_grep` becomes a read-only
-> structural-search tool. **Phase 7 - nested AGENTS.md context
-> files** (D-080) is the next feature to implement and is decomposed below: Claude Code's
-> loading model (eager up-tree at the root + lazy below-cwd on file access) keyed on the
-> cross-tool AGENTS.md standard, so nested AGENTS.md instructions reach the model automatically.
-> Later roadmap items (session recall D-044, WAN fallback
-> D-060, session manager D-061, …) stay sequenced in §6 and are decomposed here when
-> picked up.
+> **Scope.** This report tracks the active implementation cutoff and the next sequenced feature.
+> Phases 1-7 are shipped: concurrent read-only tool execution (D-050), graceful
+> turn-budget termination (D-051…D-053), cross-turn compaction (D-040…D-043),
+> provider SDK migration plus outage auto-reconnect (D-076…D-079), subagents
+> (D-045…D-049), search-tool upgrade (D-062), and nested AGENTS.md context files
+> (D-080…D-081). Phase 8 is now the active cutoff: prompt shell lane for leading
+> `!` (D-082). The output is user-visible only and prompt-invisible for this first
+> cut. Prompt composer draft persistence and Up-arrow history recall are captured
+> as the next composer follow-up (D-083…D-084). Upcoming near-term items also now
+> include the `trevor` project launcher (D-085) and early transcript top-down
+> growth (D-086), plus project-local skill roots from `<cwd>/.agents/skills`
+> (D-087). Later roadmap items (session recall D-044, WAN fallback D-060,
+> session manager D-061, git functionality, …) stay sequenced in §6 and are
+> decomposed here when picked up.
 
-> Current focus: Phase 5 - subagents shipped end-to-end for BOTH execution modes: M1 discovery, M2
->   isolated child session + `delegated.to` link, M3 inline + background delegation (cap + read-only
->   clamp + late-result), M4 web surfacing + `/doctor`, M5 inline ephemeral agents. Remaining: only the
->   fork-dependent forkability bullets (blocked on the unimplemented D-025…D-029 fork feature) and a few
->   refinements (see the milestone notes). Then Phase 7 (nested AGENTS.md).
-> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1-M5 (inline + background);
->   Phase 6 (ripgrep `grep` + read-only `ast_grep`) ✅; Phase 2 M4 (`/doctor` turn-termination reason) ✅.
-> Notes: (1) the fork machinery (D-025…D-029) referenced by M2 is NOT in the codebase yet, so the
->   "independently forkable / forking copies the frozen result" properties are forward-looking -
->   `delegated.to.result` already carries the frozen result for when fork lands. (2) Delegation runs
->   from the loop layer (it needs the provider + transport), intercepted as a parent-only capability;
->   depth-1 is structural (a child is given no capability). Then Phase 6 - search-tool upgrade (D-062).
-> Phase 7 - nested AGENTS.md context files (D-080) is now SHIPPED: Claude Code's lazy loading model
->   (eager up-tree + lazy below-cwd on file access), keyed on AGENTS.md, with /doctor surfacing. The
->   host now ingests context files (it read none before). All current-cutoff + sequenced-follow-up work
->   is complete; the only remaining items are the fork-dependent Phase 5 M2 forkability bullets (blocked
->   on the unimplemented D-025…D-029 fork feature) and minor Phase 5 refinements.
+> Current focus: Phase 8 - prompt shell lane. The work starts Storybook-first with
+> the prompt input color/state change for leading `!`, then adds protocol events,
+> host execution through the existing protected `runShell` path, dedicated transcript
+> rendering, and tests proving the shell result is not sent to the model context.
+> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3); Phase 5 M1-M5
+> (inline + background subagents); Phase 6 (ripgrep `grep` + read-only `ast_grep`);
+> Phase 7 (nested AGENTS.md context files); Phase 2 M4 (`/doctor` turn-termination
+> reason). Remaining outside the current cutoff: fork-dependent Phase 5 M2
+> forkability bullets, blocked on the unimplemented D-025…D-029 fork feature, plus
+> minor Phase 5 refinements.
 
 ## Phase 1: Concurrent read-only tool execution
 
@@ -340,7 +328,7 @@ Source: `apps/agent-host/src/tools/{ast-grep,ast-grep-bin,search-process}.ts`, `
 - [x] Registered in `TOOLS`/`TOOL_DEFS`/`READ_ONLY_TOOLS` (gated on the binary resolving) + prompt guidance
 - [x] Tests: structural match across formatting, inferred + explicit lang, no-match, unknown lang error, maxMatches cap, workspace confinement, read-only registry inclusion (7)
 
-## Next feature: Phase 7 - Nested AGENTS.md context files
+## Shipped: Phase 7 - Nested AGENTS.md context files
 
 Trevor auto-reads nested `AGENTS.md` instruction files using **Claude Code's loading model** -
 eager up-tree at the root, lazy below cwd on file access - keyed on the cross-tool **AGENTS.md**
@@ -385,6 +373,220 @@ Source: `apps/agent-host/src/main.ts` (`hostState` → `/doctor`)
 - [x] `/doctor` reports the ingested context via a `context` field: file count, scopes (`user-global`/`project`/`below-cwd`), bytes used, and `(-NB truncated)` when a budget drop occurred - never silent (`contextState()` in `main.ts`)
 - [~] Manual repro: verified at construction level against the real repo - the eager root `AGENTS.md` renders in the block + reworded guardrail; touching `apps/web/` pulls in `apps/AGENTS.md` (below-cwd); the doctor report shows `2 AGENTS.md [project, below-cwd] 16,240B`. A live model OBEYING the instructions is the gated live-model lane
 
+## Next feature: Phase 8 - Prompt shell lane (leading `!`)
+
+Leading `!` in the prompt composer runs a shell command immediately through the live host,
+using the same protected shell path as `/shell`, then displays a dedicated shell transcript
+block. It does not call a model and its output is not included in model context for this cut.
+V1 already had terminal bang-shell behavior; V2 already has `/shell`, `runShell`, the bash
+safety floor, timeout, and output cap. This phase fills the browser grammar, visual state,
+protocol, host routing, and transcript rendering gaps. Source: `apps/web/src/App.tsx`,
+`apps/web/src/derive.ts`, `apps/web/src/session/use-session.ts`,
+`packages/session/src/protocol.ts`, `apps/agent-host/src/main.ts`,
+`apps/agent-host/src/tools/run-shell.ts`, `apps/web/src/transcript.ts`,
+`apps/web/src/components/chat/message.tsx`,
+`apps/web/src/components/chat/prompt-input.stories.tsx` (D-082).
+
+### M1: Storybook-first composer shell state
+
+- [ ] Extract or reuse the production composer shell styling path so Storybook exercises the real prompt input
+- [ ] Add Storybook states: normal, slash, empty bang, executable bang, long bang command, and bang-with-attachments/error
+- [ ] Bang state changes immediately when the raw first character is `!`: Shell chip plus terminal-like border/background
+- [ ] Visual treatment stays distinct from slash menu, context-pressure yellow, assistant/tool surfaces, and command-result chrome
+
+### M2: Web parsing and publishing
+
+- [ ] Add `parseBangShell` or equivalent that triggers only on raw first character `!` with a non-empty command
+- [ ] Submit publishes `user.shell {requestId, command}` through a new session helper, bypassing send queue, model, and provider flow
+- [ ] Shell lane is text-only; attachment cases are handled explicitly instead of silently dropping files
+- [ ] `/shell <command>` continues to route through known slash command parsing
+
+### M3: Session protocol and host execution
+
+- [ ] Add `user.shell` and `shell.result` builders/decoders in `@trevor/session`
+- [ ] Live leader handles `user.shell` by running shared `runShell(command)` and emitting one `shell.result`
+- [ ] Refused/destructive, non-zero failure, timeout, and capped output render through `shell.result` with `ok: false` when appropriate
+- [ ] Replay never re-runs shell commands; standby hosts observe only
+
+### M4: Transcript and prompt projection
+
+- [ ] `toTranscript` reduces `user.shell` plus `shell.result` into one shell message keyed by `requestId`, with pending/result states
+- [ ] Add a terminal-style shell block showing `$ command` and output, visually distinct from assistant, tool, and generic command-result chrome
+- [ ] `/clear` resets visible shell blocks from prior history in the same way it resets conversation transcript
+- [ ] `buildHistory`, compaction planning, and session recall anchors ignore `user.shell`/`shell.result` for this first cut
+
+### M5: Verification
+
+- [ ] Protocol round-trip tests cover both events and permissive decode defaults
+- [ ] Web tests cover parser behavior, submit routing, transcript pairing, `/clear`, and prompt-invisible history projection
+- [ ] Host tests cover success, refusal through the bash safety floor, non-zero failure, output cap, and no replay re-execution
+- [ ] Manual EZE repro: `!printf hello` runs immediately, shows a shell block, and the next model prompt does not receive `hello` unless the user quotes it
+
+## Accepted/Deferred Follow-up: composer recovery and prompt history
+
+D-083 and D-084 are captured in the implementation plan as the follow-up after Phase 8 unless
+explicitly reprioritized. V1 already had prompt-history mechanics in the TUI `PromptState`; V2
+currently has local composer state in `useComposer`, tab identity in `use-session.ts`, and slash-menu
+ArrowUp/ArrowDown handling in `App.tsx`, but no draft persistence or terminal-style prompt recall.
+Source: `apps/web/src/hooks/use-composer.ts`, `apps/web/src/session/use-session.ts`,
+`apps/web/src/App.tsx`, `apps/web/HOTKEYS.md`, `apps/web/src/hooks/use-send-queue.ts`,
+`apps/web/src/send-queue.ts` (D-083…D-084).
+
+### M1: Debounced draft persistence (D-083)
+
+- [ ] Add a small draft-persistence hook keyed by session id plus browser tab identity, using tab/session storage rather than the durable Richter log
+- [ ] Restore only unsubmitted text drafts after the session id is known, without overwriting a non-empty in-memory draft
+- [ ] Debounce draft writes with a versioned storage payload and tolerate unavailable/private-mode storage without breaking typing
+- [ ] Clear the stored draft after successful prompt submit, `/clear`, and explicit composer clearing
+- [ ] Keep attachments out of the first cut unless artifact upload state is durable enough to restore safely
+- [ ] Add tests for restore, debounce, clear paths, storage failure, session isolation, and tab isolation
+
+### M2: Prompt history recall (D-084)
+
+- [ ] Add a local prompt-history store keyed by session id plus browser tab identity, with a small cap and adjacent-duplicate de-dupe
+- [ ] Record ordinary prompts and bang shell commands as typed after publish is accepted
+- [ ] Exclude hidden slash-command results, host-generated command output, and assistant text from recall history
+- [ ] ArrowUp from an empty composer, or from the first eligible line, recalls the previous prompt
+- [ ] ArrowDown moves forward through recalled prompts and restores the saved new draft at the end
+- [ ] Multi-line editing keeps normal cursor movement unless the cursor is at the first line and history navigation is eligible
+
+### M3: Composer integration and verification
+
+- [ ] Slash-menu ArrowUp/ArrowDown handling keeps priority while the menu is open
+- [ ] Update `apps/web/HOTKEYS.md` with the composer history conditions
+- [ ] Web tests cover history navigation, slash-menu conflict, multi-line cursor eligibility, reload persistence, and session/tab isolation
+- [ ] Manual EZE repro: type a partial draft, reload, confirm it restores, submit it, then confirm the stored draft clears
+- [ ] Manual EZE repro: submit two prompts, press ArrowUp/ArrowDown through history, and verify no slash-command result text is recalled
+
+## Accepted/Deferred Follow-up: project launcher
+
+D-085 is captured in the implementation plan as the first browser-era slice of the broader
+browser/terminal session-manager direction. The desired workflow is `trevor` from any project
+directory: resolve the project root, derive or look up the stable session id, ensure shared local
+Trevor services, spawn or reuse the matching agent-host with `SESSION_ID`, `TREVOR_WORKSPACE`, and
+cwd all pointing at that project/session, then open `http://127.0.0.1:17420/?session=<id>`. This
+replaces the manual env-command ceremony shown in the current workaround. Source: root `package.json`,
+new launcher entrypoint, `apps/agent-host/package.json`, `apps/agent-host/src/main.ts`,
+`apps/agent-host/src/tools/workspace.ts`, `apps/web/src/App.tsx`, `packages/session/src/identity.ts`,
+`~/.agents/PORTS.md` (D-085).
+
+### M1: CLI entrypoint and project identity
+
+- [ ] Add a terminal executable named `trevor` in the V2 package surface
+- [ ] Resolve the project root as the nearest Git worktree root from cwd, falling back to cwd when no Git root exists
+- [ ] Derive a stable URL-safe session id from the canonical project root using a human-readable basename plus collision-resistant short hash
+- [ ] Persist the root to session-id mapping under Trevor local state so the same project reopens the same session
+- [ ] Support the no-arg ordinary path first; reserve explicit overrides such as `--session` or `--new` for a later extension
+
+### M2: Shared service readiness
+
+- [ ] Check the shared web UI, blob store, and session-store health on reserved local ports before launching a project host
+- [ ] Start missing shared services through the repo's local runner without creating one service set per project
+- [ ] Detect occupied reserved ports and report which service owns the conflict when possible
+- [ ] Wait for session-store readiness before starting or checking the project host
+- [ ] Keep `~/.agents/PORTS.md` unchanged unless a new persistent service port is introduced
+
+### M3: Project host lifecycle
+
+- [ ] Maintain launcher ownership records with pid, session id, project root, command, and started time
+- [ ] Use a per-session/project lock so concurrent `trevor` launches cannot spawn duplicate answering hosts
+- [ ] Reuse an existing healthy host for the same project/session
+- [ ] Replace a stale ownership record or dead process before opening the browser tab
+- [ ] Spawn the host with `SESSION_ID=<derived-id>`, `TREVOR_WORKSPACE=<project-root>`, and cwd set to the project root
+- [ ] Wait for `host.online` or equivalent evidence that the host joined the expected session and announced the expected workspace
+
+### M4: Browser handoff and diagnostics
+
+- [ ] Open or focus `http://127.0.0.1:17420/?session=<id>` after the session and host path are prepared
+- [ ] Print a concise status line with session id, project root, service reused/started state, host reused/spawned state, and URL
+- [ ] Never print `.env.op`, provider keys, OAuth material, or expanded secret-bearing environment values
+- [ ] Web UI tolerates opening before `host.online` and presents a clear starting-host state until live host presence appears
+
+### M5: Verification
+
+- [ ] Unit tests cover root resolution, session id generation, mapping persistence, and no slash-containing ids
+- [ ] Unit tests cover service health classification, occupied-port diagnostics, and no per-project service duplication
+- [ ] Unit tests cover host reuse, stale-host replacement, spawn env/cwd, and concurrent launch locking
+- [ ] Integration test boots fake or local services and proves the launcher opens the expected session URL
+- [ ] Manual EZE repro: run `trevor` from two different repos and verify two tabs, two sessions, and two matching host processes
+
+## Accepted/Deferred Follow-up: early transcript layout
+
+D-086 is captured in the implementation plan as a browser transcript layout fix. V1 is a terminal TUI
+with explicit scroll-layout choices, but not a direct browser-layout precedent. V2 currently uses
+`flex-col-reverse` and treats `scrollTop === 0` as the bottom, so new sessions start just above the
+composer. The desired behavior is top-down: an empty or short session starts at the top of the
+transcript well and appends downward until content overflows; after overflow, live-bottom following
+keeps streaming output visible only while the user is already at the live edge. Source:
+`apps/web/src/App.tsx`, `apps/web/src/transcript.ts`, `apps/web/src/transcript.test.ts`,
+`apps/web/src/components/chat/message.tsx`, future transcript layout stories/fixtures (D-086).
+
+### M1: Normal scroll model
+
+- [ ] Replace the transcript container's `flex-col-reverse` model with normal top-down column flow
+- [ ] Redefine `atBottom` as `scrollHeight - clientHeight - scrollTop` within tolerance
+- [ ] Change `scrollToBottom` and live-follow effects to scroll to `scrollHeight`, not `0`
+- [ ] Keep replay, submit re-pin, `/clear`, compacting bars, queued prompts, and shell blocks on the same scroll model
+
+### M2: Short-session top alignment
+
+- [ ] Empty replayed sessions render an empty transcript well with no fake spacer
+- [ ] A single submitted user message appears at the top padding of the transcript well
+- [ ] A short user/assistant exchange appends downward without bottom-aligning above the composer
+- [ ] The composer/footer remain pinned below the transcript scroll area on mobile and desktop
+
+### M3: Overflow and live-edge behavior
+
+- [ ] Once content exceeds the viewport, new updates follow the bottom only when the user is already at the live edge
+- [ ] If the user scrolls upward, streaming deltas, tool rows, compacting bars, and shell output do not yank the viewport
+- [ ] The jump-to-bottom affordance appears when away from the live edge and hides after returning to bottom
+- [ ] The scroll behavior remains stable across transcript replay and host reconnect
+
+### M4: Visual and behavioral verification
+
+- [ ] Add Storybook or fixture views for empty, one-message, short exchange, just-before-overflow, and overflowing transcripts
+- [ ] Add fixture views for overflowing transcript at live bottom and overflowing transcript while scrolled up
+- [ ] Add mobile-height and desktop-height checks so early content does not overlap the composer or footer
+- [ ] Web tests pin top-aligned early layout and normal bottom-tolerance math
+- [ ] Manual EZE repro: new session starts at top, fills downward, then follows the live edge only after overflow
+
+## Accepted/Deferred Follow-up: project-local skill roots
+
+D-087 is captured in the implementation plan as an additive skill-discovery refinement. V1 already
+supported project-local skills first, then user/shared skills. V2 currently discovers one root:
+`TREVOR_SKILLS_DIR` when set, otherwise `~/.agents/skills`. The desired behavior is to read
+`<workspace>/.agents/skills` first, where `<workspace>` is the same effective root used by the
+host file tools, then keep the existing configured/global root. Source:
+`apps/agent-host/src/skills.ts`, `apps/agent-host/src/tools/workspace.ts`,
+`apps/agent-host/src/commands.ts`, `apps/agent-host/src/tools/index.ts`,
+`apps/agent-host/src/agents.ts`, `apps/agent-host/src/agent/delegate.ts`,
+future D-075 `skills_list`/`skill_view` registry surfaces (D-087).
+
+### M1: Discovery roots and precedence (D-087)
+
+- [ ] Replace the single `SKILLS_DIR` assumption with an ordered skill-root list
+- [ ] Resolve the project-local root as `<WORKSPACE_ROOT>/.agents/skills`, using the same workspace authority as read/write/bash
+- [ ] Preserve the existing configured/global root behavior: `TREVOR_SKILLS_DIR` when set, otherwise `~/.agents/skills`
+- [ ] Deduplicate resolved roots and treat missing or unreadable roots as empty
+- [ ] Make enabled project-local skills win over broader skills with the same id
+- [ ] Keep disabled skill files absent in the first cut; they do not create tombstones that hide broader skills
+
+### M2: Registry integration and provenance
+
+- [ ] Extend discovered skill metadata with root kind, source path, and selected/shadowed provenance
+- [ ] Update discovery caching so the effective registry cannot accidentally mix stale roots or paths
+- [ ] Update `/skills` to report all searched roots when empty and show the selected source when skills are found
+- [ ] Ensure `skill(name)` expands the effective selected skill body, including project-local overrides
+- [ ] Keep project-local skill shell interpolation behind the same opt-in gate and protected shell path as global skills
+
+### M3: Downstream validation and tests
+
+- [ ] Agent and ephemeral delegation skill allow-list validation use the effective discovered registry
+- [ ] Unit tests cover local-only, global-only, missing-local, and missing-global discovery
+- [ ] Unit tests cover duplicate-id project-local precedence and root deduplication
+- [ ] Unit tests cover `/skills` empty/list output and `skill(name)` expansion from the project-local root
+- [ ] Unit tests prove project-local skills do not auto-run shell interpolation while the interpolation gate is off
+
 ## Summary
 - Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
 - Phase 2 (turn-budget termination): 20 features, 20 completed, 0 remaining ✅ (M4 `/doctor` turn-termination reason shipped)
@@ -393,15 +595,19 @@ Source: `apps/agent-host/src/main.ts` (`hostState` → `/doctor`)
 - Phase 5 (subagents): 41 features, ~39 completed (M1 discovery + M2 isolated child session/link + M3 inline + background delegation [cap, read-only clamp, late-result] + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~2 remaining (the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
 - Phase 6 (search-tool upgrade): 14 features, 14 completed ✅ (M1 ripgrep-backed `grep` + M2 read-only `ast_grep`, both with project-managed binaries and tests)
 - Phase 7 (nested AGENTS.md context files): 17 features, 17 completed ✅ (M1 pure reader + single-sourced `TREVOR_HOME` = 6, M2 eager prompt injection = 4, M3 lazy below-cwd loading = 5, M4 `/doctor` surfacing = 2; Claude Code lazy model keyed on AGENTS.md - eager up-tree + lazy below-cwd; 18 new unit tests; manual repro verified by construction, live-obedience is the gated lane)
-- Total features: 67
-- Completed: 67
-- Remaining: 0
-- Current cutoff blockers: 0 (Phase 2 M4 /doctor turn-termination reason shipped)
+- Phase 8 (prompt shell lane): 20 features, 0 completed, 20 remaining
+- Active cutoff features: 20
+- Active cutoff completed: 0
+- Active cutoff remaining: 20
+- Current cutoff blockers: 20 (Phase 8 prompt shell lane)
+- Accepted/deferred follow-up: 75
 - Phase 4 (provider SDK migration + outage auto-reconnect): 18, all shipped ✅
 - Phase 5 (subagents): ~39/41 shipped (inline + background delegation); ~2 remaining are the fork-dependent M2 forkability bullets (blocked on the unimplemented D-025…D-029 fork feature) + minor refinements
 - Phase 6 (search-tool upgrade: ripgrep `grep` + read-only `ast_grep`): 14, all shipped ✅
 - Phase 7 (nested AGENTS.md context files, D-080 + D-081 single-sourced `TREVOR_HOME`): 17, all shipped ✅ (eager up-tree + lazy below-cwd, keyed on AGENTS.md, with /doctor surfacing)
-- Remaining implementable work: 0 (only the fork-blocked Phase 5 bullets + minor refinements remain)
+- Phase 8 (prompt shell lane, D-082): 0/20 shipped; Storybook-first composer state is the first milestone
+- Upcoming near-term, not active cutoff: D-083/D-084 composer recovery/history, D-085 project launcher, D-086 early transcript layout, D-087 project-local skill roots
+- Remaining implementable work: Phase 8 has 20 current-cutoff blockers; fork-blocked Phase 5 bullets and minor refinements remain outside the active cutoff
 - Superseded/obsolete checklist debt: 0
 
 > Phase 2 shipped 2026-06-25 ahead of Phase 1 (its silent turn-budget dead-ends were biting:

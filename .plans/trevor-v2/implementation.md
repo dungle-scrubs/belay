@@ -108,6 +108,11 @@ what V2's scope cuts changed.
 | **Execution mode** | `direct`, `delegate_inline`, `delegate_background` | <!-- D-047 --> `direct` now; **inline (sync) + read-only background (async)** being built (D-047); teams deferred |
 | **Tool** | Executable capability owned by a run (read, edit, bash, rg, …) | - |
 | **Command family** | UI-neutral command contract: names, grammar, tokenization, diagnostics, protocol actions, examples, and preview metadata | <!-- D-067 --> Host owns authoritative command handling; clients render helpers from structured contract data, not from host-rendered UI |
+| **Prompt shell lane** | Interactive prompt input beginning with `!`, executed immediately by the host shell path and rendered as a user-owned terminal transcript item | <!-- D-082 --> Not shell interpolation and not a model turn; output is prompt-invisible for now |
+| **Prompt composer state** | Browser-tab-local draft text and prompt history used to recover in-progress typing and recall previous prompts | <!-- D-083 --><!-- D-084 --> Draft persistence and Up-arrow history are client UX features; they do not affect durable session history until submitted |
+| **Project-local skill root** | Per-project skill library discovered from the active workspace at `.agents/skills` | <!-- D-087 --> Project-local skills are loaded before the existing global/configured skill root so a repo can carry its own reusable workflows |
+| **Project launcher** | Terminal command that turns the current project directory into a browser Trevor session with a matching host process | <!-- D-085 --> `trevor` owns session-id derivation, host spawning/reuse, shared-service readiness, and browser tab opening so users never hand-wire `SESSION_ID`/`TREVOR_WORKSPACE` |
+| **Early transcript layout** | Browser transcript behavior before the conversation overflows the viewport | <!-- D-086 --> New/short sessions start at the top and grow downward; live-bottom following begins once content can actually scroll |
 | **Assistant output style** | Named presentation overlay for response shape, density, and structure | <!-- D-072 --> Additive prompt overlay only; must not change model routing, work kind, execution mode, tool access, agent selection, or validation policy |
 | **Doctor snapshot** | Structured host health report with areas, checks, findings, evidence, and next actions | <!-- D-073 --> `/doctor` should render actionable diagnostics, not raw host/debug state dumps |
 | **Capability manifest** | Registry-derived self-description of Trevor tools, commands, contracts, agents, skills, and runtime surfaces | <!-- D-074 --> Full manifest for humans/clients/export; compact scoped manifest for model/subagent context; never a permission system or giant prompt dump |
@@ -160,7 +165,8 @@ These are **not** in V2 and **not** in the backlog. Permanent removals.
 - Cancel / steer + client-side send queue.
 - Immediate slash-command lane: `/help`, `/doctor`, `/shell`, `/skills`, `/jobs`(+`/jobs-stop`);
   `user.command` + `command.result` events + command inventory; web slash menu + routing.
-- Skills: discovery, progressive disclosure, **shell interpolation** (H-175 done for skills).
+- Skills: discovery, progressive disclosure, **shell interpolation** (H-175 done for skills); project-local
+  skill roots are a near-term refinement (D-087).
 - Background **process supervisor** (`pN` jobs) + the `process` tool + `/jobs`.
 - **Tasks** tool with ambient injection + `tasks.current` snapshot + live web tasks panel.
 - **Observability**: structured logging, verbose toggle, runtime invariants, provider-boundary
@@ -535,6 +541,257 @@ promoted from unsequenced backlog to the next read-only code-search tool.
   read-only registry inclusion. Prompt guidance and tool inventory tests must say when to use text search vs
   structural search.
 
+### Shipped: nested AGENTS.md context files - Claude Code lazy model <!-- D-080 -->
+
+Trevor now reads project instruction files automatically. Before this shipped,
+`buildSystemPrompt` (`apps/agent-host/src/providers/system-prompt.ts`) only *mentioned* `AGENTS.md` as a
+discovery hint (REPO_GUARDRAILS); it never ingested one. This added automatic nested context-file ingestion using
+**Claude Code's loading model** - eager up-tree at the root, lazy below cwd on file access - but keyed on the
+cross-tool **AGENTS.md** standard (agents.md) rather than `CLAUDE.md`. The repo already uses AGENTS.md
+(root `AGENTS.md`, `apps/AGENTS.md`) and the prompt already points the model at it. Codex's eager-only
+root→cwd model is the comparison point, not the target: it cannot pick up an `AGENTS.md` below cwd (its open
+issue #12115 asks for exactly the Claude Code behavior chosen here). Decomposed into milestones (M1 reader,
+M2 eager injection, M3 lazy below-cwd loading, M4 surfacing) in the progress report. Source:
+`apps/agent-host/src/providers/system-prompt.ts`, a new context-file reader module
+(`apps/agent-host/src/context/` proposed), the file tools (`apps/agent-host/src/tools/`), session/loop state,
+and `apps/agent-host/src/commands.ts` (`/doctor`).
+
+- <!-- D-080 --> **Eager up-tree scope, concatenated root→cwd.** Walk UP from the host cwd to the workspace
+  root (the `.git` marker / `WORKSPACE_ROOT` confinement boundary, never past it), collect every `AGENTS.md` on
+  that path, and concatenate them **root-first → cwd-last** so the most-specific directory's instructions land
+  last and win on conflict (positional precedence, not field-level override - the model both tools use). Add a
+  user-global scope (`~/.trevorV2/AGENTS.md`) loaded first, ahead of the project chain. One file per directory;
+  empty/whitespace-only files skipped. This eager scope rides the per-turn prompt, so it survives compaction for
+  free: `buildSystemPrompt` already re-renders every turn (that is how the live checklist outlives compaction,
+  D-040), so the block is re-read from disk and re-injected each turn instead of living only in the
+  (compactable) transcript - the same reason Claude Code re-reads root `CLAUDE.md` after `/compact`.
+- <!-- D-081 --> **The `~/.trevorV2` base directory is single-sourced and env-overridable.** Define it as ONE
+  exported host constant (proposed `TREVOR_HOME`, in a dedicated paths module), resolved once as
+  `resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"))` - the same pattern `WORKSPACE_ROOT` already
+  uses for `TREVOR_WORKSPACE` in `apps/agent-host/src/tools/workspace.ts`. Every user-global path derives from
+  it - the user-scope `AGENTS.md` introduced here, and the existing `.env.op` / future hooks / config - so the
+  directory name and its eventual relocation live in exactly one place. The host resolves no `~/.trevorV2` path
+  in TS today (only the `dev:op` / `start:op` npm scripts and the Storybook doctor fixtures name it literally),
+  so this constant lands with the M1 reader as the first real code use, not as a standalone refactor. Align the
+  `dev:op` / `start:op` scripts to honor the same `TREVOR_HOME` override (defaulting to `.trevorV2`) so the one
+  override point is shared across the shell and TS surfaces instead of being re-hardcoded per surface.
+- **Lazy below-cwd loading on file access - the defining Claude Code behavior.** An `AGENTS.md` in a
+  subdirectory *below* cwd is never on the root→cwd path, so the eager pass misses it. When a file tool (`read`,
+  and any other file-touching tool) touches a file inside a subtree, lazily load that subtree's `AGENTS.md` plus
+  every not-yet-loaded `AGENTS.md` between cwd and that file, and inject it. Track the loaded set in session
+  state, dedup so each directory loads once, and re-inject the accumulated lazy set on later turns and after a
+  compaction fold (the eager per-turn re-render does not cover below-cwd files).
+- **`@path` imports, bounded.** Support Claude Code's `@relative/or/absolute/path` import syntax inside an
+  `AGENTS.md`: expand and inline the referenced file, resolve relative paths against the importing file, cap
+  recursion (≤ 4 hops, matching Claude Code), detect and break cycles, and skip `@paths` inside fenced or inline
+  code spans so literal examples are not mistaken for imports.
+- **Bounded, observable, never silent.** Enforce a combined byte budget across all ingested context (Codex caps
+  at 32 KiB; pick a Trevor budget) and, unlike Codex's silent truncation (its issue #7138), surface what was
+  loaded and what was dropped in `/doctor`: files read, scopes, bytes used vs dropped, and which lazy subtrees
+  were pulled in. Keep the read-walk-merge logic a pure, separately-testable module seam, not inlined into
+  `buildSystemPrompt`.
+- **Reconcile the existing guardrail.** With `AGENTS.md` auto-ingested, the REPO_GUARDRAILS line that tells the
+  model to "begin from existing top-level files like README.md or AGENTS.md" is partly redundant for AGENTS.md;
+  reword it so the model knows project instructions are already in context.
+- **Validation target.** Tests should cover: a root-only repo; a nested chain (root + `apps/` + cwd) merged
+  root→cwd with cwd winning on conflict; the walk-up stopping at `WORKSPACE_ROOT`/`.git`; user-global loading
+  first; a below-cwd `AGENTS.md` loaded lazily only after a file in that subtree is read, and deduped on a
+  second read; `@path` import expansion with the 4-hop cap and cycle detection; code-span `@paths` ignored; the
+  byte budget truncating deterministically with the drop surfaced in `/doctor` (not silent); and the eager block
+  re-injected after a compaction fold.
+
+### Next: prompt shell lane - leading `!` <!-- D-082 -->
+
+Carry forward the useful Trevor V1 bang-shell behavior into the browser/Richter architecture. V1 recognizes a
+top-level `!command` as an immediate host-owned shell command, renders the user input on a distinct shell band,
+and never routes it to the model. V2 already has the safer building blocks: `/shell`, the shared `runShell`
+primitive, the bash safety floor, timeout, output cap, and command-result rendering. What V2 lacks is the
+interactive prompt grammar, composer state, dedicated protocol events, and a transcript surface that reads as
+"user ran a shell command" rather than "slash command output" or "agent tool call." This feature is distinct
+from D-012/H-175 shell interpolation in skill/command files: nothing is interpolated into a prompt and no model
+is called.
+
+- <!-- D-082 --> **Leading `!` is an immediate prompt shell lane, not a model turn.** If the first raw
+  character in the composer is `!` and the remaining text is non-empty, submitting runs the command immediately
+  on the live host. It bypasses the send queue, provider selection, reasoning controls, assistant turn
+  lifecycle, tool-call loop, and prompt projection. It uses the same `runShell` protections as `/shell` and the
+  `bash` tool: deny-only destructive-command floor, host cwd/workspace confinement, fixed timeout, output cap,
+  and rendered refusal/failure text. `/shell <command>` remains supported for command-menu compatibility; `!`
+  is the fast terminal-style spelling.
+- **Prompt-invisible by decision.** The shell command and output are durable transcript events for the user, but
+  `buildHistory`, compaction, and session recall anchors ignore them in the first cut. The next model turn does
+  not see the output unless the user quotes/copies it into a prompt. If this later changes, make it an explicit
+  feature with a visible "include shell output in context" affordance, because shell output can be large,
+  secret-bearing, or operationally noisy.
+- **Storybook first.** Build the prompt-input state in Storybook before host wiring: normal draft, slash-command
+  draft, empty bang draft, executable bang command, long bang command, and bang-with-attachments/error state.
+  The bang state changes the composer shell color immediately as the first `!` is typed: a compact `Shell` chip
+  and a terminal-like border/background distinct from slash-menu styling, context-pressure yellow, and tool
+  cards. The story must use the production composer styling path, not a story-only fake that can drift.
+- **Protocol and host events.** Add `user.shell {requestId, command}` and `shell.result {requestId, command,
+  text, ok}` to `@trevor/session`. The web publishes `user.shell`; the live leader runs `runShell(command)`
+  and emits exactly one `shell.result`. Replays never re-execute the command. Unknown/standby hosts ignore the
+  action just like current immediate commands. `/clear` resets transcript projection and UI history from that
+  point, but does not mutate prior durable shell events.
+- **Transcript rendering.** Render a single shell block keyed by `requestId`, showing `$ command` and the capped
+  output in monospace. Success uses a quiet frost/green terminal rail; refusal or command failure uses the same
+  surface with a red rail and `failed/refused` label. It must not share the assistant bubble, read-only
+  concurrent-tool grouping, tool-card chrome, or generic `CommandResult` chrome. The command itself is visible,
+  unlike current slash-command results, because the command is the user-owned action.
+- **First-cut exclusions.** Do not carry V1 shell promotion or top-level `!timeout` parsing into this cut unless
+  they already exist in V2's shared `runShell` path. `shell.promote` remains the separate backlog item, and
+  long-running process adoption should stay behind the existing supervisor/jobs design.
+- **Validation target.** Tests should cover protocol round-trip, composer classification, Storybook visual
+  states, immediate host execution, refusal through the bash safety floor, non-zero command failure, output
+  capping, replay not re-running commands, transcript pairing by `requestId`, `/clear` reset behavior, and
+  prompt projection ignoring both command and output.
+
+### Then: prompt composer recovery and history <!-- D-083 --><!-- D-084 -->
+
+Two prompt-editor ergonomics items are now captured as the follow-up after the bang shell lane, unless a later
+roadmap item is explicitly promoted ahead of them.
+
+- <!-- D-083 --> **Debounced browser-tab draft persistence.** Persist the current prompt draft in tab/session
+  storage, scoped by session id and browser tab identity, on a short debounce so reloads, hot restarts, and
+  transient web crashes do not lose mid-typed text. Restore only unsubmitted drafts; clear on successful submit,
+  `/clear`, or explicit user clearing. Attachments stay out of the first cut unless the blob upload state is
+  already durable enough to restore safely. This is browser local state, not a Richter event and not prompt
+  context.
+- <!-- D-084 --> **Up-arrow prompt history recall.** When the composer is empty, ArrowUp cycles through prior
+  submitted prompt texts for that tab/session, terminal-style. ArrowDown moves forward and eventually returns
+  to the empty/new draft. Multi-line editing keeps normal cursor movement unless the cursor is at the first
+  line and the draft is eligible for history navigation. Recall includes ordinary prompts and bang shell
+  commands as typed; it should not include hidden slash-command results or host-generated text. Persist enough
+  recent history locally for reload survival, with a small cap.
+
+### Soon: project launcher - `trevor` from any project <!-- D-085 -->
+
+The desired workflow is one terminal word from any project, not a copied env block. From a project directory,
+typing `trevor` should open or focus a browser tab on that project's Trevor session and ensure exactly one
+matching agent-host process is answering for that session. This is the first implementation slice of the broader
+D-061 browser/terminal session-manager direction.
+
+V1 comparison: V1's root package exposes a `trevor` bin that runs the Rust TUI, and the TUI's process launcher
+spawns the stdio RPC host from the invocation cwd, records host-process ownership, and reclaims stale
+Trevor-owned groups. That proves the useful ergonomic contract: one command, cwd-scoped host, owned process
+lifecycle. The browser V2 cut should carry that forward while dropping the TUI, stdio RPC coupling, and V1's
+workspace-switch machinery.
+
+V2 comparison: V2 already has the pieces but no launcher. The web app defaults to `?session=trevor-local`; the
+host defaults to `SESSION_ID=trevor-local`; the host can be pointed at a target repo with `TREVOR_WORKSPACE`
+and by starting from that cwd; `host.online` announces `cwd` and `workspace`; local mode uses the reserved
+Trevor services on `127.0.0.1:17420` (web), `17423` (blob), and `17424` (session-store). Today a second project
+requires manual `SESSION_ID`, `TREVOR_WORKSPACE`, cwd, and URL wiring. D-085 makes that wiring a product
+surface.
+
+- <!-- D-085 --> **One command, one project session.** Add a terminal executable named `trevor`. With no args,
+  it resolves the current project root, derives or looks up a stable URL-safe session id for that canonical
+  root, ensures the shared Trevor services are reachable, spawns or reuses the one matching agent-host process,
+  and opens `http://127.0.0.1:17420/?session=<id>` in a new/focused browser tab. No user should need to type
+  `SESSION_ID=...`, `TREVOR_WORKSPACE=...`, or a raw host command for the ordinary path.
+- **Project root and session identity.** Default root resolution is nearest Git worktree root from cwd; if none
+  exists, use cwd. Store the mapping under Trevor local state so the same project reopens the same session. The
+  generated session id is human-readable but collision-resistant, for example `<basename>-<short-hash>`, with no
+  slashes and no dependence on the current shell directory name alone. Add explicit overrides later (`trevor .`,
+  `trevor --new`, `trevor --session <id>`) only when the base path is reliable.
+- **Shared services are singletons; hosts are per project.** Do not start one browser server or session-store per
+  project. The launcher ensures the shared local services are up on the reserved Trevor ports, then starts one
+  agent-host per project/session. Each host gets `SESSION_ID=<derived-id>`, `TREVOR_WORKSPACE=<project-root>`,
+  and `cwd=<project-root>` so read/write/bash and AGENTS.md eager/lazy loading all describe the same project.
+- **Idempotent host lifecycle.** A second `trevor` from the same project reuses the existing healthy host and
+  opens the same session tab. A stale ownership record or dead process is replaced. Two concurrent launches for
+  the same project are serialized with a per-session lock so hosts do not contend for the same lease. Different
+  projects may run independent hosts at the same time.
+- **Launcher-owned diagnostics.** The command prints a concise status line: session id, project root, whether
+  services were reused or started, whether the host was reused or spawned, and the opened URL. Failures are
+  actionable: missing Node/pnpm/tsx/opchain, occupied reserved port, session-store unreachable, host failed to
+  announce, or browser-open failure. Secrets from `.env.op` or provider auth are never logged.
+- **Browser/UI handoff.** The app should tolerate opening before the host is online: it shows the session and a
+  clear "starting host" state from absence of live host presence, then switches to the announced workspace once
+  `host.online` arrives. The side panel remains the source of truth for the workspace label. A later full
+  session switcher can list these project sessions, but the first cut can rely on the direct URL.
+- **Validation target.** Tests should cover project-root resolution, stable/collision-safe session id generation,
+  state mapping persistence, singleton service health checks, host spawn env/cwd, host reuse, stale-host
+  replacement, concurrent launch locking, URL generation/opening, no duplicate host for one session, and manual
+  EZE from two different repos proving two browser tabs attach to two sessions with two matching host processes.
+
+### Soon: early transcript top-down growth <!-- D-086 -->
+
+New and short browser sessions should read like a page, not like an empty terminal well. The first user prompt
+and early assistant output should appear near the top of the transcript area and append downward. Only once the
+content exceeds the available transcript height should the view behave like a live chat log and follow the bottom
+while the user is already at the live edge.
+
+V1 comparison: V1 is a terminal TUI, so it is not a direct browser-layout precedent. It does have explicit
+scroll-layout concepts (`pinned-bottom` and `unified`) and a fixed prompt/footer area, which proves scroll
+position is a product decision rather than incidental rendering. This V2 item should not import a V1 setting
+surface; the browser default should simply be the better first-screen behavior.
+
+V2 comparison: Trevor web currently implements the transcript container as `flex-col-reverse` in `App.tsx`, with
+`scrollTop === 0` treated as the bottom. That makes the transcript bottom-pinned from the first paint, so a new
+session's first message appears just above the composer until enough content fills the page. D-086 replaces that
+with normal top-down document flow and explicit live-edge following.
+
+- <!-- D-086 --> **Short sessions start at the top.** Empty replayed sessions render an empty transcript area.
+  The first submitted user message appears at the top padding of the transcript well, followed by assistant
+  output below it. Additional early messages append downward without vertically bottom-aligning the group above
+  the composer.
+- **Overflow switches to live-bottom behavior.** When content grows taller than the viewport and the user is at
+  the live edge, new transcript updates scroll to the bottom. If the user scrolls upward, streaming and tool
+  updates do not yank the viewport; the existing jump-to-bottom affordance remains the way back to live output.
+- **Normal scroll math.** Replace the `flex-col-reverse` scroll model with normal column flow. `atBottom` should
+  mean `scrollHeight - clientHeight - scrollTop` is within tolerance; `scrollToBottom` should scroll to
+  `scrollHeight`, not `0`. Replay, `/clear`, queued prompts, compacting bars, and shell blocks should share the
+  same model.
+- **No fake spacer.** Do not solve this by adding a filler spacer that pushes early messages around. The
+  transcript list owns its natural top-down layout, while the composer/footer stay pinned below the scroll area.
+- **Validation target.** Storybook or fixture views should cover empty replayed session, one user message, a
+  short user/assistant exchange, just-before-overflow, overflowing transcript at live bottom, overflowing
+  transcript while scrolled up, mobile height, and desktop height. Browser tests should pin the scroll math for
+  normal top-down flow and prove early content is top-aligned until overflow.
+
+### Soon: project-local skill roots - `<cwd>/.agents/skills` <!-- D-087 -->
+
+Project-local skills should be readable from the project being worked on, in addition to the existing global or
+configured skill library. The useful behavior is: clone or open a repo, put reusable workflows under
+`.agents/skills`, and Trevor can discover and use those skills without installing them globally.
+
+V1 comparison: V1 documented the local/user/shared discovery pattern for skills. Its priority order started
+with project-local `<cwd>/.trevor/skills`, then user-local `~/.trevor/skills`, then shared paths from
+`~/.trevor/config.json[c]`. That establishes the important product contract: repo-local skills are valid and
+should beat broader defaults when the same skill id appears in more than one place.
+
+V2 comparison: V2 currently has a single skill root in `apps/agent-host/src/skills.ts`:
+`TREVOR_SKILLS_DIR` if set, otherwise `~/.agents/skills`. `discoverSkills()` scans only that one directory,
+`/skills` reports only that directory when empty, `buildSkillTool` loads one selected body from that list, and
+agent/delegate validation checks skill ids against that same discovered set. The current plan's D-075 already
+requires source/override provenance for future `skills_list` and `skill_view`, but it does not yet specify the
+project-local root.
+
+- <!-- D-087 --> **Read the project-local root first.** Discover skills from `<workspace>/.agents/skills`,
+  where `<workspace>` is the same effective root used by file tools (`TREVOR_WORKSPACE` / `WORKSPACE_ROOT`, or
+  process cwd when no workspace override exists). For ordinary project launches this is exactly
+  `<cwd>/.agents/skills`. This keeps skills, file access, shell cwd, and AGENTS.md loading aligned to one
+  project authority.
+- **Keep current global/configured roots.** This is additive. After the project-local root, keep the existing
+  configured root behavior: `TREVOR_SKILLS_DIR` when set, otherwise `~/.agents/skills`. Deduplicate identical
+  resolved roots. Future config files may add more shared roots, but this cut should not invent a new config
+  format.
+- **Project-local wins by id.** If an enabled project-local skill and a global/configured skill share the same
+  id, the project-local skill is the effective one. Preserve enough provenance to show the selected source and
+  any shadowed source in `/skills` now and in D-075's future `skills_list`/`skill_view` surfaces. A disabled
+  skill file is absent in this cut; it does not create a tombstone that hides a global skill.
+- **Progressive disclosure remains.** The compact skill roster, `skill(name)` compatibility tool, future
+  `skills_list`, and future `skill_view` all read from the same effective registry. The model should not get
+  full project-local skill bodies unless it explicitly loads the matching skill.
+- **No new execution bypass.** Project-local skills use the same parser, disabled handling, output caps, and
+  optional shell-interpolation gate as global skills. A repo-local skill cannot auto-run `!` interpolation
+  merely because it lives inside the project.
+- **Validation target.** Tests should cover local-only, global-only, missing-local, duplicate-id precedence,
+  disabled local files, root deduplication, `/skills` source display, `skill(name)` expanding the local override,
+  agent/delegate allow-list validation against the effective registry, and shell interpolation staying off by
+  default for project-local skills.
+
 ### Deferred (after Phase 5 search-tool upgrade): session recall <!-- D-044 -->
 
 On-demand retrieval of detail compaction folded away - "search my own past." Possible only because the full
@@ -588,14 +845,15 @@ does not proactively know whether the host can reach the public internet beyond 
 
 ### Later: browser/terminal session manager <!-- D-061 -->
 
-Trevor should support the browser workflow without losing the old terminal ergonomics: from any project directory,
-the user can launch or attach Trevor and land in a browser session whose host is rooted at that directory. This is
-**not shipped yet** and does not change the current `SESSION_ID` + `TREVOR_WORKSPACE` behavior.
+Trevor should support the browser workflow without losing the old terminal ergonomics. D-085 is the first
+concrete slice: `trevor` from a project root opens the browser session and starts/reuses the matching host.
+The remaining D-061 work is the richer session-management layer around that launcher. It is **not shipped yet**
+and does not change the current manual `SESSION_ID` + `TREVOR_WORKSPACE` behavior until D-085 lands.
 
-- <!-- D-061 --> **Cwd-targeted launch from any terminal directory.** Add a terminal entrypoint (name TBD) that
-  resolves the invoking shell's cwd, creates or reuses a session bound to that absolute directory, starts or attaches
-  the matching host runtime, and opens the web UI directly to that session. The cwd must be recorded as session
-  metadata, not inferred from whatever directory the monorepo dev script happened to use.
+- <!-- D-061 --> **Cwd-targeted launch is now specified by D-085.** The terminal entrypoint is named `trevor`;
+  it resolves a canonical project root, derives or looks up the session id, ensures shared services, starts or
+  reuses the matching host runtime, and opens the web UI directly to that session. The cwd/workspace must be
+  recorded as session/host metadata, not inferred from whatever directory the monorepo dev script happened to use.
 - **Browser-created sessions.** The web UI gains a create-session flow that accepts a target folder, creates a new
   durable session for that folder, starts the corresponding host runtime through the available supervisor/launcher,
   and navigates into the session once the host announces `host.online`.
@@ -606,9 +864,8 @@ the user can launch or attach Trevor and land in a browser session whose host is
   to list/open/kill sessions, and UI actions to stop a session's host runtime and mark or archive the browser-visible
   session. Killing a host is lifecycle management; it must not mutate or delete the durable session log by accident.
 - **Relationship to Phase 3.** This dovetails with the desktop shell's one-host-per-session/cwd model (D-021-D-024),
-  but may ship earlier as a browser-era local launcher/supervisor if that becomes the cleaner bridge. Either way, it
-  must preserve D-014: browser and host still communicate only through the session log; any launcher/supervisor owns
-  lifecycle only.
+  but now ships through the browser-era launcher/supervisor path in D-085. It must preserve D-014: browser and host
+  still communicate only through the session log; any launcher/supervisor owns lifecycle only.
 
 ### Deferred: provider auth/catalog + full model chooser <!-- D-065 -->
 
@@ -736,6 +993,13 @@ Sequence as each is picked up (no hard order locked here):
   **usage/metrics** surface remains separate (H-031, H-034).
 - **Browser/terminal session manager** is specified above as D-061: cwd-targeted terminal launch, browser-created
   folder sessions, session navigation, and kill/stop from terminal and UI.
+- **Prompt composer recovery/history** is specified above as D-083/D-084: debounced tab-local draft
+  persistence plus terminal-style Up-arrow/Down-arrow prompt recall for submitted prompts and bang shell
+  commands.
+- **Project launcher** is specified above as D-085: type `trevor` from any project to open the browser session,
+  start/reuse the matching host, and avoid manual `SESSION_ID`/`TREVOR_WORKSPACE` wiring.
+- **Early transcript layout** is specified above as D-086: new/short browser sessions start at the top and grow
+  downward until content overflows, then live-bottom following takes over.
 - **Output-style registry** is specified below as D-072: V1-compatible assistant styles as additive
   presentation prompt overlays, exposed through settings and `/style` without task/routing semantics (H-164).
 - **Doctor health surface** is specified below as D-073: V1-compatible structured diagnostics, rendered in
@@ -1235,7 +1499,8 @@ The first V2 discovery implementation should include:
 - **V1 and current V2 baseline.** V1 used a compact ambient skill roster plus `skills_list(query?, limit?)`
   and `skill_view(skillId)`. Current V2 uses a single `skill(name)` tool whose description carries skill ids
   and blurbs, then loads one full body. The target keeps the ambient awareness advantage, but replaces the
-  single-tool-description roster with structured prompt context plus list/view tools.
+  single-tool-description roster with structured prompt context plus list/view tools. D-087 defines the
+  project-local plus global/configured root order that this registry must read from.
 - **Hybrid skill awareness contract.** Tool-enabled turns should receive a compact `Available skills` roster:
   skill id, short description, and optional trigger summary, capped and explicitly marked when truncated. The
   model must not be left in a state where it has to guess that skills exist before it can ask for them.
@@ -1249,7 +1514,8 @@ The first V2 discovery implementation should include:
   not dumped.
 - **Source-of-truth registry.** The host owns discovery for skills, slash commands, command families, and later
   agents. Trevor web renders the structured registry/read models but does not independently scan the
-  filesystem or invent slash/skill/agent inventories. Non-web clients can still use the same protocol.
+  filesystem or invent slash/skill/agent inventories. Non-web clients can still use the same protocol. Skill
+  rows include root kind, source path, selected/shadowed status, and disabled/truncated status where relevant.
 - **Slash and command-family metadata.** Extend the command inventory beyond current `{name, summary, usage}`
   toward V1-style descriptors: owner, visibility, artifact type, argument metadata, routing mode, immediate
   host action, and command-family contract pointers. Rich helper UIs are optional renderers over that shared
@@ -1551,3 +1817,23 @@ move behind `skills_list(query?, limit?)` and `skill_view(skillId)`. The host ow
 commands, command families, and later agents; Trevor web renders structured read models instead of scanning or
 duplicating inventories. D-075 is authored here in markdown and still needs syncing into `plan.db` alongside
 D-040-D-074._
+
+_Updated 2026-06-26: **Prompt shell lane** added and promoted as D-082. Leading `!` in the prompt composer
+runs immediately through the protected host shell path and renders as a dedicated user-visible shell transcript
+block, without calling a model and without including command output in prompt context for the first cut.
+**Prompt composer recovery/history** is captured as D-083/D-084: debounced tab/session draft persistence and
+terminal-style Up-arrow/Down-arrow prompt recall. D-082-D-084 are authored here in markdown and still need
+syncing into `plan.db` alongside D-040-D-081._
+
+_Updated 2026-06-26: **Project launcher** added as D-085. The near-term browser workflow is `trevor` from any
+project directory: derive the project session, ensure shared services, spawn/reuse the matching agent-host, and
+open the browser tab without manual `SESSION_ID` or `TREVOR_WORKSPACE` setup. **Early transcript layout** added
+as D-086: new/short browser sessions should start at the top of the transcript and grow downward until overflow,
+then use live-bottom following. D-085-D-086 are authored here in markdown and still need syncing into `plan.db`
+alongside D-040-D-084._
+
+_Updated 2026-06-26: **Project-local skill roots** added as D-087. V2 should discover
+`<workspace>/.agents/skills` before the existing configured/global skill root so projects can carry their own
+skills without global installation. Project-local skills override broader skills by id, while `/skills` and the
+future D-075 `skills_list`/`skill_view` surfaces retain source and shadowing provenance. D-087 is authored here
+in markdown and still needs syncing into `plan.db` alongside D-040-D-086._
