@@ -7,6 +7,7 @@ export * from "./event";
 export * from "./identity";
 export * from "./image-tokens";
 export * from "./inventory";
+export * from "./model-preferences";
 export * from "./model-source";
 export * from "./protocol";
 export * from "./recall";
