@@ -929,27 +929,92 @@ grouping by base repo, cwd-level advisory locks, and merge/reconcile/delete flow
   no transcript/prompt leakage across switches, and merge/delete confirmation behavior when that milestone is
   implemented.
 
-### Deferred (after Phase 5 search-tool upgrade): session recall <!-- D-044 -->
+### Soon: session recall <!-- D-044 -->
 
-On-demand retrieval of detail compaction folded away - "search my own past." Possible only because the full
-log survives compaction (D-042). **Explicitly sequenced after Phase 4 subagents and Phase 5 search-tool
-upgrade.** It depends on subagent isolation, not on the code-search tools, but the search-tool upgrade is now
-the immediately-after-Phase-4 slot. Recall runs as an **isolated sub-agent**: a search hit is an *anchor*, not
-the answer - the substantive discussion may live in the turns *around* the match (sometimes while those turns
-were nominally about another topic), so recall expands each anchor to its **neighborhood** and reasons over it.
-That neighborhood can be large and tangential, so the digging happens in a sub-agent with its **own context
-budget**, returning only a distilled, cited answer to the main turn (a librarian who reads the chapter around
-the page and hands back the answer).
+On-demand retrieval of older conversation detail that is no longer in the model's active prompt. The durable
+session log survives compaction (D-042), but the active prompt projection intentionally drops or summarizes old
+detail. Session recall gives the model a way to search that unavailable-to-context history when the user asks a
+question that needs remembered prior discussion.
 
-- <!-- D-044 --> **`session recall` tool**, model-driven - the compacted prompt's fold manifest (D-042)
-  advertises the recallable gaps so the model knows what to ask for. Search = **BM25** (lexical, ranked, no
-  embeddings/index infra - built on-demand over the session's events) combined with structured pre-filters
-  (tool / turn-range / type), then **neighborhood expansion** around each hit. **This session only - no
-  cross-fork recall** for now; embeddings/semantic retrieval stay deferred behind BM25.
-- **Depends on:** the subagents feature (isolation) + the D-042 fold manifest (anchors). Distinct from the
-  §7 backlog "Code retrieval / search" row, which searches the *codebase*, not the conversation log.
+Despite the name, the intended scope is the **project's session corpus**, not only the currently active durable
+session. It searches compacted-away detail inside the current durable session and other durable sessions for the
+same project/workspace. It does not search recent visible turns that are already in the active prompt.
 
-### Deferred: internet connectivity awareness <!-- D-060 -->
+Recall runs as an **isolated sub-agent**: a search hit is an *anchor*, not the answer - the substantive
+discussion may live in the turns *around* the match, sometimes while those turns were nominally about another
+topic. Recall expands each anchor to its **neighborhood** and reasons over those neighborhoods with its own
+context budget, returning only distilled, cited findings to the main turn.
+
+- <!-- D-044 --> **`session recall` tool**, model-driven. There is no slash command in the first cut. The model
+  decides to call the tool after a user asks something that needs older project/session memory. Search = **BM25**
+  (lexical, ranked, no embeddings/index infra) over recallable conversation records, combined with structured
+  pre-filters such as session/project, turn range, event type, tool name, and folded-span id.
+- **Recallable corpus.** Include compacted-away detail in the current durable session plus other durable
+  sessions for the same project/workspace. Exclude recent turns already present in the active prompt. The
+  project mapping should use the same root/session identity model as the launcher and resume/session inventory.
+- **Citations and traceability.** Results carry stable source pointers: session id/label, workspace/project,
+  turn id or event range, timestamp, excerpt, match score, and neighborhood bounds. The final assistant answer
+  may cite human-readable session labels/timestamps, while ids remain available for debugging and audit.
+- **Visible UI result.** Recall is not hidden reasoning. The transcript shows a visible `Session recall`
+  tool/result with a compact summary such as sessions searched, folded spans searched, and neighborhoods found,
+  plus collapsed or compact source rows/snippets. Design this result state Storybook-first before app wiring.
+- **Deferred ambient memory.** Automatic/ambient remembering or proactive injection stays deferred. The first
+  cut only recalls when the model explicitly calls the tool in response to the user's current task.
+- **Depends on:** subagent isolation, D-042 compaction fold metadata, session inventory/project mapping from the
+  session-manager work, and a visible tool-result rendering path. Distinct from the §7 backlog "Code retrieval /
+  search" row, which searches the *codebase*, not the conversation log.
+
+### Soon: image attachment UX - inline tokens, transcript images, carousel <!-- D-092 -->
+
+Trevor already has blob-backed image artifacts (D-028), but the browser image experience is still too coarse.
+Images are attached as a side list, user transcript rendering uses generic thumbnails, and queued prompts do not
+show the precise position where an image was inserted. The desired UX is closer to V1's `[Image #N]` token
+model, adapted to V2's content-addressed blob store and browser UI.
+
+V1 comparison: V1 inserted `[Image #N]` tokens at the cursor for pasted image paths or clipboard images,
+preserved those token positions in the transcript, stripped the tokens from provider text, and sent the images
+as hidden attachments. It also had extensive clipboard-image paste handling for terminal limitations. That
+token model carries forward; the terminal-specific clipboard machinery does not.
+
+V2 comparison: V2 already uploads picked, pasted, or dropped files to the blob store as `ArtifactRef`s; `user.message`
+carries `artifacts`; the send queue preserves attached artifacts; the host resolves image blobs for vision
+providers; and transcript replay keeps artifact refs. What is missing is inline attachment placement, token
+highlighting, hover preview, responsive natural transcript image layout, and a same-message image carousel.
+
+- <!-- D-092 --> **Storybook-first image attachment UX.** Build the composer token states, queued prompt states,
+  transcript image layout, hover preview, and carousel dialog in Storybook before live wiring. Use production
+  components and fixture `ArtifactRef`s; do not create a story-only image renderer that can drift from replay.
+- **Inline `[Image #N]` text tokens, not rich embedded editor nodes.** Keep the normal text composer behavior,
+  but render an overlay or mirror layer that syntax-highlights `[Image #N]` ranges and provides hover/focus
+  affordances. The visible token text remains part of the draft and transcript so placement is explicit.
+- **Insertion and deletion contract.** Pasting with Cmd+V, dropping, or picking an image uploads it, inserts
+  `[Image #N]` at the cursor, and adds spacing so the token does not stick to adjacent words. Backspace/Delete
+  next to a token removes the whole token and its artifact ref in one step. Removing a token keeps text and
+  attachment refs in sync; token numbers should stay deterministic in reading order.
+- **Hover preview.** Hovering or focusing a token shows a small image preview popover sourced from the blob
+  store. The preview is bounded to 300px wide and 300px tall, preserves aspect ratio, and degrades to a broken
+  or unavailable state without hiding the token.
+- **Queue preservation.** A queued prompt must render the same inline token text and carry the same artifacts
+  while waiting. Hard steer keeps queued image tokens and attached artifacts together instead of flattening the
+  image placement into a side list.
+- **Transcript natural image layout.** Submitted user messages preserve token positions in text and render the
+  attached images at their natural dimensions, constrained by responsive max width and max height per image.
+  Images must not be cropped by default; use contained sizing with original aspect ratio. Multiple images in one
+  user message belong to one image set.
+- **Same-message carousel.** Clicking any transcript image opens a centered dialog carousel for the images in
+  that same user message. The carousel is not full screen, but large enough for inspection; it supports previous
+  and next controls, keyboard navigation, Escape close, image count, and responsive sizing.
+- **Provider projection.** The model-facing text should not include literal `[Image #N]` tokens unless a
+  provider requires a textual marker. For providers that support image blocks, preserve the user-visible order as
+  much as the adapter allows by interleaving text and image blocks or, where the provider API only supports a
+  text block plus images, stripping tokens from text while sending images in token order. Non-vision providers
+  receive a clear attachment note.
+- **Validation target.** Tests should cover token insertion at cursor, auto spacing, Cmd+V image paste, multi-image
+  paste/drop, one-step token deletion, token/ref synchronization, queued prompt rendering, hard-steer preservation,
+  transcript natural sizing, same-message carousel navigation, broken/unavailable image states, and provider
+  projection stripping or converting tokens while preserving image order.
+
+### Soon: internet connectivity awareness <!-- D-060 -->
 
 This is the narrowed version of the old "offline detection & recovery" backlog item. It is **not shipped yet**:
 today the app can observe local session transport status, live host presence, and provider-stream failures, but it
@@ -963,22 +1028,29 @@ does not proactively know whether the host can reach the public internet beyond 
   public-internet outage are different states with different fixes. Do not infer "internet offline" from local
   session-store or Richter disconnect alone. Keep host presence/status UI separate from internet-connectivity notices.
 - **One check, one meaning.** Add a host-side connectivity service with a small WAN probe (DNS + HTTPS to
-  configured public endpoints, cached briefly, e.g. 10-30s). It reports `online`, `offline`, or `unknown` plus
-  last checked time and last probe error. It does not classify provider health, provider auth, provider overload,
-  rate limits, or model availability.
+  configured public endpoints, cached briefly, about 30s). It reports `online`, `offline`, or `unknown`, plus a
+  transient `checking` flag while a probe is in flight, last checked time, staleness, and last sanitized probe
+  error. It does not classify provider health, provider auth, provider overload, rate limits, or model availability.
+- **Refresh and protocol shape.** Probe on host start, reuse the cached snapshot for ordinary UI reads, allow an
+  explicit UI refresh, and optionally kick an async refresh before a cloud turn when the snapshot is stale. Refresh
+  must not block the turn. The latest snapshot is included on `host.online`; later changes or refresh completions
+  emit a small `host.internet` status event. These events are live status, not conversation memory.
 - **No automatic model switching.** If the user selected a local model, the turn uses that local model. If the
   user selected a cloud model, the turn uses that cloud model. Cloud failures never trigger a local turn, and
   offline status never silently rewrites the user's selected model. Do not add pre-turn cloud-to-local fallback,
   reactive local retry, or an `assistant.providerFallback` event for this item.
-- **User-visible advisory only.** Internet status can appear in the UI, the model-source chooser, logs, and
-  `/doctor`. If the selected model is cloud and the host is currently offline, the UI may warn, but it must not
-  substitute a local model or route the turn elsewhere without explicit user action.
+- **User-visible advisory only.** Internet status can appear near the model/source area, in the model-source
+  chooser, logs, Storybook states, and `/doctor`. If the selected model is cloud and the host is currently offline,
+  the UI may warn, but it must not substitute a local model or route the turn elsewhere without explicit user
+  action. Local-model turns are unaffected by offline status.
 - **Doctor/debug surface.** `/doctor` should show host internet status, last probe time, last probe error, and
-  probe target class without dumping credentials or full request payloads. It should not report a fallback target
-  because this feature has no fallback behavior.
+  probe target class without dumping credentials or full request payloads. It should also show staleness/checking
+  state and sanitized DNS/HTTPS failure class. It should not report a fallback target because this feature has no
+  fallback behavior.
 - **Validation target.** Tests should cover LAN-up/WAN-down status, browser `navigator.onLine` disagreeing with
   the host probe, local session-store disconnect not implying internet offline, cloud request failure not causing
-  a local retry, local-selected turns unaffected by offline status, and UI rendering of the advisory status.
+  a local retry, local-selected turns unaffected by offline status, cloud-selected UI warnings while offline,
+  `checking`/stale rendering, and UI rendering of the advisory status.
 
 ### Later: browser/terminal session manager <!-- D-061 -->
 
@@ -1148,6 +1220,9 @@ Sequence as each is picked up (no hard order locked here):
   project first with global search, and never inferred from cwd, clear, cd, or reload.
 - **Managed worktrees** is specified above as D-091: Trevor-owned worktree registry, Storybook-first switcher,
   create/list/switch flow, cwd locks, safety boundaries, and later merge/reconcile/delete.
+- **Image attachment UX** is specified above as D-092: Storybook-first inline `[Image #N]` composer tokens,
+  Cmd+V image paste, hover previews, queue preservation, natural transcript image layout, same-message carousel,
+  and provider projection over existing blob-backed artifacts.
 - **Output-style registry** is specified below as D-072: V1-compatible assistant styles as additive
   presentation prompt overlays, exposed through settings and `/style` without task/routing semantics (H-164).
 - **Doctor health surface** is specified below as D-073: V1-compatible structured diagnostics, rendered in
@@ -1825,7 +1900,7 @@ _Updated 2026-06-24: overflow recovery **shipped** (status event renamed `assist
 the next feature (D-040…D-043: hybrid pin+drop+summarize; trigger = background-after-turn at 80% +
 blocking-before guard + recovery airbag, compact-to ~50%; durable non-mutating `context.compacted` rolling
 event with a per-fold delta manifest; tool-less ~1k summary on the turn model with a local↔cloud-routing future). **Session recall** added as
-a deferred post-subagents layer (D-044: isolated sub-agent, BM25 + neighborhood expansion, this-session-only).
+a post-subagents layer (D-044: isolated sub-agent, BM25 + neighborhood expansion over compacted-away current-session detail plus other durable sessions for the same project).
 **Subagents** promoted from backlog to the feature after compaction (D-045…D-049: reusable
 general-purpose + explorer agents, file-based discovery, inline + read-only background modes, strict context
 isolation with forkable child runs, and runtime-minted ephemeral definitions; verifier/teams/bounded-child stay
@@ -1995,3 +2070,24 @@ worktrees** added and promoted from H-140 as D-091: Trevor-managed worktrees und
 Storybook-first switcher, create/list/switch flow, cwd locks, safety boundaries, and later
 merge/reconcile/delete. D-088-D-091 are authored here in markdown and still need syncing into `plan.db`
 alongside D-040-D-087._
+
+_Updated 2026-06-26: **Session recall** (D-044) clarified before progress-report decomposition. The feature
+keeps the name "session recall," but its scope is the current project's durable session corpus: compacted-away
+detail in the current durable session plus other durable sessions for the same project/workspace. It is a
+model-facing tool only, with no slash command in the first cut; it searches only material outside the active
+prompt, returns cited neighborhoods through an isolated recall subagent, renders a visible Storybook-first
+`Session recall` transcript result, and defers ambient/proactive remembering. D-044 still needs syncing into
+`plan.db` alongside D-040-D-091._
+
+_Updated 2026-06-26: **Image attachment UX** added as D-092. V2 keeps the existing blob-backed `ArtifactRef`
+transport, but adds the user-facing image experience: inline `[Image #N]` text tokens in the composer,
+syntax-highlighted through an overlay/mirror layer, Cmd+V image paste, one-step token deletion, hover previews
+bounded to 300px, queued prompt preservation, natural transcript image sizing, same-message carousel, and
+provider projection that strips or converts tokens while preserving image order. D-092 is authored here in
+markdown and still needs syncing into `plan.db` alongside D-040-D-091._
+
+_Updated 2026-06-26: **Internet connectivity awareness** (D-060) clarified for decomposition. The feature is
+host-owned public-internet status only: `online`/`offline`/`unknown` plus transient checking, DNS plus HTTPS
+public probes cached around 30 seconds, latest snapshot on `host.online`, refresh updates on `host.internet`,
+advisory UI near model/source selection, `/doctor` diagnostics, and no automatic local/cloud fallback or routing.
+D-060 still needs syncing into `plan.db` alongside D-040-D-092._
