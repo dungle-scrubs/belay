@@ -295,14 +295,14 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 - [ ] Debug stop/kill controls are gated or confirmed and clearly describe lifecycle effects
 - [ ] Stale or inactive status is visible without implying the user must stop or kill anything
 - [ ] Normal UI filters archived sessions out of D-093 and D-090 surfaces
-- [ ] Web tests assert stop, kill, and archive controls are absent from the normal sidebar
+- [x] Web tests assert stop, kill, and archive controls are absent from the normal sidebar
 
 ### M5: Verification
 
 - [ ] Tests prove cancel and stop are different lifecycle operations
 - [ ] Tests prove stop cancels active work, clears queued work, releases the host, and keeps the durable log
 - [ ] Tests prove kill force terminates the host while preserving durable history
-- [ ] Tests prove archive and unarchive update metadata and filtering without deleting logs
+- [x] Tests prove archive and unarchive update metadata and filtering without deleting logs
 - [ ] Tests cover CLI list, list --archived, open, archive, unarchive, stop, and kill
 - [ ] Tests cover debug-only UI exposure and normal-UI absence of lifecycle controls
 - [ ] Manual EZE repro: cancel a turn, stop a session, archive/unarchive it, and verify the sidebar/resume filtering plus durable history behavior
@@ -669,10 +669,10 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
-- Live open follow-up (D-094 session lifecycle controls): 38 features, 20 completed, 18 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 38 completed, 13 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 202 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 200 unchecked items plus 5 partial/gated carry-forward items
