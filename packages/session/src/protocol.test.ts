@@ -176,6 +176,42 @@ test("context.compacting round-trips the live fold-progress tick", () => {
   });
 });
 
+test("user.shell + shell.result round-trip through decodeTrevorEvent (D-082)", () => {
+  const shell = decodeTrevorEvent(
+    stored(events.userShell({ requestId: "req-1", command: "printf hello" })),
+  );
+  assert.deepEqual(shell, { type: "user.shell", requestId: "req-1", command: "printf hello" });
+
+  const result = decodeTrevorEvent(
+    stored(
+      events.shellResult({
+        requestId: "req-1",
+        command: "printf hello",
+        output: "hello",
+        ok: true,
+      }),
+    ),
+  );
+  assert.deepEqual(result, {
+    type: "shell.result",
+    requestId: "req-1",
+    command: "printf hello",
+    output: "hello",
+    ok: true,
+  });
+});
+
+test("shell.result coerces a missing ok to false and a missing requestId to the event id", () => {
+  const decoded = decodeTrevorEvent(
+    stored({ type: "shell.result", payload: { command: "x" } }, { eventId: "ev-shell" }),
+  );
+  assert.equal(decoded?.type, "shell.result");
+  if (decoded?.type !== "shell.result") return;
+  assert.equal(decoded.ok, false);
+  assert.equal(decoded.requestId, "ev-shell");
+  assert.equal(decoded.output, "");
+});
+
 test("a malformed context.compacted manifest coerces to empty arrays, never throws", () => {
   const decoded = decodeTrevorEvent(
     stored({ type: "context.compacted", payload: { summary: "s", manifest: "nope" } }),

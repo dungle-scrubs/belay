@@ -313,6 +313,28 @@ export const events = {
     payload: { command: p.command, text: p.text, ok: p.ok },
   }),
   /**
+   * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately
+   * through the live leader's protected `runShell` path, bypassing the model and the turn queue.
+   * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
+   * fed back into the model context for this cut (history projection ignores both events).
+   */
+  userShell: (p: { requestId: string; command: string }): TrevorEventInput => ({
+    type: "user.shell",
+    payload: { requestId: p.requestId, command: p.command },
+  }),
+  /** The leader's result for a user.shell (rendered as a terminal block, never fed to the model).
+   *  `ok` is false for a refused (safety floor) or non-zero / timed-out command; `output` is the
+   *  capped command output (or the refusal/failure text). */
+  shellResult: (p: {
+    requestId: string;
+    command: string;
+    output: string;
+    ok: boolean;
+  }): TrevorEventInput => ({
+    type: "shell.result",
+    payload: { requestId: p.requestId, command: p.command, output: p.output, ok: p.ok },
+  }),
+  /**
    * Browser asks the host to open a file in the local editor. A side-channel
    * action - not part of the conversation, so it never renders in the transcript
    * nor reaches the model. The host runs its configured editor CLI.
@@ -650,6 +672,14 @@ export type DecodedEvent =
       readonly text: string;
       readonly ok: boolean;
     }
+  | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
+  | {
+      readonly type: "shell.result";
+      readonly requestId: string;
+      readonly command: string;
+      readonly output: string;
+      readonly ok: boolean;
+    }
   | {
       readonly type: "editor.open";
       readonly path: string;
@@ -795,6 +825,22 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         type: "command.result",
         command: str(p.command),
         text: str(p.text),
+        ok: p.ok === true,
+      };
+    case "user.shell":
+      // A missing requestId falls back to the event's own id, so a forward-compat event still
+      // pairs with its result rather than collapsing distinct shell runs together.
+      return {
+        type: "user.shell",
+        requestId: str(p.requestId, event.eventId),
+        command: str(p.command),
+      };
+    case "shell.result":
+      return {
+        type: "shell.result",
+        requestId: str(p.requestId, event.eventId),
+        command: str(p.command),
+        output: str(p.output),
         ok: p.ok === true,
       };
     case "editor.open":

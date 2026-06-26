@@ -41,6 +41,7 @@ import { Emit } from "./services";
 import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
+import { runShell, shellOutcome } from "./tools/run-shell";
 import { msg } from "./tools/shared";
 import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
@@ -628,6 +629,17 @@ async function forceCompact(): Promise<string> {
 }
 
 /**
+ * Runs a prompt-shell-lane command (a leading `!`) through the shared protected `runShell` path and
+ * publishes one `shell.result` (paired by requestId). Like an immediate command this bypasses the
+ * model and the turn queue and runs even while a turn streams - but unlike a command its output never
+ * enters the model context (D-082). A refusal (safety floor) or non-zero/timeout maps to `ok: false`.
+ */
+async function runShellCommand(requestId: string, command: string): Promise<void> {
+  const { output, ok } = shellOutcome(await runShell(command));
+  await emit(events.shellResult({ requestId, command, output, ok }));
+}
+
+/**
  * Runs an immediate host command and publishes its result. Unlike a user.message
  * this never touches the model or the turn queue - it executes now, even while a
  * turn is streaming, and answers with a single command.result.
@@ -800,6 +812,16 @@ function handleEvent(message: SessionEvent): void {
       log("host", "editor.open", { path: decoded.path });
       openInEditor(decoded.path, decoded.line, decoded.column).catch((error) =>
         warn("host", "editor.open failed", { path: decoded.path, error: msg(error) }),
+      );
+    }
+  } else if (decoded.type === "user.shell" && message.producerId !== PRODUCER_ID) {
+    // The prompt shell lane (D-082): a leading `!` ran a command. Like commands and editor.open it
+    // is an ACTION, not state to rebuild - only the live leader executes it, never on replay or a
+    // standby, so a reload never re-runs the command. The result is published as a `shell.result`
+    // (paired by requestId), rendered as a terminal block; it never enters the model context.
+    if (live && lease.isLeader() && decoded.command.trim()) {
+      runShellCommand(decoded.requestId, decoded.command).catch((error) =>
+        warn("host", "shell failed", { error: msg(error) }),
       );
     }
   } else if (decoded.type === "tasks.current") {

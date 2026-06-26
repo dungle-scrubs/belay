@@ -65,3 +65,13 @@ export function renderShell(result: ShellResult): string {
       return result.output;
   }
 }
+
+/**
+ * Maps a ShellResult to the `{ output, ok }` shape the prompt shell lane (D-082) publishes on a
+ * `shell.result`: the rendered text, and `ok: true` only for a clean success (a refusal or a
+ * non-zero / timed-out command reports `ok: false`). The single place that mapping lives, so the
+ * host's shell-lane handler and its tests can't drift on what counts as a failure.
+ */
+export function shellOutcome(result: ShellResult): { output: string; ok: boolean } {
+  return { output: renderShell(result), ok: result.kind === "ok" };
+}

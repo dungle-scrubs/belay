@@ -369,3 +369,27 @@ test("maps artifacts onto the user turn, omitting the key when there are none", 
     { role: "user", content: "no file" },
   ]);
 });
+
+test("D-082: user.shell / shell.result are prompt-invisible (never reach the model)", () => {
+  // A leading `!` ran a command, but for this cut the output is user-visible only. The projection
+  // must carry the surrounding turn untouched and include nothing from the shell pair.
+  const history = project([
+    ev(events.userMessage({ text: "what is in this repo?", provider: "qwen" })),
+    ev(events.assistantCompleted({ runId: "r1", text: "a monorepo" }), SELF),
+    ev(events.userShell({ requestId: "rq1", command: "printf hello" })),
+    ev(
+      events.shellResult({ requestId: "rq1", command: "printf hello", output: "hello", ok: true }),
+    ),
+    ev(events.userMessage({ text: "thanks", provider: "qwen" })),
+  ]);
+  assert.deepEqual(history, [
+    { role: "user", content: "what is in this repo?" },
+    { role: "assistant", content: "a monorepo" },
+    { role: "user", content: "thanks" },
+  ]);
+  // No message mentions the shell command or its output.
+  assert.equal(
+    history.some((m) => typeof m.content === "string" && m.content.includes("hello")),
+    false,
+  );
+});
