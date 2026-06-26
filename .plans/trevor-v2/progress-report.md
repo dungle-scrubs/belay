@@ -167,7 +167,7 @@ Source: future host connectivity service, `apps/agent-host/src/main.ts`, `packag
 - [x] `/doctor` reports DNS/HTTPS probe class and sanitized last error
 - [x] `/doctor` omits credentials, auth headers, full request payloads, and any sensitive endpoint material
 - [x] `/doctor` never reports a fallback target because D-060 has no fallback behavior
-- [ ] Host logs use structured, redacted probe fields for status changes and probe failures
+- [x] Host logs use structured, redacted probe fields for status changes and probe failures
 - [x] `/doctor` distinguishes internet reachability from host presence, session-store connectivity, and provider health
 
 ### M5: No routing side effects and verification
@@ -667,7 +667,7 @@ registry-derived capability manifest D-074.
 - Archived completed checklist detail: [progress-report-done.md](./progress-report-done.md)
 - Shipped (archived): D-044 session recall - 38 features, 37 completed, 1 gated manual EZE repro
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
-- Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
+- Live open follow-up (D-060 internet connectivity awareness): 40 features, 38 completed, 2 remaining (explicit-UI-refresh wiring, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 15 completed, 47 remaining
@@ -675,4 +675,4 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 182 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 181 unchecked items plus 5 partial/gated carry-forward items
