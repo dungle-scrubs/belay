@@ -51,8 +51,7 @@ import {
 } from "./derive";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { Markdown } from "./markdown";
-import { ensureSession } from "./session/client";
-import { useSession } from "./session/use-session";
+import { ensureSession, useSession, useSessionActions } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
 import {
   panelModel,
@@ -113,8 +112,8 @@ export function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { events, status, replayed, presence, publish, cancel, command, openInEditor } =
-    useSession(sessionId);
+  const { events, status, replayed, presence } = useSession(sessionId);
+  const { publish, cancel, command, openInEditor } = useSessionActions(sessionId);
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.

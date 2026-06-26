@@ -1,36 +1,120 @@
+import { richterTransport } from "@trevor/richter";
 import {
   type ArtifactRef,
+  type ConnectionStatus,
+  type HostPresence,
   PRODUCER_IDS,
+  type PublishInput,
+  RUNTIME_KIND,
+  type SessionConnection,
   type SessionEvent,
+  type SessionIdentity,
   events as sessionEvents,
+  streamTransport,
   type TrevorEventInput,
 } from "@trevor/session";
 import { useCallback, useEffect, useState } from "react";
-import { type ConnectionStatus, connect, type HostPresence, publishEvent } from "./client";
 
-export interface SessionState {
+export type { ConnectionStatus, HostPresence };
+
+/**
+ * The web session boundary: the transport binding (backend selection + this tab's identity) plus the
+ * two React hooks the app subscribes through. Receiving and acting are split (D-018):
+ *   - `useSession` accumulates the replay-then-tail event stream into state (read side),
+ *   - `useSessionActions` publishes user intents - prompt / cancel / command / editor-open (write side).
+ * The thin transport pass-through that used to live in a separate `client.ts` is folded in here, so the
+ * web's view of the contract is one module. The stream URL, decode loop, and REST calls live in
+ * `@trevor/session`, so host and browser can never drift on the protocol.
+ */
+
+// Backend selection (the plugin seam): by default the browser talks same-origin to the local
+// session-store, which the Vite dev proxy forwards /sessions (REST + WS) to (no CORS). Set
+// VITE_RICHTER_URL to opt into Richter instead (a Richter that serves CORS directly).
+const RICHTER_URL = import.meta.env.VITE_RICHTER_URL;
+const transport = RICHTER_URL
+  ? richterTransport(RICHTER_URL)
+  : streamTransport(window.location.origin);
+
+// Identity is per-tab and persisted in sessionStorage, so a page reload reuses it instead of
+// registering a new participant on every load. sessionStorage (not localStorage) scopes it to this
+// tab, keeping distinct tabs and devices as distinct presences - a session moves between machines by
+// URL (?session=), never by identity. Storage can throw (private mode); fall back to an ephemeral id.
+const IDENTITY_KEY = "trevor-web-identity";
+
+function webIdentity(): SessionIdentity {
+  try {
+    const cached = sessionStorage.getItem(IDENTITY_KEY);
+    if (cached) {
+      return JSON.parse(cached) as SessionIdentity;
+    }
+  } catch {
+    // storage unavailable: fall through to a fresh, non-persisted identity
+  }
+
+  const identity: SessionIdentity = {
+    displayName: "trevor-web",
+    runtimeKind: RUNTIME_KIND.web,
+    instanceId: crypto.randomUUID(),
+    participantId: `web-${crypto.randomUUID()}`,
+  };
+
+  try {
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+  } catch {
+    // ignore: an ephemeral identity still works for this load
+  }
+
+  return identity;
+}
+
+interface ConnectOptions {
+  readonly sessionId: string;
+  readonly afterSeq?: number;
+  readonly onEvent: (event: SessionEvent) => void;
+  readonly onReplayComplete?: () => void;
+  readonly onStatus?: (status: ConnectionStatus) => void;
+  readonly onPresence?: (hosts: readonly HostPresence[]) => void;
+}
+
+/** Opens a session stream as this tab's stable web participant (replay-then-tail). */
+function connect(options: ConnectOptions): SessionConnection {
+  return transport.connectSession({
+    sessionId: options.sessionId,
+    afterSeq: options.afterSeq,
+    identity: webIdentity(),
+    onEvent: options.onEvent,
+    onReplayComplete: options.onReplayComplete,
+    onStatus: options.onStatus,
+    onPresence: options.onPresence,
+  });
+}
+
+/** Publishes one event to the durable log via REST; it returns over the stream. */
+function publishEvent(sessionId: string, input: PublishInput): Promise<void> {
+  return transport.publishEvent(sessionId, input);
+}
+
+/** Ensures a session with the given id exists (idempotent) and returns it. */
+export function ensureSession(sessionId: string): Promise<string> {
+  return transport.ensureSession(sessionId);
+}
+
+// --- read side: the live event stream ---
+
+export interface SessionStream {
   readonly events: readonly SessionEvent[];
   readonly status: ConnectionStatus;
   readonly replayed: boolean;
   /**
-   * The hosts connected to the session right now, as the backend's live transport
-   * reports it - or null when the backend never reports presence (e.g. Richter), so
-   * callers can fall back to the event-log view instead of reading null as "no host".
+   * The hosts connected to the session right now, as the backend's live transport reports it - or null
+   * when the backend never reports presence (e.g. Richter), so callers can fall back to the event-log
+   * view instead of reading null as "no host".
    */
   readonly presence: readonly HostPresence[] | null;
-  readonly publish: (
-    text: string,
-    provider: string,
-    reasoning?: string,
-    artifacts?: readonly ArtifactRef[],
-  ) => Promise<void>;
-  readonly cancel: (runId: string) => Promise<void>;
-  readonly command: (command: string, args: string) => Promise<void>;
-  readonly openInEditor: (path: string, line?: number, column?: number) => Promise<void>;
 }
 
-/** Subscribes to a session: replay-then-tail into state, plus publish. */
-export function useSession(sessionId: string | null): SessionState {
+/** Subscribes to a session: replay-then-tail into state. The read side of the session boundary. */
+export function useSession(sessionId: string | null): SessionStream {
   const [events, setEvents] = useState<readonly SessionEvent[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [replayed, setReplayed] = useState(false);
@@ -53,10 +137,32 @@ export function useSession(sessionId: string | null): SessionState {
     return () => connection.close();
   }, [sessionId]);
 
-  // Every browser-published event is stamped with the shared web producer id
-  // (PRODUCER_IDS.web, owned in @trevor/session) and gated on a live session, so that
-  // guard lives here once and the public methods below are one-line delegations to the
-  // matching event builder.
+  return { events, status, replayed, presence };
+}
+
+// --- write side: publishing user intents ---
+
+export interface SessionActions {
+  readonly publish: (
+    text: string,
+    provider: string,
+    reasoning?: string,
+    artifacts?: readonly ArtifactRef[],
+  ) => Promise<void>;
+  readonly cancel: (runId: string) => Promise<void>;
+  readonly command: (command: string, args: string) => Promise<void>;
+  readonly openInEditor: (path: string, line?: number, column?: number) => Promise<void>;
+}
+
+/**
+ * The user intents a session accepts: a prompt, a hard-steer cancel, a slash command, and an
+ * editor-open side-channel. The write side of the session boundary, separate from the read stream so a
+ * caller that only acts (or only receives) depends on just that half.
+ */
+export function useSessionActions(sessionId: string | null): SessionActions {
+  // Every browser-published event is stamped with the shared web producer id (PRODUCER_IDS.web, owned
+  // in @trevor/session) and gated on a live session, so that guard lives here once and the public
+  // methods below are one-line delegations to the matching event builder.
   const publishVia = useCallback(
     async (built: TrevorEventInput) => {
       if (!sessionId) {
@@ -73,8 +179,8 @@ export function useSession(sessionId: string | null): SessionState {
     [publishVia],
   );
 
-  // Hard steering: ask the host to abort the active run. runId may be empty when
-  // the browser fires ESC before assistant.started lands (cancel "whatever runs").
+  // Hard steering: ask the host to abort the active run. runId may be empty when the browser fires ESC
+  // before assistant.started lands (cancel "whatever runs").
   const cancel = useCallback(
     (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
     [publishVia],
@@ -86,13 +192,13 @@ export function useSession(sessionId: string | null): SessionState {
     [publishVia],
   );
 
-  // Side-channel: ask the host to open a local file in the editor. Not a chat
-  // message or command - it never renders in the transcript.
+  // Side-channel: ask the host to open a local file in the editor. Not a chat message or command - it
+  // never renders in the transcript.
   const openInEditor = useCallback(
     (path: string, line?: number, column?: number) =>
       publishVia(sessionEvents.editorOpen({ path, line, column })),
     [publishVia],
   );
 
-  return { events, status, replayed, presence, publish, cancel, command, openInEditor };
+  return { publish, cancel, command, openInEditor };
 }
