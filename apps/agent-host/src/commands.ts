@@ -8,6 +8,7 @@ import {
   UNKNOWN_INTERNET,
 } from "@trevor/session";
 import { Effect } from "effect";
+import { parseDoctorCommand } from "./doctor/command";
 import { buildDoctorSnapshot, type DoctorProviderProbe } from "./doctor/snapshot";
 import { fmtFields } from "./log";
 import { supervisor } from "./processes";
@@ -194,9 +195,11 @@ export function buildCommandRegistry(): CommandRegistry {
       lease,
     }),
     run: async (args, input) => {
-      // `/doctor text` keeps the legacy plaintext dump (terminals / no-dashboard clients); the
-      // default emits the structured doctor.current snapshot the web renders as a dashboard.
-      if (args.trim() === "text") {
+      // Parse the variant (D-073 M1): `/doctor text` keeps the legacy plaintext dump (terminals /
+      // no-dashboard clients); summary/full/json all emit the structured doctor.current snapshot the
+      // web renders (it honours the view + copy hints client-side); refresh forces a fresh probe.
+      const command = parseDoctorCommand(args);
+      if (command.view === "text") {
         return doctorText(input);
       }
       const home = trevorHome();
