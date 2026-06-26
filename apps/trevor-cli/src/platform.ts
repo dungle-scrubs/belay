@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
 import { nodeFs } from "./fs";
-import type { LaunchPlatform, SpawnedHost } from "./launch";
+import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
 import { TREVOR_HOME } from "./project";
 import { RESERVED_PORTS, SERVICE_FILTERS, type ServiceName, type ServiceProbe } from "./services";
 
@@ -17,8 +17,11 @@ import { RESERVED_PORTS, SERVICE_FILTERS, type ServiceName, type ServiceProbe } 
  */
 
 const STORE_URL = `http://127.0.0.1:${RESERVED_PORTS.store}`;
+const WEB_URL = `http://127.0.0.1:${RESERVED_PORTS.web}/`;
 const PROBE_TIMEOUT_MS = 800;
 const STORE_READY_TIMEOUT_MS = 15_000;
+// Vite cold-starts can take several seconds (deps optimize), so the web gets a more generous window.
+const WEB_READY_TIMEOUT_MS = 30_000;
 const HOST_ONLINE_TIMEOUT_MS = 20_000;
 const HOST_PRESENT_TIMEOUT_MS = 1_500;
 
@@ -81,17 +84,31 @@ function startService(name: ServiceName): Promise<void> {
   return Promise.resolve();
 }
 
-/** Polls the store's `/health` until ready or the timeout elapses. */
-async function waitForStore(): Promise<boolean> {
-  const deadline = Date.now() + STORE_READY_TIMEOUT_MS;
+/** Polls a URL until it answers (or the timeout elapses). `accept` decides what counts as ready. */
+async function pollUntil(
+  url: string,
+  timeoutMs: number,
+  accept: (res: Response) => boolean,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const res = await fetchWithTimeout(`${STORE_URL}/health`, PROBE_TIMEOUT_MS);
-    if (res?.ok) {
+    const res = await fetchWithTimeout(url, PROBE_TIMEOUT_MS);
+    if (res && accept(res)) {
       return true;
     }
     await delay(300);
   }
   return false;
+}
+
+/** Polls the store's `/health` until ready or the timeout elapses. */
+function waitForStore(): Promise<boolean> {
+  return pollUntil(`${STORE_URL}/health`, STORE_READY_TIMEOUT_MS, (res) => res.ok);
+}
+
+/** Polls the web dev server until it serves a response (any status = the port is live and answering). */
+function waitForWeb(): Promise<boolean> {
+  return pollUntil(WEB_URL, WEB_READY_TIMEOUT_MS, () => true);
 }
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -155,7 +172,12 @@ async function spawnHost(opts: { sessionId: string; root: string }): Promise<Spa
     cwd: opts.root,
     detached: true,
     stdio: "ignore",
-    env: { ...process.env, SESSION_ID: opts.sessionId, TREVOR_WORKSPACE: opts.root },
+    env: {
+      ...process.env,
+      SESSION_ID: opts.sessionId,
+      TREVOR_WORKSPACE: opts.root,
+      TREVOR_MANAGED_HOST: "1",
+    },
   });
   child.unref();
   return { pid: child.pid ?? -1, command: `tsx agent-host (SESSION_ID=${opts.sessionId})` };
@@ -176,13 +198,15 @@ async function openBrowser(url: string): Promise<void> {
   }
 }
 
-/** Builds the real launcher platform bound to this process + the local filesystem. */
-export function nodePlatform(): LaunchPlatform {
+/** Builds the real launcher platform bound to this process + the local filesystem. The `reporter`
+ *  drives the live progress spinner (a no-op by default, so the platform is usable without one). */
+export function nodePlatform(reporter: Reporter = { step: () => {} }): LaunchPlatform {
   return {
     fs: nodeFs,
     home: TREVOR_HOME,
     cwd: process.cwd(),
     pid: process.pid,
+    reporter,
     now: () => new Date().toISOString(),
     processAlive: (pid) => {
       if (pid <= 0) {
@@ -198,6 +222,7 @@ export function nodePlatform(): LaunchPlatform {
     probeService,
     startService,
     waitForStore,
+    waitForWeb,
     hostPresent: (sessionId) => watchSession(sessionId, HOST_PRESENT_TIMEOUT_MS, isHostOnline),
     spawnHost,
     waitForHostOnline: (sessionId) => watchSession(sessionId, HOST_ONLINE_TIMEOUT_MS, isHostOnline),

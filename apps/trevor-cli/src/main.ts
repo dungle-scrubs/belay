@@ -1,5 +1,6 @@
 import { formatStatus, launch } from "./launch";
 import { nodePlatform } from "./platform";
+import { createSpinner } from "./spinner";
 
 /**
  * The `trevor` CLI entrypoint (D-085): run from any project directory to resolve the project root,
@@ -9,9 +10,37 @@ import { nodePlatform } from "./platform";
  * extension. All orchestration lives in launch.ts; this only wires the real platform and prints the
  * secret-free status line.
  */
+const USAGE = `trevor - open this project in Trevor V2
+
+Usage:
+  trevor            Resolve the project (nearest git root), ready the shared services,
+                    reuse-or-spawn the matching agent-host, and open the session in the browser.
+  trevor --help     Show this help.
+  trevor --version  Show the launcher version.
+`;
+
 async function main(): Promise<void> {
-  const outcome = await launch(nodePlatform());
-  process.stdout.write(`${formatStatus(outcome)}\n`);
+  const arg = process.argv[2];
+  if (arg === "--help" || arg === "-h") {
+    process.stdout.write(USAGE);
+    return;
+  }
+  if (arg === "--version" || arg === "-v") {
+    process.stdout.write("trevor v2 (trevorV2 launcher)\n");
+    return;
+  }
+  // Live spinner on stderr for the several seconds of startup; the final status block prints to
+  // stdout after it succeeds, so piping `trevor` still yields a clean machine-readable summary.
+  const spinner = createSpinner();
+  spinner.step("starting Trevor…");
+  try {
+    const outcome = await launch(nodePlatform({ step: (text) => spinner.step(text) }));
+    spinner.succeed("Trevor ready");
+    process.stdout.write(`${formatStatus(outcome)}\n`);
+  } catch (error) {
+    spinner.fail("Trevor failed to start");
+    throw error;
+  }
 }
 
 main().catch((error: unknown) => {

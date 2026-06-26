@@ -32,18 +32,28 @@ export interface SpawnedHost {
   readonly command: string;
 }
 
+/** Live progress sink the orchestrator drives through each phase (a spinner in the real CLI, a no-op
+ *  in tests), so `trevor` gives immediate feedback during the several seconds of startup. */
+export interface Reporter {
+  step(text: string): void;
+}
+
 export interface LaunchPlatform {
   readonly fs: LauncherFs;
   readonly home: string;
   readonly cwd: string;
   /** This launcher process's pid (for the lock owner). */
   readonly pid: number;
+  readonly reporter: Reporter;
   now(): string;
   processAlive(pid: number): boolean;
   probeService(name: ServiceName, port: number): Promise<ServiceProbe>;
   startService(name: ServiceName): Promise<void>;
   /** Resolves once the session-store is accepting connections (or false on timeout). */
   waitForStore(): Promise<boolean>;
+  /** Resolves once the web UI (Vite dev server) is serving, so the browser tab isn't opened against
+   *  a port that's still booting (or false on timeout). */
+  waitForWeb(): Promise<boolean>;
   /** True when a live host is already answering this session. */
   hostPresent(sessionId: string): Promise<boolean>;
   spawnHost(opts: { sessionId: string; root: string }): Promise<SpawnedHost>;
@@ -63,6 +73,8 @@ export interface LaunchOutcome {
   readonly hostAction: HostAction | "reused-concurrent";
   readonly hostPid: number | null;
   readonly online: boolean;
+  /** Whether the web UI was serving by the time we opened the tab (false = opened anyway, reload). */
+  readonly webReady: boolean;
 }
 
 /** The web UI URL for a session (the single place the `?session=` handoff URL is built). */
@@ -71,12 +83,14 @@ export function sessionUrl(sessionId: string): string {
 }
 
 export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
+  platform.reporter.step("resolving project…");
   const root = resolveProjectRoot(platform.cwd, platform.fs);
   const sessionId = resolveSession(platform.fs, platform.home, root, platform.now());
   const url = sessionUrl(sessionId);
 
   // 1. Shared services: probe the reserved ports, start the missing ones (never one set per project),
   //    surface conflicts, and wait for the store before touching the host.
+  platform.reporter.step("checking shared services…");
   const probes = {} as Record<ServiceName, ServiceProbe>;
   for (const name of SERVICE_NAMES) {
     probes[name] = await platform.probeService(name, RESERVED_PORTS[name]);
@@ -85,9 +99,11 @@ export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
   const conflicts = conflictingServices(services);
   const startedServices: ServiceName[] = [];
   for (const report of missingServices(services)) {
+    platform.reporter.step(`starting ${report.name}…`);
     await platform.startService(report.name);
     startedServices.push(report.name);
   }
+  platform.reporter.step("waiting for session store…");
   await platform.waitForStore();
 
   // 2. Host lifecycle behind the per-session lock, so two concurrent launches can't both spawn.
@@ -98,7 +114,10 @@ export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
   });
   if (!lock.acquired) {
     // A concurrent launch owns this session and is spawning; just wait for it and open the tab.
+    platform.reporter.step("waiting for host…");
     const online = await platform.waitForHostOnline(sessionId);
+    platform.reporter.step("waiting for web UI…");
+    const webReady = await platform.waitForWeb();
     await platform.openBrowser(url);
     return {
       root,
@@ -110,6 +129,7 @@ export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
       hostAction: "reused-concurrent",
       hostPid: null,
       online,
+      webReady,
     };
   }
 
@@ -123,11 +143,13 @@ export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
       hostPresent: present,
     });
     if (hostAction === "reuse" && record) {
+      platform.reporter.step("reusing agent host…");
       hostPid = record.pid;
     } else {
       if (hostAction === "replace-stale") {
         removeHost(platform.fs, platform.home, sessionId);
       }
+      platform.reporter.step("starting agent host…");
       const spawned = await platform.spawnHost({ sessionId, root });
       hostPid = spawned.pid;
       recordHost(platform.fs, platform.home, {
@@ -142,7 +164,14 @@ export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
     releaseLock(platform.fs, platform.home, sessionId, platform.pid);
   }
 
+  if (hostAction !== "reuse") {
+    platform.reporter.step("waiting for host to join…");
+  }
   const online = hostAction === "reuse" ? true : await platform.waitForHostOnline(sessionId);
+  // Wait for the web UI to actually serve before opening the tab, so a freshly-started Vite dev
+  // server (a few seconds to boot) doesn't greet the user with ERR_CONNECTION_REFUSED.
+  platform.reporter.step("waiting for web UI…");
+  const webReady = await platform.waitForWeb();
   await platform.openBrowser(url);
   return {
     root,
@@ -154,6 +183,7 @@ export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
     hostAction,
     hostPid,
     online,
+    webReady,
   };
 }
 
@@ -178,7 +208,7 @@ export function formatStatus(outcome: LaunchOutcome): string {
     `project  ${outcome.root}`,
     `services ${servicesLine}`,
     `host     ${hostLine}${outcome.online ? "" : " · waiting for host…"}`,
-    `open     ${outcome.url}`,
+    `open     ${outcome.url}${outcome.webReady ? "" : " · web still starting, reload if it doesn't load"}`,
   ];
   if (outcome.conflicts.length > 0) {
     lines.push(

@@ -58,6 +58,7 @@ function makePlatform(opts: FakeOpts = {}): Spy {
     home: "/home/.trevorV2",
     cwd: opts.cwd ?? opts.gitRoot ?? "/work/app",
     pid: opts.pid ?? 1234,
+    reporter: { step: () => {} },
     now: () => "2026-06-26T00:00:00Z",
     processAlive: opts.processAlive ?? (() => true),
     probeService: (name) =>
@@ -67,6 +68,7 @@ function makePlatform(opts: FakeOpts = {}): Spy {
       return Promise.resolve();
     },
     waitForStore: () => Promise.resolve(true),
+    waitForWeb: () => Promise.resolve(true),
     hostPresent: () => Promise.resolve(opts.hostPresent ?? false),
     spawnHost: ({ sessionId, root }) => {
       spawned.push({ sessionId, root });
