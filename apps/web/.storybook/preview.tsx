@@ -37,7 +37,10 @@ const preview: Preview = {
       document.documentElement.style.colorScheme = theme;
       return (
         <TooltipProvider>
-          <div className="bg-background text-foreground min-h-svh w-full p-8">
+          {/* Center every story vertically + horizontally in the canvas, so short components (and
+            overlays like the composer's slash menu, which opens upward) have room above and below
+            instead of being pinned to the top edge and clipped. */}
+          <div className="flex min-h-svh w-full items-center justify-center bg-background p-8 text-foreground">
             <Story />
           </div>
         </TooltipProvider>

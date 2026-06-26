@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_SESSION_ID } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { ChevronDown, CircleX, PanelRight, Plus, RotateCw, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -17,17 +17,19 @@ import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurre
 import {
   CommandResult,
   MessageMeta,
+  ShellBlock,
   ThinkingMessage,
   type ToolStatus,
   WorkingIndicator,
 } from "@/components/chat/message";
+import { PromptInput } from "@/components/chat/prompt-input";
 import { parseToolArgs, ToolMessage } from "@/components/chat/tool-message";
 import { PanelControls } from "@/components/panel/panel-controls";
 import { SidePanel } from "@/components/panel/SidePanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArtifactThumb } from "./ArtifactThumb";
+import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeRunId,
   commandsFrom,
@@ -36,15 +38,19 @@ import {
   fmtTokens,
   hostStatus,
   isOverflowError,
+  parseBangShell,
   parseCommand,
   providerModelsFrom,
   tasksFrom,
   toolSummary,
 } from "./derive";
 import { useComposer } from "./hooks/use-composer";
+import { useDraftPersistence } from "./hooks/use-draft-persistence";
+import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { Markdown } from "./markdown";
-import { ensureSession, useSession, useSessionActions } from "./session/use-session";
+import { atBottomOf } from "./scroll";
+import { ensureSession, useSession, useSessionActions, webTabId } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
 import {
   panelModel,
@@ -117,7 +123,14 @@ export function App() {
   } = useComposer();
 
   const { events, status, replayed, presence } = useSession(sessionId);
-  const { publish, cancel, command, openInEditor } = useSessionActions(sessionId);
+  const { publish, cancel, command, shell, openInEditor } = useSessionActions(sessionId);
+
+  // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
+  // kept in sessionStorage (tab-scoped, survives a reload). Draft persistence restores an unsubmitted
+  // draft; prompt history records published prompts + bang commands for ArrowUp/ArrowDown recall.
+  const tabId = useMemo(() => webTabId(), []);
+  useDraftPersistence({ storage: window.sessionStorage, tabId, sessionId, draft, setDraft });
+  const history = usePromptHistory({ storage: window.sessionStorage, tabId, sessionId });
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
@@ -258,11 +271,26 @@ export function App() {
   // idle, so a second prompt during a turn waits its turn instead of firing at once.
   const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // The prompt shell lane (D-082): a RAW leading `!` runs a shell command immediately on the host,
+    // bypassing the send queue, the model, and the provider flow. Checked before the trim/slash path
+    // so a space before `!` stays an ordinary prompt. Shell is text-only: any pending attachments are
+    // left in the composer (handled explicitly, never silently dropped) for the user's next prompt.
+    const bang = parseBangShell(draft);
+    if (bang) {
+      history.record(draft); // recall the bang command as typed (D-084)
+      setDraft("");
+      void shell(crypto.randomUUID(), bang.command);
+      setAtBottom(true); // re-pin: follow the shell block + its output down to the bottom
+      return;
+    }
     const text = draft.trim();
     // A slash command (text only) routes to the immediate host lane. Otherwise a prompt
     // may carry text, attachments, or both - attachments-only is a valid "look at this".
     const cmd = text ? parseCommand(text, commandNames) : null;
     if (cmd) {
+      // A slash command result is host output, excluded from prompt recall (D-084) - just reset any
+      // in-progress history navigation so the next ArrowUp starts fresh.
+      history.resetNavigation();
       setDraft("");
       void command(cmd.command, cmd.args);
       setAtBottom(true); // re-pin: follow the command + its result down to the bottom
@@ -271,6 +299,7 @@ export function App() {
     if (!text && attachments.length === 0) {
       return;
     }
+    history.record(text); // record ordinary prompts for recall (empty/attachments-only is skipped)
     setDraft("");
     const artifacts = attachments.length ? attachments : undefined;
     setAttachments([]);
@@ -290,14 +319,46 @@ export function App() {
   // arrows move the highlight, Tab/Enter complete it, Esc dismisses (and is swallowed
   // so the window ESC cancel/steer handler doesn't also fire). An exact match + Enter
   // falls through to submit, so a fully-typed command runs on one Enter.
+  // Recall a history entry into the composer and park the caret at its end, so the next ArrowUp/Down
+  // continues navigation from a known position (a single-line recall stays on the first+last line).
+  const recallInto = (el: HTMLTextAreaElement, text: string) => {
+    setDraft(text);
+    requestAnimationFrame(() => {
+      el.selectionStart = text.length;
+      el.selectionEnd = text.length;
+    });
+  };
+
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     const selected = menuOpen ? menuMatches[menuIdx] : undefined;
     if (!selected) {
+      const el = event.currentTarget;
       // Menu closed: in a textarea Enter inserts a newline, so submit explicitly. Enter
       // sends; Shift+Enter keeps the newline (for multi-line prompts and quoted blocks).
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        event.currentTarget.form?.requestSubmit();
+        el.form?.requestSubmit();
+        return;
+      }
+      // Prompt history recall (D-084). ArrowUp recalls the previous prompt from the first line (or an
+      // empty composer); ArrowDown steps forward while navigating, from the last line. Off the first/
+      // last line, multi-line editing keeps normal caret movement (no preventDefault).
+      const caret = el.selectionStart ?? 0;
+      if (event.key === "ArrowUp" && caretOnFirstLine(el.value, caret)) {
+        const recalled = history.recallPrev(draft);
+        if (recalled !== null) {
+          event.preventDefault();
+          recallInto(el, recalled);
+        }
+        return;
+      }
+      if (event.key === "ArrowDown" && history.navigating && caretOnLastLine(el.value, caret)) {
+        const recalled = history.recallNext();
+        if (recalled !== null) {
+          event.preventDefault();
+          recallInto(el, recalled);
+        }
+        return;
       }
       return;
     }
@@ -361,8 +422,17 @@ export function App() {
     draft,
     setDraft,
     onCancel,
+    resetHistory: history.resetNavigation,
   });
-  escRef.current = { active, awaiting: awaitingResponse, compacting, draft, setDraft, onCancel };
+  escRef.current = {
+    active,
+    awaiting: awaitingResponse,
+    compacting,
+    draft,
+    setDraft,
+    onCancel,
+    resetHistory: history.resetNavigation,
+  };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
@@ -377,50 +447,47 @@ export function App() {
       } else if (s.draft) {
         event.preventDefault();
         s.setDraft("");
+        s.resetHistory(); // clearing the composer ends any in-progress history navigation
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // The transcript container is flex-col-reverse, so it sits at the bottom (newest) from
-  // the first paint and natively stays pinned when new items arrive WHILE at the bottom -
-  // and leaves the view alone when scrolled up (no yank). All we add is a jump-to-bottom
-  // affordance: track whether we're at the bottom (col-reverse => scrollTop 0 is the
-  // bottom, so |scrollTop| within a few px counts as "at bottom"), and show a down-chevron
-  // when not. The chevron scrolls back to 0 (the bottom) and then vanishes.
+  // The transcript well is a normal top-down column (D-086): an empty or short session sits at the
+  // TOP padding and appends downward, instead of bottom-aligning above the composer. "At the live
+  // edge" is therefore the distance from the BOTTOM (scrollHeight - clientHeight - scrollTop within
+  // tolerance), not scrollTop 0 - see scroll.ts. We follow the bottom only while already pinned, so
+  // streaming output never yanks the viewport when the user has scrolled up; a jump-to-bottom chevron
+  // shows when away from the edge and scrolls back down.
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const onTranscriptScroll = () => {
     const el = transcriptRef.current;
     if (el) {
-      setAtBottom(Math.abs(el.scrollTop) < 40);
+      setAtBottom(atBottomOf(el));
     }
   };
-  const scrollToBottom = () => transcriptRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  const scrollToBottom = () =>
+    transcriptRef.current?.scrollTo({
+      top: transcriptRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   // Follow the bottom while pinned: when `atBottom`, snap to the newest content on EVERY transcript
   // update - a streaming answer, a burst of tool rows, or the two events a /compact appends (the
   // command then its result) all keep the view at the bottom, not just the first one. Instant (no
-  // smooth) so it tracks tightly without lagging behind a fast stream; col-reverse alone did not
-  // hold through multi-event bursts. Scrolling up flips `atBottom` off (onTranscriptScroll) and
-  // stops the follow; a submit re-arms it via setAtBottom(true). A no-op when already at 0.
+  // smooth) so it tracks tightly without lagging behind a fast stream. An existing session opens at
+  // the bottom (atBottom starts true → the first populated render scrolls to scrollHeight); an empty
+  // session's scrollHeight ≈ clientHeight, so the scroll is a no-op and content stays at the top.
+  // Scrolling up flips `atBottom` off (onTranscriptScroll) and stops the follow; a submit re-arms it
+  // via setAtBottom(true).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `transcript` is the trigger (not read) - re-pin on each update while at the bottom.
   useEffect(() => {
-    if (atBottom) {
-      transcriptRef.current?.scrollTo({ top: 0 });
+    const el = transcriptRef.current;
+    if (atBottom && el) {
+      el.scrollTo({ top: el.scrollHeight });
     }
   }, [transcript, atBottom]);
-
-  // Auto-grow the composer to fit multi-line prompts and quoted blocks, capped by its
-  // max-height (then it scrolls). Reset to "auto" first so it also shrinks back down. `draft`
-  // is the dependency on purpose: it drives the textarea content whose height we re-measure.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the draft changes
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [draft]);
 
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
@@ -476,10 +543,11 @@ export function App() {
           <div
             ref={transcriptRef}
             onScroll={onTranscriptScroll}
-            className="flex flex-1 flex-col-reverse overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex flex-1 flex-col overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {/* Nothing renders until the full history has replayed, then it appears all at
-            once (already pinned to the bottom) with a 150ms fade-in. */}
+            once (an existing session pinned to the bottom, an empty one at the top) with a
+            150ms fade-in. */}
             {replayed ? (
               <div className="flex flex-col gap-8 fade-in animate-in duration-150">
                 {transcript.map((message, index) => {
@@ -520,6 +588,20 @@ export function App() {
                         <CommandResult
                           command={message.command}
                           text={message.text}
+                          ok={message.ok}
+                        />
+                      </div>
+                    );
+                  }
+                  if (message.kind === "shell") {
+                    // The prompt shell lane (D-082): a leading `!` ran a command on the host. Rendered
+                    // as a terminal block (`$ command` + output), pending until its result lands.
+                    return (
+                      <div key={message.id} className="pl-3.5">
+                        <ShellBlock
+                          command={message.command}
+                          output={message.output}
+                          done={message.done}
                           ok={message.ok}
                         />
                       </div>
@@ -811,80 +893,23 @@ export function App() {
             />
           ) : null}
 
-          {uploadError ? (
-            <div className="mb-2 flex items-center gap-2 text-label tracking-wider text-smui-red">
-              <span>⚠ {uploadError}</span>
-              <button
-                type="button"
-                onClick={() => setUploadError(null)}
-                className="cursor-pointer text-muted-foreground hover:text-foreground"
-              >
-                dismiss
-              </button>
-            </div>
-          ) : null}
-
-          {/* Pending attachments, shown as removable chips (image thumbnail or a file pill)
-            above the input until the next prompt carries them. */}
-          {attachments.length || uploading > 0 ? (
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              {attachments.map((ref) => (
-                <span
-                  key={ref.hash}
-                  className="inline-flex items-center gap-1.5 border border-border bg-card px-1.5 py-1 text-xs"
-                >
-                  <ArtifactThumb artifact={ref} size={28} square />
-                  {ref.kind === "image" ? (
-                    <span className="max-w-[140px] truncate">{ref.name ?? ref.kind}</span>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(ref.hash)}
-                    title="Remove"
-                    className="cursor-pointer text-muted-foreground hover:text-smui-red"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </span>
-              ))}
-              {uploading > 0 ? (
-                <span className="text-label tracking-wider text-muted-foreground">
-                  uploading {uploading}…
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-
-          <form onSubmit={onSubmit}>
-            <div className="flex flex-col border border-input bg-background transition-colors focus-within:border-ring">
-              <textarea
-                ref={inputRef}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={onInputKeyDown}
-                onPaste={onPaste}
-                placeholder={`message ${modelMeta.label}… (/ for commands)`}
-                disabled={!sessionId}
-                rows={1}
-                className="max-h-48 w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 pb-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed"
-              />
-              <div className="flex items-center gap-2 px-2 pb-2">
-                <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!sessionId}
-                  aria-label="Attach files (or paste / drag-drop)"
-                >
-                  <Plus className="size-4.5" />
-                </Button>
-              </div>
-            </div>
-            {/* Auto-growing textarea: Enter submits, Shift+Enter inserts a newline. */}
-          </form>
+          <PromptInput
+            draft={draft}
+            onDraftChange={setDraft}
+            onSubmit={onSubmit}
+            onKeyDown={onInputKeyDown}
+            onPaste={onPaste}
+            inputRef={inputRef}
+            fileInputRef={fileInputRef}
+            onPickFiles={onPickFiles}
+            disabled={!sessionId}
+            placeholder={`message ${modelMeta.label}… (/ for commands, ! for shell)`}
+            attachments={attachments}
+            onRemoveAttachment={removeAttachment}
+            uploading={uploading}
+            uploadError={uploadError}
+            onDismissError={() => setUploadError(null)}
+          />
         </div>
       </main>
 
