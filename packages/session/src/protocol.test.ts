@@ -85,6 +85,140 @@ test("host.online round-trips the announced subagents (D-045)", () => {
   ]);
 });
 
+test("host.online round-trips the structured git status (D-088)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.hostOnline({
+        branch: "feat/x",
+        git: {
+          branch: "feat/x",
+          detached: null,
+          dirty: true,
+          ahead: 2,
+          behind: 1,
+          upstream: true,
+          worktree: false,
+        },
+        providers: ["qwen"],
+        default: "qwen",
+        models: {},
+        instanceId: "i",
+        cwd: "~",
+        workspace: "~",
+        commands: [],
+        agents: [],
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "host.online");
+  if (decoded?.type !== "host.online") return;
+  assert.deepEqual(decoded.git, {
+    branch: "feat/x",
+    detached: null,
+    dirty: true,
+    ahead: 2,
+    behind: 1,
+    upstream: true,
+    worktree: false,
+  });
+});
+
+test("host.online round-trips managed worktrees and defaults to [] when absent (D-091)", () => {
+  const worktree = {
+    id: "wt1",
+    baseRepo: "/dev/trevorV2",
+    baseRepoName: "trevorV2",
+    branch: "feat/x",
+    path: "~/.trevorV2/.worktrees/h/feat-x-wt1",
+    sessionId: "s-wt1",
+    dirty: true,
+    ahead: 2,
+    behind: 1,
+    conflict: false,
+    detached: false,
+    current: false,
+    baseline: false,
+    missing: false,
+  };
+  const withWt = decodeTrevorEvent(
+    stored(
+      events.hostOnline({
+        providers: ["qwen"],
+        default: "qwen",
+        models: {},
+        instanceId: "i",
+        cwd: "~",
+        workspace: "~",
+        commands: [],
+        agents: [],
+        worktrees: [worktree],
+      }),
+    ),
+  );
+  assert.equal(withWt?.type, "host.online");
+  if (withWt?.type !== "host.online") return;
+  assert.deepEqual(withWt.worktrees, [worktree]);
+
+  // An older host that omits worktrees decodes to an empty list, never undefined.
+  const without = decodeTrevorEvent(
+    stored(
+      events.hostOnline({
+        providers: ["qwen"],
+        default: "qwen",
+        models: {},
+        instanceId: "i",
+        cwd: "~",
+        workspace: "~",
+        commands: [],
+        agents: [],
+      }),
+    ),
+  );
+  assert.equal(without?.type === "host.online" && without.worktrees.length, 0);
+});
+
+test("host.online without a git field stays decode-tolerant (older host)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.hostOnline({
+        branch: "main",
+        providers: ["qwen"],
+        default: "qwen",
+        models: {},
+        instanceId: "i",
+        cwd: "~",
+        workspace: "~",
+        commands: [],
+        agents: [],
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "host.online");
+  if (decoded?.type !== "host.online") return;
+  assert.equal(decoded.git, undefined);
+  assert.equal(decoded.branch, "main");
+});
+
+test("host.online git coerces a partial/malformed payload to safe defaults", () => {
+  const decoded = decodeTrevorEvent(
+    stored({
+      type: "host.online",
+      payload: { git: { branch: "wip", dirty: "yes", ahead: "x" } },
+    }),
+  );
+  assert.equal(decoded?.type, "host.online");
+  if (decoded?.type !== "host.online") return;
+  assert.deepEqual(decoded.git, {
+    branch: "wip",
+    detached: null,
+    dirty: false, // non-boolean truthiness is ignored - only `true` counts
+    ahead: 0, // non-number coerces to 0
+    behind: 0,
+    upstream: false,
+    worktree: false,
+  });
+});
+
 test("a missing runId falls back to the event's own id, never collapsing turns", () => {
   const decoded = decodeTrevorEvent(
     stored({ type: "assistant.delta", payload: { text: "hi" } }, { eventId: "ev-9" }),

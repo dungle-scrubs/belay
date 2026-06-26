@@ -71,6 +71,47 @@ export interface AgentSpec {
 }
 
 /**
+ * A structured git read model for the host's effective cwd, announced on host.online
+ * (D-088). `branch` is the current branch name, or null when detached / a fresh repo;
+ * `detached` carries the short commit label when HEAD is detached. `dirty` is any
+ * porcelain output (untracked included). `ahead`/`behind` are counted only against a
+ * configured `upstream`; both stay 0 when none exists. `worktree` marks a linked git
+ * worktree (vs the main work tree). Absent entirely when cwd is not a git repository.
+ */
+export interface GitStatus {
+  readonly branch: string | null;
+  readonly detached: string | null;
+  readonly dirty: boolean;
+  readonly ahead: number;
+  readonly behind: number;
+  readonly upstream: boolean;
+  readonly worktree: boolean;
+}
+
+/**
+ * A Trevor-managed worktree as the host announces it (D-091), so the browser's worktree switcher
+ * renders without reading local state. `baseRepo` is the canonical repo identity (grouping key);
+ * `baseRepoName` its display name. `baseline` marks the base-repo checkout row (not a managed
+ * worktree); `current` the host's active worktree; `missing` a stale entry whose path is gone.
+ */
+export interface WorktreeSummary {
+  readonly id: string;
+  readonly baseRepo: string;
+  readonly baseRepoName: string;
+  readonly branch: string;
+  readonly path: string;
+  readonly sessionId: string;
+  readonly dirty: boolean;
+  readonly ahead: number;
+  readonly behind: number;
+  readonly conflict: boolean;
+  readonly detached: boolean;
+  readonly current: boolean;
+  readonly baseline: boolean;
+  readonly missing: boolean;
+}
+
+/**
  * A content-addressed artifact (image / document / other file) attached to a
  * message. The bytes do NOT ride the event - they live in the blob store beside
  * Richter (D-028); the event carries only this reference. `hash` is the sha256 the
@@ -318,7 +359,7 @@ export const events = {
    */
   sessionSwitch: (p: {
     sessionId: string;
-    reason: "clear" | "cd" | "resume";
+    reason: "clear" | "cd" | "resume" | "worktree";
   }): TrevorEventInput => ({
     type: "session.switch",
     payload: { sessionId: p.sessionId, reason: p.reason },
@@ -395,6 +436,7 @@ export const events = {
   }),
   hostOnline: (p: {
     branch?: string;
+    git?: GitStatus;
     providers: readonly string[];
     default: string;
     models: Record<string, ProviderModel>;
@@ -403,10 +445,12 @@ export const events = {
     workspace: string;
     commands: readonly CommandSpec[];
     agents: readonly AgentSpec[];
+    worktrees?: readonly WorktreeSummary[];
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
       ...(p.branch ? { branch: p.branch } : {}),
+      ...(p.git ? { git: p.git } : {}),
       providers: p.providers,
       default: p.default,
       models: p.models,
@@ -415,6 +459,7 @@ export const events = {
       workspace: p.workspace,
       commands: p.commands,
       agents: p.agents,
+      ...(p.worktrees ? { worktrees: p.worktrees } : {}),
     },
   }),
 } as const;
@@ -513,6 +558,47 @@ function coerceAgents(value: unknown): AgentSpec[] {
       ? { id, description: str(a.description), tools: strList(a.tools), skills: strList(a.skills) }
       : null;
   });
+}
+
+function coerceWorktrees(value: unknown): WorktreeSummary[] {
+  return coerceArray(value, (w) => {
+    const id = str(w.id);
+    if (!id) {
+      return null;
+    }
+    return {
+      id,
+      baseRepo: str(w.baseRepo),
+      baseRepoName: str(w.baseRepoName),
+      branch: str(w.branch),
+      path: str(w.path),
+      sessionId: str(w.sessionId),
+      dirty: w.dirty === true,
+      ahead: num(w.ahead),
+      behind: num(w.behind),
+      conflict: w.conflict === true,
+      detached: w.detached === true,
+      current: w.current === true,
+      baseline: w.baseline === true,
+      missing: w.missing === true,
+    };
+  });
+}
+
+function coerceGitStatus(value: unknown): GitStatus | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const g = value as Record<string, unknown>;
+  return {
+    branch: optStr(g.branch) ?? null,
+    detached: optStr(g.detached) ?? null,
+    dirty: g.dirty === true,
+    ahead: num(g.ahead),
+    behind: num(g.behind),
+    upstream: g.upstream === true,
+    worktree: g.worktree === true,
+  };
 }
 
 function coerceTasks(value: unknown): TaskSnapshot[] {
@@ -718,6 +804,7 @@ export type DecodedEvent =
   | {
       readonly type: "host.online";
       readonly branch?: string;
+      readonly git?: GitStatus;
       readonly instanceId?: string;
       readonly workspace?: string;
       readonly cwd?: string;
@@ -728,6 +815,7 @@ export type DecodedEvent =
       readonly models: Record<string, ProviderModel>;
       readonly commands: readonly CommandSpec[];
       readonly agents: readonly AgentSpec[];
+      readonly worktrees: readonly WorktreeSummary[];
     }
   | { readonly type: "host.hello"; readonly instanceId?: string }
   | { readonly type: "host.beat"; readonly instanceId?: string }
@@ -893,6 +981,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       return {
         type: "host.online",
         branch: optStr(p.branch),
+        git: coerceGitStatus(p.git),
         instanceId: optStr(p.instanceId),
         workspace: optStr(p.workspace),
         cwd: optStr(p.cwd),
@@ -901,6 +990,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         models: coerceProviderModels(p.models),
         commands: coerceCommands(p.commands),
         agents: coerceAgents(p.agents),
+        worktrees: coerceWorktrees(p.worktrees),
       };
     case "host.hello":
       return { type: "host.hello", instanceId: optStr(p.instanceId) };
