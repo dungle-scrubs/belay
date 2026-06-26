@@ -34,7 +34,7 @@ Implementation resume state. Normalized accounting (not raw checkbox counts).
 
 ## Phase 2 — the web frontend (near-term follow-up)
 
-- [ ] **M9** centralize token-breakdown metadata + rollup in `@trevor/session`; web + host consume it — `packages/session`, `apps/web/.../panel/breakdown.ts`, `apps/agent-host/.../usage/breakdown.ts` (enables host M6)
+- [x] **M9** centralized the display rollup + semantic colors in `@trevor/session` (`BREAKDOWN_GROUPS` + `rollupBreakdown`); web `panel/breakdown.ts` collapsed to a thin adapter (only resolves the color token → `hsl(var(--…))`); host already consumes the shared schema via M6 `poolTotal`. 5 parity tests — `packages/session/src/breakdown.ts`, `apps/web/.../panel/breakdown.ts`
 - [ ] **M10** one tool-row rendering primitive + shared status config; collapse `ToolShell`/flat-bordered; reuse in `ConcurrentToolRow` — `components/chat/tool-*.tsx`, `concurrent-tools.tsx`, `message.tsx`
 - [ ] **M11** `generateToolDiff` view-model; `DiffViewer` display-only — `components/chat/{tool-diff,multi-edit-diff,diff-utils}.tsx`, `assistant-ui/diff-viewer.tsx` (dep: M10)
 - [ ] **M12** single-source loop grammar; drop `legendKeywords`; remove unused `registry.ts` — `commands/{loop,loop-parser,registry}.ts`

@@ -110,3 +110,61 @@ export function addBreakdown(a: UsageBreakdown, b: UsageBreakdown): UsageBreakdo
   }
   return out;
 }
+
+/**
+ * The canonical DISPLAY rollup of "where did this call's tokens go": the user-facing grouping of the
+ * raw categories into a handful of cells, each with a stable label + semantic color. This is the
+ * single source the web treemap/legend renders, so the grouping and colors live here, not hardcoded
+ * per surface. The color is a CSS custom-property NAME (no `hsl(var(...))` wrapper, no CSS imported
+ * here) - the web resolves it; this package stays presentation-free beyond naming the token.
+ *
+ *   - `tools`    = input tool RESULTS (the non-overhead input categories),
+ *   - `overhead` = the fixed input overhead (system+tools, user/assistant text, tool-call args),
+ *   - `thinking` / `answer` = the two output categories the user cares about (output tool-call args
+ *     are not surfaced - they ride the assistant turn, not the answer).
+ */
+export interface BreakdownGroup {
+  readonly key: string;
+  readonly label: string;
+  /** CSS custom-property name, e.g. `smui-frost-3`; the web renders `hsl(var(--<color>))`. */
+  readonly color: string;
+}
+
+export const BREAKDOWN_GROUPS = [
+  { key: "tools", label: "tool results", color: "smui-frost-3" },
+  { key: "thinking", label: "thinking", color: "smui-yellow" },
+  { key: "answer", label: "final response", color: "smui-green" },
+  { key: "overhead", label: "overhead", color: "muted-foreground" },
+] as const satisfies readonly BreakdownGroup[];
+
+/** A display group plus its char count for one breakdown. */
+export interface BreakdownRow extends BreakdownGroup {
+  readonly value: number;
+}
+
+/** Sums one input pool over the overhead / non-overhead split, driven by the descriptor so it can
+ *  never drift from the category set (byTool/images are not categories, so they are never read). */
+function sumInput(b: UsageBreakdown, overhead: boolean): number {
+  const counts = b.input as unknown as Record<string, number>;
+  return BREAKDOWN_CATEGORIES.reduce(
+    (total, c) =>
+      c.pool === "input" && c.isOverhead === overhead ? total + (counts[c.key] ?? 0) : total,
+    0,
+  );
+}
+
+/**
+ * Rolls a `UsageBreakdown` into the canonical display rows (one value per `BREAKDOWN_GROUPS` cell), in
+ * descriptor order. Zero-value rows are KEPT - the caller decides whether to drop them (the web does,
+ * since the treemap floors tiny cells rather than dropping them). The single rollup both the web
+ * treemap and any other "where did the tokens go" view derive from.
+ */
+export function rollupBreakdown(b: UsageBreakdown): BreakdownRow[] {
+  const valueByKey: Record<string, number> = {
+    tools: sumInput(b, false),
+    overhead: sumInput(b, true),
+    thinking: b.output.thinking,
+    answer: b.output.answer,
+  };
+  return BREAKDOWN_GROUPS.map((group) => ({ ...group, value: valueByKey[group.key] ?? 0 }));
+}
