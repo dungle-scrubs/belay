@@ -531,14 +531,14 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 
 ### M3: Bounded checks and redaction
 
-- [ ] Every live probe has a short per-check timeout and an overall `/doctor` budget
-- [ ] Slow probes degrade to `timeout` or `not_checked` with a next action instead of blocking the command
-- [ ] Reuse cached state when cached state is authoritative
+- [x] Every live probe has a short per-check timeout and an overall `/doctor` budget
+- [x] Slow probes degrade to `timeout` or `not_checked` with a next action instead of blocking the command
+- [x] Reuse cached state when cached state is authoritative
 - [x] `/doctor` does not run repairs, mutate config, load models, refresh OAuth, or rewrite local state unless a later explicit action is added
 - [x] Redact API keys, OAuth tokens, auth headers, raw provider payloads, raw prompt text, raw tool outputs, and unbounded response bodies
 - [x] Paths are abbreviated or sanitized where full paths are not needed
 - [x] Findings include enough evidence to debug without leaking secrets
-- [ ] Tests cover redaction, timeout behavior, stale snapshot behavior, no mutation, and bounded overall runtime
+- [x] Tests cover redaction, timeout behavior, stale snapshot behavior, no mutation, and bounded overall runtime
 
 ### M4: Storybook-first dashboard surface
 
@@ -672,7 +672,7 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 15 completed, 47 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
-- Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
+- Live open follow-up (D-073 doctor health surface): 57 features, 31 completed, 26 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 181 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 177 unchecked items plus 5 partial/gated carry-forward items
