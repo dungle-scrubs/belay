@@ -192,8 +192,18 @@ export function resetSkillCache(): void {
  */
 export type SkillStatus = "available" | "shadowed" | "disabled" | "malformed";
 
+/**
+ * The kind of resource a registry record describes (D-075 M6). The first cut emits only `"skill"`,
+ * but the field is the discriminant a later slice widens (to `"command"`, `"agent"`, …) so slash
+ * commands, command families, and agents can join the SAME registry without changing this contract.
+ * Consumers that want skills today filter on `resourceType === "skill"`, so future rows never leak.
+ */
+export type SkillResourceType = "skill";
+
 /** One registry entry: the skill metadata plus its status + provenance (never a full body). */
 export interface SkillEntry {
+  /** The resource kind. Always `"skill"` in the skills-only first cut; the discriminant for later rows. */
+  readonly resourceType: SkillResourceType;
   readonly id: string;
   readonly name: string;
   readonly description: string;
@@ -239,6 +249,7 @@ export function buildSkillRegistry(roots: readonly SkillRoot[]): SkillEntry[] {
         text = readFileSync(path, "utf8");
       } catch {
         entries.push({
+          resourceType: "skill",
           id: entry,
           name: entry,
           description: "",
@@ -254,6 +265,7 @@ export function buildSkillRegistry(roots: readonly SkillRoot[]): SkillEntry[] {
       const meta =
         data.meta && typeof data.meta === "object" ? (data.meta as Record<string, unknown>) : {};
       const base = {
+        resourceType: "skill" as const,
         id: entry,
         name: trimStr(data.name) ?? entry,
         description,

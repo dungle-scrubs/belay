@@ -92,6 +92,32 @@ test("triggers are extracted from the description tail", () => {
   assert.equal(entry?.triggers, "rfc, design doc, spec");
 });
 
+test("every registry record is a skill row in the skills-only first cut (no command/agent leakage)", () => {
+  const { project, global } = roots();
+  writeSkill(project, "deploy", { name: "Deploy", description: "ship" }); // available
+  writeSkill(project, "wip", { name: "WIP", description: "x", disabled: true }); // disabled
+  writeSkill(global, "deploy", { name: "Deploy (global)", description: "global" }); // shadowed
+  mkdirSync(join(project.dir, "broken"), { recursive: true }); // malformed (no SKILL.md)
+
+  const registry = buildSkillRegistry([project, global]);
+  assert.ok(
+    registry.length >= 4,
+    "available + disabled + shadowed + malformed are all represented",
+  );
+  // The discriminant is stamped on EVERY record regardless of status, and nothing but "skill"
+  // appears - so a later command/agent slice can join the same registry (D-075 M6) without these
+  // rows leaking a bogus resource type into the skills-only cut.
+  assert.ok(
+    registry.every((e) => e.resourceType === "skill"),
+    "no non-skill rows leak into the skills-only registry",
+  );
+  assert.deepEqual(
+    [...new Set(registry.map((e) => e.resourceType))],
+    ["skill"],
+    "exactly one resource type in the first cut",
+  );
+});
+
 test("formatSkillsList searches metadata, defaults to available only, and bounds with truncation", () => {
   const { project } = roots();
   writeSkill(project, "deploy", {
