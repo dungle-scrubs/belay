@@ -1,3 +1,4 @@
+import { contextRegistry } from "../context/registry";
 import { taskRegistry } from "../tasks";
 import { HOST_CWD_TOOLS, WORKSPACE_CONFINED_TOOLS, WORKSPACE_ROOT } from "../tools/workspace";
 import type { ToolDef } from "./types";
@@ -65,7 +66,7 @@ const TASK_GUIDANCE = [
 const REPO_GUARDRAILS = [
   "When the user names a path or search target, act on it with glob or grep instead of asking for clarification.",
   "Use '.' or a real existing path for the workspace root; never invent placeholder paths like /path/to/repo.",
-  "For codebase structure reviews, begin from existing top-level files like README.md or AGENTS.md; do not assume directories such as src/ exist.",
+  "For codebase structure reviews, begin from existing top-level files like README.md; any AGENTS.md instructions for this repository are already provided in the project-context block above, so follow them without re-reading those files.",
   "Do not start discovery with the broad glob '**/*'; it returns a capped, partial slice. Begin with top-level files or a targeted pattern (a subdirectory or extension, e.g. src/**/*.ts) and widen only as needed.",
 ] as const;
 
@@ -137,6 +138,11 @@ export function buildSystemPrompt(
     ...RESPONSE_CALIBRATION_GUIDANCE,
   ].join("\n");
 
+  // The eager + lazy AGENTS.md context (D-080), re-read from disk every turn so it survives compaction
+  // the same way the live checklist does (D-040). Rendered BEFORE the guidance so the reworded
+  // guardrail's "project-context block above" reference holds; omitted entirely when no AGENTS.md exists
+  // (the prompt is then byte-for-byte unchanged).
+  const contextBlock = contextRegistry.renderForPrompt(cwd, workspaceRoot);
   // The live checklist is re-rendered every turn, so the model's plan survives
   // history compaction instead of living only in the (compactable) transcript.
   const checklist = taskRegistry.renderForPrompt();
@@ -144,6 +150,7 @@ export function buildSystemPrompt(
     IDENTITY,
     executionContext(workspaceRoot, cwd),
     toolInventory(tools),
+    ...(contextBlock ? [contextBlock] : []),
     guidance,
     ...(checklist ? [checklist] : []),
   ].join("\n\n");

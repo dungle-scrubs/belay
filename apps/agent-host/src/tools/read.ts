@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { Schema } from "effect";
+import { resolve } from "node:path";
+import { Effect, Schema } from "effect";
+import { contextRegistry } from "../context/registry";
 import { defineTool } from "./shared";
 
 const Params = Schema.Struct({
@@ -13,5 +15,12 @@ export const readTool = defineTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args, ops) => ops.attempt(() => readFile(args.path, "utf8")),
+  execute: (args, ops) =>
+    Effect.gen(function* () {
+      const text = yield* ops.attempt(() => readFile(args.path, "utf8"));
+      // Lazy below-cwd AGENTS.md (D-080): touching a file pulls in any directory-scoped context
+      // between cwd and it, so the next model step sees those instructions.
+      yield* Effect.sync(() => contextRegistry.noteFileAccess(resolve(process.cwd(), args.path)));
+      return text;
+    }),
 });

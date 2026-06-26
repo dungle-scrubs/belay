@@ -25,6 +25,7 @@ import { buildHistory } from "./agent/history-projection";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
+import { contextRegistry } from "./context/registry";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { supervisor } from "./processes";
@@ -155,6 +156,21 @@ function hostState(): Record<string, unknown> {
           lastFold: `seq≤${lastFold.throughSeq} ~${commas(lastFold.tokensBefore)}→${commas(lastFold.tokensAfter)}tok`,
         }
       : {}),
+    // Ingested AGENTS.md context (D-080): how many files, from which scopes, bytes used vs dropped,
+    // and whether anything was truncated - surfaced so a budget drop is never silent (unlike Codex).
+    ...contextState(),
+  };
+}
+
+/** The AGENTS.md context summary for /doctor: files, scopes, bytes used (+ dropped/truncated). */
+function contextState(): Record<string, string> {
+  const ctx = contextRegistry.report();
+  if (ctx.files.length === 0) {
+    return {};
+  }
+  const dropped = ctx.truncated ? ` (-${commas(ctx.bytesDropped)}B truncated)` : "";
+  return {
+    context: `${ctx.files.length} AGENTS.md [${ctx.scopes.join(", ")}] ${commas(ctx.bytesUsed)}B${dropped}`,
   };
 }
 
@@ -758,6 +774,9 @@ function handleEvent(message: SessionEvent): void {
       // prompts + catch-up target alongside (the active run is left to finish).
       admit(message);
       scheduler.clearPending();
+      // Drop the lazily-loaded below-cwd AGENTS.md set too, so the fresh conversation starts with only
+      // the eager scope (the eager up-tree is re-read from disk each turn regardless).
+      contextRegistry.reset();
     }
     // Immediate command lane: only the leader answers, and only when live (commands
     // are actions, not state to rebuild on replay).

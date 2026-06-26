@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { Effect } from "effect";
+import { contextRegistry } from "../context/registry";
 import type { ToolError } from "./errors";
 import { applyUniqueReplacement, replaceMissMessage } from "./replace";
 import type { ToolOps } from "./shared";
@@ -33,6 +34,8 @@ export function prepareEdit(
   return Effect.gen(function* () {
     // confine throws on a path escape; readFile rejects - both become the tool's ToolExecutionError.
     const target = yield* ops.attemptSync(() => confine(path));
+    // Lazy below-cwd AGENTS.md (D-080): editing a file pulls in its subtree's directory-scoped context.
+    yield* Effect.sync(() => contextRegistry.noteFileAccess(target));
     let content = yield* ops.attempt(() => readFile(target, "utf8"));
     for (const edit of edits) {
       const result = applyUniqueReplacement(content, edit.old, edit.new);

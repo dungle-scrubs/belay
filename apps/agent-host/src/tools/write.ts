@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { Effect, Schema } from "effect";
+import { contextRegistry } from "../context/registry";
 import { defineTool } from "./shared";
 
 const Params = Schema.Struct({
@@ -26,6 +27,8 @@ export const writeTool = defineTool({
       const target = resolve(process.cwd(), args.path);
       yield* ops.attempt(() => mkdir(dirname(target), { recursive: true }));
       yield* ops.attempt(() => writeFile(target, args.content, "utf8"));
+      // Lazy below-cwd AGENTS.md (D-080): writing into a subtree pulls in its directory-scoped context.
+      yield* Effect.sync(() => contextRegistry.noteFileAccess(target));
       return `wrote ${target}`;
     }),
 });

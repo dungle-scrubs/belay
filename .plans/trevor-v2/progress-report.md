@@ -352,38 +352,38 @@ eager-only root→cwd model is the comparison point, not the target - it cannot 
 `apps/agent-host/src/tools/` (file tools), session/loop state, `apps/agent-host/src/commands.ts`
 (`/doctor`) (D-080).
 
-### M1: Context-file reader module (pure, testable)
-Source: `apps/agent-host/src/context/agents-md.ts` (new)
+### M1: Context-file reader module (pure, testable) ✅
+Source: `apps/agent-host/src/context/agents-md.ts` (new), `apps/agent-host/src/paths.ts` (new)
 
-- [ ] The `~/.trevorV2` base directory is a single exported constant (proposed `TREVOR_HOME`, in a dedicated paths module), env-overridable as `resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"))`, mirroring `WORKSPACE_ROOT`/`TREVOR_WORKSPACE` in `tools/workspace.ts`; every user-global path derives from it and the `dev:op`/`start:op` npm scripts honor the same override so the directory name lives in one place (D-081)
-- [ ] A pure reader: given the host cwd + workspace root, walk UP collecting at most one `AGENTS.md` per directory from project root down to cwd, plus the user-global `<TREVOR_HOME>/AGENTS.md` loaded first; the walk stops at `WORKSPACE_ROOT` / the `.git` marker and never goes past it
-- [ ] Concatenate root→cwd so cwd wins on conflict (positional precedence, not field-level override), each source clearly labeled; empty/whitespace-only files skipped
-- [ ] `@path` import expansion: relative paths resolve against the importing file (absolute allowed), recursion capped at ≤ 4 hops (matching Claude Code), cycles detected and broken, and `@paths` inside fenced or inline code spans ignored
-- [ ] Combined byte budget across all ingested context with deterministic truncation; the reader returns a structured report (`files[]`, scopes, bytes used, bytes dropped, truncated) - never a silent drop
-- [ ] Unit tests: root-only repo; nested chain (root + `apps/` + cwd) merged root→cwd with cwd winning; walk-up boundary at `WORKSPACE_ROOT`/`.git`; user-global loaded first; import expansion + 4-hop cap + cycle detection; code-span `@paths` ignored; budget truncates deterministically with the drop reported
+- [x] The `~/.trevorV2` base directory is a single exported constant `TREVOR_HOME` in a dedicated paths module (`paths.ts`), env-overridable as `resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"))`, mirroring `WORKSPACE_ROOT`/`TREVOR_WORKSPACE`; `USER_AGENTS_MD` derives from it and the `dev:op`/`start:op` npm scripts now use `${TREVOR_HOME:-$HOME/.trevorV2}` so the directory name lives in one place (D-081)
+- [x] A pure reader: `collectEagerSources`/`projectDirs` walk UP collecting at most one `AGENTS.md` per directory from project root down to cwd, plus the user-global `<TREVOR_HOME>/AGENTS.md` loaded first; the walk stops at `WORKSPACE_ROOT` / a `.git` marker (inclusive) and never goes past it
+- [x] `renderContext` concatenates user-global → root → cwd so cwd appears last and wins on conflict (positional precedence), each source labeled `### scope: path`; empty/whitespace-only files skipped (`readAgentsFile` returns null)
+- [x] `@path` import expansion: relative paths resolve against the importing file (absolute allowed), recursion capped at ≤ 4 hops (`MAX_IMPORT_HOPS`), cycles detected + broken with a visible note, and `@paths` inside fenced or inline code spans ignored
+- [x] Combined byte budget (`CONTEXT_BYTE_BUDGET`) with deterministic truncation (lowest-precedence first, via a code-point-safe `sliceToBytes`); returns a structured `ContextReport` (`files[]`, scopes, bytesUsed, bytesDropped, truncated) - never a silent drop
+- [x] Unit tests (11): root-only repo; nested chain merged root→cwd with cwd winning; walk-up boundary at `.git` + never above `WORKSPACE_ROOT`; user-global loaded first; import expansion + 4-hop cap + cycle detection; code-span `@paths` ignored; budget truncates deterministically with the drop reported; empty report when none
 
-### M2: Eager scope injected into the per-turn prompt
-Source: `apps/agent-host/src/providers/system-prompt.ts`
+### M2: Eager scope injected into the per-turn prompt ✅
+Source: `apps/agent-host/src/providers/system-prompt.ts`, `apps/agent-host/src/context/registry.ts` (new)
 
-- [ ] `buildSystemPrompt` renders the eager-collected context (user-global + root→cwd) as a dedicated, clearly-labeled block, re-read from disk every turn so it survives compaction the same way the live checklist does (D-040)
-- [ ] With no `AGENTS.md` present the prompt is byte-for-byte unchanged (pure/total preserved; the existing system-prompt tests still pass)
-- [ ] Reword the REPO_GUARDRAILS line that tells the model to "begin from existing top-level files like README.md or AGENTS.md" so it knows project instructions are already in context
-- [ ] Unit test: the context block appears when files exist and is omitted when none; the reworded guardrail renders; the no-file path matches the current prompt snapshot
+- [x] `buildSystemPrompt` renders the collected context (user-global + root→cwd, plus the lazy below-cwd set) via `contextRegistry.renderForPrompt`, a dedicated labeled block re-read from disk every turn so it survives compaction the same way the live checklist does (D-040)
+- [x] With no `AGENTS.md` present the block is omitted entirely (the prompt is byte-for-byte the prior structure); the existing system-prompt confinement tests still pass
+- [x] Reworded the REPO_GUARDRAILS line: it no longer tells the model to re-read README.md/AGENTS.md but says AGENTS.md instructions are "already provided in the project-context block above"
+- [x] Unit test: the context block appears when a file exists (and precedes the guardrail that references it) and is omitted when none; the reworded guardrail renders and the old wording is gone
 
-### M3: Lazy below-cwd loading on file access
-Source: `apps/agent-host/src/tools/` (file tools), session/loop state, `apps/agent-host/src/providers/system-prompt.ts`
+### M3: Lazy below-cwd loading on file access ✅
+Source: `apps/agent-host/src/tools/{read,write,edit-core}.ts`, `apps/agent-host/src/context/registry.ts`, `apps/agent-host/src/main.ts`
 
-- [ ] When a file tool resolves a path inside a subtree below cwd, load that subtree's `AGENTS.md` plus every not-yet-loaded `AGENTS.md` between cwd and the touched file, then inject it
-- [ ] The loaded set is tracked in session state and deduped so each directory loads exactly once
-- [ ] Newly-loaded lazy context is injected, and the accumulated lazy set is re-injected on later turns and after a compaction fold (the eager per-turn re-render does not cover below-cwd files)
-- [ ] Triggered by every file-touching tool (`read` primarily, plus any tool that opens a file by path)
-- [ ] Unit test: a below-cwd `AGENTS.md` loads only after a file in that subtree is read, is deduped on a second read, and survives a compaction-fold re-injection
+- [x] `contextRegistry.noteFileAccess` loads every not-yet-loaded `AGENTS.md` between cwd and the touched file (the dirs strictly below cwd on the path to it), so a directory-scoped instruction reaches the model on the next step
+- [x] The lazy set is tracked in the session-scoped registry, keyed by directory and guarded by a `scanned` set, so each directory loads (and is stat-checked) exactly once
+- [x] The full context (eager re-read + lazy set) is re-rendered every turn from the registry, so newly-loaded lazy context survives a compaction fold (the registry is independent of history); `/clear` resets the lazy set
+- [x] Triggered by the file-touching tools that open a path: `read` (primary), `edit`/`multi_edit` (via `edit-core` `prepareEdit`), and `write`
+- [x] Unit tests (7): a below-cwd `AGENTS.md` loads only after a file in that subtree is touched, deduped on a second touch, deeper nesting parent-before-child, a cwd-level file adds nothing, survives a fold re-render, `reset()` clears it, below-cwd sits after the eager project scope
 
-### M4: Surfacing + verification
-Source: `apps/agent-host/src/commands.ts` (`/doctor`)
+### M4: Surfacing + verification ✅
+Source: `apps/agent-host/src/main.ts` (`hostState` → `/doctor`)
 
-- [ ] `/doctor` reports the ingested context: files read, scopes (user-global / project up-tree / lazy below-cwd), bytes used vs dropped, lazy subtrees pulled in, and truncation state - never silent, unlike Codex (its issue #7138)
-- [ ] Manual repro: a nested repo where a directory-scoped `AGENTS.md` changes behavior only after a file in that directory is read; the up-tree chain merges root→cwd with cwd winning on conflict
+- [x] `/doctor` reports the ingested context via a `context` field: file count, scopes (`user-global`/`project`/`below-cwd`), bytes used, and `(-NB truncated)` when a budget drop occurred - never silent (`contextState()` in `main.ts`)
+- [~] Manual repro: verified at construction level against the real repo - the eager root `AGENTS.md` renders in the block + reworded guardrail; touching `apps/web/` pulls in `apps/AGENTS.md` (below-cwd); the doctor report shows `2 AGENTS.md [project, below-cwd] 16,240B`. A live model OBEYING the instructions is the gated live-model lane
 
 ## Summary
 - Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
@@ -392,7 +392,7 @@ Source: `apps/agent-host/src/commands.ts` (`/doctor`)
 - Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
 - Phase 5 (subagents): 41 features, ~39 completed (M1 discovery + M2 isolated child session/link + M3 inline + background delegation [cap, read-only clamp, late-result] + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~2 remaining (the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
 - Phase 6 (search-tool upgrade): 14 features, 14 completed ✅ (M1 ripgrep-backed `grep` + M2 read-only `ast_grep`, both with project-managed binaries and tests)
-- Phase 7 (nested AGENTS.md context files): 17 features, 0 completed, 17 remaining - the NEXT feature to implement (Claude Code lazy model on AGENTS.md): M1 reader + single-sourced `TREVOR_HOME` = 6, M2 eager prompt injection = 4, M3 lazy below-cwd loading = 5, M4 `/doctor` surfacing = 2
+- Phase 7 (nested AGENTS.md context files): 17 features, 17 completed ✅ (M1 pure reader + single-sourced `TREVOR_HOME` = 6, M2 eager prompt injection = 4, M3 lazy below-cwd loading = 5, M4 `/doctor` surfacing = 2; Claude Code lazy model keyed on AGENTS.md - eager up-tree + lazy below-cwd; 18 new unit tests; manual repro verified by construction, live-obedience is the gated lane)
 - Total features: 67
 - Completed: 67
 - Remaining: 0

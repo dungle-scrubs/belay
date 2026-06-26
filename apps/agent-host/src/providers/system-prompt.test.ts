@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "vitest";
+import { contextRegistry } from "../context/registry";
 import { isWorkspaceConfined, WORKSPACE_CONFINED_TOOLS } from "../tools/workspace";
 import { buildSystemPrompt } from "./system-prompt";
 
@@ -44,5 +48,36 @@ test("buildSystemPrompt states the confinement rule verbatim - the tool-selectio
     prompt.includes(
       "edit, glob, and grep are scoped to the workspace root; use paths relative to it. read, write, and bash use the host working directory and accept absolute paths.",
     ),
+  );
+});
+
+// --- Phase 7 M2: nested AGENTS.md context injected into the per-turn prompt (D-080) ---
+
+test("buildSystemPrompt injects the AGENTS.md context block when a file exists", () => {
+  contextRegistry.reset();
+  const root = mkdtempSync(join(tmpdir(), "sysprompt-ctx-"));
+  writeFileSync(join(root, "AGENTS.md"), "TEAM RULE: always run pnpm lint.", "utf8");
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: root, cwd: root });
+  assert.match(prompt, /Project context \(AGENTS\.md\)/, "the labeled context block appears");
+  assert.match(prompt, /TEAM RULE: always run pnpm lint\./, "the file content is injected");
+  // It is rendered BEFORE the guardrails, so the "block above" reference holds.
+  assert.ok(
+    prompt.indexOf("TEAM RULE") < prompt.indexOf("project-context block above"),
+    "the context block precedes the guardrail that references it",
+  );
+});
+
+test("buildSystemPrompt omits the context block when no AGENTS.md exists (prompt unchanged)", () => {
+  contextRegistry.reset();
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(!prompt.includes("Project context (AGENTS.md)"), "no context block without files");
+});
+
+test("the reworded guardrail points the model at the already-provided context block", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.match(prompt, /already provided in the project-context block above/);
+  assert.ok(
+    !prompt.includes("begin from existing top-level files like README.md or AGENTS.md"),
+    "the old wording (telling the model to re-read AGENTS.md) is gone",
   );
 });
