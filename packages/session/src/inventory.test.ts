@@ -180,6 +180,11 @@ test("relativeTime renders compact buckets", () => {
   assert.equal(relativeTime("2026-06-23T12:00:00.000Z", now), "3d ago");
   assert.equal(relativeTime("2026-06-05T12:00:00.000Z", now), "3w ago");
   assert.equal(relativeTime("not-a-date", now), "");
+  // Through 10 weeks stays a week label; past it switches to a specific date (never "months ago").
+  assert.equal(relativeTime("2026-04-17T12:00:00.000Z", now), "10w ago", "exactly 70 days");
+  assert.equal(relativeTime("2026-04-10T12:00:00.000Z", now), "Apr 10, 2026", "11 weeks -> date");
+  assert.equal(relativeTime("2026-01-01T12:00:00.000Z", now), "Jan 1, 2026");
+  assert.equal(relativeTime("2025-12-25T12:00:00.000Z", now), "Dec 25, 2025");
 });
 
 test("summarizeSession derives archived from the latest session.archived event (newest wins)", () => {

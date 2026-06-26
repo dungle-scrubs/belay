@@ -193,5 +193,27 @@ export function relativeTime(thenIso: string, nowMs: number): string {
     return `${day}d ago`;
   }
   const wk = Math.floor(day / 7);
-  return `${wk}w ago`;
+  if (wk <= 10) {
+    return `${wk}w ago`;
+  }
+  // Past ~10 weeks the relative label stops growing and switches to a specific date (D-093): an
+  // ever-larger week count reads worse than a date, and a "months ago" label is never rendered.
+  // Formatted from the timestamp in UTC so it is deterministic regardless of the viewer's timezone.
+  const d = new Date(then);
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
