@@ -216,17 +216,8 @@ export function ThinkingMessage({
   );
 }
 
-/** An immediate slash command the user ran (host lane, not the model). */
-export function CommandMessage({ command, args }: { command: string; args?: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <MessageHeading>you</MessageHeading>
-      <code className="text-sm text-primary">{args ? `${command} ${args}` : command}</code>
-    </div>
-  );
-}
-
-/** The host's output for a slash command: raw text in a bordered surface. */
+/** The host's output for a slash command: raw text in a bordered surface. The command the user typed
+ *  is not echoed (it is not listed in the transcript); only this result is shown. */
 export function CommandResult({
   command,
   text,

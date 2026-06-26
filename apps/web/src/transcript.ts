@@ -42,9 +42,9 @@ export type ToolMessage = {
   /** The tool's rendered output (from tool.completed), used by renderers like web_search. */
   result?: string;
 };
-// An immediate slash command and the host's result for it (the command lane - these
-// never go to the model, so they render as their own pair, not assistant turns).
-export type CommandMessage = { kind: "command"; id: string; command: string; args: string };
+// The host's result for an immediate slash command (the command lane - these never go to the model,
+// so they render on their own, not as assistant turns). The command itself is not listed; only its
+// result is shown (the output the user invoked).
 export type CommandResultMessage = {
   kind: "result";
   id: string;
@@ -103,7 +103,6 @@ export type Message =
   | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
   | AssistantMessage
   | ToolMessage
-  | CommandMessage
   | CommandResultMessage
   | RecoveredMessage
   | ReconnectingMessage
@@ -292,12 +291,8 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           progressByRun.clear();
           doneFolds.clear();
         }
-        messages.push({
-          kind: "command",
-          id: event.eventId,
-          command: decoded.command,
-          args: decoded.args,
-        });
+        // The command itself is NOT listed in the transcript - the user just typed it, so echoing it
+        // back is noise. Only its result (command.result, below) is shown: the output they invoked.
         break;
       case "command.result":
         // A /compact result means its fold is definitively over. On success the bar was already

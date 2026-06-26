@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   AssistantMessage,
-  CommandMessage,
   CommandResult,
   MessageHeading,
   MessageMeta,
@@ -114,14 +113,6 @@ export const Thinking: Story = {
   ),
 };
 
-export const Command: Story = {
-  render: () => (
-    <Frame>
-      <CommandMessage command="/shell" args="echo hello && node -v" />
-    </Frame>
-  ),
-};
-
 export const Result: Story = {
   render: () => (
     <Frame>
@@ -135,7 +126,6 @@ export const Conversation: Story = {
   render: () => (
     <Frame>
       <div className="flex flex-col gap-5">
-        <CommandMessage command="/doctor" />
         <CommandResult command="/doctor" text={DOCTOR} />
         <UserMessage text="create a sample plan using lucid" />
         <ThinkingMessage content={THINKING} defaultOpen={false} />

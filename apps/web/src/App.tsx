@@ -20,7 +20,6 @@ import { CommandMenu } from "@/components/chat/command-menu";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import {
-  CommandMessage,
   CommandResult,
   MessageMeta,
   ThinkingMessage,
@@ -606,16 +605,6 @@ export function App() {
                       />
                     );
                   }
-                  if (message.kind === "command") {
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <CommandMessage
-                          command={message.command}
-                          args={message.args || undefined}
-                        />
-                      </div>
-                    );
-                  }
                   if (message.kind === "result") {
                     return (
                       <div key={message.id} className="pl-3.5">
@@ -847,23 +836,30 @@ export function App() {
                   </div>
                 ) : null}
 
-                {/* Prompts held in the local queue: shown muted as "queued" so they read as
-            waiting, not sent, until the current turn frees up and they publish. */}
-                {queue.map((q) => (
-                  <div
-                    key={q.id}
-                    className="flex flex-col gap-2 border-l-2 border-primary/50 bg-card px-3 py-2 opacity-60"
-                  >
-                    {q.text ? <Md text={q.text} muted /> : null}
-                    {q.artifacts?.length ? (
-                      <div className="flex gap-1.5">
-                        {q.artifacts.map((ref) => (
-                          <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
-                        ))}
+                {/* Prompts held in the local queue: rendered as subdued "> …" blockquote lines (not
+            transcript chrome) so they read as waiting, not sent, until the turn frees up and they
+            publish. Several stack as one quote block; an attached image rides under its line. */}
+                {queue.length ? (
+                  <div className="flex flex-col gap-1 pl-3.5 opacity-70">
+                    {queue.map((q) => (
+                      <div key={q.id} className="flex items-start gap-2 text-muted-foreground">
+                        <span aria-hidden className="shrink-0 select-none">
+                          &gt;
+                        </span>
+                        <div className="flex min-w-0 flex-col gap-1">
+                          {q.text ? <Md text={q.text} muted /> : null}
+                          {q.artifacts?.length ? (
+                            <div className="flex gap-1.5">
+                              {q.artifacts.map((ref) => (
+                                <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                    ) : null}
+                    ))}
                   </div>
-                ))}
+                ) : null}
               </div>
             ) : null}
           </div>
