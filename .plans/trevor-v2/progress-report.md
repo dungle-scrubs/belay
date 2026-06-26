@@ -267,13 +267,13 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 
 ### M2: Archive metadata and visibility
 
-- [ ] Add or use a durable archived flag on session metadata rather than encoding archive state in transcript text
+- [x] Add or use a durable archived flag on session metadata rather than encoding archive state in transcript text
 - [ ] Archive hides a session from the main UI, session sidebar, and normal current-project navigation
-- [ ] Archived sessions are excluded from the default resume/current-project command view
-- [ ] Archived sessions remain in Richter and are not deleted by archive
+- [x] Archived sessions are excluded from the default resume/current-project command view
+- [x] Archived sessions remain in Richter and are not deleted by archive
 - [ ] Unarchive is required before normal opening or use from the main UI
-- [ ] Archived sessions can be discovered only through an explicit archive filter, archive browser, or CLI archived list
-- [ ] Permanent delete is deferred to an archive browser with strong confirmation
+- [x] Archived sessions can be discovered only through an explicit archive filter, archive browser, or CLI archived list
+- [x] Permanent delete is deferred to an archive browser with strong confirmation
 - [ ] D-093 sidebar respects archived filtering and never shows archived rows by default
 
 ### M3: CLI lifecycle surface
@@ -669,10 +669,10 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 0 completed, 39 remaining
-- Live open follow-up (D-094 session lifecycle controls): 38 features, 0 completed, 38 remaining
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 5 completed, 33 remaining (M2 archive metadata + filtering)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 35 completed, 16 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 247 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 242 unchecked items plus 5 partial/gated carry-forward items
