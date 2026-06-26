@@ -1,5 +1,12 @@
 import { Duration, Effect, Option, Stream } from "effect";
-import type { ChatMessage, ModelEvent, Provider, ProviderError, ToolCall } from "../providers";
+import type {
+  ChatMessage,
+  ModelEvent,
+  Provider,
+  ProviderError,
+  ToolCall,
+  ToolDef,
+} from "../providers";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
 
@@ -107,15 +114,55 @@ export type AgentEvent =
  * `conversation`, and each step's `toolCalls`/`assistantText`, are mutable closures read
  * by the deferred (post-model-step) Stream stages after the model step has drained.
  */
+/**
+ * The delegation capability injected into a PARENT turn (D-048): the delegation tool defs to offer
+ * (delegate_inline / delegate_background) and the runner that executes one. The loop intercepts a
+ * call to a delegation tool and routes it here (the runner has the provider + transport + parent
+ * context the generic tool executor lacks) instead of `executeTool`. A CHILD turn is given no
+ * capability, which is how depth-1 is enforced structurally: a child can neither see nor invoke
+ * delegation (D-048).
+ */
+export interface DelegateCapability {
+  readonly defs: readonly ToolDef[];
+  readonly names: ReadonlySet<string>;
+  /** Runs one delegation tool-call, resolving to the model-facing tool result. */
+  readonly run: (name: string, args: string) => Promise<string>;
+}
+
+/** Options for a turn: a subagent's tool allow-list, and (for a parent) the delegation capability. */
+export interface RunAgentOptions {
+  readonly toolNames?: ReadonlySet<string>;
+  readonly delegate?: DelegateCapability;
+}
+
 export function runAgent(
   provider: Provider,
   history: readonly ChatMessage[],
   reasoning?: string,
   runId?: string,
   useTools = true,
+  opts: RunAgentOptions = {},
 ): Stream.Stream<AgentEvent, ProviderError> {
   const conversation: ChatMessage[] = [...history];
-  const tools = useTools ? TOOL_DEFS : [];
+  // The model is OFFERED only the allow-listed tools; the executor enforces the same set below, so
+  // a child can neither see nor run a tool outside its agent's allow-list. A parent additionally
+  // gets the delegation tools (a child gets none - depth-1).
+  const registryTools = useTools ? TOOL_DEFS : [];
+  const allowed = opts.toolNames
+    ? registryTools.filter((t) => opts.toolNames?.has(t.name))
+    : registryTools;
+  const delegate = opts.delegate;
+  const tools = delegate ? [...allowed, ...delegate.defs] : allowed;
+  const runTool = (name: string, args: string): Effect.Effect<string> => {
+    // A delegation tool-call is routed to the injected runner (it has the provider + transport the
+    // generic executor lacks); everything else goes to the executor, gated by the allow-list.
+    if (delegate?.names.has(name)) {
+      return Effect.promise(() => delegate.run(name, args));
+    }
+    return opts.toolNames && !opts.toolNames.has(name)
+      ? Effect.succeed(`error: tool "${name}" is not available to this agent`)
+      : executeTool(name, args, runId);
+  };
   // One retry budget for an empty answer (the model ending a turn with no text and no
   // tool calls). A single nudge often gets it to synthesize; if it stays empty we
   // surface it rather than ending silently.
@@ -372,7 +419,7 @@ export function runAgent(
             index: number,
           ): Stream.Stream<AgentEvent, ProviderError> =>
             Stream.fromEffect(
-              executeTool(call.name, call.arguments, runId).pipe(
+              runTool(call.name, call.arguments).pipe(
                 Effect.map((result): AgentEvent => {
                   slots[index] = result;
                   return { type: "tool_end", call, result };

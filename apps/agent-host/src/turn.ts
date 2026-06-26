@@ -1,6 +1,6 @@
 import { events } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
-import { type AgentEvent, runAgent } from "./agent/loop";
+import { type AgentEvent, type DelegateCapability, runAgent } from "./agent/loop";
 import { resolveHistoryImages } from "./artifacts";
 import type { ChatMessage, Provider, Usage } from "./providers";
 import { buildSystemPrompt } from "./providers/system-prompt";
@@ -69,9 +69,16 @@ class DeltaBuffer {
 export function publishTurn(
   provider: Provider,
   turnHistory: readonly ChatMessage[],
-  options: { readonly runId: string; readonly reasoning?: string },
+  options: {
+    readonly runId: string;
+    readonly reasoning?: string;
+    /** A subagent's tool allow-list: restricts what the turn offers + runs (D-046). Absent = all. */
+    readonly toolNames?: ReadonlySet<string>;
+    /** The delegation capability for a PARENT turn (D-048); absent on a child turn (depth-1). */
+    readonly delegate?: DelegateCapability;
+  },
 ): Effect.Effect<void, never, Emit> {
-  const { runId, reasoning } = options;
+  const { runId, reasoning, toolNames, delegate } = options;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -114,7 +121,12 @@ export function publishTurn(
     // Token-source breakdown ("where does the context go?"). Fixed overhead = the
     // system prompt + the tool schemas the provider re-sends every step; the rest
     // is seeded from history and grows as the turn's tool results stream in.
-    const toolDefs = useTools ? TOOL_DEFS : [];
+    // A subagent only sees its allow-listed tools, so its overhead (system prompt + tool schemas)
+    // is sized from that restricted set, matching what the model is actually offered; a parent's
+    // overhead also covers the delegation tools it can call.
+    const allDefs = useTools ? TOOL_DEFS : [];
+    const allowedDefs = toolNames ? allDefs.filter((t) => toolNames.has(t.name)) : allDefs;
+    const toolDefs = delegate ? [...allowedDefs, ...delegate.defs] : allowedDefs;
     const breakdown = new BreakdownAccumulator(
       buildSystemPrompt(toolDefs).length + (useTools ? JSON.stringify(toolDefs).length : 0),
     );
@@ -256,7 +268,10 @@ export function publishTurn(
         }
       });
 
-    yield* Stream.runForEach(runAgent(provider, history, reasoning, runId, useTools), handle).pipe(
+    yield* Stream.runForEach(
+      runAgent(provider, history, reasoning, runId, useTools, { toolNames, delegate }),
+      handle,
+    ).pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
           yield* flushAll;

@@ -14,6 +14,7 @@ import {
 } from "@trevor/session";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { COMPACT_WHEN, overBudget, runCompaction } from "./agent/compactor";
+import { buildDelegateCapability } from "./agent/delegate";
 import { buildHistory } from "./agent/history-projection";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
@@ -213,10 +214,28 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
   const provider = pickProvider(providers, decoded.provider);
   // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
   lastProvider = provider;
+  // The delegation capability for this PARENT turn (D-048): it can hand a subtask to a discovered
+  // subagent, which runs in its own isolated child session and folds its distilled result back.
+  // A child turn (run inside runDelegatedChild) is given no capability, so depth stays 1.
+  const delegate = buildDelegateCapability(
+    {
+      transport,
+      parentSessionId: SESSION_ID,
+      producerId: PRODUCER_ID,
+      mintChildSessionId: () => `${SESSION_ID}::sub::${crypto.randomUUID()}`,
+    },
+    {
+      provider,
+      parentRunId: runId,
+      agents: discoverAgents(),
+      mintRunId: () => crypto.randomUUID(),
+    },
+  );
   const fiber = Effect.runFork(
     publishTurn(provider, turnHistory, {
       runId,
       reasoning: decoded.reasoning,
+      delegate,
     }).pipe(Effect.provide(EmitLive)),
   );
   fiber.addObserver((exit) => {

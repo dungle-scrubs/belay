@@ -185,6 +185,34 @@ export const events = {
     payload: { runId: p.runId, attempt: p.attempt, detail: p.detail },
   }),
   /**
+   * A subagent delegation (D-046): this event on the PARENT session links the parent turn (`runId`)
+   * to the isolated child session (`childSessionId`) a delegation spawned, naming the `agent` and
+   * the `task` it was given. Analogous to a fork link - the child is its own session with its own
+   * log; this is the only thread connecting them. `status` tracks the child's lifecycle for the UI
+   * ("running" while it works; "done"/"failed" when it folds back). `result` carries the child's
+   * distilled final message once it finishes (the frozen result a later parent-fork reuses).
+   */
+  delegatedTo: (p: {
+    runId: string;
+    childSessionId: string;
+    agent: string;
+    task: string;
+    mode: "inline" | "background";
+    status: "running" | "done" | "failed";
+    result?: string;
+  }): TrevorEventInput => ({
+    type: "delegated.to",
+    payload: {
+      runId: p.runId,
+      childSessionId: p.childSessionId,
+      agent: p.agent,
+      task: p.task,
+      mode: p.mode,
+      status: p.status,
+      ...(p.result !== undefined ? { result: p.result } : {}),
+    },
+  }),
+  /**
    * A durable cross-turn compaction fold (D-040…D-043): the rolling summary that keeps the
    * prompt projection under the window. Appended, never mutating the log; each fold supersedes
    * the prior (the rolling chain), so the prompt-builder takes the latest. The manifest is this
@@ -568,6 +596,16 @@ export type DecodedEvent =
       readonly detail: string;
     }
   | {
+      readonly type: "delegated.to";
+      readonly runId: string;
+      readonly childSessionId: string;
+      readonly agent: string;
+      readonly task: string;
+      readonly mode: string;
+      readonly status: string;
+      readonly result?: string;
+    }
+  | {
       readonly type: "assistant.progress";
       readonly runId: string;
       readonly usage?: Usage;
@@ -695,6 +733,17 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         runId,
         attempt: num(p.attempt),
         detail: str(p.detail),
+      };
+    case "delegated.to":
+      return {
+        type: "delegated.to",
+        runId,
+        childSessionId: str(p.childSessionId),
+        agent: str(p.agent, "general-purpose"),
+        task: str(p.task),
+        mode: str(p.mode, "inline"),
+        status: str(p.status, "running"),
+        result: optStr(p.result),
       };
     case "assistant.progress":
       return {

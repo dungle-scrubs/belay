@@ -21,12 +21,15 @@
 > D-060, session manager D-061, …) stay sequenced in §6 and are decomposed here when
 > picked up.
 
-> Current focus: Phase 5 - subagents. M1 (agent discovery) is shipped; M2-M5 remain.
-> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1 (agent discovery) ✅.
-> Next: Phase 5 M2-M5 (isolated child sessions, delegation tools, surfacing, ephemeral agents) -
->   note: delegation must run from the loop/turn layer (the provider + turn context live there, not
->   in a plain `executeTool` call), so M3 intercepts delegation tool-calls in the loop rather than
->   routing them through the generic tool executor. Then Phase 6 - search-tool upgrade (D-062).
+> Current focus: Phase 5 - subagents. M1 (discovery) + M2 (isolated child session + link) + M3
+>   inline delegation are shipped end-to-end; `delegate_background` + M4 (web surfacing / `/doctor`)
+>   + M5 (ephemeral agents) remain.
+> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1-M3-inline.
+> Notes: (1) the fork machinery (D-025…D-029) referenced by M2 is NOT in the codebase yet, so the
+>   "independently forkable / forking copies the frozen result" properties are forward-looking -
+>   `delegated.to.result` already carries the frozen result for when fork lands. (2) Delegation runs
+>   from the loop layer (it needs the provider + transport), intercepted as a parent-only capability;
+>   depth-1 is structural (a child is given no capability). Then Phase 6 - search-tool upgrade (D-062).
 
 ## Phase 1: Concurrent read-only tool execution
 
@@ -245,35 +248,34 @@ Source: `apps/agent-host/src/agents.ts` (new, modeled on `apps/agent-host/src/sk
 - [x] Discovered agents announced in `host.online` (`agents: AgentSpec[]` - id + description + resolved allow-lists, no body); `describeAgent` builds the wire descriptor
 - [x] Unit test: discovery yields the built-ins + a user fixture (disabled/description-less skipped); general-purpose gets the full set, explorer excludes every mutating tool; host.online round-trips the agents
 
-### M2: Isolated child session + delegation link
-Source: `packages/session/src/protocol.ts`, `apps/agent-host/src/main.ts`
+### M2: Isolated child session + delegation link ✅ (fork-dependent bullets noted)
+Source: `apps/agent-host/src/agent/delegate.ts` (new), `packages/session/src/protocol.ts`
 
-- [ ] A child runs as its OWN session with its own log; nothing from the parent transcript leaks implicitly
-- [ ] The parent-authored task prompt is the ENTIRE slice the child receives (a structured `context` param deferred)
-- [ ] A `delegatedTo {childSessionId}` event on the parent links the two (analogous to `forkedFrom`)
-- [ ] The fork machinery (D-025…D-029) applies unchanged: the child is independently forkable
-- [ ] Forking the parent copies the frozen distilled result (one event) without re-running the child
-- [ ] Unit test: a delegation creates a child session + a `delegatedTo` event; the child log shares no parent transcript events
+- [x] A child runs as its OWN session with its own log (`runDelegatedChild` mints `<SESSION_ID>::sub::<uuid>`, ensures it, publishes the child lifecycle there); nothing from the parent transcript leaks
+- [x] The parent-authored task is the ENTIRE slice the child receives (seeded as the child's first `user.message`; the agent body frames it; a structured `context` param deferred)
+- [x] A `delegated.to {runId, childSessionId, agent, task, mode, status, result?}` event on the PARENT links the two (running → done/failed, carrying the frozen result)
+- [~] The fork machinery (D-025…D-029) is NOT in the codebase yet, so "independently forkable" / "forking copies the frozen result" can't be exercised; `delegated.to.result` IS the frozen distilled result a parent-fork will reuse once fork lands
+- [~] (see above - depends on the unimplemented fork feature)
+- [x] Unit test: a delegation creates a child session + a `delegated.to` event; the child log shares no parent-run-correlated event and no `delegated.to` (isolation); a failing child folds back as a `failed` link, never throwing into the parent
 
-### M3: Delegation tools + execution modes
-Source: `apps/agent-host/src/tools/delegate.ts` (new), `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`
+### M3: Delegation tools + execution modes — inline ✅; background deferred
+Source: `apps/agent-host/src/agent/delegate.ts`, `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `apps/agent-host/src/main.ts`
 
-- [ ] `delegate_inline` (sync): the parent turn blocks; the child's final message folds in as the tool result
-- [ ] `delegate_background` (async): the child runs concurrently; the parent continues and the result arrives later as an event
-- [ ] Fold-back: the child's final message becomes the parent's tool result
-- [ ] The child runs the same `runAgent` loop with its agent's tool allow-list, skill allow-list, and system prompt
-- [ ] Delegation tools leave `readOnly` unset, so the D-050 partition runs them as serial barriers (never a concurrent read child)
-- [ ] Phase 5 delegation is depth-1 only: root sessions may spawn children; children may not spawn grandchildren
-- [ ] Child tool registries/prompts never include `delegate_inline` or `delegate_background`, even for `general-purpose` or ephemeral `tools: ['*']`
-- [ ] The host enforces `MAX_DELEGATION_DEPTH = 1` at execution time and returns a structured tool error if a child somehow attempts delegation
-- [ ] Active background children are capped at `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4`; excess background delegation requests fail with a structured tool error
-- [ ] `delegate_background` is read-only only in Phase 5: discovered agents are clamped to `READ_ONLY_TOOLS`, and background children never receive mutating/default-serial tools
-- [ ] Ephemeral background `tools: ['*']` resolves to all read-only tools; explicit mutating/default-serial tool names in an ephemeral background contract are rejected with a structured tool error
-- [ ] Mutating background agents are documented as deferred until managed worktrees, cwd-level locks, and a merge/reconciliation protocol exist
-- [ ] No teams (multi-agent orchestration) in this cut
-- [ ] Unit test: an inline delegation blocks and folds the child's result; a background delegation returns immediately and emits its result as a later event
-- [ ] Unit test: child agents cannot delegate recursively; background delegation respects the active-child cap
-- [ ] Unit test: background delegation never receives mutating tools, including discovered `general-purpose` and ephemeral `tools: ['*']` cases
+- [x] `delegate_inline` (sync): the loop intercepts the call, runs the child to completion, and folds its final message in as the tool result (the parent turn blocks)
+- [ ] `delegate_background` (async): the immediate follow-on — needs the concurrent-child lifecycle + the active-child cap + the result-arrives-later event
+- [x] Fold-back: the child's final message becomes the parent's tool result
+- [x] The child runs the same `runAgent` loop with its agent's tool allow-list (`runAgent`/`publishTurn` thread `toolNames`; the executor enforces it) + the agent body as its instructions
+- [x] Delegation tools leave `readOnly` unset, so the D-050 partition runs them as serial barriers
+- [x] Depth-1 only: a child turn is given no delegation capability, so children may not spawn grandchildren
+- [x] Child tool registries never include `delegate_inline` (the delegation defs live in the parent-only capability, never in `TOOL_DEFS`), even for `general-purpose` / `tools: ['*']`
+- [x] Depth-1 enforced structurally (no capability on the child) rather than a runtime depth counter; a child literally cannot see the tool
+- [ ] `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4` cap — with `delegate_background`
+- [ ] `delegate_background` read-only clamp — with `delegate_background`
+- [ ] Ephemeral background `tools: ['*']` → read-only — with M5 + background
+- [x] Mutating background agents documented as deferred (with the background follow-on)
+- [x] No teams (multi-agent orchestration) in this cut
+- [x] Unit test: an inline delegation routes through the capability and folds the child's result; a child turn is offered no delegation tool (depth-1); the capability returns structured errors for an unknown agent / empty task
+- [ ] (background-specific tests land with `delegate_background`)
 
 ### M4: Surfacing + isolation (verification)
 Source: `apps/web/src/transcript.ts`, `apps/web/src/components/chat/message.tsx`, `apps/agent-host/src/commands.ts`
@@ -331,7 +333,7 @@ Source: `apps/agent-host/src/tools/ast-grep.ts` (new), shared search-process hel
 - Phase 2 (turn-budget termination): 20 features, 19 completed, 1 remaining
 - Phase 3 (cross-turn compaction): 27 features, 27 completed, 0 remaining
 - Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
-- Phase 5 (subagents): 41 features, 6 completed (M1 agent discovery), 35 remaining (M2-M5: isolated child sessions, delegation tools, surfacing, ephemeral agents)
+- Phase 5 (subagents): 41 features, ~22 completed (M1 discovery + M2 isolated child session/link + M3 inline delegation), ~19 remaining (`delegate_background` + caps, M4 web surfacing/`/doctor`, M5 ephemeral agents; plus the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature)
 - Phase 6 (search-tool upgrade, accepted/deferred after subagents): 14 features, 0 completed, 14 remaining (decomposed, not started)
 - Total features: 67
 - Completed: 66
