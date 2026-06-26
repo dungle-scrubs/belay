@@ -14,7 +14,13 @@ import {
 } from "@trevor/session";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { COMPACT_WHEN, overBudget, runCompaction } from "./agent/compactor";
-import { buildDelegateCapability } from "./agent/delegate";
+import {
+  type BackgroundChildInfo,
+  type BackgroundDelegator,
+  buildDelegateCapability,
+  MAX_BACKGROUND_CHILDREN_PER_SESSION,
+  runDelegatedChild,
+} from "./agent/delegate";
 import { buildHistory } from "./agent/history-projection";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
@@ -131,9 +137,19 @@ function hostState(): Record<string, unknown> {
     // cancelled | interrupted | error. Omitted until the first turn completes.
     ...(lastTermination ? { lastTurn: lastTermination } : {}),
     compacting: turns.compacting,
-    // Subagents (D-045..D-048): the discovered roster + the depth policy. Delegation is depth-1
-    // (a child is given no delegation capability), inline-only in this cut.
-    subagents: `${discoverAgents().length} agents · depth≤1 · inline`,
+    // Subagents (D-045..D-048): the discovered roster + the depth policy. Delegation is depth-1 (a
+    // child is given no delegation capability); inline blocks, background fans out read-only (≤cap).
+    subagents: `${discoverAgents().length} agents · depth≤1 · inline+background (≤${MAX_BACKGROUND_CHILDREN_PER_SESSION})`,
+    // Active background subagents right now (D-048), so /doctor shows the live fan-out + the cap.
+    ...(backgroundChildren.size > 0
+      ? {
+          background: `${backgroundChildren.size}/${MAX_BACKGROUND_CHILDREN_PER_SESSION} active: ${[
+            ...backgroundChildren.values(),
+          ]
+            .map((c) => c.agent)
+            .join(", ")}`,
+        }
+      : {}),
     ...(lastFold
       ? {
           lastFold: `seq≤${lastFold.throughSeq} ~${commas(lastFold.tokensBefore)}→${commas(lastFold.tokensAfter)}tok`,
@@ -229,20 +245,37 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
   // The delegation capability for this PARENT turn (D-048): it can hand a subtask to a discovered
   // subagent, which runs in its own isolated child session and folds its distilled result back.
   // A child turn (run inside runDelegatedChild) is given no capability, so depth stays 1.
-  const delegate = buildDelegateCapability(
-    {
-      transport,
-      parentSessionId: SESSION_ID,
-      producerId: PRODUCER_ID,
-      mintChildSessionId: () => `${SESSION_ID}::sub::${crypto.randomUUID()}`,
+  const delegationCtx = {
+    transport,
+    parentSessionId: SESSION_ID,
+    producerId: PRODUCER_ID,
+    mintChildSessionId: () => `${SESSION_ID}::sub::${crypto.randomUUID()}`,
+  };
+  // The host owns the background lifecycle: a background child OUTLIVES this turn, so it runs detached
+  // here against the SESSION-level registry + cap, publishing its terminal delegated.to to the parent
+  // log whenever it finishes (the parent turn's fiber may be long gone). runDelegatedChild never throws.
+  const background: BackgroundDelegator = {
+    cap: MAX_BACKGROUND_CHILDREN_PER_SESSION,
+    canStart: () => backgroundChildren.size < MAX_BACKGROUND_CHILDREN_PER_SESSION,
+    start: (req) => {
+      backgroundChildren.set(req.childRunId, {
+        childRunId: req.childRunId,
+        childSessionId: req.childSessionId ?? "",
+        agent: req.agent.id,
+        task: req.task,
+      });
+      void runDelegatedChild(delegationCtx, req).finally(() =>
+        backgroundChildren.delete(req.childRunId),
+      );
     },
-    {
-      provider,
-      parentRunId: runId,
-      agents: discoverAgents(),
-      mintRunId: () => crypto.randomUUID(),
-    },
-  );
+  };
+  const delegate = buildDelegateCapability(delegationCtx, {
+    provider,
+    parentRunId: runId,
+    agents: discoverAgents(),
+    mintRunId: () => crypto.randomUUID(),
+    background,
+  });
   const fiber = Effect.runFork(
     publishTurn(provider, turnHistory, {
       runId,
@@ -312,6 +345,11 @@ let lastTermination: string | null = null;
 /** Runs that emitted a terminal assistant.overflow (recovery exhausted). A turn that then ends with no
  *  real answer reports "overflow" rather than a bare "noReply". Cleared when the run's completion lands. */
 const overflowedRuns = new Set<string>();
+
+/** Background subagents currently running across the session (Phase 5 / D-048), keyed by child run id.
+ *  Each OUTLIVES the parent turn that started it - the registry is session-level, not per-turn - so the
+ *  cap holds across turns and /doctor can report active children. An entry clears when the child settles. */
+const backgroundChildren = new Map<string, BackgroundChildInfo>();
 
 /**
  * Publishes the terminal completion for a run being closed WITHOUT a completion of its own - a user

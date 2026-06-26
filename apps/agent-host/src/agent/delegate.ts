@@ -5,7 +5,7 @@ import { resolveAgentTools } from "../agents";
 import type { ChatMessage, Provider, ToolDef } from "../providers";
 import { Emit } from "../services";
 import { discoverSkills } from "../skills";
-import { TOOL_DEFS } from "../tools";
+import { READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { publishTurn } from "../turn";
 import type { DelegateCapability } from "./loop";
 
@@ -39,6 +39,9 @@ export interface DelegationRequest {
   readonly parentRunId: string;
   /** The child turn's run id (its lifecycle in the child session). */
   readonly childRunId: string;
+  /** The child's isolated session id. Pre-minted by the caller for a background child (so a spawner
+   *  can track + acknowledge it before it runs); minted from the context when omitted (inline). */
+  readonly childSessionId?: string;
   readonly mode: "inline" | "background";
 }
 
@@ -67,61 +70,80 @@ function publishTo(
   });
 }
 
+/** The child's tool allow-list. A BACKGROUND child is clamped to READ-ONLY tools (D-048): it may
+ *  observe but never mutate, so a detached child can't race the parent or another child's writes -
+ *  discovered + ephemeral alike (an ephemeral `tools:['*']` collapses to the read-only set). Inline
+ *  keeps the full resolved allow-list. */
+function resolveChildTools(req: DelegationRequest): Set<string> {
+  const allow = resolveAgentTools(req.agent);
+  return req.mode === "background"
+    ? new Set(allow.filter((name) => READ_ONLY_TOOLS.has(name)))
+    : new Set(allow);
+}
+
 /**
- * Runs a delegated subagent end to end and returns its distilled result. Best-effort: a child turn
- * never throws (publishTurn surfaces failures as a completion with an error), so the parent always
- * gets a result string and a `failed` flag, never an exception that would break the parent turn.
+ * Runs a delegated subagent end to end and returns its distilled result. Best-effort: it NEVER throws
+ * (publishTurn surfaces a model failure as an error completion, and any other fault is caught and
+ * folded into a `failed` result), so the parent - or a detached background spawner - always gets a
+ * result string and a `failed` flag, and the parent link always reaches a terminal done/failed (no
+ * child is ever left "running" forever).
  */
 export async function runDelegatedChild(
   ctx: DelegationContext,
   req: DelegationRequest,
 ): Promise<DelegationResult> {
-  const childSessionId = ctx.mintChildSessionId();
-  await ctx.transport.ensureSession(childSessionId);
-
-  // Seed the child log with the parent task as its first user message (the entire slice it sees).
-  await publishTo(
-    ctx,
-    childSessionId,
-    events.userMessage({ text: req.task, provider: req.provider.id }),
-  );
-
-  // Link parent -> child (running) on the PARENT session.
-  await publishTo(
-    ctx,
-    ctx.parentSessionId,
-    events.delegatedTo({
-      runId: req.parentRunId,
-      childSessionId,
-      agent: req.agent.id,
-      task: req.task,
-      mode: req.mode,
-      status: "running",
-    }),
-  );
-
-  // Run the child's turn with the agent's allow-list, publishing its lifecycle to the CHILD session
-  // and capturing its final message + whether it errored.
+  const childSessionId = req.childSessionId ?? ctx.mintChildSessionId();
+  // Run the child's turn with the agent's (mode-clamped) allow-list, publishing its lifecycle to the
+  // CHILD session and capturing its final message + whether it errored. Wrapped so a fault before the
+  // completion (e.g. ensureSession) still produces a terminal failed link instead of a stuck child.
   let result = "";
   let failed = false;
-  const childEmit = Layer.succeed(Emit, {
-    publish: (event: TrevorEventInput) =>
-      Effect.promise(async () => {
-        if (event.type === "assistant.completed") {
-          const p = event.payload as { text?: unknown; error?: unknown };
-          result = typeof p.text === "string" ? p.text : "";
-          failed = typeof p.error === "string" && p.error.length > 0;
-        }
-        await publishTo(ctx, childSessionId, event);
+  try {
+    await ctx.transport.ensureSession(childSessionId);
+
+    // Seed the child log with the parent task as its first user message (the entire slice it sees).
+    await publishTo(
+      ctx,
+      childSessionId,
+      events.userMessage({ text: req.task, provider: req.provider.id }),
+    );
+
+    // Link parent -> child (running) on the PARENT session.
+    await publishTo(
+      ctx,
+      ctx.parentSessionId,
+      events.delegatedTo({
+        runId: req.parentRunId,
+        childSessionId,
+        agent: req.agent.id,
+        task: req.task,
+        mode: req.mode,
+        status: "running",
       }),
-  });
-  const toolNames = new Set(resolveAgentTools(req.agent));
-  await Effect.runPromise(
-    publishTurn(req.provider, childHistory(req.agent, req.task), {
-      runId: req.childRunId,
-      toolNames,
-    }).pipe(Effect.provide(childEmit)),
-  );
+    );
+
+    const childEmit = Layer.succeed(Emit, {
+      publish: (event: TrevorEventInput) =>
+        Effect.promise(async () => {
+          if (event.type === "assistant.completed") {
+            const p = event.payload as { text?: unknown; error?: unknown };
+            result = typeof p.text === "string" ? p.text : "";
+            failed = typeof p.error === "string" && p.error.length > 0;
+          }
+          await publishTo(ctx, childSessionId, event);
+        }),
+    });
+    await Effect.runPromise(
+      publishTurn(req.provider, childHistory(req.agent, req.task), {
+        runId: req.childRunId,
+        toolNames: resolveChildTools(req),
+      }).pipe(Effect.provide(childEmit)),
+    );
+  } catch (cause) {
+    failed = true;
+    result =
+      result || `delegation error: ${cause instanceof Error ? cause.message : String(cause)}`;
+  }
 
   // Fold-back link (done/failed) carrying the frozen result the parent reuses.
   await publishTo(
@@ -136,17 +158,86 @@ export async function runDelegatedChild(
       status: failed ? "failed" : "done",
       result,
     }),
-  );
+  ).catch(() => {});
 
   return { childSessionId, result, failed };
 }
 
-// --- the delegation tool surface (D-048/D-049): delegate_inline, exposed to the parent model ---
+// --- the delegation tool surface (D-048/D-049): delegate_inline + delegate_background ---
 
-/** The one delegation tool (inline) the model can call. `delegate_background` (async, read-only,
- *  capped) is the immediate follow-on. The agent inventory rides the description so the model picks
- *  a valid id; the host validates it again at run time. A one-off agent can be `define`d inline. */
-export function buildDelegationDefs(agents: readonly AgentDefinition[]): ToolDef[] {
+/** How many background subagents one session may run at once (D-048). A small cap: background
+ *  children are detached fan-out, not a job queue, and each is a full model turn. */
+export const MAX_BACKGROUND_CHILDREN_PER_SESSION = 4;
+
+/** Identifies a background child for tracking + surfacing (the cap, /doctor). */
+export interface BackgroundChildInfo {
+  readonly childRunId: string;
+  readonly childSessionId: string;
+  readonly agent: string;
+  readonly task: string;
+}
+
+/**
+ * The host-owned background runner the capability defers the detached lifecycle to. The host owns it
+ * because a background child OUTLIVES the parent turn: the capability only decides to start one, while
+ * the host owns the session-level registry, the cap, and the fork that keeps running (publishing the
+ * child's terminal `delegated.to` to the parent log) after the parent turn has ended.
+ */
+export interface BackgroundDelegator {
+  /** Active-child cap, surfaced in the model-facing "started" / "too many" message. */
+  readonly cap: number;
+  /** Whether another background child may start now (under the cap). False -> the call is rejected. */
+  readonly canStart: () => boolean;
+  /** Register + run a background child detached from the parent turn (returns immediately). */
+  readonly start: (req: DelegationRequest) => void;
+}
+
+/** The agent/define/task parameters both delegation tools share. */
+function delegationParams(): ToolDef["parameters"] {
+  return {
+    type: "object",
+    properties: {
+      agent: {
+        type: "string",
+        description: "A discovered subagent id from the list (omit if using `define`)",
+      },
+      define: {
+        type: "object",
+        description: "An inline one-off subagent contract (omit if using `agent`)",
+        properties: {
+          description: { type: "string", description: "What this one-off agent is for" },
+          instructions: { type: "string", description: "The agent's system instructions" },
+          tools: {
+            type: "array",
+            items: { type: "string" },
+            description: "Tool allow-list (names from the tool registry); omit for all tools",
+          },
+          skills: {
+            type: "array",
+            items: { type: "string" },
+            description: "Skill allow-list (discovered skill ids); omit for all skills",
+          },
+        },
+        required: ["description", "instructions"],
+      },
+      task: {
+        type: "string",
+        description:
+          "The complete, self-contained task for the subagent - it sees ONLY this, never your conversation, so include all the context it needs.",
+      },
+    },
+    required: ["task"],
+  };
+}
+
+/** The delegation tools the parent model can call. `delegate_inline` blocks for the result;
+ *  `delegate_background` fans out an async read-only child whose result arrives later. The agent
+ *  inventory rides each description so the model picks a valid id; the host validates it again at run
+ *  time. A one-off agent can be `define`d inline either way. */
+export function buildDelegationDefs(
+  agents: readonly AgentDefinition[],
+  backgroundCap = MAX_BACKGROUND_CHILDREN_PER_SESSION,
+): ToolDef[] {
   const inventory = agents.map((a) => `- ${a.id}: ${a.description}`).join("\n");
   return [
     {
@@ -158,45 +249,26 @@ export function buildDelegationDefs(agents: readonly AgentDefinition[]): ToolDef
         "either `agent` (a discovered agent id) or `define` (a one-off ephemeral agent). Use it to " +
         "hand off a self-contained investigation or multi-step subtask whose intermediate steps you " +
         `don't need to see. Available agents:\n${inventory}`,
-      parameters: {
-        type: "object",
-        properties: {
-          agent: {
-            type: "string",
-            description: "A discovered subagent id from the list (omit if using `define`)",
-          },
-          define: {
-            type: "object",
-            description: "An inline one-off subagent contract (omit if using `agent`)",
-            properties: {
-              description: { type: "string", description: "What this one-off agent is for" },
-              instructions: { type: "string", description: "The agent's system instructions" },
-              tools: {
-                type: "array",
-                items: { type: "string" },
-                description: "Tool allow-list (names from the tool registry); omit for all tools",
-              },
-              skills: {
-                type: "array",
-                items: { type: "string" },
-                description: "Skill allow-list (discovered skill ids); omit for all skills",
-              },
-            },
-            required: ["description", "instructions"],
-          },
-          task: {
-            type: "string",
-            description:
-              "The complete, self-contained task for the subagent - it sees ONLY this, never your conversation, so include all the context it needs.",
-          },
-        },
-        required: ["task"],
-      },
+      parameters: delegationParams(),
+    },
+    {
+      name: "delegate_background",
+      description:
+        "Delegate a subtask to a subagent that runs ASYNCHRONOUSLY in its OWN isolated context and " +
+        "returns IMMEDIATELY - you keep working while it runs. Its result arrives later as a " +
+        "delegation update, NOT as this tool's result, so use it only when you don't need the answer " +
+        "before continuing. Background subagents are READ-ONLY (they can search/read but never " +
+        `edit/write/run). Up to ${backgroundCap} run at once. Pass either \`agent\` or \`define\`. ` +
+        `Use it to fan out independent investigations in parallel. Available agents:\n${inventory}`,
+      parameters: delegationParams(),
     },
   ];
 }
 
-const DELEGATION_TOOL_NAMES: ReadonlySet<string> = new Set(["delegate_inline"]);
+const DELEGATION_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "delegate_inline",
+  "delegate_background",
+]);
 
 interface EphemeralSpec {
   readonly description: string;
@@ -315,6 +387,8 @@ export function buildDelegateCapability(
     readonly agents: readonly AgentDefinition[];
     /** Mints the child turn's run id (injected so tests are deterministic). */
     readonly mintRunId: () => string;
+    /** The host-owned background runner. Omitted -> background delegation is unavailable this turn. */
+    readonly background?: BackgroundDelegator;
   },
 ): DelegateCapability {
   // The live registries an ephemeral contract is validated against (D-049).
@@ -322,10 +396,11 @@ export function buildDelegateCapability(
     tools: new Set(TOOL_DEFS.map((t) => t.name)),
     skills: new Set(discoverSkills().map((s) => s.id)),
   };
+  const cap = params.background?.cap ?? MAX_BACKGROUND_CHILDREN_PER_SESSION;
   return {
-    defs: buildDelegationDefs(params.agents),
+    defs: buildDelegationDefs(params.agents, cap),
     names: DELEGATION_TOOL_NAMES,
-    run: async (_name, argsJson) => {
+    run: async (name, argsJson) => {
       const args = parseDelegateArgs(argsJson);
       if (!args.task?.trim()) {
         return 'error: delegate requires a non-empty "task"';
@@ -334,14 +409,32 @@ export function buildDelegateCapability(
       if ("error" in resolved) {
         return resolved.error;
       }
-      const out = await runDelegatedChild(ctx, {
+      const req: DelegationRequest = {
         agent: resolved.agent,
         task: args.task,
         provider: params.provider,
         parentRunId: params.parentRunId,
         childRunId: params.mintRunId(),
-        mode: "inline",
-      });
+        childSessionId: ctx.mintChildSessionId(),
+        mode: name === "delegate_background" ? "background" : "inline",
+      };
+      if (req.mode === "background") {
+        const bg = params.background;
+        if (!bg) {
+          return "error: background delegation is not available on this turn";
+        }
+        if (!bg.canStart()) {
+          return `error: too many background subagents already running (max ${bg.cap}); wait for one to finish or use delegate_inline`;
+        }
+        // Detached by the host: it outlives this turn and its result lands later as a delegation
+        // update on the parent session. The model gets only this acknowledgement now.
+        bg.start(req);
+        return (
+          `Started background subagent "${resolved.agent.id}" in its own read-only session. ` +
+          "Continue with other work; its result will arrive later as a delegation update, not as this tool's result."
+        );
+      }
+      const out = await runDelegatedChild(ctx, req);
       if (out.failed) {
         return `The "${resolved.agent.id}" subagent failed before finishing${out.result ? `: ${out.result}` : "."}`;
       }

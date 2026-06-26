@@ -319,6 +319,51 @@ test("D-046: a delegation reduces its running + done links to one block with the
   );
 });
 
+test("D-048: a background delegation's late result lands by id AFTER the parent turn completes", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "audit the repo", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    // The parent kicks off a background child and finishes its own turn FIRST (running link only).
+    ev(
+      3,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::bg",
+        agent: "explorer",
+        task: "scan for TODOs",
+        mode: "background",
+        status: "running",
+      }),
+    ),
+    ev(4, events.assistantCompleted({ runId: "r1", text: "Working on it in the background." })),
+    // The child's result arrives LATER (higher seq, after the completion) - it must still land on the
+    // same block by childSessionId, wire-order tolerant (like D-050 / M4).
+    ev(
+      5,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::bg",
+        agent: "explorer",
+        task: "scan for TODOs",
+        mode: "background",
+        status: "done",
+        result: "found 3 TODOs",
+      }),
+    ),
+  ];
+  const blocks = toTranscript(log).filter(
+    (m): m is Extract<Message, { kind: "delegation" }> => m.kind === "delegation",
+  );
+  assert.equal(
+    blocks.length,
+    1,
+    "the late done link advances the existing block, not a second one",
+  );
+  assert.equal(blocks[0]?.mode, "background");
+  assert.equal(blocks[0]?.status, "done", "the late result advances the block to done");
+  assert.equal(blocks[0]?.result, "found 3 TODOs", "the late distilled result lands by id");
+});
+
 test("D-079: an assistant.reconnecting event renders an inline reconnecting marker", () => {
   const log = [
     ev(1, events.userMessage({ text: "go", provider: "qwen" })),

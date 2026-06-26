@@ -6,9 +6,11 @@ import type { AgentDefinition } from "../agents";
 import type { Provider, ProviderEvent } from "../providers";
 import { ProviderUnavailable } from "../providers/errors";
 import {
+  type BackgroundDelegator,
   buildDelegateCapability,
   buildDelegationDefs,
   type DelegationContext,
+  type DelegationRequest,
   runDelegatedChild,
 } from "./delegate";
 import { type AgentEvent, type DelegateCapability, runAgent } from "./loop";
@@ -365,5 +367,141 @@ test("a call with neither agent nor define is a structured error", async () => {
   assert.match(
     await cap.run("delegate_inline", JSON.stringify({ task: "go" })),
     /requires an "agent" id or an inline "define"/,
+  );
+});
+
+// --- M3/M4: background delegation (D-048): async, read-only, capped ---
+
+/** A recording background delegator: captures started requests and runs them through the same
+ *  runDelegatedChild the host would, but synchronously awaitable so the test can assert the result. */
+function recordingDelegator(transport: SessionTransport, cap = 4) {
+  const started: DelegationRequest[] = [];
+  const ran: Promise<unknown>[] = [];
+  let available = true;
+  const delegator: BackgroundDelegator = {
+    cap,
+    canStart: () => available,
+    start: (req) => {
+      started.push(req);
+      ran.push(runDelegatedChild(context(transport), req));
+    },
+  };
+  return {
+    started,
+    delegator,
+    drain: () => Promise.all(ran),
+    setAvailable: (v: boolean) => {
+      available = v;
+    },
+  };
+}
+
+function capabilityWithBackground(
+  transport: SessionTransport,
+  provider: Provider,
+  delegator: BackgroundDelegator,
+) {
+  return buildDelegateCapability(context(transport), {
+    provider,
+    parentRunId: "rp",
+    agents: [EXPLORER],
+    mintRunId: () => "rc",
+    background: delegator,
+  });
+}
+
+test("both delegation tools are offered, and delegate_background advertises its async/read-only/cap", () => {
+  const defs = buildDelegationDefs([EXPLORER], 4);
+  const names = defs.map((d) => d.name);
+  assert.deepEqual(names, ["delegate_inline", "delegate_background"]);
+  const bg = defs.find((d) => d.name === "delegate_background");
+  assert.match(bg?.description ?? "", /ASYNCHRONOUSLY/);
+  assert.match(bg?.description ?? "", /READ-ONLY/);
+  assert.match(bg?.description ?? "", /Up to 4 run at once/);
+});
+
+test("delegate_background returns immediately with an ack and starts a tracked child", async () => {
+  const t = fakeTransport();
+  const bg = recordingDelegator(t.transport);
+  const cap = capabilityWithBackground(t.transport, answeringProvider("found it"), bg.delegator);
+  const ack = await cap.run(
+    "delegate_background",
+    JSON.stringify({ agent: "explorer", task: "scan" }),
+  );
+  assert.match(ack, /Started background subagent "explorer"/);
+  assert.match(ack, /arrive later as a delegation update/);
+  assert.equal(
+    bg.started.length,
+    1,
+    "the host's background delegator was asked to start one child",
+  );
+  assert.equal(bg.started[0]?.mode, "background");
+  // The child runs to completion and lands a terminal link on the parent (the late result).
+  await bg.drain();
+  const links = (t.published.get("parent-session") ?? []).filter((e) => e.type === "delegated.to");
+  assert.equal((links.at(-1)?.payload as Record<string, unknown>).status, "done");
+  assert.equal((links.at(-1)?.payload as Record<string, unknown>).result, "found it");
+});
+
+test("delegate_background is rejected past the cap (and does not start a child)", async () => {
+  const t = fakeTransport();
+  const bg = recordingDelegator(t.transport, 4);
+  bg.setAvailable(false); // cap reached
+  const cap = capabilityWithBackground(t.transport, answeringProvider("x"), bg.delegator);
+  const out = await cap.run(
+    "delegate_background",
+    JSON.stringify({ agent: "explorer", task: "scan" }),
+  );
+  assert.match(out, /too many background subagents already running \(max 4\)/);
+  assert.equal(bg.started.length, 0, "no child is started when the cap is full");
+});
+
+test("delegate_background is unavailable when the host wires no background delegator", async () => {
+  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  assert.match(
+    await cap.run("delegate_background", JSON.stringify({ agent: "explorer", task: "scan" })),
+    /background delegation is not available/,
+  );
+});
+
+test("a background child is clamped to READ-ONLY tools (even general-purpose / tools:['*'])", async () => {
+  const t = fakeTransport();
+  let childOffered: string[] = [];
+  const provider: Provider = {
+    ...answeringProvider("done"),
+    stream: (_messages, tools) => {
+      childOffered = tools.map((tt) => tt.name);
+      return Stream.fromIterable<ProviderEvent>([
+        { type: "text", text: "done" },
+        { type: "usage", usage: USAGE },
+      ]);
+    },
+  };
+  await runDelegatedChild(context(t.transport), {
+    agent: GENERAL, // tools: ['*'] - inline this would be every tool
+    task: "x",
+    provider,
+    parentRunId: "rp",
+    childRunId: "rc",
+    childSessionId: "child-bg",
+    mode: "background",
+  });
+  assert.ok(childOffered.includes("read"), "a read-only tool is still offered");
+  assert.ok(!childOffered.includes("edit"), "edit is clamped out of a background child");
+  assert.ok(!childOffered.includes("write"), "write is clamped out of a background child");
+  assert.ok(!childOffered.includes("bash"), "bash is clamped out of a background child");
+});
+
+test("an ephemeral agent cannot allow-list delegate_background either (depth-1 covers both tools)", async () => {
+  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  assert.match(
+    await cap.run(
+      "delegate_inline",
+      JSON.stringify({
+        define: { description: "x", instructions: "y", tools: ["delegate_background"] },
+        task: "go",
+      }),
+    ),
+    /may not use delegation tools/,
   );
 });

@@ -25,11 +25,13 @@
 > D-060, session manager D-061, …) stay sequenced in §6 and are decomposed here when
 > picked up.
 
-> Current focus: Phase 5 - subagents shipped end-to-end for the INLINE path: M1 discovery, M2
->   isolated child session + `delegated.to` link, M3 inline delegation, M4 web surfacing + `/doctor`,
->   M5 inline ephemeral agents. Remaining: `delegate_background` (+ caps), the fork-dependent
->   forkability bullets, and a few refinements (see the milestone notes). Then Phase 6 (search tools).
-> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1-M5 (inline path).
+> Current focus: Phase 5 - subagents shipped end-to-end for BOTH execution modes: M1 discovery, M2
+>   isolated child session + `delegated.to` link, M3 inline + background delegation (cap + read-only
+>   clamp + late-result), M4 web surfacing + `/doctor`, M5 inline ephemeral agents. Remaining: only the
+>   fork-dependent forkability bullets (blocked on the unimplemented D-025…D-029 fork feature) and a few
+>   refinements (see the milestone notes). Then Phase 7 (nested AGENTS.md).
+> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1-M5 (inline + background);
+>   Phase 6 (ripgrep `grep` + read-only `ast_grep`) ✅; Phase 2 M4 (`/doctor` turn-termination reason) ✅.
 > Notes: (1) the fork machinery (D-025…D-029) referenced by M2 is NOT in the codebase yet, so the
 >   "independently forkable / forking copies the frozen result" properties are forward-looking -
 >   `delegated.to.result` already carries the frozen result for when fork lands. (2) Delegation runs
@@ -268,32 +270,32 @@ Source: `apps/agent-host/src/agent/delegate.ts` (new), `packages/session/src/pro
 - [~] (see above - depends on the unimplemented fork feature)
 - [x] Unit test: a delegation creates a child session + a `delegated.to` event; the child log shares no parent-run-correlated event and no `delegated.to` (isolation); a failing child folds back as a `failed` link, never throwing into the parent
 
-### M3: Delegation tools + execution modes — inline ✅; background deferred
+### M3: Delegation tools + execution modes — inline ✅; background ✅
 Source: `apps/agent-host/src/agent/delegate.ts`, `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `apps/agent-host/src/main.ts`
 
 - [x] `delegate_inline` (sync): the loop intercepts the call, runs the child to completion, and folds its final message in as the tool result (the parent turn blocks)
-- [ ] `delegate_background` (async): the immediate follow-on — needs the concurrent-child lifecycle + the active-child cap + the result-arrives-later event
+- [x] `delegate_background` (async): the capability returns an immediate ack and the host runs the child DETACHED (`BackgroundDelegator.start` → `void runDelegatedChild(...)`), so it outlives the parent turn; its terminal `delegated.to` lands on the parent session log whenever it finishes (the result-arrives-later event)
 - [x] Fold-back: the child's final message becomes the parent's tool result
 - [x] The child runs the same `runAgent` loop with its agent's tool allow-list (`runAgent`/`publishTurn` thread `toolNames`; the executor enforces it) + the agent body as its instructions
 - [x] Delegation tools leave `readOnly` unset, so the D-050 partition runs them as serial barriers
 - [x] Depth-1 only: a child turn is given no delegation capability, so children may not spawn grandchildren
-- [x] Child tool registries never include `delegate_inline` (the delegation defs live in the parent-only capability, never in `TOOL_DEFS`), even for `general-purpose` / `tools: ['*']`
+- [x] Child tool registries never include `delegate_inline`/`delegate_background` (the delegation defs live in the parent-only capability, never in `TOOL_DEFS`), even for `general-purpose` / `tools: ['*']`
 - [x] Depth-1 enforced structurally (no capability on the child) rather than a runtime depth counter; a child literally cannot see the tool
-- [ ] `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4` cap — with `delegate_background`
-- [ ] `delegate_background` read-only clamp — with `delegate_background`
-- [ ] Ephemeral background `tools: ['*']` → read-only — with M5 + background
+- [x] `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4` cap — session-level registry in `main.ts`; `BackgroundDelegator.canStart()` rejects past the cap with a structured `error: too many background subagents …`
+- [x] `delegate_background` read-only clamp — `resolveChildTools` intersects the agent's allow-list with `READ_ONLY_TOOLS` for `mode: "background"` (a background child is offered no edit/write/bash)
+- [x] Ephemeral background `tools: ['*']` → read-only — the same `resolveChildTools` clamp applies to ephemeral agents (an ephemeral `tools:['*']` expands then collapses to the read-only set)
 - [x] Mutating background agents documented as deferred (with the background follow-on)
 - [x] No teams (multi-agent orchestration) in this cut
 - [x] Unit test: an inline delegation routes through the capability and folds the child's result; a child turn is offered no delegation tool (depth-1); the capability returns structured errors for an unknown agent / empty task
-- [ ] (background-specific tests land with `delegate_background`)
+- [x] Background-specific tests: both tools offered + the background description advertises async/read-only/cap; `delegate_background` returns an immediate ack and starts a tracked child whose late result lands a terminal link; the cap rejects (and starts no child); unavailable when no delegator is wired; the read-only clamp (incl. general-purpose `['*']`); an ephemeral cannot allow-list `delegate_background` (depth-1, both names)
 
 ### M4: Surfacing + isolation (verification)
-Source: `apps/web/src/transcript.ts`, `apps/web/src/components/chat/message.tsx`, `apps/agent-host/src/commands.ts`
+Source: `apps/web/src/transcript.ts`, `apps/web/src/components/chat/message.tsx`, `apps/web/src/App.tsx`, `apps/agent-host/src/commands.ts`, `apps/agent-host/src/main.ts`
 
-- [ ] The web renders a delegation as a distinct linked block (child session id + status), separate from an ordinary tool card
-- [ ] A background delegation's late result lands by id (wire-order tolerant, like D-050 / M4)
-- [ ] `/doctor` reports active child delegations, depth policy, and active background-child count/cap
-- [ ] Manual repro: a general-purpose inline delegation distills a multi-step subtask into one parent tool result; an explorer fan-out reads files without leaking parent context
+- [x] The web renders a delegation as a distinct linked block (child session id + status), separate from an ordinary tool card — purple `Alert` block (`App.tsx`); a background child reads distinctly ("running in background…")
+- [x] A background delegation's late result lands by id (wire-order tolerant, like D-050 / M4) — `toTranscript` collapses links by `childSessionId`, so a `done` arriving AFTER the parent's `assistant.completed` advances the same block (transcript.test D-048)
+- [x] `/doctor` reports active child delegations, depth policy, and active background-child count/cap — `hostState()` `subagents` line (`depth≤1 · inline+background (≤N)`) + a `background: k/N active: <agents>` field when any run
+- [~] Manual repro: a general-purpose inline delegation distills a multi-step subtask into one parent tool result; an explorer fan-out reads files without leaking parent context — verified by construction across the unit tier (isolation + clamp + late-result); a live over-the-wire fan-out is the gated live-model lane
 
 ### M5: Ephemeral model-minted agents ✅ (inline)
 Source: `apps/agent-host/src/agent/delegate.ts`, `apps/agent-host/src/agents.ts`
@@ -385,16 +387,16 @@ Source: `apps/agent-host/src/commands.ts` (`/doctor`)
 
 ## Summary
 - Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
-- Phase 2 (turn-budget termination): 20 features, 19 completed, 1 remaining
+- Phase 2 (turn-budget termination): 20 features, 20 completed, 0 remaining ✅ (M4 `/doctor` turn-termination reason shipped)
 - Phase 3 (cross-turn compaction): 27 features, 27 completed, 0 remaining
 - Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
-- Phase 5 (subagents): 41 features, ~33 completed (M1 discovery + M2 isolated child session/link + M3 inline delegation + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~8 remaining (`delegate_background` + its caps/read-only clamp + late-result tracking; the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
+- Phase 5 (subagents): 41 features, ~39 completed (M1 discovery + M2 isolated child session/link + M3 inline + background delegation [cap, read-only clamp, late-result] + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~2 remaining (the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
 - Phase 6 (search-tool upgrade): 14 features, 14 completed ✅ (M1 ripgrep-backed `grep` + M2 read-only `ast_grep`, both with project-managed binaries and tests)
 - Phase 7 (nested AGENTS.md context files): 17 features, 0 completed, 17 remaining - the NEXT feature to implement (Claude Code lazy model on AGENTS.md): M1 reader + single-sourced `TREVOR_HOME` = 6, M2 eager prompt injection = 4, M3 lazy below-cwd loading = 5, M4 `/doctor` surfacing = 2
 - Total features: 67
-- Completed: 66
-- Remaining: 1
-- Current cutoff blockers: 1 (Phase 2 M4 /doctor turn-termination reason)
+- Completed: 67
+- Remaining: 0
+- Current cutoff blockers: 0 (Phase 2 M4 /doctor turn-termination reason shipped)
 - Next-feature work (decomposed, not started): 18 (Phase 4: provider SDK migration to `@earendil-works/pi-ai@0.80.2` = 12, then M3 provider-outage auto-reconnect recovery = 6)
 - Post-provider-migration sequenced follow-up: 41 (Phase 5 subagents, including D-049 ephemeral definitions, depth-1 limits, and read-only background delegation)
 - Post-subagents sequenced follow-up: 14 (Phase 6 search-tool upgrade: ripgrep-backed `grep` + read-only `ast_grep`)
