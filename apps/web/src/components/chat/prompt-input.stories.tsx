@@ -1,114 +1,136 @@
-import {
-  AssistantRuntimeProvider,
-  SimpleImageAttachmentAdapter,
-  type ThreadMessageLike,
-  useExternalStoreRuntime,
-} from "@assistant-ui/react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
-import { Thread } from "@/components/assistant-ui/thread";
+import type { ArtifactRef } from "@trevor/session";
+import { useRef, useState } from "react";
+import { CommandMenu } from "@/components/chat/command-menu";
+import { PromptInput } from "@/components/chat/prompt-input";
 
-const SAMPLE: ThreadMessageLike[] = [
-  { role: "user", content: "create a sample plan using lucid" },
-  {
-    role: "assistant",
-    content: [
-      {
-        type: "reasoning",
-        text: "Keep it short: a numbered list, one fenced code block, and a single link.",
-      },
-      {
-        type: "tool-call",
-        toolCallId: "call_read_1",
-        toolName: "read",
-        args: { path: "apps/web/src/App.tsx" },
-        result: "// 659 lines of React",
-      },
-      {
-        type: "text",
-        text: [
-          "Here's a sample plan:",
-          "",
-          "1. **Scaffold** the design system in `apps/web`",
-          "2. Build the composer + chat messages",
-          "3. Verify everything in Storybook",
-          "",
-          "```ts",
-          'const plan = ["scaffold", "build", "verify"] as const;',
-          "```",
-          "",
-          "See [the SMUI guide](https://smui.statico.io) for the aesthetic.",
-        ].join("\n"),
-      },
-    ],
-  },
-];
-
-// Bridges static sample messages into assistant-ui via the external-store
-// runtime. A real app swaps this for a Richter-backed runtime adapter.
-function MockThread({
-  initial = SAMPLE,
-  isRunning = false,
+/**
+ * Drives the REAL production composer (PromptInput, the same component App renders) with local
+ * state, so Storybook exercises the actual prompt input - its bordered surface, attach button,
+ * attachment chips, upload-error banner, and the prompt-shell-lane (`!`) terminal treatment - not an
+ * assistant-ui mock. Each story seeds a different draft / attachment set to show one composer state.
+ */
+function ComposerHarness({
+  initialDraft = "",
+  attachments = [],
+  uploading = 0,
+  uploadError = null,
+  showSlashMenu = false,
 }: {
-  initial?: ThreadMessageLike[];
-  isRunning?: boolean;
+  initialDraft?: string;
+  attachments?: readonly ArtifactRef[];
+  uploading?: number;
+  uploadError?: string | null;
+  showSlashMenu?: boolean;
 }) {
-  const [messages, setMessages] = useState<ThreadMessageLike[]>(initial);
-  const runtime = useExternalStoreRuntime({
-    messages,
-    isRunning,
-    convertMessage: (message: ThreadMessageLike) => message,
-    // Enables image attachments + thumbnails in the composer. A real app would
-    // use an adapter that uploads to the host instead.
-    adapters: { attachments: new SimpleImageAttachmentAdapter() },
-    onNew: async (message) => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: message.content },
-        {
-          role: "assistant",
-          content: "Mock runtime - wire a Richter-backed runtime for real replies.",
-        },
-      ]);
-    },
-  });
+  const [draft, setDraft] = useState(initialDraft);
+  const [chips, setChips] = useState<readonly ArtifactRef[]>(attachments);
+  const [error, setError] = useState<string | null>(uploadError);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // The slash menu lives in App as an absolute overlay above this input; mirror that layout so the
+  // story shows the shell chrome is distinct from the slash menu.
+  const slashMatches = [
+    { name: "/doctor", summary: "Host health: workspace, providers, tools" },
+    { name: "/shell", summary: "Run a shell command on the host", usage: "/shell <command>" },
+  ];
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <div className="mx-auto h-[36rem] w-full max-w-3xl border border-border">
-        <Thread />
+    <div className="mx-auto w-full max-w-2xl bg-smui-surface-sunken p-4">
+      <div className="relative pt-2 pb-4">
+        {showSlashMenu ? (
+          <CommandMenu
+            className="absolute inset-x-0 bottom-full z-20 mb-2"
+            matches={slashMatches}
+            activeIndex={0}
+            query={draft}
+            onPick={(name) => setDraft(`${name} `)}
+          />
+        ) : null}
+        <PromptInput
+          draft={draft}
+          onDraftChange={setDraft}
+          onSubmit={(event) => event.preventDefault()}
+          onKeyDown={() => {}}
+          onPaste={() => {}}
+          inputRef={inputRef}
+          fileInputRef={fileInputRef}
+          onPickFiles={() => {}}
+          disabled={false}
+          placeholder="message qwen… (/ for commands, ! for shell)"
+          attachments={chips}
+          onRemoveAttachment={(hash) => setChips((a) => a.filter((ref) => ref.hash !== hash))}
+          uploading={uploading}
+          uploadError={error}
+          onDismissError={() => setError(null)}
+        />
       </div>
-      {/* Select-to-quote has its own story (Chat/QuoteSelectionToolbar). */}
-    </AssistantRuntimeProvider>
+    </div>
   );
 }
 
+const HEX64 = "a".repeat(64);
+const imageAttachment: ArtifactRef = {
+  kind: "document",
+  mimeType: "text/plain",
+  size: 1024,
+  hash: HEX64,
+  name: "notes.txt",
+};
+
 const meta = {
   title: "Components/PromptInput",
-  component: MockThread,
+  component: ComposerHarness,
   parameters: { layout: "fullscreen" },
-} satisfies Meta<typeof MockThread>;
+} satisfies Meta<typeof ComposerHarness>;
 
 export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Populated: Story = {};
-
-export const Empty: Story = {
-  render: () => <MockThread initial={[]} />,
+/** An ordinary prompt: the neutral bordered composer. */
+export const Normal: Story = {
+  render: () => <ComposerHarness initialDraft="refactor the turn scheduler" />,
 };
 
-// Demonstrates the quote-on-selection toolbar. Highlight any message text to
-// reveal the "Quote" / "Tangent" popup.
-export const QuoteFromSelection: Story = {
-  name: "Quote from selection",
+/** A leading `/`: the slash-command menu overlays above the input. The composer chrome itself is
+ *  unchanged - that's how the shell treatment stays distinct from the slash menu. */
+export const Slash: Story = {
+  render: () => <ComposerHarness initialDraft="/do" showSlashMenu />,
+};
+
+/** A lone `!`: the terminal-orange styling + shell glyph appear immediately (no height reflow), but
+ *  nothing executes (no command yet). The inert state before a command is typed. */
+export const EmptyBang: Story = {
+  name: "Empty bang",
+  render: () => <ComposerHarness initialDraft="!" />,
+};
+
+/** A leading `!` with a command: the executable shell lane - terminal-orange border / background /
+ *  monospace text, with the attach `+` swapped for the shell glyph. Submitting runs it on the host. */
+export const ExecutableBang: Story = {
+  name: "Executable bang",
+  render: () => <ComposerHarness initialDraft="!git status --short" />,
+};
+
+/** A long shell command: the textarea grows and the terminal styling holds across multiple lines. */
+export const LongBang: Story = {
+  name: "Long bang command",
   render: () => (
-    <div className="flex h-full flex-col">
-      <p className="text-muted-foreground mx-auto w-full max-w-3xl px-4 pt-4 text-sm">
-        Drag-highlight any text in a message below to reveal the Quote / Tangent toolbar.
-      </p>
-      <MockThread />
-    </div>
+    <ComposerHarness initialDraft="!find apps -name '*.test.ts' -newer package.json -print | head -50 | sort -u" />
+  ),
+};
+
+/** A bang command with a pending attachment and an upload error: shell is text-only, so the
+ *  attachment stays in the composer (handled explicitly, never silently dropped). */
+export const BangWithAttachment: Story = {
+  name: "Bang with attachment + error",
+  render: () => (
+    <ComposerHarness
+      initialDraft="!cat notes.txt"
+      attachments={[imageAttachment]}
+      uploadError="couldn't attach huge.bin: file too large"
+    />
   ),
 };

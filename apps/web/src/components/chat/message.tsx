@@ -231,6 +231,48 @@ export function ThinkingMessage({
   );
 }
 
+/**
+ * A prompt-shell-lane run (D-082): a leading `!` that ran through the host's protected shell path.
+ * Rendered as a terminal block - an orange `$ command` prompt line (matching the composer's shell
+ * lane), then the output in a monospace pre - visually distinct from the assistant prose, tool cards,
+ * and the bordered command-result surface. While the result is pending it shows a "running…" line; a
+ * refused/failed command tints the output red.
+ */
+export function ShellBlock({
+  command,
+  output,
+  done,
+  ok = true,
+}: {
+  command: string;
+  output?: string;
+  done: boolean;
+  ok?: boolean;
+}) {
+  return (
+    <div className="flex flex-col border border-smui-orange/25 bg-smui-orange/[0.05] font-mono text-sm">
+      <div className="flex items-start gap-2 border-smui-orange/15 border-b px-3 py-2 text-foreground">
+        <span aria-hidden className="shrink-0 select-none text-smui-orange">
+          $
+        </span>
+        <code className="min-w-0 whitespace-pre-wrap break-all">{command}</code>
+      </div>
+      {!done ? (
+        <div className="px-3 py-2 text-muted-foreground italic">running…</div>
+      ) : output ? (
+        <pre
+          className={cn(
+            "overflow-x-auto whitespace-pre-wrap px-3 py-2",
+            ok ? "text-muted-foreground" : "text-smui-red",
+          )}
+        >
+          {output}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
 /** The host's output for a slash command: raw text in a bordered surface. The command the user typed
  *  is not echoed (it is not listed in the transcript); only this result is shown. */
 export function CommandResult({

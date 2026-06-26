@@ -67,6 +67,16 @@ function webIdentity(): SessionIdentity {
   return identity;
 }
 
+/**
+ * This browser tab's stable id: the same per-tab instanceId the session identity uses, reused to key
+ * tab-local composer state (draft persistence + prompt history, D-083/D-084). sessionStorage already
+ * scopes that state to the tab; threading the id into the storage key keeps distinct tabs isolated
+ * even under a shared storage (the unit tests rely on that), and keeps the id stable across a reload.
+ */
+export function webTabId(): string {
+  return webIdentity().instanceId;
+}
+
 interface ConnectOptions {
   readonly sessionId: string;
   readonly afterSeq?: number;
@@ -151,6 +161,9 @@ export interface SessionActions {
   ) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
   readonly command: (command: string, args: string) => Promise<void>;
+  /** The prompt shell lane (D-082): publish a `user.shell` so the leader runs the command now,
+   *  bypassing the send queue, the model, and the provider flow. */
+  readonly shell: (requestId: string, command: string) => Promise<void>;
   readonly openInEditor: (path: string, line?: number, column?: number) => Promise<void>;
 }
 
@@ -192,6 +205,14 @@ export function useSessionActions(sessionId: string | null): SessionActions {
     [publishVia],
   );
 
+  // Prompt shell lane: a leading `!` publishes a user.shell the leader runs through its protected
+  // shell path. Bypasses the send queue + model entirely - it is never a turn.
+  const shell = useCallback(
+    (requestId: string, command: string) =>
+      publishVia(sessionEvents.userShell({ requestId, command })),
+    [publishVia],
+  );
+
   // Side-channel: ask the host to open a local file in the editor. Not a chat message or command - it
   // never renders in the transcript.
   const openInEditor = useCallback(
@@ -200,5 +221,5 @@ export function useSessionActions(sessionId: string | null): SessionActions {
     [publishVia],
   );
 
-  return { publish, cancel, command, openInEditor };
+  return { publish, cancel, command, shell, openInEditor };
 }

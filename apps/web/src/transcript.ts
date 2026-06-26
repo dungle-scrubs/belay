@@ -99,6 +99,19 @@ export type DelegationMessage = {
   status: string;
   result?: string;
 };
+// A prompt-shell-lane run (D-082): a leading `!` published a `user.shell`, and the leader's
+// `shell.result` carries the output. The web reduces the pair (keyed by `requestId`) to one terminal
+// block - pending while only the request is in, then the output once the result lands. `ok` is false
+// for a refused / failed command. Never fed to the model; rendered distinctly from a command result.
+export type ShellMessage = {
+  kind: "shell";
+  id: string;
+  requestId: string;
+  command: string;
+  done: boolean;
+  output?: string;
+  ok?: boolean;
+};
 export type Message =
   | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
   | AssistantMessage
@@ -107,7 +120,8 @@ export type Message =
   | RecoveredMessage
   | ReconnectingMessage
   | CompactingMessage
-  | DelegationMessage;
+  | DelegationMessage
+  | ShellMessage;
 
 // The read-only tools the host fans out concurrently (mirrors agent-host's READ_ONLY_TOOLS). A run
 // of 2+ consecutive read-only tool rows was one parallel batch, so the UI groups it into a single
@@ -220,6 +234,11 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
   // One linked block per delegated child, keyed by childSessionId; the running + terminal
   // `delegated.to` links advance the same block in place (status + result), never two cards.
   const delegationByChild = new Map<string, DelegationMessage>();
+  // One terminal block per shell-lane run (D-082), keyed by requestId: the `user.shell` spawns a
+  // pending block, the `shell.result` fills it in place (so it shows `$ command` then the output,
+  // never two rows). A `shell.result` with no prior request (the request was compacted out of the
+  // tail, or arrived first) still renders from its own command.
+  const shellByRequest = new Map<string, ShellMessage>();
   // Reaps every open fold bar from the transcript. A fold runs on the host's one-turn gate, so a
   // bar is only ever live at the tail; once a turn or command follows it without a matching
   // `context.compacted`, that fold was interrupted (host reset mid-fold) and its bar is an orphan -
@@ -290,6 +309,7 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           toolByCall.clear();
           progressByRun.clear();
           doneFolds.clear();
+          shellByRequest.clear();
         }
         // The command itself is NOT listed in the transcript - the user just typed it, so echoing it
         // back is noise. Only its result (command.result, below) is shown: the output they invoked.
@@ -311,6 +331,46 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           ok: decoded.ok,
         });
         break;
+      case "user.shell": {
+        // The shell-lane request: a pending terminal block (no output yet), keyed by requestId so its
+        // result fills it in place. Already present means a duplicate request id - leave the block.
+        if (!shellByRequest.has(decoded.requestId)) {
+          const block: ShellMessage = {
+            kind: "shell",
+            id: event.eventId,
+            requestId: decoded.requestId,
+            command: decoded.command,
+            done: false,
+          };
+          shellByRequest.set(decoded.requestId, block);
+          messages.push(block);
+        }
+        break;
+      }
+      case "shell.result": {
+        // Fill the pending block in place, or spawn a completed one if the request never landed (it
+        // was compacted out of the tail, or the result arrived first). `command` falls back to the
+        // result's own copy when the request is gone.
+        const existing = shellByRequest.get(decoded.requestId);
+        if (existing) {
+          existing.done = true;
+          existing.output = decoded.output;
+          existing.ok = decoded.ok;
+        } else {
+          const block: ShellMessage = {
+            kind: "shell",
+            id: event.eventId,
+            requestId: decoded.requestId,
+            command: decoded.command,
+            done: true,
+            output: decoded.output,
+            ok: decoded.ok,
+          };
+          shellByRequest.set(decoded.requestId, block);
+          messages.push(block);
+        }
+        break;
+      }
       case "assistant.started":
         // A turn starting means any open fold already finished or was interrupted - reap a lingering
         // bar (this is what clears a lone orphan stuck at some % from a prior mid-fold reset).

@@ -9,6 +9,7 @@ import {
   fmtTokens,
   hostStatus,
   isOverflowError,
+  parseBangShell,
   parseCommand,
   providerModelsFrom,
   tasksFrom,
@@ -108,6 +109,31 @@ test("parseCommand routes only an exact known /command, else an ordinary prompt"
   assert.deepEqual(parseCommand("/note  hi there ", known), { command: "/note", args: "hi there" });
   assert.equal(parseCommand("/unknown", known), null);
   assert.equal(parseCommand("hello", known), null);
+});
+
+test("parseBangShell triggers only on a RAW leading ! with a non-empty command (D-082)", () => {
+  assert.deepEqual(parseBangShell("!git status"), { command: "git status" });
+  // The command is trimmed of surrounding whitespace.
+  assert.deepEqual(parseBangShell("!  ls -la  "), { command: "ls -la" });
+  // A lone `!` (the inert "empty bang" state) and a whitespace-only command publish nothing.
+  assert.equal(parseBangShell("!"), null);
+  assert.equal(parseBangShell("!   "), null);
+  // A space BEFORE the bang is an ordinary prompt, not the shell lane (raw-first-char rule).
+  assert.equal(parseBangShell(" !ls"), null);
+  // A slash, plain text, and empty draft are never the shell lane.
+  assert.equal(parseBangShell("/doctor"), null);
+  assert.equal(parseBangShell("explain !important"), null);
+  assert.equal(parseBangShell(""), null);
+});
+
+test("the shell and command lanes never overlap: a ! draft is shell, a / draft is command", () => {
+  // Submit routing precedence (App.onSubmit): a raw leading `!` is the shell lane and never reaches
+  // the command/prompt path; a `/` is the command lane and is never a bang.
+  const known = new Set(["/doctor"]);
+  assert.ok(parseBangShell("!echo hi"));
+  assert.equal(parseCommand("!echo hi", known), null);
+  assert.equal(parseBangShell("/doctor"), null);
+  assert.deepEqual(parseCommand("/doctor", known), { command: "/doctor", args: "" });
 });
 
 test("providerModelsFrom / defaultProviderFrom / commandsFrom take the latest host.online", () => {

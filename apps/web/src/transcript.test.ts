@@ -492,3 +492,81 @@ test("panelModel uses progress snapshots after replay completes", () => {
   assert.equal(panel.totalTokens, usage.input + usage.output);
   assert.deepEqual(panel.breakdown, breakdown);
 });
+
+test("D-082: user.shell + shell.result reduce to one shell block (pending -> done)", () => {
+  const pending = toTranscript([
+    ev(1, events.userShell({ requestId: "rq1", command: "printf hello" })),
+  ]);
+  assert.equal(pending.length, 1);
+  const block = pending[0];
+  assert.equal(block?.kind, "shell");
+  if (block?.kind !== "shell") return;
+  assert.equal(block.command, "printf hello");
+  assert.equal(block.done, false);
+  assert.equal(block.output, undefined);
+
+  // The result fills the SAME block in place (keyed by requestId), never a second card.
+  const done = toTranscript([
+    ev(1, events.userShell({ requestId: "rq1", command: "printf hello" })),
+    ev(
+      2,
+      events.shellResult({ requestId: "rq1", command: "printf hello", output: "hello", ok: true }),
+    ),
+  ]);
+  assert.equal(done.length, 1);
+  const filled = done[0];
+  assert.equal(filled?.kind, "shell");
+  if (filled?.kind !== "shell") return;
+  assert.equal(filled.done, true);
+  assert.equal(filled.output, "hello");
+  assert.equal(filled.ok, true);
+});
+
+test("D-082: a refused/failed shell command renders ok:false", () => {
+  const messages = toTranscript([
+    ev(1, events.userShell({ requestId: "rq1", command: "rm -rf /" })),
+    ev(
+      2,
+      events.shellResult({
+        requestId: "rq1",
+        command: "rm -rf /",
+        output: "refused: blocked",
+        ok: false,
+      }),
+    ),
+  ]);
+  const block = messages[0];
+  assert.equal(block?.kind, "shell");
+  if (block?.kind !== "shell") return;
+  assert.equal(block.ok, false);
+  assert.equal(block.output, "refused: blocked");
+});
+
+test("D-082: a shell.result with no prior request still renders from its own command", () => {
+  const messages = toTranscript([
+    ev(1, events.shellResult({ requestId: "orphan", command: "ls", output: "a\nb", ok: true })),
+  ]);
+  assert.equal(messages.length, 1);
+  const block = messages[0];
+  assert.equal(block?.kind, "shell");
+  if (block?.kind !== "shell") return;
+  assert.equal(block.command, "ls");
+  assert.equal(block.done, true);
+  assert.equal(block.output, "a\nb");
+});
+
+test("D-082: /clear resets shell blocks like the rest of the transcript", () => {
+  const messages = toTranscript([
+    ev(1, events.userShell({ requestId: "rq1", command: "ls" })),
+    ev(2, events.shellResult({ requestId: "rq1", command: "ls", output: "x", ok: true })),
+    ev(3, events.userCommand({ command: "/clear", args: "" })),
+    ev(4, events.userShell({ requestId: "rq2", command: "pwd" })),
+  ]);
+  // Only the post-clear shell block survives (the pre-clear pair is dropped, and its requestId is
+  // free again so a later result would re-pair cleanly).
+  assert.equal(messages.length, 1);
+  const block = messages[0];
+  assert.equal(block?.kind, "shell");
+  if (block?.kind !== "shell") return;
+  assert.equal(block.command, "pwd");
+});

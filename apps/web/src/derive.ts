@@ -250,6 +250,21 @@ export function commandsFrom(events: readonly SessionEvent[]): CommandSpec[] {
 }
 
 /**
+ * Parses composer text into a prompt-shell-lane command (D-082), or null for anything else. The
+ * trigger is the RAW first character being `!` (not a trimmed/leading-whitespace match - typing a
+ * space before `!` is an ordinary prompt), with a non-empty command after it. The returned `command`
+ * is trimmed of surrounding whitespace. A lone `!` (no command) yields null, so the inert "empty
+ * bang" composer state never publishes anything.
+ */
+export function parseBangShell(text: string): { command: string } | null {
+  if (text[0] !== "!") {
+    return null;
+  }
+  const command = text.slice(1).trim();
+  return command ? { command } : null;
+}
+
+/**
  * Parses composer text into an immediate command, or null for an ordinary prompt.
  * A leading slash whose first token is a known command name routes to the command
  * lane; anything else (including an unknown /slash) is a normal model prompt.
