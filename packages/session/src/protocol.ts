@@ -161,6 +161,17 @@ export const events = {
     type: "assistant.recovered",
     payload: { runId: p.runId, action: p.action, detail: p.detail, reclaimed: p.reclaimed },
   }),
+  /** A transient provider outage is being auto-retried before any token streamed (D-076…D-079):
+   *  the loop reconnected the dropped stream and is re-running the current step. `attempt` is the
+   *  1-based retry number. Sibling to `assistant.recovered`, applied to transport faults. */
+  assistantReconnecting: (p: {
+    runId: string;
+    attempt: number;
+    detail: string;
+  }): TrevorEventInput => ({
+    type: "assistant.reconnecting",
+    payload: { runId: p.runId, attempt: p.attempt, detail: p.detail },
+  }),
   /**
    * A durable cross-turn compaction fold (D-040…D-043): the rolling summary that keeps the
    * prompt projection under the window. Appended, never mutating the log; each fold supersedes
@@ -528,6 +539,12 @@ export type DecodedEvent =
       readonly reclaimed: number;
     }
   | {
+      readonly type: "assistant.reconnecting";
+      readonly runId: string;
+      readonly attempt: number;
+      readonly detail: string;
+    }
+  | {
       readonly type: "assistant.progress";
       readonly runId: string;
       readonly usage?: Usage;
@@ -647,6 +664,13 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         action: str(p.action, "trim"),
         detail: str(p.detail),
         reclaimed: num(p.reclaimed),
+      };
+    case "assistant.reconnecting":
+      return {
+        type: "assistant.reconnecting",
+        runId,
+        attempt: num(p.attempt),
+        detail: str(p.detail),
       };
     case "assistant.progress":
       return {

@@ -13,7 +13,7 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.73.1",
+    "@earendil-works/pi-ai": "0.80.2",
     "@trevor/richter": "workspace:*",
     "@trevor/session": "workspace:*",
     "effect": "^3.21.4",

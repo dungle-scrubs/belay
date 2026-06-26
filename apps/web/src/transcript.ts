@@ -62,6 +62,16 @@ export type RecoveredMessage = {
   detail: string;
   reclaimed: number;
 };
+// A transient provider outage being auto-retried before any token streamed (D-076…D-079),
+// rendered inline as a status marker: the stream dropped and the loop is reconnecting. `attempt`
+// is the 1-based retry number (of MAX_RECONNECT_ATTEMPTS). Distinct from `recovered` (context
+// pressure) - this is a transport fault.
+export type ReconnectingMessage = {
+  kind: "reconnecting";
+  id: string;
+  attempt: number;
+  detail: string;
+};
 // A cross-turn compaction fold IN PROGRESS (D-040), rendered inline as a TRANSIENT progress bar:
 // older turns are being folded into a rolling summary, which streams. `tokens`/`budget` fill the
 // bar honestly (real tokens streamed ÷ the ~1k budget, never a predicted %). It appears while the
@@ -81,6 +91,7 @@ export type Message =
   | CommandMessage
   | CommandResultMessage
   | RecoveredMessage
+  | ReconnectingMessage
   | CompactingMessage;
 
 // The read-only tools the host fans out concurrently (mirrors agent-host's READ_ONLY_TOOLS). A run
@@ -320,6 +331,22 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           action: decoded.action,
           detail: decoded.detail,
           reclaimed: decoded.reclaimed,
+        });
+        break;
+      }
+      case "assistant.reconnecting": {
+        // Finalize any open segment so the reconnected attempt's output starts fresh below the
+        // marker (a reconnect fires before any token, so usually nothing is open).
+        const open = openByRun.get(decoded.runId);
+        if (open) {
+          open.done = true;
+          openByRun.delete(decoded.runId);
+        }
+        messages.push({
+          kind: "reconnecting",
+          id: event.eventId,
+          attempt: decoded.attempt,
+          detail: decoded.detail,
         });
         break;
       }

@@ -233,6 +233,28 @@ test("panelModel: the ctx meter previews the post-fold size once a fold lands (n
   assert.deepEqual(panel.breakdown, breakdown, "no faked per-category split");
 });
 
+test("D-079: an assistant.reconnecting event renders an inline reconnecting marker", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(3, events.assistantReconnecting({ runId: "r1", attempt: 2, detail: "websocket closed" })),
+    ev(4, events.assistantDelta({ runId: "r1", text: "recovered answer" })),
+    ev(5, events.assistantCompleted({ runId: "r1", text: "recovered answer" })),
+  ];
+  const messages = toTranscript(log);
+  const marker = messages.find(
+    (m): m is Extract<Message, { kind: "reconnecting" }> => m.kind === "reconnecting",
+  );
+  assert.ok(marker, "a reconnecting marker is rendered");
+  assert.equal(marker.attempt, 2);
+  assert.match(marker.detail, /websocket/);
+  // The post-reconnect answer still renders as its own assistant segment below the marker.
+  assert.ok(
+    messages.some((m) => m.kind === "assistant" && m.text.includes("recovered answer")),
+    "the reconnected answer streams after the marker",
+  );
+});
+
 test("a host-reaped orphan is marked interrupted, not cancelled (host restart is not a user ESC)", () => {
   // reapOrphans closes a turn left dangling by a host restart/crash with interrupted:true - it must
   // NOT render as the red user "cancelled", so a hot-reload never looks like the user pressed ESC.

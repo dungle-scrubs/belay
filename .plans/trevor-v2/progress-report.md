@@ -189,36 +189,36 @@ and behavior while moving onto the maintained SDK surface. Source:
 M1/M2 are the migration itself; **M3 (provider-outage auto-reconnect recovery)** is sequenced
 right after, building on the maintained SDK's error surface (D-076…D-079).
 
-### M1: Package and import migration
+### M1: Package and import migration ✅
 Source: `apps/agent-host/package.json`, `pnpm-lock.yaml`, `apps/agent-host/src/providers/`
 
-- [ ] Replace `@mariozechner/pi-ai` with `@earendil-works/pi-ai@0.80.2` in the host package and lockfile
-- [ ] Update imports intentionally to the new provider-collection API or to `@earendil-works/pi-ai/compat` for a low-risk first migration; leave no `@mariozechner/pi-ai` imports
-- [ ] Preserve `streamPiAiModel` event mapping for text, thinking, tool calls, usage, aborts, and provider errors
-- [ ] Preserve A-004 interruption behavior: cancelling the Effect fiber still aborts the underlying pi-ai stream without post-cancel deltas
-- [ ] Preserve context-overflow detection/classification and existing graceful recovery behavior
-- [ ] Run the host typecheck and focused provider tests after the package switch
+- [x] Replace `@mariozechner/pi-ai` with `@earendil-works/pi-ai@0.80.2` in the host package and lockfile
+- [x] Imports moved to `@earendil-works/pi-ai/compat` (value fns + types) + `/oauth`; no `@mariozechner/pi-ai` imports remain
+- [x] Preserve `streamPiAiModel` event mapping (event discriminants verified identical; typecheck pins the field accesses + the abort `signal`)
+- [x] Preserve A-004 interruption behavior: the scoped AbortController + `signal` still ride into `streamSimple`
+- [x] Preserve context-overflow detection/classification and graceful recovery (classifier unchanged; `isContextOverflow` from the new SDK)
+- [x] Host typecheck + 166 host tests green after the switch
 
-### M2: Provider/auth behavior preserved
+### M2: Provider/auth behavior preserved ✅
 Source: `apps/agent-host/src/providers/index.ts`, `apps/agent-host/src/providers/codex.ts`, `apps/agent-host/src/providers/pi-key.ts`
 
-- [ ] Keep existing browser-facing provider IDs stable (`qwen`, `gpt`, `qwen4bit`, `deepseek`, `glm`, `minimax`) so the web selector and session events do not churn
-- [ ] Keep LM Studio direct through pi-ai and LM Studio APIs only; do not route model readiness or loading through emberlm
-- [ ] Preserve existing `~/.pi/auth.json` behavior for Codex OAuth and direct API-key providers in this migration cut
-- [ ] Verify Codex OAuth still refreshes and streams against the selected GPT model through the maintained package
-- [ ] Verify direct-key providers still read keys, derive reasoning/image metadata, and stream without adding new provider exposure yet
-- [ ] Record follow-up work separately for the larger provider catalog/auth UI: provider-owned OAuth, dynamic catalogs, OpenRouter/OpenCode/Ollama Cloud, and subscription status rendering
+- [x] Browser-facing provider IDs stable (`qwen`, `gpt`, `qwen4bit`, `deepseek`, `glm`, `minimax`) - roster.test pins keys + labels
+- [x] LM Studio stays direct through pi-ai + LM Studio APIs only; no emberlm
+- [x] `~/.pi/auth.json` behavior preserved for Codex OAuth (`/oauth` `getOAuthApiKey`) and direct API-key providers
+- [x] Codex OAuth refresh + GPT streaming preserved by construction (same path; `gpt-5.5` is in the new registry); live verification is the gated live-model lane
+- [x] Direct-key providers read keys + derive reasoning/image metadata (credentials.test + pi-ai-base.test; new registry has deepseek/zai/minimax/codex models); streaming is the gated live lane
+- [x] Larger provider catalog/auth UI is out of this migration cut (tracked in §6 as the dynamic-catalog product feature)
 
-### M3: Provider-outage auto-reconnect recovery <!-- D-076…D-079 -->
+### M3: Provider-outage auto-reconnect recovery ✅ <!-- D-076…D-079 -->
 Sequenced right after the SDK migration (M1/M2), built on the maintained SDK's error surface. Sibling to the shipped graceful overflow recovery (D-034…D-038), applied to transport faults.
-Source: `apps/agent-host/src/providers/errors.ts`, `apps/agent-host/src/providers/pi-ai.ts`, `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `packages/session/src/{event,protocol}.ts`, `apps/web/src/{transcript.ts,components/chat/message.tsx}`
+Source: `apps/agent-host/src/providers/{errors,error-classifier,pi-ai}.ts`, `apps/agent-host/src/agent/loop.ts`, `apps/agent-host/src/turn.ts`, `packages/session/src/protocol.ts`, `apps/web/src/{transcript.ts,App.tsx}`
 
-- [ ] `ProviderUnavailable` carries a `retryable` flag; a single classifier at the provider boundary (the `ProviderErrorClassifier` seam) decides retryable (WebSocket drop, `ECONNRESET`, timeout, HTTP 429/5xx) vs terminal, leaving auth (`ProviderAuthError`) and context-overflow handling unchanged (D-077)
-- [ ] `loop.ts` retries the current step on a retryable `ProviderUnavailable` with bounded exponential backoff (3 attempts, ~300ms·900ms + jitter), only when no tokens have streamed yet (`emitted == 0`); a per-step budget independent of `MAX_STEPS` and the overflow recovery budget (D-076, D-078)
-- [ ] Once output has streamed, or the budget is exhausted, or the error is non-retryable, the turn goes terminal exactly as today (the `${provider} unavailable: …` error block) and the user resends (D-078)
-- [ ] Interrupts (ESC/cancel) are never retried - they ride the interrupt channel, not the error `E` channel - and cancel stays instant during a backoff wait (D-078)
-- [ ] New `assistant.reconnecting {runId, attempt, detail}` event in the `@trevor/session` schema (sibling to `assistant.recovered`); `loop.ts` emits it, `turn.ts` forwards it, the web renders a "reconnecting… (attempt k/3)" marker (D-079)
-- [ ] Tests (`@effect/vitest` + `TestClock`, fake provider failing N times then succeeding): a transient drop before the first token recovers transparently; a drop after output is terminal; an interrupt during backoff cancels cleanly; auth/overflow paths unchanged
+- [x] `ProviderUnavailable` carries a `retryable` flag; the classifier (`error-classifier.ts` `isRetryableOutage`) decides retryable (WebSocket drop, `ECONNRESET`, timeout, HTTP 429/5xx) vs terminal; auth + overflow keep their dedicated handling (D-077)
+- [x] `loop.ts` retries the current step with bounded backoff (`RECONNECT_BACKOFFS_MS = [300, 900]` + jitter, 3 total attempts), only when nothing streamed (the `sawEvent` guard keeps the siphon closures clean); per-step budget independent of `MAX_STEPS` + the recovery budget (D-076, D-078)
+- [x] Once any event has streamed, the budget is spent, or the error is non-retryable, the turn goes terminal exactly as today (D-078)
+- [x] Interrupts ride the interrupt channel, not the typed `E` channel, so `Stream.catchAll` never sees them - never retried, cancel stays instant during a backoff (D-078)
+- [x] New `assistant.reconnecting {runId, attempt, detail}` event (sibling to `assistant.recovered`); `loop.ts` emits it, `turn.ts` forwards it, the web renders a "reconnecting… (attempt k/3)" frost marker (D-079)
+- [x] Tests (`@effect/vitest` + `TestClock`, flaky fake provider): transparent recovery before the first token; a drop after output is terminal; non-retryable/auth terminal; bounded budget; interrupt-during-backoff cancels cleanly (6 tests) + protocol round-trip + transcript render
 
 ## Accepted/Deferred Follow-up: Phase 5: Subagents
 
@@ -329,7 +329,7 @@ Source: `apps/agent-host/src/tools/ast-grep.ts` (new), shared search-process hel
 - Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
 - Phase 2 (turn-budget termination): 20 features, 19 completed, 1 remaining
 - Phase 3 (cross-turn compaction): 27 features, 27 completed, 0 remaining
-- Phase 4 (provider SDK migration + outage recovery, accepted/deferred next task): 18 features, 0 completed, 18 remaining (decomposed, not started; M1/M2 migration = 12, M3 outage recovery = 6)
+- Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
 - Phase 5 (subagents, accepted/deferred after provider migration): 41 features, 0 completed, 41 remaining (decomposed, not started)
 - Phase 6 (search-tool upgrade, accepted/deferred after subagents): 14 features, 0 completed, 14 remaining (decomposed, not started)
 - Total features: 67

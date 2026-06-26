@@ -49,6 +49,18 @@ test("an unknown event type decodes to null (forward-compatible)", () => {
   assert.equal(decodeTrevorEvent(stored({ type: "future.thing", payload: {} })), null);
 });
 
+test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(events.assistantReconnecting({ runId: "r", attempt: 2, detail: "websocket closed" })),
+  );
+  assert.deepEqual(decoded, {
+    type: "assistant.reconnecting",
+    runId: "r",
+    attempt: 2,
+    detail: "websocket closed",
+  });
+});
+
 test("a missing runId falls back to the event's own id, never collapsing turns", () => {
   const decoded = decodeTrevorEvent(
     stored({ type: "assistant.delta", payload: { text: "hi" } }, { eventId: "ev-9" }),

@@ -216,6 +216,17 @@ export function publishTurn(
               reclaimed: event.reclaimed,
             }),
           );
+        } else if (event.type === "reconnecting") {
+          // A transient provider outage is being auto-retried before any token streamed (D-079):
+          // surface a live "reconnecting (attempt k)" status; the retry's output streams below it.
+          yield* flushAll;
+          yield* emit.publish(
+            events.assistantReconnecting({
+              runId,
+              attempt: event.attempt,
+              detail: event.detail,
+            }),
+          );
         } else if (event.type === "empty") {
           // The model ended the turn with no reply (and the retry didn't help). Mark it
           // so the terminal completion shows a notice instead of an empty bubble.

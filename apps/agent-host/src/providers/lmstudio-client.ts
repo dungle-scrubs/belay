@@ -1,6 +1,6 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import type { Model } from "@mariozechner/pi-ai";
+import type { Model } from "@earendil-works/pi-ai/compat";
 import { debug, log, warn } from "../log";
 import { msg } from "../tools/shared";
 import { ModelLoadError, ProviderUnavailable } from "./errors";

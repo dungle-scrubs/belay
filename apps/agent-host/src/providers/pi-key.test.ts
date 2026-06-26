@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai/compat";
 import { test } from "vitest";
 import { resolvePiModel } from "./pi-key";
 
@@ -17,9 +17,9 @@ test("resolvePiModel returns the registry model when the id is known", () => {
 });
 
 test("resolvePiModel synthesizes an unregistered id from the closest sibling", () => {
-  // glm-5.2 is newer than the installed zai registry (which knows glm-5.1); it must still resolve.
-  const synthesized = resolvePiModel("zai", "glm-5.2");
-  assert.equal(synthesized.id, "glm-5.2", "the synthesized model carries the requested id");
+  // A model id newer than the installed zai registry must still resolve (sibling clone + id override).
+  const synthesized = resolvePiModel("zai", "glm-9.9-turbo");
+  assert.equal(synthesized.id, "glm-9.9-turbo", "the synthesized model carries the requested id");
   // It inherits a real sibling's transport shape, so streaming can reach the backend.
   assert.ok(synthesized.contextWindow > 0);
   assert.ok((synthesized as { baseUrl?: string }).baseUrl ?? synthesized.api);

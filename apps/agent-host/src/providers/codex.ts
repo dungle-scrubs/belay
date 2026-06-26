@@ -1,4 +1,4 @@
-import { getModel } from "@mariozechner/pi-ai";
+import { getModel } from "@earendil-works/pi-ai/compat";
 import { oauthCredentialResolver } from "./credentials";
 import { PiAiProviderBase } from "./pi-ai-base";
 

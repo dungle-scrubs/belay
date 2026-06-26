@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type Api, getSupportedThinkingLevels, type Model } from "@mariozechner/pi-ai";
+import { type Api, getSupportedThinkingLevels, type Model } from "@earendil-works/pi-ai/compat";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { CredentialResolver } from "./credentials";

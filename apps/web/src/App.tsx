@@ -645,6 +645,22 @@ export function App() {
                       </div>
                     );
                   }
+                  if (message.kind === "reconnecting") {
+                    // A transient provider outage being auto-retried before any token streamed
+                    // (D-079). Frost styling distinguishes a transport reconnect from the yellow
+                    // "context full" airbag; the cap (3) mirrors the host's MAX_RECONNECT_ATTEMPTS.
+                    return (
+                      <div key={message.id} className="pl-3.5">
+                        <Alert className="border-smui-blue/25 bg-smui-blue/[0.04] [&>svg]:text-smui-blue">
+                          <RotateCw className="h-3.5 w-3.5" />
+                          <AlertTitle className="text-smui-blue">connection dropped</AlertTitle>
+                          <AlertDescription>
+                            {message.detail} · reconnecting (attempt {message.attempt}/3)
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    );
+                  }
                   if (message.kind === "compacting") {
                     // The live cross-turn fold (D-040): a TRANSIENT bar that vanishes when the fold
                     // completes. Its own component owns the continuous (rAF) fill animation.

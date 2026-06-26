@@ -3,7 +3,7 @@ import {
   getSupportedThinkingLevels,
   type Model,
   type ThinkingLevel,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import { Effect, Stream } from "effect";
 import { msg } from "../tools/shared";
 import type { CredentialResolver } from "./credentials";

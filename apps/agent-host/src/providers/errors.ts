@@ -6,11 +6,18 @@ import { Data } from "effect";
  * failure mode, computes a human message, and preserves the underlying `cause`.
  */
 
-/** The provider's backend could not be reached or did not respond usably. */
+/**
+ * The provider's backend could not be reached or did not respond usably. `retryable` marks a
+ * TRANSIENT transport fault (a dropped WebSocket, connection reset, timeout, HTTP 429/5xx) that the
+ * agent loop may auto-retry before any token has streamed (D-076…D-078); a non-retryable outage is
+ * terminal as before. The classifier at the provider boundary (error-classifier.ts) sets it; the
+ * loop reads the boolean.
+ */
 export class ProviderUnavailable extends Data.TaggedError("ProviderUnavailable")<{
   readonly provider: string;
   readonly detail: string;
   readonly cause?: unknown;
+  readonly retryable?: boolean;
 }> {
   override get message(): string {
     return `${this.provider} unavailable: ${this.detail}`;

@@ -1,4 +1,4 @@
-import { type Api, getModel, getModels, type Model } from "@mariozechner/pi-ai";
+import { type Api, getModel, getModels, type Model } from "@earendil-works/pi-ai/compat";
 import { staticKeyCredentialResolver } from "./credentials";
 import { PiAiProviderBase } from "./pi-ai-base";
 

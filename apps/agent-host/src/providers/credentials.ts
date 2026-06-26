@@ -64,7 +64,7 @@ export function oauthCredentialResolver(params: {
           detail: `no ${params.oauthName} entry in ${authPath}`,
         });
       }
-      const { getOAuthApiKey } = await import("@mariozechner/pi-ai/oauth");
+      const { getOAuthApiKey } = await import("@earendil-works/pi-ai/oauth");
       // biome-ignore lint/suspicious/noExplicitAny: pi-ai's OAuth name + credential shapes are internal.
       const oauth = getOAuthApiKey as (name: any, creds: any) => Promise<{ apiKey: string } | null>;
       const resolved = await oauth(params.oauthName, { [params.oauthName]: credentials });

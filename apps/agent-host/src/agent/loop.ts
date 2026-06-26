@@ -1,7 +1,16 @@
-import { Effect, Option, Stream } from "effect";
+import { Duration, Effect, Option, Stream } from "effect";
 import type { ChatMessage, ModelEvent, Provider, ProviderError, ToolCall } from "../providers";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
+
+/**
+ * Bounded auto-reconnect for a transient provider outage (D-076…D-079): backoff (ms) BEFORE each
+ * retry. Two entries = three total attempts (the initial plus two retries). A small jitter is added
+ * so simultaneous turns don't reconnect in lockstep. The budget is per-step and independent of
+ * MAX_STEPS and the overflow-recovery budget, so reconnection can never spin.
+ */
+const RECONNECT_BACKOFFS_MS = [300, 900] as const;
+const MAX_RECONNECT_ATTEMPTS = RECONNECT_BACKOFFS_MS.length + 1;
 
 /** Runaway backstop, NOT the everyday governor: it only bounds a pathological tool loop
  *  that never converges. The real budget is context pressure (CONTEXT_BUDGET_FRACTION below),
@@ -71,8 +80,9 @@ export function partitionToolCalls(calls: readonly ToolCall[]): readonly ToolSeg
  *  thinking, usage, overflow) forwarded unchanged from the provider, plus the loop-only
  *  cases - tool start/end (the loop turns a provider tool_call into these as it executes),
  *  a recovery adjustment (an in-turn overflow rung - distinct from compaction, the durable
- *  history summarization deferred to D-036), a `step_limit` (the turn hit its budget and is
- *  forcing a final answer - D-051), or an empty answer. */
+ *  history summarization deferred to D-036), a `reconnecting` status (a transient provider outage
+ *  is being auto-retried before any token streamed - D-076…D-079), a `step_limit` (the turn hit its
+ *  budget and is forcing a final answer - D-051), or an empty answer. */
 export type AgentEvent =
   | ModelEvent
   | { readonly type: "tool_start"; readonly call: ToolCall }
@@ -84,6 +94,7 @@ export type AgentEvent =
       readonly reclaimed: number;
     }
   | { readonly type: "step_limit"; readonly steps: number }
+  | { readonly type: "reconnecting"; readonly attempt: number; readonly detail: string }
   | { readonly type: "empty" };
 
 /**
@@ -235,29 +246,64 @@ export function runAgent(
       // straight through - they ARE AgentEvents - while siphoning off assistant text
       // (accumulated), tool calls (collected, into tool_start/tool_end below), and any
       // overflow (captured for recovery below - not surfaced here).
-      const modelStep = provider.stream(conversation, tools, currentReasoning).pipe(
-        Stream.filterMap((event) => {
-          if (event.type === "tool_call") {
-            toolCalls.push(event.call);
-            return Option.none<AgentEvent>();
-          }
-          if (event.type === "overflow") {
-            // Capture; afterModel decides recover-and-retry vs terminal (D-035, D-038).
-            overflowReason = event.reason;
-            return Option.none<AgentEvent>();
-          }
-          if (event.type === "text") {
-            assistantText += event.text;
-          }
-          if (event.type === "usage") {
-            // Capture the prompt size + window for the next round's context-budget gate.
-            lastInputTokens = event.usage.input;
-            lastContextWindow = event.usage.contextWindow;
-          }
-          // text/thinking/usage flow through unchanged (shared ModelEvent shapes).
-          return Option.some<AgentEvent>(event);
-        }),
-      );
+      //
+      // Auto-reconnect (D-076…D-079): a transient provider outage that drops the stream BEFORE any
+      // event arrives is retried with bounded backoff, emitting a `reconnecting` marker between
+      // attempts. The `sawEvent` guard is load-bearing: a retry only happens when nothing streamed,
+      // so the siphon closures (toolCalls/assistantText/overflowReason) are still clean and a retry
+      // never double-counts. Once any event has streamed - or the error is non-retryable, or the
+      // attempt budget is spent - the failure propagates and the turn goes terminal exactly as
+      // before. Interrupts (ESC/cancel) ride the interrupt channel, not this typed `E` channel, so
+      // catchAll never sees them: they are never retried and cancel stays instant during a backoff.
+      const connectStep = (attempt: number): Stream.Stream<AgentEvent, ProviderError> => {
+        let sawEvent = false;
+        const mapped = provider.stream(conversation, tools, currentReasoning).pipe(
+          Stream.tap(() => Effect.sync(() => (sawEvent = true))),
+          Stream.filterMap((event) => {
+            if (event.type === "tool_call") {
+              toolCalls.push(event.call);
+              return Option.none<AgentEvent>();
+            }
+            if (event.type === "overflow") {
+              // Capture; afterModel decides recover-and-retry vs terminal (D-035, D-038).
+              overflowReason = event.reason;
+              return Option.none<AgentEvent>();
+            }
+            if (event.type === "text") {
+              assistantText += event.text;
+            }
+            if (event.type === "usage") {
+              // Capture the prompt size + window for the next round's context-budget gate.
+              lastInputTokens = event.usage.input;
+              lastContextWindow = event.usage.contextWindow;
+            }
+            // text/thinking/usage flow through unchanged (shared ModelEvent shapes).
+            return Option.some<AgentEvent>(event);
+          }),
+        );
+        return mapped.pipe(
+          Stream.catchAll((error) => {
+            const retryable = error._tag === "ProviderUnavailable" && error.retryable === true;
+            if (!sawEvent && retryable && attempt < MAX_RECONNECT_ATTEMPTS) {
+              const next = attempt + 1;
+              const base = RECONNECT_BACKOFFS_MS[attempt - 1] ?? 0;
+              const wait = base + Math.round(Math.random() * 150); // small jitter, no lockstep
+              return Stream.concat(
+                Stream.succeed<AgentEvent>({
+                  type: "reconnecting",
+                  attempt: next,
+                  detail: error.detail,
+                }),
+                Stream.unwrap(
+                  Effect.sleep(Duration.millis(wait)).pipe(Effect.as(connectStep(next))),
+                ),
+              );
+            }
+            return Stream.fail(error);
+          }),
+        );
+      };
+      const modelStep = connectStep(1);
 
       // Built lazily (Stream.unwrap defers the thunk until the model step has drained), so
       // it reads the now-populated toolCalls/assistantText: run each tool in order, then

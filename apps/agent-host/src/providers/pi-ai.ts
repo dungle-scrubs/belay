@@ -5,7 +5,7 @@ import {
   streamSimple,
   type ThinkingLevel,
   type TSchema,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import { Effect, Stream } from "effect";
 import { debug } from "../log";
 import { msg } from "../tools/shared";
@@ -13,6 +13,7 @@ import {
   classifyResponseOverflow,
   isAuthError,
   isContextLengthError,
+  isRetryableOutage,
   promptTooBig,
 } from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
@@ -293,12 +294,18 @@ export function streamPiAiModel<TApi extends Api>(
           signal: controller.signal,
           systemPrompt: systemPrompt ?? buildSystemPrompt(tools),
         }),
-        // A classified auth failure (see error-classifier) rides through as-is; anything else
-        // is an outage -> ProviderUnavailable.
+        // A classified auth failure (see error-classifier) rides through as-is; anything else is
+        // an outage -> ProviderUnavailable, tagged retryable when the text is a transient transport
+        // fault so the loop can auto-reconnect before any token streams (D-076…D-078).
         (cause) =>
           cause instanceof ProviderAuthError
             ? cause
-            : new ProviderUnavailable({ provider, detail: msg(cause), cause }),
+            : new ProviderUnavailable({
+                provider,
+                detail: msg(cause),
+                cause,
+                retryable: isRetryableOutage(msg(cause)),
+              }),
       );
     }),
   );
