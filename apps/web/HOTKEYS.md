@@ -40,6 +40,8 @@ focused region. Avoid re-binding these globally.
 | `Esc` | **Global** (`window`) | Cancel the active/pending run; if none, clear the composer draft. | `src/App.tsx` (window `keydown`) |
 | `Enter` | Composer `<input>` | Submit the message (form submit). | `src/App.tsx` (`<form onSubmit>`) |
 | `ArrowUp` / `ArrowDown` | Composer, **only while slash-menu open** | Move the menu highlight. | `src/App.tsx` `onInputKeyDown` |
+| `ArrowUp` | Composer, **menu closed, caret on the first line** (or empty composer) | Recall the previous prompt from history (D-084). Off the first line it moves the caret normally. | `src/App.tsx` `onInputKeyDown` |
+| `ArrowDown` | Composer, **menu closed, mid-history-navigation, caret on the last line** | Step forward through recalled prompts; past the newest, restores the draft you started from. | `src/App.tsx` `onInputKeyDown` |
 | `Tab` | Composer, **only while slash-menu open** | Complete the highlighted command. | `src/App.tsx` `onInputKeyDown` |
 | `Enter` | Composer, **only while slash-menu open** | Complete the command (falls through to submit on an exact match). | `src/App.tsx` `onInputKeyDown` |
 | `Esc` | Composer, **only while slash-menu open** | Dismiss the menu (event is swallowed so the global `Esc` does not also fire). | `src/App.tsx` `onInputKeyDown` |
