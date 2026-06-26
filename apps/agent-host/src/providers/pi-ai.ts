@@ -1,7 +1,6 @@
 import {
   type Api,
   type Context,
-  clampThinkingLevel,
   type Model,
   stream,
   type ThinkingLevel,
@@ -18,6 +17,7 @@ import {
   promptTooBig,
 } from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
+import { reasoningEffortFor } from "./reasoning-policy";
 import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
 
@@ -107,31 +107,6 @@ export function toPiAiTools(tools: readonly ToolDef[]): Context["tools"] {
 }
 
 /**
- * Maps Trevor's reasoning LEVEL to the `reasoningEffort` pi-ai's lower-level `stream` sends. We use
- * `stream`, not `streamSimple`: `streamSimple` collapses "off" (and "none") to an OMITTED parameter,
- * which makes a reasoning model fall back to its DEFAULT (medium for GPT-5.5) instead of disabling.
- * For the Codex Responses API, "off" must be sent as an explicit "none" (a documented effort value)
- * to truly turn reasoning off; other adapters (openai-completions etc.) disable on a FALSY effort,
- * where "none" would wrongly read as truthy/enabled - so there "off" stays undefined (the existing,
- * correct behavior). Every other level is clamped to what the model supports; pi-ai then remaps it
- * via the model's thinkingLevelMap. The net change vs streamSimple is exactly the Codex "off" case.
- */
-export function toReasoningEffort<TApi extends Api>(
-  model: Model<TApi>,
-  // `string` (not ThinkingLevel) because "off" rides in at runtime even though it isn't in the
-  // ThinkingLevel union (the providers cast it).
-  reasoning: string | undefined,
-): string | undefined {
-  if (!reasoning) {
-    return undefined;
-  }
-  if (reasoning === "off") {
-    return model.api === "openai-codex-responses" ? "none" : undefined;
-  }
-  return clampThinkingLevel(model, reasoning as ThinkingLevel);
-}
-
-/**
  * Streams one model step through pi-ai and maps its events onto host ProviderEvents.
  * Private async generator over the signal-driven request; the public streamPiAiModel
  * below wraps it as an Effect Stream and owns the AbortController.
@@ -192,9 +167,9 @@ async function* piAiEvents<TApi extends Api>(
       generationAt = Date.now();
     }
   };
-  // signal rides into streamSimple so an interrupt (which aborts it - see streamPiAiModel)
+  // signal rides into stream() so an interrupt (which aborts it - see streamPiAiModel)
   // closes the underlying request: upstream cancel where the adapter supports it.
-  const reasoningEffort = toReasoningEffort(model, options.reasoning);
+  const reasoningEffort = reasoningEffortFor(model, options.reasoning);
   const streamOptions = {
     apiKey: options.apiKey,
     ...(reasoningEffort !== undefined ? { reasoningEffort } : {}),
