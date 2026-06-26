@@ -14,6 +14,8 @@ import { grepTool } from "./grep";
 import { multiEditTool } from "./multi-edit";
 import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
+import { skillViewTool } from "./skill-view";
+import { skillsListTool } from "./skills-list";
 import type { Tool } from "./types";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
@@ -31,6 +33,8 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   grepTool,
   webSearchTool,
   sessionRecallTool,
+  skillsListTool,
+  skillViewTool,
   supervisor.buildTool(),
   ...buildTaskTools(),
   // ast_grep is registered only when its project-managed binary resolves (skipped on a platform

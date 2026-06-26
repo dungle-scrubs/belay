@@ -218,6 +218,8 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   task_create: renderGeneric,
   task_update: renderGeneric,
   skill: renderGeneric,
+  skills_list: renderOutput,
+  skill_view: renderGeneric,
 };
 
 /**

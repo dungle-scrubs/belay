@@ -179,6 +179,109 @@ export function discoverSkills(): readonly Skill[] {
 /** Clears the discovery memo - for tests that vary the roots/fixtures between cases. */
 export function resetSkillCache(): void {
   cache = null;
+  registryCache = null;
+}
+
+/**
+ * A skill's status in the registry (D-075). Unlike `discoverSkills` (which returns only the SELECTED
+ * enabled skills), the registry represents EVERY entry explicitly so nothing is silently dropped:
+ *  - available: the selected, enabled skill for its id (first across the root order).
+ *  - shadowed:  an enabled skill whose id a higher-precedence root already selected.
+ *  - disabled:  a skill whose frontmatter set `disabled: true`.
+ *  - malformed: an entry with no readable SKILL.md.
+ */
+export type SkillStatus = "available" | "shadowed" | "disabled" | "malformed";
+
+/** One registry entry: the skill metadata plus its status + provenance (never a full body). */
+export interface SkillEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  /** The `Triggers:` tail of the description (when present), for search + display. */
+  readonly triggers: string;
+  readonly icon?: string;
+  readonly path: string;
+  readonly rootKind: SkillRootKind;
+  readonly status: SkillStatus;
+}
+
+/** Splits a description into its main blurb source and the `Triggers:` tail (either may be ""). */
+function extractTriggers(description: string): string {
+  const parts = description.split(/\btriggers:/i);
+  return parts.length > 1 ? (parts[1] ?? "").trim() : "";
+}
+
+/**
+ * Builds the full skill registry across the ordered roots: every entry, each tagged with its status
+ * (available / shadowed / disabled / malformed) and provenance. Pure over the passed roots, so the
+ * precedence + status rules are unit-tested with temp dirs. The model-facing roster + tools use only
+ * the `available` entries; the rest are surfaced (not dropped) so a disabled/shadowed/malformed skill
+ * is explainable.
+ */
+export function buildSkillRegistry(roots: readonly SkillRoot[]): SkillEntry[] {
+  const entries: SkillEntry[] = [];
+  const selected = new Set<string>();
+
+  for (const root of roots) {
+    let names: string[];
+    try {
+      names = readdirSync(root.dir);
+    } catch {
+      continue;
+    }
+    for (const entry of names.sort()) {
+      if (entry.startsWith(".")) {
+        continue;
+      }
+      const path = join(root.dir, entry, "SKILL.md");
+      let text: string;
+      try {
+        text = readFileSync(path, "utf8");
+      } catch {
+        entries.push({
+          id: entry,
+          name: entry,
+          description: "",
+          triggers: "",
+          path,
+          rootKind: root.kind,
+          status: "malformed",
+        });
+        continue;
+      }
+      const { data } = parseFrontmatter(text);
+      const description = (trimStr(data.description) ?? "").replace(/\s+/g, " ").trim();
+      const meta =
+        data.meta && typeof data.meta === "object" ? (data.meta as Record<string, unknown>) : {};
+      const base = {
+        id: entry,
+        name: trimStr(data.name) ?? entry,
+        description,
+        triggers: extractTriggers(description),
+        icon: trimStr(meta.icon),
+        path,
+        rootKind: root.kind,
+      };
+      const status: SkillStatus =
+        data.disabled === true ? "disabled" : selected.has(entry) ? "shadowed" : "available";
+      if (status === "available") {
+        selected.add(entry);
+      }
+      entries.push({ ...base, status });
+    }
+  }
+
+  return entries.sort((a, b) => a.id.localeCompare(b.id) || a.rootKind.localeCompare(b.rootKind));
+}
+
+let registryCache: SkillEntry[] | null = null;
+
+/** The full skill registry across the effective roots (memoized; cleared by resetSkillCache). */
+export function skillRegistry(): readonly SkillEntry[] {
+  if (!registryCache) {
+    registryCache = buildSkillRegistry(skillRoots());
+  }
+  return registryCache;
 }
 
 /**

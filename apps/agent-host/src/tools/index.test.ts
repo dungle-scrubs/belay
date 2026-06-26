@@ -13,6 +13,8 @@ import { READ_ONLY_TOOLS } from "./index";
 import { multiEditTool } from "./multi-edit";
 import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
+import { skillViewTool } from "./skill-view";
+import { skillsListTool } from "./skills-list";
 import type { Tool } from "./types";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
@@ -70,6 +72,8 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     grepTool,
     webSearchTool,
     sessionRecallTool,
+    skillsListTool,
+    skillViewTool,
     astGrepTool,
     supervisor.buildTool(),
     ...buildTaskTools(),
