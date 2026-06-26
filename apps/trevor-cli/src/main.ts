@@ -1,10 +1,11 @@
 import { basename } from "node:path";
 import { events, type SessionSummary, streamTransport } from "@trevor/session";
 import { nodeFs } from "./fs";
+import { loadHosts, removeHost } from "./host-registry";
 import { formatStatus, launch } from "./launch";
-import { type LifecycleIo, runArchive, runList } from "./lifecycle";
+import { type HostControlIo, type LifecycleIo, runArchive, runList, runStop } from "./lifecycle";
 import { nodePlatform } from "./platform";
-import { resolveProjectRoot } from "./project";
+import { resolveProjectRoot, TREVOR_HOME } from "./project";
 import { RESERVED_PORTS } from "./services";
 import { createSpinner } from "./spinner";
 
@@ -34,10 +35,30 @@ function lifecycleIo(): LifecycleIo {
   };
 }
 
+/** The host-control IO for stop/kill: the launcher's ownership records + real process signalling. */
+function hostControlIo(): HostControlIo {
+  return {
+    lookupHost: (sessionId) => {
+      const record = loadHosts(nodeFs, TREVOR_HOME)[sessionId];
+      return record ? { pid: record.pid } : null;
+    },
+    processAlive: (pid) => {
+      try {
+        process.kill(pid, 0); // signal 0: liveness probe, sends nothing
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    signal: (pid, sig) => process.kill(pid, sig),
+    removeHost: (sessionId) => removeHost(nodeFs, TREVOR_HOME, sessionId),
+  };
+}
+
 /**
- * Dispatches a `trevor` session-lifecycle subcommand (D-094 M3): `list [--archived]`, `archive
- * <session>`, `unarchive <session>`. Returns the output to print, or null when `args` is not a
- * lifecycle subcommand (so the no-arg launcher path runs).
+ * Dispatches a `trevor` session-lifecycle subcommand (D-094 M1/M3): `list [--archived]`, `archive
+ * <session>`, `unarchive <session>`, `stop <session>`, `kill <session>`. Returns the output to
+ * print, or null when `args` is not a lifecycle subcommand (so the no-arg launcher path runs).
  */
 async function runSubcommand(args: readonly string[]): Promise<string | null> {
   const [cmd, ...rest] = args;
@@ -47,6 +68,9 @@ async function runSubcommand(args: readonly string[]): Promise<string | null> {
   }
   if (cmd === "archive" || cmd === "unarchive") {
     return runArchive(lifecycleIo(), (rest[0] ?? "").trim(), cmd === "archive");
+  }
+  if (cmd === "stop" || cmd === "kill") {
+    return runStop(hostControlIo(), (rest[0] ?? "").trim(), cmd === "kill");
   }
   return null;
 }
@@ -67,6 +91,8 @@ Usage:
   trevor list [--archived]     List this project's sessions (active by default; --archived for filed).
   trevor archive <session>     Archive a session (hides it from the default views; keeps its log).
   trevor unarchive <session>   Unarchive a session.
+  trevor stop <session>        Gracefully shut down the session's host (SIGTERM); keeps its log.
+  trevor kill <session>        Force-terminate a wedged session host (SIGKILL); keeps its log.
   trevor --debug               Start the host in debug mode (extra commands like /restart).
   trevor --help                Show this help.
   trevor --version             Show the launcher version.

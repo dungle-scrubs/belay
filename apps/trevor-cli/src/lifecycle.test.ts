@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import type { SessionSummary } from "@trevor/session";
 import { test } from "vitest";
-import { type LifecycleIo, renderSessions, runArchive, runList, selectSessions } from "./lifecycle";
+import {
+  type LifecycleIo,
+  renderSessions,
+  runArchive,
+  runList,
+  runStop,
+  selectSessions,
+} from "./lifecycle";
 
 /**
  * D-094 M3: the `trevor` lifecycle subcommands. The filtering + rendering + command flow are pure
@@ -108,4 +115,50 @@ test("runArchive with no session id returns usage", async () => {
   const io = fakeIo();
   assert.ok((await runArchive(io, "", true)).startsWith("usage:"));
   assert.equal(io.published.length, 0, "no publish on a usage error");
+});
+
+function fakeHostIo(
+  hosts: Record<string, { pid: number }>,
+  alive: (pid: number) => boolean = () => true,
+) {
+  const signalled: [number, string][] = [];
+  const removed: string[] = [];
+  return {
+    io: {
+      lookupHost: (id: string) => hosts[id] ?? null,
+      processAlive: alive,
+      signal: (pid: number, sig: "SIGTERM" | "SIGKILL") => signalled.push([pid, sig]),
+      removeHost: (id: string) => removed.push(id),
+    },
+    signalled,
+    removed,
+  };
+}
+
+test("runStop sends SIGTERM to the live host and drops the ownership record", () => {
+  const { io, signalled, removed } = fakeHostIo({ s1: { pid: 4242 } });
+  const out = runStop(io, "s1", false);
+  assert.ok(out.includes("Stopping"));
+  assert.deepEqual(signalled, [[4242, "SIGTERM"]]);
+  assert.deepEqual(removed, ["s1"]);
+});
+
+test("runStop with kill sends SIGKILL", () => {
+  const { io, signalled } = fakeHostIo({ s1: { pid: 7 } });
+  runStop(io, "s1", true);
+  assert.deepEqual(signalled, [[7, "SIGKILL"]]);
+});
+
+test("runStop on an unknown session reports no recorded host and signals nothing", () => {
+  const { io, signalled, removed } = fakeHostIo({});
+  assert.ok(runStop(io, "ghost", false).includes("No running host"));
+  assert.equal(signalled.length, 0);
+  assert.equal(removed.length, 0);
+});
+
+test("runStop on a dead-process record cleans up the stale record without signalling", () => {
+  const { io, signalled, removed } = fakeHostIo({ s1: { pid: 9 } }, () => false);
+  assert.ok(runStop(io, "s1", false).includes("already gone"));
+  assert.equal(signalled.length, 0, "no signal to a dead/unrelated pid");
+  assert.deepEqual(removed, ["s1"], "the stale record is cleaned up");
 });

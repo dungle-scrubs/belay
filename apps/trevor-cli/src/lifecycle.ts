@@ -74,3 +74,38 @@ export async function runArchive(
   await io.publishArchived(sessionId, archived);
   return `${archived ? "Archived" : "Unarchived"} ${sessionId}.`;
 }
+
+/** The host-control IO for stop/kill (the launcher's ownership records + process signalling). */
+export interface HostControlIo {
+  /** The launcher-owned host record for a session, or null when none is recorded. */
+  readonly lookupHost: (sessionId: string) => { readonly pid: number } | null;
+  readonly processAlive: (pid: number) => boolean;
+  readonly signal: (pid: number, sig: "SIGTERM" | "SIGKILL") => void;
+  /** Drops the ownership record for a session (after a stop/kill). */
+  readonly removeHost: (sessionId: string) => void;
+}
+
+/**
+ * Runs `trevor stop|kill <session>` (D-094 M1/M3). Stop sends SIGTERM - the host's signal handler
+ * shuts down gracefully (kills its background jobs and exits; a later leader reaps any in-flight
+ * run). Kill sends SIGKILL for a wedged host. Either way the durable log is untouched. A
+ * stale/missing record is reported and cleaned up rather than signalling an unrelated pid.
+ */
+export function runStop(io: HostControlIo, sessionId: string, kill: boolean): string {
+  if (!sessionId) {
+    return `usage: trevor ${kill ? "kill" : "stop"} <session>`;
+  }
+  const record = io.lookupHost(sessionId);
+  if (!record) {
+    return `No running host recorded for ${sessionId}.`;
+  }
+  if (!io.processAlive(record.pid)) {
+    io.removeHost(sessionId);
+    return `Host for ${sessionId} was already gone (cleaned up the stale record).`;
+  }
+  io.signal(record.pid, kill ? "SIGKILL" : "SIGTERM");
+  io.removeHost(sessionId);
+  return kill
+    ? `Killed the host for ${sessionId} (pid ${record.pid}).`
+    : `Stopping the host for ${sessionId} (pid ${record.pid})…`;
+}
