@@ -2,13 +2,14 @@
 
 Implementation resume state. Normalized accounting (not raw checkbox counts).
 
-**Current focus:** Phase 1 complete. Next: Phase 2 (the web frontend), starting at M9.
+**Current focus:** Phase 1 ✅ and Phase 2 (the web) ✅ except M15's `<PanelHost>` extraction
+(deferred, visually sensitive). Next: Phase 3 (transport/stores), starting at M16.
 
 ## Summary
 
 - Current-cutoff blockers (Phase 1, the host): 8 milestones, **8 complete** (M1-M8). ✅
-- Near-term follow-up (Phase 2, the web): 7 milestones, seeded, 0 complete —
-  may proceed in parallel; M9 enables host M6 (host M6 landed self-contained per D-012).
+- Phase 2 (the web): 7 milestones — M9-M14 complete; M15 partial (composer hook + PanelControls
+  extracted, App 1002→910; the `<PanelHost>` render-tree relocation deferred for visual review).
 - Near-term follow-up (Phase 3, transport/stores): 5 milestones, seeded, 0 complete.
 - Superseded/obsolete: none.
 - Completed current work: Phase 1 (M1-M8). Full suite green (274 passed / 3 gated skips),
