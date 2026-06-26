@@ -132,15 +132,39 @@ export function useSession(sessionId: string | null): SessionStream {
 
   useEffect(() => {
     if (!sessionId) {
+      setEvents([]);
+      setStatus("connecting");
+      setReplayed(false);
+      setPresence(null);
       return;
     }
     setEvents([]);
     setReplayed(false);
     setPresence(null);
+    // Buffer the replay burst, commit once. A reload streams the WHOLE history (10k+ events for a
+    // long session) as individual onEvent calls. Appending each straight to state would fire one
+    // render per event - an O(n^2) storm (every append re-copies the array and recomputes the
+    // transcript/panel memos) that janks the catch-up and flashes a half-built transcript. Instead we
+    // accumulate replayed events in a local buffer (no setState, no render) and commit them in ONE
+    // update when replay completes, so every consumer (transcript, sidebar count, panel) updates a
+    // single time. Live tail events (after replay.complete) append individually as before. This is the
+    // single place replay is handled, so the gate lives here rather than in each consumer.
+    const replayBuffer: SessionEvent[] = [];
+    let replaying = true;
     const connection = connect({
       sessionId,
-      onEvent: (event) => setEvents((prev) => [...prev, event]),
-      onReplayComplete: () => setReplayed(true),
+      onEvent: (event) => {
+        if (replaying) {
+          replayBuffer.push(event);
+        } else {
+          setEvents((prev) => [...prev, event]);
+        }
+      },
+      onReplayComplete: () => {
+        replaying = false;
+        setEvents(replayBuffer.slice());
+        setReplayed(true);
+      },
       onStatus: setStatus,
       onPresence: setPresence,
     });

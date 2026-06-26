@@ -570,3 +570,42 @@ test("D-082: /clear resets shell blocks like the rest of the transcript", () => 
   if (block?.kind !== "shell") return;
   assert.equal(block.command, "pwd");
 });
+
+test("/clear renders nothing - neither the command echo nor its 'cleared' result", () => {
+  const messages = toTranscript([
+    ev(1, events.userMessage({ text: "hi", provider: "qwen" })),
+    ev(2, events.assistantCompleted({ runId: "r1", text: "hello" })),
+    ev(3, events.userCommand({ command: "/clear", args: "" })),
+    ev(
+      4,
+      events.commandResult({
+        command: "/clear",
+        text: "✓ started fresh session trevor-20260626-123456z-abcdef12",
+        ok: true,
+      }),
+    ),
+  ]);
+  // The pre-clear turn is reset by the user.command, and the /clear result is swallowed - empty view.
+  assert.deepEqual(messages, []);
+});
+
+test("/clear failure result remains visible after the transcript reset", () => {
+  const messages = toTranscript([
+    ev(1, events.userMessage({ text: "hi", provider: "qwen" })),
+    ev(2, events.userCommand({ command: "/clear", args: "" })),
+    ev(
+      3,
+      events.commandResult({
+        command: "/clear",
+        text: "Failed to start a fresh session: spawn failed",
+        ok: false,
+      }),
+    ),
+  ]);
+  assert.equal(messages.length, 1);
+  const result = messages[0];
+  assert.equal(result?.kind, "result");
+  if (result?.kind !== "result") return;
+  assert.equal(result.ok, false);
+  assert.match(result.text, /spawn failed/);
+});

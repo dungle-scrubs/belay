@@ -315,6 +315,11 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         // back is noise. Only its result (command.result, below) is shown: the output they invoked.
         break;
       case "command.result":
+        // A successful /clear moves to a new session, so its success chip is noise while the browser
+        // follows `session.switch`. A failure stays visible in the old, cleared view.
+        if (decoded.command === "/clear" && decoded.ok) {
+          break;
+        }
         // A /compact result means its fold is definitively over. On success the bar was already
         // reaped by `context.compacted`; on FAILURE (host restarted mid-fold) no such event ever
         // landed, so reap the orphaned bar here - otherwise it lingers and keeps animating above the
