@@ -37,11 +37,11 @@
 >   `delegated.to.result` already carries the frozen result for when fork lands. (2) Delegation runs
 >   from the loop layer (it needs the provider + transport), intercepted as a parent-only capability;
 >   depth-1 is structural (a child is given no capability). Then Phase 6 - search-tool upgrade (D-062).
-> Next feature to implement: Phase 7 - nested AGENTS.md context files (D-080). Claude Code's lazy
->   loading model (eager up-tree + lazy below-cwd on file access), keyed on AGENTS.md, not CLAUDE.md.
->   The host reads NO context files today (buildSystemPrompt only name-drops AGENTS.md as a hint).
->   Pre-existing open items remain orthogonal: Phase 2 M4 (/doctor turn-termination reason) and the
->   Phase 5 `delegate_background` leftovers.
+> Phase 7 - nested AGENTS.md context files (D-080) is now SHIPPED: Claude Code's lazy loading model
+>   (eager up-tree + lazy below-cwd on file access), keyed on AGENTS.md, with /doctor surfacing. The
+>   host now ingests context files (it read none before). All current-cutoff + sequenced-follow-up work
+>   is complete; the only remaining items are the fork-dependent Phase 5 M2 forkability bullets (blocked
+>   on the unimplemented D-025…D-029 fork feature) and minor Phase 5 refinements.
 
 ## Phase 1: Concurrent read-only tool execution
 
@@ -397,11 +397,11 @@ Source: `apps/agent-host/src/main.ts` (`hostState` → `/doctor`)
 - Completed: 67
 - Remaining: 0
 - Current cutoff blockers: 0 (Phase 2 M4 /doctor turn-termination reason shipped)
-- Next-feature work (decomposed, not started): 18 (Phase 4: provider SDK migration to `@earendil-works/pi-ai@0.80.2` = 12, then M3 provider-outage auto-reconnect recovery = 6)
-- Post-provider-migration sequenced follow-up: 41 (Phase 5 subagents, including D-049 ephemeral definitions, depth-1 limits, and read-only background delegation)
-- Post-subagents sequenced follow-up: 14 (Phase 6 search-tool upgrade: ripgrep-backed `grep` + read-only `ast_grep`)
-- Next feature to implement (decomposed, not started): 17 (Phase 7 nested AGENTS.md context files, D-080 + D-081 single-sourced `TREVOR_HOME`: Claude Code lazy model keyed on AGENTS.md - eager up-tree + lazy below-cwd on file access)
-- Accepted/deferred follow-up: 73
+- Phase 4 (provider SDK migration + outage auto-reconnect): 18, all shipped ✅
+- Phase 5 (subagents): ~39/41 shipped (inline + background delegation); ~2 remaining are the fork-dependent M2 forkability bullets (blocked on the unimplemented D-025…D-029 fork feature) + minor refinements
+- Phase 6 (search-tool upgrade: ripgrep `grep` + read-only `ast_grep`): 14, all shipped ✅
+- Phase 7 (nested AGENTS.md context files, D-080 + D-081 single-sourced `TREVOR_HOME`): 17, all shipped ✅ (eager up-tree + lazy below-cwd, keyed on AGENTS.md, with /doctor surfacing)
+- Remaining implementable work: 0 (only the fork-blocked Phase 5 bullets + minor refinements remain)
 - Superseded/obsolete checklist debt: 0
 
 > Phase 2 shipped 2026-06-25 ahead of Phase 1 (its silent turn-budget dead-ends were biting:
