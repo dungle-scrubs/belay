@@ -2,11 +2,13 @@ import {
   type CommandSpec,
   type DecodedEvent,
   decodeTrevorEvent,
+  type GitStatus,
   HOST_ROLE,
   type HostPresence,
   type ProviderModel,
   type SessionEvent,
   type TaskSnapshot,
+  type WorktreeSummary,
 } from "@trevor/session";
 
 /** The last value `pick` yields over the decoded log (the newest snapshot), else undefined. */
@@ -105,6 +107,8 @@ export function toolSummary(name: string, argsJson: string): string {
 
 export type HostStatus = {
   branch: string | null;
+  /** Structured git status from the latest host.online, or null on a non-git cwd. */
+  git: GitStatus | null;
   cwd: string | null;
   leaderId: string | null;
   present: boolean;
@@ -135,6 +139,7 @@ export function hostStatus(
 ): HostStatus {
   let everOnline = false;
   let branch: string | null = null;
+  let git: GitStatus | null = null;
   let workspace: string | null = null;
   let cwd: string | null = null;
 
@@ -153,6 +158,12 @@ export function hostStatus(
 
       if (decoded.branch) {
         branch = decoded.branch;
+      }
+
+      // Structured git supersedes the legacy branch string; a host that omits it (older
+      // host, or a non-git cwd) leaves the prior value, so the line degrades, not flips.
+      if (decoded.git) {
+        git = decoded.git;
       }
 
       if (decoded.workspace) {
@@ -212,6 +223,7 @@ export function hostStatus(
     }
     return {
       branch,
+      git,
       cwd,
       leaderId: leaderLive,
       present: liveIds.size > 0,
@@ -229,7 +241,7 @@ export function hostStatus(
     }
   }
 
-  return { branch, cwd, leaderId, present: everOnline, standbyCount, workspace };
+  return { branch, git, cwd, leaderId, present: everOnline, standbyCount, workspace };
 }
 
 /**
@@ -260,6 +272,11 @@ export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
 /** The immediate-command inventory the host last announced (empty until one is online). */
 export function commandsFrom(events: readonly SessionEvent[]): CommandSpec[] {
   return [...(latest(events, (d) => (d.type === "host.online" ? d.commands : undefined)) ?? [])];
+}
+
+/** The managed worktrees the host last announced (empty until one is online), D-091. */
+export function worktreesFrom(events: readonly SessionEvent[]): WorktreeSummary[] {
+  return [...(latest(events, (d) => (d.type === "host.online" ? d.worktrees : undefined)) ?? [])];
 }
 
 /** The newest host-authored session handoff target, if this log asks the browser to move. */

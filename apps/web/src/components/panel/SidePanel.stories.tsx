@@ -1,6 +1,26 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { UsageBreakdown } from "@trevor/session";
+import type { GitStatus, UsageBreakdown } from "@trevor/session";
 import { SidePanel } from "./SidePanel";
+
+const cleanMain: GitStatus = {
+  branch: "main",
+  detached: null,
+  dirty: false,
+  ahead: 0,
+  behind: 0,
+  upstream: true,
+  worktree: false,
+};
+
+const dirtyAhead: GitStatus = {
+  branch: "feat/cross-turn-compaction",
+  detached: null,
+  dirty: true,
+  ahead: 2,
+  behind: 1,
+  upstream: true,
+  worktree: false,
+};
 
 // A realistic turn: tool results dominate the input, thinking dominates the
 // output, the answer is a slice, plus the fixed prompt overhead.
@@ -53,6 +73,26 @@ const Controls = (
   </>
 );
 
+const Footer = (
+  <>
+    <button
+      type="button"
+      className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+    >
+      resume
+    </button>
+    <button
+      type="button"
+      className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+    >
+      worktree
+    </button>
+    <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
+      trevor-local
+    </div>
+  </>
+);
+
 const meta = {
   title: "Panel/SidePanel",
   component: SidePanel,
@@ -74,7 +114,7 @@ export const Default: Story = {
     title: "auth-flow",
     subtitle: "session · trevor-local",
     workspace: "~/proj/api",
-    branch: "main",
+    git: cleanMain,
     ctxUsed: 128000,
     ctxMax: 200000,
     totalTokens: 14100,
@@ -82,6 +122,7 @@ export const Default: Story = {
     contextTokens: 128000,
     contextBreakdown,
     controls: Controls,
+    footer: Footer,
   },
 };
 
@@ -90,7 +131,7 @@ export const NoImagesHeavyThinking: Story = {
     title: "refactor-loop",
     subtitle: "session · trevor-local",
     workspace: "~/dev/trevorV2",
-    branch: "main",
+    git: dirtyAhead,
     ctxUsed: 82000,
     ctxMax: 200000,
     totalTokens: 8200,

@@ -1,4 +1,4 @@
-import type { UsageBreakdown } from "@trevor/session";
+import type { GitStatus, UsageBreakdown } from "@trevor/session";
 import { X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,6 +6,7 @@ import { fmtCtx } from "@/derive";
 import { useArmedAfterMount } from "@/hooks/use-armed-after-mount";
 import { panelBreakdown } from "./breakdown";
 import { Treemap } from "./Treemap";
+import { WorkspaceIdentity } from "./WorkspaceIdentity";
 
 const fmtTok = (n: number): string =>
   n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
@@ -19,8 +20,10 @@ export interface SidePanelProps {
   readonly subtitle?: string;
   /** Host / connection status line, rendered under the header. */
   readonly statusNode?: ReactNode;
+  /** Effective cwd, shown as the first line of the workspace identity block. */
   readonly workspace?: string;
-  readonly branch?: string;
+  /** Structured git status for the workspace, rendered as the branch/status line under cwd. */
+  readonly git?: GitStatus | null;
   /** Tokens consumed by the latest call (its input), for the context meter. */
   readonly ctxUsed?: number;
   /** Context-window size for the latest call (the maximum), for the context meter. */
@@ -34,6 +37,8 @@ export interface SidePanelProps {
   readonly contextTokens?: number;
   /** Model / reasoning controls, injected by the host so the panel stays presentational. */
   readonly controls?: ReactNode;
+  /** Session affordances (resume / worktree / session id) pinned inline at the panel's bottom. */
+  readonly footer?: ReactNode;
   /**
    * Whether the session has finished its initial replay. Transitions stay off until
    * this is true so a refresh - where data streams in event by event - settles into
@@ -54,7 +59,7 @@ export function SidePanel({
   subtitle,
   statusNode,
   workspace,
-  branch,
+  git,
   ctxUsed,
   ctxMax,
   totalTokens,
@@ -62,6 +67,7 @@ export function SidePanel({
   contextBreakdown,
   contextTokens,
   controls,
+  footer,
   ready = true,
   onClose,
 }: SidePanelProps) {
@@ -96,12 +102,7 @@ export function SidePanel({
 
       {statusNode ? <div className="text-label tracking-wider">{statusNode}</div> : null}
 
-      {workspace ? (
-        <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
-          <code className="truncate text-foreground">{workspace}</code>
-          {branch ? <span className="shrink-0 text-muted-foreground">· {branch}</span> : null}
-        </div>
-      ) : null}
+      {workspace ? <WorkspaceIdentity cwd={workspace} git={git} /> : null}
 
       {showMeter ? (
         <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
@@ -157,8 +158,11 @@ export function SidePanel({
         </Tabs>
       </section>
 
-      {controls ? (
-        <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3">{controls}</div>
+      {controls || footer ? (
+        <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3">
+          {controls}
+          {footer ? <div className="flex flex-wrap items-center gap-1.5 pt-1">{footer}</div> : null}
+        </div>
       ) : null}
     </aside>
   );

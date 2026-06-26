@@ -189,6 +189,26 @@ test("hostStatus (live presence): present with the live leader, others are stand
   assert.equal(hostStatus(events, presence("h2"), Date.now()).leaderId, null);
 });
 
+test("hostStatus folds the structured git status from host.online (D-088)", () => {
+  const git = {
+    branch: "feat/x",
+    detached: null,
+    dirty: true,
+    ahead: 2,
+    behind: 0,
+    upstream: true,
+    worktree: false,
+  };
+  const events = [online("h1", { git })];
+  const presence = (...ids: string[]): HostPresence[] =>
+    ids.map((instanceId) => ({ instanceId, participantId: instanceId, displayName: instanceId }));
+  const status = hostStatus(events, presence("h1"), Date.now());
+  assert.deepEqual(status.git, git);
+
+  // A host without a git field (non-git cwd / older host) leaves git null.
+  assert.equal(hostStatus([online("h1")], presence("h1"), Date.now()).git, null);
+});
+
 test("hostStatus (no live presence): latches present from host.online, leader from role", () => {
   const at = "2026-06-25T12:00:00.000Z";
   const events = [

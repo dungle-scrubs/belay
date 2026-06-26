@@ -1,7 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_SESSION_ID } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { ChevronDown, CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
+import {
+  ChevronDown,
+  CircleX,
+  GitBranch,
+  History,
+  PanelRight,
+  RotateCw,
+  TriangleAlert,
+} from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -47,12 +55,14 @@ import {
   providerModelsFrom,
   tasksFrom,
   toolSummary,
+  worktreesFrom,
 } from "./derive";
 import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
 import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { Markdown } from "./markdown";
+import { ResumeModal, useInventory } from "./resume";
 import { atBottomOf } from "./scroll";
 import { ensureSession, useSession, useSessionActions, webTabId } from "./session/use-session";
 import { TasksPanel } from "./TasksPanel";
@@ -62,6 +72,7 @@ import {
   type ToolMessage as ToolMessageData,
   toTranscript,
 } from "./transcript";
+import { WorktreeModal } from "./worktrees";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -74,6 +85,8 @@ const DEFAULT_SESSION = DEFAULT_SESSION_ID;
 const BUILT_IN_COMMANDS = [
   { name: "/clear", summary: "Start a fresh session" },
   { name: "/cd", summary: "Switch directories in a fresh session", usage: "/cd <directory>" },
+  { name: "/resume", summary: "Open a prior session (no implicit resume)" },
+  { name: "/worktree", summary: "Switch a Trevor-managed worktree" },
 ] as const;
 
 function targetFromLocation(): string {
@@ -211,6 +224,33 @@ export function App() {
     const label = (fromWorkspace && fromWorkspace !== "~" ? fromWorkspace : null) ?? fromSession;
     document.title = label ? `${label} · Trevor` : "Trevor";
   }, [host.workspace, target]);
+  // The explicit-resume chooser (D-090): a UI affordance / `/resume`, never an implicit resume.
+  // The inventory is fetched only while the modal is open; the current session's base repo
+  // orders + groups its sessions first.
+  const [resumeOpen, setResumeOpen] = useState(false);
+  // The managed-worktree switcher (D-091): a UI affordance / `/worktree` opens it; the host
+  // announces the worktrees on host.online, and switching routes the host-owned switch action.
+  const [worktreeOpen, setWorktreeOpen] = useState(false);
+  // The session inventory powers the resume chooser AND decorates worktree rows (activity/host),
+  // so fetch it while either chooser is open.
+  const inventory = useInventory(resumeOpen || worktreeOpen);
+  const currentProject = useMemo(() => {
+    const base = (host.workspace ?? host.cwd)?.split("/").filter(Boolean).pop();
+    return base && base !== "~" ? base : null;
+  }, [host.workspace, host.cwd]);
+  const worktrees = useMemo(() => worktreesFrom(events), [events]);
+  // Cross-reference per-worktree-session activity from the inventory, so a worktree row can show
+  // "agents running" / "needs you" / host presence.
+  const worktreeActivity = useMemo(() => {
+    const map = new Map<
+      string,
+      { host: "live" | "stale" | "none"; activity: "running" | "idle" }
+    >();
+    for (const s of inventory.sessions) {
+      map.set(s.sessionId, { host: s.host, activity: s.activity });
+    }
+    return map;
+  }, [inventory.sessions]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
@@ -365,6 +405,23 @@ export function App() {
       return;
     }
     const text = draft.trim();
+    // `/resume` is a browser-side UI command (D-090): it opens the resume chooser, never a
+    // model turn and never a host round-trip, so it's intercepted before the host command
+    // lane. It injects no transcript content into the current session.
+    if (text === "/resume" || text.startsWith("/resume ")) {
+      history.resetNavigation();
+      setDraft("");
+      setResumeOpen(true);
+      return;
+    }
+    // `/worktree` is a browser-side UI command (D-091): it opens the worktree switcher; the actual
+    // switch routes the host-owned action, never a model turn.
+    if (text === "/worktree" || text.startsWith("/worktree ")) {
+      history.resetNavigation();
+      setDraft("");
+      setWorktreeOpen(true);
+      return;
+    }
     // A slash command (text only) routes to the immediate host lane. Otherwise a prompt
     // may carry text, attachments, or both - attachments-only is a valid "look at this".
     const cmd = text ? parseCommand(text, commandNames) : null;
@@ -609,6 +666,38 @@ export function App() {
       showThinking={showThinkingOn}
       onShowThinkingChange={setShowThinking}
     />
+  );
+
+  // Session affordances, rendered inline at the bottom of the sidebar (not a floating bar): open the
+  // resume chooser, the worktree switcher (when any exist), and the session id for orientation.
+  const panelFooter = (
+    <>
+      <button
+        type="button"
+        onClick={() => setResumeOpen(true)}
+        title="Resume a session (/resume)"
+        aria-label="Resume a session"
+        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+      >
+        <History className="size-3" />
+        resume
+      </button>
+      {worktrees.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => setWorktreeOpen(true)}
+          title="Switch worktree (/worktree)"
+          aria-label="Switch worktree"
+          className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+        >
+          <GitBranch className="size-3" />
+          worktree
+        </button>
+      ) : null}
+      <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
+        {target}
+      </div>
+    </>
   );
 
   // Host/connection status, moved out of the footer into the panel header.
@@ -1045,20 +1134,32 @@ export function App() {
           subtitle={`${status}${replayed ? " · replayed" : ""} · ${events.length} events`}
           statusNode={statusNode}
           workspace={host.cwd ?? host.workspace ?? undefined}
-          branch={host.branch ?? undefined}
+          git={host.git}
           {...panel}
           ready={replayed}
           controls={panelControls}
+          footer={panelFooter}
           onClose={() => setPanelOpen(false)}
         />
       ) : null}
 
-      {/* Pinned bottom-right: the session id, for orientation across tabs. */}
-      <div className="fixed right-3 bottom-2 z-[100] flex items-center gap-1.5">
-        <div className="rounded border border-border bg-card/90 px-2 py-1 font-mono text-label tracking-wider text-muted-foreground shadow-sm backdrop-blur-sm">
-          {target}
-        </div>
-      </div>
+      <ResumeModal
+        open={resumeOpen}
+        onOpenChange={setResumeOpen}
+        sessions={inventory.sessions}
+        loading={inventory.loading}
+        error={inventory.error}
+        context={{ currentSessionId: sessionId, currentProject, busy, nowMs: now }}
+        onResume={navigateToSession}
+      />
+
+      <WorktreeModal
+        open={worktreeOpen}
+        onOpenChange={setWorktreeOpen}
+        worktrees={worktrees}
+        context={{ activityBySession: worktreeActivity, busy }}
+        onSwitch={(id) => void command("/worktree-switch", id)}
+      />
     </div>
   );
 }
