@@ -24,6 +24,7 @@ export const TOOL_DESCRIPTORS = [
   { name: "glob", readOnly: true },
   { name: "grep", readOnly: true },
   { name: "web_search", readOnly: true },
+  { name: "session_recall", readOnly: true },
   { name: "ast_grep", readOnly: true },
   { name: "bash", readOnly: false },
   { name: "write", readOnly: false },

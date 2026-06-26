@@ -1,9 +1,10 @@
-import type { ToolName } from "@trevor/session";
+import { decodeRecallResult, type ToolName } from "@trevor/session";
 import type { ReactElement } from "react";
 import { toolSummary } from "@/derive";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { ToolCall } from "./message";
 import { MultiEditDiff } from "./multi-edit-diff";
+import { SessionRecallResults } from "./session-recall";
 import { ToolDiff } from "./tool-diff";
 import { ToolOutput } from "./tool-output";
 import type { ToolStatus } from "./tool-status";
@@ -154,6 +155,20 @@ const renderWebSearch: RenderArm = ({ message, status, className }) => {
   );
 };
 
+// session_recall renders its distilled findings + cited source rows (or the recalling indicator
+// while running, or its error/empty note) from the JSON recall result.
+const renderRecall: RenderArm = ({ message, status, className }) => {
+  const a = parseToolArgs(message.args);
+  return (
+    <SessionRecallResults
+      className={className}
+      query={typeof a.query === "string" ? a.query : ""}
+      result={decodeRecallResult(message.result)}
+      status={status}
+    />
+  );
+};
+
 // bash/grep render their text output (command output, matches) flat.
 const renderOutput: RenderArm = ({ message, status, className }) => (
   <ToolOutput
@@ -193,6 +208,7 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   glob: renderGeneric,
   grep: renderOutput,
   web_search: renderWebSearch,
+  session_recall: renderRecall,
   ast_grep: renderGeneric,
   bash: renderOutput,
   write: renderDiff,

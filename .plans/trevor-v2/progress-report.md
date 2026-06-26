@@ -6,8 +6,8 @@
 
 > **Scope.** This report tracks open or partial/gated work only. When an item or section is fully
 > completed, move its detailed checklist to the done archive and leave only a summary/reference here.
-> Current focus: Next-Up: session recall
-> Decomposed open sections: D-044 session recall, D-092 image attachment UX, D-060 internet connectivity
+> Current focus: Next-Up: image attachment UX
+> Decomposed open sections: D-092 image attachment UX, D-060 internet connectivity
 > awareness, D-093 session navigation sidebar, D-094 session lifecycle controls, and D-065 provider
 > auth/catalog + full model chooser, D-076-D-079 provider-outage auto-reconnect recovery, and D-073 doctor
 > health surface. Later roadmap items stay sequenced in the canonical implementation plan and are decomposed here
@@ -15,8 +15,8 @@
 
 ## Archived Completed Work
 
-Completed checklist detail for Phase 1 through Phase 8, D-083-D-087, and the completed D-088-D-091
-work is archived in [progress-report-done.md](./progress-report-done.md).
+Completed checklist detail for Phase 1 through Phase 8, D-083-D-087, the completed D-088-D-091
+work, and D-044 session recall is archived in [progress-report-done.md](./progress-report-done.md).
 
 ## Carry-Forward: partial/gated archived items
 
@@ -26,72 +26,7 @@ These rows remain visible because they are not fully completed, even though thei
 - [~] D-090 explicit resume: launcher/supervisor spawning or reusing a matching host for a selected no-host session remains gated
 - [~] D-091 managed worktrees: dedicated cwd-path advisory lock remains deferred beyond the existing per-session lock
 - [~] D-091 managed worktrees: live two-host worktree smoke remains gated
-
-## Next-Up: session recall
-
-D-044 is captured in the implementation plan as model-decided recall over older project/session conversation
-memory that is not already in the active prompt. "Session recall" keeps its name, but the scope is the current
-project's durable session corpus: compacted-away detail in the current durable session plus other durable
-sessions for the same project/workspace. It is not a slash command, not ambient memory, and not codebase search.
-Source: `apps/agent-host/src/agent/compactor.ts`, `apps/agent-host/src/agent/history-projection.ts`,
-session-store/Richter session APIs, future session inventory/project mapping, future recall tool and transcript
-result component (D-044).
-
-### M1: Recallable corpus and source metadata (D-044)
-
-- [ ] Define the recallable record model for compacted-away current-session spans and other project sessions
-- [ ] Use the launcher/resume project identity so "same project" means the same canonical root/workspace mapping
-- [ ] Exclude recent turns that are already present in the active prompt projection
-- [ ] Read compaction fold manifests as anchors for current-session compacted-away detail
-- [ ] Read durable session summaries/events for other sessions in the same project without loading them into the active session
-- [ ] Attach stable source pointers: session id/label, workspace/project, turn id or event range, timestamp, excerpt, score, and neighborhood bounds
-- [ ] Treat missing, stale, corrupt, or inaccessible sessions as visible partial-search diagnostics, not silent absence
-
-### M2: BM25 search and filters
-
-- [ ] Build an on-demand lexical BM25 index over recallable conversation records, with no embeddings in the first cut
-- [ ] Support structured filters for project/session, turn range, event type, tool name, and folded-span id
-- [ ] Search compacted-away current-session detail and other same-project sessions in one query path
-- [ ] Rank, cap, and deduplicate anchors so repeated excerpts from the same neighborhood do not dominate
-- [ ] Return anchors with match score, source pointer, excerpt, and enough context keys for neighborhood expansion
-- [ ] Unit tests cover ranking, filtering, dedupe, no-hit behavior, and exclusion of active-prompt turns
-
-### M3: Neighborhood expansion and isolated recall subagent
-
-- [ ] Expand each search anchor into a bounded neighborhood of surrounding turns/events
-- [ ] Cap per-neighborhood size and total recall context so one long session cannot exhaust the recall budget
-- [ ] Run the reasoning pass in an isolated subagent with its own context budget
-- [ ] Give the recall subagent read-only access to recall neighborhoods and source metadata only
-- [ ] Return distilled findings with citations instead of dumping raw neighborhoods into the main turn
-- [ ] Tests cover anchor-to-neighborhood expansion, budget caps, citation preservation, and no mutation of the current durable session
-
-### M4: Model-facing tool contract
-
-- [ ] Add a `session_recall` model-facing tool with query, optional filters, and result caps
-- [ ] Do not add a slash command in the first cut
-- [ ] Add prompt/tool guidance so the model uses recall only when the user asks for older project/session memory
-- [ ] Tool result includes query, searched-session count, searched-fold count, anchor count, neighborhood count, cited findings, and diagnostics
-- [ ] Typed outcomes distinguish no hits, partial search, unavailable inventory, invalid filters, and internal failure
-- [ ] Ambient/proactive remembering remains deferred and cannot inject recall results without a model tool call
-
-### M5: Visible transcript rendering, Storybook first
-
-- [ ] Build a Storybook-first `Session recall` result surface before live wiring
-- [ ] Render the recall use visibly in the transcript as a tool/result, not hidden reasoning
-- [ ] Show a compact activity summary such as sessions searched, folded spans searched, and neighborhoods found
-- [ ] Show collapsed or compact source rows/snippets with session label, timestamp, and short excerpt
-- [ ] Storybook states cover searching, no hits, one hit, multiple sessions, partial search, stale session, and error
-- [ ] The first cut does not add a separate recall browser, drawer, modal, or global search UI
-- [ ] Web tests cover result rendering, collapsed snippets, accessibility labels, and long-session/long-excerpt truncation
-
-### M6: Verification
-
-- [ ] Tests prove recall searches compacted-away current-session detail but not active-prompt recent turns
-- [ ] Tests prove recall searches other sessions for the same project and excludes unrelated projects
-- [ ] Tests prove no `/resume`/session switch or transcript merge occurs while searching other sessions
-- [ ] Tests prove citations point back to stable session/event ranges
-- [ ] Tests prove no slash command is registered for recall
-- [ ] Manual EZE repro: ask a memory question whose answer exists only in compacted-away or sibling-session history, and the visible `Session recall` result appears before the final answer
+- [~] D-044 session recall: live manual EZE repro (memory question answered only from compacted-away/sibling history shows the visible recall result before the answer) remains gated
 
 ## Next-Up: image attachment UX
 
@@ -728,7 +663,7 @@ registry-derived capability manifest D-074.
 
 ## Summary
 - Archived completed checklist detail: [progress-report-done.md](./progress-report-done.md)
-- Live open follow-up (D-044 session recall): 38 features, 0 completed, 38 remaining
+- Shipped (archived): D-044 session recall - 38 features, 37 completed, 1 gated manual EZE repro
 - Live open follow-up (D-092 image attachment UX): 53 features, 0 completed, 53 remaining
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 0 completed, 40 remaining
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 0 completed, 39 remaining
@@ -737,5 +672,5 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 0 completed, 51 remaining
-- Partial/gated carry-forward from archived D-088-D-091: 4 items
-- Remaining implementable work in this report: 435 unchecked items plus 4 partial/gated carry-forward items
+- Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
+- Remaining implementable work in this report: 397 unchecked items plus 5 partial/gated carry-forward items

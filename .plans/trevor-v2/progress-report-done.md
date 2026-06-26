@@ -759,11 +759,81 @@ helpers, `apps/web` command modal consumers, `packages/session/src/protocol.ts` 
 - [~] Smoke test covers create, switch, switch back to baseline, dirty display, and blocked switching while running - covered across the manager/registry/rows/modal unit + web tiers (create/switch/baseline/missing/dirty/busy-block); a live two-host worktree smoke is the gated lane
 - Protocol: `host.online` round-trips `worktrees: WorktreeSummary[]` and defaults to `[]` for older hosts (`protocol.test.ts`); host git helpers (`git.test.ts`: `mainWorktreeRoot`, add/remove/merge result mapping, conflict detection)
 
+## D-044 Session recall
+
+Model-decided recall over the current project's durable conversation memory that is NOT in the
+active prompt: the compacted-away detail of the current session plus other sessions for the same
+project/workspace. A read-only `session_recall` tool (no slash command, no ambient memory, no
+codebase search). Source: `apps/agent-host/src/agent/recall/*`, `apps/agent-host/src/tools/session-recall.ts`,
+`packages/session/src/recall.ts` + `tools.ts`, `apps/web/src/components/chat/session-recall.tsx`.
+
+### M1: Recallable corpus and source metadata ✅
+Source: `apps/agent-host/src/agent/recall/{types,corpus}.ts` (+ `corpus.test.ts`)
+
+- [x] Recallable record model for compacted-away current-session spans + other project sessions - `RecallRecord` (user/assistant/tool/fold, stable `sessionId#seq` id, range, runId, tool, foldId)
+- [x] Launcher/resume project identity for "same project" - the sibling reader matches by canonical workspace path, falling back to project basename (the inventory's projection)
+- [x] Exclude recent turns already in the active prompt - `assembleCorpus` keeps current-session records only at `seq <= fold.throughSeq`, dropping the active-prompt tail and the in-prompt fold summary
+- [x] Read compaction fold manifests as anchors - `buildRecords` projects `context.compacted` into fold records carrying the manifest `turnRange` + foldId
+- [x] Read durable session summaries/events for siblings without loading them - the transport-backed reader streams a sibling's replay read-only, never into the active session
+- [x] Stable source pointers - session id/label, workspace/project, seq range, runId, timestamp, excerpt, score, neighborhood bounds
+- [x] Missing/stale/corrupt/inaccessible sessions as visible partial-search diagnostics - `RecallDiagnostic` (unreadable/empty/stale/corrupt/skipped), never silent
+
+### M2: BM25 search and filters ✅
+Source: `apps/agent-host/src/agent/recall/{bm25,search}.ts` (+ tests)
+
+- [x] On-demand lexical BM25 index, no embeddings - `buildBm25Index` (Okapi k1=1.5/b=0.75), rebuilt per query
+- [x] Structured filters for project/session, turn range, event type, tool name, folded-span id - `matchesFilters`
+- [x] One query path over compacted-away current detail + same-project siblings - `assembleCorpus` feeds one `searchCorpus`
+- [x] Rank, cap, dedupe by neighborhood - same-session hits within a seq radius collapse to the best
+- [x] Anchors carry score, source pointer, excerpt, neighborhood keys
+- [x] Unit tests cover ranking, filtering, dedupe, no-hit, and active-prompt exclusion
+
+### M3: Neighborhood expansion and isolated recall subagent ✅
+Source: `apps/agent-host/src/agent/recall/{neighborhood,distill,engine}.ts` (+ tests)
+
+- [x] Expand each anchor into a bounded neighborhood of surrounding turns/events - `expandNeighborhoods`
+- [x] Per-neighborhood + total-context caps so one long session cannot exhaust the budget; dropped anchors reported
+- [x] Reasoning pass in an isolated subagent with its own context budget - `distillRecall`, a tool-less model step over only the recalled neighborhoods (modeled on the compaction summarizer)
+- [x] Read-only access to neighborhoods + source metadata only - no tools offered, its whole context is the constructed prompt
+- [x] Distilled findings with citations instead of raw neighborhoods - `[Sn]` citations parsed back to stable record ids
+- [x] Tests cover expansion, budget caps, citation preservation, and no mutation of the durable session
+
+### M4: Model-facing tool contract ✅
+Source: `apps/agent-host/src/tools/session-recall.ts`, `packages/session/src/{recall,tools}.ts`
+
+- [x] `session_recall` tool with query, optional filters, result caps; read-only
+- [x] No slash command in the first cut - tested absent from the command registry
+- [x] Prompt/tool guidance: recall only for older project/session memory, not code search
+- [x] Result includes query, searched-session/fold/record counts, anchor + neighborhood counts, cited findings, diagnostics
+- [x] Typed outcomes - `ok`, `no_hits`, `partial`, `unavailable`, `invalid_filters`, `error`
+- [x] Ambient/proactive remembering stays deferred - results only enter the turn via the model's tool call
+
+### M5: Visible transcript rendering, Storybook first ✅
+Source: `apps/web/src/components/chat/session-recall.{tsx,stories,test}`, `tool-message.tsx`
+
+- [x] Storybook-first `Session recall` surface before live wiring
+- [x] Rendered visibly as a tool/result (dispatch arm), not hidden reasoning
+- [x] Compact activity summary (sessions searched, folded spans, neighborhoods found)
+- [x] Collapsed source rows with session label, timestamp, kind, short excerpt; numbered to the `[Sn]` citations
+- [x] Storybook states: searching, no hits, one hit, multiple sessions, partial, stale, error (+ unavailable)
+- [x] First cut adds no separate recall browser/drawer/modal/global-search UI
+- [x] Web tests cover rendering, collapsed snippets, accessibility labels, long-excerpt truncation, and dispatch
+
+### M6: Verification ✅
+
+- [x] Recall searches compacted-away current detail but not active-prompt recent turns - `corpus.test.ts`, `engine.test.ts`
+- [x] Recall searches same-project siblings and excludes unrelated projects - `reader.test.ts` (workspace scoping)
+- [x] No `/resume`/session switch or transcript merge while searching siblings - reader publishes nothing, joins as a `web` viewer (no host presence), closes after replay
+- [x] Citations point back to stable session/event ranges - findings cite `sessionId#seq` ids mapped from neighborhood anchors
+- [x] No slash command registered for recall - `session-recall.test.ts`
+- [~] Manual EZE repro: ask a memory question answered only from compacted-away/sibling history and see the visible recall result before the answer - gated (needs a live multi-session host)
+
 ## Archived Completion Summary
 
 - Phase 1 through Phase 8 are shipped.
 - D-083-D-087 are shipped: composer recovery/history, project launcher, early transcript layout, and project-local skill roots.
 - D-088-D-091 are archived as completed or partial/gated: sidebar git identity, shared command modal foundation, explicit resume, and managed worktrees.
 - Four D-088-D-091 partial/gated rows remain mirrored in the live report until they are resolved or intentionally dropped.
-- D-044 session recall, D-092 image attachment UX, and D-060 internet connectivity awareness are not archived here because they remain open in the live report.
+- D-044 session recall is shipped and archived above (M1-M6; one gated manual EZE repro).
+- D-092 image attachment UX and D-060 internet connectivity awareness are not archived here because they remain open in the live report.
 - Latest recorded full-suite completion for D-088-D-091: 9 packages typecheck; 455 unit + 53 web + 41 integration + 6 e2e pass; lint clean with 6 pre-existing warnings.

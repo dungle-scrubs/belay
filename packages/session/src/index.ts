@@ -5,6 +5,7 @@ export * from "./event";
 export * from "./identity";
 export * from "./inventory";
 export * from "./protocol";
+export * from "./recall";
 export * from "./stream-transport";
 export * from "./tools";
 export * from "./transport";

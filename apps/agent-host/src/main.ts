@@ -25,6 +25,8 @@ import {
   runDelegatedChild,
 } from "./agent/delegate";
 import { buildHistory } from "./agent/history-projection";
+import { recallEngine } from "./agent/recall/engine";
+import { createSiblingReader } from "./agent/recall/reader";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
@@ -734,7 +736,14 @@ function spawnReplacementHost(opts: {
   readonly sessionId: string;
   readonly workspace: string;
 }): { readonly pid: number } {
-  const child = spawn(process.execPath, process.argv.slice(1), {
+  // Re-exec with the SAME node invocation that started THIS process. Under the dev/start lanes the
+  // host runs via tsx, which installs its TypeScript loader through process.execArgv (--require
+  // preflight, --import loader) - NOT argv. Dropping execArgv respawns a bare `node src/main.ts`, which
+  // dies instantly on the first extensionless `.ts` import (ERR_MODULE_NOT_FOUND); with stdio:"ignore"
+  // that death is silent, so /cd, /clear, and /restart would leave the new session hostless ("starting
+  // host…" forever). Carrying execArgv through reproduces the full launch; it's empty under a compiled
+  // binary, so this is a no-op there.
+  const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
     cwd: opts.cwd,
     detached: true,
     stdio: "ignore",
@@ -1447,6 +1456,59 @@ function handleEvent(message: SessionEvent): void {
   }
 }
 
+/** A short label for the current session (its first user message), for recall source citations. */
+function currentLabel(): string {
+  for (const event of historyEvents) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "user.message" && decoded.text.trim()) {
+      const text = decoded.text.trim().replace(/\s+/g, " ");
+      return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+    }
+  }
+  return SESSION_ID;
+}
+
+/** Basename of a path (after home-abbreviation), matching the inventory's project projection. */
+function projectName(path: string): string {
+  const trimmed = abbrevPath(path).replace(/\/+$/, "");
+  const base = trimmed.split("/").pop();
+  return base && base.length > 0 ? base : trimmed;
+}
+
+/**
+ * Wires the session-recall engine (D-044) to this host's live state: the current session view
+ * (its log, project, and latest fold boundary, so recall searches the compacted-away span but not
+ * the active-prompt tail), a read-only sibling reader over the same transport, and the reasoning
+ * provider. Done once at startup; the engine reads through these closures at recall time.
+ */
+function configureRecall(): void {
+  recallEngine.configure({
+    current: () => ({
+      sessionId: SESSION_ID,
+      label: currentLabel(),
+      project: projectName(WORKSPACE_ROOT),
+      events: historyEvents.slice(),
+      foldThroughSeq: lastFold?.throughSeq ?? null,
+    }),
+    siblings: createSiblingReader({
+      transport,
+      serviceUrl: RICHTER_URL ?? SESSION_STORE_URL,
+      // A passive viewer identity (web runtime kind), so reading a sibling never registers this
+      // host as a live host presence on that session.
+      identity: {
+        displayName: "trevor-recall",
+        runtimeKind: RUNTIME_KIND.web,
+        instanceId: INSTANCE_ID,
+        participantId: `${PRODUCER_ID}:recall`,
+      },
+      currentSessionId: SESSION_ID,
+      currentWorkspace: abbrevPath(WORKSPACE_ROOT),
+      currentProject: projectName(WORKSPACE_ROOT),
+    }),
+    provider: () => lastProvider ?? providers[DEFAULT_PROVIDER] ?? null,
+  });
+}
+
 /** Connects to the session stream (replay-then-tail) with simple reconnect. */
 function connect(): void {
   live = false;
@@ -1489,6 +1551,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
+configureRecall();
 log("host", "starting", {
   participant: PARTICIPANT_ID,
   session: SESSION_ID,

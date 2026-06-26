@@ -12,6 +12,7 @@ import { grepTool } from "./grep";
 import { READ_ONLY_TOOLS } from "./index";
 import { multiEditTool } from "./multi-edit";
 import { readTool } from "./read";
+import { sessionRecallTool } from "./session-recall";
 import type { Tool } from "./types";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
@@ -24,7 +25,14 @@ import { writeTool } from "./write";
  */
 
 test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () => {
-  for (const tool of [readTool, globTool, grepTool, webSearchTool, astGrepTool]) {
+  for (const tool of [
+    readTool,
+    globTool,
+    grepTool,
+    webSearchTool,
+    sessionRecallTool,
+    astGrepTool,
+  ]) {
     assert.equal(tool.readOnly, true, `${tool.name} should declare readOnly: true`);
     assert.ok(READ_ONLY_TOOLS.has(tool.name), `${tool.name} should be in READ_ONLY_TOOLS`);
   }
@@ -61,6 +69,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     globTool,
     grepTool,
     webSearchTool,
+    sessionRecallTool,
     astGrepTool,
     supervisor.buildTool(),
     ...buildTaskTools(),
