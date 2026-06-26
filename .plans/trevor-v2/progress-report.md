@@ -7,7 +7,7 @@
 > **Scope.** This report tracks open or partial/gated work only. When an item or section is fully
 > completed, move its detailed checklist to the done archive and leave only a summary/reference here.
 > Current focus: Next-Up: doctor health surface (D-073). Recently progressed: D-092 image attachment
-> UX (M1-M6 done; M3 commit pending owner App.tsx; manual EZE repros open) and D-060 internet
+> UX (M1-M6 done; manual EZE repros open) and D-060 internet
 > connectivity (M1-M5 done bar explicit-UI-refresh wiring, structured probe logs, and the manual repro).
 > Decomposed open sections: D-092 image attachment UX, D-060 internet connectivity
 > awareness, D-093 session navigation sidebar, D-094 session lifecycle controls, and D-065 provider
@@ -666,7 +666,7 @@ registry-derived capability manifest D-074.
 ## Summary
 - Archived completed checklist detail: [progress-report-done.md](./progress-report-done.md)
 - Shipped (archived): D-044 session recall - 38 features, 37 completed, 1 gated manual EZE repro
-- Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros; M3 implemented, commit pending owner App.tsx)
+- Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 0 completed, 39 remaining
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 0 completed, 38 remaining
