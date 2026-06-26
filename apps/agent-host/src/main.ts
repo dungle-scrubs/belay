@@ -37,6 +37,7 @@ import { openInEditor } from "./tools/open-editor";
 import { msg } from "./tools/shared";
 import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
+import { terminationReason } from "./turn-termination";
 
 /**
  * Trevor host: a session participant that runs an agent loop (model <-> tools) for
@@ -126,6 +127,9 @@ function hostState(): Record<string, unknown> {
     queued: turns.queued,
     history: history.length,
     lastAnswerSeq: turns.lastAnswerSeq,
+    // Why the most recent turn ended (Phase 2 M4): answered | step_limit | overflow | noReply |
+    // cancelled | interrupted | error. Omitted until the first turn completes.
+    ...(lastTermination ? { lastTurn: lastTermination } : {}),
     compacting: turns.compacting,
     // Subagents (D-045..D-048): the discovered roster + the depth policy. Delegation is depth-1
     // (a child is given no delegation capability), inline-only in this cut.
@@ -300,6 +304,14 @@ const inFlightRuns = new Set<string>();
  *  completion carries this last-known usage instead of dropping it (keeps the ctx meter + token
  *  accounting honest across a cancel). Cleared when the run's completion lands. */
 const lastUsageByRun = new Map<string, { usage?: Usage; breakdown?: UsageBreakdown }>();
+
+/** Why the most recent turn ended, for /doctor (Phase 2 M4 / D-051..D-053): answered | step_limit |
+ *  overflow | noReply | cancelled | interrupted | error. Derived from the terminal assistant.completed
+ *  flags (+ whether the run hit terminal context overflow). Null until the first turn completes. */
+let lastTermination: string | null = null;
+/** Runs that emitted a terminal assistant.overflow (recovery exhausted). A turn that then ends with no
+ *  real answer reports "overflow" rather than a bare "noReply". Cleared when the run's completion lands. */
+const overflowedRuns = new Set<string>();
 
 /**
  * Publishes the terminal completion for a run being closed WITHOUT a completion of its own - a user
@@ -624,6 +636,10 @@ function handleEvent(message: SessionEvent): void {
   } else if (decoded.type === "assistant.completed") {
     inFlightRuns.delete(decoded.runId); // the run finished (normally, cancelled, or reaped)
     lastUsageByRun.delete(decoded.runId);
+    // Record WHY this turn ended (Phase 2 M4) before the overflow flag is reaped, so /doctor can
+    // report the reason for the most recent turn.
+    lastTermination = terminationReason(decoded, overflowedRuns.has(decoded.runId));
+    overflowedRuns.delete(decoded.runId);
     // Invariant: history stays strictly paired - an assistant reply lands only on top
     // of the user turn it answers. A different role on top means the pairing the loop
     // depends on has drifted (e.g. a missed/duplicated turn). Checked against the
@@ -661,6 +677,10 @@ function handleEvent(message: SessionEvent): void {
       tokensAfter: decoded.tokensAfter,
     };
     scheduler.finishCompaction();
+  } else if (decoded.type === "assistant.overflow") {
+    // Recovery was exhausted for this run (D-034). Note it so the turn's termination reason reads
+    // "overflow" if it then ends with no real answer (Phase 2 M4).
+    overflowedRuns.add(decoded.runId);
   } else if (decoded.type === "tool.started" || decoded.type === "tool.completed") {
     // Record the turn's tool activity so buildHistory carries the calls + results into the next
     // turn's prompt (the model keeps what it read until compaction folds it). Not re-projected per

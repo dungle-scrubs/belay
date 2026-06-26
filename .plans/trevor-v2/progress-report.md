@@ -17,7 +17,11 @@
 > file-defined agents and runtime-minted ephemeral definitions. **Phase 6 -
 > search-tool upgrade** (D-062) is decomposed below as the immediately-after-subagents
 > follow-up: `grep` becomes ripgrep-backed and H-108 `ast_grep` becomes a read-only
-> structural-search tool. Later roadmap items (session recall D-044, WAN fallback
+> structural-search tool. **Phase 7 - nested AGENTS.md context
+> files** (D-080) is the next feature to implement and is decomposed below: Claude Code's
+> loading model (eager up-tree at the root + lazy below-cwd on file access) keyed on the
+> cross-tool AGENTS.md standard, so nested AGENTS.md instructions reach the model automatically.
+> Later roadmap items (session recall D-044, WAN fallback
 > D-060, session manager D-061, …) stay sequenced in §6 and are decomposed here when
 > picked up.
 
@@ -31,6 +35,11 @@
 >   `delegated.to.result` already carries the frozen result for when fork lands. (2) Delegation runs
 >   from the loop layer (it needs the provider + transport), intercepted as a parent-only capability;
 >   depth-1 is structural (a child is given no capability). Then Phase 6 - search-tool upgrade (D-062).
+> Next feature to implement: Phase 7 - nested AGENTS.md context files (D-080). Claude Code's lazy
+>   loading model (eager up-tree + lazy below-cwd on file access), keyed on AGENTS.md, not CLAUDE.md.
+>   The host reads NO context files today (buildSystemPrompt only name-drops AGENTS.md as a hint).
+>   Pre-existing open items remain orthogonal: Phase 2 M4 (/doctor turn-termination reason) and the
+>   Phase 5 `delegate_background` leftovers.
 
 ## Phase 1: Concurrent read-only tool execution
 
@@ -118,7 +127,7 @@ Source: `apps/agent-host/src/agent/loop.ts` (D-053)
 Source: `apps/web` transcript/panel, `apps/agent-host/src/commands.ts` (`/doctor`)
 
 - [x] The web renders a "stopped after N steps" marker for a `stepLimit` completion, distinct from a normal answer and from `noReply`
-- [ ] Host state / `/doctor` reports the turn termination reason (answered | step_limit | overflow | noReply | cancelled)
+- [x] Host state / `/doctor` reports the turn termination reason (answered | step_limit | overflow | noReply | cancelled) — `lastTurn` field in `hostState()`, derived from the terminal `assistant.completed` flags + a tracked terminal overflow via the pure `terminationReason` (`turn-termination.ts`, 8 unit tests)
 - [x] Manual repro: the previously-failing turns now end with an answer - deepseek (was 191-char cut-off → 4316), glm (was 299 → 3069), qwen4bit (was empty → 2701); none hit the cap now that MAX_STEPS is a backstop
 
 ## Phase 3: Cross-turn compaction
@@ -329,6 +338,51 @@ Source: `apps/agent-host/src/tools/{ast-grep,ast-grep-bin,search-process}.ts`, `
 - [x] Registered in `TOOLS`/`TOOL_DEFS`/`READ_ONLY_TOOLS` (gated on the binary resolving) + prompt guidance
 - [x] Tests: structural match across formatting, inferred + explicit lang, no-match, unknown lang error, maxMatches cap, workspace confinement, read-only registry inclusion (7)
 
+## Next feature: Phase 7 - Nested AGENTS.md context files
+
+Trevor auto-reads nested `AGENTS.md` instruction files using **Claude Code's loading model** -
+eager up-tree at the root, lazy below cwd on file access - keyed on the cross-tool **AGENTS.md**
+standard (agents.md), not `CLAUDE.md`. The host reads no context files at all today:
+`buildSystemPrompt` only mentions `AGENTS.md` as a discovery hint, never ingesting one. Codex's
+eager-only root→cwd model is the comparison point, not the target - it cannot pick up an
+`AGENTS.md` below cwd (its open issue #12115 asks for exactly the behavior chosen here). Source:
+`apps/agent-host/src/context/` (new reader module), `apps/agent-host/src/providers/system-prompt.ts`,
+`apps/agent-host/src/tools/` (file tools), session/loop state, `apps/agent-host/src/commands.ts`
+(`/doctor`) (D-080).
+
+### M1: Context-file reader module (pure, testable)
+Source: `apps/agent-host/src/context/agents-md.ts` (new)
+
+- [ ] The `~/.trevorV2` base directory is a single exported constant (proposed `TREVOR_HOME`, in a dedicated paths module), env-overridable as `resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"))`, mirroring `WORKSPACE_ROOT`/`TREVOR_WORKSPACE` in `tools/workspace.ts`; every user-global path derives from it and the `dev:op`/`start:op` npm scripts honor the same override so the directory name lives in one place (D-081)
+- [ ] A pure reader: given the host cwd + workspace root, walk UP collecting at most one `AGENTS.md` per directory from project root down to cwd, plus the user-global `<TREVOR_HOME>/AGENTS.md` loaded first; the walk stops at `WORKSPACE_ROOT` / the `.git` marker and never goes past it
+- [ ] Concatenate root→cwd so cwd wins on conflict (positional precedence, not field-level override), each source clearly labeled; empty/whitespace-only files skipped
+- [ ] `@path` import expansion: relative paths resolve against the importing file (absolute allowed), recursion capped at ≤ 4 hops (matching Claude Code), cycles detected and broken, and `@paths` inside fenced or inline code spans ignored
+- [ ] Combined byte budget across all ingested context with deterministic truncation; the reader returns a structured report (`files[]`, scopes, bytes used, bytes dropped, truncated) - never a silent drop
+- [ ] Unit tests: root-only repo; nested chain (root + `apps/` + cwd) merged root→cwd with cwd winning; walk-up boundary at `WORKSPACE_ROOT`/`.git`; user-global loaded first; import expansion + 4-hop cap + cycle detection; code-span `@paths` ignored; budget truncates deterministically with the drop reported
+
+### M2: Eager scope injected into the per-turn prompt
+Source: `apps/agent-host/src/providers/system-prompt.ts`
+
+- [ ] `buildSystemPrompt` renders the eager-collected context (user-global + root→cwd) as a dedicated, clearly-labeled block, re-read from disk every turn so it survives compaction the same way the live checklist does (D-040)
+- [ ] With no `AGENTS.md` present the prompt is byte-for-byte unchanged (pure/total preserved; the existing system-prompt tests still pass)
+- [ ] Reword the REPO_GUARDRAILS line that tells the model to "begin from existing top-level files like README.md or AGENTS.md" so it knows project instructions are already in context
+- [ ] Unit test: the context block appears when files exist and is omitted when none; the reworded guardrail renders; the no-file path matches the current prompt snapshot
+
+### M3: Lazy below-cwd loading on file access
+Source: `apps/agent-host/src/tools/` (file tools), session/loop state, `apps/agent-host/src/providers/system-prompt.ts`
+
+- [ ] When a file tool resolves a path inside a subtree below cwd, load that subtree's `AGENTS.md` plus every not-yet-loaded `AGENTS.md` between cwd and the touched file, then inject it
+- [ ] The loaded set is tracked in session state and deduped so each directory loads exactly once
+- [ ] Newly-loaded lazy context is injected, and the accumulated lazy set is re-injected on later turns and after a compaction fold (the eager per-turn re-render does not cover below-cwd files)
+- [ ] Triggered by every file-touching tool (`read` primarily, plus any tool that opens a file by path)
+- [ ] Unit test: a below-cwd `AGENTS.md` loads only after a file in that subtree is read, is deduped on a second read, and survives a compaction-fold re-injection
+
+### M4: Surfacing + verification
+Source: `apps/agent-host/src/commands.ts` (`/doctor`)
+
+- [ ] `/doctor` reports the ingested context: files read, scopes (user-global / project up-tree / lazy below-cwd), bytes used vs dropped, lazy subtrees pulled in, and truncation state - never silent, unlike Codex (its issue #7138)
+- [ ] Manual repro: a nested repo where a directory-scoped `AGENTS.md` changes behavior only after a file in that directory is read; the up-tree chain merges root→cwd with cwd winning on conflict
+
 ## Summary
 - Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
 - Phase 2 (turn-budget termination): 20 features, 19 completed, 1 remaining
@@ -336,6 +390,7 @@ Source: `apps/agent-host/src/tools/{ast-grep,ast-grep-bin,search-process}.ts`, `
 - Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
 - Phase 5 (subagents): 41 features, ~33 completed (M1 discovery + M2 isolated child session/link + M3 inline delegation + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~8 remaining (`delegate_background` + its caps/read-only clamp + late-result tracking; the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
 - Phase 6 (search-tool upgrade): 14 features, 14 completed ✅ (M1 ripgrep-backed `grep` + M2 read-only `ast_grep`, both with project-managed binaries and tests)
+- Phase 7 (nested AGENTS.md context files): 17 features, 0 completed, 17 remaining - the NEXT feature to implement (Claude Code lazy model on AGENTS.md): M1 reader + single-sourced `TREVOR_HOME` = 6, M2 eager prompt injection = 4, M3 lazy below-cwd loading = 5, M4 `/doctor` surfacing = 2
 - Total features: 67
 - Completed: 66
 - Remaining: 1
@@ -343,6 +398,7 @@ Source: `apps/agent-host/src/tools/{ast-grep,ast-grep-bin,search-process}.ts`, `
 - Next-feature work (decomposed, not started): 18 (Phase 4: provider SDK migration to `@earendil-works/pi-ai@0.80.2` = 12, then M3 provider-outage auto-reconnect recovery = 6)
 - Post-provider-migration sequenced follow-up: 41 (Phase 5 subagents, including D-049 ephemeral definitions, depth-1 limits, and read-only background delegation)
 - Post-subagents sequenced follow-up: 14 (Phase 6 search-tool upgrade: ripgrep-backed `grep` + read-only `ast_grep`)
+- Next feature to implement (decomposed, not started): 17 (Phase 7 nested AGENTS.md context files, D-080 + D-081 single-sourced `TREVOR_HOME`: Claude Code lazy model keyed on AGENTS.md - eager up-tree + lazy below-cwd on file access)
 - Accepted/deferred follow-up: 73
 - Superseded/obsolete checklist debt: 0
 
