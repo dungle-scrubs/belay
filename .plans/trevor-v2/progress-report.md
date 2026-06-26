@@ -320,15 +320,15 @@ Storybook chooser fixtures (D-065).
 
 ### M1: Source and catalog domain contract (D-065)
 
-- [ ] Define model sources as the product unit above provider adapters
-- [ ] Define source types for local runtimes, OAuth subscriptions, gateway catalogs, and direct API-key providers
-- [ ] Define stable model references as `{ sourceId, modelId }` plus selected reasoning
-- [ ] Define source summaries with status, model count, auth state, catalog freshness, and available actions
-- [ ] Define catalog entries with display name, source, local/cloud kind, capabilities, context length, pricing/cost tier when known, aliases, and freshness
-- [ ] Keep the host as the source of truth for source status, auth state, and catalog freshness
-- [ ] Keep browser hardcoded model lists out of the source/catalog contract
-- [ ] Preserve backward compatibility with the current `provider` string during migration
-- [ ] Tests cover source type decoding, source-state projection, catalog entry decoding, and provider-string compatibility
+- [x] Define model sources as the product unit above provider adapters
+- [x] Define source types for local runtimes, OAuth subscriptions, gateway catalogs, and direct API-key providers
+- [x] Define stable model references as `{ sourceId, modelId }` plus selected reasoning
+- [x] Define source summaries with status, model count, auth state, catalog freshness, and available actions
+- [x] Define catalog entries with display name, source, local/cloud kind, capabilities, context length, pricing/cost tier when known, aliases, and freshness
+- [x] Keep the host as the source of truth for source status, auth state, and catalog freshness
+- [x] Keep browser hardcoded model lists out of the source/catalog contract
+- [x] Preserve backward compatibility with the current `provider` string during migration
+- [x] Tests cover source type decoding, source-state projection, catalog entry decoding, and provider-string compatibility
 
 ### M2: Storybook-first full chooser surface
 
@@ -670,9 +670,9 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
-- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
+- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 9 completed, 53 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 197 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 188 unchecked items plus 5 partial/gated carry-forward items
