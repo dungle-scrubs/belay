@@ -50,8 +50,9 @@ export function loopRunnerLabel(runner: LoopRunner): string {
 }
 
 /**
- * The loop family descriptor the guide renders. Keyword order here is the order
- * the guide lists them; `legendKeywords` is what the builder lights up as used.
+ * The loop family descriptor the guide renders. Keyword order here is the order the guide lists them,
+ * and it is also the legend order: the builder's legend derives from `keywords` (see `loopGrammar`),
+ * so there is no second hand-maintained keyword list to drift.
  */
 export const LOOP_FAMILY: CommandFamilyDescriptor = {
   id: "loop",
@@ -69,7 +70,6 @@ export const LOOP_FAMILY: CommandFamilyDescriptor = {
     { keyword: "process", arg: null },
     { keyword: "durable", arg: null },
   ],
-  legendKeywords: ["do", "max", "every", "until", "timeout", "background", "process", "durable"],
   controlVerbs: [...LOOP_CONTROL_VERBS],
   examples: [
     { text: '/loop max 5 do "run the test suite"', note: "Five iterations, then stop." },
@@ -81,6 +81,26 @@ export const LOOP_FAMILY: CommandFamilyDescriptor = {
     },
   ],
 };
+
+/**
+ * The derived lookup structures the parser walks, built once from the grammar above (D-016). loop.ts
+ * owns the grammar AND its derived forms, so the parser consumes this factory instead of rebinding the
+ * LOOP_* constants and re-deriving the legend itself:
+ *   - `runnerAliases`: the runner keyword → runner map (widened to allow a miss),
+ *   - `legend`: the keyword names in guide order, DERIVED from `keywords` (no second list to drift),
+ *   - `controlVerbs`: the control-verb set.
+ */
+export function loopGrammar(): {
+  readonly runnerAliases: Record<string, LoopRunner | undefined>;
+  readonly legend: readonly string[];
+  readonly controlVerbs: ReadonlySet<string>;
+} {
+  return {
+    runnerAliases: LOOP_RUNNER_ALIASES,
+    legend: LOOP_FAMILY.keywords.map((keyword) => keyword.keyword),
+    controlVerbs: new Set<string>(LOOP_CONTROL_VERBS),
+  };
+}
 
 /** A client-facing inventory row (mirrors the host read model). */
 export interface LoopInventoryRow {

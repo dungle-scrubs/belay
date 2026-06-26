@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { LOOP_FAMILY, loopGrammar } from "./loop";
 import { parseDurationMs, parseLoopCommand } from "./loop-parser";
+
+test("the legend derives from the descriptor keywords - no separate hand-maintained list (D-016)", () => {
+  const { legend } = loopGrammar();
+  assert.deepEqual(
+    legend,
+    LOOP_FAMILY.keywords.map((k) => k.keyword),
+    "loopGrammar().legend is exactly the keyword names, in guide order",
+  );
+  // The parser surfaces that same legend as the available keywords for a bare create.
+  assert.deepEqual([...parseLoopCommand("/loop ").availableKeywords], [...legend]);
+});
 
 test("non-loop input parses as invalid", () => {
   const result = parseLoopCommand("/shell ls");

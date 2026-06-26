@@ -16,11 +16,10 @@ import type {
 } from "./command-family";
 import {
   LOOP_COMMAND_NAMES,
-  LOOP_CONTROL_VERBS,
   LOOP_FAMILY,
-  LOOP_RUNNER_ALIASES,
   type LoopDurability,
   type LoopRunner,
+  loopGrammar,
   loopRunnerLabel,
 } from "./loop";
 
@@ -69,9 +68,13 @@ export function parseDurationMs(duration: string): number | undefined {
   return value * (unitMs[match[2] ?? "s"] ?? 1_000);
 }
 
-const RUNNER_ALIASES: Record<string, LoopRunner | undefined> = LOOP_RUNNER_ALIASES;
-const LEGEND = LOOP_FAMILY.legendKeywords;
-const CONTROL_VERBS = new Set<string>(LOOP_CONTROL_VERBS);
+// The parser walks the grammar's derived lookup structures (loop.ts owns them); it no longer rebinds
+// the LOOP_* constants or re-derives the legend here.
+const {
+  runnerAliases: RUNNER_ALIASES,
+  legend: LEGEND,
+  controlVerbs: CONTROL_VERBS,
+} = loopGrammar();
 
 /** Accumulated state while walking creation tokens. */
 interface CreationFields {

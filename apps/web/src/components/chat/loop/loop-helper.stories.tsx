@@ -3,7 +3,6 @@ import type { CommandSpec } from "@trevor/session";
 import { useState } from "react";
 import { LOOP_FAMILY, type LoopInventoryRow } from "@/commands/loop";
 import { parseLoopCommand } from "@/commands/loop-parser";
-import { commandFamilyForName } from "@/commands/registry";
 import { CommandMenu } from "../command-menu";
 import { CommandInput } from "./command-input";
 import { LoopHelper } from "./loop-helper";
@@ -92,9 +91,8 @@ function ComposerHarness() {
   const menuOpen = matches.length > 0;
   const activeIndex = Math.min(active, matches.length - 1);
 
-  // The registry, not the menu, decides a command opens a helper at all.
-  const family = commandFamilyForName(firstToken);
-  const parse = family ? parseLoopCommand(draft) : undefined;
+  // The family (its command names), not the menu, decides a command opens a helper at all.
+  const parse = LOOP_FAMILY.names.includes(firstToken) ? parseLoopCommand(draft) : undefined;
   const showInventory = firstToken === "/loops";
   const showHelper = parse !== undefined && !showInventory && draft.includes(" ");
 

@@ -39,10 +39,9 @@ export interface CommandFamilyDescriptor {
   readonly summary: string;
   /** Short paragraph shown at the top of the guide. */
   readonly description: string;
-  /** Creation keywords, in the order the guide lists them. */
+  /** Creation keywords, in the order the guide lists them. The builder's legend derives from these
+   *  (the keyword names in order); there is no separate legend list to keep in sync. */
   readonly keywords: readonly CommandKeyword[];
-  /** The legend the builder lights up as each keyword is used. */
-  readonly legendKeywords: readonly string[];
   /** Control verbs (`stop`, `pause`, …) that route to lifecycle actions. */
   readonly controlVerbs: readonly string[];
   readonly examples: readonly CommandExample[];
