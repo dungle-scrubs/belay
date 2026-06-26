@@ -1,7 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { PublishInput, SessionEvent } from "@trevor/session";
+import type { InventoryRow, PublishInput, SessionEvent } from "@trevor/session";
+
+/** The lifecycle event types the inventory reads for the per-session activity signal. */
+const LIFECYCLE_TYPES = ["assistant.started", "assistant.completed", "user.command"] as const;
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
@@ -29,6 +32,19 @@ interface EventRow {
   readonly producerId: string;
   readonly payload: string;
   readonly createdAt: string;
+}
+
+/** Maps a private SQLite row (payload as a JSON string) into the shared SessionEvent shape. */
+function rowToEvent(r: EventRow): SessionEvent {
+  return {
+    sessionId: r.sessionId,
+    seq: Number(r.seq),
+    eventId: r.eventId,
+    type: r.type,
+    producerId: r.producerId,
+    payload: JSON.parse(r.payload) as Record<string, unknown>,
+    createdAt: r.createdAt,
+  };
 }
 
 export class SessionLog {
@@ -94,6 +110,76 @@ export class SessionLog {
     };
   }
 
+  /**
+   * The raw inventory rows (D-090), one per session: aggregate counts/timestamps plus the
+   * few events the read model projects from - the latest host.online (cwd/workspace/git),
+   * the first user.message (title), and the lifecycle slice (activity). `hostPresent` is
+   * left false here; the server folds in its live-socket map. Bounded per session (a handful
+   * of targeted queries), never a full-log scan.
+   */
+  inventory(): Omit<InventoryRow, "hostPresent">[] {
+    const sessions = this.db
+      .prepare(
+        `SELECT s.sessionId AS sessionId,
+                s.createdAt  AS createdAt,
+                COUNT(e.seq) AS eventCount,
+                COALESCE(MAX(e.createdAt), s.createdAt) AS updatedAt
+           FROM sessions s
+           LEFT JOIN events e ON e.sessionId = s.sessionId
+          GROUP BY s.sessionId, s.createdAt`,
+      )
+      .all() as unknown as {
+      sessionId: string;
+      createdAt: string;
+      eventCount: number;
+      updatedAt: string;
+    }[];
+
+    return sessions.map((s) => ({
+      sessionId: s.sessionId,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      eventCount: Number(s.eventCount),
+      hostOnline: this.latestOfType(s.sessionId, "host.online"),
+      firstUser: this.firstOfType(s.sessionId, "user.message"),
+      lifecycle: this.eventsOfTypes(s.sessionId, LIFECYCLE_TYPES),
+    }));
+  }
+
+  /** The most recent event of a type in a session, or null. */
+  private latestOfType(sessionId: string, type: string): SessionEvent | null {
+    const row = this.db
+      .prepare(
+        `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt
+           FROM events WHERE sessionId = ? AND type = ? ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(sessionId, type) as EventRow | undefined;
+    return row ? rowToEvent(row) : null;
+  }
+
+  /** The earliest event of a type in a session, or null. */
+  private firstOfType(sessionId: string, type: string): SessionEvent | null {
+    const row = this.db
+      .prepare(
+        `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt
+           FROM events WHERE sessionId = ? AND type = ? ORDER BY seq ASC LIMIT 1`,
+      )
+      .get(sessionId, type) as EventRow | undefined;
+    return row ? rowToEvent(row) : null;
+  }
+
+  /** All events of the given types in a session, in seq order. */
+  private eventsOfTypes(sessionId: string, types: readonly string[]): SessionEvent[] {
+    const placeholders = types.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt
+           FROM events WHERE sessionId = ? AND type IN (${placeholders}) ORDER BY seq ASC`,
+      )
+      .all(sessionId, ...types) as unknown as EventRow[];
+    return rows.map(rowToEvent);
+  }
+
   /** Every event for a session with seq > afterSeq, in seq order (the replay). */
   readAfter(sessionId: string, afterSeq: number): SessionEvent[] {
     const rows = this.db
@@ -102,14 +188,6 @@ export class SessionLog {
            FROM events WHERE sessionId = ? AND seq > ? ORDER BY seq ASC`,
       )
       .all(sessionId, afterSeq) as unknown as EventRow[];
-    return rows.map((r) => ({
-      sessionId: r.sessionId,
-      seq: Number(r.seq),
-      eventId: r.eventId,
-      type: r.type,
-      producerId: r.producerId,
-      payload: JSON.parse(r.payload) as Record<string, unknown>,
-      createdAt: r.createdAt,
-    }));
+    return rows.map(rowToEvent);
   }
 }

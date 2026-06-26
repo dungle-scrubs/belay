@@ -3,7 +3,12 @@ import { mkdtempSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type SessionEvent, type SessionIdentity, streamTransport } from "@trevor/session";
+import {
+  type SessionEvent,
+  type SessionIdentity,
+  type SessionSummary,
+  streamTransport,
+} from "@trevor/session";
 import { afterEach, beforeEach, test } from "vitest";
 import { createSessionStore } from "../src/server";
 
@@ -184,4 +189,55 @@ test("the durable log survives a store restart and replays from disk", async () 
     ["user.message", "assistant.completed"],
   );
   conn.close();
+});
+
+test("GET /sessions returns the inventory read model with live presence folded in", async () => {
+  const transport = streamTransport(store.url);
+  // Two sessions: one with a user message + a live host, one bare (no host ever).
+  await transport.ensureSession("with-host");
+  await transport.publishEvent("with-host", {
+    type: "user.message",
+    producerId: "web",
+    payload: { text: "build the inventory" },
+  });
+  await transport.publishEvent("with-host", {
+    type: "host.online",
+    producerId: "host",
+    payload: { instanceId: "h1", cwd: "~/dev/trevorV2", workspace: "~/dev/trevorV2" },
+  });
+  await transport.ensureSession("bare");
+
+  // A live host socket on "with-host" so presence reads "live".
+  const host = transport.connectSession({
+    sessionId: "with-host",
+    identity: id("h1", "trevor"),
+    onEvent: () => {},
+  });
+
+  const fetchInventory = async (): Promise<Map<string, SessionSummary>> => {
+    const res = await fetch(`${store.url}/sessions`);
+    const body = (await res.json()) as { sessions: SessionSummary[] };
+    return new Map(body.sessions.map((s) => [s.sessionId, s]));
+  };
+
+  // Poll the endpoint until the host socket has registered as live presence.
+  let byId = await fetchInventory();
+  const deadline = Date.now() + 2000;
+  while (byId.get("with-host")?.host !== "live") {
+    if (Date.now() > deadline) throw new Error("host presence did not reach live");
+    await new Promise((r) => setTimeout(r, 20));
+    byId = await fetchInventory();
+  }
+
+  const withHost = byId.get("with-host");
+  assert.equal(withHost?.title, "build the inventory");
+  assert.equal(withHost?.cwd, "~/dev/trevorV2");
+  assert.equal(withHost?.project, "trevorV2");
+  assert.equal(withHost?.host, "live");
+
+  const bare = byId.get("bare");
+  assert.equal(bare?.host, "none");
+  assert.equal(bare?.title, "bare");
+
+  host.close();
 });

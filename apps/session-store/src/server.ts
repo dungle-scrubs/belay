@@ -6,6 +6,7 @@ import {
   type HostPresence,
   type PublishInput,
   RUNTIME_KIND,
+  summarizeSession,
 } from "@trevor/session";
 import { type WebSocket, WebSocketServer } from "ws";
 import { SessionLog } from "./log";
@@ -154,6 +155,17 @@ export function createSessionStore(dbPath: string): Server {
     }
     if (path === "/health") {
       json(res, 200, { ok: true });
+      return;
+    }
+    if (path === "/sessions" && method === "GET") {
+      // The session inventory read model (D-090): each session's distilled summary, with
+      // live host presence folded in from the in-memory socket map (the durable log can't
+      // know a host crashed). Assembly is the pure summarizeSession; the store just supplies
+      // the rows + presence.
+      const sessions = log
+        .inventory()
+        .map((row) => summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 }));
+      json(res, 200, { sessions });
       return;
     }
     if (path === "/sessions" && method === "POST") {
