@@ -380,15 +380,15 @@ Storybook chooser fixtures (D-065).
 
 ### M6: Selection, reasoning, preferences, and execution
 
-- [ ] First cut selects one active chat model only
+- [x] First cut selects one active chat model only
 - [ ] Do not add routing, prompt-intent model choice, connectivity-based switching, or provider-failure auto-switching
 - [ ] Defer role-specific model assignment for autocomplete ghost text, compaction, summarization, subagents, and background helpers
-- [ ] Persist active model, default model, recent models, pinned models, and per-model reasoning selection
-- [ ] Reasoning choices are constrained by the selected model's detected reasoning surface
-- [ ] Support `off` when the selected model supports disabling reasoning
+- [x] Persist active model, default model, recent models, pinned models, and per-model reasoning selection
+- [x] Reasoning choices are constrained by the selected model's detected reasoning surface
+- [x] Support `off` when the selected model supports disabling reasoning
 - [ ] Selecting a model updates both model reference and reasoning preference without losing current sidebar behavior
 - [ ] User turn events move toward `{ sourceId, modelId, reasoning }` while preserving legacy provider compatibility during migration
-- [ ] Tests cover active/default/recent/pinned persistence, reasoning constraints, legacy provider compatibility, and no routing side effects
+- [x] Tests cover active/default/recent/pinned persistence, reasoning constraints, legacy provider compatibility, and no routing side effects
 
 ### M7: Verification
 
@@ -670,9 +670,9 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
-- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 10 completed, 52 remaining
+- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 15 completed, 47 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 187 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 182 unchecked items plus 5 partial/gated carry-forward items
