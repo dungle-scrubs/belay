@@ -132,7 +132,7 @@ function hostState(): Record<string, unknown> {
     subagents: `${discoverAgents().length} agents · depth≤1 · inline`,
     ...(lastFold
       ? {
-          lastFold: `seq≤${lastFold.throughSeq} ~${lastFold.tokensBefore}→${lastFold.tokensAfter}tok`,
+          lastFold: `seq≤${lastFold.throughSeq} ~${commas(lastFold.tokensBefore)}→${commas(lastFold.tokensAfter)}tok`,
         }
       : {}),
   };
@@ -186,6 +186,11 @@ const lease = new Lease(
   },
   leaseOptions(),
 );
+
+/** Formats an integer with thousands separators for display (e.g. 104616 -> "104,616"). */
+function commas(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
 
 /** Abbreviates the user's home directory to ~ for display. */
 function abbrevPath(absolute: string): string {
@@ -553,7 +558,7 @@ async function forceCompact(): Promise<string> {
     return "Nothing to compact — no completed turns to fold yet.";
   }
   await emit(event); // the echo admits the fold and updates the budget estimate
-  return `✓ compacted ~${Number(event.payload.tokensBefore)} → ~${Number(event.payload.tokensAfter)} tokens`;
+  return `✓ compacted ~${commas(Number(event.payload.tokensBefore))} → ~${commas(Number(event.payload.tokensAfter))} tokens`;
 }
 
 /**
