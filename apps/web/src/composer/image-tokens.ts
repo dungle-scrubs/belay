@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import { type ArtifactRef, parseImageTokens, imageTokenText as tokenText } from "@trevor/session";
 
 /**
  * The image-token draft model (D-092): the composer keeps inline `[Image #N]` tokens IN the draft
@@ -7,13 +7,16 @@ import type { ArtifactRef } from "@trevor/session";
  * renumbers the rest. This module is pure - no DOM, no React - so insertion, deletion, auto-spacing,
  * and renumbering are unit-testable, and the composer hook is a thin wiring layer over it.
  *
- * The textarea stays a plain textarea: tokens are ordinary characters the user sees and the overlay
- * highlights. Edits that change the token set (a selection delete, a paste) are reconciled by
- * reading the SURVIVING tokens' old numbers - so dropping any token (first, middle, last) drops the
+ * The `[Image #N]` token FORMAT (parser, `tokenText`) is the cross-surface contract owned by
+ * `@trevor/session` (the host strips the same tokens when projecting to the provider); only the
+ * editing model below is web-side. Edits that change the token set (a selection delete, a paste)
+ * are reconciled by reading the SURVIVING tokens' old numbers - so dropping any token drops the
  * right ref - then renumbering to 1..K reading order.
  */
 
-const TOKEN_RE = /\[Image #(\d+)\]/g;
+export type { ImageTokenSpan as TokenSpan } from "@trevor/session";
+// Re-export the shared format pieces so the overlay + tests keep importing from one composer module.
+export { parseImageTokens, tokenText };
 
 /** A draft pairing the visible `[Image #N]` tokens in `text` with their refs in reading order. */
 export interface ImageDraft {
@@ -22,30 +25,8 @@ export interface ImageDraft {
   readonly refs: readonly ArtifactRef[];
 }
 
-/** A located token in a text: its `[`..`]` char range and the number it currently shows. */
-export interface TokenSpan {
-  readonly start: number;
-  readonly end: number;
-  readonly num: number;
-}
-
 /** The empty draft. */
 export const EMPTY_DRAFT: ImageDraft = { text: "", refs: [] };
-
-/** The literal token string for a display number. */
-export function tokenText(num: number): string {
-  return `[Image #${num}]`;
-}
-
-/** Every well-formed `[Image #N]` token in `text`, in reading order. */
-export function parseImageTokens(text: string): TokenSpan[] {
-  const spans: TokenSpan[] = [];
-  for (const match of text.matchAll(TOKEN_RE)) {
-    const start = match.index;
-    spans.push({ start, end: start + match[0].length, num: Number(match[1]) });
-  }
-  return spans;
-}
 
 /** Rewrites every token's number to its reading-order position (1..K), leaving other text intact. */
 export function renumber(text: string): string {

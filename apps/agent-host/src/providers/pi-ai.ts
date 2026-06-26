@@ -6,6 +6,7 @@ import {
   type ThinkingLevel,
   type TSchema,
 } from "@earendil-works/pi-ai/compat";
+import { parseImageTokens, stripImageTokens } from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { debug } from "../log";
 import { msg } from "../messages";
@@ -32,29 +33,80 @@ function parseArgs(raw: string): Record<string, unknown> {
 type TextBlock = { type: "text"; text: string };
 type ImageBlock = { type: "image"; data: string; mimeType: string };
 
+const textBlock = (text: string): TextBlock => ({ type: "text", text });
+const imageBlock = (img: { data: string; mimeType: string }): ImageBlock => ({
+  type: "image",
+  data: img.data,
+  mimeType: img.mimeType,
+});
+
+/** The `[attachments: ...]` note for artifacts not sent as image blocks (or "" when none). */
+function attachmentsNote(
+  refs: readonly { readonly name?: string; readonly kind: string }[],
+): string {
+  return refs.length ? `[attachments: ${refs.map((a) => a.name ?? a.kind).join(", ")}]` : "";
+}
+
 /**
- * Builds a pi-ai user content value: a plain string when there are no resolved images,
- * or a [text, ...image] block array when the message carries them (D-028). Artifacts that
- * are NOT shown as images (documents, or images when the model can't see them) are
- * surfaced as a short text note so the model at least knows they were attached.
+ * Builds a pi-ai user content value (D-028 / D-092). When the message text carries `[Image #N]`
+ * tokens, they are stripped and the inlined images are interleaved AT the token positions (so the
+ * model sees text/image order matching reading order, never literal token clutter). The k-th token
+ * maps to the k-th IMAGE artifact (documents are never tokened). When the model can't see images
+ * (non-vision, undecodable) the content collapses to clean token-stripped text plus an attachments
+ * note. A legacy message with no tokens keeps the old shape: text + note, with images appended.
  */
 function userContent(message: ChatMessage): string | (TextBlock | ImageBlock)[] {
   const images = message.images ?? [];
-  // Note exactly the artifacts that were NOT inlined (documents, plus any image the host
-  // couldn't inline - HEIC, undecodable), so the model still knows they were attached.
+  const imageByHash = new Map(images.map((img) => [img.hash, img] as const));
+  const artifacts = message.artifacts ?? [];
   const inlined = new Set(images.map((i) => i.hash));
-  const noted = (message.artifacts ?? []).filter((a) => !inlined.has(a.hash));
-  const note = noted.length
-    ? `\n\n[attachments: ${noted.map((a) => a.name ?? a.kind).join(", ")}]`
-    : "";
-  const text = `${message.content}${note}`;
-  if (images.length === 0) {
-    return text;
+  // Documents + any image the host couldn't inline (non-vision, undecodable, HEIC) ride as a note.
+  const noted = artifacts.filter((a) => !inlined.has(a.hash));
+  const tokens = parseImageTokens(message.content);
+
+  if (tokens.length === 0) {
+    // Legacy / no-token path: text (+ note) as before, images appended after.
+    const note = noted.length ? `\n\n${attachmentsNote(noted)}` : "";
+    const text = `${message.content}${note}`;
+    if (images.length === 0) {
+      return text;
+    }
+    return [...(text ? [textBlock(text)] : []), ...images.map(imageBlock)];
   }
-  return [
-    ...(text ? [{ type: "text" as const, text }] : []),
-    ...images.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType })),
-  ];
+
+  // Tokened path: interleave each token's image at its position, mapping token #k -> k-th image
+  // artifact -> its inlined block.
+  const imageArtifacts = artifacts.filter((a) => a.kind === "image");
+  const blocks: (TextBlock | ImageBlock)[] = [];
+  let last = 0;
+  tokens.forEach((token, k) => {
+    const pre = message.content.slice(last, token.start);
+    if (pre) {
+      blocks.push(textBlock(pre));
+    }
+    const ref = imageArtifacts[k];
+    const img = ref ? imageByHash.get(ref.hash) : undefined;
+    if (img) {
+      blocks.push(imageBlock(img));
+    }
+    last = token.end;
+  });
+  const tail = message.content.slice(last);
+  if (tail) {
+    blocks.push(textBlock(tail));
+  }
+  if (noted.length) {
+    blocks.push(textBlock(`\n\n${attachmentsNote(noted)}`));
+  }
+
+  // No image actually inlined (non-vision, or every image failed): the model gets a clean string,
+  // tokens stripped, never literal [Image #N] clutter.
+  if (!blocks.some((block) => block.type === "image")) {
+    const note = noted.length ? `\n\n${attachmentsNote(noted)}` : "";
+    return `${stripImageTokens(message.content)}${note}`.trim();
+  }
+
+  return blocks;
 }
 
 /**
