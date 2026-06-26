@@ -21,11 +21,12 @@
 > D-060, session manager D-061, …) stay sequenced in §6 and are decomposed here when
 > picked up.
 
-> Current focus: Phase 2 M4 `/doctor` remains as the only current cutoff blocker.
-> Next task: Phase 4 - provider SDK migration to `@earendil-works/pi-ai@0.80.2` (M1/M2), then
-> Phase 4 M3 - provider-outage auto-reconnect recovery (D-076…D-079).
-> Next after Phase 4: Phase 5 - subagents (D-045…D-049).
-> Next after subagents: Phase 6 - search-tool upgrade (D-062).
+> Current focus: Phase 5 - subagents. M1 (agent discovery) is shipped; M2-M5 remain.
+> Done: Phase 4 (SDK migration + outage auto-reconnect, M1-M3) ✅; Phase 5 M1 (agent discovery) ✅.
+> Next: Phase 5 M2-M5 (isolated child sessions, delegation tools, surfacing, ephemeral agents) -
+>   note: delegation must run from the loop/turn layer (the provider + turn context live there, not
+>   in a plain `executeTool` call), so M3 intercepts delegation tool-calls in the loop rather than
+>   routing them through the generic tool executor. Then Phase 6 - search-tool upgrade (D-062).
 
 ## Phase 1: Concurrent read-only tool execution
 
@@ -234,15 +235,15 @@ back as the parent's tool result. Sequenced after compaction per §6. Source:
 `apps/agent-host/src/tools/`, `apps/agent-host/src/agent/loop.ts`,
 `packages/session/src/protocol.ts`, `apps/agent-host/src/main.ts` (D-045…D-049).
 
-### M1: File-based agent discovery
+### M1: File-based agent discovery ✅
 Source: `apps/agent-host/src/agents.ts` (new, modeled on `apps/agent-host/src/skills.ts`)
 
-- [ ] An agent definition is a file with `{ description, tools, skills?, body = system prompt }`, discovered built-in + user-defined like skills/commands
-- [ ] Two v1 flavors: `general-purpose` (tools `['*']`) and `explorer` (read-only: no write/edit/multi_edit/bash)
-- [ ] `tools` and `skills` are separate allow-lists: tools gate executable capabilities; skills gate prompt-visible skill names/descriptions and which skill bodies may be loaded
-- [ ] No per-agent model field - all inherit the session model; cloud-routed per-agent models deferred (reuse D-043 routing)
-- [ ] Discovered agents are announced (`host.online`) so the model picks one by `description`
-- [ ] Unit test: discovery yields the two built-ins with the right allow-lists; `explorer` excludes every mutating tool
+- [x] An agent definition is `{ description, tools, skills?, body, readOnly? }`, discovered built-in + user-defined (`<TREVOR_AGENTS_DIR>/<id>/AGENT.md`) like skills; a user file overrides a built-in of the same id
+- [x] Two v1 flavors: `general-purpose` (tools `['*']`) and `explorer` (read-only flavor, clamped to the read-only tools - excludes write/edit/multi_edit/bash and every other mutating tool)
+- [x] `tools` and `skills` are separate allow-lists (`resolveAgentTools` / `resolveAgentSkills`); `['*']` expands, explicit names intersect the registry, an empty `skills: []` grants none
+- [x] No per-agent model field - all inherit the session model
+- [x] Discovered agents announced in `host.online` (`agents: AgentSpec[]` - id + description + resolved allow-lists, no body); `describeAgent` builds the wire descriptor
+- [x] Unit test: discovery yields the built-ins + a user fixture (disabled/description-less skipped); general-purpose gets the full set, explorer excludes every mutating tool; host.online round-trips the agents
 
 ### M2: Isolated child session + delegation link
 Source: `packages/session/src/protocol.ts`, `apps/agent-host/src/main.ts`
@@ -330,7 +331,7 @@ Source: `apps/agent-host/src/tools/ast-grep.ts` (new), shared search-process hel
 - Phase 2 (turn-budget termination): 20 features, 19 completed, 1 remaining
 - Phase 3 (cross-turn compaction): 27 features, 27 completed, 0 remaining
 - Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
-- Phase 5 (subagents, accepted/deferred after provider migration): 41 features, 0 completed, 41 remaining (decomposed, not started)
+- Phase 5 (subagents): 41 features, 6 completed (M1 agent discovery), 35 remaining (M2-M5: isolated child sessions, delegation tools, surfacing, ephemeral agents)
 - Phase 6 (search-tool upgrade, accepted/deferred after subagents): 14 features, 0 completed, 14 remaining (decomposed, not started)
 - Total features: 67
 - Completed: 66

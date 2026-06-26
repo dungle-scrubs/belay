@@ -61,6 +61,28 @@ test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () 
   });
 });
 
+test("host.online round-trips the announced subagents (D-045)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.hostOnline({
+        providers: ["qwen"],
+        default: "qwen",
+        models: {},
+        instanceId: "i",
+        cwd: "~",
+        workspace: "~",
+        commands: [],
+        agents: [{ id: "explorer", description: "read-only", tools: ["read", "grep"], skills: [] }],
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "host.online");
+  if (decoded?.type !== "host.online") return;
+  assert.deepEqual(decoded.agents, [
+    { id: "explorer", description: "read-only", tools: ["read", "grep"], skills: [] },
+  ]);
+});
+
 test("a missing runId falls back to the event's own id, never collapsing turns", () => {
   const decoded = decodeTrevorEvent(
     stored({ type: "assistant.delta", payload: { text: "hi" } }, { eventId: "ev-9" }),

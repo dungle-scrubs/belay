@@ -59,6 +59,18 @@ export interface CommandSpec {
 }
 
 /**
+ * A discovered subagent (D-045…D-049), announced in host.online so the model can pick one to
+ * delegate to by `description`. `tools`/`skills` are the resolved allow-lists (what the agent may
+ * execute / see); the system prompt body stays host-side and never rides the wire.
+ */
+export interface AgentSpec {
+  readonly id: string;
+  readonly description: string;
+  readonly tools: readonly string[];
+  readonly skills: readonly string[];
+}
+
+/**
  * A content-addressed artifact (image / document / other file) attached to a
  * message. The bytes do NOT ride the event - they live in the blob store beside
  * Richter (D-028); the event carries only this reference. `hash` is the sha256 the
@@ -328,6 +340,7 @@ export const events = {
     cwd: string;
     workspace: string;
     commands: readonly CommandSpec[];
+    agents: readonly AgentSpec[];
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
@@ -338,6 +351,7 @@ export const events = {
       cwd: p.cwd,
       workspace: p.workspace,
       commands: p.commands,
+      agents: p.agents,
     },
   }),
 } as const;
@@ -426,6 +440,15 @@ function coerceCommands(value: unknown): CommandSpec[] {
   return coerceArray(value, (c) => {
     const name = str(c.name);
     return name ? { name, summary: str(c.summary), usage: optStr(c.usage) } : null;
+  });
+}
+
+function coerceAgents(value: unknown): AgentSpec[] {
+  return coerceArray(value, (a) => {
+    const id = str(a.id);
+    return id
+      ? { id, description: str(a.description), tools: strList(a.tools), skills: strList(a.skills) }
+      : null;
   });
 }
 
@@ -621,6 +644,7 @@ export type DecodedEvent =
       readonly providers: readonly string[];
       readonly models: Record<string, ProviderModel>;
       readonly commands: readonly CommandSpec[];
+      readonly agents: readonly AgentSpec[];
     }
   | { readonly type: "host.hello"; readonly instanceId?: string }
   | { readonly type: "host.beat"; readonly instanceId?: string }
@@ -759,6 +783,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         providers: strList(p.providers),
         models: coerceProviderModels(p.models),
         commands: coerceCommands(p.commands),
+        agents: coerceAgents(p.agents),
       };
     case "host.hello":
       return { type: "host.hello", instanceId: optStr(p.instanceId) };

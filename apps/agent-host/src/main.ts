@@ -16,6 +16,7 @@ import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { COMPACT_WHEN, overBudget, runCompaction } from "./agent/compactor";
 import { buildHistory } from "./agent/history-projection";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
+import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
@@ -477,6 +478,8 @@ function goLive(): void {
       // The immediate-command inventory, so the browser knows which slashes route
       // to the host's command lane (and can drive a slash menu).
       commands: commands.specs,
+      // The discovered subagents (D-045), so the model picks one to delegate to by description.
+      agents: discoverAgents().map(describeAgent),
     }),
   ).catch(() => {});
 }
