@@ -174,6 +174,49 @@ test("M5: a late compacting tick after completion never re-spawns the bar", () =
   assert.ok(!toTranscript(log).some((m) => m.kind === "compacting"), "stays vanished");
 });
 
+test("M5: a /compact that FAILS (host restart mid-fold) reaps the orphaned compacting bar", () => {
+  // The host restarted mid-fold, so no context.compacted ever lands - the only signal the fold
+  // ended is the /compact command.result. Without reaping there, the transient bar would linger and
+  // keep animating ABOVE the "Compaction interrupted" message (the reported bug).
+  const log = [
+    ev(1, events.userCommand({ command: "/compact", args: "" })),
+    ev(2, events.contextCompacting({ foldId: "f1", tokens: 200, budget: 1_000 })),
+    ev(3, events.contextCompacting({ foldId: "f1", tokens: 480, budget: 1_000 })),
+    // ...host restarts; no context.compacted. The dangling /compact gets a failed result:
+    ev(
+      4,
+      events.commandResult({
+        command: "/compact",
+        text: "Compaction interrupted — the host restarted. Run /compact again.",
+        ok: false,
+      }),
+    ),
+  ];
+  const messages = toTranscript(log);
+  assert.ok(
+    !messages.some((m) => m.kind === "compacting"),
+    "the orphaned bar is reaped when /compact reports failure",
+  );
+  assert.ok(
+    messages.some((m) => m.kind === "result" && !m.ok),
+    "the failed result is still rendered",
+  );
+});
+
+test("a non-/compact command result does NOT reap a live fold bar", () => {
+  // Commands run off the one-turn gate, so a /doctor result can land WHILE a fold streams; it must
+  // not kill the live compacting bar.
+  const log = [
+    ev(1, events.userCommand({ command: "/doctor", args: "" })),
+    ev(2, events.contextCompacting({ foldId: "f1", tokens: 200, budget: 1_000 })),
+    ev(3, events.commandResult({ command: "/doctor", text: "all good", ok: true })),
+  ];
+  assert.ok(
+    toTranscript(log).some((m) => m.kind === "compacting"),
+    "an unrelated command result leaves the live fold bar alone",
+  );
+});
+
 test("M5: an orphaned fold bar (no context.compacted) is reaped when the next turn starts", () => {
   // A fold began streaming (its bar appeared) but the host was reset before context.compacted - the
   // bar would otherwise linger forever, stuck at whatever % it reached. The next turn reaps it.
