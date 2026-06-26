@@ -7,11 +7,13 @@ import {
   events,
   freshSessionId,
   type GitStatus,
+  type InternetSnapshot,
   PRODUCER_IDS,
   RUNTIME_KIND,
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
+  UNKNOWN_INTERNET,
   type Usage,
   type UsageBreakdown,
 } from "@trevor/session";
@@ -30,6 +32,7 @@ import { createSiblingReader } from "./agent/recall/reader";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
+import { probeLogLine } from "./connectivity/log";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
@@ -162,11 +165,20 @@ const INTERNET_CACHE_MS = 30_000;
  * publishes `host.internet` on each transition - but only the LIVE LEADER publishes, so multiple
  * hosts on one session never flicker the advisory. Advisory only: it drives no routing.
  */
+let lastInternet: InternetSnapshot = UNKNOWN_INTERNET;
 const internet = new InternetMonitor(
   () => probeInternet(defaultProbeTargets(), nodeProbeIo),
   INTERNET_CACHE_MS,
   Date.now,
   (snapshot) => {
+    // Structured, redacted probe log (D-060 M4): a status change or settled failure, never the
+    // configured endpoints. Logged on EVERY host (not just the leader) - each host's own view of
+    // public reachability is worth a line; only the leader publishes the advisory event.
+    const line = probeLogLine(lastInternet, snapshot);
+    if (line) {
+      (line.level === "warn" ? warn : log)("internet", line.message, line.fields);
+    }
+    lastInternet = snapshot;
     if (live && lease.isLeader()) {
       emit(events.hostInternet({ snapshot })).catch(() => {});
     }
