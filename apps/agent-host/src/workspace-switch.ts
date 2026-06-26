@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -110,24 +109,4 @@ export function resolveCdTarget(args: string, options: ResolveCdTargetOptions): 
       workspace,
     },
   };
-}
-
-export function gitBranch(cwd: string): string | null {
-  const branch = spawnSync("git", ["branch", "--show-current"], {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  const branchName = branch.status === 0 ? branch.stdout.trim() : "";
-  if (branchName) {
-    return branchName;
-  }
-
-  const head = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  const sha = head.status === 0 ? head.stdout.trim() : "";
-  return sha ? `detached ${sha}` : null;
 }

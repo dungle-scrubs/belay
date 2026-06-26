@@ -6,6 +6,7 @@ import {
   decodeTrevorEvent,
   events,
   freshSessionId,
+  type GitStatus,
   PRODUCER_IDS,
   RUNTIME_KIND,
   type SessionEvent,
@@ -28,6 +29,7 @@ import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
 import { contextRegistry } from "./context/registry";
+import { nodeGitRunner, readGitStatus } from "./git-status";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { supervisor } from "./processes";
@@ -48,7 +50,8 @@ import { msg } from "./tools/shared";
 import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
 import { terminationReason } from "./turn-termination";
-import { gitBranch, resolveCdTarget } from "./workspace-switch";
+import { resolveCdTarget } from "./workspace-switch";
+import { nodeWorktreeManager, worktreeContextFor, worktreeSessionId } from "./worktrees";
 
 /**
  * Trevor host: a session participant that runs an agent loop (model <-> tools) for
@@ -80,6 +83,24 @@ const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? "http://127.0.0.1:174
 const transport = RICHTER_URL ? richterTransport(RICHTER_URL) : streamTransport(SESSION_STORE_URL);
 const providers = buildProviders();
 const commands = buildCommandRegistry();
+// Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_HOME. abbrevPath is
+// a hoisted declaration, so referencing it here is fine.
+const worktrees = nodeWorktreeManager(abbrevPath);
+
+// Debug mode: a runtime flag (booted from `TREVOR_DEBUG`, set by `trevor --debug`, toggled at
+// runtime by `/debug`) that gates a collection of dev-only host commands - hidden from a normal
+// session. `/restart` is the headline one: re-exec the host to pick up code changes on demand,
+// instead of an auto-watch restart that orphans a live turn.
+let debugMode = process.env.TREVOR_DEBUG === "1";
+const DEBUG_TOGGLE_SPEC = { name: "/debug", summary: "Toggle debug command mode" };
+const DEBUG_ONLY_SPECS = [
+  { name: "/restart", summary: "Restart the host to pick up code changes (debug)" },
+];
+
+/** The debug-surface command specs to announce: the always-present toggle + the gated collection. */
+function debugCommandSpecs(): { name: string; summary: string }[] {
+  return [DEBUG_TOGGLE_SPEC, ...(debugMode ? DEBUG_ONLY_SPECS : [])];
+}
 
 /** Stable per-process identity: shared producerId on events, unique stream id + instance. */
 const INSTANCE_ID = crypto.randomUUID();
@@ -163,6 +184,25 @@ function hostState(): Record<string, unknown> {
     // Ingested AGENTS.md context (D-080): how many files, from which scopes, bytes used vs dropped,
     // and whether anything was truncated - surfaced so a budget drop is never silent (unlike Codex).
     ...contextState(),
+    // Managed worktrees (D-091): the current row + count, plus any stale (missing-path) entries, so
+    // a worktree/session mismatch is visible at a glance.
+    ...worktreeState(),
+  };
+}
+
+/** The managed-worktree summary for /doctor: the current row, the managed count, and stale entries. */
+function worktreeState(): Record<string, string> {
+  const rows = currentWorktrees();
+  const managed = rows.filter((w) => !w.baseline);
+  if (managed.length === 0) {
+    return {};
+  }
+  const current = rows.find((w) => w.current);
+  const stale = managed.filter((w) => w.missing).length;
+  return {
+    worktrees: `${managed.length} managed · on ${current?.branch ?? "?"}${
+      stale > 0 ? ` · ${stale} stale` : ""
+    }`,
   };
 }
 
@@ -347,9 +387,10 @@ let lastFold: { throughSeq: number; tokensBefore: number; tokensAfter: number } 
 
 /** Run ids whose assistant.started has no assistant.completed yet - the turns in flight. Tracked
  *  from the replayed + live log so a leader can REAP the ones a previous leader left dangling when
- *  it crashed or hot-reloaded mid-turn (see reapOrphans). Without that, every client reads the
- *  dangling run as still-active forever: the send queue freezes (prompts stuck "queued") and ESC
- *  targets a run no fiber backs (cancel is a no-op). */
+ *  it crashed or hot-reloaded mid-turn (see reapOrphans, fired on becoming leader). Without that,
+ *  every client reads the dangling run as still-active forever and the send queue freezes (prompts
+ *  stuck "queued"). A live leader's user.cancel (ESC) also closes a dangling run directly, so ESC
+ *  unsticks an orphan even though no fiber backs it; reapOrphans is the automatic counterpart. */
 const inFlightRuns = new Set<string>();
 
 /** The latest usage/breakdown seen per in-flight run (from assistant.progress). A cancel/reap closes
@@ -549,15 +590,41 @@ function onBecomeLeader(): void {
   );
 }
 
-/** On go-live: start the lease (once), announce presence, and report online. */
-function goLive(): void {
-  log("host", "replay complete; live");
-  if (!leaseRunning) {
-    leaseRunning = true;
-    lease.start(Date.now());
-    setInterval(() => lease.tick(Date.now()), 500);
+/**
+ * Reads the host cwd's structured git status (D-088) plus a back-compat `branch` string
+ * derived from it (branch name, or `detached <sha>` when HEAD is detached). A non-git cwd
+ * yields both undefined - the status is omitted rather than reported as an empty repo.
+ */
+function currentGit(): { git: GitStatus | undefined; branch: string | undefined } {
+  const status = readGitStatus(nodeGitRunner(process.cwd()));
+  if (!status) {
+    return { git: undefined, branch: undefined };
   }
-  emit(events.hostHello({ instanceId: INSTANCE_ID })).catch(() => {});
+  const branch = status.branch ?? (status.detached ? `detached ${status.detached}` : undefined);
+  return { git: status, branch };
+}
+
+/**
+ * Builds and emits host.online with a freshly-read git status. Idempotent + latching, so
+ * it doubles as the git-status refresh after a host-owned operation that can change the
+ * repository (a `!` shell command); a `/cd` or `/clear` instead spawns a new host that
+ * re-runs goLive in the new cwd.
+ */
+/** The managed worktrees for the host's current base repo (empty when cwd is not a git repo). */
+function currentWorktrees(): ReturnType<typeof worktrees.summaries> {
+  const ctx = worktreeContextFor(process.cwd());
+  if (!ctx) {
+    return [];
+  }
+  try {
+    return worktrees.summaries(ctx);
+  } catch {
+    return [];
+  }
+}
+
+function announceOnline(): void {
+  const { git, branch } = currentGit();
   emit(
     events.hostOnline({
       // Per-provider model id + thinking options so the browser can render the right
@@ -570,16 +637,33 @@ function goLive(): void {
         Object.entries(providers).map(([key, provider]) => [key, provider.describe()]),
       ),
       instanceId: INSTANCE_ID,
-      branch: gitBranch(process.cwd()) ?? undefined,
+      ...(branch ? { branch } : {}),
+      ...(git ? { git } : {}),
       cwd: abbrevPath(process.cwd()),
       workspace: abbrevPath(WORKSPACE_ROOT),
       // The immediate-command inventory, so the browser knows which slashes route
-      // to the host's command lane (and can drive a slash menu).
-      commands: commands.specs,
+      // to the host's command lane (and can drive a slash menu). Debug-mode adds /restart
+      // (and friends) to this set; toggling /debug re-announces with the set updated.
+      commands: [...commands.specs, ...debugCommandSpecs()],
       // The discovered subagents (D-045), so the model picks one to delegate to by description.
       agents: discoverAgents().map(describeAgent),
+      // The managed worktrees for this base repo (D-091), so the browser's switcher renders
+      // without reading local state.
+      worktrees: currentWorktrees(),
     }),
   ).catch(() => {});
+}
+
+/** On go-live: start the lease (once), announce presence, and report online. */
+function goLive(): void {
+  log("host", "replay complete; live");
+  if (!leaseRunning) {
+    leaseRunning = true;
+    lease.start(Date.now());
+    setInterval(() => lease.tick(Date.now()), 500);
+  }
+  emit(events.hostHello({ instanceId: INSTANCE_ID })).catch(() => {});
+  announceOnline();
 }
 
 /**
@@ -641,6 +725,9 @@ async function forceCompact(): Promise<string> {
 async function runShellCommand(requestId: string, command: string): Promise<void> {
   const { output, ok } = shellOutcome(await runShell(command));
   await emit(events.shellResult({ requestId, command, output, ok }));
+  // A shell command can change repository state (checkout, commit, stage); re-announce
+  // so the sidebar git line reflects it without polling. Latching + idempotent.
+  announceOnline();
 }
 
 function spawnReplacementHost(opts: {
@@ -657,6 +744,9 @@ function spawnReplacementHost(opts: {
       SESSION_ID: opts.sessionId,
       TREVOR_WORKSPACE: opts.workspace,
       TREVOR_MANAGED_HOST: "1",
+      // Carry the CURRENT debug flag (which may have been toggled at runtime via /debug, so it
+      // isn't in process.env) across the re-exec, so a debug session stays in debug after /restart.
+      ...(debugMode ? { TREVOR_DEBUG: "1" } : {}),
     },
   });
   child.unref();
@@ -781,6 +871,320 @@ async function cdToFreshSession(args: string): Promise<void> {
         ok: false,
       }),
     );
+  }
+}
+
+/**
+ * The shared workspace-switch mechanic (D-091): ensure the target session, spawn the replacement
+ * host at the new cwd/workspace/session, publish the session.switch the browser follows, reset the
+ * scheduler + lazy context, and retire this host. Used by worktree create/switch; `/cd` keeps its
+ * own copy with its bespoke result text.
+ */
+async function switchToWorkspace(opts: {
+  readonly cwd: string;
+  readonly sessionId: string;
+  readonly workspace: string;
+  readonly reason: "cd" | "worktree";
+}): Promise<void> {
+  await transport.ensureSession(opts.sessionId);
+  const spawned = spawnReplacementHost({
+    cwd: opts.cwd,
+    sessionId: opts.sessionId,
+    workspace: opts.workspace,
+  });
+  await emit(events.sessionSwitch({ sessionId: opts.sessionId, reason: opts.reason }));
+  log("host", `${opts.reason}: switched session`, {
+    cwd: opts.cwd,
+    from: SESSION_ID,
+    pid: spawned.pid,
+    to: opts.sessionId,
+  });
+  scheduler.clearPending();
+  contextRegistry.reset();
+  retireAfterSessionSwitch();
+}
+
+/** Switches to a managed worktree (or the baseline checkout) by row id, gated like `/cd`. */
+async function worktreeSwitch(id: string): Promise<void> {
+  const blocker = workspaceSwitchBlocker();
+  if (blocker) {
+    await emit(
+      events.commandResult({
+        command: "/worktree",
+        text: `Cannot switch worktrees while ${blocker}.`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const ctx = worktreeContextFor(process.cwd());
+  if (!ctx) {
+    await emit(
+      events.commandResult({ command: "/worktree", text: "Not a git repository.", ok: false }),
+    );
+    return;
+  }
+  const target = worktrees.resolveSwitch(id, ctx);
+  if (!target.ok) {
+    await emit(events.commandResult({ command: "/worktree", text: target.error, ok: false }));
+    return;
+  }
+  if (target.path === process.cwd()) {
+    await emit(
+      events.commandResult({ command: "/worktree", text: "Already on this worktree.", ok: true }),
+    );
+    return;
+  }
+  try {
+    await emit(
+      events.commandResult({
+        command: "/worktree",
+        text: `✓ switched to ${abbrevPath(target.path)}`,
+        ok: true,
+      }),
+    );
+    await switchToWorkspace({
+      cwd: target.path,
+      sessionId: target.sessionId,
+      workspace: target.path,
+      reason: "worktree",
+    });
+  } catch (error) {
+    warn("host", "worktree: switch failed", { error: msg(error) });
+    await emit(
+      events.commandResult({
+        command: "/worktree",
+        text: `Failed to switch worktree: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  }
+}
+
+/** Creates a managed worktree on a new branch from HEAD, records it, and switches into it. */
+async function worktreeNew(branch: string): Promise<void> {
+  const blocker = workspaceSwitchBlocker();
+  if (blocker) {
+    await emit(
+      events.commandResult({
+        command: "/worktree-new",
+        text: `Cannot create a worktree while ${blocker}.`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const name = branch.trim();
+  if (!name) {
+    await emit(
+      events.commandResult({
+        command: "/worktree-new",
+        text: "usage: /worktree-new <branch>",
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const ctx = worktreeContextFor(process.cwd());
+  if (!ctx) {
+    await emit(
+      events.commandResult({ command: "/worktree-new", text: "Not a git repository.", ok: false }),
+    );
+    return;
+  }
+  const sessionId = worktreeSessionId(ctx.baseRepo, name);
+  const result = worktrees.create({
+    baseRepo: ctx.baseRepo,
+    baseRepoName: ctx.baseRepoName,
+    basePath: ctx.basePath,
+    branch: name,
+    baseRef: "HEAD",
+    sessionId,
+  });
+  if (!result.ok) {
+    await emit(events.commandResult({ command: "/worktree-new", text: result.error, ok: false }));
+    return;
+  }
+  try {
+    await emit(
+      events.commandResult({
+        command: "/worktree-new",
+        text: `✓ created ${name} and switched in`,
+        ok: true,
+      }),
+    );
+    await switchToWorkspace({
+      cwd: result.record.worktreePath,
+      sessionId,
+      workspace: result.record.worktreePath,
+      reason: "worktree",
+    });
+  } catch (error) {
+    warn("host", "worktree: create-switch failed", { error: msg(error) });
+    await emit(
+      events.commandResult({
+        command: "/worktree-new",
+        text: `Failed to open worktree: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  }
+}
+
+/** Merges a worktree's branch back into the baseline checkout (M5), gated like a switch. */
+async function worktreeMerge(id: string): Promise<void> {
+  const blocker = workspaceSwitchBlocker();
+  if (blocker) {
+    await emit(
+      events.commandResult({
+        command: "/worktree-merge",
+        text: `Cannot merge while ${blocker}.`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const ctx = worktreeContextFor(process.cwd());
+  if (!ctx) {
+    await emit(
+      events.commandResult({
+        command: "/worktree-merge",
+        text: "Not a git repository.",
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const result = worktrees.mergeBack(id.trim(), ctx.basePath);
+  await emit(
+    events.commandResult({
+      command: "/worktree-merge",
+      text: result.ok ? "✓ merged worktree branch into baseline" : result.error,
+      ok: result.ok,
+    }),
+  );
+  if (result.ok) {
+    announceOnline();
+  }
+}
+
+/** Deletes a managed worktree (M5). `<id> [force]`; without force a dirty/unpushed tree is refused. */
+async function worktreeDelete(args: string): Promise<void> {
+  const [id, ...rest] = args.trim().split(/\s+/);
+  const force = rest.includes("force");
+  if (!id) {
+    await emit(
+      events.commandResult({
+        command: "/worktree-delete",
+        text: "usage: /worktree-delete <id> [force]",
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const ctx = worktreeContextFor(process.cwd());
+  if (!ctx) {
+    await emit(
+      events.commandResult({
+        command: "/worktree-delete",
+        text: "Not a git repository.",
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const result = worktrees.remove(id, ctx.basePath, force);
+  await emit(
+    events.commandResult({
+      command: "/worktree-delete",
+      text: result.ok ? "✓ deleted worktree" : result.error,
+      ok: result.ok,
+    }),
+  );
+  if (result.ok) {
+    announceOnline();
+  }
+}
+
+/** Toggles debug-command mode and re-announces, so the slash menu reveals/hides the debug set. */
+function toggleDebug(): void {
+  debugMode = !debugMode;
+  log("host", "debug mode", { on: debugMode });
+  emit(
+    events.commandResult({
+      command: "/debug",
+      text: debugMode
+        ? "✓ debug mode ON — extra commands available (try /restart)"
+        : "debug mode OFF",
+      ok: true,
+    }),
+  ).catch(() => {});
+  // Re-announce so every client's command set (and slash menu) reflects the new surface.
+  announceOnline();
+}
+
+/**
+ * Restarts the host IN PLACE (debug-only): spawns a replacement on the SAME session/cwd and retires
+ * this process, so a fresh `tsx main.ts` picks up code changes on demand. Unlike `/cd`/`/clear` it
+ * keeps the session, so the browser stays put and just reconnects; an in-flight turn is orphaned and
+ * the new leader reaps it. The headline reason debug mode exists: a stable (non-watch) host plus an
+ * explicit "pick up my changes" instead of an auto-watch restart that silently breaks a live turn.
+ */
+async function restartHost(): Promise<void> {
+  if (!debugMode) {
+    await emit(
+      events.commandResult({
+        command: "/restart",
+        text: "Run /debug first — /restart is a debug-mode command.",
+        ok: false,
+      }),
+    );
+    return;
+  }
+  try {
+    const spawned = spawnReplacementHost({
+      cwd: process.cwd(),
+      sessionId: SESSION_ID,
+      workspace: WORKSPACE_ROOT,
+    });
+    await emit(
+      events.commandResult({
+        command: "/restart",
+        text: `✓ restarting host (pid ${spawned.pid}) — reconnecting with fresh code…`,
+        ok: true,
+      }),
+    );
+    log("host", "restart: replacement spawned", { pid: spawned.pid, session: SESSION_ID });
+    retireAfterSessionSwitch();
+  } catch (error) {
+    warn("host", "restart failed", { error: msg(error) });
+    await emit(
+      events.commandResult({
+        command: "/restart",
+        text: `Failed to restart host: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  }
+}
+
+/** Reconciles the registry against the filesystem, dropping worktrees whose path is gone (M5). */
+async function worktreeReconcile(): Promise<void> {
+  const ctx = worktreeContextFor(process.cwd());
+  if (!ctx) {
+    return;
+  }
+  const gone = worktrees.reconcile(ctx.basePath);
+  await emit(
+    events.commandResult({
+      command: "/worktree-reconcile",
+      text:
+        gone.length > 0 ? `✓ reconciled ${gone.length} stale worktree(s)` : "nothing to reconcile",
+      ok: true,
+    }),
+  );
+  if (gone.length > 0) {
+    announceOnline();
   }
 }
 
@@ -950,6 +1354,47 @@ function handleEvent(message: SessionEvent): void {
         cdToFreshSession(args).catch((error) =>
           warn("host", "cd failed", { command, error: msg(error) }),
         );
+        return;
+      }
+      // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so
+      // they're intercepted here rather than registered as slash commands.
+      if (command === "/worktree-switch") {
+        worktreeSwitch(args.trim()).catch((error) =>
+          warn("host", "worktree-switch failed", { error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/worktree-new") {
+        worktreeNew(args).catch((error) =>
+          warn("host", "worktree-new failed", { error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/worktree-merge") {
+        worktreeMerge(args).catch((error) =>
+          warn("host", "worktree-merge failed", { error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/worktree-delete") {
+        worktreeDelete(args).catch((error) =>
+          warn("host", "worktree-delete failed", { error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/worktree-reconcile") {
+        worktreeReconcile().catch((error) =>
+          warn("host", "worktree-reconcile failed", { error: msg(error) }),
+        );
+        return;
+      }
+      // Debug surface: /debug toggles the mode (always available); /restart is gated inside its handler.
+      if (command === "/debug") {
+        toggleDebug();
+        return;
+      }
+      if (command === "/restart") {
+        restartHost().catch((error) => warn("host", "restart failed", { error: msg(error) }));
         return;
       }
       runCommand(command, args).catch((error) =>
