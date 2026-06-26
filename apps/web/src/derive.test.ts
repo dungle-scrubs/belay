@@ -9,6 +9,7 @@ import {
   fmtTokens,
   hostStatus,
   isOverflowError,
+  latestSessionSwitch,
   parseBangShell,
   parseCommand,
   providerModelsFrom,
@@ -144,6 +145,17 @@ test("providerModelsFrom / defaultProviderFrom / commandsFrom take the latest ho
   const commands = commandsFrom([online("h1")]);
   assert.equal(commands.length, 1);
   assert.equal(commands[0]?.name, "/clear");
+});
+
+test("latestSessionSwitch returns the newest host-authored session target", () => {
+  assert.equal(latestSessionSwitch([]), null);
+  assert.equal(
+    latestSessionSwitch([
+      evt("session.switch", { sessionId: "trevor-20260626-010203z-aaaaaaaa", reason: "clear" }),
+      evt("session.switch", { sessionId: "trevor-20260626-010204z-bbbbbbbb", reason: "clear" }),
+    ]),
+    "trevor-20260626-010204z-bbbbbbbb",
+  );
 });
 
 test("tasksFrom returns the latest checklist snapshot", () => {

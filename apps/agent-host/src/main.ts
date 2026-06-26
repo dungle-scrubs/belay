@@ -1,9 +1,11 @@
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { richterTransport } from "@trevor/richter";
 import {
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
+  freshSessionId,
   PRODUCER_IDS,
   RUNTIME_KIND,
   type SessionEvent,
@@ -46,6 +48,7 @@ import { msg } from "./tools/shared";
 import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
 import { terminationReason } from "./turn-termination";
+import { gitBranch, resolveCdTarget } from "./workspace-switch";
 
 /**
  * Trevor host: a session participant that runs an agent loop (model <-> tools) for
@@ -567,6 +570,7 @@ function goLive(): void {
         Object.entries(providers).map(([key, provider]) => [key, provider.describe()]),
       ),
       instanceId: INSTANCE_ID,
+      branch: gitBranch(process.cwd()) ?? undefined,
       cwd: abbrevPath(process.cwd()),
       workspace: abbrevPath(WORKSPACE_ROOT),
       // The immediate-command inventory, so the browser knows which slashes route
@@ -637,6 +641,147 @@ async function forceCompact(): Promise<string> {
 async function runShellCommand(requestId: string, command: string): Promise<void> {
   const { output, ok } = shellOutcome(await runShell(command));
   await emit(events.shellResult({ requestId, command, output, ok }));
+}
+
+function spawnReplacementHost(opts: {
+  readonly cwd: string;
+  readonly sessionId: string;
+  readonly workspace: string;
+}): { readonly pid: number } {
+  const child = spawn(process.execPath, process.argv.slice(1), {
+    cwd: opts.cwd,
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      SESSION_ID: opts.sessionId,
+      TREVOR_WORKSPACE: opts.workspace,
+      TREVOR_MANAGED_HOST: "1",
+    },
+  });
+  child.unref();
+  if (!child.pid) {
+    throw new Error("replacement host did not report a pid");
+  }
+  return { pid: child.pid };
+}
+
+function retireAfterSessionSwitch(): void {
+  const timer = setTimeout(() => {
+    supervisor.killAll();
+    if (process.env.TREVOR_MANAGED_HOST === "1") {
+      process.exit(0);
+    }
+  }, 750);
+  timer.unref();
+}
+
+async function clearToFreshSession(): Promise<void> {
+  const nextSessionId = freshSessionId();
+  try {
+    await transport.ensureSession(nextSessionId);
+    const spawned = spawnReplacementHost({
+      cwd: process.cwd(),
+      sessionId: nextSessionId,
+      workspace: WORKSPACE_ROOT,
+    });
+    await emit(
+      events.commandResult({
+        command: "/clear",
+        text: `✓ started fresh session ${nextSessionId}`,
+        ok: true,
+      }),
+    );
+    await emit(events.sessionSwitch({ sessionId: nextSessionId, reason: "clear" }));
+    log("host", "clear: switched session", {
+      from: SESSION_ID,
+      to: nextSessionId,
+      pid: spawned.pid,
+    });
+    retireAfterSessionSwitch();
+  } catch (error) {
+    warn("host", "clear: failed to switch session", { error: msg(error) });
+    await emit(
+      events.commandResult({
+        command: "/clear",
+        text: `Failed to start a fresh session: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  }
+}
+
+function workspaceSwitchBlocker(): string | null {
+  const turns = scheduler.debug();
+  if (scheduler.isBusy() || turns.queued > 0) {
+    return "a turn is running or queued";
+  }
+  if (turns.compacting || manualCompactFiber) {
+    return "compaction is running";
+  }
+  if (inFlightRuns.size > 0) {
+    return "a prior run is still being reconciled";
+  }
+  if (backgroundChildren.size > 0) {
+    return "background subagents are running";
+  }
+  const jobs = supervisor.list().filter((job) => job.status === "running");
+  if (jobs.length > 0) {
+    return `background jobs are running (${jobs.map((job) => job.id).join(", ")})`;
+  }
+  return null;
+}
+
+async function cdToFreshSession(args: string): Promise<void> {
+  const blocker = workspaceSwitchBlocker();
+  if (blocker) {
+    await emit(
+      events.commandResult({
+        command: "/cd",
+        text: `Cannot switch directories while ${blocker}.`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+
+  const target = resolveCdTarget(args, { cwd: process.cwd() });
+  if (!target.ok) {
+    await emit(events.commandResult({ command: "/cd", text: target.error, ok: false }));
+    return;
+  }
+
+  try {
+    await transport.ensureSession(target.value.sessionId);
+    const spawned = spawnReplacementHost(target.value);
+    await emit(
+      events.commandResult({
+        command: "/cd",
+        text: `✓ switched to ${target.value.cwd}`,
+        ok: true,
+      }),
+    );
+    await emit(events.sessionSwitch({ sessionId: target.value.sessionId, reason: "cd" }));
+    log("host", "cd: switched session", {
+      cwd: target.value.cwd,
+      from: SESSION_ID,
+      pid: spawned.pid,
+      to: target.value.sessionId,
+      workspace: target.value.workspace,
+    });
+    scheduler.clearPending();
+    contextRegistry.reset();
+    retireAfterSessionSwitch();
+  } catch (error) {
+    warn("host", "cd: failed to switch session", { error: msg(error) });
+    await emit(
+      events.commandResult({
+        command: "/cd",
+        text: `Failed to switch directories: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  }
 }
 
 /**
@@ -795,6 +940,18 @@ function handleEvent(message: SessionEvent): void {
     if (live && lease.isLeader()) {
       const { command, args } = decoded;
       log("host", "command", { command, args: args || undefined });
+      if (command === "/clear") {
+        clearToFreshSession().catch((error) =>
+          warn("host", "clear failed", { command, error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/cd") {
+        cdToFreshSession(args).catch((error) =>
+          warn("host", "cd failed", { command, error: msg(error) }),
+        );
+        return;
+      }
       runCommand(command, args).catch((error) =>
         warn("host", "command failed", { command, error: msg(error) }),
       );

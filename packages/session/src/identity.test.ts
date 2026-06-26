@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { projectSessionId, shortHash } from "./identity";
+import { freshSessionId, projectSessionId, shortHash } from "./identity";
 
 /**
  * The project launcher (D-085) derives a session id from the project root. These pin the two
@@ -40,4 +40,23 @@ test("shortHash is 8 hex chars and deterministic", () => {
   assert.match(shortHash("abc"), /^[0-9a-f]{8}$/);
   assert.equal(shortHash("abc"), shortHash("abc"));
   assert.notEqual(shortHash("abc"), shortHash("abd"));
+});
+
+test("freshSessionId is timestamped, URL-safe, and entropy-distinct", () => {
+  const now = new Date("2026-06-26T12:34:56.789Z");
+  const a = freshSessionId({ now, random: "one" });
+  const b = freshSessionId({ now, random: "two" });
+
+  assert.match(a, /^trevor-20260626-123456z-[0-9a-f]{8}$/);
+  assert.equal(a, freshSessionId({ now, random: "one" }));
+  assert.notEqual(a, b);
+});
+
+test("freshSessionId sanitizes custom prefixes", () => {
+  const id = freshSessionId({
+    prefix: "My Project!",
+    now: new Date("2026-06-26T12:34:56.000Z"),
+    random: "entropy",
+  });
+  assert.match(id, /^my-project-20260626-123456z-[0-9a-f]{8}$/);
 });

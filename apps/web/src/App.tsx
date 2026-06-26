@@ -5,7 +5,9 @@ import { ChevronDown, CircleX, PanelRight, RotateCw, TriangleAlert } from "lucid
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -38,6 +40,7 @@ import {
   fmtTokens,
   hostStatus,
   isOverflowError,
+  latestSessionSwitch,
   parseBangShell,
   parseCommand,
   providerModelsFrom,
@@ -67,6 +70,21 @@ const SHOW_THINKING_KEY = "trevor.showThinking";
 // wiring; override with ?session=<id> in the URL. The id is owned in @trevor/session so
 // this and the host's SESSION_ID default cannot drift into two different sessions.
 const DEFAULT_SESSION = DEFAULT_SESSION_ID;
+const BUILT_IN_COMMANDS = [
+  { name: "/clear", summary: "Start a fresh session" },
+  { name: "/cd", summary: "Switch directories in a fresh session", usage: "/cd <directory>" },
+] as const;
+
+function targetFromLocation(): string {
+  return new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
+}
+
+function urlForSession(sessionId: string): URL {
+  const url = new URL(window.location.href);
+  url.searchParams.set("session", sessionId);
+  return url;
+}
+
 // The local send queue + hard-steer fold (QueuedPrompt, sendQueueReducer, foldSteer)
 // live in ./send-queue, unit-tested without React; the React state machine that drives
 // them (the busy/in-flight latch + release/drain effects) lives in ./hooks/use-send-queue.
@@ -83,7 +101,24 @@ function Md({ text, muted = false }: { text: string; muted?: boolean }) {
 }
 
 export function App() {
-  const target = new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
+  const [target, setTarget] = useState(() => targetFromLocation());
+  const navigateToSession = useCallback(
+    (sessionId: string) => {
+      if (sessionId === target) {
+        return;
+      }
+      window.history.pushState(null, "", urlForSession(sessionId));
+      setTarget(sessionId);
+    },
+    [target],
+  );
+
+  useEffect(() => {
+    const syncTarget = () => setTarget(targetFromLocation());
+    window.addEventListener("popstate", syncTarget);
+    return () => window.removeEventListener("popstate", syncTarget);
+  }, []);
+
   const sessionQuery = useQuery({
     queryKey: ["richter-session", target],
     queryFn: async () => {
@@ -135,6 +170,12 @@ export function App() {
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
   const transcript = useMemo(() => toTranscript(events), [events]);
+  const switchTarget = useMemo(() => latestSessionSwitch(events), [events]);
+  useEffect(() => {
+    if (switchTarget && switchTarget !== target) {
+      navigateToSession(switchTarget);
+    }
+  }, [navigateToSession, switchTarget, target]);
   // Runs of 2+ consecutive read-only tool rows were one concurrent batch (D-050); group them so
   // they render as a single compact block instead of stacked cards.
   const toolBatches = useMemo(() => readOnlyToolBatches(transcript), [transcript]);
@@ -187,7 +228,11 @@ export function App() {
   // Immediate host commands the host announced, plus the set of names used to tell a
   // command from an ordinary prompt at submit time.
   const commands = useMemo(() => commandsFrom(events), [events]);
-  const commandNames = useMemo(() => new Set(commands.map((c) => c.name)), [commands]);
+  const commandSpecs = useMemo(() => {
+    const announced = new Set(commands.map((c) => c.name));
+    return [...BUILT_IN_COMMANDS.filter((c) => !announced.has(c.name)), ...commands];
+  }, [commands]);
+  const commandNames = useMemo(() => new Set(commandSpecs.map((c) => c.name)), [commandSpecs]);
   // Slash menu: open while the draft is a bare "/token" (no space yet) with matches,
   // unless Esc dismissed it for exactly this text. menuIndex is the highlighted row. (inputRef is
   // the composer textarea ref, owned by useComposer.)
@@ -195,8 +240,8 @@ export function App() {
   const [menuDismissedFor, setMenuDismissedFor] = useState<string | null>(null);
   const slashQuery = draft.startsWith("/") && !draft.includes(" ") ? draft : null;
   const menuMatches = useMemo(
-    () => (slashQuery ? commands.filter((c) => c.name.startsWith(slashQuery)) : []),
-    [slashQuery, commands],
+    () => (slashQuery ? commandSpecs.filter((c) => c.name.startsWith(slashQuery)) : []),
+    [slashQuery, commandSpecs],
   );
   const menuOpen = menuMatches.length > 0 && slashQuery !== null && draft !== menuDismissedFor;
   const menuIdx = Math.min(menuIndex, menuMatches.length - 1);
@@ -480,9 +525,11 @@ export function App() {
   // the bottom (atBottom starts true → the first populated render scrolls to scrollHeight); an empty
   // session's scrollHeight ≈ clientHeight, so the scroll is a no-op and content stays at the top.
   // Scrolling up flips `atBottom` off (onTranscriptScroll) and stops the follow; a submit re-arms it
-  // via setAtBottom(true).
+  // via setAtBottom(true). useLayoutEffect (not useEffect) so the scroll lands BEFORE paint: on a
+  // reload the full history commits in one update (see use-session's replay buffer), and scrolling
+  // pre-paint puts the view at the bottom on the first frame instead of flashing the top first.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `transcript` is the trigger (not read) - re-pin on each update while at the bottom.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = transcriptRef.current;
     if (atBottom && el) {
       el.scrollTo({ top: el.scrollHeight });
@@ -545,10 +592,23 @@ export function App() {
             onScroll={onTranscriptScroll}
             className="flex flex-1 flex-col overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {/* Nothing renders until the full history has replayed, then it appears all at
-            once (an existing session pinned to the bottom, an empty one at the top) with a
-            150ms fade-in. */}
-            {replayed ? (
+            {/* Three states, so the page never looks broken while things come up:
+              1. still replaying the session stream -> a brief "connecting to session" state;
+              2. replayed + empty + no host joined yet (e.g. just opened via `trevor`, host booting)
+                 -> a clear "waiting for host" state that vanishes once the host announces online;
+              3. otherwise -> the full history (existing session pinned to bottom, empty at top), 150ms fade. */}
+            {!replayed ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2">
+                <WorkingIndicator label="connecting to session" />
+              </div>
+            ) : !host.leaderId && transcript.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+                <WorkingIndicator label={host.present ? "connecting to host" : "starting host"} />
+                <span className="text-label tracking-wider text-muted-foreground/70">
+                  waiting for the agent host to start and join this session…
+                </span>
+              </div>
+            ) : (
               <div className="flex flex-col gap-8 fade-in animate-in duration-150">
                 {transcript.map((message, index) => {
                   // Consecutive tool calls read as one block: collapse the gap-8 between
@@ -595,16 +655,17 @@ export function App() {
                   }
                   if (message.kind === "shell") {
                     // The prompt shell lane (D-082): a leading `!` ran a command on the host. Rendered
-                    // as a terminal block (`$ command` + output), pending until its result lands.
+                    // as a terminal block (`$ command` + output), pending until its result lands. No
+                    // left padding (unlike assistant/tool rows): the box sits flush at the content-
+                    // column left edge, aligned with the user-prompt blocks.
                     return (
-                      <div key={message.id} className="pl-3.5">
-                        <ShellBlock
-                          command={message.command}
-                          output={message.output}
-                          done={message.done}
-                          ok={message.ok}
-                        />
-                      </div>
+                      <ShellBlock
+                        key={message.id}
+                        command={message.command}
+                        output={message.output}
+                        done={message.done}
+                        ok={message.ok}
+                      />
                     );
                   }
                   if (message.kind === "recovered") {
@@ -852,7 +913,7 @@ export function App() {
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            )}
           </div>
           {!atBottom ? (
             <button
@@ -918,7 +979,8 @@ export function App() {
           title={target}
           subtitle={`${status}${replayed ? " · replayed" : ""} · ${events.length} events`}
           statusNode={statusNode}
-          workspace={host.workspace ?? undefined}
+          workspace={host.cwd ?? host.workspace ?? undefined}
+          branch={host.branch ?? undefined}
           {...panel}
           ready={replayed}
           controls={panelControls}

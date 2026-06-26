@@ -104,11 +104,12 @@ export function toolSummary(name: string, argsJson: string): string {
 }
 
 export type HostStatus = {
-  present: boolean;
+  branch: string | null;
+  cwd: string | null;
   leaderId: string | null;
+  present: boolean;
   standbyCount: number;
   workspace: string | null;
-  cwd: string | null;
 };
 
 /** A standby pings continuously, so it counts as present only if seen this recently. */
@@ -133,6 +134,7 @@ export function hostStatus(
   nowMs: number,
 ): HostStatus {
   let everOnline = false;
+  let branch: string | null = null;
   let workspace: string | null = null;
   let cwd: string | null = null;
 
@@ -148,6 +150,10 @@ export function hostStatus(
 
     if (decoded.type === "host.online") {
       everOnline = true;
+
+      if (decoded.branch) {
+        branch = decoded.branch;
+      }
 
       if (decoded.workspace) {
         workspace = decoded.workspace;
@@ -204,7 +210,14 @@ export function hostStatus(
         standbyCount += 1;
       }
     }
-    return { present: liveIds.size > 0, leaderId: leaderLive, standbyCount, workspace, cwd };
+    return {
+      branch,
+      cwd,
+      leaderId: leaderLive,
+      present: liveIds.size > 0,
+      standbyCount,
+      workspace,
+    };
   }
 
   // Event-log fallback (no live presence reported).
@@ -216,7 +229,7 @@ export function hostStatus(
     }
   }
 
-  return { present: everOnline, leaderId, standbyCount, workspace, cwd };
+  return { branch, cwd, leaderId, present: everOnline, standbyCount, workspace };
 }
 
 /**
@@ -247,6 +260,14 @@ export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
 /** The immediate-command inventory the host last announced (empty until one is online). */
 export function commandsFrom(events: readonly SessionEvent[]): CommandSpec[] {
   return [...(latest(events, (d) => (d.type === "host.online" ? d.commands : undefined)) ?? [])];
+}
+
+/** The newest host-authored session handoff target, if this log asks the browser to move. */
+export function latestSessionSwitch(events: readonly SessionEvent[]): string | null {
+  return (
+    latest(events, (d) => (d.type === "session.switch" && d.sessionId ? d.sessionId : undefined)) ??
+    null
+  );
 }
 
 /**

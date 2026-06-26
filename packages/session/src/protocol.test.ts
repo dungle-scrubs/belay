@@ -176,6 +176,19 @@ test("context.compacting round-trips the live fold-progress tick", () => {
   });
 });
 
+test("session.switch round-trips the host-authored handoff target", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.sessionSwitch({ sessionId: "trevor-20260626-123456z-abcdef12", reason: "clear" }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "session.switch",
+    sessionId: "trevor-20260626-123456z-abcdef12",
+    reason: "clear",
+  });
+});
+
 test("user.shell + shell.result round-trip through decodeTrevorEvent (D-082)", () => {
   const shell = decodeTrevorEvent(
     stored(events.userShell({ requestId: "req-1", command: "printf hello" })),

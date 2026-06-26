@@ -313,6 +313,17 @@ export const events = {
     payload: { command: p.command, text: p.text, ok: p.ok },
   }),
   /**
+   * Host-authored session handoff. Used by /clear to move the browser into a newly minted durable
+   * session after the leader has ensured it and spawned an attached replacement host.
+   */
+  sessionSwitch: (p: {
+    sessionId: string;
+    reason: "clear" | "cd" | "resume";
+  }): TrevorEventInput => ({
+    type: "session.switch",
+    payload: { sessionId: p.sessionId, reason: p.reason },
+  }),
+  /**
    * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately
    * through the live leader's protected `runShell` path, bypassing the model and the turn queue.
    * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
@@ -383,6 +394,7 @@ export const events = {
     payload: { instanceId: p.instanceId, role: p.role },
   }),
   hostOnline: (p: {
+    branch?: string;
     providers: readonly string[];
     default: string;
     models: Record<string, ProviderModel>;
@@ -394,6 +406,7 @@ export const events = {
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
+      ...(p.branch ? { branch: p.branch } : {}),
       providers: p.providers,
       default: p.default,
       models: p.models,
@@ -672,6 +685,7 @@ export type DecodedEvent =
       readonly text: string;
       readonly ok: boolean;
     }
+  | { readonly type: "session.switch"; readonly sessionId: string; readonly reason: string }
   | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
   | {
       readonly type: "shell.result";
@@ -703,6 +717,7 @@ export type DecodedEvent =
     }
   | {
       readonly type: "host.online";
+      readonly branch?: string;
       readonly instanceId?: string;
       readonly workspace?: string;
       readonly cwd?: string;
@@ -827,6 +842,12 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         text: str(p.text),
         ok: p.ok === true,
       };
+    case "session.switch":
+      return {
+        type: "session.switch",
+        sessionId: str(p.sessionId),
+        reason: str(p.reason),
+      };
     case "user.shell":
       // A missing requestId falls back to the event's own id, so a forward-compat event still
       // pairs with its result rather than collapsing distinct shell runs together.
@@ -871,6 +892,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
     case "host.online":
       return {
         type: "host.online",
+        branch: optStr(p.branch),
         instanceId: optStr(p.instanceId),
         workspace: optStr(p.workspace),
         cwd: optStr(p.cwd),

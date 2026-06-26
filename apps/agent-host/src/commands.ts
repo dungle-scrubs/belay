@@ -154,11 +154,23 @@ export function buildCommandRegistry(): CommandRegistry {
   });
 
   add({
-    spec: { name: "/clear", summary: "Clear the conversation and start fresh" },
+    spec: { name: "/clear", summary: "Start a fresh session" },
     select: none,
-    // The actual history reset happens in the host's event handler (so it applies on
-    // replay too); this just confirms the action in the command lane.
-    run: () => "✓ conversation cleared — starting fresh",
+    // The actual switch is owned by main.ts because it has the session transport and process
+    // lifecycle. This fallback only protects direct registry calls.
+    run: () => "Clear is handled by the live host.",
+  });
+
+  add({
+    spec: {
+      name: "/cd",
+      summary: "Switch directories in a fresh session",
+      usage: "/cd <directory>",
+    },
+    select: none,
+    // The actual switch is owned by main.ts because it has filesystem, session transport, and
+    // process lifecycle access. This fallback only protects direct registry calls.
+    run: () => "Directory switching is handled by the live host.",
   });
 
   add<CompactInput>({

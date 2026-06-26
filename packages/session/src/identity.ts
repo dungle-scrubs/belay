@@ -53,6 +53,15 @@ export function shortHash(text: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+function idSlug(text: string, fallback: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || fallback
+  );
+}
+
 /**
  * Derives a stable, URL-safe session id from a canonical (absolute, resolved) project root: a
  * human-readable slug of the directory basename plus the short path hash. The slug strips everything
@@ -67,10 +76,30 @@ export function projectSessionId(root: string): string {
       .split(/[/\\]+/)
       .filter(Boolean)
       .pop() ?? "project";
-  const slug =
-    base
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "project";
+  const slug = idSlug(base, "project");
   return `${slug}-${shortHash(root)}`;
+}
+
+export interface FreshSessionIdOptions {
+  readonly now?: Date;
+  readonly random?: string;
+  readonly prefix?: string;
+}
+
+const pad2 = (value: number): string => String(value).padStart(2, "0");
+
+/**
+ * Mints a URL-safe, human-scannable conversation id for a fresh durable session. The UTC stamp makes
+ * screenshots identifiable at a glance, while the entropy hash keeps two clears in the same second
+ * distinct. This is intentionally session identity, not project identity.
+ */
+export function freshSessionId(options: FreshSessionIdOptions = {}): string {
+  const now = options.now ?? new Date();
+  const random = options.random ?? crypto.randomUUID();
+  const prefix = idSlug(options.prefix ?? "trevor", "trevor");
+  const stamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}-${pad2(
+    now.getUTCHours(),
+  )}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}z`;
+
+  return `${prefix}-${stamp}-${shortHash(random)}`;
 }
