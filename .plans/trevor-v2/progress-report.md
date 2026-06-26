@@ -593,65 +593,65 @@ registry-derived capability manifest D-074.
 
 ### M1: Skill registry source of truth
 
-- [ ] Define the host-owned skill registry read model for skill id, name, description, triggers, source path, root kind, status, and provenance
-- [ ] Read skills from the D-087 project-local, global, and configured root order
-- [ ] Preserve selected versus shadowed skill provenance when duplicate skill ids exist
-- [ ] Represent disabled, malformed, missing, and truncated skills explicitly instead of silently dropping them
-- [ ] Preserve existing skill body parsing and shell interpolation behavior unless intentionally superseded by this registry
-- [ ] Do not let Trevor web scan the filesystem or invent its own skill inventory
-- [ ] Unit tests cover root ordering, duplicate ids, disabled skills, malformed skills, and provenance fields
-- [ ] Unit tests prove registry output changes when source skill metadata changes
+- [x] Define the host-owned skill registry read model for skill id, name, description, triggers, source path, root kind, status, and provenance
+- [x] Read skills from the D-087 project-local, global, and configured root order
+- [x] Preserve selected versus shadowed skill provenance when duplicate skill ids exist
+- [x] Represent disabled, malformed, missing, and truncated skills explicitly instead of silently dropping them
+- [x] Preserve existing skill body parsing and shell interpolation behavior unless intentionally superseded by this registry
+- [x] Do not let Trevor web scan the filesystem or invent its own skill inventory
+- [x] Unit tests cover root ordering, duplicate ids, disabled skills, malformed skills, and provenance fields
+- [x] Unit tests prove registry output changes when source skill metadata changes
 
 ### M2: Compact ambient skill roster
 
-- [ ] Build a compact `Available skills` roster from the registry for tool-enabled turns
-- [ ] Include skill id, short description, and optional trigger summary in the ambient roster
-- [ ] Keep the ambient roster capped and budgeted
+- [x] Build a compact `Available skills` roster from the registry for tool-enabled turns
+- [x] Include skill id, short description, and optional trigger summary in the ambient roster
+- [x] Keep the ambient roster capped and budgeted
 - [ ] Mark roster truncation explicitly with counts or continuation metadata
-- [ ] Ensure the model can know relevant skills exist without loading full skill bodies
-- [ ] Do not put full skill bodies or huge dynamic inventories into normal prompts
+- [x] Ensure the model can know relevant skills exist without loading full skill bodies
+- [x] Do not put full skill bodies or huge dynamic inventories into normal prompts
 - [ ] Prompt tests cover relevant-skill awareness from the compact roster
 - [ ] Prompt tests cover truncated roster behavior without speculative all-skill loading
 
 ### M3: `skills_list` searchable metadata tool
 
-- [ ] Add `skills_list(query?, limit?)` over compact registry metadata
-- [ ] Return ids, descriptions, trigger summaries, source/provenance, status, match counts, and truncation metadata
-- [ ] Search across id, name, description, trigger summary, and relevant metadata fields
-- [ ] Enforce default and maximum limits so list results cannot bloat prompt context
-- [ ] Keep `skills_list` read-only and UI-agnostic
-- [ ] Handle empty query, no matches, disabled-only matches, malformed entries, and truncated matches clearly
-- [ ] Tests cover search ranking, limits, truncation, disabled/malformed entries, and no full-body return
-- [ ] Tests cover non-web clients calling `skills_list` without Trevor web involvement
+- [x] Add `skills_list(query?, limit?)` over compact registry metadata
+- [x] Return ids, descriptions, trigger summaries, source/provenance, status, match counts, and truncation metadata
+- [x] Search across id, name, description, trigger summary, and relevant metadata fields
+- [x] Enforce default and maximum limits so list results cannot bloat prompt context
+- [x] Keep `skills_list` read-only and UI-agnostic
+- [x] Handle empty query, no matches, disabled-only matches, malformed entries, and truncated matches clearly
+- [x] Tests cover search ranking, limits, truncation, disabled/malformed entries, and no full-body return
+- [x] Tests cover non-web clients calling `skills_list` without Trevor web involvement
 
 ### M4: `skill_view` full-body drill-in tool
 
-- [ ] Add `skill_view(skillId)` for loading exactly one selected skill body
-- [ ] Include full body, metadata, source/provenance, selected/shadowed status, and parse diagnostics when available
-- [ ] Reject unknown skill ids with a structured not-found result
-- [ ] Reject or clearly mark disabled skills without pretending they are usable
-- [ ] Do not auto-load neighboring, related, or all matching skill bodies
-- [ ] Preserve existing security and trust gates for shell interpolation inside skill bodies
+- [x] Add `skill_view(skillId)` for loading exactly one selected skill body
+- [x] Include full body, metadata, source/provenance, selected/shadowed status, and parse diagnostics when available
+- [x] Reject unknown skill ids with a structured not-found result
+- [x] Reject or clearly mark disabled skills without pretending they are usable
+- [x] Do not auto-load neighboring, related, or all matching skill bodies
+- [x] Preserve existing security and trust gates for shell interpolation inside skill bodies
 - [ ] Tests cover one-body loading, unknown id, disabled id, shadowed provenance, parse diagnostics, and interpolation gating
 
 ### M5: Prompt guidance and model behavior
 
-- [ ] Tell the model to call `skill_view` when a visible skill clearly matches the user request
-- [ ] Tell the model to call `skills_list(query)` when the compact roster is missing, truncated, too broad, or insufficient
-- [ ] Tell the model to load only the specific skill intended for use
-- [ ] Tell the model not to call `skill_view` for every listed skill
+- [x] Tell the model to call `skill_view` when a visible skill clearly matches the user request
+- [x] Tell the model to call `skills_list(query)` when the compact roster is missing, truncated, too broad, or insufficient
+- [x] Tell the model to load only the specific skill intended for use
+- [x] Tell the model not to call `skill_view` for every listed skill
 - [ ] Tell the model not to treat skills as mandatory when ordinary repository context and tools are enough
 - [ ] Evals cover a relevant listed skill being opened exactly once
 - [ ] Evals cover ordinary coding work proceeding without unnecessary skill loading
 
 ### M6: Compatibility and future registry shape
 
-- [ ] Keep the existing `skill(name)` tool temporarily as an alias or compatibility shim if needed
+- [x] Keep the existing `skill(name)` tool temporarily as an alias or compatibility shim if needed
 - [ ] Define migration behavior from `skill(name)` to `skills_list` plus `skill_view`
 - [ ] Shape registry records so slash commands, command families, and agents can join later without changing the skill contract
-- [ ] Do not include slash-command, command-family, or agent discovery in the first implementation slice
-- [ ] Expose the skill registry in a way D-074 capability manifests and `trevor-expert` can consume deterministically
-- [ ] Tests cover compatibility alias behavior or its intentional removal
+- [x] Do not include slash-command, command-family, or agent discovery in the first implementation slice
+- [x] Expose the skill registry in a way D-074 capability manifests and `trevor-expert` can consume deterministically
+- [x] Tests cover compatibility alias behavior or its intentional removal
 - [ ] Tests prove future resource-type fields do not leak bogus command or agent rows into the skills-only first cut
 
 ### M7: UI and verification
@@ -673,6 +673,6 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
-- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 0 completed, 51 remaining
+- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 35 completed, 16 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 282 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 247 unchecked items plus 5 partial/gated carry-forward items
