@@ -111,6 +111,39 @@ test("clicking a row selects that session", () => {
   assert.deepEqual(picked, ["s2"]);
 });
 
+test("the normal sidebar exposes no stop/kill/archive controls (D-094 M4)", () => {
+  const { container } = render(
+    <SessionSidebar
+      sessions={[
+        summary({ sessionId: "cur", title: "current", activity: "running", host: "live" }),
+        summary({ sessionId: "s2", title: "other" }),
+        summary({ sessionId: "filed", title: "filed", archived: true }),
+      ]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={noop}
+      nowMs={NOW}
+    />,
+  );
+
+  // The only interactive controls are the one-per-visible-session select rows (the archived "filed"
+  // session is excluded), so there are exactly two buttons and nothing else to click - no per-row
+  // stop/kill/archive affordances. Escape/cancel stays the active-work control; lifecycle operations
+  // live in the CLI and (later) a gated debug surface, never the everyday sidebar.
+  const buttons = [...container.querySelectorAll("button")];
+  assert.equal(buttons.length, 2, "only the per-session select rows are interactive");
+
+  // Lifecycle verbs never appear as visible text or accessible labels in the everyday surface.
+  const labels = [...container.querySelectorAll("[aria-label],[title]")].flatMap((el) => [
+    el.getAttribute("aria-label") ?? "",
+    el.getAttribute("title") ?? "",
+  ]);
+  const haystack = [container.textContent ?? "", ...labels].join(" ").toLowerCase();
+  for (const verb of ["stop", "kill", "archive", "unarchive"]) {
+    assert.ok(!haystack.includes(verb), `no "${verb}" control in the normal sidebar`);
+  }
+});
+
 test("an empty list shows a project-scoped empty state with an accessible nav label", () => {
   const { container } = render(
     <SessionSidebar
