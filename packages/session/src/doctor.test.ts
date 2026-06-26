@@ -4,6 +4,7 @@ import {
   type DoctorArea,
   type DoctorSnapshot,
   type DoctorStatus,
+  decodeDoctorSnapshot,
   isIssue,
   overallStatus,
   rollupStatus,
@@ -73,5 +74,16 @@ describe("isIssue", () => {
     expect(isIssue(area("core", "warn"))).toBe(true);
     expect(isIssue(area("core", "ok"))).toBe(false);
     expect(isIssue(area("core", "not_checked"))).toBe(false);
+  });
+});
+
+describe("decodeDoctorSnapshot", () => {
+  it("decodes a structured snapshot but rejects legacy text / errors / junk", () => {
+    const snap: DoctorSnapshot = { state: "ready", areas: [area("core", "ok")] };
+    expect(decodeDoctorSnapshot(JSON.stringify(snap))?.state).toBe("ready");
+    expect(decodeDoctorSnapshot("workspace: ~/dev\nproviders:")).toBeNull();
+    expect(decodeDoctorSnapshot("error: boom")).toBeNull();
+    expect(decodeDoctorSnapshot(undefined)).toBeNull();
+    expect(decodeDoctorSnapshot('{"state":"ready"}')).toBeNull();
   });
 });

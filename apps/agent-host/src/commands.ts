@@ -1,5 +1,9 @@
-import type { CommandSpec } from "@trevor/session";
+import { access, constants } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { type CommandSpec, type InternetSnapshot, UNKNOWN_INTERNET } from "@trevor/session";
 import { Effect } from "effect";
+import { buildDoctorSnapshot, type DoctorProviderProbe } from "./doctor/snapshot";
 import { fmtFields } from "./log";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
@@ -34,6 +38,10 @@ export interface CommandContext {
   readonly role: string;
   /** Live turn-machine snapshot (host orchestrator state), for /doctor. */
   readonly host?: Record<string, unknown>;
+  /** The host's public-internet snapshot (D-060), for the /doctor Internet area. */
+  readonly internet?: InternetSnapshot;
+  /** The current branch (or `detached <sha>`), for the /doctor Workspace area. */
+  readonly branch?: string;
   /** Election internals (lease.debugInfo), for /doctor. */
   readonly lease?: Record<string, unknown>;
   /** Forces one cross-turn compaction fold now and resolves with a human-readable result line
@@ -84,6 +92,71 @@ async function providerStatus(key: string, provider: ProviderRegistry[string]): 
   return `  ${key} - ${provider.label} (${provider.model}) - ${status}${detail}`;
 }
 
+/** Structured provider reachability for the /doctor snapshot (warm/cold/unreachable + kind). */
+async function doctorProviderProbe(
+  key: string,
+  provider: ProviderRegistry[string],
+): Promise<DoctorProviderProbe> {
+  let status: DoctorProviderProbe["status"];
+  try {
+    const { ready, warm } = await Effect.runPromise(provider.readiness());
+    status = ready ? (warm ? "warm" : "cold") : "unreachable";
+  } catch {
+    status = "unreachable";
+  }
+  return { key, label: provider.label, model: provider.model, kind: provider.kind, status };
+}
+
+/** Abbreviates the home dir to `~` for a sanitized /doctor path. */
+function abbrevHome(absolute: string): string {
+  const home = homedir();
+  return absolute === home || absolute.startsWith(`${home}/`)
+    ? `~${absolute.slice(home.length)}`
+    : absolute;
+}
+
+/** The TREVOR_HOME path (env override or `~/.trevorV2`). */
+function trevorHome(): string {
+  return process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2");
+}
+
+/** Whether a directory is writable (a bounded fs probe for the /doctor Storage area). */
+async function storageWritable(dir: string): Promise<boolean> {
+  try {
+    await access(dir, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reads a string field off the host turn-machine record (the /doctor session facts). */
+function hostStr(host: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = host?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+/** The legacy plaintext /doctor dump (`/doctor text`), kept for terminals / no-dashboard clients. */
+async function doctorText(input: DoctorInput): Promise<string> {
+  const lines: string[] = [`workspace: ${input.workspace}`];
+  if (input.cwd !== input.workspace) {
+    lines.push(`cwd: ${input.cwd}`);
+  }
+  lines.push(`host: ${input.instanceId} (${input.role})`);
+  if (input.host) {
+    lines.push(`turn: ${fmtFields(input.host)}`);
+  }
+  if (input.lease) {
+    lines.push(`lease: ${fmtFields(input.lease)}`);
+  }
+  lines.push("", "providers:");
+  const statuses = await Promise.all(
+    Object.entries(input.providers).map(([key, provider]) => providerStatus(key, provider)),
+  );
+  lines.push(...statuses, "", `tools: ${TOOL_DEFS.map((t) => t.name).join(", ")}`);
+  return lines.join("\n");
+}
+
 export function buildCommandRegistry(): CommandRegistry {
   const commands: Command<unknown>[] = [];
   /** Registers a command, preserving its narrow input type at the declaration site. */
@@ -102,36 +175,50 @@ export function buildCommandRegistry(): CommandRegistry {
   add<DoctorInput>({
     spec: {
       name: "/doctor",
-      summary: "Host health: workspace, providers, tools",
+      summary: "Host health dashboard (providers, internet, tools, workspace)",
     },
-    select: ({ providers, cwd, workspace, instanceId, role, host, lease }) => ({
+    select: ({ providers, cwd, workspace, instanceId, role, host, internet, branch, lease }) => ({
       providers,
       cwd,
       workspace,
       instanceId,
       role,
       host,
+      internet,
+      branch,
       lease,
     }),
-    run: async (_args, input) => {
-      const lines: string[] = [`workspace: ${input.workspace}`];
-      if (input.cwd !== input.workspace) {
-        lines.push(`cwd: ${input.cwd}`);
+    run: async (args, input) => {
+      // `/doctor text` keeps the legacy plaintext dump (terminals / no-dashboard clients); the
+      // default emits the structured doctor.current snapshot the web renders as a dashboard.
+      if (args.trim() === "text") {
+        return doctorText(input);
       }
-      lines.push(`host: ${input.instanceId} (${input.role})`);
-      if (input.host) {
-        lines.push(`turn: ${fmtFields(input.host)}`);
-      }
-      if (input.lease) {
-        lines.push(`lease: ${fmtFields(input.lease)}`);
-      }
-      lines.push("", "providers:");
-      // Probe every provider's readiness concurrently - they're independent.
-      const statuses = await Promise.all(
-        Object.entries(input.providers).map(([key, provider]) => providerStatus(key, provider)),
-      );
-      lines.push(...statuses, "", `tools: ${TOOL_DEFS.map((t) => t.name).join(", ")}`);
-      return lines.join("\n");
+      const home = trevorHome();
+      const [providers, writable] = await Promise.all([
+        Promise.all(
+          Object.entries(input.providers).map(([key, provider]) =>
+            doctorProviderProbe(key, provider),
+          ),
+        ),
+        storageWritable(home),
+      ]);
+      const snapshot = buildDoctorSnapshot({
+        host: { instanceId: input.instanceId, role: input.role, live: input.role !== "standby" },
+        session: {
+          activeRun: hostStr(input.host, "activeRun"),
+          queued: typeof input.host?.queued === "number" ? input.host.queued : 0,
+          lastTurn: hostStr(input.host, "lastTurn"),
+          compacting: input.host?.compacting === true,
+        },
+        providers,
+        internet: input.internet ?? UNKNOWN_INTERNET,
+        tools: TOOL_DEFS.map((t) => t.name),
+        workspace: { cwd: input.cwd, workspace: input.workspace, branch: input.branch },
+        storage: { home: abbrevHome(home), writable },
+        checkedAt: new Date().toISOString(),
+      });
+      return JSON.stringify(snapshot);
     },
   });
 

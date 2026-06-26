@@ -5,6 +5,7 @@ import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection
 import { CommandMenu } from "@/components/chat/command-menu";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
+import { DoctorResult } from "@/components/chat/doctor/doctor-result";
 import {
   CommandResult,
   MessageMeta,
@@ -238,11 +239,19 @@ export function PanelHost(props: {
                   if (message.kind === "result") {
                     return (
                       <div key={message.id} className="pl-3.5">
-                        <CommandResult
-                          command={message.command}
-                          text={message.text}
-                          ok={message.ok}
-                        />
+                        {message.command === "/doctor" ? (
+                          <DoctorResult
+                            command={message.command}
+                            text={message.text}
+                            ok={message.ok}
+                          />
+                        ) : (
+                          <CommandResult
+                            command={message.command}
+                            text={message.text}
+                            ok={message.ok}
+                          />
+                        )}
                       </div>
                     );
                   }
@@ -552,6 +561,7 @@ export function PanelHost(props: {
             onDraftChange={composer.setDraft}
             onSubmit={compose.onSubmit}
             onKeyDown={compose.onInputKeyDown}
+            onComposerKeyDown={composer.handleKeyDown}
             onPaste={composer.onPaste}
             inputRef={composer.inputRef}
             fileInputRef={composer.fileInputRef}

@@ -1259,6 +1259,8 @@ async function runCommand(name: string, args: string): Promise<void> {
     instanceId: INSTANCE_ID.slice(0, 8),
     role: lease.isLeader() ? "leader" : "standby",
     host: hostState(),
+    internet: internet.current(),
+    branch: currentGit().branch,
     lease: lease.debugInfo(Date.now()),
     compact: forceCompact,
   });
