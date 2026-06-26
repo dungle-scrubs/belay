@@ -194,25 +194,25 @@ transport activity folding (D-093).
 
 ### M1: Storybook-first sidebar surface (D-093)
 
-- [ ] Build the session navigation sidebar in Storybook before app wiring
-- [ ] Add an upper-left dashboard-style icon entry point that opens or focuses the session navigator
-- [ ] Keep the surface in the left-hand sidebar rather than a landing page, full dashboard, or command-only modal
-- [ ] Show the current selected session with a stable selected state
-- [ ] Rows show title or first prompt, branch or worktree when known, activity state, and last activity
-- [ ] Stories cover empty, current-only, many sessions, long titles, long cwd/branch, narrow viewport, and tall lists
-- [ ] Keep row heights, icon buttons, and labels stable so live status changes do not resize the sidebar
-- [ ] Storybook uses production-shaped `SessionSummary` fixtures instead of story-only row data
+- [x] Build the session navigation sidebar in Storybook before app wiring
+- [x] Add an upper-left dashboard-style icon entry point that opens or focuses the session navigator
+- [x] Keep the surface in the left-hand sidebar rather than a landing page, full dashboard, or command-only modal
+- [x] Show the current selected session with a stable selected state
+- [x] Rows show title or first prompt, branch or worktree when known, activity state, and last activity
+- [x] Stories cover empty, current-only, many sessions, long titles, long cwd/branch, narrow viewport, and tall lists
+- [x] Keep row heights, icon buttons, and labels stable so live status changes do not resize the sidebar
+- [x] Storybook uses production-shaped `SessionSummary` fixtures instead of story-only row data
 
 ### M2: Current-project inventory and scope
 
-- [ ] Reuse the D-090 session inventory/read model where possible instead of inventing a second data path
-- [ ] Filter the sidebar list to the current project/root only
-- [ ] Do not show other project sessions in the current working directory context
-- [ ] Sort sessions by most recent activity, with no grouping in this cut
-- [ ] Represent stale or inactive host state without exposing "no-host session" as user-facing vocabulary
-- [ ] Empty and load-error states make clear that the list is scoped to the current project
-- [ ] Tests prove cross-project sessions are excluded even when they are more recent
-- [ ] Tests prove recency sorting within the current project
+- [x] Reuse the D-090 session inventory/read model where possible instead of inventing a second data path
+- [x] Filter the sidebar list to the current project/root only
+- [x] Do not show other project sessions in the current working directory context
+- [x] Sort sessions by most recent activity, with no grouping in this cut
+- [x] Represent stale or inactive host state without exposing "no-host session" as user-facing vocabulary
+- [x] Empty and load-error states make clear that the list is scoped to the current project
+- [x] Tests prove cross-project sessions are excluded even when they are more recent
+- [x] Tests prove recency sorting within the current project
 
 ### M3: Live activity and recency projection
 
@@ -274,7 +274,7 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 - [ ] Unarchive is required before normal opening or use from the main UI
 - [x] Archived sessions can be discovered only through an explicit archive filter, archive browser, or CLI archived list
 - [x] Permanent delete is deferred to an archive browser with strong confirmation
-- [ ] D-093 sidebar respects archived filtering and never shows archived rows by default
+- [x] D-093 sidebar respects archived filtering and never shows archived rows by default
 
 ### M3: CLI lifecycle surface
 
@@ -668,11 +668,11 @@ registry-derived capability manifest D-074.
 - Shipped (archived): D-044 session recall - 38 features, 37 completed, 1 gated manual EZE repro
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
-- Live open follow-up (D-093 session navigation sidebar): 39 features, 0 completed, 39 remaining
-- Live open follow-up (D-094 session lifecycle controls): 38 features, 9 completed, 29 remaining (M2 archive metadata; M3 list/archive/unarchive CLI)
+- Live open follow-up (D-093 session navigation sidebar): 39 features, 16 completed, 23 remaining (M1 surface + M2 scope)
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 10 completed, 28 remaining (M2 archive metadata + sidebar filtering; M3 list/archive/unarchive CLI)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 35 completed, 16 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 238 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 221 unchecked items plus 5 partial/gated carry-forward items
