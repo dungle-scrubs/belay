@@ -16,6 +16,7 @@
     "@earendil-works/pi-ai": "0.80.2",
     "@trevor/richter": "workspace:*",
     "@trevor/session": "workspace:*",
+    "@vscode/ripgrep": "1.18.0",
     "effect": "^3.21.4",
     "web-search": "github:dungle-scrubs/web-search#3d9d0db4d28ad6801250adb3b294c19f89b819d5",
     "yaml": "^2.9.0"
