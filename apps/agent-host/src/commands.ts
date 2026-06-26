@@ -239,6 +239,18 @@ export function buildCommandRegistry(): CommandRegistry {
           lsp: { kind: "unconfigured" },
           hooks: { kind: "unconfigured" },
         },
+        // Web / Docs config facts (D-073): presence booleans + a provider name only, never key
+        // values. web_search reads BRAVE_API_KEY then SERPER_API_KEY; fetch/rendering would use
+        // Jina/Firecrawl. No docs cache is built in this slice.
+        web: {
+          searchConfigured: Boolean(process.env.BRAVE_API_KEY || process.env.SERPER_API_KEY),
+          fetchProvider: process.env.JINA_API_KEY
+            ? "Jina"
+            : process.env.FIRECRAWL_API_KEY
+              ? "Firecrawl"
+              : null,
+          docs: { present: false, stale: false },
+        },
         checkedAt: new Date().toISOString(),
       });
       return JSON.stringify(snapshot);

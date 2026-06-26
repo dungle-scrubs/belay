@@ -49,7 +49,20 @@ export interface DoctorProbeInput {
   readonly storage: { readonly home: string; readonly writable: boolean };
   readonly build: DoctorBuildInfo;
   readonly peripherals: DoctorPeripherals;
+  readonly web: DoctorWebDocs;
   readonly checkedAt: string;
+}
+
+/**
+ * Web / Docs dependency facts (D-073). Booleans + provider NAMES only - never key values - so the
+ * area stays redaction-safe: whether a web-search key is configured, which fetch/rendering provider
+ * (if any) is set, and the docs-cache presence/staleness.
+ */
+export interface DoctorWebDocs {
+  readonly searchConfigured: boolean;
+  /** The configured fetch/rendering provider name (e.g. "Jina"/"Firecrawl"), or null when none. */
+  readonly fetchProvider: string | null;
+  readonly docs: { readonly present: boolean; readonly stale: boolean };
 }
 
 /** Package/build/version facts for the Updates / Version area (D-073). `version` is null in a dev build. */
@@ -266,6 +279,80 @@ function updatesArea(input: DoctorProbeInput): DoctorArea {
   return area("updates", "Updates / Version", version.message, [version, check], facts);
 }
 
+/** The docs-cache finding: ok when fresh, warn when stale (with a refresh action), else not_checked. */
+function docsFinding(docs: DoctorWebDocs["docs"]): DoctorFinding {
+  if (!docs.present) {
+    return {
+      id: "web.docs",
+      status: "not_checked",
+      title: "Docs cache",
+      message: "No docs cache is present.",
+    };
+  }
+  if (docs.stale) {
+    return {
+      id: "web.docs",
+      status: "warn",
+      title: "Docs cache",
+      message: "The docs cache is stale.",
+      nextAction: { label: "Refresh the docs cache" },
+    };
+  }
+  return {
+    id: "web.docs",
+    status: "ok",
+    title: "Docs cache",
+    message: "The docs cache is present and fresh.",
+  };
+}
+
+/**
+ * Builds the Web / Docs area (D-073) from {@link DoctorWebDocs} config facts: web-search key presence,
+ * the fetch/rendering provider, and docs-cache staleness. Redaction-safe by construction - it reads
+ * only booleans + a provider name, never a key value. An unconfigured dependency is `not_checked`
+ * (not an error); a stale docs cache warns; any configured dependency lifts the area to ok.
+ */
+function webDocsArea(input: DoctorProbeInput): DoctorArea {
+  const w = input.web;
+  const findings: DoctorFinding[] = [
+    w.searchConfigured
+      ? {
+          id: "web.search",
+          status: "ok",
+          title: "Web search",
+          message: "A web-search provider key is configured.",
+        }
+      : {
+          id: "web.search",
+          status: "not_checked",
+          title: "Web search",
+          message: "No web-search provider key is configured.",
+          nextAction: { label: "Set BRAVE_API_KEY or SERPER_API_KEY to enable web_search" },
+        },
+    w.fetchProvider
+      ? {
+          id: "web.fetch",
+          status: "ok",
+          title: "Web fetch / rendering",
+          message: `${w.fetchProvider} is configured for page fetch/rendering.`,
+        }
+      : {
+          id: "web.fetch",
+          status: "not_checked",
+          title: "Web fetch / rendering",
+          message: "No web fetch/rendering provider (Jina/Firecrawl) is configured.",
+        },
+    docsFinding(w.docs),
+  ];
+  const statuses = findings.map((f) => f.status);
+  const verdict = statuses.every((s) => s === "not_checked")
+    ? "Web/docs tools are not configured."
+    : statuses.includes("warn")
+      ? "Some web/docs state needs attention."
+      : "Web/docs tools are configured.";
+  return area("web", "Web / Docs", verdict, findings);
+}
+
 /**
  * Builds a peripheral-subsystem area (MCP / LSP / Hooks, D-073) from its {@link PeripheralState}.
  * Maps each state to a status + verdict + next action: `unconfigured`/`timeout` stay `not_checked`
@@ -317,17 +404,6 @@ function peripheralArea(id: DoctorAreaId, label: string, state: PeripheralState)
   return area(id, label, message, [finding]);
 }
 
-/** A `not_checked` placeholder area for a surface this first cut does not probe. */
-function notChecked(id: DoctorAreaId, label: string, verdict: string): DoctorArea {
-  return {
-    id,
-    label,
-    status: "not_checked",
-    verdict,
-    findings: [{ id: `${id}.unchecked`, status: "not_checked", title: label, message: verdict }],
-  };
-}
-
 export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
   return {
     state: "ready",
@@ -343,7 +419,7 @@ export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
       providersArea(input),
       internetArea(input),
       toolsArea(input),
-      notChecked("web", "Web / Docs", "not probed in this build"),
+      webDocsArea(input),
       peripheralArea("mcp", "MCP", input.peripherals.mcp),
       peripheralArea("lsp", "LSP", input.peripherals.lsp),
       peripheralArea("hooks", "Hooks", input.peripherals.hooks),

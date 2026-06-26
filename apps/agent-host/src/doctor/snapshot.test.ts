@@ -37,6 +37,7 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
       lsp: { kind: "unconfigured" },
       hooks: { kind: "unconfigured" },
     },
+    web: { searchConfigured: false, fetchProvider: null, docs: { present: false, stale: false } },
     checkedAt: "2026-06-26T12:00:00.000Z",
     ...over,
   };
@@ -92,6 +93,36 @@ test("a dev build with no embedded version reports the Updates area as not_check
     "no version + no update check -> not_checked, never ok",
   );
   assert.match(updates?.verdict ?? "", /dev build/i);
+});
+
+test("the Web / Docs area reports config presence (names/booleans only, never key values)", () => {
+  // Unconfigured: every dependency is not_checked, so the whole area is not_checked (not an error).
+  const none = buildDoctorSnapshot(input()).areas.find((a) => a.id === "web");
+  assert.equal(none?.status, "not_checked");
+  assert.ok(
+    none?.findings?.some((f) => f.id === "web.search" && f.nextAction),
+    "an unconfigured web-search offers a configure action",
+  );
+
+  // A configured search key lifts the area to ok; the finding carries no key value.
+  const configured = buildDoctorSnapshot(
+    input({
+      web: { searchConfigured: true, fetchProvider: "Jina", docs: { present: true, stale: false } },
+    }),
+  ).areas.find((a) => a.id === "web");
+  assert.equal(configured?.status, "ok");
+  const text = JSON.stringify(configured);
+  assert.ok(text.includes("Jina"), "the provider name renders");
+  assert.ok(!/API_KEY|sk-|brave_/i.test(text), "no key value or env-var name leaks into the area");
+
+  // A stale docs cache warns with a refresh action.
+  const stale = buildDoctorSnapshot(
+    input({
+      web: { searchConfigured: true, fetchProvider: null, docs: { present: true, stale: true } },
+    }),
+  ).areas.find((a) => a.id === "web");
+  assert.equal(stale?.status, "warn");
+  assert.ok(stale?.findings?.some((f) => f.id === "web.docs" && f.nextAction));
 });
 
 test("MCP/LSP/Hooks areas map each peripheral state to the right status + next action", () => {
