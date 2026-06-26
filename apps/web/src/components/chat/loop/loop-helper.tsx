@@ -1,4 +1,8 @@
-import type { CommandFamilyDescriptor, CommandParseResult } from "@/commands/command-family";
+import {
+  type CommandFamilyDescriptor,
+  type CommandParseResult,
+  commandPresentation,
+} from "@/commands/command-family";
 import { cn } from "@/lib/utils";
 import { LoopBuilder } from "./loop-builder";
 import { LoopKeywords } from "./loop-keywords";
@@ -16,6 +20,8 @@ export function LoopHelper(props: {
   className?: string;
 }) {
   const { descriptor, parse, className } = props;
+  // The single presentation view-model both panels render from (chips + rows + errors + ready).
+  const view = commandPresentation(parse, descriptor);
 
   return (
     <div
@@ -25,10 +31,10 @@ export function LoopHelper(props: {
       )}
     >
       <div className="px-3 py-2.5">
-        <LoopBuilder parse={parse} />
+        <LoopBuilder view={view} />
       </div>
       <div className="border-t border-border bg-secondary/30 px-3 py-2">
-        <LoopKeywords descriptor={descriptor} usedKeywords={parse.usedKeywords} />
+        <LoopKeywords chips={view.chips} />
       </div>
     </div>
   );

@@ -112,3 +112,44 @@ export interface CommandParseResult {
   /** True only when the input is a complete, valid, activatable command. */
   readonly ready: boolean;
 }
+
+/** A keyword chip ready to render: the keyword, its value form, and whether it is already used. */
+export interface CommandKeywordChip {
+  readonly keyword: string;
+  readonly arg: string | null;
+  readonly used: boolean;
+}
+
+/**
+ * The PRESENTATION view-model for a parsed command (D-017): everything the builder + keyword strip
+ * render, precomputed from the parse result and the family descriptor. The components consume this
+ * instead of each re-deriving the used-set, filtering diagnostics by severity, and reaching past the
+ * raw `CommandParseResult`/`CommandFamilyDescriptor` fields on every render.
+ */
+export interface CommandPresentation {
+  /** Keyword chips in guide order, each flagged used/unused. */
+  readonly chips: readonly CommandKeywordChip[];
+  /** Builder field rows (label / value / missing / hint), as parsed. */
+  readonly rows: readonly CommandFieldRow[];
+  /** Just the error-severity diagnostics the builder lists. */
+  readonly errors: readonly CommandDiagnostic[];
+  readonly ready: boolean;
+}
+
+/** Builds the presentation view-model from a parse result + its family descriptor. */
+export function commandPresentation(
+  parse: CommandParseResult,
+  descriptor: CommandFamilyDescriptor,
+): CommandPresentation {
+  const used = new Set(parse.usedKeywords);
+  return {
+    chips: descriptor.keywords.map((keyword) => ({
+      keyword: keyword.keyword,
+      arg: keyword.arg,
+      used: used.has(keyword.keyword),
+    })),
+    rows: parse.fields,
+    errors: parse.diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
+    ready: parse.ready,
+  };
+}

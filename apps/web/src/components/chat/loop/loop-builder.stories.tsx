@@ -1,6 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { commandPresentation } from "@/commands/command-family";
+import { LOOP_FAMILY } from "@/commands/loop";
 import { parseLoopCommand } from "@/commands/loop-parser";
 import { LoopBuilder } from "./loop-builder";
+
+/** The builder renders the presentation view-model; build it from a typed line. */
+const view = (input: string) => commandPresentation(parseLoopCommand(input), LOOP_FAMILY);
 
 const meta = {
   title: "Chat/Loop/Builder",
@@ -21,25 +26,25 @@ type Story = StoryObj<typeof meta>;
 
 /** A complete, valid loop: every field set, ready, Confirm enabled. */
 export const Ready: Story = {
-  args: { parse: parseLoopCommand('/loop every 5m until "tests pass" do "run the suite"') },
+  args: { view: view('/loop every 5m until "tests pass" do "run the suite"') },
 };
 
 /** Just `/loop` - both required parts (action and a bound) flagged as gaps. */
 export const Incomplete: Story = {
-  args: { parse: parseLoopCommand("/loop") },
+  args: { view: view("/loop") },
 };
 
 /** Has an action but no bound yet - one gap remaining. */
 export const MissingBound: Story = {
-  args: { parse: parseLoopCommand('/loop do "watch the build"') },
+  args: { view: view('/loop do "watch the build"') },
 };
 
 /** Value errors: a bad duration and a non-positive max both block readiness. */
 export const WithErrors: Story = {
-  args: { parse: parseLoopCommand('/loop every 5flarn max 0 do "x"') },
+  args: { view: view('/loop every 5flarn max 0 do "x"') },
 };
 
 /** A shell-command loop on a cadence (process runner). */
 export const ProcessLoop: Story = {
-  args: { parse: parseLoopCommand('/loop process durable every 30s do "curl -sf localhost:8080"') },
+  args: { view: view('/loop process durable every 30s do "curl -sf localhost:8080"') },
 };
