@@ -4,6 +4,10 @@ import type { ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/markdown";
+import { ToolSection } from "./tool-section";
+import { type ToolStatus, toolStatusColor } from "./tool-status";
+
+export type { ToolStatus } from "./tool-status";
 
 /** The uppercase transcript heading above each message (you / assistant / …). */
 export function MessageHeading({
@@ -42,17 +46,6 @@ export function WorkingIndicator({ label = "working" }: { label?: string }) {
     </span>
   );
 }
-
-/** The lifecycle of a tool call as the chat renders it: the single union every tool
- *  renderer (diff, output, web-search, multi-edit) shares, rather than re-declaring. */
-export type ToolStatus = "running" | "done" | "error";
-
-// Status shows in the wrench icon color (no separate dot).
-const TOOL_STATUS_ICON: Record<ToolStatus, string> = {
-  running: "text-smui-yellow animate-pulse",
-  done: "text-smui-frost-3",
-  error: "text-smui-red",
-};
 
 /**
  * Generic tool-call row: icon, name(args), with an optional output body. The
@@ -105,6 +98,9 @@ export function ToolCall({
   defaultOpen = true,
   className,
   onOpenPath,
+  border = false,
+  sectionTitle,
+  sectionMeta,
 }: {
   name: string;
   args?: ReactNode;
@@ -114,6 +110,17 @@ export function ToolCall({
   className?: string;
   /** When set, the args text becomes a click target that opens the file in the editor. */
   onOpenPath?: () => void;
+  /**
+   * Wrap the body in a bordered ToolSection box (header + border) instead of letting it sit flat
+   * under the row. Off by default: a single body sits flat under the already-collapsible row, so the
+   * box (and its second chevron) would be redundant. The seam every result-bearing renderer (diff,
+   * output, web-search) shares to box its body when it wants to - the boxing assembly lives here, not
+   * in a separate ToolShell wrapper.
+   */
+  border?: boolean;
+  /** Header left/right of the ToolSection box (a file path, a +/- stat); shown only when `border`. */
+  sectionTitle?: ReactNode;
+  sectionMeta?: ReactNode;
 }) {
   const argsNode = onOpenPath ? (
     <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
@@ -122,7 +129,7 @@ export function ToolCall({
   );
   const header = (
     <>
-      <Wrench className={cn("size-3.5 shrink-0", TOOL_STATUS_ICON[status])} />
+      <Wrench className={cn("size-3.5 shrink-0", toolStatusColor(status, true))} />
       <code className="text-ui text-foreground">
         {name}
         <span className="text-muted-foreground">({argsNode})</span>
@@ -148,7 +155,15 @@ export function ToolCall({
         {header}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="border-l border-border pl-3 text-sm text-muted-foreground">{children}</div>
+        <div className="border-l border-border pl-3 text-sm text-muted-foreground">
+          {border ? (
+            <ToolSection title={sectionTitle} meta={sectionMeta}>
+              {children}
+            </ToolSection>
+          ) : (
+            children
+          )}
+        </div>
       </CollapsibleContent>
     </Collapsible>
   );

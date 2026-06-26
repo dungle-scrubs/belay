@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
-import { ToolCall, type ToolStatus, WorkingIndicator } from "./message";
-import { ToolShell } from "./tool-shell";
+import { ToolCall, WorkingIndicator } from "./message";
+import type { ToolStatus } from "./tool-status";
 
 /** One normalized search result, mirroring the web-search library's `Source`. */
 export interface WebSearchResultItem {
@@ -25,7 +25,7 @@ interface WebSearchResultsProps {
   /** Whether the results body starts expanded; the global compact setting drives this. */
   defaultOpen?: boolean;
   /**
-   * Draw the results inside a bordered ToolSection box (see ToolShell's `border`). Off by
+   * Draw the results inside a bordered ToolSection box (see ToolCall's `border`). Off by
    * default: the single result list sits flat under the row, so the box would be redundant.
    */
   border?: boolean;
@@ -129,7 +129,7 @@ export function WebSearchResults({
     );
 
   return (
-    <ToolShell
+    <ToolCall
       name="web_search"
       args={query}
       status={status}
@@ -137,13 +137,16 @@ export function WebSearchResults({
       className={className}
       border={border}
       sectionTitle={<span className="text-muted-foreground">{meta}</span>}
-      bordered={<div className="p-2.5">{list}</div>}
-      flat={
+    >
+      {/* Boxed, the meta rides the section header (sectionTitle); flat, it sits inline above the list. */}
+      {border ? (
+        <div className="p-2.5">{list}</div>
+      ) : (
         <div className="flex flex-col gap-2.5">
           <span className="text-label tracking-wider text-muted-foreground/70">{meta}</span>
           {list}
         </div>
-      }
-    />
+      )}
+    </ToolCall>
   );
 }

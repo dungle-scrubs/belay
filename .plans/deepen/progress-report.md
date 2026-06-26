@@ -35,7 +35,7 @@ Implementation resume state. Normalized accounting (not raw checkbox counts).
 ## Phase 2 — the web frontend (near-term follow-up)
 
 - [x] **M9** centralized the display rollup + semantic colors in `@trevor/session` (`BREAKDOWN_GROUPS` + `rollupBreakdown`); web `panel/breakdown.ts` collapsed to a thin adapter (only resolves the color token → `hsl(var(--…))`); host already consumes the shared schema via M6 `poolTotal`. 5 parity tests — `packages/session/src/breakdown.ts`, `apps/web/.../panel/breakdown.ts`
-- [ ] **M10** one tool-row rendering primitive + shared status config; collapse `ToolShell`/flat-bordered; reuse in `ConcurrentToolRow` — `components/chat/tool-*.tsx`, `concurrent-tools.tsx`, `message.tsx`
+- [x] **M10** folded `ToolShell`'s border/ToolSection assembly into `ToolCall` (the single tool-row primitive: header + status + collapse + border) and deleted `tool-shell.tsx`; the four renderers now pass one `children` body to `ToolCall` (each owns its own flat-vs-bordered branch where it genuinely differs); one shared `tool-status.ts` (`toolStatusColor(status, pulse)`) replaces the duplicate color maps in `message.tsx` + `concurrent-tools.tsx`. Behavior/stories preserved (faithful body reproduction). 3 status tests + existing tool-output test green
 - [ ] **M11** `generateToolDiff` view-model; `DiffViewer` display-only — `components/chat/{tool-diff,multi-edit-diff,diff-utils}.tsx`, `assistant-ui/diff-viewer.tsx` (dep: M10)
 - [ ] **M12** single-source loop grammar; drop `legendKeywords`; remove unused `registry.ts` — `commands/{loop,loop-parser,registry}.ts`
 - [ ] **M13** command parse → presentation view-model; loop/doctor UI stop reaching past parse fields — `commands/*`, `components/chat/loop/*`, `components/chat/doctor/*` (dep: M12)

@@ -1,7 +1,8 @@
 import { LoaderIcon, Split, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { OpenPathLink, type ToolStatus } from "./message";
+import { OpenPathLink } from "./message";
+import { type ToolStatus, toolStatusColor } from "./tool-status";
 
 /**
  * A burst of read-only tools the host runs concurrently (read/glob/grep/web_search).
@@ -27,14 +28,6 @@ export interface ConcurrentTool {
   onOpenPath?: () => void;
 }
 
-// Status tints the wrench. Deliberately unlike message.tsx's map: `running` doesn't
-// pulse, because in a batch the leading spinner already animates the active rows.
-const STATUS_TINT: Record<ToolStatus, string> = {
-  running: "text-smui-yellow",
-  done: "text-smui-frost-3",
-  error: "text-smui-red",
-};
-
 function ConcurrentToolRow({ name, args, status, onOpenPath }: Omit<ConcurrentTool, "id">) {
   const argsNode = onOpenPath ? (
     <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
@@ -50,7 +43,8 @@ function ConcurrentToolRow({ name, args, status, onOpenPath }: Omit<ConcurrentTo
       ) : (
         <span className="size-3 shrink-0" aria-hidden />
       )}
-      <Wrench className={cn("size-3.5 shrink-0", STATUS_TINT[status])} />
+      {/* No pulse here: the leading spinner already animates the active rows. */}
+      <Wrench className={cn("size-3.5 shrink-0", toolStatusColor(status))} />
       {/* Settled rows dim to muted so the eye tracks what's still in flight. */}
       <code
         className={cn("text-ui", status === "done" ? "text-muted-foreground" : "text-foreground")}

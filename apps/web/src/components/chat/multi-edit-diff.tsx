@@ -2,9 +2,9 @@ import { createTwoFilesPatch } from "diff";
 import type { ReactNode } from "react";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
 import { countChanges, DiffStat, withNewline } from "./diff-utils";
-import { OpenPathLink, type ToolStatus } from "./message";
+import { OpenPathLink, ToolCall } from "./message";
 import { ToolSection } from "./tool-section";
-import { ToolShell } from "./tool-shell";
+import type { ToolStatus } from "./tool-status";
 
 export interface MultiEdit {
   path: string;
@@ -67,8 +67,8 @@ export function MultiEditDiff({
     groups.length === 1 ? "" : "s"
   } · +${totalAdded} -${totalRemoved}`;
 
-  // multi_edit boxes per file internally (`border` drives each group), so the outer shell
-  // never wraps the body in its own ToolSection - the body is the same flat children.
+  // multi_edit boxes per file internally (`border` drives each group), so the outer row never wraps
+  // the body in its own ToolSection (border stays false) - the body is the same flat children.
   const body = (
     <div className="flex flex-col gap-2">
       {groups.map((group) => {
@@ -126,15 +126,14 @@ export function MultiEditDiff({
   );
 
   return (
-    <ToolShell
+    <ToolCall
       name="multi_edit"
       args={summary}
       status={status}
       defaultOpen={defaultOpen}
       className={className}
-      border={false}
-      flat={body}
-      bordered={body}
-    />
+    >
+      {body}
+    </ToolCall>
   );
 }
