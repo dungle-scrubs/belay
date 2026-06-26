@@ -307,3 +307,31 @@ export function parseCommand(
 
   return { command, args: space === -1 ? "" : text.slice(space + 1).trim() };
 }
+
+/**
+ * The start time (ms epoch) of the turn currently in flight, for the live "Working (elapsed)"
+ * indicator: the active run's `assistant.started`, or - before the run starts - the trailing
+ * `user.message` that kicked off the turn. Null when neither is found. The caller renders the
+ * indicator only while busy, so a stale trailing user.message from an idle conversation is unused.
+ */
+export function activeTurnStartedAt(events: readonly SessionEvent[]): number | null {
+  const runId = activeRunId(events);
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (!event) {
+      continue;
+    }
+    const decoded = decodeTrevorEvent(event);
+    if (!decoded) {
+      continue;
+    }
+    if (
+      (runId && decoded.type === "assistant.started" && decoded.runId === runId) ||
+      (!runId && decoded.type === "user.message")
+    ) {
+      const ms = Date.parse(event.createdAt);
+      return Number.isNaN(ms) ? null : ms;
+    }
+  }
+  return null;
+}

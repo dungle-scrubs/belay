@@ -34,6 +34,7 @@ import { ArtifactThumb } from "./ArtifactThumb";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeRunId,
+  activeTurnStartedAt,
   commandsFrom,
   defaultProviderFrom,
   fmtCtx,
@@ -200,11 +201,23 @@ export function App() {
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
   const host = useMemo(() => hostStatus(events, presence, now), [events, presence, now]);
+  // Reflect WHERE we are in the tab/window title (not a bare "Trevor"): the project name - the
+  // host-announced workspace basename when known, else the session-id slug (the `<name>-<hash>` the
+  // launcher mints, hash stripped). The default shared session stays plain "Trevor".
+  useEffect(() => {
+    const fromWorkspace = host.workspace?.split("/").filter(Boolean).pop();
+    const fromSession =
+      target === DEFAULT_SESSION ? null : target.replace(/-[0-9a-f]{8}$/, "") || target;
+    const label = (fromWorkspace && fromWorkspace !== "~" ? fromWorkspace : null) ?? fromSession;
+    document.title = label ? `${label} · Trevor` : "Trevor";
+  }, [host.workspace, target]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
   const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
   const active = useMemo(() => activeRunId(events), [events]);
+  // The in-flight turn's start time (ms epoch), driving the live "Working (elapsed)" timer.
+  const turnStartedAt = useMemo(() => activeTurnStartedAt(events), [events]);
   // True while a manual /compact fold is streaming (a transient bar in the transcript). ESC cancels
   // it (manual folds are interruptible; automatic ones run to completion).
   const compacting = useMemo(() => transcript.some((m) => m.kind === "compacting"), [transcript]);
@@ -265,6 +278,29 @@ export function App() {
     window.addEventListener("focus", focusInput);
     return () => window.removeEventListener("focus", focusInput);
   }, []);
+  // Vim-style "insert mode": pressing `i` while not already typing in a field focuses the composer,
+  // so after clicking around the page you can jump straight back to the input. Ignored when a field
+  // already has focus (so you can type the letter i) or with a modifier (so app/browser chords pass).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "i" || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      event.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Local send queue: a prompt submitted while a turn is in flight waits here and is
   // published only once the session is idle, so the host never receives two prompts
@@ -273,7 +309,7 @@ export function App() {
   // The reducer wiring + the in-flight/echo latch + the release/drain effects live in
   // useSendQueue; App.tsx calls submit/steer and renders the queue.
   const busy = active !== null || awaitingResponse;
-  const { queue, submit, steer } = useSendQueue({ busy, publish });
+  const { queue, submit, steer } = useSendQueue({ busy, publish, resetKey: sessionId });
 
   const activeProvider = provider ?? hostDefault ?? "qwen";
   // Before any host has announced (empty hostModels), there's no roster to show: fall back
@@ -506,7 +542,12 @@ export function App() {
   // streaming output never yanks the viewport when the user has scrolled up; a jump-to-bottom chevron
   // shows when away from the edge and scrolls back down.
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
+  // Mirror atBottom into a ref so the ResizeObserver callback below reads the latest value without
+  // re-subscribing on every change.
+  const atBottomRef = useRef(atBottom);
+  atBottomRef.current = atBottom;
   const onTranscriptScroll = () => {
     const el = transcriptRef.current;
     if (el) {
@@ -535,6 +576,26 @@ export function App() {
       el.scrollTo({ top: el.scrollHeight });
     }
   }, [transcript, atBottom]);
+  // Re-pin to the bottom as content SETTLES after a reload (or a fast stream): markdown, images, and
+  // collapsible thinking sections grow the scroll height AFTER the initial layout, which would
+  // otherwise leave a reload stranded mid-way (the one scroll-to-bottom fired before the content
+  // reached its final height). A ResizeObserver on the content re-scrolls to the bottom whenever it
+  // grows while we're meant to be pinned; scrolling up flips atBottom off and stops the re-pin.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach when the transcript content mounts (replayed/host gate); atBottom is read via the ref.
+  useEffect(() => {
+    const content = contentRef.current;
+    const container = transcriptRef.current;
+    if (!content || !container) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (atBottomRef.current) {
+        container.scrollTo({ top: container.scrollHeight });
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [replayed, host.leaderId, transcript.length === 0]);
 
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
@@ -609,7 +670,7 @@ export function App() {
                 </span>
               </div>
             ) : (
-              <div className="flex flex-col gap-8 fade-in animate-in duration-150">
+              <div ref={contentRef} className="flex flex-col gap-8 fade-in animate-in duration-150">
                 {transcript.map((message, index) => {
                   // Consecutive tool calls read as one block: collapse the gap-8 between
                   // a tool row and the tool row directly above it.
@@ -884,7 +945,11 @@ export function App() {
                     turn never looks stalled. `active` is the running run id (null once it ends). */}
                 {active !== null || awaitingResponse ? (
                   <div className="pl-3.5">
-                    <WorkingIndicator label="working" />
+                    <WorkingIndicator
+                      label="Working"
+                      startedAt={turnStartedAt ?? undefined}
+                      interruptible
+                    />
                   </div>
                 ) : null}
 

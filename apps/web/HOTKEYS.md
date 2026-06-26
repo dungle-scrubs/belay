@@ -38,6 +38,7 @@ focused region. Avoid re-binding these globally.
 | Keys | Scope | Action | Source |
 | --- | --- | --- | --- |
 | `Esc` | **Global** (`window`) | Cancel the active/pending run; if none, clear the composer draft. | `src/App.tsx` (window `keydown`) |
+| `i` | **Global** (`window`), **only when no input/textarea/contenteditable is focused** | Focus the composer (Vim-style insert mode). | `src/App.tsx` (window `keydown`) |
 | `Enter` | Composer `<input>` | Submit the message (form submit). | `src/App.tsx` (`<form onSubmit>`) |
 | `ArrowUp` / `ArrowDown` | Composer, **only while slash-menu open** | Move the menu highlight. | `src/App.tsx` `onInputKeyDown` |
 | `ArrowUp` | Composer, **menu closed, caret on the first line** (or empty composer) | Recall the previous prompt from history (D-084). Off the first line it moves the caret normally. | `src/App.tsx` `onInputKeyDown` |
