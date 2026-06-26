@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { expandSkill, skillRegistry } from "../skills";
+import { expandSkill, type SkillEntry, skillRegistry } from "../skills";
 import { defineTool } from "./shared";
 
 /**
@@ -15,6 +15,56 @@ const Params = Schema.Struct({
   skill_id: Schema.String.annotations({ description: "The id of the single skill to load." }),
 });
 
+/**
+ * The resolved outcome of a `skill_view` lookup. The body case carries the single chosen entry +
+ * its provenance header; the rest are terminal messages. Pure so the selection rules (one-body
+ * loading, unknown / disabled / malformed handling, available-over-shadowed precedence) are unit-
+ * tested over a registry without touching the global memo or the filesystem.
+ */
+export type SkillViewResolution =
+  | { readonly kind: "not-found"; readonly message: string }
+  | { readonly kind: "disabled"; readonly message: string }
+  | { readonly kind: "malformed"; readonly message: string }
+  | { readonly kind: "body"; readonly header: string; readonly entry: SkillEntry };
+
+/** Resolves a `skill_view` request against a registry: which single skill (if any) to load, or why not. */
+export function resolveSkillView(
+  registry: readonly SkillEntry[],
+  rawId: string,
+): SkillViewResolution {
+  const id = rawId.trim();
+  // Prefer the SELECTED (available) entry for the id, so a shadowing project skill wins over the
+  // shadowed global one; fall back to any same-id entry only to explain a disabled/malformed result.
+  const entry =
+    registry.find((e) => e.id === id && e.status === "available") ??
+    registry.find((e) => e.id === id);
+
+  if (!entry) {
+    const available = registry.filter((e) => e.status === "available").map((e) => e.id);
+    return {
+      kind: "not-found",
+      message: `unknown skill "${id}". Available: ${available.join(", ") || "(none)"}`,
+    };
+  }
+  if (entry.status === "disabled") {
+    return {
+      kind: "disabled",
+      message: `skill "${id}" is disabled (frontmatter disabled: true), so it cannot be loaded.`,
+    };
+  }
+  if (entry.status === "malformed") {
+    return {
+      kind: "malformed",
+      message: `skill "${id}" has no readable SKILL.md at ${entry.path}.`,
+    };
+  }
+  return {
+    kind: "body",
+    header: `# ${entry.name} (${entry.id}) [${entry.rootKind}]\n\n`,
+    entry,
+  };
+}
+
 export const skillViewTool = defineTool({
   name: "skill_view",
   description:
@@ -24,36 +74,16 @@ export const skillViewTool = defineTool({
   readOnly: true,
   capped: true,
   execute: (args, ops) => {
-    const id = args.skill_id.trim();
-    const registry = skillRegistry();
-    const entry =
-      registry.find((e) => e.id === id && e.status === "available") ??
-      registry.find((e) => e.id === id);
-
-    if (!entry) {
-      const available = registry.filter((e) => e.status === "available").map((e) => e.id);
-      return ops.reject(`unknown skill "${id}". Available: ${available.join(", ") || "(none)"}`);
+    const res = resolveSkillView(skillRegistry(), args.skill_id);
+    if (res.kind === "not-found") {
+      return ops.reject(res.message);
     }
-    if (entry.status === "disabled") {
-      return Effect.succeed(
-        `skill "${id}" is disabled (frontmatter disabled: true), so it cannot be loaded.`,
-      );
+    if (res.kind === "disabled" || res.kind === "malformed") {
+      return Effect.succeed(res.message);
     }
-    if (entry.status === "malformed") {
-      return Effect.succeed(`skill "${id}" has no readable SKILL.md at ${entry.path}.`);
-    }
-
-    const header = `# ${entry.name} (${entry.id}) [${entry.rootKind}${entry.status === "shadowed" ? ", shadowed" : ""}]\n\n`;
-    // expandSkill catches its own read errors (never rejects), so Effect.promise is safe.
-    return Effect.promise(() =>
-      expandSkill({
-        id: entry.id,
-        name: entry.name,
-        description: entry.description,
-        icon: entry.icon,
-        path: entry.path,
-        rootKind: entry.rootKind,
-      }),
-    ).pipe(Effect.map((body) => header + body));
+    // A SkillEntry is a superset of Skill; expandSkill catches its own read errors (never rejects).
+    return Effect.promise(() => expandSkill(res.entry)).pipe(
+      Effect.map((body) => res.header + body),
+    );
   },
 });
