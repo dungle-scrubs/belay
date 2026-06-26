@@ -607,11 +607,11 @@ registry-derived capability manifest D-074.
 - [x] Build a compact `Available skills` roster from the registry for tool-enabled turns
 - [x] Include skill id, short description, and optional trigger summary in the ambient roster
 - [x] Keep the ambient roster capped and budgeted
-- [ ] Mark roster truncation explicitly with counts or continuation metadata
+- [x] Mark roster truncation explicitly with counts or continuation metadata
 - [x] Ensure the model can know relevant skills exist without loading full skill bodies
 - [x] Do not put full skill bodies or huge dynamic inventories into normal prompts
-- [ ] Prompt tests cover relevant-skill awareness from the compact roster
-- [ ] Prompt tests cover truncated roster behavior without speculative all-skill loading
+- [x] Prompt tests cover relevant-skill awareness from the compact roster
+- [x] Prompt tests cover truncated roster behavior without speculative all-skill loading
 
 ### M3: `skills_list` searchable metadata tool
 
@@ -673,6 +673,6 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
-- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 35 completed, 16 remaining
+- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 38 completed, 13 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 205 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 202 unchecked items plus 5 partial/gated carry-forward items
