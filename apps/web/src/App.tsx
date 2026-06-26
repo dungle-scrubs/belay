@@ -1,11 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { type ArtifactRef, DEFAULT_SESSION_ID } from "@trevor/session";
+import { DEFAULT_SESSION_ID } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { ChevronDown, CircleX, PanelRight, Plus, RotateCw, TriangleAlert, X } from "lucide-react";
 import {
-  type ChangeEvent,
-  type ClipboardEvent as ReactClipboardEvent,
-  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
   useEffect,
@@ -13,8 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { ModelSelector } from "@/components/assistant-ui/model-selector";
-import { buildQuotedComposerText } from "@/components/assistant-ui/quote";
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { CommandMenu } from "@/components/chat/command-menu";
 import { CompactingBar } from "@/components/chat/compacting-bar";
@@ -27,15 +22,12 @@ import {
   WorkingIndicator,
 } from "@/components/chat/message";
 import { parseToolArgs, ToolMessage } from "@/components/chat/tool-message";
+import { PanelControls } from "@/components/panel/panel-controls";
 import { SidePanel } from "@/components/panel/SidePanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { ArtifactThumb } from "./ArtifactThumb";
-import { uploadArtifact } from "./blob";
 import {
   activeRunId,
   commandsFrom,
@@ -49,6 +41,7 @@ import {
   tasksFrom,
   toolSummary,
 } from "./derive";
+import { useComposer } from "./hooks/use-composer";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { Markdown } from "./markdown";
 import { ensureSession, useSession, useSessionActions } from "./session/use-session";
@@ -104,13 +97,24 @@ export function App() {
   const [showThinking, setShowThinking] = useLocalStorageState<boolean>(SHOW_THINKING_KEY, {
     defaultValue: true,
   });
-  const [draft, setDraft] = useState("");
-  // Pending attachments: ArtifactRefs already uploaded to the blob store, waiting to ride
-  // the next prompt. `uploading` counts in-flight uploads so the composer can show progress.
-  const [attachments, setAttachments] = useState<readonly ArtifactRef[]>([]);
-  const [uploading, setUploading] = useState(0);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // The composer's local state as one boundary: draft, pending attachments + upload state, refs, and
+  // the file-intake handlers. App keeps the submit/steer/slash-menu wiring (send queue + commands).
+  const {
+    draft,
+    setDraft,
+    attachments,
+    setAttachments,
+    uploading,
+    uploadError,
+    setUploadError,
+    inputRef,
+    fileInputRef,
+    onPickFiles,
+    onPaste,
+    onDrop,
+    removeAttachment,
+    quoteSelection,
+  } = useComposer();
 
   const { events, status, replayed, presence } = useSession(sessionId);
   const { publish, cancel, command, openInEditor } = useSessionActions(sessionId);
@@ -172,8 +176,8 @@ export function App() {
   const commands = useMemo(() => commandsFrom(events), [events]);
   const commandNames = useMemo(() => new Set(commands.map((c) => c.name)), [commands]);
   // Slash menu: open while the draft is a bare "/token" (no space yet) with matches,
-  // unless Esc dismissed it for exactly this text. menuIndex is the highlighted row.
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // unless Esc dismissed it for exactly this text. menuIndex is the highlighted row. (inputRef is
+  // the composer textarea ref, owned by useComposer.)
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissedFor, setMenuDismissedFor] = useState<string | null>(null);
   const slashQuery = draft.startsWith("/") && !draft.includes(" ") ? draft : null;
@@ -190,12 +194,14 @@ export function App() {
     inputRef.current?.focus();
   };
   // Focus the composer on load, once the session resolves and the input is enabled.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
     if (sessionId) {
       inputRef.current?.focus();
     }
   }, [sessionId]);
   // Refocus the composer whenever the tab/window regains focus.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
     const focusInput = () => inputRef.current?.focus();
     window.addEventListener("focus", focusInput);
@@ -416,114 +422,18 @@ export function App() {
     el.style.height = `${el.scrollHeight}px`;
   }, [draft]);
 
-  // Quote a highlighted message into the composer: append it as a markdown blockquote
-  // below the current draft, then focus the input and park the cursor on the fresh line
-  // beneath it (GitHub-style). Driven by QuoteSelectionToolbar's selection detection.
-  const quoteSelection = (selected: string) => {
-    const { value, cursor } = buildQuotedComposerText(draft, selected);
-    setDraft(value);
-    requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (input) {
-        input.focus();
-        input.setSelectionRange(cursor, cursor);
-      }
-    });
-  };
-
-  // Attachments: upload each picked/pasted/dropped file to the blob store and hold its
-  // ArtifactRef until the next prompt carries it. Uploads run in parallel; a failed one
-  // simply doesn't attach. `uploading` brackets each so the composer can show progress.
-  const addFiles = (files: Iterable<File>) => {
-    setUploadError(null);
-    for (const file of files) {
-      setUploading((n) => n + 1);
-      uploadArtifact(file)
-        .then((ref) => setAttachments((a) => [...a, ref]))
-        .catch((cause: unknown) => {
-          const detail = cause instanceof Error ? cause.message : String(cause);
-          setUploadError(`couldn't attach ${file.name || "file"}: ${detail}`);
-        })
-        .finally(() => setUploading((n) => n - 1));
-    }
-  };
-  const onPickFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      addFiles(event.target.files);
-    }
-    event.target.value = ""; // let the same file be re-picked
-  };
-  const onPaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-    const files = [...event.clipboardData.files];
-    if (files.length) {
-      event.preventDefault();
-      addFiles(files);
-    }
-  };
-  const onDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    if (event.dataTransfer.files.length) {
-      addFiles(event.dataTransfer.files);
-    }
-  };
-  const removeAttachment = (hash: string) =>
-    setAttachments((a) => a.filter((ref) => ref.hash !== hash));
-
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
-    <>
-      <ModelSelector.Root models={modelOptions} value={activeProvider} onValueChange={setProvider}>
-        <ModelSelector.Trigger className="w-full justify-between text-label" />
-        <ModelSelector.Content>
-          <ModelSelector.Search />
-          <ModelSelector.List />
-        </ModelSelector.Content>
-      </ModelSelector.Root>
-
-      {modelMeta.reasoningLevels.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <span className="text-label tracking-wider uppercase text-muted-foreground">
-            reasoning
-          </span>
-          <ToggleGroup
-            type="single"
-            value={reasoning}
-            onValueChange={(next) => {
-              if (next) {
-                setReasoning(next);
-              }
-            }}
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-          >
-            {modelMeta.reasoningLevels.map((level) => (
-              <ToggleGroupItem
-                key={level}
-                value={level}
-                className="h-6 px-2 text-label lowercase data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-              >
-                {level}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
-      ) : null}
-
-      <div className="flex items-center gap-1.5">
-        <Checkbox
-          id="show-thinking"
-          checked={showThinkingOn}
-          onCheckedChange={(checked) => setShowThinking(checked === true)}
-        />
-        <Label
-          htmlFor="show-thinking"
-          className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
-        >
-          show thinking
-        </Label>
-      </div>
-    </>
+    <PanelControls
+      models={modelOptions}
+      activeProvider={activeProvider}
+      onProviderChange={setProvider}
+      reasoningLevels={modelMeta.reasoningLevels}
+      reasoning={reasoning}
+      onReasoningChange={setReasoning}
+      showThinking={showThinkingOn}
+      onShowThinkingChange={setShowThinking}
+    />
   );
 
   // Host/connection status, moved out of the footer into the panel header.
