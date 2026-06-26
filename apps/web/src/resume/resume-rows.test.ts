@@ -18,6 +18,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   eventCount: 10,
   host: "none",
   activity: "idle",
+  archived: false,
   ...over,
 });
 
@@ -100,4 +101,16 @@ test("buildResumeRows never mutates the source summaries", () => {
   const before = JSON.stringify(sessions);
   buildResumeRows(sessions, ctx());
   assert.equal(JSON.stringify(sessions), before);
+});
+
+test("an archived session never appears in the default resume rows (D-094)", () => {
+  const rows = buildResumeRows(
+    [summary({ sessionId: "active" }), summary({ sessionId: "filed", archived: true })],
+    ctx({ currentSessionId: "x" }),
+  );
+  assert.deepEqual(
+    rows.map((r) => r.id),
+    ["active"],
+    "the archived session is excluded; the active one remains",
+  );
 });

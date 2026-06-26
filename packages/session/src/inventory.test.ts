@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
 import {
+  activeSessions,
+  archivedSessions,
   type InventoryRow,
   relativeTime,
   type SessionSummary,
@@ -49,6 +51,7 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
   hostOnline: hostOnlineEvent(),
   firstUser: ev("user.message", { text: "add the resume chooser please" }),
   lifecycle: [],
+  archived: null,
   hostPresent: false,
   ...over,
 });
@@ -149,6 +152,7 @@ test("sortInventory puts the current project first, each block by recency desc",
     eventCount: 1,
     host: "none",
     activity: "idle",
+    archived: false,
   });
   const list = [
     mk("a", "other", "2026-06-26T05:00:00.000Z"),
@@ -176,4 +180,50 @@ test("relativeTime renders compact buckets", () => {
   assert.equal(relativeTime("2026-06-23T12:00:00.000Z", now), "3d ago");
   assert.equal(relativeTime("2026-06-05T12:00:00.000Z", now), "3w ago");
   assert.equal(relativeTime("not-a-date", now), "");
+});
+
+test("summarizeSession derives archived from the latest session.archived event (newest wins)", () => {
+  const noFlag = summarizeSession(baseRow());
+  assert.equal(noFlag.archived, false, "no session.archived event -> not archived");
+
+  const archived = events.sessionArchived({ archived: true });
+  assert.equal(
+    summarizeSession(
+      baseRow({ archived: ev(archived.type, archived.payload as Record<string, unknown>) }),
+    ).archived,
+    true,
+    "an archived: true marker archives the session",
+  );
+
+  // The store keeps only the LATEST session.archived, so an unarchive (archived: false) reads as active.
+  const unarchived = events.sessionArchived({ archived: false });
+  assert.equal(
+    summarizeSession(
+      baseRow({ archived: ev(unarchived.type, unarchived.payload as Record<string, unknown>) }),
+    ).archived,
+    false,
+    "the latest marker (unarchive) wins",
+  );
+});
+
+test("activeSessions / archivedSessions partition the inventory by the archived flag", () => {
+  const a = summarizeSession(baseRow({ sessionId: "a" }));
+  const archivedEvent = events.sessionArchived({ archived: true });
+  const b = summarizeSession(
+    baseRow({
+      sessionId: "b",
+      archived: ev(archivedEvent.type, archivedEvent.payload as Record<string, unknown>),
+    }),
+  );
+
+  assert.deepEqual(
+    activeSessions([a, b]).map((s) => s.sessionId),
+    ["a"],
+    "active view excludes archived",
+  );
+  assert.deepEqual(
+    archivedSessions([a, b]).map((s) => s.sessionId),
+    ["b"],
+    "archived view keeps only archived",
+  );
 });

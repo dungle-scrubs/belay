@@ -366,6 +366,16 @@ export const events = {
     payload: { sessionId: p.sessionId, reason: p.reason },
   }),
   /**
+   * The durable archive flag for a session (D-094): archive hides a session from the main UI,
+   * sidebar, and default resume/inventory views without deleting its log; unarchive clears it. The
+   * LATEST `session.archived` event wins, so it doubles as an unarchive (`archived: false`). It is a
+   * lifecycle marker, not transcript content.
+   */
+  sessionArchived: (p: { archived: boolean }): TrevorEventInput => ({
+    type: "session.archived",
+    payload: { archived: p.archived },
+  }),
+  /**
    * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately
    * through the live leader's protected `runShell` path, bypassing the model and the turn queue.
    * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
@@ -804,6 +814,7 @@ export type DecodedEvent =
       readonly ok: boolean;
     }
   | { readonly type: "session.switch"; readonly sessionId: string; readonly reason: string }
+  | { readonly type: "session.archived"; readonly archived: boolean }
   | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
   | {
       readonly type: "shell.result";
@@ -971,6 +982,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         sessionId: str(p.sessionId),
         reason: str(p.reason),
       };
+    case "session.archived":
+      return { type: "session.archived", archived: p.archived === true };
     case "user.shell":
       // A missing requestId falls back to the event's own id, so a forward-compat event still
       // pairs with its result rather than collapsing distinct shell runs together.

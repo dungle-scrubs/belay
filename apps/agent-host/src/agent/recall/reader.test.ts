@@ -33,6 +33,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
     eventCount: 2,
     host: "none",
     activity: "idle",
+    archived: false,
     ...over,
   };
 }

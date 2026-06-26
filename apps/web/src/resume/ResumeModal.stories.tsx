@@ -34,6 +34,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   eventCount: 42,
   host: "none",
   activity: "idle",
+  archived: false,
   ...over,
 });
 

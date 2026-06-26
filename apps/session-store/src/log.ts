@@ -141,6 +141,7 @@ export class SessionLog {
       hostOnline: this.latestOfType(s.sessionId, "host.online"),
       firstUser: this.firstOfType(s.sessionId, "user.message"),
       lifecycle: this.eventsOfTypes(s.sessionId, LIFECYCLE_TYPES),
+      archived: this.latestOfType(s.sessionId, "session.archived"),
     }));
   }
 

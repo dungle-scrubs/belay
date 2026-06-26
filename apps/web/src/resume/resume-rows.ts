@@ -40,12 +40,13 @@ export function buildResumeRows(
   sessions: readonly SessionSummary[],
   ctx: ResumeContext,
 ): CommandRow[] {
+  // Archived sessions (D-094) never appear in the default resume view - they are reached only
+  // through an explicit archive browser / `trevor list --archived`.
+  const visible = sessions.filter((s) => !s.archived);
   // Scope to the current working directory's project; with no known project (e.g. the default
   // shared session) we can't identify a cwd to scope to, so fall back to the full list.
   const scoped =
-    ctx.currentProject != null
-      ? sessions.filter((s) => s.project === ctx.currentProject)
-      : sessions;
+    ctx.currentProject != null ? visible.filter((s) => s.project === ctx.currentProject) : visible;
   const sorted = [...scoped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   return sorted.map((s) => {

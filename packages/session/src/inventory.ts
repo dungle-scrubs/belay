@@ -29,6 +29,8 @@ export interface SessionSummary {
   readonly host: HostPresenceState;
   /** Coarse activity from the durable log: a turn in flight vs settled. */
   readonly activity: SessionActivity;
+  /** Whether the session is archived (D-094): hidden from the default UI/sidebar/resume views. */
+  readonly archived: boolean;
 }
 
 export type HostPresenceState = "live" | "stale" | "none";
@@ -50,6 +52,8 @@ export interface InventoryRow {
   readonly firstUser: SessionEvent | null;
   /** assistant.started/assistant.completed/user.command, seq order (activity + clear reset). */
   readonly lifecycle: readonly SessionEvent[];
+  /** The latest session.archived event (D-094), if any - the newest wins (archive/unarchive). */
+  readonly archived: SessionEvent | null;
   /** Whether a host socket is connected to this session right now. */
   readonly hostPresent: boolean;
 }
@@ -114,6 +118,9 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
 
   const presence: HostPresenceState = row.hostPresent ? "live" : row.hostOnline ? "stale" : "none";
 
+  const archivedEvent = row.archived ? decodeTrevorEvent(row.archived) : null;
+  const archived = archivedEvent?.type === "session.archived" ? archivedEvent.archived : false;
+
   return {
     sessionId: row.sessionId,
     title: titleFrom(row.firstUser, row.sessionId),
@@ -127,7 +134,22 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     eventCount: row.eventCount,
     host: presence,
     activity: runActive(row.lifecycle) ? "running" : "idle",
+    archived,
   };
+}
+
+/**
+ * The non-archived sessions (D-094): the default view for the sidebar, resume chooser, and
+ * current-project navigation. Archived sessions remain in the durable store but are filtered out
+ * here unless a caller explicitly wants them (e.g. an archive browser or `trevor list --archived`).
+ */
+export function activeSessions(summaries: readonly SessionSummary[]): SessionSummary[] {
+  return summaries.filter((s) => !s.archived);
+}
+
+/** The archived sessions only (for an explicit archive filter / `trevor list --archived`). */
+export function archivedSessions(summaries: readonly SessionSummary[]): SessionSummary[] {
+  return summaries.filter((s) => s.archived);
 }
 
 /**
