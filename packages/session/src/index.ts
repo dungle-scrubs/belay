@@ -1,5 +1,6 @@
 export * from "./blob";
 export * from "./breakdown";
+export * from "./connectivity";
 export * from "./envelope";
 export * from "./event";
 export * from "./identity";

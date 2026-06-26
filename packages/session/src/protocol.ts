@@ -1,5 +1,6 @@
 import { HEX64 } from "./blob";
 import { BREAKDOWN_CATEGORIES, type UsageBreakdown } from "./breakdown";
+import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
 
 export type { UsageBreakdown };
@@ -434,6 +435,15 @@ export const events = {
     type: "host.role",
     payload: { instanceId: p.instanceId, role: p.role },
   }),
+  /**
+   * The host's public-internet reachability snapshot (D-060): emitted on a `checking` start, a
+   * status change, and a refresh completion. Advisory only - it drives no routing and is kept OUT of
+   * conversation memory / prompt-history projection (a presence-style signal, like host.beat).
+   */
+  hostInternet: (p: { snapshot: InternetSnapshot }): TrevorEventInput => ({
+    type: "host.internet",
+    payload: { internet: p.snapshot },
+  }),
   hostOnline: (p: {
     branch?: string;
     git?: GitStatus;
@@ -446,6 +456,8 @@ export const events = {
     commands: readonly CommandSpec[];
     agents: readonly AgentSpec[];
     worktrees?: readonly WorktreeSummary[];
+    /** The latest internet snapshot, so a joining client sees connectivity without waiting. */
+    internet?: InternetSnapshot;
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
@@ -460,6 +472,7 @@ export const events = {
       commands: p.commands,
       agents: p.agents,
       ...(p.worktrees ? { worktrees: p.worktrees } : {}),
+      ...(p.internet ? { internet: p.internet } : {}),
     },
   }),
   /**
@@ -835,7 +848,10 @@ export type DecodedEvent =
       readonly commands: readonly CommandSpec[];
       readonly agents: readonly AgentSpec[];
       readonly worktrees: readonly WorktreeSummary[];
+      /** Latest internet snapshot (D-060), or unknown when the host announced none. */
+      readonly internet: InternetSnapshot;
     }
+  | { readonly type: "host.internet"; readonly internet: InternetSnapshot }
   | { readonly type: "host.hello"; readonly instanceId?: string }
   | { readonly type: "host.beat"; readonly instanceId?: string }
   | { readonly type: "host.role"; readonly instanceId?: string; readonly role?: string };
@@ -1010,7 +1026,10 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         commands: coerceCommands(p.commands),
         agents: coerceAgents(p.agents),
         worktrees: coerceWorktrees(p.worktrees),
+        internet: coerceInternetSnapshot(p.internet),
       };
+    case "host.internet":
+      return { type: "host.internet", internet: coerceInternetSnapshot(p.internet) };
     case "host.hello":
       return { type: "host.hello", instanceId: optStr(p.instanceId) };
     case "host.beat":

@@ -30,6 +30,8 @@ import { createSiblingReader } from "./agent/recall/reader";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
+import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
+import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
 import { nodeGitRunner, readGitStatus } from "./git-status";
 import { Lease } from "./lease";
@@ -152,6 +154,25 @@ const EmitLive = Layer.succeed(Emit, {
     }),
 });
 
+/** Cache window for the internet probe (D-060): reuse a result for ~30s to avoid constant checks. */
+const INTERNET_CACHE_MS = 30_000;
+
+/**
+ * The host-owned internet monitor (D-060): probes public reachability (DNS + HTTPS), caches it, and
+ * publishes `host.internet` on each transition - but only the LIVE LEADER publishes, so multiple
+ * hosts on one session never flicker the advisory. Advisory only: it drives no routing.
+ */
+const internet = new InternetMonitor(
+  () => probeInternet(defaultProbeTargets(), nodeProbeIo),
+  INTERNET_CACHE_MS,
+  Date.now,
+  (snapshot) => {
+    if (live && lease.isLeader()) {
+      emit(events.hostInternet({ snapshot })).catch(() => {});
+    }
+  },
+);
+
 /** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
 function hostState(): Record<string, unknown> {
   const turns = scheduler.debug();
@@ -189,7 +210,22 @@ function hostState(): Record<string, unknown> {
     // Managed worktrees (D-091): the current row + count, plus any stale (missing-path) entries, so
     // a worktree/session mismatch is visible at a glance.
     ...worktreeState(),
+    // Public-internet reachability (D-060): the advisory status + last-probe age/error, distinct
+    // from provider health and session-store presence.
+    internet: internetState(),
   };
+}
+
+/** A compact internet-status line for /doctor (status + checking + last-probe age + sanitized error). */
+function internetState(): string {
+  const snap = internet.current();
+  const age =
+    snap.checkedAt !== null
+      ? ` ${Math.round((Date.now() - Date.parse(snap.checkedAt)) / 1000)}s ago`
+      : "";
+  const checking = snap.checking ? " · checking…" : "";
+  const error = snap.status !== "online" && snap.error ? ` · ${snap.error}` : "";
+  return `${snap.status}${age}${checking} · probe ${snap.targetClass}${error}`;
 }
 
 /** The managed-worktree summary for /doctor: the current row, the managed count, and stale entries. */
@@ -304,6 +340,11 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
   const provider = pickProvider(providers, decoded.provider);
   // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
   lastProvider = provider;
+  // A cloud turn may want fresh connectivity for the advisory (D-060): refresh if stale, never block
+  // the turn on it (fire-and-forget; the result rides a later host.internet).
+  if (provider.kind === "cloud") {
+    void internet.refreshIfStale();
+  }
   // The delegation capability for this PARENT turn (D-048): it can hand a subtask to a discovered
   // subagent, which runs in its own isolated child session and folds its distilled result back.
   // A child turn (run inside runDelegatedChild) is given no capability, so depth stays 1.
@@ -546,6 +587,12 @@ const scheduler = new TurnScheduler({
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
 function onBecomeLeader(): void {
+  // The leader owns the internet probe (D-060): kick off a fresh check + re-announce so the advisory
+  // reflects this host's reachability. Fire-and-forget - a turn never waits on it.
+  internet
+    .refresh()
+    .then(announceOnline)
+    .catch(() => {});
   if (inFlightRuns.size > 0) {
     // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
     // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
@@ -651,6 +698,9 @@ function announceOnline(): void {
       // The managed worktrees for this base repo (D-091), so the browser's switcher renders
       // without reading local state.
       worktrees: currentWorktrees(),
+      // The latest internet snapshot (D-060), so a joining client sees connectivity without waiting
+      // for the next probe transition.
+      internet: internet.current(),
     }),
   ).catch(() => {});
 }
