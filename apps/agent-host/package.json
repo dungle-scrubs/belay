@@ -13,6 +13,7 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@ast-grep/cli": "0.44.0",
     "@earendil-works/pi-ai": "0.80.2",
     "@trevor/richter": "workspace:*",
     "@trevor/session": "workspace:*",

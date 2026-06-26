@@ -44,7 +44,8 @@ const CODING_GUIDANCE = [
 /** How to pick between this host's tools, and the workspace confinement contract. */
 const TOOL_SELECTION_GUIDANCE = [
   "Prefer read, write, and edit over bash when a dedicated file tool fits the task.",
-  "Use grep for exact strings, symbols, error text, or regular expressions, and glob for path or filename discovery.",
+  "Use grep (ripgrep-backed text/regex search) for exact strings, symbols, error text, or regular expressions, and glob for path or filename discovery.",
+  "Use ast_grep for STRUCTURAL (syntax-aware) search when text/regex is awkward - e.g. finding a call shape like 'console.log($$$)' or a function/JSX pattern regardless of formatting; it is read-only and only available when its binary is installed.",
   "Independent read-only lookups (read, glob, grep, web_search) run in parallel when you request several in a single step, so batch them together instead of one at a time; edits, writes, and bash run sequentially, so issue those one per step.",
   "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
   CONFINEMENT_GUIDANCE,

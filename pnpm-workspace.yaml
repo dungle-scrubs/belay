@@ -3,6 +3,9 @@ packages:
   - "packages/*"
   - "e2e"
 allowBuilds:
+  # The host resolves the ast-grep platform binary directly (tools/ast-grep-bin.ts), so its
+  # postinstall wrapper is not needed - skip the build script.
+  '@ast-grep/cli': false
   '@google/genai': false
   esbuild: true
   lefthook: true

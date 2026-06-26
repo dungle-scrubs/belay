@@ -3,6 +3,8 @@ import { log, warn } from "../log";
 import { buildProcessTool } from "../processes";
 import { buildSkillTool, discoverSkills } from "../skills";
 import { buildTaskTools } from "../tasks";
+import { astGrepTool } from "./ast-grep";
+import { astGrepPath } from "./ast-grep-bin";
 import { bashTool } from "./bash";
 import { editTool } from "./edit";
 import { ToolInputError } from "./errors";
@@ -28,6 +30,9 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   webSearchTool,
   buildProcessTool(),
   ...buildTaskTools(),
+  // ast_grep is registered only when its project-managed binary resolves (skipped on a platform
+  // without a prebuilt package), so the model is never offered a tool the host can't run.
+  ...(astGrepPath() ? [astGrepTool] : []),
 ];
 
 // The skill tool is added only when the library is non-empty, so an empty skills

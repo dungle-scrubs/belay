@@ -307,27 +307,27 @@ promote H-108 `ast_grep` into a first-class read-only structural-search tool. So
 `apps/agent-host/src/tools/search-process.ts` (new), `apps/agent-host/src/tools/index.ts`,
 `apps/agent-host/src/providers/system-prompt.ts`, `apps/web` generic tool rendering (D-062).
 
-### M1: Ripgrep-backed `grep`
-Source: `apps/agent-host/src/tools/grep.ts`, shared search-process helper
+### M1: Ripgrep-backed `grep` ✅
+Source: `apps/agent-host/src/tools/{grep,search-process}.ts`
 
-- [ ] Add a shared read-only search-process helper using `execFile`/`spawn` with argv arrays, `cwd: WORKSPACE_ROOT`, timeout, max buffer, output cap, typed nonzero handling, and interruption cleanup
-- [ ] Add a project-managed ripgrep binary resolver such as `@vscode/ripgrep` or an equivalent checked dependency; do not depend on Homebrew/system `rg`
-- [ ] Replace the custom Node glob/read/RegExp scanner with the ripgrep backend while keeping tool `name: "grep"` and its text-output result shape
-- [ ] Preserve `readOnly: true`, workspace confinement, D-050 concurrent-read behavior, output caps, and typed tool input/execution errors
-- [ ] Keep the schema explicit: `pattern`, optional `glob`, `literal`, `ignoreCase`, `hidden`, `noIgnore`, `maxMatches`; no raw ripgrep flag passthrough
-- [ ] Update prompt/tool-selection guidance to explain ripgrep-backed text search and when to use `grep` vs `ast_grep`
-- [ ] Tests cover no-match, ignored dirs/gitignore behavior, literal vs regex, invalid regex, max caps, workspace confinement, output truncation, and `READ_ONLY_TOOLS` inclusion
+- [x] Shared read-only search-process helper (`search-process.ts`) using `execFile` with argv arrays, `cwd`, timeout, max buffer, and exit-code-preserving capture (each tool maps codes itself); rg/ast-grep are read-only so no in-loop interrupt wiring beyond the timeout
+- [x] Project-managed ripgrep via `@vscode/ripgrep` (`rgPath`, a platform optional-dependency) - never a system/Homebrew `rg`
+- [x] Replaced the custom Node glob/read/RegExp scanner with ripgrep, keeping `name: "grep"` + the `path:line:text` shape (the `./` prefix stripped; `.` path avoids the rg-reads-stdin hang)
+- [x] Preserves `readOnly: true`, the D-050 read-concurrency, output caps, and typed input/execution errors
+- [x] Explicit schema: `pattern`, `glob`, `literal`, `ignoreCase`, `hidden`, `noIgnore`, `maxMatches`; no raw flag passthrough
+- [x] Prompt/tool-selection guidance updated (grep = ripgrep text/regex, when to reach for ast_grep)
+- [x] Tests: gitignore (+ noIgnore), literal vs regex, ignoreCase, no-match, invalid regex, maxMatches cap, glob restriction, path:line:text shape (8); `READ_ONLY_TOOLS` inclusion (index.test)
 
-### M2: Read-only `ast_grep`
-Source: `apps/agent-host/src/tools/ast-grep.ts` (new), shared search-process helper
+### M2: Read-only `ast_grep` ✅
+Source: `apps/agent-host/src/tools/{ast-grep,ast-grep-bin,search-process}.ts`, `index.ts`, `providers/system-prompt.ts`
 
-- [ ] Add an ast-grep CLI resolver through a project-managed package; call the full `ast-grep` binary name, not `sg`
-- [ ] Add `ast_grep` as a read-only tool that wraps `ast-grep run` only; no rewrite, update-all, or interactive flags in this cut
-- [ ] Keep the schema explicit: `pattern`, optional `lang`, optional `paths`, optional `globs`, optional `strictness`, optional `maxMatches`; no raw flag passthrough
-- [ ] Prefer `--json=stream`, parse structured matches, and normalize them into compact capped rows with path, line/column, and snippet
-- [ ] Run confined to `WORKSPACE_ROOT`, respect bounded paths/globs, and preserve typed failures for invalid patterns, invalid languages, and execution errors
-- [ ] Register `ast_grep` in `TOOLS`, `TOOL_DEFS`, `READ_ONLY_TOOLS`, and prompt guidance; generic web text-output rendering is enough unless a clearer renderer is needed
-- [ ] Tests cover TS/TSX structural matches, lang inference and explicit `lang`, globs/paths, no-match, invalid pattern/lang, max caps, workspace confinement, and read-only registry inclusion
+- [x] Project-managed ast-grep resolver (`ast-grep-bin.ts`) - detects the `@ast-grep/cli-<platform>` package and points at the full `ast-grep` binary (not `sg`); `@ast-grep/cli` build skipped in pnpm-workspace (binary resolved directly)
+- [x] `ast_grep` wraps `ast-grep run` only (no rewrite/interactive flags), read-only
+- [x] Explicit schema: `pattern`, `lang?`, `paths?`, `globs?`, `strictness?`, `maxMatches?`; no raw flag passthrough
+- [x] `--json=stream` parsed into compact capped `file:line:col  snippet` rows
+- [x] Confined to `WORKSPACE_ROOT` (paths validated via `confine`, escape → typed input error); typed failures for invalid pattern/lang (exit ≥2) and execution; exit 1 = no matches
+- [x] Registered in `TOOLS`/`TOOL_DEFS`/`READ_ONLY_TOOLS` (gated on the binary resolving) + prompt guidance
+- [x] Tests: structural match across formatting, inferred + explicit lang, no-match, unknown lang error, maxMatches cap, workspace confinement, read-only registry inclusion (7)
 
 ## Summary
 - Phase 1 (concurrent reads): 20 features, 20 completed, 0 remaining
@@ -335,7 +335,7 @@ Source: `apps/agent-host/src/tools/ast-grep.ts` (new), shared search-process hel
 - Phase 3 (cross-turn compaction): 27 features, 27 completed, 0 remaining
 - Phase 4 (provider SDK migration + outage recovery): 18 features, 18 completed, 0 remaining ✅ (M1/M2 migration to `@earendil-works/pi-ai@0.80.2` via `/compat` = 12, M3 outage auto-reconnect = 6; full suite + e2e + smoke green)
 - Phase 5 (subagents): 41 features, ~33 completed (M1 discovery + M2 isolated child session/link + M3 inline delegation + M4 web surfacing/`/doctor` + M5 inline ephemeral agents), ~8 remaining (`delegate_background` + its caps/read-only clamp + late-result tracking; the fork-dependent M2 forkability bullets, blocked on the unimplemented D-025…D-029 fork feature; plus refinements: ephemeral contract snapshot into the child session, runtime skill-tool allow-list gate, a distinct ephemeral web view)
-- Phase 6 (search-tool upgrade, accepted/deferred after subagents): 14 features, 0 completed, 14 remaining (decomposed, not started)
+- Phase 6 (search-tool upgrade): 14 features, 14 completed ✅ (M1 ripgrep-backed `grep` + M2 read-only `ast_grep`, both with project-managed binaries and tests)
 - Total features: 67
 - Completed: 66
 - Remaining: 1
