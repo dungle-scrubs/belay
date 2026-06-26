@@ -215,7 +215,7 @@ export function buildDelegateCapability(
         const ids = params.agents.map((a) => a.id).join(", ") || "(none)";
         return `error: unknown agent "${agentId}". Available: ${ids}`;
       }
-      if (!task || !task.trim()) {
+      if (!task?.trim()) {
         return 'error: delegate requires a non-empty "task"';
       }
       const out = await runDelegatedChild(ctx, {
