@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-ai/compat";
 import { Effect, Stream } from "effect";
 import { debug } from "../log";
-import { msg } from "../tools/shared";
+import { msg } from "../messages";
 import {
   classifyResponseOverflow,
   isAuthError,

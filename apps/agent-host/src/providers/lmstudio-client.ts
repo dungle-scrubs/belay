@@ -2,7 +2,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Model } from "@earendil-works/pi-ai/compat";
 import { debug, log, warn } from "../log";
-import { msg } from "../tools/shared";
+import { msg } from "../messages";
 import { ModelLoadError, ProviderUnavailable } from "./errors";
 import type { ModelCapabilities, Readiness } from "./types";
 

@@ -1,9 +1,9 @@
 import { rgPath } from "@vscode/ripgrep";
 import { Effect, Schema } from "effect";
+import { WORKSPACE_ROOT } from "../paths";
 import { ToolExecutionError } from "./errors";
 import { runSearchProcess } from "./search-process";
 import { defineTool } from "./shared";
-import { WORKSPACE_ROOT } from "./workspace";
 
 const DEFAULT_MAX_MATCHES = 100;
 const MAX_MATCHES_CAP = 1000;

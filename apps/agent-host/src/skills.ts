@@ -4,11 +4,11 @@ import { join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import { parse as parseYaml } from "yaml";
 import type { Command } from "./commands";
+import { WORKSPACE_ROOT } from "./paths";
 import { ToolInputError } from "./tools/errors";
 import { renderShell, runShell } from "./tools/run-shell";
 import { cap } from "./tools/shared";
 import type { Tool } from "./tools/types";
-import { WORKSPACE_ROOT } from "./tools/workspace";
 
 /**
  * Skill discovery + progressive disclosure.

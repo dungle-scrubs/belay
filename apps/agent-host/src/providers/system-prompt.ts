@@ -1,7 +1,23 @@
+import type { ContextRegistry } from "../context/registry";
 import { contextRegistry } from "../context/registry";
+import { HOST_CWD_TOOLS, WORKSPACE_CONFINED_TOOLS, WORKSPACE_ROOT } from "../paths";
+import type { TaskRegistry } from "../tasks";
 import { taskRegistry } from "../tasks";
-import { HOST_CWD_TOOLS, WORKSPACE_CONFINED_TOOLS, WORKSPACE_ROOT } from "../tools/workspace";
 import type { ToolDef } from "./types";
+
+/**
+ * Owns system-prompt assembly and the registry reads that feed it: the context registry
+ * (AGENTS.md, eager + lazy) and the task registry (the live checklist) are rendered for the
+ * prompt only from here, alongside the confinement policy (paths.ts) and the tool-inventory
+ * rendering. Call sites ask the builder for a prompt; they do not import the registries to
+ * render them, and they do not thread workspaceRoot/cwd when the builder's defaults suffice.
+ *
+ * It does NOT own tool execution, and it does NOT own the registries' MUTATION by tools:
+ * `contextRegistry.noteFileAccess(...)` is still driven by the read/write/edit tools as they
+ * touch files (that is tool-execution timing, not prompt assembly), and the task tools still
+ * mutate `taskRegistry`. The builder is the single READ point for prompt assembly, not the
+ * owner of when those registries change.
+ */
 
 /** Oxford-comma join: "a", "a and b", "a, b, and c" - matches the prompt's prose. */
 function listAnd(items: readonly string[]): string {
@@ -14,7 +30,7 @@ function listAnd(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
-// The confinement rule, rendered once from the workspace policy (tools/workspace.ts) so
+// The confinement rule, rendered once from the workspace policy (paths.ts) so
 // the prompt cannot advertise a confinement the tools do not enforce. Two phrasings for
 // the two prompt locations (tool-selection guidance vs. the execution-context header);
 // both derive the same confined / host-cwd tool lists.
@@ -108,50 +124,74 @@ function toolInventory(tools: readonly ToolDef[]): string {
 }
 
 /**
- * Builds the system prompt for one model request. The tool inventory is rendered
- * from the same `tools` array the provider sends to the model, so the advertised
- * surface can never drift from what is actually callable. With no tools (an
- * answer-only route), the inventory and tool guidance are dropped but the identity,
- * execution context, and calibration rules remain.
+ * Assembles the per-turn system prompt and owns the registry reads that feed it. The
+ * context + task registries are injected (defaulting to the module singletons), so the
+ * builder is the one place that renders them FOR THE PROMPT; the tool inventory, the
+ * confinement policy, and the prompt copy are assembled here too.
+ */
+export class SystemPromptBuilder {
+  constructor(
+    private readonly context: ContextRegistry = contextRegistry,
+    private readonly tasks: TaskRegistry = taskRegistry,
+  ) {}
+
+  /**
+   * Builds the system prompt for one model request. The tool inventory is rendered
+   * from the same `tools` array the provider sends to the model, so the advertised
+   * surface can never drift from what is actually callable. With no tools (an
+   * answer-only route), the inventory and tool guidance are dropped but the identity,
+   * execution context, and calibration rules remain.
+   */
+  build(tools: readonly ToolDef[] = [], context: SystemPromptContext = {}): string {
+    const workspaceRoot = context.workspaceRoot ?? WORKSPACE_ROOT;
+    const cwd = context.cwd ?? process.cwd();
+
+    if (tools.length === 0) {
+      return [
+        IDENTITY,
+        executionContext(workspaceRoot, cwd),
+        RESPONSE_CALIBRATION_GUIDANCE.join("\n"),
+        "No tools are available on this route; answer directly in ordinary text.",
+      ].join("\n\n");
+    }
+
+    const guidance = [
+      ...CODING_GUIDANCE,
+      ...TOOL_SELECTION_GUIDANCE,
+      ...TASK_GUIDANCE,
+      ...REPO_GUARDRAILS,
+      ...RESPONSE_CALIBRATION_GUIDANCE,
+    ].join("\n");
+
+    // The eager + lazy AGENTS.md context (D-080), re-read from disk every turn so it survives compaction
+    // the same way the live checklist does (D-040). Rendered BEFORE the guidance so the reworded
+    // guardrail's "project-context block above" reference holds; omitted entirely when no AGENTS.md exists
+    // (the prompt is then byte-for-byte unchanged).
+    const contextBlock = this.context.renderForPrompt(cwd, workspaceRoot);
+    // The live checklist is re-rendered every turn, so the model's plan survives
+    // history compaction instead of living only in the (compactable) transcript.
+    const checklist = this.tasks.renderForPrompt();
+    return [
+      IDENTITY,
+      executionContext(workspaceRoot, cwd),
+      toolInventory(tools),
+      ...(contextBlock ? [contextBlock] : []),
+      guidance,
+      ...(checklist ? [checklist] : []),
+    ].join("\n\n");
+  }
+}
+
+/** The host's prompt builder, wired to the session's context + task registries. */
+export const systemPromptBuilder = new SystemPromptBuilder();
+
+/**
+ * The stable free-function entry, delegating to the singleton builder. Call sites keep a
+ * single import; the registry reads for the prompt all live behind `systemPromptBuilder`.
  */
 export function buildSystemPrompt(
   tools: readonly ToolDef[] = [],
   context: SystemPromptContext = {},
 ): string {
-  const workspaceRoot = context.workspaceRoot ?? WORKSPACE_ROOT;
-  const cwd = context.cwd ?? process.cwd();
-
-  if (tools.length === 0) {
-    return [
-      IDENTITY,
-      executionContext(workspaceRoot, cwd),
-      RESPONSE_CALIBRATION_GUIDANCE.join("\n"),
-      "No tools are available on this route; answer directly in ordinary text.",
-    ].join("\n\n");
-  }
-
-  const guidance = [
-    ...CODING_GUIDANCE,
-    ...TOOL_SELECTION_GUIDANCE,
-    ...TASK_GUIDANCE,
-    ...REPO_GUARDRAILS,
-    ...RESPONSE_CALIBRATION_GUIDANCE,
-  ].join("\n");
-
-  // The eager + lazy AGENTS.md context (D-080), re-read from disk every turn so it survives compaction
-  // the same way the live checklist does (D-040). Rendered BEFORE the guidance so the reworded
-  // guardrail's "project-context block above" reference holds; omitted entirely when no AGENTS.md exists
-  // (the prompt is then byte-for-byte unchanged).
-  const contextBlock = contextRegistry.renderForPrompt(cwd, workspaceRoot);
-  // The live checklist is re-rendered every turn, so the model's plan survives
-  // history compaction instead of living only in the (compactable) transcript.
-  const checklist = taskRegistry.renderForPrompt();
-  return [
-    IDENTITY,
-    executionContext(workspaceRoot, cwd),
-    toolInventory(tools),
-    ...(contextBlock ? [contextBlock] : []),
-    guidance,
-    ...(checklist ? [checklist] : []),
-  ].join("\n\n");
+  return systemPromptBuilder.build(tools, context);
 }

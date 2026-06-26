@@ -12,8 +12,9 @@ import { type LauncherFs, readJson, writeJson } from "./fs";
 
 /**
  * `~/.trevorV2` (or `$TREVOR_HOME`) - the same base directory the host's `paths.ts` uses. Duplicated
- * here (a one-liner) rather than imported, so the launcher package doesn't depend on the host package;
- * the env convention is the shared contract.
+ * here (a one-liner) rather than imported, so the launcher does not depend on the host package, and so
+ * the browser-bundled `@trevor/session` stays free of node built-ins (D-041); the env convention is
+ * the shared contract.
  */
 export const TREVOR_HOME = resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"));
 

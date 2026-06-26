@@ -1,7 +1,7 @@
 import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { Effect, Schema } from "effect";
+import { msg } from "./messages";
 import { ToolExecutionError } from "./tools/errors";
-import { msg } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
 /**

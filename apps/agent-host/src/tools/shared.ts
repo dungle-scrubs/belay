@@ -1,4 +1,5 @@
 import { Effect, type Schema } from "effect";
+import { msg } from "../messages";
 import { type ToolError, ToolExecutionError, ToolInputError } from "./errors";
 import type { Tool } from "./types";
 
@@ -11,11 +12,6 @@ export const SKIP_DIRS = /(^|\/)(node_modules|\.git|dist|\.next)\//u;
 /** Caps tool output at MAX_OUTPUT characters, with a truncation marker. */
 export function cap(text: string): string {
   return text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}\n…[truncated]` : text;
-}
-
-/** Normalizes an unknown thrown value to its message string. */
-export function msg(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Wraps a thrown/rejected cause as this tool's ToolExecutionError (detail = its

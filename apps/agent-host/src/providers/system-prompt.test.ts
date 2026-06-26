@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
 import { contextRegistry } from "../context/registry";
-import { isWorkspaceConfined, WORKSPACE_CONFINED_TOOLS } from "../tools/workspace";
-import { buildSystemPrompt } from "./system-prompt";
+import { isWorkspaceConfined, WORKSPACE_CONFINED_TOOLS } from "../paths";
+import { buildSystemPrompt, SystemPromptBuilder, systemPromptBuilder } from "./system-prompt";
 
 /**
  * Characterization tests for the workspace-confinement policy (M10 / D-010).
@@ -80,4 +80,26 @@ test("the reworded guardrail points the model at the already-provided context bl
     !prompt.includes("begin from existing top-level files like README.md or AGENTS.md"),
     "the old wording (telling the model to re-read AGENTS.md) is gone",
   );
+});
+
+// --- M22: SystemPromptBuilder owns the prompt's registry reads (D-029) ---
+
+test("the builder's build() equals the buildSystemPrompt free function (parity)", () => {
+  contextRegistry.reset();
+  const opts = { workspaceRoot: "/ws", cwd: "/ws" };
+
+  // The free function delegates to the module singleton, so they must produce the same prompt.
+  assert.equal(systemPromptBuilder.build(TOOLS, opts), buildSystemPrompt(TOOLS, opts));
+
+  // ...with and without tools, to cover both assembly branches.
+  assert.equal(systemPromptBuilder.build([], opts), buildSystemPrompt([], opts));
+});
+
+test("a fresh SystemPromptBuilder defaults to the module registries (same prompt)", () => {
+  contextRegistry.reset();
+  const opts = { workspaceRoot: "/ws", cwd: "/ws" };
+
+  // Constructed without args, the builder wires the module-singleton registries, so a new
+  // instance assembles the byte-identical prompt the shared singleton does.
+  assert.equal(new SystemPromptBuilder().build(TOOLS, opts), buildSystemPrompt(TOOLS, opts));
 });

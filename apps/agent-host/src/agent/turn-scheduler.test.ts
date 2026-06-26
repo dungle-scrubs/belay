@@ -234,9 +234,9 @@ test("reconnect clears the queue but leaves an in-flight run intact", () => {
 });
 
 /**
- * Compaction gating (D-041): the scheduler holds turns behind a fold. `needsCompaction` reports
- * whether the projection is over budget (the host flips it false after a fold) and `compact` kicks
- * one off; `finishCompaction` releases the gate. Exercised as a state machine with stub deps.
+ * Compaction gating (D-041): the scheduler holds turns behind a fold. `compaction.needed()` reports
+ * whether the projection is over budget (the host flips it false after a fold) and `compaction.run()`
+ * kicks one off; `finishCompaction` releases the gate. Exercised as a state machine with stub deps.
  */
 function compactionHarness() {
   const started: SessionEvent[] = [];
@@ -248,9 +248,11 @@ function compactionHarness() {
       started.push(event);
       return { runId: `run${started.length - 1}`, cancel: () => {} };
     },
-    needsCompaction: () => overBudget,
-    compact: () => {
-      compactCalls += 1;
+    compaction: {
+      needed: () => overBudget,
+      run: () => {
+        compactCalls += 1;
+      },
     },
   });
   return {
@@ -316,7 +318,7 @@ test("a completion under budget evaluates the gate and folds nothing", () => {
 });
 
 test("compaction gating is inert when the scheduler has no compaction deps", () => {
-  // The plain harness (no needsCompaction/compact) starts turns immediately - compaction is opt-in.
+  // The plain harness (no compaction policy) starts turns immediately - compaction is opt-in.
   const h = harness();
   h.scheduler.noteTurn(userEv("a"));
   assert.equal(h.scheduler.isBusy(), true);

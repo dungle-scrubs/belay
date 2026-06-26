@@ -31,8 +31,11 @@ const ctl = vi.hoisted(() => ({
 
 vi.mock("../tools", async () => {
   const { Effect } = await import("effect");
+  // The read-only partition is the cross-surface vocabulary (D-031), not a re-spelled literal,
+  // so the mock can't drift from the real classification the loop dispatches against.
+  const { READ_ONLY_TOOL_NAMES } = await import("@trevor/session");
   return {
-    READ_ONLY_TOOLS: new Set(["read", "glob", "grep", "web_search"]),
+    READ_ONLY_TOOLS: READ_ONLY_TOOL_NAMES,
     // Non-empty so the loop advertises tools to the provider; content is irrelevant here.
     TOOL_DEFS: [{ name: "read", description: "read", parameters: {} }],
     executeTool: (name: string, args: string): Effect.Effect<string> =>

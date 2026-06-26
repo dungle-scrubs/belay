@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderEvent } from "../providers";
-import { buildSummaryPrompt, summarize } from "./compaction";
+import { buildSummaryPrompt, summarize } from "./compactor";
 
 /**
  * Phase 3 (cross-turn compaction, D-043): the tool-less rolling-summary generator. These drive

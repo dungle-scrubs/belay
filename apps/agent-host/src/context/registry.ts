@@ -1,5 +1,5 @@
 import { dirname, resolve, sep } from "node:path";
-import { WORKSPACE_ROOT } from "../tools/workspace";
+import { WORKSPACE_ROOT } from "../paths";
 import {
   AGENTS_FILE,
   type ContextReport,
@@ -18,7 +18,7 @@ import {
  *
  * A single module instance mirrors `taskRegistry`: the host is one session per process.
  */
-class ContextRegistry {
+export class ContextRegistry {
   /** Below-cwd AGENTS.md that have been lazily loaded, keyed by their directory (so each loads once). */
   private lazy = new Map<string, ContextScope>();
   /** Directories already checked for a below-cwd AGENTS.md (present or not), so a re-touch never re-stats. */

@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect";
+import { confine, WORKSPACE_ROOT } from "../paths";
 import { astGrepPath } from "./ast-grep-bin";
 import { ToolExecutionError } from "./errors";
 import { runSearchProcess } from "./search-process";
 import { defineTool } from "./shared";
-import { confine, WORKSPACE_ROOT } from "./workspace";
 
 const DEFAULT_MAX_MATCHES = 100;
 const MAX_MATCHES_CAP = 500;

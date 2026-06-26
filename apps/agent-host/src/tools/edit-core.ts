@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { Effect } from "effect";
 import { contextRegistry } from "../context/registry";
+import { confine, WORKSPACE_ROOT } from "../paths";
 import type { ToolError } from "./errors";
 import { applyUniqueReplacement, replaceMissMessage } from "./replace";
 import type { ToolOps } from "./shared";
-import { confine, WORKSPACE_ROOT } from "./workspace";
 
 /** A file read + edited in memory but not yet written: where it lives and its new content. */
 export interface PreparedEdit {

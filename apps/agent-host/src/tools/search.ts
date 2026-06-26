@@ -1,6 +1,6 @@
 import { glob } from "node:fs/promises";
+import { WORKSPACE_ROOT } from "../paths";
 import { SKIP_DIRS } from "./shared";
-import { WORKSPACE_ROOT } from "./workspace";
 
 /**
  * The one workspace file-walk both search tools (glob, grep) share: iterate the entries matching

@@ -1,6 +1,7 @@
+import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
 import { Effect, Either, JSONSchema, ParseResult, Schema } from "effect";
 import { log, warn } from "../log";
-import { buildProcessTool } from "../processes";
+import { supervisor } from "../processes";
 import { buildSkillTool, discoverSkills } from "../skills";
 import { buildTaskTools } from "../tasks";
 import { astGrepTool } from "./ast-grep";
@@ -28,7 +29,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   globTool,
   grepTool,
   webSearchTool,
-  buildProcessTool(),
+  supervisor.buildTool(),
   ...buildTaskTools(),
   // ast_grep is registered only when its project-managed binary resolves (skipped on a platform
   // without a prebuilt package), so the model is never offered a tool the host can't run.
@@ -68,14 +69,15 @@ export function toParametersJsonSchema(
 }
 
 /**
- * Names of the tools the loop may run concurrently, derived by filtering `TOOLS` on the
- * `readOnly` flag - never a hardcoded list, so a new read-only tool joins the set just by
- * declaring `readOnly: true`. A tool that leaves the flag unset is a mutating serial barrier
- * and is absent here. The loop partitions a step's tool batch against this set (D-050).
+ * Names of the tools the loop may run concurrently. The classification is owned by the
+ * cross-surface vocabulary in `@trevor/session` (D-031) - the single source both the host
+ * and the web consume - so it can never drift between the two surfaces. A parity test
+ * (index.test.ts) cross-checks this shared table against the real `TOOLS` defs, so adding a
+ * host tool or flipping its `readOnly` flag without updating the table fails the build. A
+ * tool absent from the read-only set is a mutating serial barrier. The loop partitions a
+ * step's tool batch against this set (D-050).
  */
-export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(
-  TOOLS.filter((tool) => tool.readOnly).map((tool) => tool.name),
-);
+export const READ_ONLY_TOOLS: ReadonlySet<string> = READ_ONLY_TOOL_NAMES;
 
 /** Tool definitions advertised to the model (parameters derived from each tool's schema). */
 export const TOOL_DEFS = TOOLS.map((tool) => ({

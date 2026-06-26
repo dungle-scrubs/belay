@@ -17,20 +17,21 @@ export interface TurnSchedulerDeps {
    */
   readonly start: (event: SessionEvent) => ActiveTurn | null;
   /**
-   * True when the prompt projection has crossed the compaction budget and a fold must run
-   * before the next turn starts (blocking-before, D-041). Optional: omitting it (with `compact`)
-   * disables compaction gating entirely, leaving the plain turn behaviour. The host must return
-   * false once a fold has brought the projection back under budget (or could not fold further),
-   * so the gate never loops.
+   * The compaction policy (D-041), as ONE optional unit because the two halves are meaningless
+   * apart. The scheduler owns the gate MECHANISM (hold the idle slot, drain after a fold); the host
+   * injects the POLICY here. Omit it to disable compaction gating entirely (plain turns).
+   *   - needed(): true when the prompt projection has crossed the budget and a fold must run before
+   *     the next turn starts (blocking-before). The host must return false once a fold brought the
+   *     projection back under budget (or it could not fold further), so the gate never loops.
+   *   - run(): kicks off ONE fold off the idle slot (async); the host plans + summarizes + emits the
+   *     fold, then calls `finishCompaction` once the projection has updated. The scheduler holds all
+   *     turns behind it (the same one-at-a-time gate that serializes turns), so a fold never runs
+   *     concurrently with a turn.
    */
-  readonly needsCompaction?: () => boolean;
-  /**
-   * Kicks off ONE compaction off the idle slot (async): the host plans + summarizes + emits the
-   * fold, then calls `finishCompaction` when the projection has updated. The scheduler holds all
-   * turns behind it (the same one-at-a-time gate that serializes turns), so a fold never runs
-   * concurrently with a turn.
-   */
-  readonly compact?: () => void;
+  readonly compaction?: {
+    readonly needed: () => boolean;
+    readonly run: () => void;
+  };
 }
 
 /**
@@ -175,9 +176,9 @@ export class TurnScheduler {
     if (this.active || this.compacting || !this.deps.isLeader()) {
       return;
     }
-    if (this.deps.compact && this.deps.needsCompaction?.()) {
+    if (this.deps.compaction?.needed()) {
       this.compacting = true;
-      this.deps.compact();
+      this.deps.compaction.run();
     }
   }
 
@@ -261,11 +262,11 @@ export class TurnScheduler {
     // front of the queue behind a fold; finishCompaction() drains it once the projection shrinks.
     // The host's needsCompaction must return false after a fold (or when it cannot fold further),
     // so a turn re-drained here proceeds rather than looping.
-    if (this.deps.compact && this.deps.needsCompaction?.()) {
+    if (this.deps.compaction?.needed()) {
       this.compacting = true;
       this.queue.unshift(event);
       this.lastUser = event;
-      this.deps.compact();
+      this.deps.compaction.run();
       return;
     }
     this.lastUser = event;

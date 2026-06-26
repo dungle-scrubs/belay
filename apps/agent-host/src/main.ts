@@ -32,6 +32,8 @@ import { contextRegistry } from "./context/registry";
 import { nodeGitRunner, readGitStatus } from "./git-status";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
+import { msg } from "./messages";
+import { WORKSPACE_ROOT } from "./paths";
 import { supervisor } from "./processes";
 import {
   buildProviders,
@@ -46,8 +48,6 @@ import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
 import { runShell, shellOutcome } from "./tools/run-shell";
-import { msg } from "./tools/shared";
-import { WORKSPACE_ROOT } from "./tools/workspace";
 import { publishTurn } from "./turn";
 import { terminationReason } from "./turn-termination";
 import { resolveCdTarget } from "./workspace-switch";
@@ -539,8 +539,7 @@ const scheduler = new TurnScheduler({
     admit(event);
     return live ? startTurn(event, history.slice()) : null;
   },
-  needsCompaction,
-  compact: startCompaction,
+  compaction: { needed: needsCompaction, run: startCompaction },
 });
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
