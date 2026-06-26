@@ -1,7 +1,6 @@
-import { createTwoFilesPatch } from "diff";
 import type { ReactNode } from "react";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
-import { countChanges, DiffStat, withNewline } from "./diff-utils";
+import { countChanges, DiffStat, generateToolDiff } from "./diff-utils";
 import { OpenPathLink, ToolCall } from "./message";
 import { ToolSection } from "./tool-section";
 import type { ToolStatus } from "./tool-status";
@@ -72,25 +71,18 @@ export function MultiEditDiff({
   const body = (
     <div className="flex flex-col gap-2">
       {groups.map((group) => {
-        let added = 0;
-        let removed = 0;
-        for (const edit of group.edits) {
-          const c = countChanges(edit.old, edit.new);
-          added += c.added;
-          removed += c.removed;
-        }
-        const diffs = group.edits.map((edit) => (
+        // One prepared diff per edit (patch + counts together), the same single patch-prep path as
+        // single edit/write; the group's +/- stat sums them.
+        const prepared = group.edits.map((edit) => ({
+          edit,
+          ...generateToolDiff(group.path, edit.old, edit.new, 2),
+        }));
+        const added = prepared.reduce((sum, p) => sum + p.added, 0);
+        const removed = prepared.reduce((sum, p) => sum + p.removed, 0);
+        const diffs = prepared.map((p) => (
           <DiffViewer
-            key={`${group.path}::${edit.old}`}
-            patch={createTwoFilesPatch(
-              group.path,
-              group.path,
-              withNewline(edit.old),
-              withNewline(edit.new),
-              undefined,
-              undefined,
-              { context: 2 },
-            )}
+            key={`${group.path}::${p.edit.old}`}
+            patch={p.patch}
             variant="ghost"
             showHeader={false}
           />

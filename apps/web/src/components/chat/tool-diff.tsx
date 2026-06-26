@@ -1,6 +1,5 @@
-import { createTwoFilesPatch } from "diff";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
-import { countChanges, DiffStat, withNewline } from "./diff-utils";
+import { DiffStat, generateToolDiff } from "./diff-utils";
 import { ToolCall } from "./message";
 import type { ToolStatus } from "./tool-status";
 
@@ -41,15 +40,7 @@ export function ToolDiff({
   className,
   onOpenPath,
 }: ToolDiffProps) {
-  const patch = createTwoFilesPatch(
-    path,
-    path,
-    withNewline(oldText),
-    withNewline(newText),
-    undefined,
-    undefined,
-    { context: 3 },
-  );
+  const { patch, added, removed } = generateToolDiff(path, oldText, newText, 3);
   const diff = <DiffViewer patch={patch} variant="ghost" showHeader={false} />;
   return (
     <ToolCall
@@ -60,7 +51,7 @@ export function ToolDiff({
       className={className}
       onOpenPath={onOpenPath}
       border={border}
-      sectionMeta={<DiffStat {...countChanges(oldText, newText)} />}
+      sectionMeta={<DiffStat added={added} removed={removed} />}
     >
       {diff}
     </ToolCall>

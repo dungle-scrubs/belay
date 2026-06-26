@@ -540,6 +540,9 @@ DiffViewer.displayName = "DiffViewer";
 
 export type { ParsedLine, ParsedFile, SplitLinePair };
 
+// parsePatch / computeDiff are intentionally NOT exported: DiffViewer is a display-only component
+// (patch in, rendered diff out). Patch PREPARATION (createTwoFilesPatch + counts) lives in one place,
+// diff-utils' generateToolDiff (D-015), so callers never reach into the viewer's parsing internals.
 export {
   DiffViewer,
   DiffViewerFile,
@@ -552,6 +555,4 @@ export {
   diffViewerVariants,
   diffLineVariants,
   diffLineTextVariants,
-  parsePatch,
-  computeDiff,
 };
