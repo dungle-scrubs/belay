@@ -523,7 +523,7 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 - [x] Add Internet area summary from D-060 host-owned public-internet status and last probe details
 - [x] Add Tools/Search area summary for core tool availability, `rg`, `ast_grep`, web search/fetch/docs dependencies, and tool failures when known
 - [ ] Add Web/Docs area summary for docs cache, web fetch/rendering availability, Jina/Firecrawl configuration, and stale corpora
-- [ ] Add MCP, LSP, and Hooks areas with unconfigured, unavailable, auth-needed, error, and timeout states
+- [x] Add MCP, LSP, and Hooks areas with unconfigured, unavailable, auth-needed, error, and timeout states
 - [x] Add Storage/Roots area for `TREVOR_HOME`, local state/cache/share roots, writeability, migration debt, and observation-store status
 - [x] Add Workspace area for cwd, git/worktree status, AGENTS context, managed worktrees, locks, and non-git states
 - [x] Add Updates/Version area for package/build/version/update facts when available
@@ -672,7 +672,7 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 15 completed, 47 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
-- Live open follow-up (D-073 doctor health surface): 57 features, 33 completed, 24 remaining
+- Live open follow-up (D-073 doctor health surface): 57 features, 34 completed, 23 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 175 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 174 unchecked items plus 5 partial/gated carry-forward items
