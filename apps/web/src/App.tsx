@@ -119,7 +119,7 @@ export function App() {
   // and passes the whole `composer` object to PanelHost; it also reads a few fields here for that
   // wiring (the submit path clears the draft/attachments, the slash menu refocuses the input, etc.).
   const composer = useComposer();
-  const { draft, setDraft, attachments, setAttachments, inputRef } = composer;
+  const { draft, setDraft, imageRefs, attachments, setAttachments, inputRef } = composer;
 
   const stream = useSession(sessionId);
   const { events, presence, replayed, replayThroughSeq, status } = stream;
@@ -391,12 +391,15 @@ export function App() {
       setAtBottom(true); // re-pin: follow the command + its result down to the bottom
       return;
     }
-    if (!text && attachments.length === 0) {
+    if (!text && imageRefs.length === 0 && attachments.length === 0) {
       return;
     }
     history.record(text); // record ordinary prompts for recall (empty/attachments-only is skipped)
-    setDraft("");
-    const artifacts = attachments.length ? attachments : undefined;
+    setDraft(""); // clears the draft text AND its image-token refs (via the composer's syncDraft)
+    // Image refs (token order) ride first so the host maps token #k -> the k-th image artifact;
+    // document attachments follow as a note.
+    const all = [...imageRefs, ...attachments];
+    const artifacts = all.length ? all : undefined;
     setAttachments([]);
     submit({
       id: crypto.randomUUID(),
@@ -489,8 +492,9 @@ export function App() {
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
     // Fold the queued prompts + draft + queued/attached artifacts into ONE steering
-    // prompt that replaces the queue, then ask the host to cancel the active run.
-    steer(draft, attachments, {
+    // prompt that replaces the queue, then ask the host to cancel the active run. The draft's
+    // image-token refs ride with the document attachments so a steered prompt keeps its images.
+    steer(draft, [...imageRefs, ...attachments], {
       id: crypto.randomUUID(),
       provider: activeProvider,
       reasoning: reasoning || undefined,

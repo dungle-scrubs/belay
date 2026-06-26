@@ -33,6 +33,9 @@ export interface PromptInputProps {
   readonly onDraftChange: (value: string) => void;
   readonly onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   readonly onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  /** Composer-owned key handling (image-token atomic delete); runs before {@link onKeyDown} and may
+   *  `preventDefault` to swallow the key (e.g. backspacing a whole `[Image #N]` token). */
+  readonly onComposerKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   readonly onPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
   readonly inputRef: RefObject<HTMLTextAreaElement | null>;
   readonly fileInputRef: RefObject<HTMLInputElement | null>;
@@ -52,6 +55,7 @@ export function PromptInput({
   onDraftChange,
   onSubmit,
   onKeyDown,
+  onComposerKeyDown,
   onPaste,
   inputRef,
   fileInputRef,
@@ -138,7 +142,14 @@ export function PromptInput({
             ref={inputRef}
             value={draft}
             onChange={(event) => onDraftChange(event.target.value)}
-            onKeyDown={onKeyDown}
+            onKeyDown={(event) => {
+              // Composer token-delete runs first and may swallow the key; otherwise App's handler
+              // (Enter submit, slash menu, history) runs.
+              onComposerKeyDown?.(event);
+              if (!event.defaultPrevented) {
+                onKeyDown(event);
+              }
+            }}
             onPaste={onPaste}
             placeholder={placeholder}
             disabled={disabled}
