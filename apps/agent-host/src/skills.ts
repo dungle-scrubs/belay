@@ -383,6 +383,29 @@ function blurb(description: string): string {
   return main.length > 90 ? `${main.slice(0, 90).trimEnd()}…` : main;
 }
 
+/** The ambient roster inlines at most this many skills; any surplus is reachable via `skills_list`. */
+export const SKILL_ROSTER_CAP = 40;
+
+/**
+ * The compact level-1 roster embedded in the `skill` tool description: one terse `- id: blurb` line
+ * per skill (D-075 M2), capped at {@link SKILL_ROSTER_CAP}. When more skills exist than fit, the
+ * surplus is NOT silently dropped: it is summarised with an explicit count (shown / total) plus a
+ * pointer to `skills_list(query)`, so the model knows unshown skills exist and how to reach them by
+ * keyword - never a speculative load of every body. Pure over the passed skills, so capping +
+ * truncation marking are unit-tested directly.
+ */
+export function buildSkillRoster(skills: readonly Skill[], capCount = SKILL_ROSTER_CAP): string {
+  const shown = skills.slice(0, capCount);
+  const lines = shown.map((s) => `- ${s.icon ? `${s.icon} ` : ""}${s.id}: ${blurb(s.description)}`);
+  const hidden = skills.length - shown.length;
+  if (hidden > 0) {
+    lines.push(
+      `…and ${hidden} more skill${hidden === 1 ? "" : "s"} not shown (${skills.length} total) - call skills_list(query) to find them by keyword.`,
+    );
+  }
+  return lines.join("\n");
+}
+
 /**
  * The progressive-disclosure tool: its description lists every skill's id + a terse
  * blurb (level 1) and `skill(name)` returns one skill's full instructions (level 2).
@@ -393,9 +416,7 @@ const SkillParams = Schema.Struct({
 });
 
 export function buildSkillTool(skills: readonly Skill[]): Tool<typeof SkillParams.Type> {
-  const list = skills
-    .map((s) => `- ${s.icon ? `${s.icon} ` : ""}${s.id}: ${blurb(s.description)}`)
-    .join("\n");
+  const list = buildSkillRoster(skills);
 
   return {
     name: "skill",

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "vitest";
 import {
+  buildSkillRoster,
   discoverSkillsIn,
   expandSkill,
   renderSkillsList,
@@ -132,6 +133,40 @@ test("renderSkillsList reports searched roots when empty and source tags when fo
   const list = renderSkillsList(discoverSkillsIn([r.project, r.global]), [r.project, r.global]);
   assert.match(list, /alpha \[project\] - project alpha/);
   assert.match(list, /beta \[global\] - global beta/);
+});
+
+/** An in-memory Skill (no disk), for the pure roster builder. */
+function inMemorySkill(id: string, description: string): Skill {
+  return { id, name: id, description, path: `/x/${id}/SKILL.md`, rootKind: "global" };
+}
+
+test("buildSkillRoster lists each skill terse and omits the truncation marker when all fit", () => {
+  const roster = buildSkillRoster([
+    inMemorySkill("alpha", "Do alpha things"),
+    inMemorySkill("beta", "Do beta things. Triggers: when beta is needed"),
+  ]);
+  // Awareness: a relevant skill's id + blurb is present so the model knows it exists (D-075 M2).
+  assert.ok(roster.includes("- alpha: Do alpha things"));
+  // The blurb stops at the Triggers tail and the full body never appears inline.
+  assert.ok(roster.includes("- beta: Do beta things"));
+  assert.ok(!roster.includes("when beta is needed"));
+  assert.ok(!roster.includes("not shown"), "no truncation marker when nothing is hidden");
+});
+
+test("buildSkillRoster caps the roster and marks the surplus with counts + a skills_list pointer", () => {
+  const many = Array.from({ length: 5 }, (_, i) => inMemorySkill(`s${i}`, `desc ${i}`));
+  const roster = buildSkillRoster(many, 2);
+  // The first two (input order) are inlined; the surplus is summarised, not dropped or body-loaded.
+  assert.ok(roster.includes("- s0:"));
+  assert.ok(roster.includes("- s1:"));
+  assert.ok(!roster.includes("- s2:"), "surplus skill bodies are not inlined");
+  // Explicit continuation metadata: how many are hidden, the total, and how to reach them.
+  assert.ok(roster.includes("3 more skills not shown"));
+  assert.ok(roster.includes("(5 total)"));
+  assert.ok(
+    roster.includes("skills_list(query)"),
+    "points to search, not a speculative all-body load",
+  );
 });
 
 test("a project-local skill body does NOT auto-run shell interpolation while the gate is off", async () => {
