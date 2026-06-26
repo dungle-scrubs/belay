@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  CATALOG_PAGE_MAX,
   type CatalogEntry,
   catalogEntryFromProviderModel,
   decodeCatalogEntry,
@@ -9,6 +10,7 @@ import {
   modelRefFromProvider,
   projectSourceState,
   providerStringOf,
+  queryCatalog,
   type SourceSummary,
 } from "./model-source";
 import type { ProviderModel } from "./protocol";
@@ -151,6 +153,90 @@ test("the legacy provider string round-trips through a stable model ref", () => 
   assert.equal(providerStringOf(ref), "qwen", "the provider string IS the source id");
   // Default reasoning is null when the caller does not pass one.
   assert.equal(modelRefFromProvider("qwen", "m").reasoning, null);
+});
+
+const entry = (over: Partial<CatalogEntry> & { modelId: string }): CatalogEntry => ({
+  sourceId: "gw",
+  displayName: over.modelId,
+  kind: "cloud",
+  capabilities: [],
+  contextLength: null,
+  costTier: null,
+  aliases: [],
+  freshness: { refreshedAt: null, stale: false },
+  ...over,
+});
+
+test("queryCatalog filters by text, family, capability, kind, and context size", () => {
+  const all = [
+    entry({ modelId: "qwen3-coder", displayName: "Qwen3 Coder", capabilities: ["reasoning"] }),
+    entry({ modelId: "gpt-vision", displayName: "GPT Vision", capabilities: ["vision", "tools"] }),
+    entry({ modelId: "llama-local", kind: "local", contextLength: 8000, aliases: ["llama3"] }),
+    entry({ modelId: "big-ctx", contextLength: 200000 }),
+  ];
+  assert.deepEqual(
+    queryCatalog(all, { text: "coder" }).entries.map((e) => e.modelId),
+    ["qwen3-coder"],
+    "free text matches id/display",
+  );
+  assert.deepEqual(
+    queryCatalog(all, { text: "llama3" }).entries.map((e) => e.modelId),
+    ["llama-local"],
+    "free text matches aliases",
+  );
+  assert.deepEqual(
+    queryCatalog(all, { filters: { vision: true } }).entries.map((e) => e.modelId),
+    ["gpt-vision"],
+  );
+  assert.deepEqual(
+    queryCatalog(all, { filters: { kind: "local" } }).entries.map((e) => e.modelId),
+    ["llama-local"],
+  );
+  assert.deepEqual(
+    queryCatalog(all, { filters: { minContext: 100000 } }).entries.map((e) => e.modelId),
+    ["big-ctx"],
+  );
+  assert.deepEqual(
+    queryCatalog(all, { filters: { family: "gpt" } }).entries.map((e) => e.modelId),
+    ["gpt-vision"],
+  );
+});
+
+test("queryCatalog pages thousands of models with a cursor and a hard cap", () => {
+  const all = Array.from({ length: 5000 }, (_, i) => entry({ modelId: `m${i}` }));
+
+  const first = queryCatalog(all, { limit: 100 });
+  assert.equal(first.entries.length, 100, "the page is bounded by the limit");
+  assert.equal(first.total, 5000, "total reports the full match count, not the page size");
+  assert.equal(first.nextCursor, 100, "the cursor advances by the page size");
+
+  const second = queryCatalog(all, { cursor: first.nextCursor ?? 0, limit: 100 });
+  assert.equal(second.entries[0]?.modelId, "m100", "the next page continues where the first ended");
+
+  // A request beyond the hard cap is clamped, so a caller can never pull the whole catalog at once.
+  const capped = queryCatalog(all, { limit: 100000 });
+  assert.equal(capped.entries.length, CATALOG_PAGE_MAX);
+
+  // The last page reports a null cursor (matches exhausted).
+  const tail = queryCatalog(all, { cursor: 4950, limit: 100 });
+  assert.equal(tail.entries.length, 50);
+  assert.equal(tail.nextCursor, null);
+});
+
+test("queryCatalog returns stale entries (staleness is display, not exclusion) and an empty match cleanly", () => {
+  const all = [
+    entry({ modelId: "fresh" }),
+    entry({ modelId: "old", freshness: { refreshedAt: null, stale: true } }),
+  ];
+  assert.deepEqual(
+    queryCatalog(all).entries.map((e) => e.modelId),
+    ["fresh", "old"],
+    "a stale entry is still returned",
+  );
+  const none = queryCatalog(all, { text: "nomatch" });
+  assert.deepEqual(none.entries, []);
+  assert.equal(none.total, 0);
+  assert.equal(none.nextCursor, null);
 });
 
 test("a legacy ProviderModel projects into a catalog entry under its provider source", () => {
