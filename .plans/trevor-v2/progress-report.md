@@ -278,12 +278,12 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 
 ### M3: CLI lifecycle surface
 
-- [ ] `trevor list` shows non-archived current-project sessions by default
-- [ ] `trevor list --archived` shows archived sessions for the current project
+- [x] `trevor list` shows non-archived current-project sessions by default
+- [x] `trevor list --archived` shows archived sessions for the current project
 - [ ] `trevor open <session>` opens or resumes the selected session in the browser
 - [ ] `trevor open <session>` starts or attaches the matching host when possible
-- [ ] `trevor archive <session>` sets the archived flag without deleting the durable log
-- [ ] `trevor unarchive <session>` clears the archived flag
+- [x] `trevor archive <session>` sets the archived flag without deleting the durable log
+- [x] `trevor unarchive <session>` clears the archived flag
 - [ ] `trevor stop <session>` performs graceful session shutdown, including active and queued work handling
 - [ ] `trevor kill <session>` force terminates the session host runtime
 
@@ -669,10 +669,10 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 37 completed, 3 remaining (explicit-UI-refresh wiring, structured probe logs, manual EZE repro)
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 0 completed, 39 remaining
-- Live open follow-up (D-094 session lifecycle controls): 38 features, 5 completed, 33 remaining (M2 archive metadata + filtering)
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 9 completed, 29 remaining (M2 archive metadata; M3 list/archive/unarchive CLI)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 35 completed, 16 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 242 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 238 unchecked items plus 5 partial/gated carry-forward items
