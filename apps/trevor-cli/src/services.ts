@@ -21,6 +21,18 @@ export const SERVICE_FILTERS: Record<ServiceName, string> = {
   store: "@trevor/session-store",
 };
 
+/**
+ * The npm script the launcher runs per service. The host-critical stores run NON-watch (`start`)
+ * so editing shared/protocol/store source can't restart them out from under a live session and drop
+ * its sockets mid-turn - the `pnpm dev` watcher is the place for that, not a `trevor`-launched
+ * backend. The web stays on `dev` (Vite): its HMR reloads the browser tab, never the host's stream.
+ */
+export const SERVICE_SCRIPTS: Record<ServiceName, string> = {
+  web: "dev",
+  blob: "start",
+  store: "start",
+};
+
 /** The result of probing one reserved port: is something listening, and is it OUR service. */
 export interface ServiceProbe {
   readonly reachable: boolean;

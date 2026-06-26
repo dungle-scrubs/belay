@@ -7,7 +7,13 @@ import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/s
 import { nodeFs } from "./fs";
 import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
 import { TREVOR_HOME } from "./project";
-import { RESERVED_PORTS, SERVICE_FILTERS, type ServiceName, type ServiceProbe } from "./services";
+import {
+  RESERVED_PORTS,
+  SERVICE_FILTERS,
+  SERVICE_SCRIPTS,
+  type ServiceName,
+  type ServiceProbe,
+} from "./services";
 
 /**
  * The real, node-backed launcher platform: HTTP probes of the reserved ports, spawning shared
@@ -91,7 +97,7 @@ function logFd(name: string): number | "ignore" {
  *  and only one set exists across projects. Its output goes to `<TREVOR_HOME>/logs/<name>.log`. */
 function startService(name: ServiceName): Promise<void> {
   const out = logFd(name);
-  const child = spawn("pnpm", ["--filter", SERVICE_FILTERS[name], "dev"], {
+  const child = spawn("pnpm", ["--filter", SERVICE_FILTERS[name], SERVICE_SCRIPTS[name]], {
     cwd: repoRoot(),
     detached: true,
     stdio: ["ignore", out, out],
@@ -176,7 +182,11 @@ function watchSession(
 const isHostOnline = (event: SessionEvent): boolean =>
   decodeTrevorEvent(event)?.type === "host.online";
 
-async function spawnHost(opts: { sessionId: string; root: string }): Promise<SpawnedHost> {
+async function spawnHost(opts: {
+  sessionId: string;
+  root: string;
+  debug?: boolean;
+}): Promise<SpawnedHost> {
   // Run the host through tsx with cwd = the project root, so its host-cwd tools (read/write/bash)
   // operate in the project and confined tools see TREVOR_WORKSPACE. Env is inherited (so a shell that
   // already injected provider secrets passes them through) plus the session + workspace; nothing
@@ -195,6 +205,9 @@ async function spawnHost(opts: { sessionId: string; root: string }): Promise<Spa
       SESSION_ID: opts.sessionId,
       TREVOR_WORKSPACE: opts.root,
       TREVOR_MANAGED_HOST: "1",
+      // Debug mode (`trevor --debug`): the host boots with its debug command surface on (incl.
+      // /restart). The flag rides the env so it survives the host's own /restart re-exec.
+      ...(opts.debug ? { TREVOR_DEBUG: "1" } : {}),
     },
   });
   child.unref();

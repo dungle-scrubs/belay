@@ -56,7 +56,7 @@ export interface LaunchPlatform {
   waitForWeb(): Promise<boolean>;
   /** True when a live host is already answering this session. */
   hostPresent(sessionId: string): Promise<boolean>;
-  spawnHost(opts: { sessionId: string; root: string }): Promise<SpawnedHost>;
+  spawnHost(opts: { sessionId: string; root: string; debug?: boolean }): Promise<SpawnedHost>;
   /** Resolves true once the spawned host announces it joined the session (or false on timeout). */
   waitForHostOnline(sessionId: string): Promise<boolean>;
   openBrowser(url: string): Promise<void>;
@@ -82,7 +82,10 @@ export function sessionUrl(sessionId: string): string {
   return `http://127.0.0.1:${RESERVED_PORTS.web}/?session=${sessionId}`;
 }
 
-export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
+export async function launch(
+  platform: LaunchPlatform,
+  options: { readonly debug?: boolean } = {},
+): Promise<LaunchOutcome> {
   platform.reporter.step("resolving project…");
   const root = resolveProjectRoot(platform.cwd, platform.fs);
   const sessionId = resolveSession(platform.fs, platform.home, root, platform.now());
@@ -150,7 +153,7 @@ export async function launch(platform: LaunchPlatform): Promise<LaunchOutcome> {
         removeHost(platform.fs, platform.home, sessionId);
       }
       platform.reporter.step("starting agent host…");
-      const spawned = await platform.spawnHost({ sessionId, root });
+      const spawned = await platform.spawnHost({ sessionId, root, debug: options.debug });
       hostPid = spawned.pid;
       recordHost(platform.fs, platform.home, {
         sessionId,

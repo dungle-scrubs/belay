@@ -39,7 +39,7 @@ interface FakeOpts {
 interface Spy {
   platform: LaunchPlatform;
   started: ServiceName[];
-  spawned: { sessionId: string; root: string }[];
+  spawned: { sessionId: string; root: string; debug?: boolean }[];
   opened: string[];
 }
 
@@ -50,7 +50,7 @@ function makePlatform(opts: FakeOpts = {}): Spy {
     fs.writeFile(`${opts.gitRoot}/.git`, "");
   }
   const started: ServiceName[] = [];
-  const spawned: { sessionId: string; root: string }[] = [];
+  const spawned: { sessionId: string; root: string; debug?: boolean }[] = [];
   const opened: string[] = [];
   let spawnPid = 9000;
   const platform: LaunchPlatform = {
@@ -70,8 +70,8 @@ function makePlatform(opts: FakeOpts = {}): Spy {
     waitForStore: () => Promise.resolve(true),
     waitForWeb: () => Promise.resolve(true),
     hostPresent: () => Promise.resolve(opts.hostPresent ?? false),
-    spawnHost: ({ sessionId, root }) => {
-      spawned.push({ sessionId, root });
+    spawnHost: ({ sessionId, root, debug }) => {
+      spawned.push({ sessionId, root, ...(debug ? { debug } : {}) });
       spawnPid += 1;
       return Promise.resolve({
         pid: spawnPid,
@@ -118,6 +118,13 @@ test("a fresh launch starts missing services, spawns the host, and opens the ses
   assert.deepEqual(spy.opened, [sessionUrl(outcome.sessionId)]);
   assert.equal(outcome.url, `http://127.0.0.1:${RESERVED_PORTS.web}/?session=${outcome.sessionId}`);
   assert.equal(outcome.online, true);
+});
+
+test("--debug threads the debug flag through to the spawned host", async () => {
+  const spy = makePlatform({ gitRoot: "/work/app" });
+  const outcome = await launch(spy.platform, { debug: true });
+  // The host is spawned with debug:true (the no-debug case is covered above: no debug key).
+  assert.deepEqual(spy.spawned, [{ sessionId: outcome.sessionId, root: "/work/app", debug: true }]);
 });
 
 test("a healthy recorded host is reused, not re-spawned", async () => {
