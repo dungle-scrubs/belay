@@ -1,4 +1,4 @@
-import { Duration, Effect, Option, Stream } from "effect";
+import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
 import type {
   ChatMessage,
   ModelEvent,
@@ -7,8 +7,70 @@ import type {
   ToolCall,
   ToolDef,
 } from "../providers";
+import { ProviderUnavailable } from "../providers/errors";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
+
+/**
+ * Provider-stream idle watchdog (ms): if a model stream produces no event for this long, treat it as
+ * a stalled (half-open) connection and fail it, so the loop retries or goes terminal instead of
+ * hanging forever - the fix for the 18-minute "Working" stall where a half-open Codex stream sent no
+ * tokens, close, or error. Env-overridable; set to 0 to disable. Default 90s (xhigh reasoning can
+ * pause for a while, so the gap is generous - it only catches a genuinely dead stream).
+ */
+const STREAM_STALL_MS = (() => {
+  const raw = process.env.TREVOR_STREAM_STALL_MS;
+  return raw !== undefined && Number.isFinite(Number(raw)) ? Number(raw) : 90_000;
+})();
+
+/**
+ * Wraps a provider stream with the idle watchdog: a scoped fiber polls the time since the last event
+ * and, past STREAM_STALL_MS, fails the stream with a RETRYABLE ProviderUnavailable. The loop's
+ * existing reconnect `catchAll` then retries (when nothing has streamed yet) or, once tokens have
+ * flowed, surfaces it as a clear terminal error. A normal end, the stall failure, or an interrupt
+ * (ESC/cancel) all close the stream scope and tear the watchdog down.
+ */
+function withStallTimeout<A>(
+  source: Stream.Stream<A, ProviderError>,
+  providerName: string,
+): Stream.Stream<A, ProviderError> {
+  if (STREAM_STALL_MS <= 0) {
+    return source;
+  }
+  return Stream.unwrapScoped(
+    Effect.gen(function* () {
+      const lastSeen = yield* Ref.make(yield* Clock.currentTimeMillis);
+      const stalled = yield* Deferred.make<never, ProviderError>();
+      const bump = Clock.currentTimeMillis.pipe(Effect.flatMap((now) => Ref.set(lastSeen, now)));
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          for (;;) {
+            yield* Effect.sleep(Duration.millis(Math.min(STREAM_STALL_MS, 5_000)));
+            const idle = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastSeen));
+            if (idle >= STREAM_STALL_MS) {
+              yield* Deferred.fail(
+                stalled,
+                new ProviderUnavailable({
+                  provider: providerName,
+                  detail: `model stream stalled (no output for ${Math.round(STREAM_STALL_MS / 1000)}s)`,
+                  retryable: true,
+                }),
+              );
+              return;
+            }
+          }
+        }),
+      );
+      const guarded = source.pipe(Stream.tap(() => bump));
+      const failOnStall: Stream.Stream<never, ProviderError> = Stream.fromEffect(
+        Deferred.await(stalled),
+      );
+      // haltStrategy "left": the merged stream ends when the SOURCE ends (we don't wait on the
+      // never-resolving watchdog); a stall failure still propagates immediately from either side.
+      return Stream.merge(guarded, failOnStall, { haltStrategy: "left" });
+    }),
+  );
+}
 
 /**
  * Bounded auto-reconnect for a transient provider outage (D-076…D-079): backoff (ms) BEFORE each
@@ -248,7 +310,10 @@ export function runAgent(
       });
       const synthReasoning = cheapestReasoning(provider.reasoningLevels);
       let answer = "";
-      const model = provider.stream(conversation, [], synthReasoning).pipe(
+      const model = withStallTimeout(
+        provider.stream(conversation, [], synthReasoning),
+        provider.model,
+      ).pipe(
         Stream.filterMap((event) => {
           // Tools were removed; drop any stray tool_call/overflow and keep text/thinking/usage.
           if (event.type === "tool_call" || event.type === "overflow") {
@@ -304,7 +369,10 @@ export function runAgent(
       // catchAll never sees them: they are never retried and cancel stays instant during a backoff.
       const connectStep = (attempt: number): Stream.Stream<AgentEvent, ProviderError> => {
         let sawEvent = false;
-        const mapped = provider.stream(conversation, tools, currentReasoning).pipe(
+        const mapped = withStallTimeout(
+          provider.stream(conversation, tools, currentReasoning),
+          provider.model,
+        ).pipe(
           Stream.tap(() => Effect.sync(() => (sawEvent = true))),
           Stream.filterMap((event) => {
             if (event.type === "tool_call") {

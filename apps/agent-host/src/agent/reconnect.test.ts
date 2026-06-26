@@ -168,3 +168,75 @@ it.effect("an interrupt during a backoff cancels cleanly (no retry, no completio
     assert.equal(reconnects(events).length, 1, "only the first reconnect marker was emitted");
   }),
 );
+
+/**
+ * Idle/stall watchdog (the 18-minute "Working" fix): a half-open stream that emits no event for
+ * STREAM_STALL_MS (90s) is failed as a RETRYABLE outage, so it reconnects when nothing has streamed
+ * yet, or goes terminal once tokens have flowed - never hangs forever. Driven with TestClock so the
+ * 90s idle window is virtual; the fake provider HANGS (Stream.never) instead of failing.
+ */
+function hangingProvider(opts: { hangBefore: number; emitBeforeHang?: boolean }): Provider {
+  let calls = 0;
+  const describe = {
+    label: "Fake",
+    model: "fake-1",
+    reasoningLevels: ["off", "low"] as const,
+    defaultReasoning: "off",
+    kind: "cloud" as const,
+  };
+  return {
+    id: "fake",
+    ...describe,
+    describe: () => describe,
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: false, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: (): Stream.Stream<ProviderEvent, ProviderError> => {
+      calls += 1;
+      if (calls <= opts.hangBefore) {
+        return opts.emitBeforeHang
+          ? Stream.concat(
+              Stream.succeed<ProviderEvent>({ type: "text", text: "partial" }),
+              Stream.never,
+            )
+          : Stream.never;
+      }
+      return Stream.fromIterable(ANSWER);
+    },
+  };
+}
+
+/** Drives the loop, advancing the TestClock past the 90s idle-stall window (+ the reconnect backoff). */
+function driveStalled(provider: Provider) {
+  return Effect.gen(function* () {
+    const events: AgentEvent[] = [];
+    const fiber = yield* Stream.runForEach(runAgent(provider, HISTORY, "off", "r1"), (e) =>
+      Effect.sync(() => void events.push(e)),
+    ).pipe(Effect.exit, Effect.fork);
+    yield* TestClock.adjust(Duration.seconds(120));
+    const exit = yield* Fiber.join(fiber);
+    return { events, exit };
+  });
+}
+
+it.effect("a stalled stream BEFORE the first token is retried (idle watchdog)", () =>
+  Effect.gen(function* () {
+    // The first call hangs (half-open); the watchdog fails it retryably, the loop reconnects, the
+    // retry answers - exactly like a transient drop before output.
+    const { events, exit } = yield* driveStalled(hangingProvider({ hangBefore: 1 }));
+    assert.ok(Exit.isSuccess(exit), "the turn recovered after the stalled stream");
+    assert.ok(reconnects(events).length >= 1, "the stall surfaced as a reconnect");
+    assert.equal(answerText(events), "DONE", "the retry streamed the answer");
+  }),
+);
+
+it.effect("a stalled stream AFTER output is terminal (no retry, like a mid-stream drop)", () =>
+  Effect.gen(function* () {
+    const { events, exit } = yield* driveStalled(
+      hangingProvider({ hangBefore: 99, emitBeforeHang: true }),
+    );
+    assert.ok(Exit.isFailure(exit), "a stall after a token is terminal - the turn never hangs");
+    assert.equal(reconnects(events).length, 0, "no reconnect once a token has streamed");
+    assert.equal(answerText(events), "partial");
+  }),
+);
