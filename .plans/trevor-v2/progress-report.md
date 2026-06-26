@@ -632,7 +632,7 @@ registry-derived capability manifest D-074.
 - [x] Reject or clearly mark disabled skills without pretending they are usable
 - [x] Do not auto-load neighboring, related, or all matching skill bodies
 - [x] Preserve existing security and trust gates for shell interpolation inside skill bodies
-- [ ] Tests cover one-body loading, unknown id, disabled id, shadowed provenance, parse diagnostics, and interpolation gating
+- [x] Tests cover one-body loading, unknown id, disabled id, shadowed provenance, parse diagnostics, and interpolation gating
 
 ### M5: Prompt guidance and model behavior
 
@@ -673,6 +673,6 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 0 completed, 62 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
 - Live open follow-up (D-073 doctor health surface): 57 features, 27 completed, 30 remaining
-- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 38 completed, 13 remaining
+- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 39 completed, 12 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 200 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 199 unchecked items plus 5 partial/gated carry-forward items
