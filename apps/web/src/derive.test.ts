@@ -47,6 +47,7 @@ const online = (instanceId: string, extra: Record<string, unknown> = {}) =>
       },
     },
     commands: [{ name: "/clear", summary: "reset" }],
+    branch: "main",
     default: "qwen",
     workspace: "/ws",
     cwd: "/cwd",
@@ -178,6 +179,8 @@ test("hostStatus (live presence): present with the live leader, others are stand
   assert.equal(solo.leaderId, "h1");
   assert.equal(solo.standbyCount, 0);
   assert.equal(solo.workspace, "/ws");
+  assert.equal(solo.cwd, "/cwd");
+  assert.equal(solo.branch, "main");
 
   const withStandby = hostStatus(events, presence("h1", "h2"), Date.now());
   assert.equal(withStandby.standbyCount, 1);

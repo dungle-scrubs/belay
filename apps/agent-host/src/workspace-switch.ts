@@ -47,6 +47,15 @@ function expandHome(input: string, home: string): string {
   return input.startsWith("~/") ? join(home, input.slice(2)) : input;
 }
 
+function stripMatchingQuotes(input: string): string {
+  const first = input[0];
+  const last = input[input.length - 1];
+  if ((first === '"' || first === "'") && first === last) {
+    return input.slice(1, -1);
+  }
+  return input;
+}
+
 export function resolveWorkspaceRoot(cwd: string, fs: WorkspaceSwitchFs): string {
   let dir = cwd;
   for (;;) {
@@ -62,7 +71,7 @@ export function resolveWorkspaceRoot(cwd: string, fs: WorkspaceSwitchFs): string
 }
 
 export function resolveCdTarget(args: string, options: ResolveCdTargetOptions): CdTargetResult {
-  const raw = args.trim();
+  const raw = stripMatchingQuotes(args.trim());
   if (!raw) {
     return { ok: false, error: "usage: /cd <directory>" };
   }

@@ -65,6 +65,7 @@ test("host.online round-trips the announced subagents (D-045)", () => {
   const decoded = decodeTrevorEvent(
     stored(
       events.hostOnline({
+        branch: "main",
         providers: ["qwen"],
         default: "qwen",
         models: {},
@@ -78,6 +79,7 @@ test("host.online round-trips the announced subagents (D-045)", () => {
   );
   assert.equal(decoded?.type, "host.online");
   if (decoded?.type !== "host.online") return;
+  assert.equal(decoded.branch, "main");
   assert.deepEqual(decoded.agents, [
     { id: "explorer", description: "read-only", tools: ["read", "grep"], skills: [] },
   ]);

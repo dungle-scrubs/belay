@@ -53,3 +53,25 @@ test("hard steer folds the queued prompts + draft into a single prompt", () => {
     folded,
   );
 });
+
+test("session changes clear queued prompts and the in-flight latch", () => {
+  const published: string[] = [];
+  const publish = async (text: string) => {
+    published.push(text);
+  };
+  const { result, rerender } = renderHook(
+    ({ sessionId }: { sessionId: string }) =>
+      useSendQueue({ busy: true, publish, resetKey: sessionId }),
+    { initialProps: { sessionId: "s1" } },
+  );
+
+  act(() => result.current.submit(prompt("1", "old directory prompt")));
+  assert.equal(result.current.queue.length, 1);
+
+  rerender({ sessionId: "s2" });
+  assert.deepEqual(result.current.queue, []);
+
+  act(() => result.current.submit(prompt("2", "new directory prompt")));
+  assert.equal(result.current.queue.length, 1);
+  assert.deepEqual(published, []);
+});

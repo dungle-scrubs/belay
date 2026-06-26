@@ -43,6 +43,16 @@ test("/compact reports unavailability when the host offers no compaction hook", 
   assert.match(text, /unavailable/i);
 });
 
+test("/cd is announced as a host-owned workspace switch command", async () => {
+  const registry = buildCommandRegistry();
+  const spec = registry.specs.find((item) => item.name === "/cd");
+  assert.equal(spec?.usage, "/cd <directory>");
+
+  const { text, ok } = await registry.run("/cd", "/tmp", baseCtx);
+  assert.equal(ok, true);
+  assert.match(text, /handled by the live host/i);
+});
+
 /**
  * /skills (M7 / D-010): its construction moved into skills.ts (buildSkillCommand), so commands.ts
  * no longer imports skill-discovery internals. Pin that the relocated builder is wired into the

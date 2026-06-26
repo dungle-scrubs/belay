@@ -38,6 +38,7 @@ export function combineSteer(queue: readonly QueuedPrompt[], draft: string): str
 }
 
 export type SendQueueAction =
+  | { readonly type: "clear" }
   | { readonly type: "enqueue"; readonly prompt: QueuedPrompt }
   | { readonly type: "drainHead" }
   | { readonly type: "steer"; readonly prompt: QueuedPrompt | null };
@@ -49,6 +50,8 @@ export function sendQueueReducer(
   action: SendQueueAction,
 ): QueuedPrompt[] {
   switch (action.type) {
+    case "clear":
+      return [];
     case "enqueue":
       return [...queue, action.prompt];
     case "drainHead":

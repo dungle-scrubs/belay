@@ -35,6 +35,7 @@ export interface UseSendQueue {
 export function useSendQueue({
   busy,
   publish,
+  resetKey,
 }: {
   /** True while a turn is in flight (active run, or awaiting the echo). */
   readonly busy: boolean;
@@ -44,6 +45,8 @@ export function useSendQueue({
     reasoning?: string,
     artifacts?: readonly ArtifactRef[],
   ) => Promise<void>;
+  /** Changes when the browser switches durable sessions; queued prompts must not cross sessions. */
+  readonly resetKey?: string | null;
 }): UseSendQueue {
   const [queue, dispatchQueue] = useReducer(sendQueueReducer, [] as QueuedPrompt[]);
   // inFlight bridges the window between publishing a prompt and seeing its echo turn
@@ -51,6 +54,14 @@ export function useSendQueue({
   // catches the turn-ended edge (busy high -> low) to release the latch.
   const inFlightRef = useRef(false);
   const prevBusy = usePrevious(busy);
+
+  useEffect(() => {
+    if (resetKey === undefined) {
+      return;
+    }
+    inFlightRef.current = false;
+    dispatchQueue({ type: "clear" });
+  }, [resetKey]);
 
   // Release the in-flight latch when a turn ends (busy goes high then low), so the
   // next queued prompt becomes eligible to publish. Runs before the drain effect.
