@@ -511,7 +511,7 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 - [x] Keep `/doctor` distinct from `host.debugInfo`: doctor is health and repair guidance, debug info is sanitized runtime internals
 - [x] Use stable area ids, finding ids, status values, severities, labels, and next-action kinds
 - [x] Include source paths or local paths only when relevant and sanitized
-- [ ] Add command variants or actions for refresh, full/detail, JSON view, copy report, and relevant settings/details
+- [x] Add command variants or actions for refresh, full/detail, JSON view, copy report, and relevant settings/details
 - [x] Default `/doctor` output omits raw provider structs, lease timestamps, low-level reload flags, raw auth state, and internal token caps unless directly needed for a finding
 - [x] Tests cover schema decode, stable ids, no model turn, command variants, default-vs-full output, and command-result compatibility
 
@@ -672,7 +672,7 @@ registry-derived capability manifest D-074.
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 22 completed, 16 remaining (M1 semantics; M2 archive; M3 full CLI list/archive/stop/kill)
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 15 completed, 47 remaining
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
-- Live open follow-up (D-073 doctor health surface): 57 features, 32 completed, 25 remaining
+- Live open follow-up (D-073 doctor health surface): 57 features, 33 completed, 24 remaining
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 176 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 175 unchecked items plus 5 partial/gated carry-forward items
