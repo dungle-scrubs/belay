@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { AlertCircleIcon, CheckIcon, LoaderIcon, XCircleIcon } from "lucide-react";
 import { test } from "vitest";
-import { toolStatusColor } from "./tool-status";
+import { statusIcon, toolStatusColor } from "./tool-status";
 
 /**
  * One status→color config (D-014) shared by the transcript tool row and the concurrent-batch rows, so
@@ -23,4 +24,15 @@ test("pulse adds the running animation only for the running state", () => {
 test("without pulse the running color carries no animation (the concurrent-batch row)", () => {
   assert.ok(!toolStatusColor("running").includes("animate-pulse"));
   assert.match(toolStatusColor("running"), /text-smui-yellow/);
+});
+
+/**
+ * The shared status -> icon map (M29): the assistant-ui tool-fallback's lifecycle icons, moved here
+ * so every surface that shows a tool-call status icon reads one map instead of a local copy.
+ */
+test("each assistant-ui tool status maps to its lifecycle icon", () => {
+  assert.equal(statusIcon("running"), LoaderIcon);
+  assert.equal(statusIcon("complete"), CheckIcon);
+  assert.equal(statusIcon("incomplete"), XCircleIcon);
+  assert.equal(statusIcon("requires-action"), AlertCircleIcon);
 });

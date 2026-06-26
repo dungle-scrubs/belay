@@ -1,9 +1,12 @@
+import type { ToolName } from "@trevor/session";
+import type { ReactElement } from "react";
 import { toolSummary } from "@/derive";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { ToolCall } from "./message";
 import { MultiEditDiff } from "./multi-edit-diff";
 import { ToolDiff } from "./tool-diff";
 import { ToolOutput } from "./tool-output";
+import type { ToolStatus } from "./tool-status";
 import { type WebSearchResultItem, WebSearchResults } from "./web-search";
 
 // Tool-call arguments arrive as a JSON string; parse defensively (a streaming or
@@ -54,116 +57,120 @@ function parseWebSearchResult(raw: string | undefined): ParsedWebSearch | null {
 }
 
 /**
- * Dispatches one tool message to its renderer by name, owning the `done -> status`
- * derivation and the per-tool arg/result parsing in one place (so App.tsx no longer
- * carries the ~110-line name ladder, and the status is computed once here, not per arm):
- *   - multi_edit -> grouped collapsible diffs (when it parses to >0 edits);
- *   - write/edit -> a code diff (when a path is present);
- *   - web_search -> a normalized result list (or working/error);
- *   - bash/grep  -> flat text output;
- *   - everything else -> the generic ToolCall row (path-arg tools get a clickable path).
+ * The shared inputs every renderer arm reads: the tool message, the once-derived lifecycle
+ * status, the editor-open callback, and the wrapper className. Arms take this single context so
+ * the status is computed once for the whole dispatch, never per arm.
  */
-export function ToolMessage({
-  message,
-  className,
-  onOpenPath,
-}: {
+interface RenderContext {
   message: ToolMessageData;
-  className?: string;
-  /** Opens a local file in the editor (path-bearing tools wire the path to this). */
+  status: ToolStatus;
   onOpenPath: (path: string) => void;
-}) {
-  const status = message.done ? "done" : "running";
+  className?: string;
+}
 
-  // multi_edit: one atomic operation, grouped by file as collapsible diffs.
-  if (message.name === "multi_edit") {
-    const a = parseToolArgs(message.args);
-    const raw = Array.isArray(a.edits) ? a.edits : [];
-    const edits = raw
-      .map((item) => {
-        const e = (item ?? {}) as Record<string, unknown>;
-        return {
-          path: typeof e.path === "string" ? e.path : "",
-          old: typeof e.old === "string" ? e.old : "",
-          new: typeof e.new === "string" ? e.new : "",
-        };
-      })
-      .filter((e) => e.path);
-    if (edits.length > 0) {
-      return (
-        <MultiEditDiff
-          className={className}
-          edits={edits}
-          status={status}
-          border={false}
-          onOpenPath={onOpenPath}
-        />
-      );
-    }
+/** Each arm renders its tool, or returns null to defer to the generic fallback row (e.g. a
+ *  multi_edit/write/edit whose args don't yet carry what its specialized view needs). */
+type RenderArm = (ctx: RenderContext) => ReactElement | null;
+
+// multi_edit: one atomic operation, grouped by file as collapsible diffs (deferring to the
+// generic row until at least one edit with a path has streamed in).
+const renderMultiEdit: RenderArm = ({ message, status, onOpenPath, className }) => {
+  const a = parseToolArgs(message.args);
+  const raw = Array.isArray(a.edits) ? a.edits : [];
+  const edits = raw
+    .map((item) => {
+      const e = (item ?? {}) as Record<string, unknown>;
+      return {
+        path: typeof e.path === "string" ? e.path : "",
+        old: typeof e.old === "string" ? e.old : "",
+        new: typeof e.new === "string" ? e.new : "",
+      };
+    })
+    .filter((e) => e.path);
+
+  if (edits.length === 0) {
+    return null;
   }
 
-  // write/edit render as a code diff (up to 3 lines of subdued context).
-  if (message.name === "write" || message.name === "edit") {
-    const a = parseToolArgs(message.args);
-    const path = typeof a.path === "string" ? a.path : "";
-    if (path) {
-      return message.name === "write" ? (
-        <ToolDiff
-          className={className}
-          tool="write"
-          path={path}
-          newText={typeof a.content === "string" ? a.content : ""}
-          status={status}
-          onOpenPath={() => onOpenPath(path)}
-        />
-      ) : (
-        <ToolDiff
-          className={className}
-          tool="edit"
-          path={path}
-          oldText={typeof a.old === "string" ? a.old : ""}
-          newText={typeof a.new === "string" ? a.new : ""}
-          status={status}
-          onOpenPath={() => onOpenPath(path)}
-        />
-      );
-    }
+  return (
+    <MultiEditDiff
+      className={className}
+      edits={edits}
+      status={status}
+      border={false}
+      onOpenPath={onOpenPath}
+    />
+  );
+};
+
+// write/edit render as a code diff (up to 3 lines of subdued context), deferring to the generic
+// row until a path has streamed in.
+const renderDiff: RenderArm = ({ message, status, onOpenPath, className }) => {
+  const a = parseToolArgs(message.args);
+  const path = typeof a.path === "string" ? a.path : "";
+
+  if (!path) {
+    return null;
   }
 
-  // web_search renders its JSON output as a result list (or the working indicator while
-  // running, or its error message).
-  if (message.name === "web_search") {
-    const a = parseToolArgs(message.args);
-    const parsed = parseWebSearchResult(message.result);
-    return (
-      <WebSearchResults
-        className={className}
-        query={typeof a.query === "string" ? a.query : ""}
-        provider={parsed?.provider}
-        freshness={parsed?.freshness}
-        results={parsed?.results}
-        error={parsed?.error}
-        status={status}
-      />
-    );
-  }
+  return message.name === "write" ? (
+    <ToolDiff
+      className={className}
+      tool="write"
+      path={path}
+      newText={typeof a.content === "string" ? a.content : ""}
+      status={status}
+      onOpenPath={() => onOpenPath(path)}
+    />
+  ) : (
+    <ToolDiff
+      className={className}
+      tool="edit"
+      path={path}
+      oldText={typeof a.old === "string" ? a.old : ""}
+      newText={typeof a.new === "string" ? a.new : ""}
+      status={status}
+      onOpenPath={() => onOpenPath(path)}
+    />
+  );
+};
 
-  // bash/grep render their text output (command output, matches) flat.
-  if (message.name === "bash" || message.name === "grep") {
-    return (
-      <ToolOutput
-        className={className}
-        name={message.name}
-        args={toolSummary(message.name, message.args)}
-        output={message.result}
-        status={status}
-      />
-    );
-  }
+// web_search renders its JSON output as a result list (or the working indicator while running,
+// or its error message).
+const renderWebSearch: RenderArm = ({ message, status, className }) => {
+  const a = parseToolArgs(message.args);
+  const parsed = parseWebSearchResult(message.result);
 
-  // Tools whose primary arg is a file path get a clickable path that opens it in the
-  // editor (read/ls/...); pattern/command tools don't.
+  return (
+    <WebSearchResults
+      className={className}
+      query={typeof a.query === "string" ? a.query : ""}
+      provider={parsed?.provider}
+      freshness={parsed?.freshness}
+      results={parsed?.results}
+      error={parsed?.error}
+      status={status}
+    />
+  );
+};
+
+// bash/grep render their text output (command output, matches) flat.
+const renderOutput: RenderArm = ({ message, status, className }) => (
+  <ToolOutput
+    className={className}
+    name={message.name}
+    args={toolSummary(message.name, message.args)}
+    output={message.result}
+    status={status}
+  />
+);
+
+// The default for every other (and every unknown/dynamic) tool: the generic ToolCall row. Tools
+// whose primary arg is a file path get a clickable path that opens it in the editor (read/ls/...);
+// pattern/command tools don't.
+const renderGeneric: RenderArm = ({ message, status, onOpenPath, className }) => {
   const toolPath = parseToolArgs(message.args).path;
+
   return (
     <ToolCall
       className={className}
@@ -173,4 +180,69 @@ export function ToolMessage({
       onOpenPath={typeof toolPath === "string" && toolPath ? () => onOpenPath(toolPath) : undefined}
     />
   );
+};
+
+/**
+ * The exhaustive name -> renderer table keyed by `ToolName` (the @trevor/session contract, M24),
+ * so adding or renaming a host tool surfaces here at compile time. Every known tool maps to its
+ * arm (most to the generic row); unknown/dynamic tool names (custom skill/agent tools outside the
+ * union) are NOT in this table and fall through to the generic default in `ToolRenderer`.
+ */
+const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
+  read: renderGeneric,
+  glob: renderGeneric,
+  grep: renderOutput,
+  web_search: renderWebSearch,
+  ast_grep: renderGeneric,
+  bash: renderOutput,
+  write: renderDiff,
+  edit: renderDiff,
+  multi_edit: renderMultiEdit,
+  process: renderGeneric,
+  task_create: renderGeneric,
+  task_update: renderGeneric,
+  skill: renderGeneric,
+};
+
+/**
+ * The single tool-message renderer: it owns the tool NAME -> renderer dispatch and the
+ * `done -> status` derivation in one place, so callers render one component instead of a name
+ * ladder (M29). Status is derived once here and threaded to whichever arm runs. The dispatch is
+ * keyed by `ToolName` (the @trevor/session contract) for compile-time exhaustiveness; an unknown
+ * or dynamic tool name (custom skill/agent tools) falls back to the generic ToolCall row, as does
+ * any arm that defers (a multi_edit/write/edit whose args haven't streamed a path yet).
+ *
+ * This component owns ONLY dispatch + status derivation; the per-tool visuals live in the
+ * individual renderers (MultiEditDiff, ToolDiff, WebSearchResults, ToolOutput, ToolCall).
+ */
+export function ToolRenderer({
+  message,
+  className,
+  onOpenPath,
+}: {
+  message: ToolMessageData;
+  className?: string;
+  /** Opens a local file in the editor (path-bearing tools wire the path to this). */
+  onOpenPath: (path: string) => void;
+}) {
+  const status: ToolStatus = message.done ? "done" : "running";
+  const ctx: RenderContext = { message, status, onOpenPath, className };
+
+  const arm = Object.hasOwn(TOOL_RENDERERS, message.name)
+    ? TOOL_RENDERERS[message.name as ToolName]
+    : renderGeneric;
+
+  return arm(ctx) ?? renderGeneric(ctx);
+}
+
+/**
+ * Transcript wrapper kept as the caller-facing name (App.tsx). Delegates to `ToolRenderer`, the
+ * single dispatch + status-derivation component; it adds nothing of its own.
+ */
+export function ToolMessage(props: {
+  message: ToolMessageData;
+  className?: string;
+  onOpenPath: (path: string) => void;
+}) {
+  return <ToolRenderer {...props} />;
 }

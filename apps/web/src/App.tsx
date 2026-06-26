@@ -1,15 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { DEFAULT_SESSION_ID } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import {
-  ChevronDown,
-  CircleX,
-  GitBranch,
-  History,
-  PanelRight,
-  RotateCw,
-  TriangleAlert,
-} from "lucide-react";
+import { GitBranch, History } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -20,35 +12,18 @@ import {
   useRef,
   useState,
 } from "react";
-import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
-import { CommandMenu } from "@/components/chat/command-menu";
-import { CompactingBar } from "@/components/chat/compacting-bar";
-import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
-import {
-  CommandResult,
-  MessageMeta,
-  ShellBlock,
-  ThinkingMessage,
-  type ToolStatus,
-  WorkingIndicator,
-} from "@/components/chat/message";
-import { PromptInput } from "@/components/chat/prompt-input";
-import { parseToolArgs, ToolMessage } from "@/components/chat/tool-message";
+import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
+import type { ToolStatus } from "@/components/chat/message";
+import { parseToolArgs } from "@/components/chat/tool-message";
+import { PanelHost } from "@/components/panel/PanelHost";
 import { PanelControls } from "@/components/panel/panel-controls";
-import { SidePanel } from "@/components/panel/SidePanel";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
-import { ArtifactThumb } from "./ArtifactThumb";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeRunId,
   activeTurnStartedAt,
   commandsFrom,
   defaultProviderFrom,
-  fmtCtx,
-  fmtTokens,
   hostStatus,
-  isOverflowError,
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
@@ -61,18 +36,15 @@ import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
 import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useSendQueue } from "./hooks/use-send-queue";
-import { Markdown } from "./markdown";
-import { ResumeModal, useInventory } from "./resume";
+import { useInventory } from "./resume";
 import { atBottomOf } from "./scroll";
 import { ensureSession, useSession, useSessionActions, webTabId } from "./session/use-session";
-import { TasksPanel } from "./TasksPanel";
 import {
   panelModel,
   readOnlyToolBatches,
   type ToolMessage as ToolMessageData,
   toTranscript,
 } from "./transcript";
-import { WorktreeModal } from "./worktrees";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -103,16 +75,6 @@ function urlForSession(sessionId: string): URL {
 // live in ./send-queue, unit-tested without React; the React state machine that drives
 // them (the busy/in-flight latch + release/drain effects) lives in ./hooks/use-send-queue.
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
-
-// SMUI-themed markdown body: reuses the app's Markdown renderer, re-themed via the
-// .smui-md scope in index.css.
-function Md({ text, muted = false }: { text: string; muted?: boolean }) {
-  return (
-    <div className={cn("smui-md text-sm", muted ? "text-muted-foreground" : "text-foreground")}>
-      <Markdown text={text} muted={muted} />
-    </div>
-  );
-}
 
 export function App() {
   const [target, setTarget] = useState(() => targetFromLocation());
@@ -153,25 +115,14 @@ export function App() {
     defaultValue: true,
   });
   // The composer's local state as one boundary: draft, pending attachments + upload state, refs, and
-  // the file-intake handlers. App keeps the submit/steer/slash-menu wiring (send queue + commands).
-  const {
-    draft,
-    setDraft,
-    attachments,
-    setAttachments,
-    uploading,
-    uploadError,
-    setUploadError,
-    inputRef,
-    fileInputRef,
-    onPickFiles,
-    onPaste,
-    onDrop,
-    removeAttachment,
-    quoteSelection,
-  } = useComposer();
+  // the file-intake handlers. App keeps the submit/steer/slash-menu wiring (send queue + commands)
+  // and passes the whole `composer` object to PanelHost; it also reads a few fields here for that
+  // wiring (the submit path clears the draft/attachments, the slash menu refocuses the input, etc.).
+  const composer = useComposer();
+  const { draft, setDraft, attachments, setAttachments, inputRef } = composer;
 
-  const { events, status, replayed, presence } = useSession(sessionId);
+  const stream = useSession(sessionId);
+  const { events, status, replayed, presence } = stream;
   const { publish, cancel, command, shell, openInEditor } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
@@ -718,448 +669,68 @@ export function App() {
     ) : null;
 
   return (
-    <div className="flex h-svh">
-      <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4">
-        {/* Highlight text in any message (data-message-id) to get a floating Quote action
-          that drops the selection into the composer as a markdown blockquote. */}
-        <QuoteSelectionToolbar onQuote={quoteSelection} />
-        {!panelOpen ? (
-          <button
-            type="button"
-            onClick={() => setPanelOpen(true)}
-            aria-label="Open panel"
-            className="absolute top-4 right-4 z-10 cursor-pointer text-muted-foreground hover:text-foreground"
-          >
-            <PanelRight className="size-4.5" />
-          </button>
-        ) : null}
-        {/* Transcript fills the view; the composer + footer pin to the bottom.
-          Scrollbar is hidden but the region still scrolls. The relative wrapper anchors
-          the jump-to-bottom chevron over the transcript's lower edge. */}
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <div
-            ref={transcriptRef}
-            onScroll={onTranscriptScroll}
-            className="flex flex-1 flex-col overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {/* Three states, so the page never looks broken while things come up:
-              1. still replaying the session stream -> a brief "connecting to session" state;
-              2. replayed + empty + no host joined yet (e.g. just opened via `trevor`, host booting)
-                 -> a clear "waiting for host" state that vanishes once the host announces online;
-              3. otherwise -> the full history (existing session pinned to bottom, empty at top), 150ms fade. */}
-            {!replayed ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2">
-                <WorkingIndicator label="connecting to session" />
-              </div>
-            ) : !host.leaderId && transcript.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                <WorkingIndicator label={host.present ? "connecting to host" : "starting host"} />
-                <span className="text-label tracking-wider text-muted-foreground/70">
-                  waiting for the agent host to start and join this session…
-                </span>
-              </div>
-            ) : (
-              <div ref={contentRef} className="flex flex-col gap-8 fade-in animate-in duration-150">
-                {transcript.map((message, index) => {
-                  // Consecutive tool calls read as one block: collapse the gap-8 between
-                  // a tool row and the tool row directly above it.
-                  const toolClass = cn(
-                    "pl-3.5",
-                    message.kind === "tool" && transcript[index - 1]?.kind === "tool" && "-mt-6",
-                  );
-                  // Every tool message dispatches to its renderer in one place: ToolMessage
-                  // owns the name ladder, the done -> status derivation, and the per-tool
-                  // arg/result parsing.
-                  if (message.kind === "tool") {
-                    // A continuation row of a concurrent batch already drawn at its first row.
-                    if (toolBatches.skip.has(message.id)) {
-                      return null;
-                    }
-                    const batch = toolBatches.batchAt.get(message.id);
-                    if (batch) {
-                      return (
-                        <div key={message.id} className={toolClass}>
-                          <ConcurrentTools tools={batch.map(toConcurrentTool)} />
-                        </div>
-                      );
-                    }
-                    return (
-                      <ToolMessage
-                        key={message.id}
-                        message={message}
-                        className={toolClass}
-                        onOpenPath={(path) => void openInEditor(path)}
-                      />
-                    );
-                  }
-                  if (message.kind === "result") {
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <CommandResult
-                          command={message.command}
-                          text={message.text}
-                          ok={message.ok}
-                        />
-                      </div>
-                    );
-                  }
-                  if (message.kind === "shell") {
-                    // The prompt shell lane (D-082): a leading `!` ran a command on the host. Rendered
-                    // as a terminal block (`$ command` + output), pending until its result lands. No
-                    // left padding (unlike assistant/tool rows): the box sits flush at the content-
-                    // column left edge, aligned with the user-prompt blocks.
-                    return (
-                      <ShellBlock
-                        key={message.id}
-                        command={message.command}
-                        output={message.output}
-                        done={message.done}
-                        ok={message.ok}
-                      />
-                    );
-                  }
-                  if (message.kind === "recovered") {
-                    const reclaimed =
-                      message.reclaimed > 0
-                        ? ` · ~${fmtTokens(Math.round(message.reclaimed / 4))} reclaimed`
-                        : "";
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                          <RotateCw className="h-3.5 w-3.5" />
-                          <AlertTitle className="text-smui-yellow">context full</AlertTitle>
-                          <AlertDescription>
-                            {message.detail}
-                            {reclaimed} · retrying
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    );
-                  }
-                  if (message.kind === "reconnecting") {
-                    // A transient provider outage being auto-retried before any token streamed
-                    // (D-079). Frost styling distinguishes a transport reconnect from the yellow
-                    // "context full" airbag; the cap (3) mirrors the host's MAX_RECONNECT_ATTEMPTS.
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <Alert className="border-smui-blue/25 bg-smui-blue/[0.04] [&>svg]:text-smui-blue">
-                          <RotateCw className="h-3.5 w-3.5" />
-                          <AlertTitle className="text-smui-blue">connection dropped</AlertTitle>
-                          <AlertDescription>
-                            {message.detail} · reconnecting (attempt {message.attempt}/3)
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    );
-                  }
-                  if (message.kind === "compacting") {
-                    // The live cross-turn fold (D-040): a TRANSIENT bar that vanishes when the fold
-                    // completes. Its own component owns the continuous (rAF) fill animation.
-                    return (
-                      <CompactingBar
-                        key={message.id}
-                        tokens={message.tokens}
-                        budget={message.budget}
-                      />
-                    );
-                  }
-                  if (message.kind === "delegation") {
-                    // A subagent delegation (D-046..D-048): a distinct linked block - which agent ran
-                    // in its own isolated child session, the task, and the distilled result once it
-                    // folds back. Purple (vs the tool-card greys) marks it as a sub-run, not a tool. A
-                    // background child is async (read-only, result arrives later), so it reads distinctly.
-                    const running = message.status === "running";
-                    const failed = message.status === "failed";
-                    const isBackground = message.mode === "background";
-                    const tone = failed
-                      ? "text-smui-red"
-                      : running
-                        ? "text-smui-purple"
-                        : "text-smui-green";
-                    const verb = running
-                      ? isBackground
-                        ? "running in background…"
-                        : "delegating…"
-                      : failed
-                        ? "delegation failed"
-                        : "delegated";
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <Alert className="border-smui-purple/25 bg-smui-purple/[0.04] [&>svg]:text-smui-purple">
-                          <PanelRight className="h-3.5 w-3.5" />
-                          <AlertTitle className={tone}>
-                            {message.agent} · {verb}
-                          </AlertTitle>
-                          <AlertDescription>
-                            <div className="text-muted-foreground">{message.task}</div>
-                            {message.result ? (
-                              <div className="mt-1 whitespace-pre-wrap">{message.result}</div>
-                            ) : null}
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    );
-                  }
-
-                  const thinking =
-                    message.kind === "assistant" && showThinkingOn && message.thinking
-                      ? message.thinking
-                      : null;
-
-                  const overflowNote =
-                    message.kind === "assistant" && message.overflow ? (
-                      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                        <TriangleAlert className="h-3.5 w-3.5" />
-                        <AlertTitle className="text-smui-yellow">context overflow</AlertTitle>
-                        <AlertDescription>{message.overflow}</AlertDescription>
-                      </Alert>
-                    ) : null;
-
-                  const errorNote =
-                    message.kind === "assistant" && message.error ? (
-                      <Alert variant="destructive">
-                        <CircleX className="h-3.5 w-3.5" />
-                        <AlertTitle>
-                          {isOverflowError(message.error) ? "context overflow" : "error"}
-                        </AlertTitle>
-                        <AlertDescription>{message.error}</AlertDescription>
-                      </Alert>
-                    ) : null;
-
-                  const cancelledNote =
-                    message.kind === "assistant" && message.cancelled ? (
-                      <div className="text-sm text-smui-red">cancelled</div>
-                    ) : null;
-
-                  // The host closed this turn (a restart/crash reaped it mid-flight), not the user.
-                  const interruptedNote =
-                    message.kind === "assistant" && message.interrupted ? (
-                      <div className="text-sm text-smui-red">interrupted · host restarted</div>
-                    ) : null;
-
-                  const noReplyNote =
-                    message.kind === "assistant" && message.noReply ? (
-                      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                        <TriangleAlert className="h-3.5 w-3.5" />
-                        <AlertTitle className="text-smui-yellow">no reply</AlertTitle>
-                        <AlertDescription>
-                          The model ended the turn without a reply. Try again or rephrase.
-                        </AlertDescription>
-                      </Alert>
-                    ) : null;
-
-                  // Budget-terminated turn: the answer above was forced after the model hit
-                  // its tool-call budget (step backstop or context pressure). A muted footnote
-                  // so the answer reads normally but the user knows it was cut short of more work.
-                  const stepLimitNote =
-                    message.kind === "assistant" && message.stepLimit ? (
-                      <div className="text-label text-muted-foreground">
-                        ⚐ answered after the {message.stepLimit}-step tool budget
-                      </div>
-                    ) : null;
-
-                  if (message.kind === "assistant" && !message.text && !message.done) {
-                    return (
-                      <div key={message.id} className="flex flex-col gap-3 pl-3.5">
-                        {thinking ? (
-                          <ThinkingMessage content={thinking} />
-                        ) : (
-                          <WorkingIndicator
-                            label={message.warm ? "thinking" : `loading ${message.model}`}
-                          />
-                        )}
-                        {overflowNote}
-                        {errorNote}
-                      </div>
-                    );
-                  }
-
-                  // Meta (model · context · speed) rides on the final segment - the one that
-                  // carries usage - so it isn't repeated under every pre-tool segment.
-                  let metaItems: string[] | null = null;
-                  if (message.kind === "assistant" && message.usage) {
-                    const usage = message.usage;
-                    metaItems = [
-                      message.model,
-                      `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
-                    ];
-                    if (usage.genMs > 0) {
-                      metaItems.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
-                    }
-                  }
-
-                  // User prompts read as a boxed, left-barred block; assistant replies are
-                  // plain prose. Neither carries a "you"/"assistant" header.
-                  if (message.kind === "user") {
-                    return (
-                      <div
-                        key={message.id}
-                        data-message-id={message.id}
-                        className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
-                      >
-                        {message.text ? <Md text={message.text} /> : null}
-                        {message.artifacts.length ? (
-                          <div className="flex flex-wrap gap-2">
-                            {message.artifacts.map((ref) => (
-                              <ArtifactThumb key={ref.hash} artifact={ref} />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={message.id}
-                      data-message-id={message.id}
-                      className="flex flex-col gap-3 pl-3.5"
-                    >
-                      {thinking ? <ThinkingMessage content={thinking} /> : null}
-                      {message.text ? <Md text={message.text} /> : null}
-                      {overflowNote}
-                      {errorNote}
-                      {cancelledNote}
-                      {interruptedNote}
-                      {noReplyNote}
-                      {stepLimitNote}
-                      {metaItems ? <MessageMeta items={metaItems} /> : null}
-                    </div>
-                  );
-                })}
-
-                {/* A persistent "working" pulse whenever a turn is in flight - not just while
-                    waiting for the first token. Fills the dead air between steps (e.g. while the
-                    model generates the next thinking/tool batch after a read completes), so the
-                    turn never looks stalled. `active` is the running run id (null once it ends). */}
-                {active !== null || awaitingResponse ? (
-                  <div className="pl-3.5">
-                    <WorkingIndicator
-                      label="Working"
-                      startedAt={turnStartedAt ?? undefined}
-                      interruptible
-                    />
-                  </div>
-                ) : null}
-
-                {/* Prompts held in the local queue: rendered as subdued "> …" blockquote lines (not
-            transcript chrome) so they read as waiting, not sent, until the turn frees up and they
-            publish. Several stack as one quote block; an attached image rides under its line. */}
-                {queue.length ? (
-                  <div className="flex flex-col gap-1 pl-3.5 opacity-70">
-                    {queue.map((q) => (
-                      <div key={q.id} className="flex items-start gap-2 text-muted-foreground">
-                        <span aria-hidden className="shrink-0 select-none">
-                          &gt;
-                        </span>
-                        <div className="flex min-w-0 flex-col gap-1">
-                          {q.text ? <Md text={q.text} muted /> : null}
-                          {q.artifacts?.length ? (
-                            <div className="flex gap-1.5">
-                              {q.artifacts.map((ref) => (
-                                <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-          {!atBottom ? (
-            <button
-              type="button"
-              onClick={scrollToBottom}
-              aria-label="Scroll to bottom"
-              className="absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
-            >
-              <ChevronDown className="size-4" />
-            </button>
-          ) : null}
-        </div>
-
-        {/* Live task checklist, above the composer. */}
-        <TasksPanel tasks={tasks} />
-
-        {/* Pinned bottom: composer, then a two-column footer (status + model controls).
-          Files dropped anywhere here upload as attachments. */}
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: passive drop target; the
-          keyboard-accessible path is the attach button below. */}
-        <div
-          onDrop={onDrop}
-          onDragOver={(event) => event.preventDefault()}
-          className="relative shrink-0 pt-2 pb-4"
-        >
-          {/* Slash menu: overlays above the composer (absolute, so it never pushes the
-            transcript up). Filters the host's announced command inventory as you type a
-            leading "/", with the matched prefix highlighted. Arrows/Tab/Enter pick a row
-            (handled on the input); a row click fills the composer. onMouseDown (not
-            onClick) so the input keeps focus. */}
-          {menuOpen ? (
-            <CommandMenu
-              className="absolute inset-x-0 bottom-full z-20 mb-2"
-              matches={menuMatches}
-              activeIndex={menuIdx}
-              query={slashQuery ?? ""}
-              onPick={acceptCommand}
-            />
-          ) : null}
-
-          <PromptInput
-            draft={draft}
-            onDraftChange={setDraft}
-            onSubmit={onSubmit}
-            onKeyDown={onInputKeyDown}
-            onPaste={onPaste}
-            inputRef={inputRef}
-            fileInputRef={fileInputRef}
-            onPickFiles={onPickFiles}
-            disabled={!sessionId}
-            placeholder={`message ${modelMeta.label}… (/ for commands, ! for shell)`}
-            attachments={attachments}
-            onRemoveAttachment={removeAttachment}
-            uploading={uploading}
-            uploadError={uploadError}
-            onDismissError={() => setUploadError(null)}
-          />
-        </div>
-      </main>
-
-      {panelOpen ? (
-        <SidePanel
-          title={target}
-          subtitle={`${status}${replayed ? " · replayed" : ""} · ${events.length} events`}
-          statusNode={statusNode}
-          workspace={host.cwd ?? host.workspace ?? undefined}
-          git={host.git}
-          {...panel}
-          ready={replayed}
-          controls={panelControls}
-          footer={panelFooter}
-          onClose={() => setPanelOpen(false)}
-        />
-      ) : null}
-
-      <ResumeModal
-        open={resumeOpen}
-        onOpenChange={setResumeOpen}
-        sessions={inventory.sessions}
-        loading={inventory.loading}
-        error={inventory.error}
-        context={{ currentSessionId: sessionId, currentProject, busy, nowMs: now }}
-        onResume={navigateToSession}
-      />
-
-      <WorktreeModal
-        open={worktreeOpen}
-        onOpenChange={setWorktreeOpen}
-        worktrees={worktrees}
-        context={{ activityBySession: worktreeActivity, busy }}
-        onSwitch={(id) => void command("/worktree-switch", id)}
-      />
-    </div>
+    <PanelHost
+      composer={composer}
+      compose={{
+        onSubmit,
+        onInputKeyDown,
+        menuOpen,
+        menuMatches,
+        menuIndex: menuIdx,
+        slashQuery,
+        acceptCommand,
+        disabled: !sessionId,
+        placeholder: `message ${modelMeta.label}… (/ for commands, ! for shell)`,
+      }}
+      stream={stream}
+      host={host}
+      transcript={{
+        transcript,
+        toolBatches,
+        toConcurrentTool,
+        onOpenPath: (path) => void openInEditor(path),
+        showThinking: showThinkingOn,
+        active,
+        awaitingResponse,
+        turnStartedAt,
+        queue,
+      }}
+      scroll={{
+        transcriptRef,
+        contentRef,
+        atBottom,
+        onScroll: onTranscriptScroll,
+        scrollToBottom,
+      }}
+      tasks={tasks}
+      panel={{
+        // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
+        // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
+        open: Boolean(panelOpen),
+        onOpen: () => setPanelOpen(true),
+        onClose: () => setPanelOpen(false),
+        title: target,
+        subtitle: `${status}${replayed ? " · replayed" : ""} · ${events.length} events`,
+        statusNode,
+        workspace: host.cwd ?? host.workspace ?? undefined,
+        git: host.git,
+        model: panel,
+        controls: panelControls,
+        footer: panelFooter,
+        ready: replayed,
+      }}
+      choosers={{
+        resumeOpen,
+        setResumeOpen,
+        worktreeOpen,
+        setWorktreeOpen,
+        inventory,
+        resumeContext: { currentSessionId: sessionId, currentProject, busy, nowMs: now },
+        onResume: navigateToSession,
+        worktrees,
+        worktreeContext: { activityBySession: worktreeActivity, busy },
+        onSwitchWorktree: (id) => void command("/worktree-switch", id),
+      }}
+    />
   );
 }

@@ -2,6 +2,7 @@ import {
   type ArtifactRef,
   addBreakdown,
   decodeTrevorEvent,
+  READ_ONLY_TOOL_NAMES,
   type SessionEvent,
   type Usage,
   type UsageBreakdown,
@@ -122,16 +123,6 @@ export type Message =
   | CompactingMessage
   | DelegationMessage
   | ShellMessage;
-
-// The read-only tools the host fans out concurrently (mirrors agent-host's READ_ONLY_TOOLS). A run
-// of 2+ consecutive read-only tool rows was one parallel batch, so the UI groups it into a single
-// compact block (ConcurrentTools) instead of stacked one-off cards.
-export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "read",
-  "glob",
-  "grep",
-  "web_search",
-]);
 
 /**
  * Finds the concurrent read-only batches in a transcript: each run of 2+ consecutive read-only tool

@@ -1,3 +1,6 @@
+import type { ToolCallMessagePartStatus } from "@assistant-ui/react";
+import { AlertCircleIcon, CheckIcon, LoaderIcon, XCircleIcon } from "lucide-react";
+import type { ElementType } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,4 +24,24 @@ const TOOL_STATUS_COLOR: Record<ToolStatus, string> = {
 /** The wrench className for a status; `pulse` adds the running animation (the transcript row only). */
 export function toolStatusColor(status: ToolStatus, pulse = false): string {
   return cn(TOOL_STATUS_COLOR[status], pulse && status === "running" && "animate-pulse");
+}
+
+/**
+ * The assistant-ui tool-call lifecycle (running / complete / incomplete / requires-action) - a
+ * different axis from the transcript `ToolStatus` above (this one carries the kit's approval and
+ * cancellation states), so it has its own icon map. Keyed on the part status `type` the kit reports.
+ */
+type ToolPartStatus = ToolCallMessagePartStatus["type"];
+
+/** The single status -> lifecycle-icon map, shared by every surface that shows a tool-call status icon. */
+const TOOL_STATUS_ICON: Record<ToolPartStatus, ElementType> = {
+  running: LoaderIcon,
+  complete: CheckIcon,
+  incomplete: XCircleIcon,
+  "requires-action": AlertCircleIcon,
+};
+
+/** The lifecycle icon component for an assistant-ui tool-call status (M29; was tool-fallback's local map). */
+export function statusIcon(status: ToolPartStatus): ElementType {
+  return TOOL_STATUS_ICON[status];
 }

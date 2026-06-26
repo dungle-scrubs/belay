@@ -1,13 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
-import {
-  AlertCircleIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  LoaderIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import {
   useToolCallElapsed,
   type ToolApprovalOption,
@@ -23,6 +17,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { statusIcon } from "@/components/chat/tool-status";
 import {
   ANIMATION_DURATION,
   useCollapsibleDisclosure,
@@ -73,15 +68,6 @@ function ToolFallbackRoot({
   );
 }
 
-type ToolStatus = ToolCallMessagePartStatus["type"];
-
-const statusIconMap: Record<ToolStatus, React.ElementType> = {
-  running: LoaderIcon,
-  complete: CheckIcon,
-  incomplete: XCircleIcon,
-  "requires-action": AlertCircleIcon,
-};
-
 const formatToolDuration = (ms: number) => {
   if (ms < 1000) return "<1s";
   const seconds = ms / 1000;
@@ -125,7 +111,7 @@ function ToolFallbackTrigger({
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
 
-  const Icon = statusIconMap[statusType];
+  const Icon = statusIcon(statusType);
   const label = isCancelled ? "Cancelled tool" : "Used tool";
 
   return (

@@ -29,7 +29,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/components/ui/command";
 
 export type ModelSelectorEffortOption = {
@@ -295,7 +294,7 @@ function ModelSelectorTrigger({
   );
 }
 
-export type ModelSelectorValueProps = {
+type ModelSelectorValueProps = {
   placeholder?: ReactNode;
   /** Show the active effort level next to the model name. */
   showEffort?: boolean;
@@ -480,9 +479,7 @@ function ModelSelectorDefaultList({ models }: { models: readonly ModelOption[] }
   );
 }
 
-export type ModelSelectorEmptyProps = ComponentPropsWithoutRef<
-  typeof CommandEmpty
->;
+type ModelSelectorEmptyProps = ComponentPropsWithoutRef<typeof CommandEmpty>;
 
 function ModelSelectorEmpty({ children, ...props }: ModelSelectorEmptyProps) {
   return (
@@ -492,23 +489,7 @@ function ModelSelectorEmpty({ children, ...props }: ModelSelectorEmptyProps) {
   );
 }
 
-export type ModelSelectorGroupProps = ComponentPropsWithoutRef<
-  typeof CommandGroup
->;
-
-function ModelSelectorGroup(props: ModelSelectorGroupProps) {
-  return <CommandGroup data-slot="model-selector-group" {...props} />;
-}
-
-export type ModelSelectorSeparatorProps = ComponentPropsWithoutRef<
-  typeof CommandSeparator
->;
-
-function ModelSelectorSeparator(props: ModelSelectorSeparatorProps) {
-  return <CommandSeparator data-slot="model-selector-separator" {...props} />;
-}
-
-export type ModelSelectorItemProps = Omit<
+type ModelSelectorItemProps = Omit<
   ComponentPropsWithoutRef<typeof CommandItem>,
   "value"
 > & {
@@ -561,7 +542,7 @@ function ModelSelectorItem({
   );
 }
 
-export type ModelSelectorEffortProps = ComponentPropsWithoutRef<"div"> & {
+type ModelSelectorEffortProps = ComponentPropsWithoutRef<"div"> & {
   label?: ReactNode;
 };
 
@@ -676,19 +657,16 @@ const ModelSelectorImpl = ({
   );
 };
 
+// The composition surface callers actually use. The list rendering, effort
+// toggle, value display, items, and empty state are internal pieces driven by
+// Root's context; they aren't exposed for direct composition.
 type ModelSelectorComponent = typeof ModelSelectorImpl & {
   displayName?: string;
   Root: typeof ModelSelectorRoot;
   Trigger: typeof ModelSelectorTrigger;
-  Value: typeof ModelSelectorValue;
   Content: typeof ModelSelectorContent;
   Search: typeof ModelSelectorSearch;
   List: typeof ModelSelectorList;
-  Empty: typeof ModelSelectorEmpty;
-  Group: typeof ModelSelectorGroup;
-  Separator: typeof ModelSelectorSeparator;
-  Item: typeof ModelSelectorItem;
-  Effort: typeof ModelSelectorEffort;
 };
 
 const ModelSelector = memo(
@@ -698,27 +676,15 @@ const ModelSelector = memo(
 ModelSelector.displayName = "ModelSelector";
 ModelSelector.Root = ModelSelectorRoot;
 ModelSelector.Trigger = ModelSelectorTrigger;
-ModelSelector.Value = ModelSelectorValue;
 ModelSelector.Content = ModelSelectorContent;
 ModelSelector.Search = ModelSelectorSearch;
 ModelSelector.List = ModelSelectorList;
-ModelSelector.Empty = ModelSelectorEmpty;
-ModelSelector.Group = ModelSelectorGroup;
-ModelSelector.Separator = ModelSelectorSeparator;
-ModelSelector.Item = ModelSelectorItem;
-ModelSelector.Effort = ModelSelectorEffort;
 
 export {
   ModelSelector,
   ModelSelectorRoot,
   ModelSelectorTrigger,
-  ModelSelectorValue,
   ModelSelectorContent,
   ModelSelectorSearch,
   ModelSelectorList,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorSeparator,
-  ModelSelectorItem,
-  ModelSelectorEffort,
 };
