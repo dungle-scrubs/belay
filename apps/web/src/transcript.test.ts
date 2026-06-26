@@ -233,6 +233,49 @@ test("panelModel: the ctx meter previews the post-fold size once a fold lands (n
   assert.deepEqual(panel.breakdown, breakdown, "no faked per-category split");
 });
 
+test("D-046: a delegation reduces its running + done links to one block with the result", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "find the bug", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::abc",
+        agent: "explorer",
+        task: "search for the failing assertion",
+        mode: "inline",
+        status: "running",
+      }),
+    ),
+    ev(
+      4,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::abc",
+        agent: "explorer",
+        task: "search for the failing assertion",
+        mode: "inline",
+        status: "done",
+        result: "the bug is in src/auth.ts:42",
+      }),
+    ),
+    ev(5, events.assistantCompleted({ runId: "r1", text: "Fixed it." })),
+  ];
+  const messages = toTranscript(log);
+  const blocks = messages.filter(
+    (m): m is Extract<Message, { kind: "delegation" }> => m.kind === "delegation",
+  );
+  assert.equal(blocks.length, 1, "the running + done links collapse to one linked block");
+  assert.equal(blocks[0]?.status, "done", "the block advances to the terminal status in place");
+  assert.equal(blocks[0]?.agent, "explorer");
+  assert.equal(
+    blocks[0]?.result,
+    "the bug is in src/auth.ts:42",
+    "it carries the distilled result",
+  );
+});
+
 test("D-079: an assistant.reconnecting event renders an inline reconnecting marker", () => {
   const log = [
     ev(1, events.userMessage({ text: "go", provider: "qwen" })),

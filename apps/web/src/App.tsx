@@ -672,6 +672,35 @@ export function App() {
                       />
                     );
                   }
+                  if (message.kind === "delegation") {
+                    // A subagent delegation (D-046..D-048): a distinct linked block - which agent ran
+                    // in its own isolated child session, the task, and the distilled result once it
+                    // folds back. Purple (vs the tool-card greys) marks it as a sub-run, not a tool.
+                    const running = message.status === "running";
+                    const failed = message.status === "failed";
+                    const tone = failed
+                      ? "text-smui-red"
+                      : running
+                        ? "text-smui-purple"
+                        : "text-smui-green";
+                    return (
+                      <div key={message.id} className="pl-3.5">
+                        <Alert className="border-smui-purple/25 bg-smui-purple/[0.04] [&>svg]:text-smui-purple">
+                          <PanelRight className="h-3.5 w-3.5" />
+                          <AlertTitle className={tone}>
+                            {message.agent} ·{" "}
+                            {running ? "delegating…" : failed ? "delegation failed" : "delegated"}
+                          </AlertTitle>
+                          <AlertDescription>
+                            <div className="text-muted-foreground">{message.task}</div>
+                            {message.result ? (
+                              <div className="mt-1 whitespace-pre-wrap">{message.result}</div>
+                            ) : null}
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    );
+                  }
 
                   const thinking =
                     message.kind === "assistant" && showThinkingOn && message.thinking

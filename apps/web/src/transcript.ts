@@ -84,6 +84,21 @@ export type CompactingMessage = {
   tokens: number;
   budget: number;
 };
+// A subagent delegation (D-046..D-048), rendered inline as a distinct linked block: a `delegated.to`
+// event names the child session, the agent, the task, and a status that advances running -> done
+// /failed. `result` is the child's distilled final message once it folds back. The web reduces the
+// running + terminal links for one child to this single block (keyed by `childSessionId`), so it
+// shows progress then the result, not two cards. Distinct from an ordinary tool card.
+export type DelegationMessage = {
+  kind: "delegation";
+  id: string;
+  childSessionId: string;
+  agent: string;
+  task: string;
+  mode: string;
+  status: string;
+  result?: string;
+};
 export type Message =
   | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
   | AssistantMessage
@@ -92,7 +107,8 @@ export type Message =
   | CommandResultMessage
   | RecoveredMessage
   | ReconnectingMessage
-  | CompactingMessage;
+  | CompactingMessage
+  | DelegationMessage;
 
 // The read-only tools the host fans out concurrently (mirrors agent-host's READ_ONLY_TOOLS). A run
 // of 2+ consecutive read-only tool rows was one parallel batch, so the UI groups it into a single
@@ -202,6 +218,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
   // rather than re-spawning a bar that should have vanished).
   const compactingByFold = new Map<string, CompactingMessage>();
   const doneFolds = new Set<string>();
+  // One linked block per delegated child, keyed by childSessionId; the running + terminal
+  // `delegated.to` links advance the same block in place (status + result), never two cards.
+  const delegationByChild = new Map<string, DelegationMessage>();
   // Reaps every open fold bar from the transcript. A fold runs on the host's one-turn gate, so a
   // bar is only ever live at the tail; once a turn or command follows it without a matching
   // `context.compacted`, that fold was interrupted (host reset mid-fold) and its bar is an orphan -
@@ -348,6 +367,31 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           attempt: decoded.attempt,
           detail: decoded.detail,
         });
+        break;
+      }
+      case "delegated.to": {
+        // First link for a child spawns the block; later links (done/failed, with the result)
+        // advance the same block in place, so the UI shows one linked card per delegation.
+        const existing = delegationByChild.get(decoded.childSessionId);
+        if (existing) {
+          existing.status = decoded.status;
+          if (decoded.result !== undefined) {
+            existing.result = decoded.result;
+          }
+        } else {
+          const block: DelegationMessage = {
+            kind: "delegation",
+            id: event.eventId,
+            childSessionId: decoded.childSessionId,
+            agent: decoded.agent,
+            task: decoded.task,
+            mode: decoded.mode,
+            status: decoded.status,
+            ...(decoded.result !== undefined ? { result: decoded.result } : {}),
+          };
+          delegationByChild.set(decoded.childSessionId, block);
+          messages.push(block);
+        }
         break;
       }
       case "context.compacting": {

@@ -127,6 +127,9 @@ function hostState(): Record<string, unknown> {
     history: history.length,
     lastAnswerSeq: turns.lastAnswerSeq,
     compacting: turns.compacting,
+    // Subagents (D-045..D-048): the discovered roster + the depth policy. Delegation is depth-1
+    // (a child is given no delegation capability), inline-only in this cut.
+    subagents: `${discoverAgents().length} agents · depth≤1 · inline`,
     ...(lastFold
       ? {
           lastFold: `seq≤${lastFold.throughSeq} ~${lastFold.tokensBefore}→${lastFold.tokensAfter}tok`,
