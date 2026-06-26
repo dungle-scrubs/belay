@@ -31,6 +31,7 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
     tools: ["read", "grep", "bash"],
     workspace: { cwd: "~/dev/trevorV2", workspace: "~/dev/trevorV2", branch: "main" },
     storage: { home: "~/.trevorV2", writable: true },
+    build: { version: "2.0.0", node: "v22.0.0", runtime: "trevor" },
     checkedAt: "2026-06-26T12:00:00.000Z",
     ...over,
   };
@@ -53,7 +54,39 @@ test("an all-healthy snapshot rolls up to ok (unprobed areas are not_checked, no
   assert.equal(overallStatus(snap), "ok", "ok dominates the not_checked placeholders");
   const summary = summarizeSnapshot(snap);
   assert.equal(summary.error, 0);
-  assert.ok(summary.notChecked >= 4, "web/mcp/lsp/hooks/updates are not_checked");
+  assert.ok(summary.notChecked >= 4, "web/mcp/lsp/hooks are not_checked");
+});
+
+test("the Updates / Version area reports build facts ok when a version is embedded", () => {
+  const snap = buildDoctorSnapshot(input());
+  const updates = snap.areas.find((a) => a.id === "updates");
+  assert.equal(updates?.status, "ok", "a known version + Node/runtime facts roll up to ok");
+  assert.ok(
+    updates?.facts?.some((f) => f.label === "Trevor" && f.value === "2.0.0"),
+    "the embedded version is a fact",
+  );
+  assert.ok(
+    updates?.facts?.some((f) => f.label === "Node"),
+    "the Node version is a fact",
+  );
+  // Update availability is explicitly NOT probed (never implies up-to-date).
+  assert.ok(
+    updates?.findings?.some((f) => f.id === "updates.check" && f.status === "not_checked"),
+    "the update check is reported as not checked",
+  );
+});
+
+test("a dev build with no embedded version reports the Updates area as not_checked", () => {
+  const snap = buildDoctorSnapshot(
+    input({ build: { version: null, node: "v22.0.0", runtime: "trevor" } }),
+  );
+  const updates = snap.areas.find((a) => a.id === "updates");
+  assert.equal(
+    updates?.status,
+    "not_checked",
+    "no version + no update check -> not_checked, never ok",
+  );
+  assert.match(updates?.verdict ?? "", /dev build/i);
 });
 
 test("an unreachable local runtime warns, an unreachable cloud provider errors", () => {

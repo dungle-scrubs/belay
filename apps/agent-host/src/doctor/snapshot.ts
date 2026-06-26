@@ -46,7 +46,15 @@ export interface DoctorProbeInput {
     readonly branch?: string;
   };
   readonly storage: { readonly home: string; readonly writable: boolean };
+  readonly build: DoctorBuildInfo;
   readonly checkedAt: string;
+}
+
+/** Package/build/version facts for the Updates / Version area (D-073). `version` is null in a dev build. */
+export interface DoctorBuildInfo {
+  readonly version: string | null;
+  readonly node: string;
+  readonly runtime: string;
 }
 
 /** Rolls an area's findings into its header status (any error wins, then warn, then ok). */
@@ -203,6 +211,39 @@ function workspaceArea(input: DoctorProbeInput): DoctorArea {
   return area("workspace", "Workspace", finding.message, [finding], facts);
 }
 
+/**
+ * The Updates / Version area (D-073): the package/build/version facts that ARE available (host build
+ * version, runtime kind, Node version), plus an explicit note that this build does not query for a
+ * newer release. A dev build with no embedded version reports the version finding as `not_checked`
+ * (so it never implies up-to-date), while the Node/runtime facts always render.
+ */
+function updatesArea(input: DoctorProbeInput): DoctorArea {
+  const b = input.build;
+  const facts: DoctorArea["facts"] = [
+    { label: "Trevor", value: b.version ?? "dev build", status: b.version ? "ok" : "not_checked" },
+    { label: "Runtime", value: b.runtime },
+    { label: "Node", value: b.node },
+  ];
+  const version: DoctorFinding = {
+    id: "updates.version",
+    status: b.version ? "ok" : "not_checked",
+    title: "Version",
+    message: b.version
+      ? `Running Trevor ${b.version}.`
+      : "No build version is embedded (a local dev build).",
+  };
+  // Update availability is deliberately NOT probed (it would need a network call /doctor does not
+  // make), so the area is explicit that it has not checked for a newer release rather than implying
+  // the build is current.
+  const check: DoctorFinding = {
+    id: "updates.check",
+    status: "not_checked",
+    title: "Update check",
+    message: "Not checked - /doctor does not query for newer releases.",
+  };
+  return area("updates", "Updates / Version", version.message, [version, check], facts);
+}
+
 /** A `not_checked` placeholder area for a surface this first cut does not probe. */
 function notChecked(id: DoctorAreaId, label: string, verdict: string): DoctorArea {
   return {
@@ -235,7 +276,7 @@ export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
       notChecked("hooks", "Hooks", "not probed in this build"),
       storageArea(input),
       workspaceArea(input),
-      notChecked("updates", "Updates / Version", "not probed in this build"),
+      updatesArea(input),
     ],
   };
 }

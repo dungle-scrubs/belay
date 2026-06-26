@@ -1,7 +1,12 @@
 import { access, constants } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type CommandSpec, type InternetSnapshot, UNKNOWN_INTERNET } from "@trevor/session";
+import {
+  type CommandSpec,
+  type InternetSnapshot,
+  RUNTIME_KIND,
+  UNKNOWN_INTERNET,
+} from "@trevor/session";
 import { Effect } from "effect";
 import { buildDoctorSnapshot, type DoctorProviderProbe } from "./doctor/snapshot";
 import { fmtFields } from "./log";
@@ -216,6 +221,13 @@ export function buildCommandRegistry(): CommandRegistry {
         tools: TOOL_DEFS.map((t) => t.name),
         workspace: { cwd: input.cwd, workspace: input.workspace, branch: input.branch },
         storage: { home: abbrevHome(home), writable },
+        // Package/build/version facts (D-073): the embedded version when present (else a dev build),
+        // plus the always-available Node + runtime kind. Update-availability is not probed here.
+        build: {
+          version: process.env.npm_package_version ?? null,
+          node: process.version,
+          runtime: RUNTIME_KIND.host,
+        },
         checkedAt: new Date().toISOString(),
       });
       return JSON.stringify(snapshot);
