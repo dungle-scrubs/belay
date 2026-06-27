@@ -28,12 +28,20 @@ export const MAX_IMPORT_HOPS = 4;
 /** One ingested AGENTS.md: where it sits in the precedence order + its expanded body. */
 export interface ContextScope {
   readonly path: string;
-  /** Precedence band, low to high: user-global < project (up-tree) < below-cwd (lazy). */
-  readonly scope: "user-global" | "project" | "below-cwd";
+  /** Precedence band, low to high: user-global < project < trevor-rule < below-cwd < below-cwd-rule. */
+  readonly scope: "user-global" | "project" | "trevor-rule" | "below-cwd" | "below-cwd-rule";
   /** Expanded (imports inlined) + trimmed body. */
   readonly content: string;
   /** UTF-8 byte length of `content`. */
   readonly bytes: number;
+}
+
+export interface ContextRuleSource {
+  readonly bytes: number;
+  readonly folder: string | undefined;
+  readonly inclusionReason: "always" | "file-access";
+  readonly metadata: object;
+  readonly path: string;
 }
 
 /** The result of rendering ingested context: the prompt block plus a full accounting (never silent). */
@@ -46,6 +54,7 @@ export interface ContextReport {
   readonly scopes: readonly string[];
   readonly bytesUsed: number;
   readonly bytesDropped: number;
+  readonly ruleSources: readonly ContextRuleSource[];
   readonly truncated: boolean;
 }
 
@@ -55,6 +64,7 @@ export const EMPTY_REPORT: ContextReport = {
   scopes: [],
   bytesUsed: 0,
   bytesDropped: 0,
+  ruleSources: [],
   truncated: false,
 };
 
@@ -141,6 +151,11 @@ function expandImports(
     .join("\n");
 }
 
+/** Shared importer for AGENTS.md and Trevor rule files. */
+export function expandContextImports(text: string, fromDir: string, absPath: string): string {
+  return expandImports(text, fromDir, new Set([absPath]), MAX_IMPORT_HOPS).trim();
+}
+
 /**
  * Reads one AGENTS.md, expands its `@path` imports, and trims it. Returns null when the file is absent,
  * unreadable, or empty/whitespace-only (so callers skip it without branching).
@@ -152,7 +167,7 @@ export function readAgentsFile(absPath: string): string | null {
   } catch {
     return null;
   }
-  const expanded = expandImports(raw, dirname(absPath), new Set([absPath]), MAX_IMPORT_HOPS).trim();
+  const expanded = expandContextImports(raw, dirname(absPath), absPath);
   return expanded.length > 0 ? expanded : null;
 }
 
@@ -199,6 +214,7 @@ export function projectDirs(cwd: string, workspaceRoot: string): string[] {
 export function renderContext(
   sources: readonly ContextScope[],
   budget = CONTEXT_BYTE_BUDGET,
+  ruleSources: readonly ContextRuleSource[] = [],
 ): ContextReport {
   if (sources.length === 0) {
     return EMPTY_REPORT;
@@ -230,9 +246,12 @@ export function renderContext(
       truncated = true;
     }
   }
-  kept.reverse(); // restore precedence order: user-global -> project -> below-cwd
+  kept.reverse(); // restore precedence order: user-global -> project -> rules -> below-cwd
+  const hasRules = kept.some(
+    ({ source }) => source.scope === "trevor-rule" || source.scope === "below-cwd-rule",
+  );
   const intro =
-    "Project context (AGENTS.md). These are standing instructions for this repository; follow them. " +
+    `Project context (${hasRules ? "AGENTS.md and .trevor/rules" : "AGENTS.md"}). These are standing instructions for this repository; follow them. ` +
     "More specific scopes (closer to the working directory, listed later) take precedence over broader " +
     "ones on any conflict.";
   const sections = kept.map(
@@ -244,6 +263,7 @@ export function renderContext(
     scopes: [...new Set(kept.map((k) => k.source.scope))],
     bytesUsed: used,
     bytesDropped: dropped,
+    ruleSources,
     truncated,
   };
 }

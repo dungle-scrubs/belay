@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { test } from "vitest";
 import { buildCommandRegistry, type CommandContext } from "./commands";
 import { buildSkillCommand } from "./skills";
@@ -15,6 +18,15 @@ const baseCtx: CommandContext = {
   instanceId: "abc",
   role: "leader",
 };
+
+function tree(): string {
+  return mkdtempSync(join(tmpdir(), "init-command-"));
+}
+
+function write(path: string, content: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content, "utf8");
+}
 
 test("/compact is announced and invokes the host compaction hook, returning its result", async () => {
   const registry = buildCommandRegistry();
@@ -51,6 +63,32 @@ test("/cd is announced as a host-owned workspace switch command", async () => {
   const { text, ok } = await registry.run("/cd", "/tmp", baseCtx);
   assert.equal(ok, true);
   assert.match(text, /handled by the live host/i);
+});
+
+test("/init drafts AGENTS.md from repo evidence without writing", async () => {
+  const root = tree();
+  write(join(root, "README.md"), "# Demo");
+  write(
+    join(root, "package.json"),
+    JSON.stringify({ scripts: { lint: "biome check .", test: "vitest run" } }),
+  );
+  write(join(root, "vitest.config.ts"), "export default {};");
+  write(join(root, "apps", "AGENTS.md"), "nested");
+  write(join(root, ".trevor", "rules", "review.md"), "---\nid: review\n---\nRun tests.");
+  write(join(root, "CLAUDE.md"), "legacy");
+
+  const registry = buildCommandRegistry();
+  const { text, ok } = await registry.run("/init", "", { ...baseCtx, cwd: root, workspace: root });
+
+  assert.equal(ok, true);
+  assert.match(text, /No files were written/);
+  assert.match(text, /README\.md/);
+  assert.match(text, /pnpm lint/);
+  assert.match(text, /vitest\.config\.ts/);
+  assert.match(text, /apps\/AGENTS\.md/);
+  assert.match(text, /\.trevor\/rules\/review\.md/);
+  assert.match(text, /CLAUDE\.md/);
+  assert.equal(text.includes("```markdown"), true);
 });
 
 /**

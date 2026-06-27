@@ -8,6 +8,7 @@ import {
   UNKNOWN_INTERNET,
 } from "@trevor/session";
 import { Effect } from "effect";
+import { buildInitProposal } from "./context/init-agents";
 import { parseDoctorCommand } from "./doctor/command";
 import { buildDoctorSnapshot, type DoctorProviderProbe } from "./doctor/snapshot";
 import { fmtFields } from "./log";
@@ -178,6 +179,15 @@ export function buildCommandRegistry(): CommandRegistry {
     spec: { name: "/help", summary: "List available host commands" },
     select: none,
     run: () => commands.map((c) => `${c.spec.usage ?? c.spec.name} - ${c.spec.summary}`).join("\n"),
+  });
+
+  add<Pick<CommandContext, "cwd">>({
+    spec: {
+      name: "/init",
+      summary: "Draft or refresh AGENTS.md from repository evidence",
+    },
+    select: ({ cwd }) => ({ cwd }),
+    run: (_args, input) => buildInitProposal(input.cwd).preview,
   });
 
   add<DoctorInput>({

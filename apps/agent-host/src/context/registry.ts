@@ -3,11 +3,19 @@ import { WORKSPACE_ROOT } from "../paths";
 import {
   AGENTS_FILE,
   type ContextReport,
+  type ContextRuleSource,
   type ContextScope,
   collectEagerSources,
   readAgentsFile,
   renderContext,
 } from "./agents-md";
+import {
+  collectTrevorRuleSources,
+  ruleMatchesFile,
+  ruleToContextScope,
+  ruleToReportSource,
+  type TrevorRuleSource,
+} from "./rules";
 
 /**
  * Session-scoped AGENTS.md context (D-080), the live counterpart to the pure reader. It owns the one
@@ -21,6 +29,8 @@ import {
 export class ContextRegistry {
   /** Below-cwd AGENTS.md that have been lazily loaded, keyed by their directory (so each loads once). */
   private lazy = new Map<string, ContextScope>();
+  /** Scoped .trevor/rules loaded after matching file access, keyed by rule path. */
+  private lazyRules = new Map<string, TrevorRuleSource>();
   /** Directories already checked for a below-cwd AGENTS.md (present or not), so a re-touch never re-stats. */
   private scanned = new Set<string>();
 
@@ -74,14 +84,30 @@ export class ContextRegistry {
         });
       }
     }
+    for (const rule of collectTrevorRuleSources(cwd).rules) {
+      if (rule.metadata.inclusion === "scoped" && ruleMatchesFile(rule, absFile, cwd)) {
+        this.lazyRules.set(rule.path, rule);
+      }
+    }
   }
 
   /** The full context report - eager (re-read) + the lazy below-cwd set - for the prompt + /doctor. */
   report(cwd: string = process.cwd(), workspaceRoot: string = WORKSPACE_ROOT): ContextReport {
     const eager = collectEagerSources({ cwd, workspaceRoot });
+    const rules = collectTrevorRuleSources(cwd).rules;
+    const alwaysRuleSources = rules.filter((rule) => rule.metadata.inclusion === "always");
+    const alwaysRules = alwaysRuleSources.map((rule) => ruleToContextScope(rule, "trevor-rule"));
     // Below-cwd is the MOST specific, so it sits last (highest precedence); sort parent-before-child.
     const lazy = [...this.lazy.values()].sort((a, b) => a.path.localeCompare(b.path));
-    return renderContext([...eager, ...lazy]);
+    const lazyRuleSources = [...this.lazyRules.values()].sort((a, b) =>
+      a.path.localeCompare(b.path),
+    );
+    const lazyRules = lazyRuleSources.map((rule) => ruleToContextScope(rule, "below-cwd-rule"));
+    const ruleSources: ContextRuleSource[] = [
+      ...alwaysRuleSources.map(ruleToReportSource),
+      ...lazyRuleSources.map(ruleToReportSource),
+    ];
+    return renderContext([...eager, ...alwaysRules, ...lazy, ...lazyRules], undefined, ruleSources);
   }
 
   /** The prompt block (eager + lazy), or "" when nothing is ingested. Re-rendered every turn. */
@@ -92,6 +118,7 @@ export class ContextRegistry {
   /** Drops the lazy set (a `/clear` resets the baseline, so below-cwd context starts fresh too). */
   reset(): void {
     this.lazy.clear();
+    this.lazyRules.clear();
     this.scanned.clear();
   }
 }
