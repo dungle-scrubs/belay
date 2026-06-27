@@ -1,10 +1,10 @@
 import type { GitStatus, UsageBreakdown } from "@trevor/session";
-import { X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtCtx } from "@/derive";
 import { useArmedAfterMount } from "@/hooks/use-armed-after-mount";
 import { panelBreakdown } from "./breakdown";
+import { DrawerToggle, SideDrawer } from "./side-drawer";
 import { Treemap } from "./Treemap";
 import { WorkspaceIdentity } from "./WorkspaceIdentity";
 
@@ -80,91 +80,98 @@ export function SidePanel({
   const meterArmed = useArmedAfterMount(ready && showMeter);
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col gap-4 border-l border-border bg-card/40 px-4 py-4">
-      <div className="flex items-start justify-between gap-2">
+    <SideDrawer
+      side="right"
+      ariaLabel="session detail"
+      widthClass="w-80"
+      toneClass="bg-card/40"
+      className="px-4 pb-4"
+    >
+      {/* Flush top strip, same height as the main top bar, so the collapse toggle lines up vertically
+        with the top-bar toggles. The collapse glyph is the SAME PanelRight icon used to open the
+        panel, on the inner (left) edge. */}
+      {onClose ? (
+        <div className="flex h-8 shrink-0 items-center">
+          <DrawerToggle side="right" onClick={onClose} label="Collapse panel" />
+        </div>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
         <div className="min-w-0">
           <h2 className="truncate font-semibold text-foreground">{title}</h2>
           {subtitle ? (
             <p className="truncate text-label tracking-wider text-muted-foreground">{subtitle}</p>
           ) : null}
         </div>
-        {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close panel"
-            className="-mr-1 shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
-        ) : null}
-      </div>
 
-      {statusNode ? <div className="text-label tracking-wider">{statusNode}</div> : null}
+        {statusNode ? <div className="text-label tracking-wider">{statusNode}</div> : null}
 
-      {workspace ? <WorkspaceIdentity cwd={workspace} git={git} /> : null}
+        {workspace ? <WorkspaceIdentity cwd={workspace} git={git} /> : null}
 
-      {showMeter ? (
-        <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
-          <span className="shrink-0 text-muted-foreground">ctx</span>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-            <div
-              className={`h-full rounded-full bg-primary${
-                meterArmed ? " transition-[width] duration-300 ease-out" : ""
-              }`}
-              style={{ width: `${Math.min(100, pct(ctxUsed, ctxMax))}%` }}
-            />
+        {showMeter ? (
+          <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
+            <span className="shrink-0 text-muted-foreground">ctx</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+              <div
+                className={`h-full rounded-full bg-primary${
+                  meterArmed ? " transition-[width] duration-300 ease-out" : ""
+                }`}
+                style={{ width: `${Math.min(100, pct(ctxUsed, ctxMax))}%` }}
+              />
+            </div>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              <span className="text-foreground">{pct(ctxUsed, ctxMax)}%</span> of {fmtCtx(ctxMax)}
+            </span>
           </div>
-          <span className="shrink-0 tabular-nums text-muted-foreground">
-            <span className="text-foreground">{pct(ctxUsed, ctxMax)}%</span> of {fmtCtx(ctxMax)}
-          </span>
-        </div>
-      ) : null}
+        ) : null}
 
-      <section>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "request" | "context")}>
-          <div className="flex items-center justify-between gap-2">
-            <TabsList>
-              <TabsTrigger value="request" title="This request">
-                Request
-              </TabsTrigger>
-              <TabsTrigger value="context" title="All requests in the current context">
-                Context
-              </TabsTrigger>
-            </TabsList>
-            {activeTotal != null ? (
-              <span className="text-label tracking-wider text-muted-foreground">
-                {fmtTok(activeTotal)} tok
-              </span>
+        <section>
+          <Tabs value={tab} onValueChange={(v) => setTab(v as "request" | "context")}>
+            <div className="flex items-center justify-between gap-2">
+              <TabsList>
+                <TabsTrigger value="request" title="This turn">
+                  turn
+                </TabsTrigger>
+                <TabsTrigger value="context" title="All turns in the current session">
+                  session
+                </TabsTrigger>
+              </TabsList>
+              {activeTotal != null ? (
+                <span className="text-label tracking-wider text-muted-foreground">
+                  {fmtTok(activeTotal)} tok
+                </span>
+              ) : null}
+            </div>
+
+            <TabsContent value="request">
+              <BreakdownView
+                breakdown={breakdown}
+                totalTokens={totalTokens}
+                emptyLabel="No turn data yet"
+                ready={ready}
+              />
+            </TabsContent>
+            <TabsContent value="context">
+              <BreakdownView
+                breakdown={contextBreakdown}
+                totalTokens={contextTokens}
+                emptyLabel="No session data yet"
+                ready={ready}
+              />
+            </TabsContent>
+          </Tabs>
+        </section>
+
+        {controls || footer ? (
+          <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3">
+            {controls}
+            {footer ? (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">{footer}</div>
             ) : null}
           </div>
-
-          <TabsContent value="request">
-            <BreakdownView
-              breakdown={breakdown}
-              totalTokens={totalTokens}
-              emptyLabel="No call data yet"
-              ready={ready}
-            />
-          </TabsContent>
-          <TabsContent value="context">
-            <BreakdownView
-              breakdown={contextBreakdown}
-              totalTokens={contextTokens}
-              emptyLabel="No context yet"
-              ready={ready}
-            />
-          </TabsContent>
-        </Tabs>
-      </section>
-
-      {controls || footer ? (
-        <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3">
-          {controls}
-          {footer ? <div className="flex flex-wrap items-center gap-1.5 pt-1">{footer}</div> : null}
-        </div>
-      ) : null}
-    </aside>
+        ) : null}
+      </div>
+    </SideDrawer>
   );
 }
 

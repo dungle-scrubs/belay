@@ -227,6 +227,23 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
   }
+  /* Every interactive control shows a pointer cursor by default (shadcn buttons don't). This is the
+     source-of-truth rule so individual components never need to add `cursor-pointer`; a disabled or
+     aria-disabled control reverts to the not-allowed cursor. */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  label[for],
+  summary,
+  a[href] {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 /* Card hover: subtle border-color transition (skill.md "card-glow"). */

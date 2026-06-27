@@ -1,5 +1,12 @@
-import type { CommandSpec, GitStatus, TaskSnapshot, WorktreeSummary } from "@trevor/session";
-import { ChevronDown, PanelRight } from "lucide-react";
+import type {
+  CommandSpec,
+  GitStatus,
+  SessionActivity,
+  SessionSummary,
+  TaskSnapshot,
+  WorktreeSummary,
+} from "@trevor/session";
+import { ChevronDown } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -9,6 +16,7 @@ import {
   useMemo,
 } from "react";
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
+import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { CommandMenu } from "@/components/chat/command-menu";
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import { WorkingIndicator } from "@/components/chat/message";
@@ -16,7 +24,10 @@ import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { SidePanel } from "@/components/panel/SidePanel";
+import { SessionSidebar } from "@/components/panel/session-sidebar";
+import { DrawerToggle } from "@/components/panel/side-drawer";
 import type { Composer } from "@/hooks/use-composer";
+import { cn } from "@/lib/utils";
 import type { SessionStream } from "@/session/use-session";
 import type { HostStatus } from "../../derive";
 import { type InventoryState, type ResumeContext, ResumeModal } from "../../resume";
@@ -63,6 +74,8 @@ export interface TranscriptView {
 export interface TranscriptScroll {
   readonly transcriptRef: RefObject<HTMLDivElement | null>;
   readonly atBottom: boolean;
+  /** True when content appended below the fold while scrolled up (D-093): glows the chevron. */
+  readonly hasUnseen: boolean;
   readonly bottomRequestId: number;
   readonly onScroll: () => void;
   readonly onUserScrollIntent: () => void;
@@ -125,8 +138,26 @@ export interface ChooserBinding {
 }
 
 /**
- * PanelHost owns the rendered chat layout: the main column (transcript well + task checklist +
- * composer), the toggleable side panel, and the resume/worktree choosers. It owns NO state - it is
+ * The session navigation sidebar binding (D-093): the left-hand session list. App owns the open
+ * state, the current-project inventory, the live-activity overlay, and the guarded switch action;
+ * PanelHost renders the rail (when open) and the upper-left dashboard toggle (when closed).
+ */
+export interface SidebarBinding {
+  readonly open: boolean;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+  readonly sessions: readonly SessionSummary[];
+  readonly currentSessionId: string;
+  readonly currentProject: string | null;
+  readonly onSelect: (sessionId: string) => void;
+  readonly liveActivity: ReadonlyMap<string, SessionActivity>;
+  readonly nowMs: number;
+}
+
+/**
+ * PanelHost owns the rendered chat layout: the session sidebar, the main column (transcript well +
+ * task checklist + composer), the toggleable side panel, and the resume/worktree choosers. It owns
+ * NO state - it is
  * pure presentation over the injected view-models and wiring. App stays the composition root: it
  * wires the hooks (session, composer, send queue) and folds the memos (transcript, panelModel,
  * host), then hands them here as cohesive objects. The JSX is moved verbatim from App.tsx - same
@@ -142,8 +173,15 @@ export function PanelHost(props: {
   tasks: readonly TaskSnapshot[];
   panel: PanelBinding;
   choosers: ChooserBinding;
+  sidebar: SidebarBinding;
+  /** A short name for the open session, shown in the main header strip (D-093). */
+  sessionName: string;
+  /** Whether the open session is archived (D-094): gates the composer behind an unarchive notice. */
+  archived: boolean;
+  onUnarchive: () => void;
 }) {
   const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
+  const { sidebar, sessionName, archived, onUnarchive } = props;
   const { replayed } = stream;
   const {
     transcript,
@@ -176,20 +214,43 @@ export function PanelHost(props: {
 
   return (
     <div className="flex h-svh">
+      {/* The session navigation sidebar (D-093): a collapsible left rail listing the current
+        project's sessions. Switching routes through the same safe path as `/resume`. */}
+      {sidebar.open ? (
+        <SessionSidebar
+          sessions={sidebar.sessions}
+          currentSessionId={sidebar.currentSessionId}
+          currentProject={sidebar.currentProject}
+          onSelect={sidebar.onSelect}
+          liveActivity={sidebar.liveActivity}
+          onToggle={sidebar.onClose}
+          nowMs={sidebar.nowMs}
+          className="w-64 shrink-0"
+        />
+      ) : null}
       <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4">
         {/* Highlight text in any message (data-message-id) to get a floating Quote action
           that drops the selection into the composer as a markdown blockquote. */}
         <QuoteSelectionToolbar onQuote={composer.quoteSelection} />
-        {!panel.open ? (
-          <button
-            type="button"
-            onClick={panel.onOpen}
-            aria-label="Open panel"
-            className="absolute top-4 right-4 z-10 cursor-pointer text-muted-foreground hover:text-foreground"
-          >
-            <PanelRight className="size-4.5" />
-          </button>
-        ) : null}
+        {/* Thin top header (D-093): a dedicated strip for the two drawer-open toggles + the session
+          name, so the toggles never sit over the transcript (they used to block text selection). The
+          icons are revealed by hovering anywhere in this strip (group-hover), not just the icon. The
+          left/right slots stay reserved so the centered name doesn't shift when a drawer opens. */}
+        <header className="flex h-8 shrink-0 items-center gap-2">
+          <span className="flex w-6 shrink-0 justify-start">
+            {!sidebar.open ? (
+              <DrawerToggle side="left" onClick={sidebar.onOpen} label="Open sessions sidebar" />
+            ) : null}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-center text-label tracking-wider text-muted-foreground/70">
+            {sessionName}
+          </span>
+          <span className="flex w-6 shrink-0 justify-end">
+            {!panel.open ? (
+              <DrawerToggle side="right" onClick={panel.onOpen} label="Open panel" />
+            ) : null}
+          </span>
+        </header>
         {/* Transcript fills the view; the composer + footer pin to the bottom.
           Scrollbar is hidden but the region still scrolls. The relative wrapper anchors
           the jump-to-bottom chevron over the transcript's lower edge. */}
@@ -244,8 +305,16 @@ export function PanelHost(props: {
             <button
               type="button"
               onClick={scroll.scrollToBottom}
-              aria-label="Scroll to bottom"
-              className="absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+              aria-label={scroll.hasUnseen ? "Scroll to new content" : "Scroll to bottom"}
+              data-unseen={scroll.hasUnseen ? "true" : undefined}
+              className={cn(
+                "absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-md border bg-card shadow-sm transition-colors",
+                // Two states: plain away-from-edge, or a primary-colored border/icon when there is
+                // unseen content below (no glow shadow - the border color alone signals it).
+                scroll.hasUnseen
+                  ? "border-primary text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
             >
               <ChevronDown className="size-4" />
             </button>
@@ -266,39 +335,47 @@ export function PanelHost(props: {
           onDragOver={(event) => event.preventDefault()}
           className="relative shrink-0 pt-2 pb-4"
         >
-          {/* Slash menu: overlays above the composer (absolute, so it never pushes the
-            transcript up). Filters the host's announced command inventory as you type a
-            leading "/", with the matched prefix highlighted. Arrows/Tab/Enter pick a row
-            (handled on the input); a row click fills the composer. onMouseDown (not
-            onClick) so the input keeps focus. */}
-          {compose.menuOpen ? (
-            <CommandMenu
-              className="absolute inset-x-0 bottom-full z-20 mb-2"
-              matches={compose.menuMatches}
-              activeIndex={compose.menuIndex}
-              query={compose.slashQuery ?? ""}
-              onPick={compose.acceptCommand}
-            />
-          ) : null}
+          {/* Archived sessions (D-094) gate the composer: unarchive is required before normal use.
+            The transcript history stays readable above; only sending is blocked. */}
+          {archived ? (
+            <ArchivedNotice onUnarchive={onUnarchive} />
+          ) : (
+            <>
+              {/* Slash menu: overlays above the composer (absolute, so it never pushes the
+                transcript up). Filters the host's announced command inventory as you type a
+                leading "/", with the matched prefix highlighted. Arrows/Tab/Enter pick a row
+                (handled on the input); a row click fills the composer. onMouseDown (not
+                onClick) so the input keeps focus. */}
+              {compose.menuOpen ? (
+                <CommandMenu
+                  className="absolute inset-x-0 bottom-full z-20 mb-2"
+                  matches={compose.menuMatches}
+                  activeIndex={compose.menuIndex}
+                  query={compose.slashQuery ?? ""}
+                  onPick={compose.acceptCommand}
+                />
+              ) : null}
 
-          <PromptInput
-            draft={composer.draft}
-            onDraftChange={composer.setDraft}
-            onSubmit={compose.onSubmit}
-            onKeyDown={compose.onInputKeyDown}
-            onComposerKeyDown={composer.handleKeyDown}
-            onPaste={composer.onPaste}
-            inputRef={composer.inputRef}
-            fileInputRef={composer.fileInputRef}
-            onPickFiles={composer.onPickFiles}
-            disabled={compose.disabled}
-            placeholder={compose.placeholder}
-            attachments={composer.attachments}
-            onRemoveAttachment={composer.removeAttachment}
-            uploading={composer.uploading}
-            uploadError={composer.uploadError}
-            onDismissError={() => composer.setUploadError(null)}
-          />
+              <PromptInput
+                draft={composer.draft}
+                onDraftChange={composer.setDraft}
+                onSubmit={compose.onSubmit}
+                onKeyDown={compose.onInputKeyDown}
+                onComposerKeyDown={composer.handleKeyDown}
+                onPaste={composer.onPaste}
+                inputRef={composer.inputRef}
+                fileInputRef={composer.fileInputRef}
+                onPickFiles={composer.onPickFiles}
+                disabled={compose.disabled}
+                placeholder={compose.placeholder}
+                attachments={composer.attachments}
+                onRemoveAttachment={composer.removeAttachment}
+                uploading={composer.uploading}
+                uploadError={composer.uploadError}
+                onDismissError={() => composer.setUploadError(null)}
+              />
+            </>
+          )}
         </div>
       </main>
 

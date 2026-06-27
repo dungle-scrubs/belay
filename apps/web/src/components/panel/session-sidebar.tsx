@@ -1,6 +1,7 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
-import { GitBranch, LayoutDashboard } from "lucide-react";
+import { GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DrawerToggle, SideDrawer } from "./side-drawer";
 
 /**
  * The session navigation sidebar (D-093): the everyday left-hand surface for switching among the
@@ -40,6 +41,9 @@ export interface SessionSidebarProps {
    * session's activity visible while the user is viewing a DIFFERENT session.
    */
   readonly liveActivity?: ReadonlyMap<string, SessionActivity>;
+  /** When provided, the header's dashboard icon becomes a collapse button (the open↔closed toggle the
+   *  app owns). Omitted in Storybook/standalone use, where the sidebar is always visible. */
+  readonly onToggle?: () => void;
   readonly nowMs?: number;
   readonly className?: string;
 }
@@ -53,41 +57,71 @@ export function effectiveActivity(
   return liveActivity?.get(summary.sessionId) ?? summary.activity;
 }
 
-/** A fixed-size activity dot: green pulse running, amber pulse queued, a muted dot when settled, a
- *  faint dot when never-run / no live host. The size never changes, so live transitions don't reflow. */
-function ActivityDot({
+/**
+ * A thin vertical activity bar pinned to the row's left edge - green when there is active work
+ * (running or queued), gray when the session has settled or has a live host, and faint when it has
+ * never run / has no host. Replaces the old dot to save horizontal space; the fixed width means live
+ * transitions never reflow the row.
+ */
+function ActivityBar({
   activity,
   host,
 }: {
   activity: SessionActivity;
   host: SessionSummary["host"];
 }) {
+  const active = activity === "running" || activity === "queued";
   return (
     <span
       aria-hidden
       className={cn(
-        "size-1.5 shrink-0 rounded-full",
-        activity === "running"
-          ? "animate-pulse bg-smui-green"
-          : activity === "queued"
-            ? "animate-pulse bg-amber-400"
-            : activity === "settled" || host === "live"
-              ? "bg-muted-foreground/60"
-              : "bg-muted-foreground/25",
+        "absolute inset-y-1.5 left-1 w-0.5 rounded-full",
+        active
+          ? "bg-smui-green"
+          : activity === "settled" || host === "live"
+            ? "bg-muted-foreground/50"
+            : "bg-muted-foreground/20",
       )}
     />
   );
 }
 
-/** The right-aligned label: a live status word for running/queued, else the settled relative time. */
-function activityLabel(activity: SessionActivity, updatedAt: string, nowMs: number): string {
+/**
+ * An animated three-dot "…" that draws the eye with movement (D-093): the running label is motion,
+ * not the static word "running". A staggered opacity wave reads as live work in progress; it inherits
+ * the row's text color via `bg-current`, and carries `aria-label="running"` so it still announces.
+ */
+function RunningDots() {
+  return (
+    <span className="inline-flex items-center gap-[3px]" role="status" aria-label="running">
+      {[0, 200, 400].map((delay) => (
+        <span
+          key={delay}
+          className="size-1 animate-pulse rounded-full bg-current"
+          style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** The right-aligned label content: the animated running dots, a "queued" word, or the relative time. */
+function ActivityLabel({
+  activity,
+  updatedAt,
+  nowMs,
+}: {
+  activity: SessionActivity;
+  updatedAt: string;
+  nowMs: number;
+}) {
   if (activity === "running") {
-    return "running";
+    return <RunningDots />;
   }
   if (activity === "queued") {
-    return "queued";
+    return <>queued</>;
   }
-  return relativeTime(updatedAt, nowMs);
+  return <>{relativeTime(updatedAt, nowMs)}</>;
 }
 
 function SessionRow({
@@ -109,24 +143,32 @@ function SessionRow({
       onClick={() => onSelect(summary.sessionId)}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
+        // Always selectable - switching is allowed even while a session is running (the turn keeps
+        // running on the host; the row's activity bar shows it). Never blocked or disabled.
+        "relative flex w-full cursor-pointer flex-col gap-0.5 py-1.5 pr-2.5 pl-3 text-left",
         selected
           ? "bg-card text-foreground"
           : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
       )}
     >
-      <ActivityDot activity={activity} host={summary.host} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm leading-tight">{summary.title}</span>
-        {summary.branch ? (
-          <span className="inline-flex items-center gap-1 truncate text-label tracking-wider text-muted-foreground/70">
-            <GitBranch className="size-2.5 shrink-0" />
-            <span className="truncate">{summary.branch}</span>
-          </span>
-        ) : null}
-      </span>
-      <span className="shrink-0 text-label tracking-wider text-muted-foreground/60">
-        {activityLabel(activity, summary.updatedAt, nowMs)}
+      <ActivityBar activity={activity} host={summary.host} />
+      {/* Top row: the title, truncating before it can widen the row. */}
+      <span className="truncate text-sm leading-tight">{summary.title}</span>
+      {/* Bottom row: branch (left, truncates) and the activity/time (right, fixed) with space between -
+        the time never shrinks, only the branch truncates. Rendered even without a branch, so every row
+        is the same two-line height and live status changes never reflow the list. */}
+      <span className="flex items-center justify-between gap-2 text-label tracking-wider text-muted-foreground/60">
+        <span className="inline-flex min-w-0 items-center gap-1">
+          {summary.branch ? (
+            <>
+              <GitBranch className="size-2.5 shrink-0" />
+              <span className="truncate">{summary.branch}</span>
+            </>
+          ) : null}
+        </span>
+        <span className="flex shrink-0 items-center">
+          <ActivityLabel activity={activity} updatedAt={summary.updatedAt} nowMs={nowMs} />
+        </span>
       </span>
     </button>
   );
@@ -138,20 +180,28 @@ export function SessionSidebar({
   currentProject,
   onSelect,
   liveActivity,
+  onToggle,
   nowMs = Date.now(),
   className,
 }: SessionSidebarProps) {
   const rows = visibleSessions(sessions, currentProject);
 
   return (
-    <nav
-      aria-label="sessions"
-      className={cn("flex flex-col border-r border-border bg-smui-surface-sunken", className)}
+    <SideDrawer
+      side="left"
+      ariaLabel="sessions"
+      widthClass=""
+      toneClass="bg-card/40"
+      className={className}
     >
-      <header className="flex items-center gap-1.5 px-2.5 py-2 text-label tracking-wider text-muted-foreground">
-        <LayoutDashboard className="size-3.5 shrink-0" />
-        <span>Sessions</span>
-        <span className="ml-auto text-muted-foreground/50">{rows.length}</span>
+      {/* Header is the same height as the main top bar so the collapse toggle lines up vertically with
+        the top-bar toggles. The collapse glyph is the SAME PanelLeft icon used to open the drawer, on
+        the inner (right) edge. Only the live app passes onToggle; Storybook stays a static header. */}
+      <header className="flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-label tracking-wider text-muted-foreground">
+        <span className="mr-auto">Sessions</span>
+        {onToggle ? (
+          <DrawerToggle side="left" onClick={onToggle} label="Collapse sessions sidebar" />
+        ) : null}
       </header>
 
       {rows.length === 0 ? (
@@ -173,6 +223,6 @@ export function SessionSidebar({
           ))}
         </ul>
       )}
-    </nav>
+    </SideDrawer>
   );
 }

@@ -9,6 +9,7 @@ import {
   fmtTokens,
   hostStatus,
   isOverflowError,
+  isSessionArchived,
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
@@ -148,6 +149,23 @@ test("providerModelsFrom / defaultProviderFrom / commandsFrom take the latest ho
   const commands = commandsFrom([online("h1")]);
   assert.equal(commands.length, 1);
   assert.equal(commands[0]?.name, "/clear");
+});
+
+test("isSessionArchived reflects the latest session.archived event (D-094)", () => {
+  assert.equal(isSessionArchived([]), false, "no archive event -> not archived");
+  assert.equal(
+    isSessionArchived([evt("session.archived", { archived: true })]),
+    true,
+    "an archive event marks it archived",
+  );
+  assert.equal(
+    isSessionArchived([
+      evt("session.archived", { archived: true }),
+      evt("session.archived", { archived: false }),
+    ]),
+    false,
+    "the latest event wins: an unarchive clears it",
+  );
 });
 
 test("latestSessionSwitch returns the newest host-authored session target", () => {

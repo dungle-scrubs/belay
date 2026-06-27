@@ -90,7 +90,10 @@ test("a running session shows a running indicator", () => {
       nowMs={NOW}
     />,
   );
-  assert.ok((container.textContent ?? "").includes("running"));
+  assert.ok(
+    container.querySelector('[aria-label="running"]'),
+    "the running row shows the animated running indicator",
+  );
 });
 
 test("rows show running, queued, and settled states distinctly (D-093 M3)", () => {
@@ -116,14 +119,21 @@ test("rows show running, queued, and settled states distinctly (D-093 M3)", () =
     />,
   );
   const text = container.textContent ?? "";
-  assert.ok(text.includes("running"), "the running row shows a running label");
+  assert.equal(
+    container.querySelectorAll('[aria-label="running"]').length,
+    1,
+    "only the running row shows the animated running indicator",
+  );
   assert.ok(text.includes("queued"), "the live-queued row shows a queued label");
   // The settled row shows a relative time, not a live status word.
   assert.ok(getByText("10m ago"), "the settled row shows when it last settled");
   assert.ok(!text.includes("idle"), "settled is distinct from idle - no idle label");
-  // A green (running) and an amber (queued) pulse dot are both present and distinct.
-  assert.equal(container.querySelectorAll(".bg-smui-green.animate-pulse").length, 1);
-  assert.equal(container.querySelectorAll(".bg-amber-400.animate-pulse").length, 1);
+  // The two active rows (running + queued) carry a green left activity bar; the settled row does not.
+  assert.equal(
+    container.querySelectorAll(".bg-smui-green").length,
+    2,
+    "running and queued rows both show the green active bar",
+  );
 });
 
 test("activity stays visible for a session the user is NOT currently viewing (D-093 M3)", () => {
@@ -142,10 +152,10 @@ test("activity stays visible for a session the user is NOT currently viewing (D-
   );
   const bgRow = getByText("background run").closest("button");
   assert.ok(bgRow, "the non-current row renders");
-  assert.ok((bgRow?.textContent ?? "").includes("running"), "its running state is visible");
+  assert.ok(bgRow?.querySelector('[aria-label="running"]'), "its running indicator is visible");
   assert.ok(
-    bgRow?.querySelector(".bg-smui-green.animate-pulse"),
-    "the running dot shows on the non-current row",
+    bgRow?.querySelector(".bg-smui-green"),
+    "the green active bar shows on the non-current row",
   );
   // And it is not the selected row.
   assert.notEqual(bgRow?.getAttribute("aria-current"), "true");
@@ -183,6 +193,30 @@ test("clicking a row selects that session", () => {
   );
   fireEvent.click(getByText("switch to me"));
   assert.deepEqual(picked, ["s2"]);
+});
+
+test("switching is allowed even while the current session is running (D-093 M4)", () => {
+  // Switching never stops the agent - the turn keeps running on the host - so a running current
+  // session must NOT block selecting another session.
+  const picked: string[] = [];
+  const { getByText } = render(
+    <SessionSidebar
+      sessions={[
+        summary({ sessionId: "cur", title: "current run", activity: "running", host: "live" }),
+        summary({ sessionId: "s2", title: "switch target" }),
+      ]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={(id) => picked.push(id)}
+      nowMs={NOW}
+    />,
+  );
+
+  const target = getByText("switch target").closest("button") as HTMLButtonElement;
+  assert.ok(target, "the other row renders");
+  assert.ok(!target.disabled, "the other row is NOT disabled while the current session runs");
+  fireEvent.click(target);
+  assert.deepEqual(picked, ["s2"], "selecting another session fires even mid-run");
 });
 
 test("the normal sidebar exposes no stop/kill/archive controls (D-094 M4)", () => {

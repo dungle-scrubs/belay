@@ -255,6 +255,10 @@ export interface SessionActions {
    *  bypassing the send queue, the model, and the provider flow. */
   readonly shell: (requestId: string, command: string) => Promise<void>;
   readonly openInEditor: (path: string, line?: number, column?: number) => Promise<void>;
+  /** Explicit internet refresh (D-060 M2): ask the host to probe public reachability now. */
+  readonly refreshInternet: () => Promise<void>;
+  /** Unarchive this session (D-094): clear the durable archived flag so the main UI un-gates. */
+  readonly unarchive: () => Promise<void>;
 }
 
 /**
@@ -311,5 +315,18 @@ export function useSessionActions(sessionId: string | null): SessionActions {
     [publishVia],
   );
 
-  return { publish, cancel, command, shell, openInEditor };
+  // Explicit internet refresh (D-060 M2): the advisory's refresh button asks the host to probe public
+  // reachability now. A programmatic command (no transcript echo, no command.result); the fresh
+  // `checking` + settled snapshot ride the host.internet events the host already publishes.
+  const refreshInternet = useCallback(() => command("/internet-refresh", ""), [command]);
+
+  // Unarchive this session (D-094): publish the durable `session.archived: false` flag so the main UI
+  // gate clears and normal use resumes. The latest session.archived event wins, so this is the inverse
+  // of an archive without deleting anything.
+  const unarchive = useCallback(
+    () => publishVia(sessionEvents.sessionArchived({ archived: false })),
+    [publishVia],
+  );
+
+  return { publish, cancel, command, shell, openInEditor, refreshInternet, unarchive };
 }

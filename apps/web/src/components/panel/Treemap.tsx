@@ -11,7 +11,7 @@ const MIN_CELL_FRACTION = 0.05; // floor so even ~1% categories stay visible
 // meter's 300ms ease-out. Only existing cells (stable key) animate; new/removed
 // categories just appear/vanish.
 const CELL_TRANSITION =
-  "left 300ms ease-out, top 300ms ease-out, width 300ms ease-out, height 300ms ease-out";
+  "left 600ms ease-out, top 600ms ease-out, width 600ms ease-out, height 600ms ease-out";
 
 /**
  * Renders weighted leaves as a squarified treemap. Measures its own width so the

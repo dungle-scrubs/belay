@@ -520,6 +520,22 @@ test("panelModel uses progress snapshots after replay completes", () => {
   assert.deepEqual(panel.breakdown, breakdown);
 });
 
+test("panelModel folds the in-flight turn into Session, so Session updates live (not only on completion)", () => {
+  const liveOnly = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(2, events.assistantProgress({ runId: "r1", usage, breakdown })),
+  ];
+  const panel = panelModel(toTranscript(liveOnly), liveOnly, { replayed: true });
+  // The running turn is the whole session so far, so Session mirrors the live turn instead of being
+  // empty until the turn completes.
+  assert.deepEqual(
+    panel.contextBreakdown,
+    breakdown,
+    "Session includes the in-flight turn's breakdown",
+  );
+  assert.equal(panel.contextTokens, panel.totalTokens, "Session tokens include the in-flight turn");
+});
+
 test("panelModel floors ctx usage at the request breakdown estimate", () => {
   const lowUsage = {
     input: 756,

@@ -23,6 +23,7 @@ import {
   commandsFrom,
   defaultProviderFrom,
   hostStatus,
+  isSessionArchived,
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
@@ -122,7 +123,7 @@ export function App() {
 
   const stream = useSession(sessionId);
   const { events, presence, replayed, replayThroughSeq, status } = stream;
-  const { publish, cancel, command, shell, openInEditor } = useSessionActions(sessionId);
+  const { publish, cancel, command, shell, openInEditor, unarchive } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
   // kept in sessionStorage (tab-scoped, survives a reload). Draft persistence restores an unsubmitted
@@ -187,13 +188,35 @@ export function App() {
   // The managed-worktree switcher (D-091): a UI affordance / `/worktree` opens it; the host
   // announces the worktrees on host.online, and switching routes the host-owned switch action.
   const [worktreeOpen, setWorktreeOpen] = useState(false);
-  // The session inventory powers the resume chooser AND decorates worktree rows (activity/host),
-  // so fetch it while either chooser is open.
-  const inventory = useInventory(resumeOpen || worktreeOpen);
-  const currentProject = useMemo(() => {
+  // The left-side session sidebar (D-093) is toggleable; starts collapsed (the upper-left dashboard
+  // icon opens it) and the choice persists across reloads.
+  const [sidebarOpen, setSidebarOpen] = useLocalStorageState<boolean>("trevor.sidebar", {
+    defaultValue: false,
+  });
+  // The session inventory powers the resume chooser, decorates worktree rows (activity/host), AND
+  // backs the session sidebar (D-093), so fetch it while any of those surfaces is open.
+  const inventory = useInventory(resumeOpen || worktreeOpen || sidebarOpen);
+  const resolvedProject = useMemo(() => {
     const base = (host.workspace ?? host.cwd)?.split("/").filter(Boolean).pop();
-    return base && base !== "~" ? base : null;
-  }, [host.workspace, host.cwd]);
+    if (base && base !== "~") {
+      return base;
+    }
+    // Right after a switch the new session replays before its host.online lands, so the live host
+    // carries no workspace for a couple of frames. Fall back to the viewed session's project from the
+    // (stable) inventory so the sidebar/resume lists never briefly flash the full cross-project set.
+    return inventory.sessions.find((s) => s.sessionId === target)?.project ?? null;
+  }, [host.workspace, host.cwd, inventory.sessions, target]);
+  // Sticky last-known project - the one-time fix for the "lists flash ALL sessions" class of glitch.
+  // A switch, `/clear` minting a brand-new session (not in the inventory yet), `/cd`, or a reload all
+  // leave the host workspace momentarily unannounced, so `resolvedProject` briefly goes null. Retaining
+  // the last value keeps the session lists (sidebar AND /resume, which both read currentProject) scoped
+  // through the gap instead of showing every project. Assigned during render (idempotent, safe); only
+  // ever null before any project is known at all (first load).
+  const lastKnownProjectRef = useRef<string | null>(null);
+  if (resolvedProject != null) {
+    lastKnownProjectRef.current = resolvedProject;
+  }
+  const currentProject = resolvedProject ?? lastKnownProjectRef.current;
   const worktrees = useMemo(() => worktreesFrom(events), [events]);
   // Cross-reference per-worktree-session activity from the inventory, so a worktree row can show
   // "agents running" / "needs you" / host presence.
@@ -209,6 +232,19 @@ export function App() {
   // user hasn't chosen one, rather than to a hardcoded key.
   const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
   const active = useMemo(() => activeRunId(events), [events]);
+  // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
+  // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
+  const archived = useMemo(() => isSessionArchived(events), [events]);
+  // A short, friendly name for the header strip (D-093): the first user prompt, one line and capped,
+  // falling back to the session id before anything has been said.
+  const sessionName = useMemo(() => {
+    const firstUser = transcript.find((m) => m.kind === "user");
+    const text = firstUser && "text" in firstUser ? firstUser.text.trim().replace(/\s+/g, " ") : "";
+    if (!text) {
+      return target;
+    }
+    return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+  }, [transcript, target]);
   // The in-flight turn's start time (ms epoch), driving the live "Working (elapsed)" timer.
   const turnStartedAt = useMemo(() => activeTurnStartedAt(events), [events]);
   // True while a manual /compact fold is streaming (a transient bar in the transcript). ESC cancels
@@ -304,6 +340,18 @@ export function App() {
   const busy = active !== null || awaitingResponse;
   const { pending, queue, submit, steer } = useSendQueue({ busy, publish, resetKey: sessionId });
   const visibleQueue = pending ? [pending, ...queue] : queue;
+
+  // The sidebar's live-activity overlay (D-093 M3): the browser only owns the VIEWED session's live
+  // state, so it overrides just that row - "running" while a turn is in flight - layered over the
+  // durable inventory activity the other rows project from their logs. Keeps the current session's
+  // run state immediate even before its assistant.started lands in the inventory read model.
+  const sidebarLiveActivity = useMemo(() => {
+    const map = new Map<string, SessionActivity>();
+    if (sessionId && busy) {
+      map.set(sessionId, "running");
+    }
+    return map;
+  }, [sessionId, busy]);
 
   const activeProvider = provider ?? hostDefault ?? "qwen";
   // Before any host has announced (empty hostModels), there's no roster to show: fall back
@@ -589,6 +637,23 @@ export function App() {
     setBottomRequestId((id) => id + 1);
   };
 
+  // Unseen-content glow for the jump-to-bottom chevron: while the user is scrolled up, transcript
+  // content that appended below the fold (a new turn, a streamed reply) glows the chevron so it reads
+  // as "new below". Reaching the bottom marks everything seen and clears it - two states, plain
+  // (away from the edge) and glowing (away + unseen). Counts coalesced messages, so a new turn or a
+  // freshly-started assistant row trips it; submitting re-pins to the bottom, so your own prompt never
+  // glows. Seeds from the current length so the very first paint never glows.
+  const [hasUnseen, setHasUnseen] = useState(false);
+  const seenCountRef = useRef(transcript.length);
+  useEffect(() => {
+    if (atBottom) {
+      seenCountRef.current = transcript.length;
+      setHasUnseen(false);
+    } else if (transcript.length > seenCountRef.current) {
+      setHasUnseen(true);
+    }
+  }, [atBottom, transcript.length]);
+
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
     <PanelControls
@@ -683,6 +748,7 @@ export function App() {
       scroll={{
         transcriptRef,
         atBottom,
+        hasUnseen,
         bottomRequestId,
         onScroll: onTranscriptScroll,
         onUserScrollIntent,
@@ -717,6 +783,24 @@ export function App() {
         worktreeContext: { activityBySession: worktreeActivity, busy },
         onSwitchWorktree: (id) => void command("/worktree-switch", id),
       }}
+      sidebar={{
+        open: sidebarOpen,
+        onOpen: () => setSidebarOpen(true),
+        onClose: () => setSidebarOpen(false),
+        sessions: inventory.sessions,
+        currentSessionId: target,
+        currentProject,
+        // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
+        // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
+        // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
+        // the durable log and replay on return); the row's activity bar shows it from the other view.
+        onSelect: navigateToSession,
+        liveActivity: sidebarLiveActivity,
+        nowMs: now,
+      }}
+      sessionName={sessionName}
+      archived={archived}
+      onUnarchive={() => void unarchive()}
     />
   );
 }

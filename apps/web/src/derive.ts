@@ -302,6 +302,16 @@ export function latestSessionSwitch(
 }
 
 /**
+ * Whether this session is currently archived (D-094): the latest `session.archived` event wins, so an
+ * unarchive (`archived: false`) clears it. Archived sessions are filtered out of the sidebar/resume
+ * lists, but a deep link (`?session=`) or a session archived while it is open can still land the
+ * browser here - the main UI then gates normal use behind an explicit unarchive.
+ */
+export function isSessionArchived(events: readonly SessionEvent[]): boolean {
+  return latest(events, (d) => (d.type === "session.archived" ? d.archived : undefined)) ?? false;
+}
+
+/**
  * Parses composer text into a prompt-shell-lane command (D-082), or null for anything else. The
  * trigger is the RAW first character being `!` (not a trimmed/leading-whitespace match - typing a
  * space before `!` is an ordinary prompt), with a non-empty command after it. The returned `command`

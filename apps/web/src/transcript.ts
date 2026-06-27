@@ -707,5 +707,18 @@ export function panelModel(
       : undefined;
   const breakdown = live?.breakdown ?? lastCall?.breakdown;
 
+  // Fold the in-flight turn into the Session totals too, so Session updates live as the current turn
+  // streams instead of only after it completes. The open transcript message carries no breakdown until
+  // it finishes (the loop above counts only completed turns), but the live snapshot does. On completion
+  // the message carries it and `live` is null, so the turn is counted exactly once - no double count.
+  if (live?.breakdown) {
+    contextBreakdown = contextBreakdown
+      ? addBreakdown(contextBreakdown, live.breakdown)
+      : live.breakdown;
+  }
+  if (live?.usage) {
+    contextTokens = (contextTokens ?? 0) + (liveInput ?? live.usage.input) + live.usage.output;
+  }
+
   return { ctxUsed, ctxMax, totalTokens, breakdown, contextBreakdown, contextTokens };
 }

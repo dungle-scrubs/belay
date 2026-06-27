@@ -111,6 +111,51 @@ test("drafts are isolated by session id", () => {
   assert.equal(readDraft(storage, "t", "sessB"), "for B");
 });
 
+test("switching sessions resets the composer, never carrying the prior session's draft over", () => {
+  const storage = fakeStorage();
+  writeDraft(storage, "t", "sessB", "draft for B");
+  const { result, rerender } = renderHook(
+    ({ sessionId }: { sessionId: string }) => useHarness({ storage, tabId: "t", sessionId }),
+    { initialProps: { sessionId: "sessA" } },
+  );
+  // Leave an unsubmitted half-typed command in session A.
+  act(() => result.current.setDraft("/c"));
+  act(() => vi.advanceTimersByTime(300));
+
+  // Switch to B: the composer shows B's OWN saved draft, not A's "/c" (no bleed-through).
+  act(() => rerender({ sessionId: "sessB" }));
+  assert.equal(result.current.draft, "draft for B");
+
+  // Switch to a draftless session: the composer is empty, not "/c" or "draft for B".
+  act(() => rerender({ sessionId: "sessC" }));
+  assert.equal(result.current.draft, "");
+});
+
+test("a stale bare slash-command fragment is never restored and is cleared on visit", () => {
+  const storage = fakeStorage();
+  // Simulate a stale "/c" left in a session's slot by the old draft-carryover bug.
+  writeDraft(storage, "t", "sess", "/c");
+  const { result } = renderHook(() => useHarness({ storage, tabId: "t", sessionId: "sess" }));
+  // The composer opens empty (no "/c", so the command menu never pops on switch)...
+  assert.equal(result.current.draft, "");
+  // ...and the stale fragment is overwritten with an empty slot after the debounce.
+  act(() => vi.advanceTimersByTime(300));
+  assert.equal(readDraft(storage, "t", "sess"), "");
+});
+
+test("a bare command fragment typed live is not persisted as a draft", () => {
+  const storage = fakeStorage();
+  const { result } = renderHook(() => useHarness({ storage, tabId: "t", sessionId: "sess" }));
+  act(() => result.current.setDraft("/c"));
+  act(() => vi.advanceTimersByTime(300));
+  assert.equal(readDraft(storage, "t", "sess"), "", "a half-typed command is not saved");
+
+  // A real message (or a command with args) still persists normally.
+  act(() => result.current.setDraft("/cd ~/dev/x"));
+  act(() => vi.advanceTimersByTime(300));
+  assert.equal(readDraft(storage, "t", "sess"), "/cd ~/dev/x");
+});
+
 test("storage failure never breaks typing", () => {
   const storage = throwingStorage();
   const { result } = renderHook(() => useHarness({ storage, tabId: "t", sessionId: "sess" }));
