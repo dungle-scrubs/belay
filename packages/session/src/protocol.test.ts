@@ -241,6 +241,8 @@ test("host.online round-trips the model sources + catalog, defaulting to empty w
     costTier: null,
     aliases: [],
     freshness: { refreshedAt: null, stale: false },
+    reasoningLevels: ["off", "high"],
+    defaultReasoning: "high",
   };
   const base = {
     providers: ["qwen"],

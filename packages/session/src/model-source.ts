@@ -85,6 +85,11 @@ export interface CatalogEntry {
   readonly costTier: CostTier | null;
   readonly aliases: readonly string[];
   readonly freshness: CatalogFreshness;
+  /** The model's detected reasoning levels (lowest→highest), so the chooser shows the right control
+   *  for the selected model. Empty when the model has no thinking surface. */
+  readonly reasoningLevels: readonly string[];
+  /** The reasoning level to default to within {@link reasoningLevels}; "off" when there is none. */
+  readonly defaultReasoning: string;
 }
 
 const SOURCE_TYPES: readonly SourceType[] = ["local", "oauth", "gateway", "api-key"];
@@ -159,6 +164,8 @@ export function decodeCatalogEntry(v: unknown): CatalogEntry {
     costTier: typeof r.costTier === "string" ? oneOfOrNull(COST_TIERS, r.costTier) : null,
     aliases: asStringArray(r.aliases),
     freshness: decodeFreshness(r.freshness),
+    reasoningLevels: asStringArray(r.reasoningLevels),
+    defaultReasoning: typeof r.defaultReasoning === "string" ? r.defaultReasoning : "off",
   };
 }
 
@@ -270,6 +277,8 @@ export function catalogEntryFromProviderModel(provider: string, pm: ProviderMode
     costTier: null,
     aliases: [],
     freshness: { refreshedAt: null, stale: false },
+    reasoningLevels: pm.reasoningLevels,
+    defaultReasoning: pm.defaultReasoning,
   };
 }
 

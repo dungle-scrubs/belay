@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { getModel, getModels } from "@earendil-works/pi-ai/compat";
+import { getModel, getModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import type {
   CatalogEntry,
   ModelKind,
@@ -135,61 +135,102 @@ async function fetchLiveModelIds(baseUrl: string, key: string | null): Promise<s
     .filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
-/** A pi-ai registry model's shape (context/reasoning/vision/name), for enriching a live id. */
-function shapeOf(piProvider: string | undefined, id: string) {
+/** The pi-ai registry Model for an id (full object), for shape + reasoning enrichment, or undefined. */
+type PiModel = {
+  readonly name?: string;
+  readonly contextWindow?: number;
+  readonly input?: readonly string[];
+};
+function piModelOf(piProvider: string | undefined, id: string): PiModel | undefined {
   if (!piProvider) {
     return undefined;
   }
   try {
-    return getModel(piProvider as "deepseek", id as "deepseek-v4-pro") as
-      | { name?: string; contextWindow?: number; reasoning?: boolean; input?: readonly string[] }
-      | undefined;
+    return getModel(piProvider as "deepseek", id as "deepseek-v4-pro") as PiModel | undefined;
   } catch {
     return undefined;
   }
 }
 
+/** The reasoning levels a model supports: a graded/binary surface for a registry model, the LM Studio
+ *  on/off toggle for local, or none when the id is unknown to pi-ai. */
+function reasoningLevelsFor(source: SourceDef, model: PiModel | undefined): readonly string[] {
+  if (source.type === "local") {
+    return ["off", "on"];
+  }
+  if (!model) {
+    return [];
+  }
+  try {
+    // getSupportedThinkingLevels reads the model's adapter/reasoning shape (the same call the provider
+    // base uses), so the chooser's reasoning control matches what the turn will actually honor.
+    return getSupportedThinkingLevels(model as never) as readonly string[];
+  } catch {
+    return [];
+  }
+}
+
+/** The default reasoning level within a surface: medium, then high, then off, then the lowest level. */
+function defaultReasoningFor(levels: readonly string[]): string {
+  if (levels.length === 0) {
+    return "off";
+  }
+  return (
+    (levels.includes("medium") && "medium") ||
+    (levels.includes("high") && "high") ||
+    (levels.includes("off") && "off") ||
+    levels[0] ||
+    "off"
+  );
+}
+
+/** LM Studio's /models lists more than chat models (embeddings, rerankers, filters); keep only chat. */
+const NON_CHAT_LOCAL =
+  /embed|embedding|gliner|rerank|reranker|privacy-filter|whisper|\btts\b|bge-/i;
+
 /** Builds a {@link CatalogEntry} for one model id under a source, enriched from the pi-ai shape. */
 function entryFor(source: SourceDef, id: string): CatalogEntry {
-  const shape = shapeOf(source.piProvider, id);
+  const model = piModelOf(source.piProvider, id);
   const kind: ModelKind = source.type === "local" ? "local" : "cloud";
+  const reasoningLevels = reasoningLevelsFor(source, model);
   const capabilities: string[] = ["tools"];
-  if (shape?.reasoning) {
+  if (reasoningLevels.length > 1) {
     capabilities.push("reasoning");
   }
-  if (shape?.input?.includes("image")) {
+  if (model?.input?.includes("image")) {
     capabilities.push("vision");
   }
   return {
     sourceId: source.sourceId,
     modelId: id,
-    displayName: shape?.name ?? id,
+    displayName: model?.name ?? id,
     kind,
     capabilities,
-    contextLength: typeof shape?.contextWindow === "number" ? shape.contextWindow : null,
+    contextLength: typeof model?.contextWindow === "number" ? model.contextWindow : null,
     costTier: null,
     aliases: [],
     freshness: { refreshedAt: null, stale: false },
+    reasoningLevels,
+    defaultReasoning: defaultReasoningFor(reasoningLevels),
   };
 }
 
-/** The model ids available under a configured source: live `/models`, else pi-ai's registry. */
+/** The model ids available under a configured source: live `/models`, else pi-ai's registry. Local
+ *  sources drop non-chat models (embeddings, rerankers) that the runtime also serves. */
 async function modelIdsFor(source: SourceDef, key: string | null): Promise<string[]> {
   const baseUrl = baseUrlOf(source);
+  let ids: string[] = [];
   if (baseUrl) {
     try {
-      const ids = await fetchLiveModelIds(baseUrl, key);
-      if (ids.length > 0) {
-        return ids;
-      }
+      ids = await fetchLiveModelIds(baseUrl, key);
     } catch {
       // fall through to the static registry
     }
   }
-  if (source.piProvider) {
-    return (getModels(source.piProvider as "deepseek") as Array<{ id: string }>).map((m) => m.id);
+  if (ids.length === 0 && source.piProvider) {
+    ids = (getModels(source.piProvider as "deepseek") as Array<{ id: string }>).map((m) => m.id);
   }
-  return [];
+  return source.type === "local" ? ids.filter((id) => !NON_CHAT_LOCAL.test(id)) : ids;
 }
 
 function statusFor(configured: boolean): SourceStatus {

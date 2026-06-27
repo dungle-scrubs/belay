@@ -80,6 +80,8 @@ test("decodeCatalogEntry defaults unknown context length and cost tier to null",
     costTier: "high",
     aliases: ["gpt-x-latest"],
     freshness: { refreshedAt: "2026-06-27T00:00:00.000Z", stale: true },
+    reasoningLevels: ["off", "low", "medium", "high"],
+    defaultReasoning: "medium",
   });
   assert.deepEqual(entry, {
     sourceId: "openai",
@@ -91,6 +93,8 @@ test("decodeCatalogEntry defaults unknown context length and cost tier to null",
     costTier: "high",
     aliases: ["gpt-x-latest"],
     freshness: { refreshedAt: "2026-06-27T00:00:00.000Z", stale: true },
+    reasoningLevels: ["off", "low", "medium", "high"],
+    defaultReasoning: "medium",
   } satisfies CatalogEntry);
 
   const sparse = decodeCatalogEntry({ modelId: "m" });
@@ -166,6 +170,8 @@ const entry = (over: Partial<CatalogEntry> & { modelId: string }): CatalogEntry 
   costTier: null,
   aliases: [],
   freshness: { refreshedAt: null, stale: false },
+  reasoningLevels: [],
+  defaultReasoning: "off",
   ...over,
 });
 

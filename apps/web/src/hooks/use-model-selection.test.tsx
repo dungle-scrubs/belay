@@ -111,6 +111,8 @@ test("the host-announced sources + catalog are preferred once they arrive (D-065
         costTier: null,
         aliases: [],
         freshness: { refreshedAt: null, stale: false },
+        reasoningLevels: ["off", "high"],
+        defaultReasoning: "high",
       },
     ],
   };

@@ -41,6 +41,8 @@ function entry(over: Partial<CatalogEntry> & { sourceId: string; modelId: string
     costTier: "medium",
     aliases: [],
     freshness: { refreshedAt: "2026-06-27T00:00:00.000Z", stale: false },
+    reasoningLevels: [],
+    defaultReasoning: "off",
     ...over,
   };
 }

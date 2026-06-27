@@ -430,6 +430,28 @@ export function App() {
   // keeps the legacy roster's curated name for a registered provider, else the catalog display name.
   const sendModel = selection.active ?? activeModelRef;
   const activeLabel = hostModels[activeProvider] ? modelMeta.label : selection.activeLabel;
+  // The active model's reasoning surface (D-065): its catalog entry's levels for a catalog pick, else
+  // the legacy roster - so the reasoning control matches the chosen model instead of vanishing, and the
+  // turn carries the reasoning the model actually supports. The toggle is keyed by the active source.
+  const activeEntry = (selection.catalogBySource[sendModel.sourceId] ?? []).find(
+    (e) => e.modelId === sendModel.modelId,
+  );
+  const activeReasoningLevels =
+    activeEntry && activeEntry.reasoningLevels.length > 0
+      ? activeEntry.reasoningLevels
+      : modelMeta.reasoningLevels;
+  const storedReasoning = reasoningMap?.[activeProvider];
+  const activeReasoning =
+    storedReasoning && activeReasoningLevels.includes(storedReasoning)
+      ? storedReasoning
+      : (activeEntry?.defaultReasoning ?? modelMeta.defaultReasoning);
+  // The ModelRef sent with the turn: the active model + the live reasoning (so changing the toggle
+  // takes effect on the next turn even after an explicit chooser pick).
+  const sendModelRef: ModelRef = {
+    sourceId: sendModel.sourceId,
+    modelId: sendModel.modelId,
+    reasoning: activeReasoning || null,
+  };
 
   const hostCommand =
     target === DEFAULT_SESSION
@@ -498,7 +520,7 @@ export function App() {
       text,
       provider: activeProvider,
       reasoning: reasoning || undefined,
-      model: sendModel,
+      model: sendModelRef,
       artifacts,
     });
     // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
@@ -591,7 +613,7 @@ export function App() {
       id: crypto.randomUUID(),
       provider: activeProvider,
       reasoning: reasoning || undefined,
-      model: sendModel,
+      model: sendModelRef,
     });
     setDraft("");
     setAttachments([]);
@@ -713,8 +735,8 @@ export function App() {
       activeModel={sendModel}
       onOpenChooser={() => setChooserOpen(true)}
       onSelectModel={onSelectModel}
-      reasoningLevels={modelMeta.reasoningLevels}
-      reasoning={reasoning}
+      reasoningLevels={activeReasoningLevels}
+      reasoning={activeReasoning}
       onReasoningChange={setReasoning}
       showThinking={showThinkingOn}
       onShowThinkingChange={setShowThinking}
