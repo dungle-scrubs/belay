@@ -112,9 +112,9 @@ what V2's scope cuts changed.
 | **Project-local skill root** | Per-project skill library discovered from the active workspace at `.agents/skills` | <!-- D-087 --> Project-local skills are loaded before the existing global/configured skill root so a repo can carry its own reusable workflows |
 | **Project launcher** | Terminal command that turns the current project directory into a browser Trevor session with a matching host process | <!-- D-085 --> `trevor` owns session-id derivation, host spawning/reuse, shared-service readiness, and browser tab opening so users never hand-wire `SESSION_ID`/`TREVOR_WORKSPACE` |
 | **Early transcript layout** | Browser transcript behavior before the conversation overflows the viewport | <!-- D-086 --> New/short sessions start at the top and grow downward; live-bottom following begins once content can actually scroll |
-| **Assistant output style** | Named presentation overlay for response shape, density, and structure | <!-- D-072 --> Additive prompt overlay only; must not change model routing, work kind, execution mode, tool access, agent selection, or validation policy |
+| **Assistant output style** | Named presentation preference selected through the nested command menu to shape response density and structure | Extracted to `.plans/18-nested-command-menu`; presentation-only, must not change model routing, work kind, execution mode, tool access, agent selection, or validation policy |
 | **Doctor snapshot** | Structured host health report with areas, checks, findings, evidence, and next actions | <!-- D-073 --> `/doctor` should render actionable diagnostics, not raw host/debug state dumps |
-| **Capability manifest** | Registry-derived self-description of Trevor tools, commands, contracts, agents, skills, runtime surfaces, and the `trevor-expert` explainer skill | <!-- D-074 --> Full manifest for humans/clients/export; compact scoped manifest for model/subagent context; deterministic source for Trevor explanation surfaces; never a permission system or giant prompt dump |
+| **Capability manifest** | Registry-derived self-description of Trevor tools, commands, contracts, agents, skills, runtime surfaces, and the `trevor-expert` explainer skill | Extracted to `.plans/19-capability-manifest-and-trevor-expert`; full/compact export plus built-in expert consumer; never a permission system or giant prompt dump |
 | **Subagent** | Delegated agent in its own isolated context | <!-- D-045 --> **general-purpose + explorer + ephemeral definitions** being built (D-045…D-049); verifier / teams / bounded-child deferred |
 | **Bounded child** | Internal constrained helper; host-owned, returns a structured artifact | <!-- D-033 --> Backlog |
 | **Steering / hard steering** | User control mid-request; ordinary = recorded via turn/run; hard = interrupts the provider path | - |
@@ -1206,8 +1206,6 @@ Sequence as each is picked up (no hard order locked here):
   shared auth-store integration, and provider catalog status (H-019, H-155).
 - **Internet connectivity awareness** is specified above as D-060: host-owned public-internet status only, with
   no automatic local/cloud switching or retry behavior (H-026, H-093).
-- **`/clip` + `clipboard_write`** is specified below as D-071: V1-compatible clipboard write surface with a
-  bare host command and a restricted prompt form (H-111).
 - **Settings & preferences** for model/provider/thinking mode are specified as part of D-065; deeper
   **usage/metrics** surface remains separate (H-031, H-034).
 - **Browser/terminal session manager** is specified above as D-061: cwd-targeted terminal launch, browser-created
@@ -1243,12 +1241,15 @@ Sequence as each is picked up (no hard order locked here):
 - **Image attachment UX** is specified above as D-092: Storybook-first inline `[Image #N]` composer tokens,
   Cmd+V image paste, hover previews, queue preservation, natural transcript image layout, same-message carousel,
   and provider projection over existing blob-backed artifacts.
-- **Output-style registry** is specified below as D-072: V1-compatible assistant styles as additive
-  presentation prompt overlays, exposed through settings and `/style` without task/routing semantics (H-164).
+- **Nested command menu / `/style`** is extracted to `.plans/18-nested-command-menu`: a reusable hierarchical
+  command-menu pattern with `/style` as the first consumer. Output styles are command choices, not prompt
+  overlays, and remain presentation-only without task/routing semantics (formerly D-072 / H-164).
 - **Doctor health surface** is specified below as D-073: V1-compatible structured diagnostics, rendered in
   Trevor web through Storybook-first responsive UI before app wiring (H-163).
-- **Capability manifest** is specified below as D-074: registry-derived full and compact Trevor self-description
-  for humans, clients, subagents, and exports without prompt bloat (H-156).
+- **Capability manifest + `trevor-expert`** is extracted to
+  `.plans/19-capability-manifest-and-trevor-expert`: registry-derived full/compact self-description,
+  `trevor-export`, and the built-in `trevor-expert` consumer, with general command/skill interpolation kept
+  separately gated and disabled by default (formerly D-074 / H-156).
 - **Agent / skill / slash discovery** depth (H-165 is now backlog under delegation; skill + slash discovery
   KEEP) is specified below as D-075: host-owned discovery registry, hybrid ambient skill roster, and explicit
   `skills_list` / `skill_view` drill-in (H-166, H-167, H-168).
@@ -1312,87 +1313,11 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Local observation corpus / classifier learning** | new | <!-- D-096 --> deferred pattern. Store redacted, deduped unclassified observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so Trevor can improve classifiers and harness guidance over time. Provider failure observations from D-076 are the first use; later candidates include tool-result patterns, repeated tool calls, number of attempts to reach a goal, prompt/harness guidance signals, and possible model task classification. Observations are inspectable on demand and never automatically injected into prompts |
 | **Vim motions in UI/UX** | new | <!-- D-097 --> deferred discussion. Evaluate https://github.com/vimeejs/vimee for adding Vim-style motions to Trevor UI/UX, starting small with the prompt input before considering broader navigation or editing surfaces |
 
-**Clipboard write surface (deferred).** <!-- D-071 --> Add a V1-compatible `clipboard_write` host tool and
-`/clip` slash command. This is a plain-text clipboard write feature, not a clipboard-reading feature, not an
-OS automation surface, and not a shell escape hatch for `pbcopy` / `clip` / `wl-copy` commands.
-
-The first V2 clipboard implementation should include:
-
-- **Tool shape.** `clipboard_write` accepts exactly the text to place on the host system clipboard and returns
-  a bounded structured result such as `{ copied: true, charCount }`. The tool owns platform clipboard writes
-  behind the host boundary and supports test capture without touching the real system clipboard.
-- **Bare `/clip`.** Submitting `/clip` with no prompt is a host-owned immediate command. It copies the last
-  copyable transcript item and emits a visible command/result event. It does not start a model turn. If no
-  transcript item is copyable, return a clear "nothing to copy" result.
-- **Prompt `/clip <request>`.** Submitting `/clip` with a prompt starts a restricted clipboard-only model turn.
-  The model receives only the clipboard-write surface and the relevant conversation context needed to resolve
-  the request, then calls `clipboard_write` with the exact text that should be copied.
-- **Purpose of the prompt form.** The prompt form exists for cases where the user wants Trevor to select,
-  transform, or compose clipboard text from the conversation: copy the last command only, summarize the last
-  answer for Slack, extract a config snippet, rewrite a message, produce a commit title, or copy the exact
-  patch explanation. It is not for running tools, browsing files, executing shell commands, or copying an
-  answer that should simply be shown in chat.
-- **Restricted tool surface.** The prompt form must not expose shell, file mutation, process, MCP, web, docs,
-  or other general tools. Prompt guidance must say: resolve the clipboard request from context; call
-  `clipboard_write` with exactly the desired text; do not describe clipboard commands; do not call shell
-  clipboard commands.
-- **Plain-text first.** The first implementation copies text only. Images, rich text, multiple clipboard
-  formats, clipboard read/paste, and "deliver assistant output directly to clipboard while hiding it from the
-  transcript" are separate features and must not be folded into H-111 by accident.
-- **Visibility and safety.** Clipboard writes are external mutations, even when small. Emit normal Trevor tool
-  or command events with redacted/bounded previews, result metadata, and clear failure states. `/doctor`
-  should report platform clipboard availability and the active test-capture mode when relevant.
-- **Validation required.** Tests/evals must cover bare `/clip` copying the last copyable transcript item,
-  empty-history behavior, prompt `/clip <request>` exposing only `clipboard_write`, rejection/absence of shell
-  clipboard commands, exact copied text capture, platform command selection through a host abstraction,
-  failure reporting, transcript visibility, and prompt regressions showing the model uses `/clip <request>` for
-  selection/transformation but not for ordinary chat answers.
-
-**Output-style registry (deferred).** <!-- D-072 --> Carry forward Trevor V1's useful assistant output-style
-system as a host-owned presentation layer: named styles add compact prompt overlays that shape the form of the
-assistant's answer. Output styles are not work kinds, not modes, not agents, not model routes, and not tool
-permission profiles.
-
-The first V2 output-style implementation should include:
-
-- **Shared style metadata.** Define a single host/protocol metadata boundary with stable style id, label,
-  picker/list description, optional prompt overlay lines, and optional suggestion eligibility. Clients render
-  pickers/lists from this metadata instead of hardcoding their own style rows.
-- **Initial built-ins.** Carry forward V1's built-in ids unless renamed deliberately during implementation:
-  `default`, `visual`, `concise`, `explanatory`, `diagnostic`, `architect`, `reviewer`, `operational`, and
-  `spec`. `default` has no overlay.
-- **Presentation-only invariant.** A style may influence response shape, ordering, density, diagrams/tables,
-  findings-first posture, requirements language, or operational status formatting. It must never choose or
-  change provider/model, reasoning level, work kind, execution mode, agent/subagent selection, tool access,
-  validation policy, or whether a command/tool is allowed.
-- **Prompt composition.** The active style overlay is appended as a compact additive prompt fragment alongside
-  ordinary host/project/tool guidance. It must not replace project instructions, user instructions, safety
-  guidance, tool guidance, or command-specific prompt context. Unknown or retired persisted style ids fall
-  back to `default` without crashing, with a diagnostic visible through settings or `/doctor`.
-- **Selection precedence.** Explicit user selection wins, then explicit project/global config if supported,
-  then `default`. Carry forward `outputStyleSource` or an equivalent source marker with values such as
-  `user`, `config`, `suggestion`, and `default`, so the UI and route/run diagnostics explain why a style is
-  active.
-- **No V1 routing-engine carryover.** V1 let the old router suggest output styles. V2 must not revive the
-  dropped model-led routing engine just for style selection. If automatic style suggestions are added later,
-  they should be a small presentation-only classifier or host heuristic, disabled by explicit user/config
-  style, and recorded as `suggestion` source. This automatic suggestion path is deferred from the first cut.
-- **Command surface.** Support `/style` as the command family. `/style <style>` validates and persists the
-  user-selected style as an immediate host command with no model turn. Bare `/style` exposes a UI-neutral
-  style-list/chooser contract: Trevor web may render a picker, while headless clients can receive a structured
-  list and usage result.
-- **Settings and persistence.** Surface `outputStyle`, `outputStyleSource`, and available style metadata in
-  settings/read-model output. Persist explicit user preference under the root selected by the standalone
-  filesystem-root-taxonomy plan, not in disposable cache. If project/global config defaults are supported, keep
-  them distinct from user local state and avoid rewriting config when the user changes a local preference.
-- **Run attribution.** Each run records the active output style and source at turn start for reproducibility,
-  debugging, and transcript inspection. Changing style mid-session affects later turns, not already-started
-  provider calls.
-- **Prompt guidance and evals.** Guidance should tell the model how each style affects answer shape while
-  preserving higher-priority instructions and task requirements. Evals must prove: overlays are additive;
-  styles do not alter tool inventory/routing/execution mode; `/style <style>` is host-owned and no-route;
-  bare `/style` can render or return a chooser/list; user/config precedence beats suggestions; unknown styles
-  fall back safely; and style-specific behavior appears only when it helps the answer.
+**Nested command menu / `/style` (extracted).** The former D-072 output-style registry item has been moved to
+`.plans/18-nested-command-menu`. The extracted plan reframes the work as a reusable nested command-menu pattern
+with `/style` as its first consumer. Output styles are selected through command choices, not prompt overlays,
+and remain presentation-only: they must never change provider/model, reasoning level, work kind, execution mode,
+agent/subagent selection, tool access, validation policy, or whether a command/tool is allowed.
 
 **Doctor health surface (deferred).** <!-- D-073 --> Replace the current V2 `/doctor` debug-style text dump
 with a V1-inspired structured health surface. `/doctor` should answer: what is healthy, what is degraded or
@@ -1447,58 +1372,11 @@ The first V2 doctor implementation should include:
   state, responsive visual checks for desktop/mobile, and regressions proving style/layout does not hide
   errors, warnings, or next actions.
 
-**Capability manifest (deferred).** <!-- D-074 --> Carry forward Trevor V1's useful capability manifest as
-the host's registry-derived self-description. This feature answers "what can this Trevor host do?" for humans,
-clients, subagents, and export/debug surfaces without relying on stale documentation or dumping every possible
-capability into every model prompt.
-
-The first V2 capability manifest implementation should include:
-
-- **V1 behavior to carry forward.** Preserve the useful V1 shape: a full manifest rendered by a host-owned
-  export command, a machine-readable JSON payload, and a compact capability context for delegated/subagent
-  prompts. The manifest is derived from live registries such as tools, slash commands, command families,
-  domain contracts, agents, skills, and runtime surfaces; it is not maintained as handwritten prose.
-- **Full vs compact forms.** Full manifest is for UI/debug/export and may include structured detail. Compact
-  manifest is for model/subagent context and must stay short, scoped, and budgeted. The compact form should
-  list only the capabilities relevant to the receiving context, with summaries and pointers for discovery
-  rather than exhaustive schemas or huge dynamic catalogs.
-- **Not a permission system.** The manifest describes available capabilities; it does not grant tool access,
-  bypass command authority, override per-run allow-lists, or replace normal tool schemas. Authorization and
-  execution still live at the ordinary tool/command/agent boundaries.
-- **Inputs and related read models.** Build from existing source-of-truth registries: core tool metadata,
-  read-only/mutating classification, slash command descriptors, command-family contracts, output-style
-  metadata, agent/skill discovery summaries, MCP server/capability summaries, LSP feature availability,
-  web/docs status, hooks, Doctor areas, and runtime surfaces. Keep `contract.current` for protocol hash/skew
-  detection and tool identity read models for client presentation; the capability manifest may reference or
-  compose them, but must not blur their meanings.
-- **Dynamic capability handling.** MCP servers, model catalogs, docs corpora, and provider/model lists can be
-  huge and dynamic. The manifest should expose counts, names, status, search/discovery affordances, and
-  qualified identifiers, not inline every entry. Use explicit refresh/search/read operations for detail.
-- **Export and command surface.** Preserve a host-owned export command, renaming only if the V2 command naming
-  pass decides to change `/trevor-export`. The export should provide a human-readable summary plus JSON. Future
-  command variants can include compact, full, json, and per-scope export.
-- **Subagent and prompt guidance.** Subagents should receive a compact capability context only when useful,
-  especially when they need to know Trevor-native tools/commands/contracts. The model should prefer manifest
-  guidance for understanding Trevor surfaces, not for ordinary coding context. Do not inject the full manifest
-  into normal turns.
-- **Client/UI usage.** Trevor web may use the full structured manifest to power capability/help surfaces,
-  command discovery, tool lists, agent/skill listings, and debug/export screens. UI should render from the
-  structured data rather than scraping prompt text or duplicating hardcoded lists.
-- **`trevor-expert` consumer.** The capability manifest should be the deterministic substrate for a
-  public-facing internal `trevor-expert` skill that answers "how does Trevor work?" from host-generated
-  output instead of stale prose. The skill may use trusted, bounded shell interpolation to embed read-only
-  host exports such as compact/full manifests, Doctor summaries, registry excerpts, version/protocol details,
-  and source provenance. It must not scrape arbitrary files, grant permissions, mutate state, start work,
-  bypass slash/tool authority, or become another giant prompt dump. Default turns should only know that this
-  explainer exists; full explanatory detail is loaded on demand through the skill/discovery path.
-- **Versioning and provenance.** Include manifest version, generated time, host build/version when known,
-  workspace/cwd when relevant, source registries/provenance, and truncation/scope metadata. Unknown or
-  unavailable registry sections should be represented explicitly instead of omitted silently.
-- **Validation required.** Tests/evals must cover registry-derived tool and command inclusion, debug-only or
-  hidden capability filtering, compact token budget, no full-catalog prompt dumps, dynamic MCP/provider/docs
-  summarization, JSON export stability, `trevor-expert` using only bounded read-only deterministic exports,
-  subagent prompt inclusion only when scoped, client rendering from the structured payload, and drift tests
-  proving the manifest changes when source registries change.
+**Capability manifest + `trevor-expert` (extracted).** The former D-074 capability manifest item has been moved
+to `.plans/19-capability-manifest-and-trevor-expert`. The extracted plan owns the registry-derived full/compact
+manifest, `trevor-export`, and the built-in `trevor-expert` consumer. General command/skill interpolation is
+kept as a separate configurable feature, disabled by default unless explicitly enabled through an env/trust
+gate; built-in `trevor-expert` may use direct bounded host exports without depending on that global gate.
 
 **Discovery registry + progressive skill drill-in (deferred).** <!-- D-075 --> Carry forward Trevor V1's
 registry shape while preserving the useful current V2 behavior where the model knows that skills exist from
@@ -1579,26 +1457,23 @@ The first V2 discovery implementation should include:
   ends via `Stream.empty` and reads as a clean `assistant.completed`, with no answer and no signal - on the
   local 4-bit at 64k this hit five consecutive turns at the window's 16-18%. Addressed by graceful turn-budget
   termination (D-051…D-053): observable exit, forced synthesis, context-pressure budget.
-- **Clipboard prompt turns can become a hidden general-purpose agent path (D-071).** If `/clip <request>` gets
-  the full tool surface, it can run unrelated work just to populate the clipboard, or hide useful output from
-  the transcript. Mitigation: prompt `/clip` is clipboard-only, visible, plain-text first, and limited to
-  selecting, transforming, or composing text from existing context before one `clipboard_write`.
-- **Output styles can become hidden work modes (D-072).** If styles influence routing, tools, execution mode,
+- **Output styles can become hidden work modes.** If styles influence routing, tools, execution mode,
   or validation, they recreate a weaker version of the dropped work-kind/routing system and make transcripts
-  harder to reproduce. Mitigation: styles are additive presentation overlays only, with explicit source
-  attribution, run metadata, prompt tests, and evals that prove tool/routing/execution surfaces do not change
-  when the style changes.
+  harder to reproduce. Mitigation: styles are presentation-only command choices from
+  `.plans/18-nested-command-menu`, with explicit source attribution, run metadata, prompt tests, and evals that
+  prove tool/routing/execution surfaces do not change when the style changes.
 - **Doctor can become either noise or a blocking health check (D-073).** A raw debug dump is hard to act on,
   while unbounded live probes can make diagnostics slow or flaky. Mitigation: `/doctor` returns structured
   health areas with status, evidence, and next actions; raw internals stay in detail/debug surfaces; probes are
   explicit, time-bounded, non-mutating, and degrade to `not_checked`/`timeout`; Storybook fixtures prove the
   web layout before runtime wiring.
-- **Capability manifests and `trevor-expert` can bloat prompts or become stale docs (D-074).** A manifest or
+- **Capability manifests and `trevor-expert` can bloat prompts or become stale docs.** A manifest or
   explainer skill that is handwritten or injected whole into normal turns becomes stale and expensive; a
   manifest treated as authorization blurs the tool boundary. Mitigation: derive it from registries, version
   it, expose full/export forms separately from compact scoped model context, summarize huge dynamic catalogs,
-  make `trevor-expert` read deterministic host exports through bounded read-only calls, and keep execution
-  authority at the existing tool/command/agent boundaries.
+  make `trevor-expert` read deterministic host exports through bounded read-only calls, keep general
+  interpolation separately gated and disabled by default, and keep execution authority at the existing
+  tool/command/agent boundaries.
 
 ---
 _Consolidated 2026-06-23: single plan; FEATURES.md + TABLED.md deleted and folded in; graceful-overflow-recovery merged (D-034…D-038); routing engine + T-1 dropped for good (D-032); work-kinds kept inert (D-039). Supersedes all prior Trevor V2 planning documents._
@@ -1649,22 +1524,11 @@ setup actions, sidebar model/reasoning constraints, and tests for huge catalogs,
 availability, reasoning capability, persistence, and non-blocking refresh. D-065 is authored here in markdown
 and still needs syncing into `plan.db`._
 
-_Updated 2026-06-25: **Clipboard write surface** added as D-071. The future `/clip` command carries forward
-Trevor V1's useful behavior under the new command name: bare `/clip` is a host-owned copy-last-item command,
-while `/clip <request>` is a restricted clipboard-only model turn that selects, transforms, or composes the
-exact text to copy and calls `clipboard_write`. The first cut is plain text only, visible in command/tool
-events, and explicitly excludes shell clipboard commands, clipboard reads, rich clipboard formats, and hidden
-assistant-output delivery. D-071 is authored here in markdown and still needs syncing into `plan.db` alongside
-the earlier markdown-authored decisions._
-
-_Updated 2026-06-25: **Output-style registry** added as D-072. The deferred V2 feature carries forward Trevor
-V1's useful assistant output-style model: shared style metadata, built-in style ids, additive prompt overlays,
-`/style` selection, settings visibility, local-state persistence, and run attribution. Styles are explicitly
-presentation-only and must not affect routing, work kind, execution mode, tool access, agent selection, or
-validation. V1's router-suggested styles are not carried forward through the dropped routing engine; any later
-automatic style suggestion path must be presentation-only, source-attributed, and disabled by explicit
-user/config style. D-072 is authored here in markdown and still needs syncing into `plan.db` alongside
-D-040-D-071._
+_Updated 2026-06-27: **Nested command menu / `/style`** extracted to `.plans/18-nested-command-menu`. The old
+D-072 output-style registry framing is superseded: styles are selected through reusable nested command-menu
+choices, not prompt overlays. `/style` is the first consumer of the shared pattern, with local-state persistence
+and run attribution. Styles remain presentation-only and must not affect routing, work kind, execution mode,
+tool access, agent selection, or validation._
 
 _Updated 2026-06-25: **Doctor health surface** added as D-073. The deferred V2 feature replaces the current
 debug-dump `/doctor` output with a V1-inspired structured health report: host-owned immediate command,
@@ -1672,21 +1536,14 @@ debug-dump `/doctor` output with a V1-inspired structured health report: host-ow
 actions. Trevor web must build the diagnostic dashboard in Storybook first using fixture snapshots, covering
 responsive grid layouts and healthy/warning/error/not-checked states before live app wiring. Fresh probes are
 allowed only when bounded and non-mutating; raw internals belong in detail/full/json/debug surfaces, not the
-default doctor view. D-073 is authored here in markdown and still needs syncing into `plan.db` alongside
-D-040-D-072._
+default doctor view. D-073 is authored here in markdown and still needs syncing into `plan.db` alongside the
+remaining markdown-authored decisions._
 
-_Updated 2026-06-25: **Capability manifest** added as D-074. The deferred V2 feature carries forward Trevor
-V1's registry-derived manifest shape: a full human/JSON export plus compact scoped capability context for
-subagents and other non-TUI consumers. It should describe tools, commands, command families, domain contracts,
-agents, skills, MCP summaries, LSP/web/docs status, hooks, and runtime surfaces without becoming a permission
-system or giant prompt dump. Dynamic catalogs are summarized and queried explicitly. D-074 is authored here in
-markdown and still needs syncing into `plan.db` alongside D-040-D-073._
-
-_Updated 2026-06-26: **Capability manifest** refined with the `trevor-expert` consumer. `trevor-expert` is a
-public-facing internal skill that explains how Trevor works from deterministic host-generated output, such as
-bounded manifest, Doctor, registry, version, protocol, and provenance exports. Shell interpolation is allowed
-only for trusted read-only host commands with bounded output; the skill does not mutate state, grant
-permissions, start work, bypass command/tool authority, or dump full inventories into ordinary turns._
+_Updated 2026-06-27: **Capability manifest + `trevor-expert`** extracted to
+`.plans/19-capability-manifest-and-trevor-expert`. The plan owns registry-derived full/compact manifests,
+`trevor-export`, built-in `trevor-expert`, and the explicit boundary that general interpolation inside
+skills/commands is a separate configurable feature, disabled by default unless enabled through an env/trust
+gate. Built-in `trevor-expert` can use direct bounded host exports either way._
 
 _Updated 2026-06-25: **Discovery registry + progressive skill drill-in** added as D-075. The deferred V2
 feature carries forward Trevor V1's useful discovery shape while preserving current V2's ambient skill
@@ -1694,7 +1551,7 @@ awareness: every tool-enabled turn gets a compact skill roster, but searchable s
 move behind `skills_list(query?, limit?)` and `skill_view(skillId)`. The host owns discovery for skills, slash
 commands, command families, and later agents; Trevor web renders structured read models instead of scanning or
 duplicating inventories. D-075 is authored here in markdown and still needs syncing into `plan.db` alongside
-D-040-D-074._
+D-040-D-073 and the extracted numbered plans._
 
 _Updated 2026-06-26: **Discovery registry + progressive skill drill-in** clarified for first-cut scope. The
 first implementation slice is skills only: host-owned skill registry, compact ambient roster, `skills_list`,
