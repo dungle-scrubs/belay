@@ -191,6 +191,17 @@ test("resolveOpenTarget falls back to cwd when workspace is null", () => {
   });
 });
 
+test("resolveOpenTarget refuses an archived session and points to unarchive (D-094 M2)", () => {
+  const list = [summary({ sessionId: "filed", workspace: "~/dev/trevorV2", archived: true })];
+  const result = resolveOpenTarget(list, "filed", "/Users/kevin");
+  assert.ok("error" in result, "an archived session is not openable directly");
+  assert.ok(result.error.includes("archived"), "the error names the archived state");
+  assert.ok(
+    result.error.includes("trevor unarchive filed"),
+    "the error points to the unarchive command",
+  );
+});
+
 test("resolveOpenTarget reports a missing id, an unknown session, and a session with no workspace", () => {
   const list = [summary({ sessionId: "s1" })];
   assert.ok("error" in resolveOpenTarget(list, "", "/h"), "empty id is a usage error");

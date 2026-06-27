@@ -128,11 +128,14 @@ function area(
   verdict: string,
   findings: readonly DoctorFinding[],
   facts?: DoctorArea["facts"],
+  // Most areas roll their status up from their findings; a binary area (e.g. internet) sets it
+  // directly so it can carry warn/ok without a redundant finding row.
+  statusOverride?: DoctorStatus,
 ): DoctorArea {
   return {
     id,
     label,
-    status: areaStatus(findings),
+    status: statusOverride ?? areaStatus(findings),
     verdict,
     findings,
     ...(facts ? { facts } : {}),
@@ -269,23 +272,18 @@ function internetArea(input: DoctorProbeInput): DoctorArea {
   const snap = input.internet;
   const status: DoctorStatus =
     snap.status === "online" ? "ok" : snap.status === "offline" ? "warn" : "not_checked";
-  const finding: DoctorFinding = {
-    id: "internet.reachability",
-    status,
-    title: "Public internet",
-    message:
-      snap.status === "online"
-        ? "reachable"
-        : snap.status === "offline"
-          ? `unreachable${snap.error ? ` (${snap.error})` : ""}`
-          : "not probed yet",
-  };
+  // Binary by design - just "am I online?". The verdict is one word; the probe mechanics (DNS+HTTPS,
+  // the sanitized error) live as collapsed facts for debugging, not in the resting line, and there is
+  // no redundant finding row repeating the verdict.
+  const verdict =
+    snap.status === "online" ? "online" : snap.status === "offline" ? "offline" : "not checked";
   const facts: DoctorArea["facts"] = [
-    { label: "status", value: snap.status, status },
-    { label: "probe", value: snap.targetClass },
     ...(snap.checkedAt ? [{ label: "checked", value: snap.checkedAt }] : []),
+    ...(snap.status === "offline" && snap.error
+      ? [{ label: "detail", value: snap.error, status: "warn" as const }]
+      : []),
   ];
-  return area("internet", "Internet", finding.message, [finding], facts);
+  return area("internet", "Internet", verdict, [], facts, status);
 }
 
 function toolsArea(input: DoctorProbeInput): DoctorArea {

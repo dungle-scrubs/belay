@@ -1538,6 +1538,15 @@ function handleEvent(message: SessionEvent): void {
           .catch((error) => warn("host", "retry failed", { error: msg(error) }));
         return;
       }
+      // Explicit internet refresh (D-060 M2): the advisory's refresh button asks the host to run a
+      // fresh public-internet probe NOW. Like the worktree actions it is a programmatic command, not
+      // a typed slash, and produces no command.result - the monitor's `checking` start + settled
+      // result ride the host.internet events the refresh already emits. refresh() never throws and
+      // dedupes a probe already in flight, so a double-click is harmless.
+      if (command === "/internet-refresh") {
+        internet.refresh().catch(() => {});
+        return;
+      }
       // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so
       // they're intercepted here rather than registered as slash commands.
       if (command === "/worktree-switch") {

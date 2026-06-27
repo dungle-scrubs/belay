@@ -43,7 +43,7 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
   };
 }
 
-test("builds all twelve areas in canonical order, each with at least one finding", () => {
+test("builds all twelve areas in canonical order, with findings (internet is binary)", () => {
   const snap = buildDoctorSnapshot(input());
   assert.deepEqual(
     snap.areas.map((a) => a.id),
@@ -51,6 +51,11 @@ test("builds all twelve areas in canonical order, each with at least one finding
     "every area is present in the canonical dashboard order",
   );
   for (const area of snap.areas) {
+    if (area.id === "internet") {
+      // Internet is binary - its verdict carries online/offline directly, no redundant finding row.
+      assert.equal(area.findings?.length ?? 0, 0, "internet has no finding");
+      continue;
+    }
     assert.ok((area.findings?.length ?? 0) >= 1, `area ${area.id} has a finding`);
   }
 });
@@ -295,9 +300,11 @@ test("offline internet warns; unknown is not_checked", () => {
   );
   const area = offline.areas.find((a) => a.id === "internet");
   assert.equal(area?.status, "warn");
+  assert.equal(area?.verdict, "offline", "the resting line is binary, not the probe detail");
+  assert.equal(area?.findings?.length ?? 0, 0, "no redundant finding row repeating the verdict");
   assert.ok(
-    area?.findings?.[0]?.message.includes("HTTPS probe failed"),
-    "the sanitized reason shows",
+    area?.facts?.some((f) => f.label === "detail" && f.value.includes("HTTPS probe failed")),
+    "the sanitized reason is a collapsed fact, available on expand",
   );
 
   const unknown = buildDoctorSnapshot(

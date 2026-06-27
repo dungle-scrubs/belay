@@ -144,6 +144,13 @@ export function resolveOpenTarget(
       error: `No session "${sessionId}" found. Run \`trevor list\` to see this project's sessions.`,
     };
   }
+  // Archived sessions require an explicit unarchive before opening (D-094 M2): opening one directly
+  // would resurrect a filed session without the user clearing its archived flag first.
+  if (summary.archived) {
+    return {
+      error: `Session "${sessionId}" is archived. Run \`trevor unarchive ${sessionId}\` first, then open it.`,
+    };
+  }
   const dir = summary.workspace ?? summary.cwd;
   if (!dir) {
     return {
