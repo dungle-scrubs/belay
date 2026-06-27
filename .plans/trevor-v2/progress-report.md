@@ -216,8 +216,8 @@ transport activity folding (D-093).
 
 ### M3: Live activity and recency projection
 
-- [ ] Show running, queued, and settled states in session rows
-- [ ] Keep activity visible for a session while the user is viewing another session
+- [x] Show running, queued, and settled states in session rows
+- [x] Keep activity visible for a session while the user is viewing another session
 - [x] Update session row activity from durable events and live host/session presence without requiring transcript merge
 - [x] Show when a session last settled after running work completes
 - [x] Format relative time in seconds, minutes, hours, days, and weeks
@@ -268,7 +268,7 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 ### M2: Archive metadata and visibility
 
 - [x] Add or use a durable archived flag on session metadata rather than encoding archive state in transcript text
-- [ ] Archive hides a session from the main UI, session sidebar, and normal current-project navigation
+- [x] Archive hides a session from the main UI, session sidebar, and normal current-project navigation
 - [x] Archived sessions are excluded from the default resume/current-project command view
 - [x] Archived sessions remain in Richter and are not deleted by archive
 - [ ] Unarchive is required before normal opening or use from the main UI
@@ -290,18 +290,18 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 ### M4: UI and debug boundaries
 
 - [ ] Normal UI keeps Escape/cancel as the primary active-work control
-- [ ] Normal sidebar rows do not expose stop, kill, or archive as ordinary actions
+- [x] Normal sidebar rows do not expose stop, kill, or archive as ordinary actions
 - [ ] Debug mode may expose stop, kill, archive, and unarchive controls
 - [ ] Debug stop/kill controls are gated or confirmed and clearly describe lifecycle effects
 - [ ] Stale or inactive status is visible without implying the user must stop or kill anything
-- [ ] Normal UI filters archived sessions out of D-093 and D-090 surfaces
+- [x] Normal UI filters archived sessions out of D-093 and D-090 surfaces
 - [x] Web tests assert stop, kill, and archive controls are absent from the normal sidebar
 
 ### M5: Verification
 
-- [ ] Tests prove cancel and stop are different lifecycle operations
-- [ ] Tests prove stop cancels active work, clears queued work, releases the host, and keeps the durable log
-- [ ] Tests prove kill force terminates the host while preserving durable history
+- [x] Tests prove cancel and stop are different lifecycle operations
+- [x] Tests prove stop cancels active work, clears queued work, releases the host, and keeps the durable log
+- [x] Tests prove kill force terminates the host while preserving durable history
 - [x] Tests prove archive and unarchive update metadata and filtering without deleting logs
 - [x] Tests cover CLI list, list --archived, open, archive, unarchive, stop, and kill
 - [ ] Tests cover debug-only UI exposure and normal-UI absence of lifecycle controls
@@ -332,15 +332,15 @@ Storybook chooser fixtures (D-065).
 
 ### M2: Storybook-first full chooser surface
 
-- [ ] Build the full model chooser in Storybook before live app wiring
-- [ ] Render the chooser in the transcript + prompt space, not as the small sidebar popup
-- [ ] Keep left and right sidebars able to remain visible while the chooser is open
-- [ ] Use container queries so the chooser adapts to the space left after sidebars, not only viewport width
-- [ ] Build a source overview grouped by local, cloud subscription, direct API, and gateway catalog
-- [ ] Source rows show status, model count, available action, and click-through affordance
-- [ ] Clicking a source opens a narrowed source-detail view with back navigation
-- [ ] Source-detail view shows source identity, status, auth/setup action, search, filters, and model rows
-- [ ] Storybook states cover wide, narrow, both sidebars visible, long labels, empty, loading, stale, error, and many-source layouts
+- [x] Build the full model chooser in Storybook before live app wiring
+- [x] Render the chooser in the transcript + prompt space, not as the small sidebar popup
+- [x] Keep left and right sidebars able to remain visible while the chooser is open
+- [x] Use container queries so the chooser adapts to the space left after sidebars, not only viewport width
+- [x] Build a source overview grouped by local, cloud subscription, direct API, and gateway catalog
+- [x] Source rows show status, model count, available action, and click-through affordance
+- [x] Clicking a source opens a narrowed source-detail view with back navigation
+- [x] Source-detail view shows source identity, status, auth/setup action, search, filters, and model rows
+- [x] Storybook states cover wide, narrow, both sidebars visible, long labels, empty, loading, stale, error, and many-source layouts
 
 ### M3: Sidebar split control and quick recent picker
 
@@ -368,15 +368,15 @@ Storybook chooser fixtures (D-065).
 
 ### M5: Auth, setup, and no-secret UI boundary
 
-- [ ] OAuth subscription sources expose sign-in and re-login actions through host-owned flows
-- [ ] Provider-code or device-code flows can show links and accept non-key codes when the provider protocol requires it
-- [ ] Direct API keys, env-derived credentials, and provider secrets live in the host auth JSON store
-- [ ] The chooser never renders an API-key paste form
-- [ ] Direct-provider rows show missing, configured, rejected, stale, and refresh states from the host auth JSON store
-- [ ] Source detail can refresh auth/catalog state without blocking browsing other sources
-- [ ] Local runtimes expose setup/open-runtime guidance without pretending to own local runtime installation
-- [ ] Auth/setup failures remain scoped to that source and do not block browsing or selecting unrelated configured sources
-- [ ] Tests cover OAuth signed-in/signed-out/expired, provider-code flow, host auth JSON states, and absence of API-key input fields
+- [x] OAuth subscription sources expose sign-in and re-login actions through host-owned flows
+- [x] Provider-code or device-code flows can show links and accept non-key codes when the provider protocol requires it
+- [x] Direct API keys, env-derived credentials, and provider secrets live in the host auth JSON store (UI boundary points to the store, never accepts keys; host-side store impl is separate)
+- [x] The chooser never renders an API-key paste form
+- [x] Direct-provider rows show missing, configured, rejected, stale, and refresh states from the host auth JSON store
+- [x] Source detail can refresh auth/catalog state without blocking browsing other sources
+- [x] Local runtimes expose setup/open-runtime guidance without pretending to own local runtime installation
+- [x] Auth/setup failures remain scoped to that source and do not block browsing or selecting unrelated configured sources
+- [x] Tests cover OAuth signed-in/signed-out/expired, provider-code flow, host auth JSON states, and absence of API-key input fields
 
 ### M6: Selection, reasoning, preferences, and execution
 
@@ -416,79 +416,79 @@ future provider-observation store, and `@effect/vitest` fake-provider tests (D-0
 
 ### M1: Provider failure taxonomy and typed error contract (D-076-D-077)
 
-- [ ] Replace or extend the retryable boolean with a normalized provider-failure classification where needed
-- [ ] Classifications distinguish auth, transient transport, rate limited, provider overloaded, provider unavailable, local runtime unavailable, model unavailable, quota/billing, request rejected, context overflow, and unknown provider failure
-- [ ] Each classified failure carries provider/source/model identity, phase, sanitized detail, retry policy, user action, and redacted evidence
-- [ ] Keep provider failures in the Effect typed error channel through the provider and agent loop boundary
-- [ ] Preserve `ProviderAuthError` and context-overflow behavior as dedicated non-retry paths
-- [ ] Unknown or low-confidence provider failures default to non-retryable unless strongly classified otherwise
-- [ ] Unit tests cover typed classification for auth, overflow, transient transport, rate limit, local runtime unavailable, gateway upstream unavailable, and unknown failures
-- [ ] Unit tests prove raw SDK/API/local errors never leak secrets through the typed error payload
+- [x] Replace or extend the retryable boolean with a normalized provider-failure classification where needed
+- [x] Classifications distinguish auth, transient transport, rate limited, provider overloaded, provider unavailable, local runtime unavailable, model unavailable, quota/billing, request rejected, context overflow, and unknown provider failure
+- [x] Each classified failure carries provider/source/model identity, phase, sanitized detail, retry policy, user action, and redacted evidence
+- [x] Keep provider failures in the Effect typed error channel through the provider and agent loop boundary
+- [x] Preserve `ProviderAuthError` and context-overflow behavior as dedicated non-retry paths
+- [x] Unknown or low-confidence provider failures default to non-retryable unless strongly classified otherwise
+- [x] Unit tests cover typed classification for auth, overflow, transient transport, rate limit, local runtime unavailable, gateway upstream unavailable, and unknown failures
+- [x] Unit tests prove raw SDK/API/local errors never leak secrets through the typed error payload
 
 ### M2: Provider-boundary normalization
 
-- [ ] Normalize pi-ai stream event errors before they reach the turn loop
-- [ ] Normalize thrown SDK errors, event errors, HTTP-like errors, and plain string errors through the same classifier seam
-- [ ] Use structured provider fields when available before falling back to sanitized message matching
-- [ ] Preserve retry-after, HTTP status, SDK error code/type, provider request id, gateway/upstream source, and local runtime error class when available
-- [ ] Codex/OpenAI OAuth failures classify as auth or refresh/sign-in needed, not retryable transport
-- [ ] Direct API-key failures classify as missing/rejected/quota/billing/request-rejected where evidence supports it
-- [ ] Gateway providers preserve whether the failure came from the gateway or an upstream model provider when known
-- [ ] Local providers distinguish runtime unreachable, model not loaded, model load failure, context-window mismatch, and transient stream interruption
-- [ ] Tests cover Codex/OAuth, Anthropic-like OAuth, direct API-key, gateway, and local runtime shaped failures using sanitized fixtures
+- [x] Normalize pi-ai stream event errors before they reach the turn loop
+- [x] Normalize thrown SDK errors, event errors, HTTP-like errors, and plain string errors through the same classifier seam
+- [x] Use structured provider fields when available before falling back to sanitized message matching
+- [x] Preserve retry-after, HTTP status, SDK error code/type, provider request id, gateway/upstream source, and local runtime error class when available
+- [x] Codex/OpenAI OAuth failures classify as auth or refresh/sign-in needed, not retryable transport
+- [x] Direct API-key failures classify as missing/rejected/quota/billing/request-rejected where evidence supports it
+- [x] Gateway providers preserve whether the failure came from the gateway or an upstream model provider when known
+- [x] Local providers distinguish runtime unreachable, model not loaded, model load failure, context-window mismatch, and transient stream interruption
+- [x] Tests cover Codex/OAuth, Anthropic-like OAuth, direct API-key, gateway, and local runtime shaped failures using sanitized fixtures
 
 ### M3: Effect retry schedule and output-start safety gate
 
-- [ ] Implement retry with Effect schedules or equivalent Effect-native structured concurrency
-- [ ] Use a bounded per-step retry budget of three attempts with exponential backoff and jitter
-- [ ] Keep retry budget independent of `MAX_STEPS`, overflow recovery budget, and turn queue state
-- [ ] Track whether any text, thinking, tool call, or tool execution has started for the failed attempt
-- [ ] Retry only when classified retryable and no output/tool activity has started
-- [ ] Do not retry after partial text, thinking, tool call, or tool result activity because replay would duplicate work
-- [ ] User cancel or fiber interruption bypasses retry and stays instant, including during a backoff sleep
-- [ ] Tests use `@effect/vitest` and `TestClock` or equivalent fake time so retry timing is deterministic
-- [ ] Tests cover pre-output retry success, exhausted retries, partial-output terminal failure, and cancel during backoff
+- [x] Implement retry with Effect schedules or equivalent Effect-native structured concurrency
+- [x] Use a bounded per-step retry budget of three attempts with exponential backoff and jitter
+- [x] Keep retry budget independent of `MAX_STEPS`, overflow recovery budget, and turn queue state
+- [x] Track whether any text, thinking, tool call, or tool execution has started for the failed attempt
+- [x] Retry only when classified retryable and no output/tool activity has started
+- [x] Do not retry after partial text, thinking, tool call, or tool result activity because replay would duplicate work
+- [x] User cancel or fiber interruption bypasses retry and stays instant, including during a backoff sleep
+- [x] Tests use `@effect/vitest` and `TestClock` or equivalent fake time so retry timing is deterministic
+- [x] Tests cover pre-output retry success, exhausted retries, partial-output terminal failure, and cancel during backoff
 
 ### M4: User-visible reconnecting events and transcript rendering
 
-- [ ] Emit `assistant.reconnecting` for each retry attempt with run id, attempt number, and sanitized detail
-- [ ] Keep reconnecting events correlated with the active run id
-- [ ] Flush pending text/thinking buffers before publishing reconnecting status
-- [ ] Render reconnecting as a live status marker in the transcript or turn surface
-- [ ] Terminal error block remains unchanged when retry budget is exhausted or the failure is non-retryable
-- [ ] Do not emit reconnecting for auth failures, context overflow, user cancel, or unknown non-retryable failures
-- [ ] Web tests cover reconnecting rendering, multiple attempts, exhausted retry, non-retryable terminal error, and cancellation
+- [x] Emit `assistant.reconnecting` for each retry attempt with run id, attempt number, and sanitized detail
+- [x] Keep reconnecting events correlated with the active run id
+- [x] Flush pending text/thinking buffers before publishing reconnecting status
+- [x] Render reconnecting as a live status marker in the transcript or turn surface
+- [x] Terminal error block remains unchanged when retry budget is exhausted or the failure is non-retryable
+- [x] Do not emit reconnecting for auth failures, context overflow, user cancel, or unknown non-retryable failures
+- [x] Web tests cover reconnecting rendering, multiple attempts, exhausted retry, non-retryable terminal error, and cancellation
 
 ### M5: Redacted provider observation store
 
-- [ ] Add a provider-failure observation store under `TREVOR_HOME` defaulting to `~/.trevorV2`
-- [ ] Store unknown or low-confidence provider failure shapes as redacted, deduped observations
-- [ ] Observation records include provider/source/model, auth mode, phase, status/code fields, sanitized message, top-level shape/field names, output-started flag, classifier verdict, retry decision, and fingerprint
-- [ ] Deduplicate observations by stable fingerprint and track first seen, last seen, and count
-- [ ] Do not store prompts, API keys, auth headers, raw response bodies, raw tool outputs, or raw provider payloads by default
-- [ ] Observation writes are best effort and never fail the user turn
-- [ ] `/doctor` or debug detail can report counts and fingerprints for unclassified provider observations without exposing secrets
-- [ ] Tests cover redaction, dedupe, best-effort write failure, and `TREVOR_HOME` path override behavior
+- [x] Add a provider-failure observation store under `TREVOR_HOME` defaulting to `~/.trevorV2`
+- [x] Store unknown or low-confidence provider failure shapes as redacted, deduped observations
+- [x] Observation records include provider/source/model, auth mode, phase, status/code fields, sanitized message, top-level shape/field names, output-started flag, classifier verdict, retry decision, and fingerprint
+- [x] Deduplicate observations by stable fingerprint and track first seen, last seen, and count
+- [x] Do not store prompts, API keys, auth headers, raw response bodies, raw tool outputs, or raw provider payloads by default
+- [x] Observation writes are best effort and never fail the user turn
+- [x] `/doctor` or debug detail can report counts and fingerprints for unclassified provider observations without exposing secrets
+- [x] Tests cover redaction, dedupe, best-effort write failure, and `TREVOR_HOME` path override behavior
 
 ### M6: Doctor/debug surfaces and boundary observability
 
-- [ ] Provider adapters expose inspectable debug info for last classified failure without leaking secrets
-- [ ] Structured logs record provider failure classification, retry decision, attempt number, source/model, phase, and fingerprint
-- [ ] Debug logs can include richer sanitized shape metadata behind a verbose provider/debug scope
-- [ ] `/doctor` distinguishes provider auth failure, internet reachability, provider outage, local runtime status, and unknown provider failure shapes
-- [ ] `/doctor` shows retry exhaustion separately from non-retryable terminal provider failures
-- [ ] Observation diagnostics are available on demand and are never injected into normal model prompts automatically
-- [ ] Tests cover doctor/debug output redaction, retry exhaustion reporting, and unknown-shape counts
+- [x] Provider adapters expose inspectable debug info for last classified failure without leaking secrets
+- [x] Structured logs record provider failure classification, retry decision, attempt number, source/model, phase, and fingerprint
+- [x] Debug logs can include richer sanitized shape metadata behind a verbose provider/debug scope
+- [x] `/doctor` distinguishes provider auth failure, internet reachability, provider outage, local runtime status, and unknown provider failure shapes
+- [x] `/doctor` shows retry exhaustion separately from non-retryable terminal provider failures
+- [x] Observation diagnostics are available on demand and are never injected into normal model prompts automatically
+- [x] Tests cover doctor/debug output redaction, retry exhaustion reporting, and unknown-shape counts
 
 ### M7: Verification
 
-- [ ] Fake provider fails N times before first token and then succeeds without user resend
-- [ ] Fake provider fails after first text/thinking/tool call and does not retry
-- [ ] Fake provider auth failure surfaces re-auth/actionable failure without retry
-- [ ] Fake provider context overflow still follows overflow recovery and does not use outage retry
-- [ ] Fake provider rate-limit or transient outage exhausts retry budget and surfaces a terminal error
-- [ ] Local-provider unreachable/runtime-not-running case is classified and observed without pretending it is an internet outage
-- [ ] Redaction tests prove prompts, keys, tokens, auth headers, and raw bodies do not enter logs, events, or observation records
+- [x] Fake provider fails N times before first token and then succeeds without user resend
+- [x] Fake provider fails after first text/thinking/tool call and does not retry
+- [x] Fake provider auth failure surfaces re-auth/actionable failure without retry
+- [x] Fake provider context overflow still follows overflow recovery and does not use outage retry
+- [x] Fake provider rate-limit or transient outage exhausts retry budget and surfaces a terminal error
+- [x] Local-provider unreachable/runtime-not-running case is classified and observed without pretending it is an internet outage
+- [x] Redaction tests prove prompts, keys, tokens, auth headers, and raw bodies do not enter logs, events, or observation records
 - [ ] Manual EZE repro: simulate a pre-output transient stream drop and verify reconnecting status plus automatic recovery
 - [ ] Manual EZE repro: simulate a new unknown provider error shape and verify a redacted observation appears under `~/.trevorV2`
 
@@ -545,21 +545,21 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 - [x] Build or verify the Trevor web diagnostic dashboard in Storybook before live wiring
 - [x] Render `/doctor` as a dashboard, not terminal-shaped text
 - [x] Include summary strip, severity filters, category/area layout, repeated findings, status icons, key-value rows, next actions, and expandable evidence/details
-- [ ] Avoid nested cards and oversized hero treatment
-- [ ] Support mobile one-column layout and desktop multi-column or dense responsive layout
-- [ ] Use container/responsive behavior so long paths, labels, and evidence do not overflow
-- [ ] Storybook states cover all-ok, mixed warnings/errors, many findings, all not-checked, loading/refreshing, stale snapshot, long paths, mobile, tablet, and desktop widths
-- [ ] Storybook states cover provider auth missing, local runtime unreachable, cloud unreachable, internet disconnected, MCP auth-needed/error, LSP missing/diagnostic warning, hooks slow/trust changed, docs stale, storage root invalid, and workspace not Git
+- [x] Avoid nested cards and oversized hero treatment
+- [x] Support mobile one-column layout and desktop multi-column or dense responsive layout
+- [x] Use container/responsive behavior so long paths, labels, and evidence do not overflow
+- [x] Storybook states cover all-ok, mixed warnings/errors, many findings, all not-checked, loading/refreshing, stale snapshot, long paths, mobile, tablet, and desktop widths
+- [x] Storybook states cover provider auth missing, local runtime unreachable, cloud unreachable, internet disconnected, MCP auth-needed/error, LSP missing/diagnostic warning, hooks slow/trust changed, docs stale, storage root invalid, and workspace not Git
 - [ ] Visual review verifies errors, warnings, and next actions stay visible at narrow and wide widths
 
 ### M5: Live web wiring and transcript behavior
 
 - [x] Convert `doctor.current` command results into the structured dashboard renderer
 - [x] Preserve command-result history and transcript ordering for `/doctor`
-- [ ] `/doctor refresh` or refresh action updates the snapshot without starting a model turn
-- [ ] Copy report and view JSON actions use sanitized structured data
+- [x] `/doctor refresh` or refresh action updates the snapshot without starting a model turn
+- [x] Copy report and view JSON actions use sanitized structured data
 - [x] Expanded details stay local to the doctor result and do not inject raw diagnostics into model prompt history
-- [ ] Accessibility labels cover summary, filters, areas, findings, next actions, expand/collapse, refresh, copy, and JSON actions
+- [x] Accessibility labels cover summary, filters, areas, findings, next actions, expand/collapse, refresh, copy, and JSON actions
 - [x] Web tests cover rendering, filtering, refresh, copy report, JSON view, expand/collapse, transcript placement, and accessibility labels
 
 ### M6: Prompt/model guidance and diagnostics usage
@@ -575,7 +575,7 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 ### M7: Verification
 
 - [x] Host tests cover snapshot construction, area aggregation, bounded probes, no model turn, redaction, and command variants
-- [ ] Web tests cover dashboard rendering, responsive behavior, severity filters, next actions, details, copy/JSON, and accessibility
+- [x] Web tests cover dashboard rendering, responsive behavior, severity filters, next actions, details, copy/JSON, and accessibility
 - [ ] Storybook reviewed for every required state before live app wiring is considered complete
 - [ ] Manual EZE repro: run `/doctor` with all-ok fixtures/state and verify concise healthy dashboard
 - [ ] Manual EZE repro: simulate provider auth missing, internet offline, local runtime unavailable, and unknown provider observations, then verify actionable findings
@@ -640,14 +640,14 @@ registry-derived capability manifest D-074.
 - [x] Tell the model to call `skills_list(query)` when the compact roster is missing, truncated, too broad, or insufficient
 - [x] Tell the model to load only the specific skill intended for use
 - [x] Tell the model not to call `skill_view` for every listed skill
-- [ ] Tell the model not to treat skills as mandatory when ordinary repository context and tools are enough
+- [x] Tell the model not to treat skills as mandatory when ordinary repository context and tools are enough
 - [ ] Evals cover a relevant listed skill being opened exactly once
 - [ ] Evals cover ordinary coding work proceeding without unnecessary skill loading
 
 ### M6: Compatibility and future registry shape
 
 - [x] Keep the existing `skill(name)` tool temporarily as an alias or compatibility shim if needed
-- [ ] Define migration behavior from `skill(name)` to `skills_list` plus `skill_view`
+- [x] Define migration behavior from `skill(name)` to `skills_list` plus `skill_view`
 - [x] Shape registry records so slash commands, command families, and agents can join later without changing the skill contract
 - [x] Do not include slash-command, command-family, or agent discovery in the first implementation slice
 - [x] Expose the skill registry in a way D-074 capability manifests and `trevor-expert` can consume deterministically
@@ -668,11 +668,11 @@ registry-derived capability manifest D-074.
 - Shipped (archived): D-044 session recall - 38 features, 37 completed, 1 gated manual EZE repro
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 38 completed, 2 remaining (explicit-UI-refresh wiring, manual EZE repro)
-- Live open follow-up (D-093 session navigation sidebar): 39 features, 22 completed, 17 remaining (M1 surface + M2 scope + M3 recency)
-- Live open follow-up (D-094 session lifecycle controls): 38 features, 25 completed, 13 remaining (M1 semantics; M2 archive; M3 CLI complete)
-- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 17 completed, 45 remaining
-- Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 0 completed, 57 remaining
-- Live open follow-up (D-073 doctor health surface): 57 features, 35 completed, 22 remaining
-- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 41 completed, 10 remaining
+- Live open follow-up (D-093 session navigation sidebar): 39 features, 24 completed, 15 remaining (M1 surface + M2 scope + M3 recency complete; M4 navigation/safety + M5 resume/verification remain)
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 31 completed, 7 remaining (M1 semantics; M2 archive; M3 CLI; M5 cancel/stop/kill semantic tests; archive-visibility filtering complete; debug-only lifecycle UI + unarchive-before-open + Escape-primary + manual EZE remain)
+- Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 35 completed, 27 remaining (M1 contract + M2 chooser surface + M5 no-secret auth UI built; M3 split-control UI partial - quick-picker component built, App split-control wiring remains; M4 catalog browsing UI, M6 selection wiring, M7 verification remain)
+- Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 55 completed, 2 remaining (2 manual EZE repros)
+- Live open follow-up (D-073 doctor health surface): 57 features, 44 completed, 13 remaining (M4 visual review; M6 prompt/model guidance; storybook review + manual EZE repros)
+- Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 43 completed, 8 remaining (M5 live-model evals; M7 web UI + manual repros)
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 168 unchecked items plus 5 partial/gated carry-forward items
+- Remaining implementable work in this report: 94 unchecked items plus 5 partial/gated carry-forward items
