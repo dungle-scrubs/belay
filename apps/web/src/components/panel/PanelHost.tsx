@@ -13,7 +13,7 @@ import { CommandMenu } from "@/components/chat/command-menu";
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
-import type { StopAction } from "@/components/chat/transcript-row-view";
+import { QueuedPrompts } from "@/components/chat/queued-prompts";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { SidePanel } from "@/components/panel/SidePanel";
 import type { Composer } from "@/hooks/use-composer";
@@ -47,7 +47,6 @@ export interface TranscriptView {
   /** Re-runs `/doctor` on the host (a no-model-turn immediate command), wired to the dashboard's
    *  refresh control. App owns it because it depends on the session command action. */
   readonly onDoctorRefresh: () => void;
-  readonly onStopAction: (action: StopAction) => void;
   readonly showThinking: boolean;
   /** The running run id, or null once the turn ends; drives the persistent "Working" pulse. */
   readonly active: string | null;
@@ -152,7 +151,6 @@ export function PanelHost(props: {
     toConcurrentTool,
     onOpenPath,
     onDoctorRefresh,
-    onStopAction,
     showThinking,
     queue,
   } = tv;
@@ -162,12 +160,11 @@ export function PanelHost(props: {
       buildTranscriptRows({
         active,
         awaitingResponse,
-        queue,
         toolBatches,
         transcript,
         turnStartedAt,
       }),
-    [active, awaitingResponse, queue, toolBatches, transcript, turnStartedAt],
+    [active, awaitingResponse, toolBatches, transcript, turnStartedAt],
   );
   const onTranscriptScroll = (event: ReactUIEvent<HTMLDivElement>) => {
     const virtualList = event.currentTarget.querySelector("[data-transcript-virtual-list]");
@@ -240,7 +237,6 @@ export function PanelHost(props: {
                 toConcurrentTool={toConcurrentTool}
                 onOpenPath={onOpenPath}
                 onDoctorRefresh={onDoctorRefresh}
-                onStopAction={onStopAction}
               />
             )}
           </div>
@@ -258,6 +254,8 @@ export function PanelHost(props: {
 
         {/* Live task checklist, above the composer. */}
         <TasksPanel tasks={tasks} />
+
+        <QueuedPrompts queue={queue} />
 
         {/* Pinned bottom: composer, then a two-column footer (status + model controls).
           Files dropped anywhere here upload as attachments. */}

@@ -68,7 +68,6 @@ function Harness({
         })}
         onOpenPath={noop}
         onDoctorRefresh={noop}
-        onStopAction={noop}
         testInitialRect={{ width: 900, height: 600 }}
       />
     </div>

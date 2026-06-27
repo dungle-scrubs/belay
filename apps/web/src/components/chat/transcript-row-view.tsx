@@ -1,12 +1,5 @@
-import {
-  Archive,
-  CircleX,
-  PanelRight,
-  Play,
-  RefreshCw,
-  RotateCw,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
+import type { ReactNode } from "react";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import { DoctorResult } from "@/components/chat/doctor/doctor-result";
@@ -20,12 +13,9 @@ import {
 import { MessageAttachments } from "@/components/chat/message-attachments";
 import { ToolMessage } from "@/components/chat/tool-message";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArtifactThumb } from "../../ArtifactThumb";
 import { fmtCtx, fmtTokens, isOverflowError } from "../../derive";
 import { Markdown } from "../../markdown";
-import type { QueuedPrompt } from "../../send-queue";
 import type { ToolMessage as ToolMessageData } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
@@ -64,62 +54,12 @@ function stopTitle(cause: string): string {
   }
 }
 
-export type StopAction = "continue" | "compress" | "retry" | "cancel";
-
-function StopControls({ onAction }: { readonly onAction: (action: StopAction) => void }) {
-  return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      <Button type="button" size="xs" variant="secondary" onClick={() => onAction("continue")}>
-        <Play className="size-3" />
-        Continue
-      </Button>
-      <Button type="button" size="xs" variant="outline" onClick={() => onAction("compress")}>
-        <Archive className="size-3" />
-        Compress
-      </Button>
-      <Button type="button" size="xs" variant="outline" onClick={() => onAction("retry")}>
-        <RefreshCw className="size-3" />
-        Retry
-      </Button>
-      <Button type="button" size="xs" variant="ghost" onClick={() => onAction("cancel")}>
-        <CircleX className="size-3" />
-        Cancel
-      </Button>
-    </div>
-  );
-}
-
-function QueueRow({ queue }: { queue: readonly QueuedPrompt[] }) {
-  return (
-    <div className="flex flex-col gap-1 pl-3.5 opacity-70">
-      {queue.map((q) => (
-        <div key={q.id} className="flex items-start gap-2 text-muted-foreground">
-          <span aria-hidden className="shrink-0 select-none">
-            &gt;
-          </span>
-          <div className="flex min-w-0 flex-col gap-1">
-            {q.text ? <Md text={q.text} muted /> : null}
-            {q.artifacts?.length ? (
-              <div className="flex gap-1.5">
-                {q.artifacts.map((ref) => (
-                  <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export interface TranscriptRowViewProps {
   readonly row: TranscriptRow;
   readonly showThinking: boolean;
   readonly toConcurrentTool: (tool: ToolMessageData) => ConcurrentTool;
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
-  readonly onStopAction: (action: StopAction) => void;
 }
 
 export function TranscriptRowView({
@@ -128,7 +68,6 @@ export function TranscriptRowView({
   toConcurrentTool,
   onOpenPath,
   onDoctorRefresh,
-  onStopAction,
 }: TranscriptRowViewProps) {
   if (row.kind === "tool_batch") {
     return (
@@ -148,10 +87,6 @@ export function TranscriptRowView({
         />
       </div>
     );
-  }
-
-  if (row.kind === "queue") {
-    return <QueueRow queue={row.queue} />;
   }
 
   const message = row.message;
@@ -294,21 +229,28 @@ export function TranscriptRowView({
       </Alert>
     ) : null;
 
-  const stepLimitNote =
-    message.kind === "assistant" && message.stop ? (
-      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-        <TriangleAlert className="h-3.5 w-3.5" />
-        <AlertTitle className="text-smui-yellow">{stopTitle(message.stop.cause)}</AlertTitle>
-        <AlertDescription className="break-words">
-          <div>{message.stop.summary.slice(0, 240)}</div>
-          <StopControls onAction={onStopAction} />
-        </AlertDescription>
-      </Alert>
-    ) : message.kind === "assistant" && message.stepLimit ? (
-      <div className="text-label text-muted-foreground">
-        legacy step budget reached after {message.stepLimit} steps
-      </div>
-    ) : null;
+  let stepLimitNote: ReactNode = null;
+  if (message.kind === "assistant") {
+    if (message.stop?.cause === "step_backstop") {
+      stepLimitNote = null;
+    } else if (message.stop) {
+      stepLimitNote = (
+        <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
+          <TriangleAlert className="h-3.5 w-3.5" />
+          <AlertTitle className="text-smui-yellow">{stopTitle(message.stop.cause)}</AlertTitle>
+          <AlertDescription className="break-words">
+            <div>{message.stop.summary.slice(0, 240)}</div>
+          </AlertDescription>
+        </Alert>
+      );
+    } else if (message.stepLimit) {
+      stepLimitNote = (
+        <div className="text-label text-muted-foreground">
+          legacy step budget reached after {message.stepLimit} steps
+        </div>
+      );
+    }
+  }
 
   if (message.kind === "assistant" && !message.text && !message.done) {
     return (

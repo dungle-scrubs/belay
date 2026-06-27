@@ -1,4 +1,3 @@
-import type { QueuedPrompt } from "./send-queue";
 import type { Message, ToolMessage } from "./transcript";
 
 export interface ToolBatchLookup {
@@ -24,17 +23,11 @@ export type TranscriptRow =
       readonly id: string;
       readonly interruptible: true;
       readonly startedAt?: number;
-    }
-  | {
-      readonly kind: "queue";
-      readonly id: string;
-      readonly queue: readonly QueuedPrompt[];
     };
 
 export interface BuildTranscriptRowsInput {
   readonly active: string | null;
   readonly awaitingResponse: boolean;
-  readonly queue: readonly QueuedPrompt[];
   readonly toolBatches: ToolBatchLookup;
   readonly transcript: readonly Message[];
   readonly turnStartedAt: number | null;
@@ -48,7 +41,7 @@ export interface BuildTranscriptRowsInput {
  */
 export function buildTranscriptRows(input: BuildTranscriptRowsInput): TranscriptRow[] {
   const rows: TranscriptRow[] = [];
-  const { active, awaitingResponse, queue, toolBatches, transcript, turnStartedAt } = input;
+  const { active, awaitingResponse, toolBatches, transcript, turnStartedAt } = input;
 
   for (let index = 0; index < transcript.length; index += 1) {
     const message = transcript[index];
@@ -86,10 +79,6 @@ export function buildTranscriptRows(input: BuildTranscriptRowsInput): Transcript
       interruptible: true,
       ...(turnStartedAt === null ? {} : { startedAt: turnStartedAt }),
     });
-  }
-
-  if (queue.length > 0) {
-    rows.push({ kind: "queue", id: "queue", queue });
   }
 
   return rows;

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, test } from "vitest";
-import type { QueuedPrompt } from "./send-queue";
 import { type Message, readOnlyToolBatches } from "./transcript";
 import { buildTranscriptRows, type ToolBatchLookup, transcriptRowKey } from "./transcript-rows";
 
@@ -31,17 +30,10 @@ const tool = (id: string, name = "read"): Message => ({
   result: `result ${id}`,
 });
 
-const queuePrompt = (id: string): QueuedPrompt => ({
-  id,
-  provider: "qwen",
-  text: `queued ${id}`,
-});
-
 function rows(transcript: readonly Message[], over: Partial<ToolBatchLookup> = {}) {
   return buildTranscriptRows({
     active: null,
     awaitingResponse: false,
-    queue: [],
     toolBatches: { ...readOnlyToolBatches(transcript), ...over },
     transcript,
     turnStartedAt: null,
@@ -86,12 +78,11 @@ describe("buildTranscriptRows", () => {
     assert.deepEqual(result.map(transcriptRowKey), ["message:r1", "message:w1", "message:r2"]);
   });
 
-  test("appends working and queued prompt rows at the live edge", () => {
+  test("appends working rows at the live edge", () => {
     const transcript = [user("u1"), assistant("a1")];
     const result = buildTranscriptRows({
       active: "run-1",
       awaitingResponse: false,
-      queue: [queuePrompt("q1"), queuePrompt("q2")],
       toolBatches: readOnlyToolBatches(transcript),
       transcript,
       turnStartedAt: 123,
@@ -99,12 +90,8 @@ describe("buildTranscriptRows", () => {
 
     assert.deepEqual(
       result.map((row) => row.kind),
-      ["message", "message", "working", "queue"],
+      ["message", "message", "working"],
     );
     assert.equal(result[2]?.kind === "working" ? result[2].startedAt : null, 123);
-    assert.deepEqual(result[3]?.kind === "queue" ? result[3].queue.map((q) => q.id) : [], [
-      "q1",
-      "q2",
-    ]);
   });
 });

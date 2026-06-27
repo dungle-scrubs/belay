@@ -14,7 +14,6 @@ import {
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import type { ToolStatus } from "@/components/chat/message";
 import { parseToolArgs } from "@/components/chat/tool-message";
-import type { StopAction } from "@/components/chat/transcript-row-view";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { PanelControls } from "@/components/panel/panel-controls";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
@@ -509,19 +508,6 @@ export function App() {
     inputRef.current?.focus();
   };
 
-  const onStopAction = (action: StopAction) => {
-    if (action === "continue") {
-      void command("/continue", "");
-    } else if (action === "compress") {
-      void command("/compress", "");
-    } else if (action === "retry") {
-      void command("/retry", "");
-    } else {
-      void cancel(active ?? "");
-    }
-    setAtBottom(true);
-  };
-
   // ESC mirrors the cancel button when a run is active/pending; with nothing to
   // cancel it just clears the composer. One window listener reads the latest state
   // from a ref so it never goes stale and works regardless of which element has focus.
@@ -684,7 +670,6 @@ export function App() {
         toConcurrentTool,
         onOpenPath: (path) => void openInEditor(path),
         onDoctorRefresh: () => void command("/doctor", "refresh"),
-        onStopAction,
         showThinking: showThinkingOn,
         active,
         awaitingResponse,

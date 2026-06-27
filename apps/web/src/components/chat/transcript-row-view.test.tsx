@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { test, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { test } from "vitest";
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import type { AssistantMessage, ToolMessage as ToolMessageData } from "../../transcript";
@@ -25,7 +25,7 @@ const assistant = (over: Partial<AssistantMessage>): TranscriptRow => ({
   },
 });
 
-function renderRow(row: TranscriptRow, onStopAction = noop) {
+function renderRow(row: TranscriptRow) {
   return render(
     <TranscriptRowView
       row={row}
@@ -37,15 +37,13 @@ function renderRow(row: TranscriptRow, onStopAction = noop) {
       })}
       onOpenPath={noop}
       onDoctorRefresh={noop}
-      onStopAction={onStopAction}
     />,
   );
 }
 
-test("renders typed stop notes for adaptive termination causes", () => {
+test("renders typed stop notes for non-automatic adaptive termination causes", () => {
   for (const [cause, title] of [
     ["context_pressure", "context pressure"],
-    ["step_backstop", "paused at step backstop"],
     ["loop_stalled", "loop stalled"],
     ["provider_protocol_anomaly", "provider protocol anomaly"],
   ] as const) {
@@ -64,8 +62,7 @@ test("renders typed stop notes for adaptive termination causes", () => {
   }
 });
 
-test("typed stop notes expose continuation controls", () => {
-  const onStopAction = vi.fn();
+test("hides automatic step backstop stops because the host continues without user choice", () => {
   renderRow(
     assistant({
       stop: {
@@ -74,18 +71,11 @@ test("typed stop notes expose continuation controls", () => {
         summary: "Paused at the step backstop.",
       },
     }),
-    onStopAction,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-  fireEvent.click(screen.getByRole("button", { name: /compress/i }));
-  fireEvent.click(screen.getByRole("button", { name: /retry/i }));
-  fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
-
-  assert.deepEqual(
-    onStopAction.mock.calls.map(([action]) => action),
-    ["continue", "compress", "retry", "cancel"],
-  );
+  assert.equal(screen.queryByText("paused at step backstop"), null);
+  assert.equal(screen.queryByText("Paused at the step backstop."), null);
+  assert.equal(screen.queryByRole("button", { name: /continue/i }), null);
 });
 
 test("renders legacy stepLimit events without calling them answered", () => {

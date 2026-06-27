@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
-import { type StopAction, TranscriptRowView } from "@/components/chat/transcript-row-view";
+import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
 import type { ToolMessage as ToolMessageData } from "../../transcript";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
@@ -23,14 +23,10 @@ export interface VirtualTranscriptProps {
   readonly toConcurrentTool: (tool: ToolMessageData) => ConcurrentTool;
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
-  readonly onStopAction: (action: StopAction) => void;
   readonly testInitialRect?: Rect;
 }
 
 function estimateRowSize(row: TranscriptRow): number {
-  if (row.kind === "queue") {
-    return 48 + row.queue.length * 28;
-  }
   if (row.kind === "working") {
     return 32;
   }
@@ -65,7 +61,6 @@ export function VirtualTranscript({
   toConcurrentTool,
   onOpenPath,
   onDoctorRefresh,
-  onStopAction,
   testInitialRect,
 }: VirtualTranscriptProps) {
   const lastRowIdRef = useRef<string | null>(null);
@@ -228,7 +223,6 @@ export function VirtualTranscript({
               toConcurrentTool={toConcurrentTool}
               onOpenPath={onOpenPath}
               onDoctorRefresh={onDoctorRefresh}
-              onStopAction={onStopAction}
             />
           </div>
         );
