@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { SessionSummary } from "@trevor/session";
+import { type ResumeContext, ResumeModal } from "../../resume";
 import { SessionSidebar } from "./session-sidebar";
 
 /**
@@ -228,4 +229,39 @@ export const TallList: Story = {
       />
     </Frame>
   ),
+};
+
+/**
+ * D-093 M5: the sidebar alongside the `/resume` command modal, so the relationship reads at a glance.
+ * Both surfaces are fed the SAME inventory (`MANY`) and back the same safe switch action - the sidebar
+ * is the always-visible everyday list (left), while `/resume` is the keyboard/search entry point over
+ * the identical sessions (the open modal). Neither widens to cross-project search in this slice: both
+ * stay scoped to the current project. The sidebar carries its collapse glyph (the dashboard-icon entry
+ * point) via `onToggle`.
+ */
+export const WithResumeModal: Story = {
+  render: () => {
+    const context: ResumeContext = {
+      currentSessionId: "cur",
+      currentProject: "trevorV2",
+      busy: false,
+      nowMs: NOW,
+    };
+    return (
+      <div className="flex h-svh">
+        <Frame>
+          <SessionSidebar
+            sessions={MANY}
+            currentSessionId="cur"
+            currentProject="trevorV2"
+            onSelect={noop}
+            onToggle={noop}
+            nowMs={NOW}
+            className="h-full"
+          />
+        </Frame>
+        <ResumeModal open onOpenChange={noop} sessions={MANY} context={context} onResume={noop} />
+      </div>
+    );
+  },
 };

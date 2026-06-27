@@ -268,3 +268,60 @@ test("an empty list shows a project-scoped empty state with an accessible nav la
     "the empty state names the project",
   );
 });
+
+// --- D-093 M5: the dashboard-icon collapse affordance + keyboard accessibility ---
+
+test("the collapse toggle renders only when the app wires onToggle, and fires it", () => {
+  let collapsed = 0;
+  const { getByLabelText } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "cur" })]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={noop}
+      onToggle={() => (collapsed += 1)}
+      nowMs={NOW}
+    />,
+  );
+  fireEvent.click(getByLabelText("Collapse sessions sidebar"));
+  assert.equal(collapsed, 1, "the header toggle collapses the sidebar");
+});
+
+test("the sidebar stays a static header in standalone/Storybook use (no toggle without onToggle)", () => {
+  const { queryByLabelText } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "cur" })]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={noop}
+      nowMs={NOW}
+    />,
+  );
+  assert.equal(
+    queryByLabelText("Collapse sessions sidebar"),
+    null,
+    "no collapse affordance when the app does not own an open/closed state",
+  );
+});
+
+test("session rows are keyboard-focusable buttons that select on activation", () => {
+  let selected = "";
+  const { getByText } = render(
+    <SessionSidebar
+      sessions={[
+        summary({ sessionId: "cur", title: "current" }),
+        summary({ sessionId: "s2", title: "other" }),
+      ]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={(id) => (selected = id)}
+      nowMs={NOW}
+    />,
+  );
+  const row = getByText("other").closest("button") as HTMLButtonElement;
+  row.focus();
+  assert.equal(document.activeElement, row, "a row can take keyboard focus");
+  // Native button: a keyboard Enter/Space activates the same onClick a pointer does.
+  fireEvent.click(row);
+  assert.equal(selected, "s2", "activating the focused row selects that session");
+});
