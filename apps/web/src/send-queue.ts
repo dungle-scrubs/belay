@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef, ModelRef } from "@trevor/session";
 
 /**
  * The browser's local send queue + hard-steer fold - the "when does my prompt go out"
@@ -25,6 +25,9 @@ export type QueuedPrompt = {
   readonly text: string;
   readonly provider: string;
   readonly reasoning?: string;
+  /** The selected model reference (D-065), snapshotted at submit time alongside provider/reasoning so
+   *  a model switch while the prompt waits does not rewrite it. Carried to the host's user.message. */
+  readonly model?: ModelRef;
   readonly artifacts?: readonly ArtifactRef[];
 };
 
@@ -36,6 +39,14 @@ export type QueuedPrompt = {
 export function combineSteer(queue: readonly QueuedPrompt[], draft: string): string {
   return [...queue.map((q) => q.text), draft.trim()].filter(Boolean).join("\n\n");
 }
+
+/** The active selection snapshot a steer stamps onto its folded prompt (the same fields submit carries). */
+export type SteerMeta = {
+  readonly id: string;
+  readonly provider: string;
+  readonly reasoning?: string;
+  readonly model?: ModelRef;
+};
 
 export type SendQueueAction =
   | { readonly type: "clear" }
@@ -71,7 +82,7 @@ export function foldSteer(
   queue: readonly QueuedPrompt[],
   draft: string,
   attachments: readonly ArtifactRef[],
-  meta: { readonly id: string; readonly provider: string; readonly reasoning?: string },
+  meta: SteerMeta,
 ): QueuedPrompt | null {
   const text = combineSteer(queue, draft);
   const artifacts = [...queue.flatMap((q) => q.artifacts ?? []), ...attachments];
@@ -83,6 +94,7 @@ export function foldSteer(
     text,
     provider: meta.provider,
     reasoning: meta.reasoning,
+    ...(meta.model ? { model: meta.model } : {}),
     ...(artifacts.length ? { artifacts } : {}),
   };
 }

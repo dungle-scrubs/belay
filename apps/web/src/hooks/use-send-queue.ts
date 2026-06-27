@@ -1,7 +1,7 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef, ModelRef } from "@trevor/session";
 import { usePrevious } from "ahooks";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { foldSteer, type QueuedPrompt, sendQueueReducer } from "@/send-queue";
+import { foldSteer, type QueuedPrompt, type SteerMeta, sendQueueReducer } from "@/send-queue";
 
 /**
  * The browser's local send-queue React state machine, lifted out of App.tsx so the
@@ -27,11 +27,7 @@ export interface UseSendQueue {
   /** Enqueue a fresh prompt to publish when idle (the drain effect handles publishing). */
   readonly submit: (prompt: QueuedPrompt) => void;
   /** Hard steer: fold the queue + draft + artifacts into one prompt that replaces the queue. */
-  readonly steer: (
-    draft: string,
-    attachments: readonly ArtifactRef[],
-    meta: { readonly id: string; readonly provider: string; readonly reasoning?: string },
-  ) => void;
+  readonly steer: (draft: string, attachments: readonly ArtifactRef[], meta: SteerMeta) => void;
 }
 
 export function useSendQueue({
@@ -46,6 +42,7 @@ export function useSendQueue({
     provider: string,
     reasoning?: string,
     artifacts?: readonly ArtifactRef[],
+    model?: ModelRef,
   ) => Promise<void>;
   /** Changes when the browser switches durable sessions; queued prompts must not cross sessions. */
   readonly resetKey?: string | null;
@@ -98,7 +95,7 @@ export function useSendQueue({
     inFlightRef.current = true;
     setPending(next);
     dispatchQueue({ type: "drainHead" });
-    void publish(next.text, next.provider, next.reasoning, next.artifacts).catch(() => {
+    void publish(next.text, next.provider, next.reasoning, next.artifacts, next.model).catch(() => {
       inFlightRef.current = false;
       setPending((current) => (current?.id === next.id ? null : current));
     });
@@ -109,11 +106,7 @@ export function useSendQueue({
   }, []);
 
   const steer = useCallback(
-    (
-      draft: string,
-      attachments: readonly ArtifactRef[],
-      meta: { readonly id: string; readonly provider: string; readonly reasoning?: string },
-    ) => {
+    (draft: string, attachments: readonly ArtifactRef[], meta: SteerMeta) => {
       // Fold the queued prompts + draft + every queued/attached artifact into ONE steering
       // prompt (foldSteer keeps the images the user lined up rather than dropping them).
       const steered = foldSteer(queue, draft, attachments, meta);

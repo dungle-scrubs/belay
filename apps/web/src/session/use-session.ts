@@ -3,6 +3,7 @@ import {
   type ArtifactRef,
   type ConnectionStatus,
   type HostPresence,
+  type ModelRef,
   PRODUCER_IDS,
   type PublishInput,
   RUNTIME_KIND,
@@ -248,6 +249,7 @@ export interface SessionActions {
     provider: string,
     reasoning?: string,
     artifacts?: readonly ArtifactRef[],
+    model?: ModelRef,
   ) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
   readonly command: (command: string, args: string) => Promise<void>;
@@ -281,8 +283,13 @@ export function useSessionActions(sessionId: string | null): SessionActions {
   );
 
   const publish = useCallback(
-    (text: string, provider: string, reasoning?: string, artifacts?: readonly ArtifactRef[]) =>
-      publishVia(sessionEvents.userMessage({ text, provider, reasoning, artifacts })),
+    (
+      text: string,
+      provider: string,
+      reasoning?: string,
+      artifacts?: readonly ArtifactRef[],
+      model?: ModelRef,
+    ) => publishVia(sessionEvents.userMessage({ text, provider, reasoning, model, artifacts })),
     [publishVia],
   );
 

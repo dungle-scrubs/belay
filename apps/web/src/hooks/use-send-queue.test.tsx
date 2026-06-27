@@ -45,6 +45,23 @@ test("drains one prompt at a time and never double-sends", async () => {
   assert.deepEqual(result.current.queue, []);
 });
 
+test("a submitted prompt's ModelRef is forwarded to publish (D-065)", () => {
+  const calls: Array<{ text: string; model: unknown }> = [];
+  const publish = async (
+    text: string,
+    _provider: string,
+    _reasoning?: string,
+    _artifacts?: unknown,
+    model?: unknown,
+  ) => {
+    calls.push({ text, model });
+  };
+  const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
+  const { result } = renderHook(() => useSendQueue({ busy: false, publish }));
+  act(() => result.current.submit({ id: "1", text: "hi", provider: "deepseek", model }));
+  assert.deepEqual(calls, [{ text: "hi", model }], "the snapshot ModelRef reaches publish");
+});
+
 test("hard steer folds the queued prompts + draft into a single prompt", () => {
   const publish = async () => {};
   // Busy throughout, so the submits accumulate in the queue instead of draining.

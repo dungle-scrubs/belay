@@ -74,6 +74,18 @@ test("foldSteer folds queued prompts + draft + artifacts into one steering promp
   assert.deepEqual(steer.artifacts, [a1, a2]);
 });
 
+test("foldSteer stamps the steer meta's ModelRef onto the folded prompt (D-065)", () => {
+  const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
+  const steer = foldSteer([prompt("1", "first")], "go", [], {
+    id: "s",
+    provider: "deepseek",
+    reasoning: "high",
+    model,
+  });
+  assert.ok(steer);
+  assert.deepEqual(steer.model, model, "the active selection rides the steered prompt");
+});
+
 test("foldSteer returns null when there is no text and no artifacts", () => {
   assert.equal(foldSteer([], "   ", [], { id: "s", provider: "qwen" }), null);
 });

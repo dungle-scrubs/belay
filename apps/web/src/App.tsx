@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_SESSION_ID, type SessionActivity } from "@trevor/session";
+import { DEFAULT_SESSION_ID, modelRefFromProvider, type SessionActivity } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { GitBranch, History } from "lucide-react";
 import {
@@ -387,6 +387,12 @@ export function App() {
   const showThinkingOn = showThinking ?? true;
   const setReasoning = (level: string) =>
     setReasoningMap({ ...(reasoningMap ?? {}), [activeProvider]: level });
+  // The active selection as a stable ModelRef (D-065 migration): the source IS the provider key, the
+  // model id comes from the host roster, and reasoning is the chosen level (null = provider default).
+  // Sent ALONGSIDE the legacy provider/reasoning so the host resolves through resolveUserTurnModel
+  // while old clients keep working. Derived from the provider selection today; the split-control +
+  // ModelPreferences source-of-truth land in the next D-065 slice.
+  const activeModelRef = modelRefFromProvider(activeProvider, modelMeta.model, reasoning || null);
 
   const hostCommand =
     target === DEFAULT_SESSION
@@ -455,6 +461,7 @@ export function App() {
       text,
       provider: activeProvider,
       reasoning: reasoning || undefined,
+      model: activeModelRef,
       artifacts,
     });
     // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
@@ -547,6 +554,7 @@ export function App() {
       id: crypto.randomUUID(),
       provider: activeProvider,
       reasoning: reasoning || undefined,
+      model: activeModelRef,
     });
     setDraft("");
     setAttachments([]);
