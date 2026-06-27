@@ -5,6 +5,7 @@ import {
   type DoctorSnapshot,
   type DoctorStatus,
   decodeDoctorSnapshot,
+  formatDoctorReport,
   isIssue,
   overallStatus,
   rollupStatus,
@@ -74,6 +75,58 @@ describe("isIssue", () => {
     expect(isIssue(area("core", "warn"))).toBe(true);
     expect(isIssue(area("core", "ok"))).toBe(false);
     expect(isIssue(area("core", "not_checked"))).toBe(false);
+  });
+});
+
+describe("formatDoctorReport", () => {
+  const snap: DoctorSnapshot = {
+    state: "ready",
+    checkedAt: "12s ago",
+    host: { workspace: "~/dev/trevorV2" },
+    areas: [
+      {
+        id: "internet",
+        label: "Internet",
+        status: "warn",
+        verdict: "unreachable",
+        facts: [{ label: "probe", value: "dns+https" }],
+        findings: [
+          {
+            id: "internet.reachability",
+            status: "warn",
+            title: "Public internet",
+            message: "last probe failed",
+            source: "https://example.test",
+            evidence: "ETIMEDOUT",
+            nextAction: { label: "Check the network", command: "/doctor refresh" },
+          },
+        ],
+      },
+      { id: "core", label: "Core", status: "ok", verdict: "running" },
+    ],
+  };
+
+  it("renders a paste-ready report: header, summary, areas, findings, and next actions", () => {
+    const report = formatDoctorReport(snap);
+    expect(report).toContain("Trevor /doctor - Degraded");
+    expect(report).toContain("12s ago · 2 areas · 0 error, 1 warning, 1 ok, 0 not checked");
+    expect(report).toContain("workspace: ~/dev/trevorV2");
+    expect(report).toContain("## Internet [WARN] unreachable");
+    expect(report).toContain("- probe: dns+https");
+    expect(report).toContain("[WARN] Public internet - last probe failed");
+    expect(report).toContain("source: https://example.test");
+    expect(report).toContain("evidence: ETIMEDOUT");
+    expect(report).toContain("next: Check the network (/doctor refresh)");
+    expect(report).toContain("## Core [OK] running");
+  });
+
+  it("carries no field the dashboard does not already show (no secrets beyond the snapshot)", () => {
+    // Every non-structural token in the report must trace back to a snapshot string.
+    const report = formatDoctorReport(snap);
+    expect(report).not.toContain("undefined");
+    // A snapshot with no host context omits the workspace line entirely.
+    const bare = formatDoctorReport({ state: "ready", areas: [] });
+    expect(bare).not.toContain("workspace:");
   });
 });
 

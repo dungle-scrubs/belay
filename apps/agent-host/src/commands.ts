@@ -13,6 +13,8 @@ import { buildDoctorSnapshot, type DoctorProviderProbe } from "./doctor/snapshot
 import { fmtFields } from "./log";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
+import { readObservations, summarizeObservations } from "./providers/observation-store";
+import { providerFailures } from "./providers/provider-failure-log";
 import { buildSkillCommand } from "./skills";
 import { TOOL_DEFS } from "./tools";
 import { renderShell, runShell } from "./tools/run-shell";
@@ -203,14 +205,16 @@ export function buildCommandRegistry(): CommandRegistry {
         return doctorText(input);
       }
       const home = trevorHome();
-      const [providers, writable] = await Promise.all([
+      const [providers, writable, observationStore] = await Promise.all([
         Promise.all(
           Object.entries(input.providers).map(([key, provider]) =>
             doctorProviderProbe(key, provider),
           ),
         ),
         storageWritable(home),
+        readObservations(),
       ]);
+      const obs = summarizeObservations(observationStore);
       const snapshot = buildDoctorSnapshot({
         host: { instanceId: input.instanceId, role: input.role, live: input.role !== "standby" },
         session: {
@@ -251,6 +255,20 @@ export function buildCommandRegistry(): CommandRegistry {
               : null,
           docs: { present: false, stale: false },
         },
+        // Redacted provider-failure observation counts (D-076 M6): how many distinct unclassified
+        // shapes the classifier has logged, surfaced as a Providers fact (counts only, no secrets).
+        observations: { distinct: obs.distinct, unknown: obs.unknown, total: obs.total },
+        // Recent terminal provider-failure outcomes (D-076 M6): retry-exhausted vs non-retryable,
+        // surfaced as two distinct Providers findings. Sanitized one-line details only.
+        providerFailures: (() => {
+          const summary = providerFailures.summary();
+          return {
+            retryExhausted: summary.retryExhausted,
+            nonRetryableTerminal: summary.nonRetryableTerminal,
+            lastRetryExhausted: summary.lastRetryExhausted?.detail,
+            lastTerminal: summary.lastTerminal?.detail,
+          };
+        })(),
         checkedAt: new Date().toISOString(),
       });
       return JSON.stringify(snapshot);

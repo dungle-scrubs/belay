@@ -29,12 +29,9 @@ export default meta;
 
 type Story = StoryObj<typeof DoctorPanel>;
 
-// In the live app these drive host commands; here they just report the intent.
-const ACTIONS = {
-  onRefresh: () => window.alert("/doctor refresh"),
-  onCopyReport: () => window.alert("copy report"),
-  onViewJson: () => window.alert("/doctor json"),
-};
+// In the live app this re-runs `/doctor` on the host; here it just reports the intent.
+// Copy report (clipboard) and View JSON (inline toggle) are wired inside the panel itself.
+const onRefresh = () => window.alert("/doctor refresh");
 
 /** The panel reads as a command result: a single column at a comfortable width. */
 const Frame = ({ children }: { children: React.ReactNode }) => (
@@ -45,7 +42,7 @@ const Frame = ({ children }: { children: React.ReactNode }) => (
 export const AllHealthy: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={healthySnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={healthySnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -55,7 +52,7 @@ export const AllHealthy: Story = {
 export const MixedWarningsErrors: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={mixedSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={mixedSnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -64,7 +61,7 @@ export const MixedWarningsErrors: Story = {
 export const ManyFindings: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={manyFindingsSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={manyFindingsSnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -73,7 +70,7 @@ export const ManyFindings: Story = {
 export const AllNotChecked: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={notCheckedSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={notCheckedSnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -82,7 +79,7 @@ export const AllNotChecked: Story = {
 export const Loading: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={loadingSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={loadingSnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -92,7 +89,7 @@ export const Loading: Story = {
 export const Refreshing: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={refreshingSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={refreshingSnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -101,7 +98,7 @@ export const Refreshing: Story = {
 export const Stale: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={staleSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={staleSnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -110,7 +107,7 @@ export const Stale: Story = {
 export const LongPaths: Story = {
   render: () => (
     <Frame>
-      <DoctorPanel snapshot={longPathsSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={longPathsSnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
@@ -119,7 +116,7 @@ export const LongPaths: Story = {
 export const Mobile: Story = {
   render: () => (
     <div className="w-[390px] max-w-full">
-      <DoctorPanel snapshot={mixedSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={mixedSnapshot} onRefresh={onRefresh} />
     </div>
   ),
 };
@@ -128,7 +125,7 @@ export const Mobile: Story = {
 export const Tablet: Story = {
   render: () => (
     <div className="w-[768px] max-w-full">
-      <DoctorPanel snapshot={mixedSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={mixedSnapshot} onRefresh={onRefresh} />
     </div>
   ),
 };
@@ -137,17 +134,18 @@ export const Tablet: Story = {
 export const Desktop: Story = {
   render: () => (
     <div className="w-[1100px] max-w-full">
-      <DoctorPanel snapshot={mixedSnapshot} actions={ACTIONS} />
+      <DoctorPanel snapshot={mixedSnapshot} onRefresh={onRefresh} />
     </div>
   ),
 };
 
 /** Working refresh + expandable rows: refresh flips the header to "refreshing"
- *  for ~1.2s; click any row with a chevron to reveal its key facts. */
+ *  for ~1.2s; click any row with a chevron to reveal its key facts. Copy report
+ *  and View JSON act on the live snapshot. */
 function InteractivePanel() {
   const [snapshot, setSnapshot] = useState<DoctorSnapshot>(mixedSnapshot);
 
-  const onRefresh = () => {
+  const refresh = () => {
     setSnapshot((prev) => ({ ...prev, state: "refreshing" }));
     setTimeout(() => {
       setSnapshot({ ...mixedSnapshot, state: "ready", checkedAt: "checked just now" });
@@ -158,7 +156,7 @@ function InteractivePanel() {
     <Frame>
       <DoctorPanel
         snapshot={snapshot}
-        actions={{ ...ACTIONS, onRefresh }}
+        onRefresh={refresh}
         onAction={(finding) => window.alert(`next action: ${finding.nextAction?.label}`)}
       />
     </Frame>

@@ -92,6 +92,7 @@ export function DoctorSummaryStrip({
   checkedAt,
   issuesOnly,
   onIssuesOnlyChange,
+  jsonOpen,
   actions,
 }: {
   status: DoctorStatus;
@@ -100,6 +101,8 @@ export function DoctorSummaryStrip({
   checkedAt?: string;
   issuesOnly: boolean;
   onIssuesOnlyChange: (next: boolean) => void;
+  /** Whether the inline JSON view is open, so its toggle reads `aria-pressed`. */
+  jsonOpen?: boolean;
   actions?: DoctorSummaryActions;
 }) {
   const headlineTint = DOCTOR_STATUS_META[status].text;
@@ -148,16 +151,18 @@ export function DoctorSummaryStrip({
         </Button>
 
         <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon-xs"
-            onClick={actions?.onRefresh}
-            disabled={state === "refreshing"}
-            title="Refresh diagnostics"
-            aria-label="Refresh diagnostics"
-          >
-            <RefreshCw className={cn("size-3", state === "refreshing" && "animate-spin")} />
-          </Button>
+          {actions?.onRefresh ? (
+            <Button
+              variant="outline"
+              size="icon-xs"
+              onClick={actions.onRefresh}
+              disabled={state === "refreshing"}
+              title="Refresh diagnostics"
+              aria-label="Refresh diagnostics"
+            >
+              <RefreshCw className={cn("size-3", state === "refreshing" && "animate-spin")} />
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="icon-xs"
@@ -168,9 +173,10 @@ export function DoctorSummaryStrip({
             <Copy className="size-3" />
           </Button>
           <Button
-            variant="outline"
+            variant={jsonOpen ? "secondary" : "outline"}
             size="icon-xs"
             onClick={actions?.onViewJson}
+            aria-pressed={jsonOpen}
             title="View JSON"
             aria-label="View JSON"
           >

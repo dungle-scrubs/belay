@@ -50,7 +50,32 @@ export interface DoctorProbeInput {
   readonly build: DoctorBuildInfo;
   readonly peripherals: DoctorPeripherals;
   readonly web: DoctorWebDocs;
+  /** Redacted provider-failure observation counts (D-076 M5/M6): distinct unclassified shapes and
+   *  total sightings, shown as a Providers fact. Counts + fingerprint ids only - never any secret. */
+  readonly observations?: DoctorObservations;
+  /** Recent provider-failure outcomes (D-076 M6): retry-exhausted vs non-retryable-terminal counts,
+   *  surfaced as DISTINCT Providers findings so a transient outage that gave up reads differently from
+   *  an auth/quota/rejected failure that was never eligible for retry. */
+  readonly providerFailures?: DoctorProviderFailures;
   readonly checkedAt: string;
+}
+
+/** The compact, redaction-safe provider-observation summary the Providers area surfaces (D-076 M6). */
+export interface DoctorObservations {
+  readonly distinct: number;
+  readonly unknown: number;
+  readonly total: number;
+}
+
+/** Recent terminal provider-failure counts, kept in two distinct buckets (D-076 M6). */
+export interface DoctorProviderFailures {
+  /** Recent failures that exhausted the bounded reconnect budget (a transient outage that gave up). */
+  readonly retryExhausted: number;
+  /** Recent terminal failures never eligible for retry (auth, quota, rejected, model/runtime down). */
+  readonly nonRetryableTerminal: number;
+  /** A sanitized one-line detail of the most recent of each, for the finding message. */
+  readonly lastRetryExhausted?: string;
+  readonly lastTerminal?: string;
 }
 
 /**
@@ -169,10 +194,48 @@ function providersArea(input: DoctorProbeInput): DoctorArea {
       ? { nextAction: { label: "Start the local runtime (LM Studio)" } }
       : {}),
   }));
-  const verdict = findings.length
-    ? `${findings.length} source${findings.length === 1 ? "" : "s"}`
+  // Recent terminal provider-failure outcomes (D-076 M6) as two SEPARATE findings: retry exhaustion
+  // (a transient outage Trevor auto-retried and still couldn't recover) is distinct from a
+  // non-retryable terminal failure (auth/quota/rejected - never eligible for retry). Each is shown
+  // only when it has happened, so a clean session adds neither.
+  const pf = input.providerFailures;
+  if (pf && pf.retryExhausted > 0) {
+    findings.push({
+      id: "providers.retryExhausted",
+      status: "warn",
+      title: "Provider retry exhaustion",
+      message: `${pf.retryExhausted} turn${pf.retryExhausted === 1 ? "" : "s"} exhausted the auto-reconnect budget on a transient provider outage.`,
+      ...(pf.lastRetryExhausted ? { evidence: pf.lastRetryExhausted } : {}),
+      nextAction: { label: "Retry the turn; if it persists, check provider/internet status" },
+    });
+  }
+  if (pf && pf.nonRetryableTerminal > 0) {
+    findings.push({
+      id: "providers.terminal",
+      status: "warn",
+      title: "Non-retryable provider failure",
+      message: `${pf.nonRetryableTerminal} turn${pf.nonRetryableTerminal === 1 ? "" : "s"} ended with a terminal provider failure that was not eligible for retry.`,
+      ...(pf.lastTerminal ? { evidence: pf.lastTerminal } : {}),
+    });
+  }
+  const sourceCount = input.providers.length;
+  const verdict = sourceCount
+    ? `${sourceCount} source${sourceCount === 1 ? "" : "s"}`
     : "no providers";
-  return area("providers", "Providers / Models / Auth", verdict, findings);
+  // Unclassified-failure observations (D-076 M6): a redacted diagnostic FACT (counts only), so it
+  // informs without inflating the area severity - an unknown shape isn't a current health problem,
+  // it's a breadcrumb for improving the classifier. Omitted entirely when nothing has been observed.
+  const obs = input.observations;
+  const facts: DoctorArea["facts"] =
+    obs && obs.distinct > 0
+      ? [
+          {
+            label: "observations",
+            value: `${obs.distinct} unclassified shape${obs.distinct === 1 ? "" : "s"} · ${obs.unknown} sighting${obs.unknown === 1 ? "" : "s"}`,
+          },
+        ]
+      : undefined;
+  return area("providers", "Providers / Models / Auth", verdict, findings, facts);
 }
 
 function internetArea(input: DoctorProbeInput): DoctorArea {

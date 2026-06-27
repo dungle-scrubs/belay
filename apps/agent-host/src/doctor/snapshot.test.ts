@@ -125,6 +125,68 @@ test("the Web / Docs area reports config presence (names/booleans only, never ke
   assert.ok(stale?.findings?.some((f) => f.id === "web.docs" && f.nextAction));
 });
 
+test("the Providers area surfaces unclassified-failure observation counts as a redacted fact (D-076 M6)", () => {
+  // No observations: no observations fact (only the provider findings).
+  const clean = buildDoctorSnapshot(input()).areas.find((a) => a.id === "providers");
+  assert.ok(
+    !clean?.facts?.some((f) => f.label === "observations"),
+    "no observations fact when nothing has been observed",
+  );
+
+  // With observed unknown shapes: a counts-only fact, and the area stays ok (a breadcrumb, not a fault).
+  const withObs = buildDoctorSnapshot(
+    input({ observations: { distinct: 3, unknown: 12, total: 15 } }),
+  ).areas.find((a) => a.id === "providers");
+  const fact = withObs?.facts?.find((f) => f.label === "observations");
+  assert.ok(fact, "an observations fact is present");
+  assert.match(fact?.value ?? "", /3 unclassified shapes/);
+  assert.match(fact?.value ?? "", /12 sightings/);
+  assert.equal(
+    withObs?.status,
+    "ok",
+    "an unknown-shape breadcrumb does not inflate the area severity",
+  );
+  // Counts only - no fingerprint, message, or any secret-bearing field leaks into the area.
+  assert.ok(!/«|sk-|bearer|token/i.test(JSON.stringify(withObs)), "no secret material in the area");
+});
+
+test("the Providers area shows retry exhaustion separately from non-retryable terminal failures (D-076 M6)", () => {
+  // Nothing recorded: neither finding appears.
+  const clean = buildDoctorSnapshot(input()).areas.find((a) => a.id === "providers");
+  assert.ok(!clean?.findings?.some((f) => f.id === "providers.retryExhausted"));
+  assert.ok(!clean?.findings?.some((f) => f.id === "providers.terminal"));
+
+  // Both kinds recorded: two DISTINCT findings, each with its own count + sanitized detail.
+  const both = buildDoctorSnapshot(
+    input({
+      providerFailures: {
+        retryExhausted: 2,
+        nonRetryableTerminal: 1,
+        lastRetryExhausted: "codex unavailable: websocket 1006 closed",
+        lastTerminal: "codex unavailable: invalid request",
+      },
+    }),
+  ).areas.find((a) => a.id === "providers");
+  const exhausted = both?.findings?.find((f) => f.id === "providers.retryExhausted");
+  const terminal = both?.findings?.find((f) => f.id === "providers.terminal");
+  assert.ok(exhausted, "a retry-exhaustion finding is present");
+  assert.ok(terminal, "a separate non-retryable terminal finding is present");
+  assert.notEqual(exhausted?.id, terminal?.id, "the two are distinct findings");
+  assert.match(exhausted?.message ?? "", /2 turns exhausted/);
+  assert.match(terminal?.message ?? "", /1 turn ended/);
+  assert.equal(exhausted?.evidence, "codex unavailable: websocket 1006 closed");
+  assert.ok(exhausted?.nextAction, "retry exhaustion offers a next action");
+  // The source-count verdict still reflects the providers, not the extra failure findings.
+  assert.match(both?.verdict ?? "", /1 source/);
+
+  // Only retry exhaustion (no terminal): just that one finding.
+  const onlyExhausted = buildDoctorSnapshot(
+    input({ providerFailures: { retryExhausted: 1, nonRetryableTerminal: 0 } }),
+  ).areas.find((a) => a.id === "providers");
+  assert.ok(onlyExhausted?.findings?.some((f) => f.id === "providers.retryExhausted"));
+  assert.ok(!onlyExhausted?.findings?.some((f) => f.id === "providers.terminal"));
+});
+
 test("MCP/LSP/Hooks areas map each peripheral state to the right status + next action", () => {
   const mcpState = (state: PeripheralState) => {
     const snap = buildDoctorSnapshot(

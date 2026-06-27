@@ -126,6 +126,7 @@ export function DoctorAreaRow({
           type="button"
           onClick={() => setExpanded((open) => !open)}
           aria-expanded={expanded}
+          aria-label={`${area.label} area details`}
           className="-mx-1 rounded-sm px-1 transition-colors hover:bg-secondary/40"
         >
           {header}

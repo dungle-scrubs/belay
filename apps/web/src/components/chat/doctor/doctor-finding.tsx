@@ -33,6 +33,7 @@ export function DoctorNextActionLine({
       <button
         type="button"
         onClick={onAction}
+        aria-label={action.label}
         className="flex w-full items-baseline gap-1.5 text-left text-ui text-smui-frost-3 transition-colors hover:text-primary"
       >
         {body}

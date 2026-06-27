@@ -12,14 +12,17 @@ export function DoctorResult({
   command,
   text,
   ok,
+  onRefresh,
 }: {
   command: string;
   text: string;
   ok: boolean;
+  /** Re-runs `/doctor` on the host (no model turn). Wired by the panel host. */
+  onRefresh?: () => void;
 }) {
   const snapshot = decodeDoctorSnapshot(text);
   if (!snapshot) {
     return <CommandResult command={command} text={text} ok={ok} />;
   }
-  return <DoctorPanel snapshot={snapshot} />;
+  return <DoctorPanel snapshot={snapshot} onRefresh={onRefresh} />;
 }

@@ -16,6 +16,7 @@ export {
   type DoctorSnapshotState,
   type DoctorStatus,
   type DoctorSummary,
+  formatDoctorReport,
   isIssue,
   overallStatus,
   rollupStatus,

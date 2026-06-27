@@ -185,6 +185,70 @@ export function isIssue(area: DoctorArea): boolean {
   return area.status === "warn" || area.status === "error";
 }
 
+/** Per-status prefix for a finding line in the copyable text report. */
+const REPORT_STATUS_TAG: Record<DoctorStatus, string> = {
+  ok: "OK",
+  warn: "WARN",
+  error: "FAIL",
+  not_checked: "----",
+};
+
+const REPORT_HEADLINE: Record<DoctorStatus, string> = {
+  ok: "Healthy",
+  warn: "Degraded",
+  error: "Problems found",
+  not_checked: "Not checked",
+};
+
+/**
+ * Renders a snapshot as a plain-text report for the "copy report" action. Built purely from the
+ * already-sanitized snapshot the host published, so it carries no secrets the dashboard doesn't
+ * already show: it reuses the same titles, messages, sources, evidence, and next actions. The
+ * output is paste-ready for a bug report or scratch note - one header line, one summary line, then
+ * each area with its facts, findings, and next actions.
+ */
+export function formatDoctorReport(snapshot: DoctorSnapshot): string {
+  const status = overallStatus(snapshot);
+  const summary = summarizeSnapshot(snapshot);
+  const lines: string[] = [];
+  lines.push(`Trevor /doctor - ${REPORT_HEADLINE[status]}`);
+  const freshness = snapshot.checkedAt ? `${snapshot.checkedAt} · ` : "";
+  lines.push(
+    `${freshness}${summary.total} areas · ${summary.error} error, ${summary.warn} warning, ${summary.ok} ok, ${summary.notChecked} not checked`,
+  );
+  if (snapshot.host?.workspace) {
+    lines.push(`workspace: ${snapshot.host.workspace}`);
+  }
+
+  for (const area of snapshot.areas) {
+    lines.push("");
+    lines.push(`## ${area.label} [${REPORT_STATUS_TAG[area.status]}] ${area.verdict}`.trimEnd());
+    for (const fact of area.facts ?? []) {
+      lines.push(`  - ${fact.label}: ${fact.value}`);
+    }
+    for (const finding of area.findings ?? []) {
+      lines.push(`  [${REPORT_STATUS_TAG[finding.status]}] ${finding.title} - ${finding.message}`);
+      if (finding.source) {
+        lines.push(`      source: ${finding.source}`);
+      }
+      if (finding.evidence) {
+        lines.push(`      evidence: ${finding.evidence}`);
+      }
+      if (finding.nextAction) {
+        lines.push(`      next: ${formatNextAction(finding.nextAction)}`);
+      }
+    }
+    if (area.nextAction) {
+      lines.push(`  next: ${formatNextAction(area.nextAction)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function formatNextAction(action: DoctorNextAction): string {
+  return action.command ? `${action.label} (${action.command})` : action.label;
+}
+
 /**
  * Defensively decodes a `/doctor` command-result string into a {@link DoctorSnapshot}. Returns null
  * for a legacy text dump, an `error:` line, or any non-snapshot body, so the web renders the

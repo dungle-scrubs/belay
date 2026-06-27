@@ -3,13 +3,14 @@ import { useState } from "react";
 import {
   type DoctorFinding,
   type DoctorSnapshot,
+  formatDoctorReport,
   isIssue,
   overallStatus,
   summarizeSnapshot,
 } from "@/commands/doctor";
 import { cn } from "@/lib/utils";
 import { DoctorAreaRow } from "./doctor-area-row";
-import { type DoctorSummaryActions, DoctorSummaryStrip } from "./doctor-summary";
+import { DoctorSummaryStrip } from "./doctor-summary";
 
 /**
  * The `/doctor` health surface: one panel, not a grid of cards. A quiet summary
@@ -24,16 +25,19 @@ import { type DoctorSummaryActions, DoctorSummaryStrip } from "./doctor-summary"
  */
 export function DoctorPanel({
   snapshot,
-  actions,
+  onRefresh,
   onAction,
   className,
 }: {
   snapshot: DoctorSnapshot;
-  actions?: DoctorSummaryActions;
+  /** Re-runs `/doctor` on the host (a no-model-turn immediate command). Omitted in
+   *  pure-presentational contexts; when unset the refresh control is hidden. */
+  onRefresh?: () => void;
   onAction?: (finding: DoctorFinding) => void;
   className?: string;
 }) {
   const [issuesOnly, setIssuesOnly] = useState(false);
+  const [jsonOpen, setJsonOpen] = useState(false);
 
   // Initial probe with nothing to show yet: a skeleton, not an empty panel.
   if (snapshot.state === "refreshing" && snapshot.areas.length === 0) {
@@ -45,8 +49,19 @@ export function DoctorPanel({
   const hasIssues = summary.error + summary.warn > 0;
   const areas = issuesOnly ? snapshot.areas.filter(isIssue) : snapshot.areas;
 
+  // Copy and JSON act on the already-sanitized snapshot the host published, so neither
+  // can leak anything the dashboard doesn't already show. Refresh comes from the parent.
+  const actions = {
+    onRefresh,
+    onCopyReport: () => void navigator.clipboard?.writeText(formatDoctorReport(snapshot)),
+    onViewJson: () => setJsonOpen((open) => !open),
+  };
+
   return (
-    <div className={cn("@container border border-border bg-card", className)}>
+    <section
+      aria-label="Doctor diagnostics"
+      className={cn("@container border border-border bg-card", className)}
+    >
       <DoctorSummaryStrip
         status={status}
         summary={summary}
@@ -54,8 +69,11 @@ export function DoctorPanel({
         checkedAt={snapshot.checkedAt}
         issuesOnly={issuesOnly}
         onIssuesOnlyChange={setIssuesOnly}
+        jsonOpen={jsonOpen}
         actions={actions}
       />
+
+      {jsonOpen ? <DoctorJsonView snapshot={snapshot} /> : null}
 
       {issuesOnly && !hasIssues ? (
         <AllClear total={summary.total} />
@@ -66,7 +84,22 @@ export function DoctorPanel({
           ))}
         </div>
       )}
-    </div>
+    </section>
+  );
+}
+
+/** The raw `doctor.current` payload, pretty-printed for inspection or a bug report.
+ *  It is the same sanitized snapshot the dashboard renders - no extra internals. */
+function DoctorJsonView({ snapshot }: { snapshot: DoctorSnapshot }) {
+  return (
+    <figure
+      aria-label="Doctor snapshot JSON"
+      className="m-0 border-b border-border bg-smui-surface-2/40 p-3"
+    >
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-label text-muted-foreground">
+        {JSON.stringify(snapshot, null, 2)}
+      </pre>
+    </figure>
   );
 }
 
