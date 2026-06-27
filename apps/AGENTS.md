@@ -154,10 +154,18 @@ async handler. A single uncontrolled input with no validation does not need it.
 Scope: React frontend apps (currently `apps/web`). Does **not** apply to the
 Node host.
 
-**Every interactive element gets `cursor-pointer`.** Anything a user can click,
-tap, or activate - `<button>`s, links styled as buttons, menu items, tabs,
-toggles, custom `role="button"` elements, clickable rows/cards - must carry
-Tailwind's `cursor-pointer`. This is explicit, not assumed: the browser default
-for `<button>` is `cursor: default`, so omitting it leaves clickable controls
-feeling inert. The only exception is the disabled state, which uses
-`disabled:cursor-not-allowed` and drops `cursor-pointer` while disabled.
+**Every interactive element shows a pointer cursor - enforced globally, not per
+component.** A base-layer rule in [`apps/web/src/index.css`](./web/src/index.css)
+gives `cursor: pointer` to every `<button>`, `[role="button"]`, tab, menu item,
+option, `<a href>`, `<summary>`, and `label[for]`, and `cursor: not-allowed` to
+anything `:disabled` or `[aria-disabled="true"]`. This exists because the browser
+default for `<button>` is `cursor: default` and shadcn buttons don't fix it, which
+left clickable controls feeling inert.
+
+Because the base rule covers it, **do not sprinkle `cursor-pointer` on individual
+components** - a standard `<button>` / `role="button"` is already correct. Only
+reach for an explicit Tailwind `cursor-*` when a control is NOT one of the matched
+selectors (e.g. a clickable plain `<div>` with no role - which you should usually
+give a proper role/button instead) or to deliberately override the base. If you
+ever find yourself adding `cursor-pointer` to a real button, the base rule is the
+bug to fix, not the component.

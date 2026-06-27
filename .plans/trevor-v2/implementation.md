@@ -107,7 +107,6 @@ what V2's scope cuts changed.
 | **Work kind** | `chat`, `plan`, `analysis`, `implement`, `review` | <!-- D-039 --> Defined but **inert** in V2 - not wired to routing/sampling/prompts; revisit later |
 | **Execution mode** | `direct`, `delegate_inline`, `delegate_background` | <!-- D-047 --> `direct` now; **inline (sync) + read-only background (async)** being built (D-047); teams deferred |
 | **Tool** | Executable capability owned by a run (read, edit, bash, rg, …) | - |
-| **Command family** | UI-neutral command contract: names, grammar, tokenization, diagnostics, protocol actions, examples, and preview metadata | <!-- D-067 --> Host owns authoritative command handling; clients render helpers from structured contract data, not from host-rendered UI |
 | **Prompt shell lane** | Interactive prompt input beginning with `!`, executed immediately by the host shell path and rendered as a user-owned terminal transcript item | <!-- D-082 --> Not shell interpolation and not a model turn; output is prompt-invisible for now |
 | **Prompt composer state** | Browser-tab-local draft text and prompt history used to recover in-progress typing and recall previous prompts | <!-- D-083 --><!-- D-084 --> Draft persistence and Up-arrow history are client UX features; they do not affect durable session history until submitted |
 | **Project-local skill root** | Per-project skill library discovered from the active workspace at `.agents/skills` | <!-- D-087 --> Project-local skills are loaded before the existing global/configured skill root so a repo can carry its own reusable workflows |
@@ -116,12 +115,6 @@ what V2's scope cuts changed.
 | **Assistant output style** | Named presentation overlay for response shape, density, and structure | <!-- D-072 --> Additive prompt overlay only; must not change model routing, work kind, execution mode, tool access, agent selection, or validation policy |
 | **Doctor snapshot** | Structured host health report with areas, checks, findings, evidence, and next actions | <!-- D-073 --> `/doctor` should render actionable diagnostics, not raw host/debug state dumps |
 | **Capability manifest** | Registry-derived self-description of Trevor tools, commands, contracts, agents, skills, runtime surfaces, and the `trevor-expert` explainer skill | <!-- D-074 --> Full manifest for humans/clients/export; compact scoped manifest for model/subagent context; deterministic source for Trevor explanation surfaces; never a permission system or giant prompt dump |
-| **Loop** | Recurring/cadence work spec with bounds, lifecycle, runner, controls, and confirmation | <!-- D-067 --> A host feature that works headlessly through commands/session protocol; Trevor web owns the rich helper UI |
-| **Web fetch** | Host-owned read-only URL content fetcher that turns an explicit public URL into bounded attributable content | <!-- D-068 --> `web_search` already exists; deferred work is `web_fetch`, with static-first fetching, direct Jina Reader fallback for JS-blocked/thin pages, and Firecrawl only as the configured last resort |
-| **Filesystem root** | One of Trevor's host-local roots for config, state, cache, share, or external auth | <!-- D-069 --> New work must use the clarified root taxonomy instead of inventing ad hoc dotdirs |
-| **Docs corpus** | Cached, normalized documentation pages fetched for a product/service/library/SaaS/work task | <!-- D-070 --> Stored under Trevor local state with source metadata and 24-hour staleness; fetched through `web_fetch` |
-| **MCP server** | Named external context/tool server configured in the host MCP registry | <!-- D-066 --> Tool proxy, if configured, is only one MCP server entry; it is not the MCP abstraction, bridge, or special case |
-| **MCP capability** | A tool, resource, prompt, elicitation request, or sampling request exposed by a named MCP server | <!-- D-066 --> Keep tools/resources/prompts distinct; resources are attributable context, prompts are imported prompt artifacts, and tools are executable external capabilities |
 | **Subagent** | Delegated agent in its own isolated context | <!-- D-045 --> **general-purpose + explorer + ephemeral definitions** being built (D-045…D-049); verifier / teams / bounded-child deferred |
 | **Bounded child** | Internal constrained helper; host-owned, returns a structured artifact | <!-- D-033 --> Backlog |
 | **Steering / hard steering** | User control mid-request; ordinary = recorded via turn/run; hard = interrupts the provider path | - |
@@ -409,62 +402,6 @@ exhaustion is indistinguishable from the model deciding it was finished.
 Self-contained (loop + turn + one event field) and independent of compaction (D-040) and concurrent reads
 (D-050), so it can land in any order relative to them - it is a correctness fix, so promote ahead of the
 perf work if the silent dead-ends bite. Decomposed for execution in `progress-report.md`.
-
-### Later (parked): per-turn tool-call guardrails <!-- D-054 -->
-
-Inspired by NousResearch Hermes' pure tool-call loop guardrail controller
-([`agent/tool_guardrails.py`](https://github.com/NousResearch/hermes-agent/blob/main/agent/tool_guardrails.py)).
-Hermes' useful shape is small: a side-effect-free per-turn controller observes tool calls/results, detects
-repeated exact failures and repeated read-only calls returning identical results, and returns a decision
-(`allow` / `warn` / `block` / `halt`). Runtime code decides whether that decision becomes model-visible
-guidance, a synthetic tool result, telemetry, or a controlled turn halt.
-
-This is parked behind the current cutoff. It complements graceful turn-budget termination (D-051…D-053), but
-does not replace it: the budget feature governs how a long turn ends; guardrails steer the model *before* it
-burns the whole budget retrying the same failed/no-progress tool path. Pick it up after the loop-budget and
-read-only-concurrency work if repeated tool loops remain visible in real runs.
-
-- <!-- D-054 --> **Pure per-turn controller, not a permission system.** Add a small host module
-  (e.g. `apps/agent-host/src/agent/tool-guardrails.ts`) that owns only in-memory, per-turn observation:
-  canonicalize tool arguments, hash them, record exact failure counts, record read-only same-result counts,
-  and return typed decisions. It must not execute tools, mutate conversation history, publish events, read
-  config from global state, persist lessons, or decide policy/permissions. The loop (`runAgent`) owns how to
-  surface the decision, keeping the same separation Hermes uses.
-- <!-- D-055 --> **Tool purity comes from the registry.** Do not copy Hermes' hardcoded idempotent/mutating
-  name lists. Reuse the D-050 `readOnly?: boolean` metadata on `Tool` and the derived read-only registry
-  (`READ_ONLY_TOOLS`) as the single source of truth. A tool omitted from `readOnly` is a serial/mutating
-  barrier and is excluded from same-result no-progress detection by default. `read`, `glob`, `grep`, and
-  `web_search` can opt in; `write`, `edit`, `multi_edit`, `bash`, `process`, task tools, and dynamic skill
-  tools stay excluded unless explicitly proven read-only.
-- <!-- D-056 --> **Redacted fingerprints only.** Public events, logs, and UI markers carry tool name, action,
-  count, short reason code, and sha256 fingerprints of canonical args/results - never raw arguments or raw
-  output. Canonicalization should parse JSON tool args when possible, sort object keys, use compact JSON, and
-  hash the normalized value. Result hashing should parse structured JSON when possible and fall back to the
-  raw string. This follows both Hermes' `ToolCallSignature` shape and Trevor V1's
-  `ToolProgressMonitor.fingerprintToolValue` pattern.
-- <!-- D-057 --> **V2 failure classification is simple and local.** Because V2's `executeTool` renders typed
-  tool failures into one model-facing `error: ...` string, the first version can classify failures from that
-  convention instead of porting V1's full structured-output detector. Exact repeated failure = same tool +
-  same arg fingerprint + same normalized error/result fingerprint. A successful mutating result clears the
-  matching failure/no-progress entry for that signature. If later tools return richer typed output, extend the
-  classifier at the tool boundary, not with broad substring heuristics across the transcript.
-- <!-- D-058 --> **Warn first; hard stops stay opt-in.** Defaults should be advisory: after a low threshold
-  (e.g. two exact failures or two identical read-only results) append concise provider-visible guidance to
-  the tool result and emit a redacted `tool.guardrail`/`tool.progress` event for the UI. Hard blocking should
-  be an explicit config or runtime option and, when enabled, return a synthetic retryable tool result rather
-  than throwing out of the loop. The message should tell the model to inspect the latest error/output, change
-  arguments or strategy, or report the blocker after one diagnostic attempt. It must not tell the model to stop
-  using tools entirely.
-- **V1 overlap to reuse cautiously:** `~/dev/trevor/packages/agent-host/src/agent/tool-progress-monitor.ts`
-  already proves the useful Trevor-specific pieces: hash-only progress signals, repeated idempotent
-  no-progress detection, repeated-failure warnings, optional synthetic blocked results, mutating-tool
-  exclusion through tool metadata, and provider-visible recovery guidance. Do **not** port V1's durable
-  "Tool Progress Lessons" persistence/classifier in this slice; that belongs with a later learning/memory
-  feature if it is still wanted. The first V2 cut is per-turn only.
-- **Validation when picked up:** add focused host tests for (1) repeated read-only same-result warning,
-  (2) repeated exact failure warning, (3) mutating tools excluded from no-progress comparison, (4) optional
-  synthetic blocked result, (5) no raw args/output in emitted events, and (6) integration with the D-051
-  forced-synthesis path so a guarded loop still produces a final answer or explicit terminal reason.
 
 ### Then: subagents <!-- D-045 -->
 
@@ -1269,20 +1206,6 @@ Sequence as each is picked up (no hard order locked here):
   shared auth-store integration, and provider catalog status (H-019, H-155).
 - **Internet connectivity awareness** is specified above as D-060: host-owned public-internet status only, with
   no automatic local/cloud switching or retry behavior (H-026, H-093).
-- **MCP client runtime** is specified below as D-066: generalized host-owned MCP server registry and client,
-  not a tool-proxy-centered bridge (H-119, H-160).
-- **`/loop` command surface** is specified below as D-067: host-owned recurring/cadence work, explicit slash
-  grammar, shared preview contract, rich Trevor web helper UI, controls, lifecycle, and separately deferred
-  natural-language loop drafting (H-029, H-169).
-- **`web_fetch`** is specified below as D-068: explicit public-URL content fetch, static first, direct Jina
-  Reader fallback for JS-blocked/thin pages, Firecrawl only after Jina cannot produce usable content and
-  `FIRECRAWL_API_KEY` is configured, graceful disabled state when not configured (H-113).
-- **Filesystem root taxonomy** is specified below as D-069: config in `~/.trevorV2` for now, disposable cache
-  in `~/.cache/trevor`, local state in `~/.local/state/trevor`, shareable local data in
-  `~/.local/share/trevor`, pi-ai auth in `~/.pi`, shared agent assets in `~/.agents`, and optional
-  `~/.config/trevor` only when an explicit config-dir export points there.
-- **`docs` tool** is specified below as D-070: documentation-set lookup and caching over `web_fetch`, stored
-  in `~/.local/state/trevor/docs`, stale after 24 hours, with bounded crawling and provenance.
 - **`/clip` + `clipboard_write`** is specified below as D-071: V1-compatible clipboard write surface with a
   bare host command and a restricted prompt form (H-111).
 - **Settings & preferences** for model/provider/thinking mode are specified as part of D-065; deeper
@@ -1369,13 +1292,6 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 
 | Bucket | V1 ref | Notes |
 |---|---|---|
-| **LSP integration** | H-022, H-116, H-161 | <!-- D-063 --> deferred. First cut is read-only and pull-based, carrying forward the useful Trevor V1 shape plus one explicit V2 addition: list/status, diagnostics, hover, document symbols, workspace symbols, and code actions as proposals. No ambient diagnostic stream and no prompt injection except as an explicit tool result. Mutating LSP behavior - `applyWorkspaceEdit`, applying code actions, rename edits, and any future workspace edit surface - stays deferred behind a separate implementation phase |
-| **MCP client runtime** | H-119, H-160 | <!-- D-066 --> deferred. Generalized host-owned MCP server registry and client for tools, resources, prompts, elicitation, sampling mediation, auth, lifecycle, discovery, diagnostics, prompt guidance, and evals. Tool proxy is not a bridge or special path; if configured, it is one named MCP server like any other |
-| **Hooks runtime** | H-036, H-162 | <!-- D-064 --> deferred. First cut is narrow command hooks for `PreToolUse` and `Stop`, not a general plugin bus. Preserve the useful V1 shape: sha256 trust, local/user/shared discovery, explicit decisions, visible events, `/doctor` diagnostics, and non-blocking failures unless a hook explicitly returns a blocking decision |
-| **`/loop` command surface** | H-029, H-169 | <!-- D-067 --> deferred. Host-owned recurring/cadence work feature with a UI-neutral command-family contract. Core loop creation/control works headlessly through explicit commands and structured session protocol; Trevor web adds the rich live helper, syntax highlighting, used/available keyword guide, and confirmation UI. Natural-language loop drafting is a later layer |
-| **`web_fetch` tool** | H-113 | <!-- D-068 --> deferred. Add the missing companion to shipped `web_search`: fetch an explicit public URL into bounded attributable markdown/text. Static fetch/extraction is the default. Direct Jina Reader is the first JS-blocked/thin-page fallback. Firecrawl is the final rendered-page fallback only when Jina cannot produce usable content and `FIRECRAWL_API_KEY` is configured; missing Firecrawl config disables that path gracefully |
-| **Filesystem root taxonomy** | new | <!-- D-069 --> deferred cleanup/standard. New stateful features use the clarified roots immediately; existing `~/.trevor` service-data defaults are migration debt |
-| **`docs` tool** | new | <!-- D-070 --> deferred. Higher-level documentation lookup/cache tool over `web_fetch`; stores normalized docs corpora in `~/.local/state/trevor/docs`, treats entries as stale after 24 hours, and refreshes intentionally |
 | **Tangents** | H-030 | lateral exploration side-threads |
 | **Bounded-child + takeover** | H-024, H-025, H-086 | host-owned constrained helpers + route escalation/takeover |
 | **Managed worktrees + cwd locks + merge protocol** | H-140 | <!-- D-091 --> promoted to §6. Stable per-session git worktrees (paths/branches/hashes), cwd-level advisory locks, and a merge/reconciliation protocol remain prerequisite for mutating background subagents |
@@ -1395,243 +1311,6 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Headless CLI / TypeScript SDK / harness** | new | <!-- D-095 --> deferred discussion. V2 is currently headless-capable at the session transport and host-runtime layer, but the productized access surface is not designed yet. Later discussion must cover CLI commands, TypeScript package boundaries, launch/attach semantics, prompt streaming, session inventory/lifecycle, artifact upload, cancellation, safety, and test-harness ergonomics. This is separate from the dropped single-prompt `SDK ask()` shortcut and does not reintroduce that API by default |
 | **Local observation corpus / classifier learning** | new | <!-- D-096 --> deferred pattern. Store redacted, deduped unclassified observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so Trevor can improve classifiers and harness guidance over time. Provider failure observations from D-076 are the first use; later candidates include tool-result patterns, repeated tool calls, number of attempts to reach a goal, prompt/harness guidance signals, and possible model task classification. Observations are inspectable on demand and never automatically injected into prompts |
 | **Vim motions in UI/UX** | new | <!-- D-097 --> deferred discussion. Evaluate https://github.com/vimeejs/vimee for adding Vim-style motions to Trevor UI/UX, starting small with the prompt input before considering broader navigation or editing surfaces |
-
-**LSP posture (deferred).** <!-- D-063 --> LSP remains unsequenced. When picked up, it should be an
-intentional navigation and problem-solving aid, not a real-time side channel. The host may keep language
-servers warm and cache lifecycle state, but LSP findings enter the model context only when the agent chooses
-an `lsp` tool call. Slow, missing, unsupported, or stale servers return bounded `lsp-unavailable` /
-`lsp-error` results so the agent can continue with `rg`, `ast_grep`, file reads, tests, compiler output, and
-ordinary reasoning. Code actions are read-only proposals in the first cut; applying edits is a later mutating
-phase with explicit user-visible tool semantics.
-
-Prompt guidance is part of the feature, not polish:
-
-- **Use LSP proactively at chosen moments** when the task is about program structure or typed facts:
-  `documentSymbols` to understand one file's real outline; `workspaceSymbols(query)` to find named
-  definitions/entities across the project instead of grepping mentions; `hover` for inferred types,
-  signatures, overloads, and doc facts at a position; targeted `diagnostics` after localized edits or when
-  type errors are blocking; `codeActions` as read-only repair/import/refactor proposals; and compact LSP
-  results to avoid dumping broad file context when one symbol/type fact is enough.
-- **Do not use LSP as the default search engine or truth source** for literal text, docs, config, tests,
-  route strings, environment keys, broad content search, structural pattern search, unsupported languages, or
-  build/test correctness. Keep `rg` for text, `ast_grep` for structural code patterns, direct file reads for
-  source truth, and tests/typecheck/compiler output as the final correctness signal.
-- **Invocation discipline:** no full-project symbol dump, no automatic background diagnostic feed, no
-  pre-edit gate that waits on a language server, and no automatic application of code actions. Calls must be
-  query-driven, capped, time-bounded, and represented as explicit tool results. If LSP is unavailable, stale,
-  noisy, or slow, continue through normal read/edit/test work.
-- **Evals required when implemented:** include navigation tasks where `workspaceSymbols` should beat grep,
-  file-orientation tasks where `documentSymbols` should reduce context, typed-code repair tasks where
-  `hover`/`diagnostics` should reduce churn, code-action proposal tasks that must not mutate files, and
-  distraction regressions proving unavailable/noisy/slow LSP does not block progress or make the model chase
-  unrelated findings.
-
-**MCP posture (deferred).** <!-- D-066 --> MCP remains unsequenced. When picked up, preserve the useful
-Trevor V1 generalized MCP client shape, but make MCP itself the product abstraction. Do not model this feature
-as "tool proxy integration." Tool proxy is just one possible configured MCP server, no different in the MCP
-runtime from a GitHub server, docs server, browser server, design server, or any other named MCP endpoint.
-
-The first V2 MCP implementation should include:
-
-- **Named server registry.** Host-owned config defines named servers with `enabled`, transport, endpoint or
-  command/args, per-server exposure flags for tools/resources/prompts, request timeout, auth config, and
-  redacted debug representation. Carry forward V1's transports: `stdio`, `streamable_http`, and `sse`.
-- **Lifecycle and transport behavior.** The host initializes servers with the MCP handshake, preserves
-  `mcp-session-id` for HTTP transports, closes transports on host/session shutdown, and rejects pending
-  requests on timeout, JSON-RPC error, child crash, connection close, or malformed response. Stdio framing must
-  handle partial frames, multiple frames in one buffer, case-insensitive `Content-Length`, and byte-counted
-  multibyte bodies.
-- **Secret and auth boundary.** Stdio children inherit only an allowlisted environment plus explicit server
-  env, never the host's full provider/API-key environment. HTTP servers support bearer auth and OAuth-needed
-  state through a credential-store boundary. Logs, `/doctor`, debug info, and tool results redact auth headers,
-  bearer tokens, configured env values, and sensitive URL material.
-- **Capabilities stay separate.** MCP tools, resources, and prompts are different host concepts. Tool calls are
-  executable external actions. Resources are attributable context records and must not be logged as tool
-  execution. Prompts are imported/expanded prompt artifacts and must not be collapsed into Trevor slash
-  commands. Elicitation and sampling are server-originated requests that cross back into the host only through
-  explicit host-owned mediation.
-- **Qualified identity and provenance.** Every discovered item carries `serverName`, transport, original MCP
-  name, qualified name, input/argument schema when available, and source provenance. Same-named tools or
-  prompts on different servers are normal and must be selected by qualified identity, not by last-wins merging.
-- **Model-facing surface.** V2 should expose MCP as MCP, not as a `tool_proxy` tool. The model-facing schema may
-  be a single `mcp` tool with typed actions or a small `mcp_*` family, but it must support capability
-  discovery/search, tool calls, resource list/read, prompt list/get, server status, and bounded result output
-  without dumping every configured server's full catalog into the prompt. Tool proxy-specific names must not
-  leak into the generic MCP prompt guidance.
-- **Discovery and cache strategy.** The host can keep server transports warm and maintain capability caches, but
-  model context receives MCP data only through explicit tool results. Support `refreshCapabilities(serverName)`
-  and `searchTools(query)`-style access so large dynamic catalogs are searched, capped, and attributed instead
-  of injected wholesale.
-- **Tool metadata and safety.** MCP calls flow through the normal Trevor tool boundary: tool events, redaction,
-  truncation, hooks when hooks exist, cancellation, and concurrency classification. Unknown MCP tools default to
-  external/network, identity-dependent, variable-idempotence behavior and are not considered read-only for
-  concurrent-read scheduling unless the server/tool is explicitly classified as read-only. Workspace mutation
-  and external-service mutation are separate risks and should be surfaced separately.
-- **Server-originated requests.** Elicitation uses a host-owned answer callback and can decline/cancel when no
-  UI/agent path is available. Sampling is off by default unless explicitly enabled with budget limits and a
-  sampling handler; accepted sampling returns only handler output and sanitized usage, not private model
-  preferences or provider secrets.
-- **Diagnostics.** `/doctor`, debug info, and UI status should report per-server configured/ready/auth_needed/
-  failed/closed state, transport, redacted endpoint/command, exposure flags, capability-count/cache freshness,
-  last checked time, and sanitized last error. Service-specific health for a tool-proxy daemon, if any, belongs
-  to the service launcher/diagnostic layer; it is not a special MCP runtime category.
-- **Prompt guidance.** The agent should discover/search MCP when the user asks for an external integration,
-  account-backed service, configured external tool, remote resource, imported prompt, or server-specific
-  capability. It should call known qualified MCP tools directly when already discovered. It should read MCP
-  resources for context, get MCP prompts when the user asks to apply an imported prompt, and avoid broad
-  discovery when built-in Trevor tools (`rg`, `ast_grep`, file reads, LSP, web tools, or shell) are the clearer
-  fit. It must not assume a configured tool-proxy server exists or privilege it over other MCP servers.
-- **Validation required.** Tests/evals must cover config normalization/redaction, stdio and HTTP transports,
-  SSE compatibility, HTTP auth/session headers, OAuth-needed state, no full env inheritance, stdio framing,
-  request timeout/crash/error draining, same-named qualified tools, resources as context, prompts as prompt
-  artifacts, elicitation decline/accept, sampling budget rejection/acceptance, capability refresh/search
-  without full-catalog prompt dumps, per-server diagnostics, and a configured tool-proxy server behaving exactly
-  like any other MCP server.
-
-**Hooks posture (deferred).** <!-- D-064 --> Hooks are future work and should enter as a local policy/context
-mechanism at explicit lifecycle boundaries, not as an open-ended extension platform. The first cut has exactly
-two event types:
-
-- **`PreToolUse`** fires before a tool executes. Its payload includes session/run/turn IDs, cwd, tool name,
-  tool input, tool metadata, and caller kind. It can return `allow`, `deny`, `halt`, bounded `context`, and
-  narrowly scoped `updatedInput`. `updatedInput` is allowed only for explicit tool-input fields the host
-  chooses to support; it must never rewrite hidden state or bypass tool validation.
-- **`Stop`** fires when a run is about to finalize a terminal assistant result. Its payload includes
-  session/run/turn IDs, cwd, terminal reason, final assistant text, and a compact tool/change summary when
-  available. It can `allow` completion, `halt` completion with a user-visible reason, or return bounded
-  `context` that asks the agent for at most one continuation/synthesis pass before finalizing. It cannot
-  mutate files, rewrite prior events, or apply tools directly.
-
-The V2 first cut should keep V1's useful constraints and tighten the risky parts: command handlers only;
-explicit `args` arrays with no shell splitting by default; low default timeouts; bounded stdout/stderr;
-secret redaction; trust hashes over normalized config plus referenced local script contents; approval required
-before executing project/user hooks; `/doctor` findings for missing handler IDs, missing local scripts,
-changed trust hashes, slow handlers, repeated timeouts, and legacy executable `HOOK.md` migration. Hook
-command failures, invalid JSON, and timeouts are observable but non-blocking unless the hook returns an
-explicit `deny`, `halt`, or `Stop` continuation decision. Do not include PostToolUse hooks, native extension
-dispatch, model-routing hooks, long-running hook daemons, or arbitrary plugin APIs in the first cut.
-
-**Filesystem root taxonomy (target).** <!-- D-069 --> Trevor needs one explicit host-local filesystem policy.
-Current code still has legacy/default service data under `~/.trevor` (`sessions.db`, blob-store root), while
-local package scripts use `~/.trevorV2/.env.op` for config. Treat that as current implementation state plus
-migration debt, not as permission to keep adding ad hoc dotdirs. New stateful features should use the target
-taxonomy immediately.
-
-Target roots:
-
-- **Config root:** `~/.trevorV2` for now, eventually renamed/migrated to `~/.trevor`. This is for Trevor
-  config, env/opchain files, local preferences, and non-pi model/provider configuration that belongs to
-  Trevor. `~/.config/trevor` is allowed only when an explicit export variable points the config root there;
-  do not create or prefer it by default.
-- **Disposable cache root:** `~/.cache/trevor`. Use for rebuildable data that can be deleted without losing
-  meaningful user state: HTTP cache fragments, derived indexes, temporary extraction products, and other
-  performance caches.
-- **Local state root:** `~/.local/state/trevor`. Use for durable local machine state that is not just config:
-  session databases, local service state, normalized docs corpora, durable local indexes, and state that should
-  survive cache cleanup but is not portable share content.
-- **Local share root:** `~/.local/share/trevor`. Use only for shareable, portable local data if Trevor gains
-  such assets. Do not put machine-local service state here.
-- **External ownership:** model auth stays in `~/.pi` because pi-ai owns that auth store; shared agent assets
-  stay in `~/.agents`. Trevor may read or integrate with those locations, but it must not re-home them.
-- **Environment overrides.** Every root should have a deliberate override path once implemented, with the
-  config-root override enabling `~/.config/trevor` for users who export it. Overrides must be visible in
-  `/doctor`, and logs should show redacted/abbreviated paths.
-- **Migration posture.** Do not move existing `~/.trevor` data opportunistically in unrelated work. When the
-  state-layout cleanup is picked up, add a compatibility/migration pass for current `~/.trevor/sessions.db`
-  and `~/.trevor/blobs` defaults into the target local-state layout, with explicit backup/rollback behavior.
-
-**Web fetch posture (deferred).** <!-- D-068 --> `web_search` is already shipped; the missing feature is
-`web_fetch`, a host-owned read-only tool that fetches one explicit public URL and returns bounded,
-attributable content for source verification. It is the source-reading companion to search, not a replacement
-for search, not an authenticated browser, and not a general browsing automation surface.
-
-The first V2 `web_fetch` implementation should include:
-
-- **Explicit URL only.** The tool accepts a single URL and optional mode/cap settings. It does not search,
-  click around, follow user browser cookies, reuse logged-in sessions, or fetch authenticated/private pages.
-  It should reject unsupported schemes, userinfo URLs, loopback/private/link-local/cloud-metadata targets, and
-  unsafe redirect hops through a Trevor-owned URL safety guard before any fetch backend runs.
-- **Static-first fetch path.** Default behavior is ordinary static HTTP fetch plus deterministic extraction:
-  HTML to readable markdown/text, text/plain and JSON as bounded text, and PDF support only if a safe parser is
-  chosen during implementation. Return metadata such as original URL, final URL, title when known, content
-  type, status, fetched time, byte count, text length, truncation info, and backend. Static fetch must be tried
-  first for `mode: "auto"` and is the only path for `mode: "static"`.
-- **Jina Reader is the first rendered/thin-page fallback, called directly.** Do not route through Dendrite or
-  any Python scraper. When static extraction fails or is clearly a JS shell, try Jina Reader directly
-  (`https://r.jina.ai/<target-url>`) as the first third-party recovery path. Treat it as external egress:
-  apply Trevor's URL safety guard before sending the target URL, cap bytes/time/text, record provenance, and
-  support an optional Jina API key only if implementation needs higher limits. If Jina returns empty/thin
-  content, an error, a blocker page, or unusable markdown, continue to the Firecrawl decision.
-- **Firecrawl is the last rendered-page fallback, and disabled gracefully when absent.** Use the official
-  Firecrawl Node SDK (`firecrawl`) with `FIRECRAWL_API_KEY` when Firecrawl rendering is configured. If the key
-  is absent, do not advertise or call the Firecrawl backend; return a structured `rendered_fetch_unavailable`
-  result only when static extraction and Jina cannot produce usable content or when the caller explicitly
-  requested rendered content.
-- **Do not accidentally spend Firecrawl calls.** Firecrawl must never be the default for every fetch. In
-  `mode: "auto"`, the ladder is static fetch, then Jina only when static content is empty/thin or
-  render-blocked, then Firecrawl only if Jina cannot get usable content and `FIRECRAWL_API_KEY` is present. In
-  `mode: "rendered"`, skip static if necessary but still try Jina before Firecrawl unless implementation adds
-  an explicit Firecrawl-only override. Prompt guidance must tell the model that Firecrawl is a scarce final
-  fallback, not a routine source-reading step.
-- **Bounded Firecrawl request shape.** Ask Firecrawl for markdown/main content only in the first cut. Do not
-  use Firecrawl search, crawl, map, extract/JSON, screenshots, interact/actions, persistent profiles,
-  customer headers/cookies, enhanced proxy, or broad site crawling in this feature. Apply Trevor result caps
-  after Firecrawl returns, and surface Firecrawl metadata/provenance without exposing secrets.
-- **Graceful degradation.** Jina errors, Jina rate limits, missing `FIRECRAWL_API_KEY`, Firecrawl rate limit,
-  timeout, provider error, or unavailable SDK must not fail the whole agent turn. The tool returns a typed
-  result explaining whether static content was returned, Jina was attempted, Firecrawl was unavailable, or all
-  allowed paths failed. `/doctor` should report Jina reachability/status and Firecrawl configured/unconfigured
-  plus last sanitized errors.
-- **Prompt guidance.** Use `web_search` to discover candidate sources, then `web_fetch` to read a selected URL
-  when source detail matters. Use static fetch by default. Use Jina only when static fetch is unusable or the
-  user/model explicitly needs rendered/thin-page recovery. Use Firecrawl only when Jina cannot get usable
-  content and Firecrawl is configured. Prefer local repo files, LSP, `rg`, and `ast_grep` for workspace truth;
-  do not browse or fetch when the answer should come from local code.
-- **Validation required.** Tests/evals must cover static HTML extraction, plain text/JSON, redirects,
-  blocked internal/private targets, byte/time/text caps, truncation metadata, `web_search` result followed by
-  `web_fetch`, Jina attempted only after static failure/thinness, Firecrawl absent but static/Jina success,
-  Firecrawl absent plus render-required page returning a graceful unavailable result, Firecrawl present only
-  after Jina cannot produce usable content, explicit rendered mode, rate limit/provider error handling,
-  `/doctor` status, and prompt regressions proving the model does not call Firecrawl for ordinary pages.
-
-**Docs tool (deferred).** <!-- D-070 --> Add a model-facing `docs` tool for documentation lookup and local
-docs-corpus caching across anything relevant to work: coding libraries, services, SaaS products, APIs,
-platforms, internal tools with public docs, and operational references. It is not a new fetch stack. It is a
-higher-level documentation workflow built on `web_search` for discovery and `web_fetch` for source reading.
-
-The first V2 `docs` implementation should include:
-
-- **Tool purpose.** `docs` answers "get/use the docs for X" by resolving a documentation root or a supplied
-  URL, fetching a bounded docs set, storing normalized pages plus metadata, and returning a concise index or
-  relevant excerpts to the model. The model should use it proactively when it needs current docs rather than
-  relying on memory.
-- **Storage root and shape.** Store under `~/.local/state/trevor/docs` per D-069. Each corpus has a stable key
-  derived from source identity, root URL, and optional version. Store page markdown/text, source URL, final URL,
-  fetched time, stale-after time, title, content type, fetch backend/provenance, content hash, and any
-  crawl/discovery metadata needed to refresh predictably.
-- **Freshness.** Docs entries go stale after 24 hours. A fresh corpus is reused without re-fetching by default.
-  A stale corpus may be refreshed on the next `docs` call before use, or returned with stale metadata only if
-  the caller explicitly allows stale use. Manual refresh should be supported.
-- **Bounded discovery.** "All docs" means all docs inside a deliberate bounded scope, not an unlimited website
-  crawl. Prefer official docs roots, `llms.txt`/`llms-full.txt`, sitemap/docs index pages, and same-origin or
-  same-path documentation links. Enforce max pages, max bytes, max depth, same-domain/path scope, robots or
-  site policy where applicable, and visible truncation when a corpus is partial.
-- **Fetch backend.** Use `web_fetch` for page reads so the existing static/Jina/Firecrawl ladder, URL safety
-  guard, caps, and provenance are reused. `docs` must not call Firecrawl directly or create a parallel web
-  scraper. Any Firecrawl usage happens only inside `web_fetch` under D-068's restrictions.
-- **Corpus query behavior.** The tool should support at least: resolve/fetch docs for a subject, refresh a
-  corpus, search within an existing corpus, read a specific cached page, list cached corpora, and report
-  freshness/provenance. Large corpora should return compact ranked excerpts plus citations, not dump every page
-  into the prompt.
-- **Prompt guidance.** Use `docs` when the task needs product/API/service/library documentation, especially
-  current syntax, provider setup, limits, pricing rules, SDK behavior, SaaS admin workflows, or external
-  platform docs. Do not use `docs` for source-code truth inside the current workspace; use repo files, LSP,
-  `rg`, `ast_grep`, tests, or compiler output. Do not fetch enormous docs sets when one specific page or
-  `web_fetch` URL is enough.
-- **Validation required.** Tests/evals must cover corpus keying, 24-hour staleness, fresh cache reuse,
-  stale refresh, manual refresh, bounded docs discovery, `llms.txt`/sitemap/index handling, partial-corpus
-  metadata, source citations, search within cached docs, no direct Firecrawl calls from `docs`, no workspace
-  truth substitution, and graceful behavior when network fetches fail after a stale corpus exists.
 
 **Clipboard write surface (deferred).** <!-- D-071 --> Add a V1-compatible `clipboard_write` host tool and
 `/clip` slash command. This is a plain-text clipboard write feature, not a clipboard-reading feature, not an
@@ -1703,9 +1382,9 @@ The first V2 output-style implementation should include:
   style-list/chooser contract: Trevor web may render a picker, while headless clients can receive a structured
   list and usage result.
 - **Settings and persistence.** Surface `outputStyle`, `outputStyleSource`, and available style metadata in
-  settings/read-model output. Persist explicit user preference under the D-069 local-state root, not in
-  disposable cache. If project/global config defaults are supported, keep them distinct from user local state
-  and avoid rewriting config when the user changes a local preference.
+  settings/read-model output. Persist explicit user preference under the root selected by the standalone
+  filesystem-root-taxonomy plan, not in disposable cache. If project/global config defaults are supported, keep
+  them distinct from user local state and avoid rewriting config when the user changes a local preference.
 - **Run attribution.** Each run records the active output style and source at turn start for reproducibility,
   debugging, and transcript inspection. Changing style mid-session affects later turns, not already-started
   provider calls.
@@ -1872,61 +1551,6 @@ The first V2 discovery implementation should include:
   loading, UI rendering from host read models, non-web client usability, and a model-behavior eval where the
   agent notices a relevant listed skill and opens only that skill.
 
-**Loop command surface (deferred).** <!-- D-067 --> `/loop` is a host feature with a UI-neutral command
-contract, not a Trevor web-only macro. The authoritative loop domain lives in the host: parse/validate,
-draft, confirm, run, schedule, pause, resume, stop, delete, persist durable loops, emit status, and enforce
-bounds, timeouts, cancellation, and permissions. The rich helper belongs to Trevor web, but the core command
-and control surface must still work from any client that can send command/session-protocol events.
-
-The first V2 loop implementation should carry forward V1's explicit command surface:
-
-- **Command family contract.** Define `/loop` and `/loops` as a shared command family with names, aliases,
-  grammar keywords, control verbs, tokenization, diagnostics, examples, and preview metadata. The web can
-  import the shared parser for per-keystroke preview; the host must re-parse authoritatively on submit.
-  Other clients may ignore the rich preview and still submit explicit commands and receive ordinary command
-  results/status events.
-- **Explicit slash grammar.** Support creation with optional `new`, runner aliases `current`, `session`,
-  `background`, and `process`, optional `durable`, and the grammar keywords `max`, `every`, `until`,
-  `timeout`, and `do`. Support controls through `/loop list`, `/loops`, `/loop stop <id>`,
-  `/loop pause <id>`, `/loop resume <id>`, `/loop delete <id>`, `/loop run-now <id>`, and `/loop clear`
-  if clear remains wanted at implementation time.
-- **Quote and duration rules.** Double-quoted spans are single values; unquoted `do` and `until` values are
-  single-token only. The helper and diagnostics must make this visible so multi-word actions and conditions
-  are quoted. Durations accept compact units such as `ms`, `s`, `sec`, `m`, `min`, `h`, and `hr`; bare
-  numeric durations default to seconds if that V1 behavior is retained.
-- **Validation diagnostics.** Creation requires both an action via `do` and at least one deterministic
-  bound/cadence: `max`, `until`, `every`, or `timeout`. Diagnostics should distinguish missing action,
-  missing bound, invalid `max`, invalid duration, empty `until`, empty action, and unknown tokens. Explicit
-  `/loop` text is parsed deterministically; no model is involved in the slash-command path.
-- **Shared preview model.** The parser returns command mode, tokens with `command`/`keyword`/`value` kinds,
-  parsed fields, used keywords, available keywords, missing requirements, diagnostics, and `ready`. This is
-  the UI bridge. The host does not render rows, chips, colors, or layouts.
-- **Trevor web helper.** The web UI should provide the rich V1-style experience: `/loop` discovery through
-  the slash menu, a live committed helper after `/loop `, syntax highlighting, a used/available keyword
-  legend, rows for runner/max/every/until/timeout/action/durability, missing-field hints, ready state, and
-  loop inventory controls. This helper is the first-class Trevor experience, but not a requirement for other
-  clients.
-- **Runtime semantics.** Carry forward the runner categories: current-session prompt, background-agent
-  prompt, and process command. Bodies are prompt text or shell command text. Lifecycle is explicit:
-  draft/pending confirmation, running, paused, stopped, completed, failed, and deleted. Stop reasons include
-  max-iterations, until-satisfied, timeout, cancelled/stopped, and error. Cadence loops have one active timer
-  per loop and can be run immediately through `run-now`.
-- **Safety and observability.** Process loops run through the same command/process safety boundary, timeout,
-  cancellation, redaction, status events, and diagnostics as other host command execution. Recurring work must
-  never become unbounded by default: every loop needs a stop/cadence bound, visible status, and explicit user
-  controls. Durable loops must survive restart without losing their last-known status or next-run time.
-- **Natural-language drafting is deferred.** Do not include natural-language loop creation in the first
-  `/loop` command-surface implementation. Later, add an agent tool that knows when a user is asking for
-  repeated work and returns a structured semantic loop draft. That tool should infer only fields the user
-  stated, never start execution directly, compile through the same validator, ask for clarification when the
-  action or bound is missing, and require confirm/edit/cancel before activation.
-- **Prompt guidance and evals.** The model prompt should say to use explicit `/loop` commands when the user
-  types or asks for the command surface, and not to invent hidden recurring work. When the deferred
-  natural-language tool exists, guidance should cover when to call it and when to ask for a plain one-off
-  turn instead. Evals must cover grammar parsing, quote requirements, duration parsing, diagnostics, helper
-  preview metadata, headless command/control operation, process/current/background runner behavior,
-  persistence, cancellation, and the later natural-language draft tool's confirmation gate.
-
 ## 8. Assumptions
 
 | Code | Assumption | Status |
@@ -1955,29 +1579,6 @@ The first V2 loop implementation should carry forward V1's explicit command surf
   ends via `Stream.empty` and reads as a clean `assistant.completed`, with no answer and no signal - on the
   local 4-bit at 64k this hit five consecutive turns at the window's 16-18%. Addressed by graceful turn-budget
   termination (D-051…D-053): observable exit, forced synthesis, context-pressure budget.
-- **Ambient LSP feedback can degrade agent work (D-063).** A constant diagnostic feed, automatic prompt
-  injection, or edit-gating language-server wait would compete with the normal read/edit/test loop and can
-  make the agent chase stale or low-priority findings. Mitigation: LSP is pull-only, bounded, and optional.
-  It never blocks ordinary tool use; unavailable or slow servers degrade to `lsp-unavailable` / `lsp-error`,
-  and the agent falls back to `rg`, `ast_grep`, direct file reads, tests, and compiler output.
-- **MCP can become prompt/tool noise or an unsafe external mutation path (D-066).** Dumping all server
-  catalogs into the prompt, treating tool proxy as a special bridge, or assuming every MCP tool is read-only
-  would make agent behavior worse and blur external-service risk. Mitigation: MCP is explicit, qualified,
-  searched/capped, redacted, and routed through normal Trevor tool events, metadata, hooks, diagnostics, and
-  evals.
-- **Web fetch can leak URLs to third parties or spend Firecrawl calls too freely (D-068).** `web_fetch` reads
-  arbitrary public URLs, and Jina/Firecrawl are external services. Mitigation: Trevor applies its own URL
-  safety guard before every backend, uses static fetch first, calls Jina only for unusable/thin static content,
-  calls Firecrawl only after Jina fails and `FIRECRAWL_API_KEY` is configured, reports third-party provenance,
-  caps outputs/time/bytes, and keeps Firecrawl prompt guidance/evals focused on avoiding routine use.
-- **Filesystem roots can drift into hard-to-clean dotdir sprawl (D-069).** Current code already mixes
-  `~/.trevor` service data, `~/.trevorV2` config, `~/.pi` auth, and `~/.agents` shared assets. Mitigation:
-  new features follow the explicit root taxonomy, `/doctor` reports resolved roots, and existing `~/.trevor`
-  service data is migrated only through a deliberate state-layout cleanup with compatibility/rollback.
-- **Docs caching can become stale, huge, or substitute for local source truth (D-070).** A `docs` tool that
-  eagerly scrapes broad sites can waste network calls and context, while stale docs can mislead coding work.
-  Mitigation: docs corpora are scoped, capped, cited, stale after 24 hours, refreshed intentionally through
-  `web_fetch`, and prompt guidance keeps workspace truth on local code/search/LSP/tests instead of cached docs.
 - **Clipboard prompt turns can become a hidden general-purpose agent path (D-071).** If `/clip <request>` gets
   the full tool surface, it can run unrelated work just to populate the clipboard, or hide useful output from
   the transcript. Mitigation: prompt `/clip` is clipboard-only, visible, plain-text first, and limited to
@@ -1998,12 +1599,6 @@ The first V2 loop implementation should carry forward V1's explicit command surf
   it, expose full/export forms separately from compact scoped model context, summarize huge dynamic catalogs,
   make `trevor-expert` read deterministic host exports through bounded read-only calls, and keep execution
   authority at the existing tool/command/agent boundaries.
-- **Loop can become UI-coupled or unbounded recurring work (D-067).** If `/loop` exists only as a rich web
-  helper, it becomes a UI macro instead of a host feature; if loops can start from prose without confirmation
-  or without explicit bounds, they can create surprising repeated work. Mitigation: the host owns the
-  authoritative loop domain and deterministic slash parser, the rich helper is rendered from a shared
-  contract, every loop requires an action plus a bound/cadence, controls are visible, and natural-language
-  drafting is deferred behind a confirmation-gated agent tool.
 
 ---
 _Consolidated 2026-06-23: single plan; FEATURES.md + TABLED.md deleted and folded in; graceful-overflow-recovery merged (D-034…D-038); routing engine + T-1 dropped for good (D-032); work-kinds kept inert (D-039). Supersedes all prior Trevor V2 planning documents._
@@ -2025,13 +1620,8 @@ order). **Graceful turn-budget termination** added as a self-contained correctne
 the step-budget loop exit becomes observable via a `step_limit` event + `stepLimit` completion flag, the
 budget forces a final tool-less synthesis instead of dead-ending on a tool result, and the cap is re-based on
 context-window occupancy with `MAX_STEPS` demoted to a runaway backstop - motivated by the 2026-06-24 local
-4-bit case where five turns died at exactly `MAX_STEPS=8` with the window at 16-18%). **Per-turn tool-call
-guardrails** parked as a later correctness follow-up (D-054…D-058), inspired by Hermes'
-[`agent/tool_guardrails.py`](https://github.com/NousResearch/hermes-agent/blob/main/agent/tool_guardrails.py)
-and Trevor V1's `ToolProgressMonitor`: pure per-turn controller, registry-derived read-only classification,
-redacted fingerprints, simple V2-local failure classification, warn-first with opt-in hard stops, and no
-durable Tool Progress Lessons in the first cut. New decisions **D-040…D-058 are authored here in markdown
-and still need syncing into `plan.db`** (canonical store)._
+4-bit case where five turns died at exactly `MAX_STEPS=8` with the window at 16-18%). New decisions
+**D-040…D-053 are authored here in markdown and still need syncing into `plan.db`** (canonical store)._
 
 _Updated 2026-06-25: **Internet connectivity awareness** narrowed D-060. "Offline" now means only
 host-observed public-internet connectivity status, not browser `navigator.onLine`, local session WebSocket
@@ -2051,67 +1641,13 @@ and before session recall. It keeps the model-facing `grep` tool name but replac
 ripgrep-backed backend, and promotes H-108 `ast_grep` into a read-only structural-search tool. D-062 is
 authored here in markdown and still needs syncing into `plan.db` alongside D-040-D-061._
 
-_Updated 2026-06-25: **LSP integration posture** clarified as D-063. LSP remains deferred and unsequenced;
-the first implementation is read-only, pull-only, and based on Trevor V1's useful non-mutating surface, with
-workspace symbols added as an explicit V2 read-only navigation primitive. Required prompt guidance must tell
-the model when to use document symbols, workspace symbols, hover, diagnostics, and code-action proposals
-and when not to use LSP in favor of `rg`, `ast_grep`, direct reads, tests, typecheck, or compiler output.
-Evals must cover navigation benefit, typed-repair benefit, read-only code-action behavior, and distraction
-regressions. Ambient real-time diagnostics and automatic prompt injection are explicitly rejected; mutating
-LSP actions are deferred to a separate phase. D-063 is authored here in markdown and still needs syncing into
-`plan.db` alongside D-040-D-062._
-
-_Updated 2026-06-25: **Hooks runtime posture** clarified as D-064. Hooks remain deferred and unsequenced; the
-first cut is command hooks for `PreToolUse` plus a `Stop` hook, with V1's trust-hash, explicit decision,
-visible event, and `/doctor` model retained. The first cut explicitly rejects a broad plugin bus,
-PostToolUse, native extension dispatch, model-routing hooks, long-running hook daemons, and shell-splitting by
-default. D-064 is authored here in markdown and still needs syncing into `plan.db` alongside D-040-D-063._
-
 _Updated 2026-06-25: **Provider auth/catalog + full model chooser** added as D-065. The future chooser is a
 host-owned model-source and model-catalog layer covering local/manual models, OAuth subscriptions, large
 gateway catalogs, and direct API-key providers. It captures source auth/status, queryable large catalogs,
 stable `{sourceId, modelId, reasoning}` selection, per-model detected reasoning controls, source-aware
 setup actions, sidebar model/reasoning constraints, and tests for huge catalogs, auth states, local
 availability, reasoning capability, persistence, and non-blocking refresh. D-065 is authored here in markdown
-and still needs syncing into `plan.db` alongside D-040-D-064._
-
-_Updated 2026-06-25: **MCP client runtime posture** clarified as D-066. MCP is now specified as a generalized
-host-owned MCP server registry and client, carrying forward Trevor V1's useful shape: named servers,
-stdio/Streamable HTTP/SSE transports, separate tools/resources/prompts, elicitation, sampling mediation, auth,
-credential-store boundaries, redaction, lifecycle, diagnostics, prompt guidance, and evals. Tool proxy is
-explicitly not the MCP abstraction or bridge; if configured, it is one named MCP server like any other. D-066
-is authored here in markdown and still needs syncing into `plan.db` alongside D-040-D-065._
-
-_Updated 2026-06-25: **Loop command surface posture** clarified as D-067. `/loop` is specified as a
-host-owned recurring/cadence work feature with a UI-neutral command-family contract and rich Trevor web helper
-rendered from structured preview data. The first implementation carries forward explicit slash grammar,
-quote/duration rules, diagnostics, controls, lifecycle, runners, persistence, safety, and evals. Natural-language
-loop drafting is deferred as a later confirmation-gated agent tool that structures a loop draft but never starts
-execution directly. D-067 is authored here in markdown and still needs syncing into `plan.db` alongside
-D-040-D-066._
-
-_Updated 2026-06-25: **Web fetch posture** added as D-068. `web_search` is treated as already shipped; the
-remaining feature is `web_fetch`, an explicit public-URL fetch tool with static extraction first, direct Jina
-Reader as the first JS-blocked/thin-page fallback, and Firecrawl as the final configured fallback only after
-Jina cannot produce usable content. Firecrawl uses the official Node SDK and `FIRECRAWL_API_KEY`, is disabled
-gracefully when the key is missing, and must not be called for ordinary pages. No Dendrite/Python scraper
-integration is planned. D-068 is authored here in markdown and still needs syncing into `plan.db` alongside
-D-040-D-067._
-
-_Updated 2026-06-25: **Filesystem root taxonomy** added as D-069. `~/.trevorV2` is the current Trevor config
-root and eventually migrates/renames to `~/.trevor`; `~/.config/trevor` is used only when an explicit
-config-root export points there. Disposable cache goes in `~/.cache/trevor`, durable local state goes in
-`~/.local/state/trevor`, shareable local data goes in `~/.local/share/trevor`, model auth remains in `~/.pi`,
-and shared agent assets remain in `~/.agents`. Existing `~/.trevor` service-data defaults are migration debt,
-not a pattern for new state. D-069 is authored here in markdown and still needs syncing into `plan.db`
-alongside D-040-D-068._
-
-_Updated 2026-06-25: **Docs tool** added as D-070. The future model-facing `docs` tool uses `web_search` for
-discovery and `web_fetch` for page reads, stores normalized documentation corpora under
-`~/.local/state/trevor/docs`, marks pages/corpora stale after 24 hours, and refreshes intentionally. It is
-bounded by docs roots, same-domain/path scope, page/byte/depth caps, provenance, and prompt guidance that keeps
-workspace truth on local files/LSP/search/tests rather than cached external docs. D-070 is authored here in
-markdown and still needs syncing into `plan.db` alongside D-040-D-069._
+and still needs syncing into `plan.db`._
 
 _Updated 2026-06-25: **Clipboard write surface** added as D-071. The future `/clip` command carries forward
 Trevor V1's useful behavior under the new command name: bare `/clip` is a host-owned copy-last-item command,
@@ -2119,7 +1655,7 @@ while `/clip <request>` is a restricted clipboard-only model turn that selects, 
 exact text to copy and calls `clipboard_write`. The first cut is plain text only, visible in command/tool
 events, and explicitly excludes shell clipboard commands, clipboard reads, rich clipboard formats, and hidden
 assistant-output delivery. D-071 is authored here in markdown and still needs syncing into `plan.db` alongside
-D-040-D-070._
+the earlier markdown-authored decisions._
 
 _Updated 2026-06-25: **Output-style registry** added as D-072. The deferred V2 feature carries forward Trevor
 V1's useful assistant output-style model: shared style metadata, built-in style ids, additive prompt overlays,
