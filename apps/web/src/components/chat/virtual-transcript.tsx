@@ -1,4 +1,4 @@
-import { type Rect, useVirtualizer } from "@tanstack/react-virtual";
+import { elementScroll, type Rect, useVirtualizer } from "@tanstack/react-virtual";
 import {
   type RefObject,
   useCallback,
@@ -87,6 +87,17 @@ export function VirtualTranscript({
     initialRect: testInitialRect,
     scrollEndThreshold: 40,
     useAnimationFrameWithResizeObserver: true,
+    // The component owns scrolling: it only follows the live edge when pinned. So when the user has
+    // scrolled up (unpinned), swallow EVERY programmatic scroll - including tanstack's
+    // resize-adjustment, which otherwise yanks the viewport down as a streaming row grows at its
+    // bottom (the row is one big virtualized item whose start sits above the viewport, so bottom
+    // growth is misread as top-growth). This keeps the intentional scroll position; manual user
+    // scrolling is unaffected (that is the browser, not this fn).
+    scrollToFn: (offset, opts, instance) => {
+      if (pinned) {
+        elementScroll(offset, opts, instance);
+      }
+    },
   });
 
   const scrollToLiveEdge = useCallback(
