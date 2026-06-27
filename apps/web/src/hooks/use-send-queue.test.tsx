@@ -27,14 +27,22 @@ test("drains one prompt at a time and never double-sends", async () => {
   act(() => result.current.submit(prompt("1", "first")));
   act(() => result.current.submit(prompt("2", "second")));
   assert.deepEqual(published, ["first"]);
+  assert.equal(result.current.pending?.text, "first");
+  assert.deepEqual(
+    result.current.queue.map((p) => p.text),
+    ["second"],
+  );
 
   // The turn runs (busy goes high) then ends (busy goes low): the release effect frees the
   // latch and the drain effect publishes the second prompt - now, and only now.
   busy = true;
   rerender();
+  assert.equal(Boolean(result.current.pending), false);
   busy = false;
   rerender();
   assert.deepEqual(published, ["first", "second"]);
+  assert.equal(result.current.pending?.text, "second");
+  assert.deepEqual(result.current.queue, []);
 });
 
 test("hard steer folds the queued prompts + draft into a single prompt", () => {
@@ -69,6 +77,7 @@ test("session changes clear queued prompts and the in-flight latch", () => {
   assert.equal(result.current.queue.length, 1);
 
   rerender({ sessionId: "s2" });
+  assert.equal(result.current.pending, null);
   assert.deepEqual(result.current.queue, []);
 
   act(() => result.current.submit(prompt("2", "new directory prompt")));

@@ -9,6 +9,7 @@ import {
   type SessionConnection,
   type SessionEvent,
   type SessionIdentity,
+  type SessionTransport,
   events as sessionEvents,
   streamTransport,
   type TrevorEventInput,
@@ -34,6 +35,8 @@ const RICHTER_URL = import.meta.env.VITE_RICHTER_URL;
 const transport = RICHTER_URL
   ? richterTransport(RICHTER_URL)
   : streamTransport(window.location.origin);
+const RECONNECT_BASE_MS = 250;
+const RECONNECT_MAX_MS = 2_000;
 
 // Identity is per-tab and persisted in sessionStorage, so a page reload reuses it instead of
 // registering a new participant on every load. sessionStorage (not localStorage) scopes it to this
@@ -87,8 +90,8 @@ interface ConnectOptions {
 }
 
 /** Opens a session stream as this tab's stable web participant (replay-then-tail). */
-function connect(options: ConnectOptions): SessionConnection {
-  return transport.connectSession({
+function connect(sessionTransport: SessionTransport, options: ConnectOptions): SessionConnection {
+  return sessionTransport.connectSession({
     sessionId: options.sessionId,
     afterSeq: options.afterSeq,
     identity: webIdentity(),
@@ -100,8 +103,12 @@ function connect(options: ConnectOptions): SessionConnection {
 }
 
 /** Publishes one event to the durable log via REST; it returns over the stream. */
-function publishEvent(sessionId: string, input: PublishInput): Promise<void> {
-  return transport.publishEvent(sessionId, input);
+function publishEvent(
+  sessionTransport: SessionTransport,
+  sessionId: string,
+  input: PublishInput,
+): Promise<void> {
+  return sessionTransport.publishEvent(sessionId, input);
 }
 
 /** Ensures a session with the given id exists (idempotent) and returns it. */
@@ -130,6 +137,14 @@ export interface SessionStream {
 
 /** Subscribes to a session: replay-then-tail into state. The read side of the session boundary. */
 export function useSession(sessionId: string | null): SessionStream {
+  return useSessionWithTransport(transport, sessionId);
+}
+
+/** Same session hook with an injected transport, exported for deterministic hook tests. */
+export function useSessionWithTransport(
+  sessionTransport: SessionTransport,
+  sessionId: string | null,
+): SessionStream {
   const [events, setEvents] = useState<readonly SessionEvent[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [replayed, setReplayed] = useState(false);
@@ -158,28 +173,69 @@ export function useSession(sessionId: string | null): SessionStream {
     // single time. Live tail events (after replay.complete) append individually as before. This is the
     // single place replay is handled, so the gate lives here rather than in each consumer.
     const replayBuffer: SessionEvent[] = [];
+    let closed = false;
+    let connection: SessionConnection | null = null;
+    let lastSeq = 0;
+    let reconnectAttempt = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let replaying = true;
-    const connection = connect({
-      sessionId,
-      onEvent: (event) => {
-        if (replaying) {
-          replayBuffer.push(event);
-        } else {
-          setEvents((prev) => [...prev, event]);
-        }
-      },
-      onReplayComplete: () => {
-        replaying = false;
-        const replayedEvents = replayBuffer.slice();
-        setEvents(replayedEvents);
-        setReplayThroughSeq(replayedEvents.at(-1)?.seq ?? 0);
-        setReplayed(true);
-      },
-      onStatus: setStatus,
-      onPresence: setPresence,
-    });
-    return () => connection.close();
-  }, [sessionId]);
+    const scheduleReconnect = (): void => {
+      if (closed || reconnectTimer !== null) {
+        return;
+      }
+      const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+      reconnectAttempt += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        start();
+      }, delay);
+    };
+    const onEvent = (event: SessionEvent): void => {
+      lastSeq = Math.max(lastSeq, event.seq);
+      if (replaying) {
+        replayBuffer.push(event);
+      } else {
+        setEvents((prev) => [...prev, event]);
+      }
+    };
+    const start = (): void => {
+      if (closed) {
+        return;
+      }
+      connection = connect(sessionTransport, {
+        sessionId,
+        afterSeq: lastSeq,
+        onEvent,
+        onReplayComplete: () => {
+          if (!replaying) {
+            return;
+          }
+          replaying = false;
+          const replayedEvents = replayBuffer.slice();
+          setEvents(replayedEvents);
+          setReplayThroughSeq(replayedEvents.at(-1)?.seq ?? 0);
+          setReplayed(true);
+        },
+        onStatus: (next) => {
+          setStatus(next);
+          if (next === "open") {
+            reconnectAttempt = 0;
+          } else if (next === "closed") {
+            scheduleReconnect();
+          }
+        },
+        onPresence: setPresence,
+      });
+    };
+    start();
+    return () => {
+      closed = true;
+      if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+      }
+      connection?.close();
+    };
+  }, [sessionId, sessionTransport]);
 
   return { events, presence, replayed, replayThroughSeq, status };
 }
@@ -215,7 +271,7 @@ export function useSessionActions(sessionId: string | null): SessionActions {
       if (!sessionId) {
         return;
       }
-      await publishEvent(sessionId, { producerId: PRODUCER_IDS.web, ...built });
+      await publishEvent(transport, sessionId, { producerId: PRODUCER_IDS.web, ...built });
     },
     [sessionId],
   );

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_SESSION_ID } from "@trevor/session";
+import { DEFAULT_SESSION_ID, type SessionActivity } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { GitBranch, History } from "lucide-react";
 import {
@@ -199,10 +199,7 @@ export function App() {
   // Cross-reference per-worktree-session activity from the inventory, so a worktree row can show
   // "agents running" / "needs you" / host presence.
   const worktreeActivity = useMemo(() => {
-    const map = new Map<
-      string,
-      { host: "live" | "stale" | "none"; activity: "running" | "idle" }
-    >();
+    const map = new Map<string, { host: "live" | "stale" | "none"; activity: SessionActivity }>();
     for (const s of inventory.sessions) {
       map.set(s.sessionId, { host: s.host, activity: s.activity });
     }
@@ -306,7 +303,8 @@ export function App() {
   // The reducer wiring + the in-flight/echo latch + the release/drain effects live in
   // useSendQueue; App.tsx calls submit/steer and renders the queue.
   const busy = active !== null || awaitingResponse;
-  const { queue, submit, steer } = useSendQueue({ busy, publish, resetKey: sessionId });
+  const { pending, queue, submit, steer } = useSendQueue({ busy, publish, resetKey: sessionId });
+  const visibleQueue = pending ? [pending, ...queue] : queue;
 
   const activeProvider = provider ?? hostDefault ?? "qwen";
   // Before any host has announced (empty hostModels), there's no roster to show: fall back
@@ -699,11 +697,12 @@ export function App() {
         toolBatches,
         toConcurrentTool,
         onOpenPath: (path) => void openInEditor(path),
+        onDoctorRefresh: () => void command("/doctor", "refresh"),
         showThinking: showThinkingOn,
         active,
         awaitingResponse,
         turnStartedAt,
-        queue,
+        queue: visibleQueue,
       }}
       scroll={{
         transcriptRef,

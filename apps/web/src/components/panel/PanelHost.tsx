@@ -58,6 +58,9 @@ export interface TranscriptView {
   readonly toolBatches: ToolBatches;
   readonly toConcurrentTool: (tool: ToolMessageData) => ConcurrentTool;
   readonly onOpenPath: (path: string) => void;
+  /** Re-runs `/doctor` on the host (a no-model-turn immediate command), wired to the dashboard's
+   *  refresh control. App owns it because it depends on the session command action. */
+  readonly onDoctorRefresh: () => void;
   readonly showThinking: boolean;
   /** The running run id, or null once the turn ends; drives the persistent "Working" pulse. */
   readonly active: string | null;
@@ -155,7 +158,15 @@ export function PanelHost(props: {
 }) {
   const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
   const { replayed } = stream;
-  const { transcript, toolBatches, toConcurrentTool, onOpenPath, showThinking, queue } = tv;
+  const {
+    transcript,
+    toolBatches,
+    toConcurrentTool,
+    onOpenPath,
+    onDoctorRefresh,
+    showThinking,
+    queue,
+  } = tv;
   const { active, awaitingResponse, turnStartedAt } = tv;
 
   return (
@@ -244,6 +255,7 @@ export function PanelHost(props: {
                             command={message.command}
                             text={message.text}
                             ok={message.ok}
+                            onRefresh={onDoctorRefresh}
                           />
                         ) : (
                           <CommandResult

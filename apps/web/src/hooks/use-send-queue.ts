@@ -1,6 +1,6 @@
 import type { ArtifactRef } from "@trevor/session";
 import { usePrevious } from "ahooks";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { foldSteer, type QueuedPrompt, sendQueueReducer } from "@/send-queue";
 
 /**
@@ -21,6 +21,8 @@ import { foldSteer, type QueuedPrompt, sendQueueReducer } from "@/send-queue";
  */
 
 export interface UseSendQueue {
+  /** The prompt already POSTed to the durable log, waiting for its stream echo. */
+  readonly pending: QueuedPrompt | null;
   readonly queue: readonly QueuedPrompt[];
   /** Enqueue a fresh prompt to publish when idle (the drain effect handles publishing). */
   readonly submit: (prompt: QueuedPrompt) => void;
@@ -49,6 +51,7 @@ export function useSendQueue({
   readonly resetKey?: string | null;
 }): UseSendQueue {
   const [queue, dispatchQueue] = useReducer(sendQueueReducer, [] as QueuedPrompt[]);
+  const [pending, setPending] = useState<QueuedPrompt | null>(null);
   // inFlight bridges the window between publishing a prompt and seeing its echo turn
   // the session busy, so the drain effect can't fire twice and double-send. prevBusy
   // catches the turn-ended edge (busy high -> low) to release the latch.
@@ -60,8 +63,18 @@ export function useSendQueue({
       return;
     }
     inFlightRef.current = false;
+    setPending(null);
     dispatchQueue({ type: "clear" });
   }, [resetKey]);
+
+  // Once the prompt echo reaches the transcript, App's busy fold turns true
+  // (`awaitingResponse` or `active`). At that point the local pending row would duplicate the durable
+  // user message, so drop it.
+  useEffect(() => {
+    if (busy) {
+      setPending(null);
+    }
+  }, [busy]);
 
   // Release the in-flight latch when a turn ends (busy goes high then low), so the
   // next queued prompt becomes eligible to publish. Runs before the drain effect.
@@ -83,8 +96,12 @@ export function useSendQueue({
       return;
     }
     inFlightRef.current = true;
+    setPending(next);
     dispatchQueue({ type: "drainHead" });
-    void publish(next.text, next.provider, next.reasoning, next.artifacts);
+    void publish(next.text, next.provider, next.reasoning, next.artifacts).catch(() => {
+      inFlightRef.current = false;
+      setPending((current) => (current?.id === next.id ? null : current));
+    });
   }, [busy, queue, publish]);
 
   const submit = useCallback((prompt: QueuedPrompt) => {
@@ -105,5 +122,5 @@ export function useSendQueue({
     [queue],
   );
 
-  return { queue, submit, steer };
+  return { pending, queue, submit, steer };
 }
