@@ -6,6 +6,7 @@ import { buildSkillTool } from "../skills";
 import { buildTaskTools } from "../tasks";
 import { astGrepTool } from "./ast-grep";
 import { bashTool } from "./bash";
+import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
@@ -34,6 +35,7 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     webSearchTool,
     sessionRecallTool,
     astGrepTool,
+    doctorTool,
   ]) {
     assert.equal(tool.readOnly, true, `${tool.name} should declare readOnly: true`);
     assert.ok(READ_ONLY_TOOLS.has(tool.name), `${tool.name} should be in READ_ONLY_TOOLS`);
@@ -75,6 +77,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     skillsListTool,
     skillViewTool,
     astGrepTool,
+    doctorTool,
     supervisor.buildTool(),
     ...buildTaskTools(),
     buildSkillTool([]),

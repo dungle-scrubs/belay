@@ -51,6 +51,22 @@ test("buildSystemPrompt states the confinement rule verbatim - the tool-selectio
   );
 });
 
+// --- D-073 M6: the `doctor` tool is diagnostics-only, not routine context-gathering ---
+
+test("buildSystemPrompt guides the model to use doctor only as a diagnostic, not routine context", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  // It explains what doctor is (Trevor's own host self-diagnostic)...
+  assert.ok(
+    prompt.includes("The doctor tool runs Trevor's own host self-diagnostic"),
+    "the prompt describes the doctor self-diagnostic tool",
+  );
+  // ...and pins the constraint that it is NOT routine context-gathering for ordinary coding.
+  assert.ok(
+    prompt.includes("never as routine context-gathering for ordinary coding work"),
+    "the prompt forbids routine doctor calls during ordinary coding",
+  );
+});
+
 // --- Phase 7 M2: nested AGENTS.md context injected into the per-turn prompt (D-080) ---
 
 test("buildSystemPrompt injects the AGENTS.md context block when a file exists", () => {

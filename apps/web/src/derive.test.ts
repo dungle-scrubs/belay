@@ -105,6 +105,9 @@ test("toolSummary picks the salient arg per tool and truncates", () => {
   assert.equal(toolSummary("grep", JSON.stringify({ pattern: "TODO" })), "TODO");
   assert.equal(toolSummary("read", JSON.stringify({ path: "src/app.ts" })), "src/app.ts");
   assert.equal(toolSummary("bash", "not json"), "");
+  // A no-arg tool (e.g. doctor) collapses to an empty summary rather than rendering "{}".
+  assert.equal(toolSummary("doctor", "{}"), "");
+  assert.equal(toolSummary("doctor", ""), "");
   assert.ok(toolSummary("bash", JSON.stringify({ command: "x".repeat(80) })).endsWith("…"));
 });
 

@@ -1,21 +1,11 @@
-import { access, constants } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import {
-  type CommandSpec,
-  type InternetSnapshot,
-  RUNTIME_KIND,
-  UNKNOWN_INTERNET,
-} from "@trevor/session";
+import type { CommandSpec, InternetSnapshot } from "@trevor/session";
 import { Effect } from "effect";
 import { buildInitProposal } from "./context/init-agents";
+import { buildLiveDoctorSnapshot } from "./doctor/build";
 import { parseDoctorCommand } from "./doctor/command";
-import { buildDoctorSnapshot, type DoctorProviderProbe } from "./doctor/snapshot";
 import { fmtFields } from "./log";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
-import { readObservations, summarizeObservations } from "./providers/observation-store";
-import { providerFailures } from "./providers/provider-failure-log";
 import { buildSkillCommand } from "./skills";
 import { TOOL_DEFS } from "./tools";
 import { renderShell, runShell } from "./tools/run-shell";
@@ -101,50 +91,6 @@ async function providerStatus(key: string, provider: ProviderRegistry[string]): 
   return `  ${key} - ${provider.label} (${provider.model}) - ${status}${detail}`;
 }
 
-/** Structured provider reachability for the /doctor snapshot (warm/cold/unreachable + kind). */
-async function doctorProviderProbe(
-  key: string,
-  provider: ProviderRegistry[string],
-): Promise<DoctorProviderProbe> {
-  let status: DoctorProviderProbe["status"];
-  try {
-    const { ready, warm } = await Effect.runPromise(provider.readiness());
-    status = ready ? (warm ? "warm" : "cold") : "unreachable";
-  } catch {
-    status = "unreachable";
-  }
-  return { key, label: provider.label, model: provider.model, kind: provider.kind, status };
-}
-
-/** Abbreviates the home dir to `~` for a sanitized /doctor path. */
-function abbrevHome(absolute: string): string {
-  const home = homedir();
-  return absolute === home || absolute.startsWith(`${home}/`)
-    ? `~${absolute.slice(home.length)}`
-    : absolute;
-}
-
-/** The TREVOR_HOME path (env override or `~/.trevorV2`). */
-function trevorHome(): string {
-  return process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2");
-}
-
-/** Whether a directory is writable (a bounded fs probe for the /doctor Storage area). */
-async function storageWritable(dir: string): Promise<boolean> {
-  try {
-    await access(dir, constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Reads a string field off the host turn-machine record (the /doctor session facts). */
-function hostStr(host: Record<string, unknown> | undefined, key: string): string | undefined {
-  const value = host?.[key];
-  return typeof value === "string" ? value : undefined;
-}
-
 /** The legacy plaintext /doctor dump (`/doctor text`), kept for terminals / no-dashboard clients. */
 async function doctorText(input: DoctorInput): Promise<string> {
   const lines: string[] = [`workspace: ${input.workspace}`];
@@ -214,74 +160,9 @@ export function buildCommandRegistry(): CommandRegistry {
       if (command.view === "text") {
         return doctorText(input);
       }
-      const home = trevorHome();
-      const [providers, writable, observationStore] = await Promise.all([
-        Promise.all(
-          Object.entries(input.providers).map(([key, provider]) =>
-            doctorProviderProbe(key, provider),
-          ),
-        ),
-        storageWritable(home),
-        readObservations(),
-      ]);
-      const obs = summarizeObservations(observationStore);
-      const snapshot = buildDoctorSnapshot({
-        host: { instanceId: input.instanceId, role: input.role, live: input.role !== "standby" },
-        session: {
-          activeRun: hostStr(input.host, "activeRun"),
-          queued: typeof input.host?.queued === "number" ? input.host.queued : 0,
-          lastTurn: hostStr(input.host, "lastTurn"),
-          compacting: input.host?.compacting === true,
-        },
-        providers,
-        internet: input.internet ?? UNKNOWN_INTERNET,
-        tools: TOOL_DEFS.map((t) => t.name),
-        workspace: { cwd: input.cwd, workspace: input.workspace, branch: input.branch },
-        storage: { home: abbrevHome(home), writable },
-        // Package/build/version facts (D-073): the embedded version when present (else a dev build),
-        // plus the always-available Node + runtime kind. Update-availability is not probed here.
-        build: {
-          version: process.env.npm_package_version ?? null,
-          node: process.version,
-          runtime: RUNTIME_KIND.host,
-        },
-        // MCP / LSP / Hooks are not integrated in this build, so each reports `unconfigured` (not an
-        // error) - the area builder maps later states (unavailable/auth-needed/error/timeout) once a
-        // real integration feeds them.
-        peripherals: {
-          mcp: { kind: "unconfigured" },
-          lsp: { kind: "unconfigured" },
-          hooks: { kind: "unconfigured" },
-        },
-        // Web / Docs config facts (D-073): presence booleans + a provider name only, never key
-        // values. web_search reads BRAVE_API_KEY then SERPER_API_KEY; fetch/rendering would use
-        // Jina/Firecrawl. No docs cache is built in this slice.
-        web: {
-          searchConfigured: Boolean(process.env.BRAVE_API_KEY || process.env.SERPER_API_KEY),
-          fetchProvider: process.env.JINA_API_KEY
-            ? "Jina"
-            : process.env.FIRECRAWL_API_KEY
-              ? "Firecrawl"
-              : null,
-          docs: { present: false, stale: false },
-        },
-        // Redacted provider-failure observation counts (D-076 M6): how many distinct unclassified
-        // shapes the classifier has logged, surfaced as a Providers fact (counts only, no secrets).
-        observations: { distinct: obs.distinct, unknown: obs.unknown, total: obs.total },
-        // Recent terminal provider-failure outcomes (D-076 M6): retry-exhausted vs non-retryable,
-        // surfaced as two distinct Providers findings. Sanitized one-line details only.
-        providerFailures: (() => {
-          const summary = providerFailures.summary();
-          return {
-            retryExhausted: summary.retryExhausted,
-            nonRetryableTerminal: summary.nonRetryableTerminal,
-            lastRetryExhausted: summary.lastRetryExhausted?.detail,
-            lastTerminal: summary.lastTerminal?.detail,
-          };
-        })(),
-        checkedAt: new Date().toISOString(),
-      });
-      return JSON.stringify(snapshot);
+      // The structured path goes through the SAME reusable accessor the `doctor` model tool calls
+      // (D-073 M6), so the command and the tool can never report a different health picture.
+      return JSON.stringify(await buildLiveDoctorSnapshot(input));
     },
   });
 

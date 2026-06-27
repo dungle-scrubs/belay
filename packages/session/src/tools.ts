@@ -26,6 +26,7 @@ export const TOOL_DESCRIPTORS = [
   { name: "web_search", readOnly: true },
   { name: "session_recall", readOnly: true },
   { name: "ast_grep", readOnly: true },
+  { name: "doctor", readOnly: true },
   { name: "bash", readOnly: false },
   { name: "write", readOnly: false },
   { name: "edit", readOnly: false },

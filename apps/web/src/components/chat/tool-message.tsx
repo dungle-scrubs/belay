@@ -210,6 +210,9 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   web_search: renderWebSearch,
   session_recall: renderRecall,
   ast_grep: renderGeneric,
+  // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it
+  // renders like other text-output tools (the dashboard surface is the /doctor command, not this).
+  doctor: renderOutput,
   bash: renderOutput,
   write: renderDiff,
   edit: renderDiff,

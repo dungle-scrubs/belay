@@ -564,13 +564,19 @@ D-065 source/auth/catalog state, D-076 provider-failure observations, and Storyb
 
 ### M6: Prompt/model guidance and diagnostics usage
 
-- [ ] Model guidance treats `/doctor` output as host diagnostics when the user asks about Trevor health, setup, provider readiness, tool availability, or why a turn failed
-- [ ] The model does not call `/doctor` as routine context gathering for ordinary coding work
-- [ ] Doctor output can explain provider auth/catalog issues from D-065 without exposing secrets
-- [ ] Doctor output can explain internet status from D-060 without conflating it with host/session connectivity
-- [ ] Doctor output can explain provider-outage retry exhaustion and unknown provider observation counts from D-076
-- [ ] Doctor output can explain archived/stale/inactive session states from D-093/D-094 when available
-- [ ] Tests or evals cover model guidance, no routine doctor calls, and correct distinction between health areas
+The host now exposes the `/doctor` health snapshot as a READ-ONLY `doctor` model tool (diagnostics-only).
+Both the `/doctor` command and the tool draw from one shared accessor: `buildLiveDoctorSnapshot`
+(`apps/agent-host/src/doctor/build.ts`) over a registered source (`apps/agent-host/src/doctor/source.ts`,
+wired by `main.ts`), so command and tool can never report a different picture. The tool renders the
+sanitized `formatDoctorReport` text (not raw JSON) and degrades a source failure to one `error:` line.
+
+- [x] Model guidance treats `/doctor` output as host diagnostics when the user asks about Trevor health, setup, provider readiness, tool availability, or why a turn failed (system-prompt.ts tool-selection guidance + prompt test)
+- [x] The model does not call `/doctor` as routine context gathering for ordinary coding work (guidance pins "never as routine context-gathering"; covered by system-prompt.test.ts)
+- [~] Doctor output can explain provider auth/catalog issues from D-065 without exposing secrets (surfaces provider reachability + retry-exhaustion/observation counts today; full auth-state/catalog-freshness projection rides D-065)
+- [x] Doctor output can explain internet status from D-060 without conflating it with host/session connectivity (distinct Internet area, separate from Core/Session)
+- [x] Doctor output can explain provider-outage retry exhaustion and unknown provider observation counts from D-076
+- [ ] Doctor output can explain archived/stale/inactive session states from D-093/D-094 when available (no lifecycle area in the snapshot yet; rides D-093/D-094)
+- [~] Tests or evals cover model guidance, no routine doctor calls, and correct distinction between health areas (prompt-guidance + area-distinction unit tests landed; the live model-behavioral eval is gated)
 
 ### M7: Verification
 
@@ -708,8 +714,8 @@ rename handling.
 - Live open follow-up (D-094 session lifecycle controls): 38 features, 32 completed, 6 remaining. Unarchive-before-open now enforced: the web derives the open session's archived state (`isSessionArchived`, apps/web/src/derive.ts) and gates the composer behind an `ArchivedNotice` + Unarchive action; `trevor open` refuses an archived session and points to `trevor unarchive`. Remaining: debug-only lifecycle UI + Escape-primary tests + manual EZE.
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 35 completed, 27 remaining (M1 contract + M2 chooser surface + M5 no-secret auth UI built; M3 split-control UI partial - quick-picker component built, App split-control wiring remains; M4 catalog browsing UI, M6 selection wiring, M7 verification remain)
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 55 completed, 2 remaining (2 manual EZE repros)
-- Live open follow-up (D-073 doctor health surface): 57 features, 44 completed, 13 remaining (M4 visual review; M6 prompt/model guidance; storybook review + manual EZE repros)
+- Live open follow-up (D-073 doctor health surface): 57 features, 48 completed, 9 remaining. M6 landed: the `/doctor` snapshot is now a READ-ONLY `doctor` model tool (diagnostics-only) over the shared `buildLiveDoctorSnapshot` accessor + registered source, with system-prompt guidance and unit/prompt tests. Remaining: M4 visual review; the D-065 auth/catalog and D-093/D-094 session-lifecycle doctor explanations (ride those features); M7 storybook review + manual EZE repros; and the gated live model-behavioral eval.
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 43 completed, 8 remaining (M5 live-model evals; M7 web UI + manual repros)
 - New (proposed, not yet in plan.db) editable session titles: 13 features, 0 completed, 13 remaining (durable rename event + sidebar inline edit + scope/consistency) - needs planner ratification before build
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 93 unchecked items plus 5 partial/gated carry-forward items (D-060 M2 + D-093 M4 + D-093 M5 semantic items + D-094 M2 landed this pass, removing 13; the new 13-item editable-session-titles section was added)
+- Remaining implementable work in this report: 87 unchecked items plus 5 partial/gated carry-forward items (D-073 M6 doctor model tool landed this pass: 4 items completed, 2 moved to partial)

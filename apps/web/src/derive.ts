@@ -105,7 +105,10 @@ export function toolSummary(name: string, argsJson: string): string {
   const primary =
     name === "bash" ? args.command : name === "grep" || name === "glob" ? args.pattern : args.path;
 
-  const text = typeof primary === "string" ? primary : argsJson;
+  // With no recognized primary arg, fall back to the raw args JSON - but a no-arg tool (e.g. doctor)
+  // has an empty object, and rendering "{}" as the summary is noise, so collapse it to nothing.
+  const text =
+    typeof primary === "string" ? primary : Object.keys(args).length === 0 ? "" : argsJson;
 
   return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }

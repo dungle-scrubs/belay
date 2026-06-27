@@ -7,6 +7,7 @@ import { buildTaskTools } from "../tasks";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
 import { bashTool } from "./bash";
+import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
 import { ToolInputError } from "./errors";
 import { globTool } from "./glob";
@@ -35,6 +36,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   sessionRecallTool,
   skillsListTool,
   skillViewTool,
+  doctorTool,
   supervisor.buildTool(),
   ...buildTaskTools(),
   // ast_grep is registered only when its project-managed binary resolves (skipped on a platform

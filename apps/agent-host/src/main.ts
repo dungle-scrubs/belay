@@ -36,6 +36,8 @@ import { probeLogLine } from "./connectivity/log";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
+import { buildLiveDoctorSnapshot, type DoctorFacts } from "./doctor/build";
+import { registerDoctorSnapshotSource } from "./doctor/source";
 import { nodeGitRunner, readGitStatus } from "./git-status";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
@@ -1337,12 +1339,12 @@ async function worktreeReconcile(): Promise<void> {
 }
 
 /**
- * Runs an immediate host command and publishes its result. Unlike a user.message
- * this never touches the model or the turn queue - it executes now, even while a
- * turn is streaming, and answers with a single command.result.
+ * The live host facts /doctor reads (D-073). Assembled once here from the host's singletons so the
+ * `/doctor` command (via CommandContext) and the model-facing `doctor` tool (via the registered
+ * snapshot source below) draw from the exact same state.
  */
-async function runCommand(name: string, args: string): Promise<void> {
-  const { text, ok } = await commands.run(name, args, {
+function doctorFacts(): DoctorFacts {
+  return {
     providers,
     cwd: abbrevPath(process.cwd()),
     workspace: abbrevPath(WORKSPACE_ROOT),
@@ -1351,6 +1353,21 @@ async function runCommand(name: string, args: string): Promise<void> {
     host: hostState(),
     internet: internet.current(),
     branch: currentGit().branch,
+  };
+}
+
+// The `doctor` tool (D-073 M6) has no CommandContext, so the host registers the snapshot accessor it
+// reads: the SAME builder + facts the /doctor command uses, so command and tool never disagree.
+registerDoctorSnapshotSource(() => buildLiveDoctorSnapshot(doctorFacts()));
+
+/**
+ * Runs an immediate host command and publishes its result. Unlike a user.message
+ * this never touches the model or the turn queue - it executes now, even while a
+ * turn is streaming, and answers with a single command.result.
+ */
+async function runCommand(name: string, args: string): Promise<void> {
+  const { text, ok } = await commands.run(name, args, {
+    ...doctorFacts(),
     lease: lease.debugInfo(Date.now()),
     compact: forceCompact,
   });
