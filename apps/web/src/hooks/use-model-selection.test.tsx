@@ -69,7 +69,7 @@ test("select records the active + recent and clamps reasoning to the model's sur
   assert.equal(result.current.quickGroups[0]?.models[0]?.modelId, "deepseek-v4");
 });
 
-test("sources and catalog fall back to the roster projection before the host catalog loads", () => {
+test("sources/catalog are empty when the host has not reported them (no misleading roster projection)", () => {
   const { result } = renderHook(() =>
     useModelSelection({
       roster,
@@ -79,11 +79,12 @@ test("sources and catalog fall back to the roster projection before the host cat
       legacyReasoning: null,
     }),
   );
-  assert.deepEqual(
-    result.current.sources.map((s) => s.sourceId),
-    ["qwen", "deepseek"],
-  );
-  assert.equal(result.current.catalogBySource.qwen?.[0]?.modelId, "qwen3-coder");
+  // The roster is NOT projected into fake sources - the chooser shows an explicit empty state instead.
+  assert.deepEqual(result.current.sources, []);
+  assert.deepEqual(result.current.catalogBySource, {});
+  // The active model still resolves (from the legacy roster) so the split control keeps a label.
+  assert.equal(result.current.active?.sourceId, "qwen");
+  assert.equal(result.current.activeLabel, "Qwen3 Coder");
 });
 
 test("the host-announced sources + catalog are preferred once they arrive (D-065)", () => {

@@ -182,10 +182,14 @@ function SourceOverview({
   }
   if (sources.length === 0) {
     return (
-      <p className="p-6 text-sm text-muted-foreground">
-        No model sources are configured yet. Add a local runtime, sign in to a subscription, or
-        configure an API key.
-      </p>
+      <div className="flex flex-1 flex-col gap-2 p-6 text-sm text-muted-foreground">
+        <p>The host has not reported any model sources yet.</p>
+        <p>
+          Sources come from the running host. If one is connected, it may still be starting up - if
+          this persists, restart the host so it reports its catalog. Otherwise configure a source: a
+          local runtime, a subscription sign-in, or an API key.
+        </p>
+      </div>
     );
   }
   return (

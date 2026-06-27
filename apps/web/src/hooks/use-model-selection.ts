@@ -12,13 +12,7 @@ import {
 } from "@trevor/session";
 import { useLocalStorageState } from "ahooks";
 import { useCallback, useMemo } from "react";
-import {
-  catalogFromRoster,
-  legacyActiveRef,
-  reasoningSurfaceOf,
-  rosterLabels,
-  sourcesFromRoster,
-} from "@/model-selection";
+import { legacyActiveRef, reasoningSurfaceOf, rosterLabels } from "@/model-selection";
 
 /**
  * The model-selection state hook (D-065 M3/M6): owns the persisted {@link ModelPreferences} (active /
@@ -74,32 +68,28 @@ export function useModelSelection({
   // unusable refs) rather than trusting the raw JSON ahooks hands back.
   const preferences = useMemo(() => decodeModelPreferences(rawPrefs), [rawPrefs]);
 
-  // Prefer the host-owned source/catalog read model (real types, live model lists, auth state); fall
-  // back to projecting the legacy provider roster only until the host's first catalog load lands.
-  const sources = useMemo(
-    () => (hostSources.length > 0 ? hostSources : sourcesFromRoster(roster)),
-    [hostSources, roster],
-  );
-  const catalogBySource = useMemo(
-    () => (Object.keys(hostCatalog).length > 0 ? hostCatalog : catalogFromRoster(roster)),
-    [hostCatalog, roster],
-  );
+  // The source/catalog the chooser renders is purely host-owned (real provider types, live model
+  // lists, auth state). It is NOT projected from the legacy provider roster: that projection produced
+  // a wrong structure (one source per provider, OAuth shown as direct-API, "1 models" each), so when
+  // the host has not reported sources the chooser shows an explicit empty state instead of fake data.
+  const sources = hostSources;
+  const catalogBySource = hostCatalog;
+  // Labels merge the roster's curated names (for the active model before/without a host catalog) with
+  // the host source/catalog labels, which win when present.
   const { sourceLabels, modelLabels } = useMemo(() => {
-    if (hostSources.length > 0 || Object.keys(hostCatalog).length > 0) {
-      const sl: Record<string, string> = {};
-      for (const s of sources) {
-        sl[s.sourceId] = s.label;
-      }
-      const ml: Record<string, string> = {};
-      for (const entries of Object.values(catalogBySource)) {
-        for (const e of entries) {
-          ml[e.modelId] = e.displayName;
-        }
-      }
-      return { sourceLabels: sl, modelLabels: ml };
+    const roster0 = rosterLabels(roster);
+    const sl: Record<string, string> = { ...roster0.sourceLabels };
+    for (const s of hostSources) {
+      sl[s.sourceId] = s.label;
     }
-    return rosterLabels(roster);
-  }, [hostSources, hostCatalog, sources, catalogBySource, roster]);
+    const ml: Record<string, string> = { ...roster0.modelLabels };
+    for (const entries of Object.values(hostCatalog)) {
+      for (const e of entries) {
+        ml[e.modelId] = e.displayName;
+      }
+    }
+    return { sourceLabels: sl, modelLabels: ml };
+  }, [hostSources, hostCatalog, roster]);
   const quickGroups = useMemo(() => quickPickerModels(preferences), [preferences]);
 
   const legacyRef = useMemo(

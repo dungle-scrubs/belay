@@ -206,8 +206,8 @@ test("loading shows a skeleton; empty shows a configure-a-source message", () =>
 
   const empty = render(<ModelChooser sources={[]} catalogBySource={{}} onSelectModel={noop} />);
   assert.ok(
-    (empty.container.textContent ?? "").includes("No model sources are configured"),
-    "the empty state explains there are no sources",
+    (empty.container.textContent ?? "").includes("has not reported any model sources"),
+    "the empty state explains the host has not reported sources",
   );
 });
 
