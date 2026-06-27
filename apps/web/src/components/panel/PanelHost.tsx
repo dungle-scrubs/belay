@@ -1,29 +1,24 @@
 import type { CommandSpec, GitStatus, TaskSnapshot, WorktreeSummary } from "@trevor/session";
-import { ChevronDown, CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject, SubmitEvent } from "react";
+import { ChevronDown, PanelRight } from "lucide-react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  type UIEvent as ReactUIEvent,
+  type RefObject,
+  type SubmitEvent,
+  useMemo,
+} from "react";
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { CommandMenu } from "@/components/chat/command-menu";
-import { CompactingBar } from "@/components/chat/compacting-bar";
-import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
-import { DoctorResult } from "@/components/chat/doctor/doctor-result";
-import {
-  CommandResult,
-  MessageMeta,
-  ShellBlock,
-  ThinkingMessage,
-  WorkingIndicator,
-} from "@/components/chat/message";
-import { MessageAttachments } from "@/components/chat/message-attachments";
+import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
+import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
-import { ToolMessage } from "@/components/chat/tool-message";
+import type { StopAction } from "@/components/chat/transcript-row-view";
+import { VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { SidePanel } from "@/components/panel/SidePanel";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { Composer } from "@/hooks/use-composer";
-import { cn } from "@/lib/utils";
 import type { SessionStream } from "@/session/use-session";
-import { ArtifactThumb } from "../../ArtifactThumb";
-import { fmtCtx, fmtTokens, type HostStatus, isOverflowError } from "../../derive";
-import { Markdown } from "../../markdown";
+import type { HostStatus } from "../../derive";
 import { type InventoryState, type ResumeContext, ResumeModal } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
 import { TasksPanel } from "../../TasksPanel";
@@ -33,18 +28,9 @@ import type {
   ToolMessage as ToolMessageData,
   toTranscript,
 } from "../../transcript";
+import { buildTranscriptRows } from "../../transcript-rows";
 import { WorktreeModal } from "../../worktrees";
 import type { WorktreeRowsContext } from "../../worktrees/worktree-rows";
-
-// SMUI-themed markdown body: reuses the app's Markdown renderer, re-themed via the
-// .smui-md scope in index.css.
-function Md({ text, muted = false }: { text: string; muted?: boolean }) {
-  return (
-    <div className={cn("smui-md text-sm", muted ? "text-muted-foreground" : "text-foreground")}>
-      <Markdown text={text} muted={muted} />
-    </div>
-  );
-}
 
 type Transcript = ReturnType<typeof toTranscript>;
 type ToolBatches = ReturnType<typeof readOnlyToolBatches>;
@@ -61,6 +47,7 @@ export interface TranscriptView {
   /** Re-runs `/doctor` on the host (a no-model-turn immediate command), wired to the dashboard's
    *  refresh control. App owns it because it depends on the session command action. */
   readonly onDoctorRefresh: () => void;
+  readonly onStopAction: (action: StopAction) => void;
   readonly showThinking: boolean;
   /** The running run id, or null once the turn ends; drives the persistent "Working" pulse. */
   readonly active: string | null;
@@ -76,8 +63,8 @@ export interface TranscriptView {
  */
 export interface TranscriptScroll {
   readonly transcriptRef: RefObject<HTMLDivElement | null>;
-  readonly contentRef: RefObject<HTMLDivElement | null>;
   readonly atBottom: boolean;
+  readonly bottomRequestId: number;
   readonly onScroll: () => void;
   readonly scrollToBottom: () => void;
 }
@@ -164,10 +151,30 @@ export function PanelHost(props: {
     toConcurrentTool,
     onOpenPath,
     onDoctorRefresh,
+    onStopAction,
     showThinking,
     queue,
   } = tv;
   const { active, awaitingResponse, turnStartedAt } = tv;
+  const rows = useMemo(
+    () =>
+      buildTranscriptRows({
+        active,
+        awaitingResponse,
+        queue,
+        toolBatches,
+        transcript,
+        turnStartedAt,
+      }),
+    [active, awaitingResponse, queue, toolBatches, transcript, turnStartedAt],
+  );
+  const onTranscriptScroll = (event: ReactUIEvent<HTMLDivElement>) => {
+    const virtualList = event.currentTarget.querySelector("[data-transcript-virtual-list]");
+    if (virtualList?.getAttribute("data-transcript-ready") === "false") {
+      return;
+    }
+    scroll.onScroll();
+  };
 
   return (
     <div className="flex h-svh">
@@ -191,7 +198,8 @@ export function PanelHost(props: {
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={scroll.transcriptRef}
-            onScroll={scroll.onScroll}
+            onScroll={onTranscriptScroll}
+            data-transcript-scroll
             className="flex flex-1 flex-col overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {/* Three states, so the page never looks broken while things come up:
@@ -211,322 +219,17 @@ export function PanelHost(props: {
                 </span>
               </div>
             ) : (
-              <div
-                ref={scroll.contentRef}
-                className="flex flex-col gap-8 fade-in animate-in duration-150"
-              >
-                {transcript.map((message, index) => {
-                  // Consecutive tool calls read as one block: collapse the gap-8 between
-                  // a tool row and the tool row directly above it.
-                  const toolClass = cn(
-                    "pl-3.5",
-                    message.kind === "tool" && transcript[index - 1]?.kind === "tool" && "-mt-6",
-                  );
-                  // Every tool message dispatches to its renderer in one place: ToolMessage
-                  // owns the name ladder, the done -> status derivation, and the per-tool
-                  // arg/result parsing.
-                  if (message.kind === "tool") {
-                    // A continuation row of a concurrent batch already drawn at its first row.
-                    if (toolBatches.skip.has(message.id)) {
-                      return null;
-                    }
-                    const batch = toolBatches.batchAt.get(message.id);
-                    if (batch) {
-                      return (
-                        <div key={message.id} className={toolClass}>
-                          <ConcurrentTools tools={batch.map(toConcurrentTool)} />
-                        </div>
-                      );
-                    }
-                    return (
-                      <ToolMessage
-                        key={message.id}
-                        message={message}
-                        className={toolClass}
-                        onOpenPath={onOpenPath}
-                      />
-                    );
-                  }
-                  if (message.kind === "result") {
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        {message.command === "/doctor" ? (
-                          <DoctorResult
-                            command={message.command}
-                            text={message.text}
-                            ok={message.ok}
-                            onRefresh={onDoctorRefresh}
-                          />
-                        ) : (
-                          <CommandResult
-                            command={message.command}
-                            text={message.text}
-                            ok={message.ok}
-                          />
-                        )}
-                      </div>
-                    );
-                  }
-                  if (message.kind === "shell") {
-                    // The prompt shell lane (D-082): a leading `!` ran a command on the host. Rendered
-                    // as a terminal block (`$ command` + output), pending until its result lands. No
-                    // left padding (unlike assistant/tool rows): the box sits flush at the content-
-                    // column left edge, aligned with the user-prompt blocks.
-                    return (
-                      <ShellBlock
-                        key={message.id}
-                        command={message.command}
-                        output={message.output}
-                        done={message.done}
-                        ok={message.ok}
-                      />
-                    );
-                  }
-                  if (message.kind === "recovered") {
-                    const reclaimed =
-                      message.reclaimed > 0
-                        ? ` · ~${fmtTokens(Math.round(message.reclaimed / 4))} reclaimed`
-                        : "";
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                          <RotateCw className="h-3.5 w-3.5" />
-                          <AlertTitle className="text-smui-yellow">context full</AlertTitle>
-                          <AlertDescription>
-                            {message.detail}
-                            {reclaimed} · retrying
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    );
-                  }
-                  if (message.kind === "reconnecting") {
-                    // A transient provider outage being auto-retried before any token streamed
-                    // (D-079). Frost styling distinguishes a transport reconnect from the yellow
-                    // "context full" airbag; the cap (3) mirrors the host's MAX_RECONNECT_ATTEMPTS.
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <Alert className="border-smui-blue/25 bg-smui-blue/[0.04] [&>svg]:text-smui-blue">
-                          <RotateCw className="h-3.5 w-3.5" />
-                          <AlertTitle className="text-smui-blue">connection dropped</AlertTitle>
-                          <AlertDescription>
-                            {message.detail} · reconnecting (attempt {message.attempt}/3)
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    );
-                  }
-                  if (message.kind === "compacting") {
-                    // The live cross-turn fold (D-040): a TRANSIENT bar that vanishes when the fold
-                    // completes. Its own component owns the continuous (rAF) fill animation.
-                    return (
-                      <CompactingBar
-                        key={message.id}
-                        tokens={message.tokens}
-                        budget={message.budget}
-                      />
-                    );
-                  }
-                  if (message.kind === "delegation") {
-                    // A subagent delegation (D-046..D-048): a distinct linked block - which agent ran
-                    // in its own isolated child session, the task, and the distilled result once it
-                    // folds back. Purple (vs the tool-card greys) marks it as a sub-run, not a tool. A
-                    // background child is async (read-only, result arrives later), so it reads distinctly.
-                    const running = message.status === "running";
-                    const failed = message.status === "failed";
-                    const isBackground = message.mode === "background";
-                    const tone = failed
-                      ? "text-smui-red"
-                      : running
-                        ? "text-smui-purple"
-                        : "text-smui-green";
-                    const verb = running
-                      ? isBackground
-                        ? "running in background…"
-                        : "delegating…"
-                      : failed
-                        ? "delegation failed"
-                        : "delegated";
-                    return (
-                      <div key={message.id} className="pl-3.5">
-                        <Alert className="border-smui-purple/25 bg-smui-purple/[0.04] [&>svg]:text-smui-purple">
-                          <PanelRight className="h-3.5 w-3.5" />
-                          <AlertTitle className={tone}>
-                            {message.agent} · {verb}
-                          </AlertTitle>
-                          <AlertDescription>
-                            <div className="text-muted-foreground">{message.task}</div>
-                            {message.result ? (
-                              <div className="mt-1 whitespace-pre-wrap">{message.result}</div>
-                            ) : null}
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-                    );
-                  }
-
-                  const thinking =
-                    message.kind === "assistant" && showThinking && message.thinking
-                      ? message.thinking
-                      : null;
-
-                  const overflowNote =
-                    message.kind === "assistant" && message.overflow ? (
-                      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                        <TriangleAlert className="h-3.5 w-3.5" />
-                        <AlertTitle className="text-smui-yellow">context overflow</AlertTitle>
-                        <AlertDescription>{message.overflow}</AlertDescription>
-                      </Alert>
-                    ) : null;
-
-                  const errorNote =
-                    message.kind === "assistant" && message.error ? (
-                      <Alert variant="destructive">
-                        <CircleX className="h-3.5 w-3.5" />
-                        <AlertTitle>
-                          {isOverflowError(message.error) ? "context overflow" : "error"}
-                        </AlertTitle>
-                        <AlertDescription>{message.error}</AlertDescription>
-                      </Alert>
-                    ) : null;
-
-                  const cancelledNote =
-                    message.kind === "assistant" && message.cancelled ? (
-                      <div className="text-sm text-smui-red">cancelled</div>
-                    ) : null;
-
-                  // The host closed this turn (a restart/crash reaped it mid-flight), not the user.
-                  const interruptedNote =
-                    message.kind === "assistant" && message.interrupted ? (
-                      <div className="text-sm text-smui-red">interrupted · host restarted</div>
-                    ) : null;
-
-                  const noReplyNote =
-                    message.kind === "assistant" && message.noReply ? (
-                      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-                        <TriangleAlert className="h-3.5 w-3.5" />
-                        <AlertTitle className="text-smui-yellow">no reply</AlertTitle>
-                        <AlertDescription>
-                          The model ended the turn without a reply. Try again or rephrase.
-                        </AlertDescription>
-                      </Alert>
-                    ) : null;
-
-                  // Budget-terminated turn: the answer above was forced after the model hit
-                  // its tool-call budget (step backstop or context pressure). A muted footnote
-                  // so the answer reads normally but the user knows it was cut short of more work.
-                  const stepLimitNote =
-                    message.kind === "assistant" && message.stepLimit ? (
-                      <div className="text-label text-muted-foreground">
-                        ⚐ answered after the {message.stepLimit}-step tool budget
-                      </div>
-                    ) : null;
-
-                  if (message.kind === "assistant" && !message.text && !message.done) {
-                    return (
-                      <div key={message.id} className="flex flex-col gap-3 pl-3.5">
-                        {thinking ? (
-                          <ThinkingMessage content={thinking} />
-                        ) : (
-                          <WorkingIndicator
-                            label={message.warm ? "thinking" : `loading ${message.model}`}
-                          />
-                        )}
-                        {overflowNote}
-                        {errorNote}
-                      </div>
-                    );
-                  }
-
-                  // Meta (model · context · speed) rides on the final segment - the one that
-                  // carries usage - so it isn't repeated under every pre-tool segment.
-                  let metaItems: string[] | null = null;
-                  if (message.kind === "assistant" && message.usage) {
-                    const usage = message.usage;
-                    metaItems = [
-                      message.model,
-                      `${fmtTokens(usage.input)}/${fmtCtx(usage.contextWindow)} ctx`,
-                    ];
-                    if (usage.genMs > 0) {
-                      metaItems.push(`${Math.round(usage.output / (usage.genMs / 1000))} tok/s`);
-                    }
-                  }
-
-                  // User prompts read as a boxed, left-barred block; assistant replies are
-                  // plain prose. Neither carries a "you"/"assistant" header.
-                  if (message.kind === "user") {
-                    return (
-                      <div
-                        key={message.id}
-                        data-message-id={message.id}
-                        className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
-                      >
-                        {message.text ? <Md text={message.text} /> : null}
-                        {message.artifacts.length ? (
-                          <MessageAttachments artifacts={message.artifacts} />
-                        ) : null}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={message.id}
-                      data-message-id={message.id}
-                      className="flex flex-col gap-3 pl-3.5"
-                    >
-                      {thinking ? <ThinkingMessage content={thinking} /> : null}
-                      {message.text ? <Md text={message.text} /> : null}
-                      {overflowNote}
-                      {errorNote}
-                      {cancelledNote}
-                      {interruptedNote}
-                      {noReplyNote}
-                      {stepLimitNote}
-                      {metaItems ? <MessageMeta items={metaItems} /> : null}
-                    </div>
-                  );
-                })}
-
-                {/* A persistent "working" pulse whenever a turn is in flight - not just while
-                    waiting for the first token. Fills the dead air between steps (e.g. while the
-                    model generates the next thinking/tool batch after a read completes), so the
-                    turn never looks stalled. `active` is the running run id (null once it ends). */}
-                {active !== null || awaitingResponse ? (
-                  <div className="pl-3.5">
-                    <WorkingIndicator
-                      label="Working"
-                      startedAt={turnStartedAt ?? undefined}
-                      interruptible
-                    />
-                  </div>
-                ) : null}
-
-                {/* Prompts held in the local queue: rendered as subdued "> …" blockquote lines (not
-            transcript chrome) so they read as waiting, not sent, until the turn frees up and they
-            publish. Several stack as one quote block; an attached image rides under its line. */}
-                {queue.length ? (
-                  <div className="flex flex-col gap-1 pl-3.5 opacity-70">
-                    {queue.map((q) => (
-                      <div key={q.id} className="flex items-start gap-2 text-muted-foreground">
-                        <span aria-hidden className="shrink-0 select-none">
-                          &gt;
-                        </span>
-                        <div className="flex min-w-0 flex-col gap-1">
-                          {q.text ? <Md text={q.text} muted /> : null}
-                          {q.artifacts?.length ? (
-                            <div className="flex gap-1.5">
-                              {q.artifacts.map((ref) => (
-                                <ArtifactThumb key={ref.hash} artifact={ref} size={32} square />
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              <VirtualTranscript
+                rows={rows}
+                scrollRef={scroll.transcriptRef}
+                pinned={scroll.atBottom}
+                scrollToBottomRequest={scroll.bottomRequestId}
+                showThinking={showThinking}
+                toConcurrentTool={toConcurrentTool}
+                onOpenPath={onOpenPath}
+                onDoctorRefresh={onDoctorRefresh}
+                onStopAction={onStopAction}
+              />
             )}
           </div>
           {!scroll.atBottom ? (

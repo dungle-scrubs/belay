@@ -7,7 +7,6 @@ import {
   type SubmitEvent,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,6 +14,7 @@ import {
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import type { ToolStatus } from "@/components/chat/message";
 import { parseToolArgs } from "@/components/chat/tool-message";
+import type { StopAction } from "@/components/chat/transcript-row-view";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { PanelControls } from "@/components/panel/panel-controls";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
@@ -509,6 +509,19 @@ export function App() {
     inputRef.current?.focus();
   };
 
+  const onStopAction = (action: StopAction) => {
+    if (action === "continue") {
+      void command("/continue", "");
+    } else if (action === "compress") {
+      void command("/compress", "");
+    } else if (action === "retry") {
+      void command("/retry", "");
+    } else {
+      void cancel(active ?? "");
+    }
+    setAtBottom(true);
+  };
+
   // ESC mirrors the cancel button when a run is active/pending; with nothing to
   // cancel it just clears the composer. One window listener reads the latest state
   // from a ref so it never goes stale and works regardless of which element has focus.
@@ -558,60 +571,18 @@ export function App() {
   // streaming output never yanks the viewport when the user has scrolled up; a jump-to-bottom chevron
   // shows when away from the edge and scrolls back down.
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
-  // Mirror atBottom into a ref so the ResizeObserver callback below reads the latest value without
-  // re-subscribing on every change.
-  const atBottomRef = useRef(atBottom);
-  atBottomRef.current = atBottom;
+  const [bottomRequestId, setBottomRequestId] = useState(0);
   const onTranscriptScroll = () => {
     const el = transcriptRef.current;
     if (el) {
       setAtBottom(atBottomOf(el));
     }
   };
-  const scrollToBottom = () =>
-    transcriptRef.current?.scrollTo({
-      top: transcriptRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  // Follow the bottom while pinned: when `atBottom`, snap to the newest content on EVERY transcript
-  // update - a streaming answer, a burst of tool rows, or the two events a /compact appends (the
-  // command then its result) all keep the view at the bottom, not just the first one. Instant (no
-  // smooth) so it tracks tightly without lagging behind a fast stream. An existing session opens at
-  // the bottom (atBottom starts true → the first populated render scrolls to scrollHeight); an empty
-  // session's scrollHeight ≈ clientHeight, so the scroll is a no-op and content stays at the top.
-  // Scrolling up flips `atBottom` off (onTranscriptScroll) and stops the follow; a submit re-arms it
-  // via setAtBottom(true). useLayoutEffect (not useEffect) so the scroll lands BEFORE paint: on a
-  // reload the full history commits in one update (see use-session's replay buffer), and scrolling
-  // pre-paint puts the view at the bottom on the first frame instead of flashing the top first.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `transcript` is the trigger (not read) - re-pin on each update while at the bottom.
-  useLayoutEffect(() => {
-    const el = transcriptRef.current;
-    if (atBottom && el) {
-      el.scrollTo({ top: el.scrollHeight });
-    }
-  }, [transcript, atBottom]);
-  // Re-pin to the bottom as content SETTLES after a reload (or a fast stream): markdown, images, and
-  // collapsible thinking sections grow the scroll height AFTER the initial layout, which would
-  // otherwise leave a reload stranded mid-way (the one scroll-to-bottom fired before the content
-  // reached its final height). A ResizeObserver on the content re-scrolls to the bottom whenever it
-  // grows while we're meant to be pinned; scrolling up flips atBottom off and stops the re-pin.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach when the transcript content mounts (replayed/host gate); atBottom is read via the ref.
-  useEffect(() => {
-    const content = contentRef.current;
-    const container = transcriptRef.current;
-    if (!content || !container) {
-      return;
-    }
-    const observer = new ResizeObserver(() => {
-      if (atBottomRef.current) {
-        container.scrollTo({ top: container.scrollHeight });
-      }
-    });
-    observer.observe(content);
-    return () => observer.disconnect();
-  }, [replayed, host.leaderId, transcript.length === 0]);
+  const scrollToBottom = () => {
+    setAtBottom(true);
+    setBottomRequestId((id) => id + 1);
+  };
 
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
@@ -698,6 +669,7 @@ export function App() {
         toConcurrentTool,
         onOpenPath: (path) => void openInEditor(path),
         onDoctorRefresh: () => void command("/doctor", "refresh"),
+        onStopAction,
         showThinking: showThinkingOn,
         active,
         awaitingResponse,
@@ -706,8 +678,8 @@ export function App() {
       }}
       scroll={{
         transcriptRef,
-        contentRef,
         atBottom,
+        bottomRequestId,
         onScroll: onTranscriptScroll,
         scrollToBottom,
       }}

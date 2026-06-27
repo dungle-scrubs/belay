@@ -15,6 +15,7 @@
     "@assistant-ui/react-markdown": "^0.14.4",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@tanstack/react-query": "^5.101.0",
+    "@tanstack/react-virtual": "3.14.4",
     "@trevor/richter": "workspace:*",
     "@trevor/session": "workspace:*",
     "ahooks": "^3.9.7",

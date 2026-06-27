@@ -4,6 +4,7 @@ import {
   decodeTrevorEvent,
   READ_ONLY_TOOL_NAMES,
   type SessionEvent,
+  type TurnStop,
   type Usage,
   type UsageBreakdown,
 } from "@trevor/session";
@@ -33,6 +34,7 @@ export type AssistantMessage = {
   noReply?: boolean;
   /** Steps run when the turn hit its budget (>0 = a forced answer after the step/context cap). */
   stepLimit?: number;
+  stop?: TurnStop;
 };
 export type ToolMessage = {
   kind: "tool";
@@ -573,6 +575,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         }
         if (decoded.stepLimit) {
           segment.stepLimit = decoded.stepLimit;
+        }
+        if (decoded.stop) {
+          segment.stop = decoded.stop;
         }
         if (!segment.text && !segment.thinking) {
           segment.text = decoded.text;

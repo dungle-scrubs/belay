@@ -114,6 +114,33 @@ test("M2: a context.compacted fold leaves the rendered transcript full (no colla
   );
 });
 
+test("legacy stepLimit events render as legacy budget stops without typed stop data", () => {
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(2, events.assistantCompleted({ runId: "r1", text: "best effort", stepLimit: 32 })),
+  ];
+  const [message] = toTranscript(log).filter((m) => m.kind === "assistant");
+  assert.equal(message?.kind === "assistant" && message.stepLimit, 32);
+  assert.equal(message?.kind === "assistant" && message.stop, undefined);
+});
+
+test("typed stop causes survive transcript replay", () => {
+  const stop = {
+    cause: "step_backstop",
+    action: "paused" as const,
+    summary: "Paused at the 32-step backstop before context pressure.",
+    steps: 32,
+    context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
+  };
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(2, events.assistantCompleted({ runId: "r1", text: "", stepLimit: 32, stop })),
+  ];
+  const [message] = toTranscript(log).filter((m) => m.kind === "assistant");
+  assert.equal(message?.kind === "assistant" && message.stepLimit, 32);
+  assert.deepEqual(message?.kind === "assistant" && message.stop, stop);
+});
+
 const compacted = (foldId: string, seq: number) =>
   ev(
     seq,
