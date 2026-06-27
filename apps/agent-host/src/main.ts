@@ -51,6 +51,7 @@ import {
   pickProvider,
 } from "./providers";
 import { Emit } from "./services";
+import { stopSession } from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
@@ -1606,14 +1607,43 @@ function connect(): void {
   });
 }
 
-// Background processes are children of this host; SIGTERM them on shutdown so a
-// Ctrl-C doesn't leave dev servers or watchers orphaned.
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => {
+// Ctrl-C (SIGINT) is a quick exit: tear down child processes (dev servers, watchers) so they aren't
+// orphaned, then go. No turn bookkeeping - an interactive Ctrl-C wants out now.
+process.once("SIGINT", () => {
+  supervisor.killAll();
+  process.exit(0);
+});
+
+// `trevor stop` sends SIGTERM: a GRACEFUL session shutdown (D-094 M5), distinct from cancel (which
+// only aborts the active turn and stays attached) and kill (SIGKILL, no in-process orchestration).
+// Abort active work - a clean cancelled completion where it can still flush; a successor leader's
+// orphan-reap closes it durably otherwise - clear the deferred queue so no successor answers stale
+// prompts, and tear down background jobs. Exiting then lapses the lease (a standby takes over) and
+// lets the launcher reap the ownership record. The durable log is never touched.
+process.once("SIGTERM", () => {
+  try {
+    const outcome = stopSession({
+      abortActive: () => {
+        for (const runId of [...inFlightRuns]) {
+          closeRun(runId, "cancelled");
+        }
+        scheduler.cancel("");
+      },
+      clearQueue: () => scheduler.clearPending(),
+      killJobs: () => supervisor.killAll(),
+      isBusy: () => scheduler.isBusy(),
+      queuedCount: () => scheduler.debug().queued,
+    });
+    log("host", "stopping (SIGTERM)", {
+      cancelledActive: outcome.cancelledActive,
+      clearedQueued: outcome.clearedQueued,
+    });
+  } catch (error) {
+    warn("host", "graceful stop failed; tearing down anyway", { error: msg(error) });
     supervisor.killAll();
-    process.exit(0);
-  });
-}
+  }
+  process.exit(0);
+});
 
 configureRecall();
 log("host", "starting", {
