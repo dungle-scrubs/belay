@@ -32,6 +32,14 @@
   margin: 0.5em 0;
   padding-left: 1.4em;
 }
+/* Tailwind's preflight resets every list to `list-style: none`, so restore the markers - otherwise a
+   markdown numbered or bulleted list (in a user OR assistant message) renders with no numbers/bullets. */
+.trevor-md ul {
+  list-style: disc outside;
+}
+.trevor-md ol {
+  list-style: decimal outside;
+}
 .trevor-md li {
   margin: 0.15em 0;
 }
