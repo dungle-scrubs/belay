@@ -1,4 +1,9 @@
-import type { TurnStop } from "@trevor/session";
+import type {
+  ProviderDiagnostic,
+  ProviderIncidentReason,
+  ProviderPartialCounts,
+  TurnStop,
+} from "@trevor/session";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
 import { debug } from "../log";
 import type {
@@ -10,11 +15,18 @@ import type {
   ToolDef,
 } from "../providers";
 import { ProviderUnavailable } from "../providers/errors";
+import { redactSecrets } from "../providers/failure-taxonomy";
 import { recordObservation } from "../providers/observation-store";
 import { classifyProviderProtocolAnomaly } from "../providers/protocol-anomaly";
 import { providerFailureLogFields } from "../providers/provider-failure-log";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
+import {
+  initialRetrySafetyState,
+  isSafeToRetry,
+  noteProviderEvent,
+  outputStarted,
+} from "./retry-safety";
 import { evaluateTurnTermination } from "./turn-policy";
 
 /**
@@ -84,6 +96,61 @@ function observeUnknownFailure(
       ),
     ),
   ).pipe(Stream.drain);
+}
+
+function incidentReasonOf(error: ProviderError): ProviderIncidentReason {
+  if (error._tag === "ProviderAuthError") {
+    return "auth";
+  }
+  if (error.classification === "transient_transport") {
+    return "transport_loss";
+  }
+  if (error.classification === "context_overflow") {
+    return "context_overflow";
+  }
+  return error.classification ?? "unknown";
+}
+
+function providerDiagnostic(
+  provider: Provider,
+  error: ProviderError,
+  attempt: number,
+  safeToRetry: boolean,
+  partials: ProviderPartialCounts,
+): ProviderDiagnostic {
+  const unavailable = error instanceof ProviderUnavailable ? error : undefined;
+  const detail = redactSecrets(unavailable?.detail ?? error.message);
+  return {
+    provider: provider.id,
+    model: provider.model,
+    phase: "model-step",
+    reason: incidentReasonOf(error),
+    retryable: unavailable?.retryable === true,
+    safeToRetry,
+    attempt,
+    detail,
+    partials,
+    ...(unavailable?.evidence?.status !== undefined ? { status: unavailable.evidence.status } : {}),
+    ...(unavailable?.evidence?.code ? { code: unavailable.evidence.code } : {}),
+    ...(unavailable?.evidence?.requestId ? { requestId: unavailable.evidence.requestId } : {}),
+  };
+}
+
+function withDiagnostic(error: ProviderError, diagnostic: ProviderDiagnostic): ProviderError {
+  if (error instanceof ProviderUnavailable) {
+    return new ProviderUnavailable({
+      provider: error.provider,
+      detail: error.detail,
+      cause: error.cause,
+      retryable: error.retryable,
+      classification: error.classification,
+      userAction: error.userAction,
+      retryAfterMs: error.retryAfterMs,
+      evidence: error.evidence,
+      diagnostic,
+    });
+  }
+  return error;
 }
 
 /**
@@ -239,7 +306,12 @@ export type AgentEvent =
     }
   | { readonly type: "stop"; readonly stop: TurnStop }
   | { readonly type: "step_limit"; readonly steps: number }
-  | { readonly type: "reconnecting"; readonly attempt: number; readonly detail: string }
+  | {
+      readonly type: "reconnecting";
+      readonly attempt: number;
+      readonly detail: string;
+      readonly diagnostic?: ProviderDiagnostic;
+    }
   | { readonly type: "empty" };
 
 /**
@@ -463,13 +535,13 @@ export function runAgent(
       // before. Interrupts (ESC/cancel) ride the interrupt channel, not this typed `E` channel, so
       // catchAll never sees them: they are never retried and cancel stays instant during a backoff.
       const connectStep = (attempt: number): Stream.Stream<AgentEvent, ProviderError> => {
-        let sawEvent = false;
+        let retrySafety = initialRetrySafetyState();
         const mapped = withStallTimeout(
           provider.stream(conversation, tools, currentReasoning),
           provider.model,
         ).pipe(
-          Stream.tap(() => Effect.sync(() => (sawEvent = true))),
           Stream.filterMap((event) => {
+            retrySafety = noteProviderEvent(retrySafety, event);
             if (event.type === "tool_call") {
               toolCalls.push(event.call);
               return Option.none<AgentEvent>();
@@ -494,16 +566,25 @@ export function runAgent(
         return mapped.pipe(
           Stream.catchAll((error) => {
             const retryable = error._tag === "ProviderUnavailable" && error.retryable === true;
-            if (!sawEvent && retryable && attempt < MAX_RECONNECT_ATTEMPTS) {
+            const safeToRetry = isSafeToRetry(retrySafety);
+            if (safeToRetry && retryable && attempt < MAX_RECONNECT_ATTEMPTS) {
               const next = attempt + 1;
               const base = RECONNECT_BACKOFFS_MS[attempt - 1] ?? 0;
               const wait = base + Math.round(Math.random() * 150); // small jitter, no lockstep
               logProviderFailure(provider, error, next, "reconnect");
+              const diagnostic = providerDiagnostic(
+                provider,
+                error,
+                next,
+                true,
+                retrySafety.partials,
+              );
               return Stream.concat(
                 Stream.succeed<AgentEvent>({
                   type: "reconnecting",
                   attempt: next,
                   detail: error.detail,
+                  diagnostic,
                 }),
                 Stream.unwrap(
                   Effect.sleep(Duration.millis(wait)).pipe(Effect.as(connectStep(next))),
@@ -515,9 +596,17 @@ export function runAgent(
             // classifier's rules can improve later. Best-effort and output-started-aware; never fails
             // the turn.
             logProviderFailure(provider, error, attempt, "terminal");
+            const diagnostic = providerDiagnostic(
+              provider,
+              error,
+              attempt,
+              safeToRetry,
+              retrySafety.partials,
+            );
+            const diagnosticError = withDiagnostic(error, diagnostic);
             return Stream.concat(
-              observeUnknownFailure(provider, error, sawEvent),
-              Stream.fail(error),
+              observeUnknownFailure(provider, diagnosticError, outputStarted(retrySafety)),
+              Stream.fail(diagnosticError),
             );
           }),
         );

@@ -61,6 +61,64 @@ test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () 
   });
 });
 
+test("assistant.reconnecting optionally carries a provider diagnostic", () => {
+  const diagnostic = {
+    provider: "deepseek",
+    model: "deepseek-chat",
+    phase: "model-step",
+    reason: "transport_loss",
+    retryable: true,
+    safeToRetry: true,
+    attempt: 2,
+    detail: "stream failed",
+    partials: { textChars: 0, thinkingChars: 43, toolCalls: 0, toolResults: 0 },
+    status: 502,
+    code: "stream_error",
+    requestId: "req_123",
+  } as const;
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.assistantReconnecting({
+        runId: "r",
+        attempt: 2,
+        detail: "stream failed",
+        diagnostic,
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "assistant.reconnecting");
+  if (decoded?.type !== "assistant.reconnecting") return;
+  assert.deepEqual(decoded.diagnostic, diagnostic);
+});
+
+test("assistant.completed optionally carries a provider diagnostic while preserving error", () => {
+  const diagnostic = {
+    provider: "deepseek",
+    model: "deepseek-chat",
+    phase: "model-step",
+    reason: "transport_loss",
+    retryable: true,
+    safeToRetry: false,
+    attempt: 3,
+    detail: "stream failed",
+    partials: { textChars: 12, thinkingChars: 80, toolCalls: 0, toolResults: 0 },
+  } as const;
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.assistantCompleted({
+        runId: "r",
+        text: "",
+        error: "deepseek unavailable: stream failed",
+        diagnostic,
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "assistant.completed");
+  if (decoded?.type !== "assistant.completed") return;
+  assert.equal(decoded.error, "deepseek unavailable: stream failed");
+  assert.deepEqual(decoded.diagnostic, diagnostic);
+});
+
 test("assistant.completed stop metadata round-trips through decodeTrevorEvent", () => {
   const decoded = decodeTrevorEvent(
     stored(
@@ -100,6 +158,7 @@ test("legacy assistant.completed events decode with no stop object", () => {
   if (decoded?.type !== "assistant.completed") return;
   assert.equal(decoded.stepLimit, 32);
   assert.equal(decoded.stop, undefined);
+  assert.equal(decoded.diagnostic, undefined);
 });
 
 test("host.online round-trips the announced subagents (D-045)", () => {

@@ -63,6 +63,8 @@ export function isRetryableClass(cls: ProviderFailureClass): boolean {
  * for a cloud provider but a not-running runtime for a local one).
  */
 export interface ProviderFailureSignals {
+  /** Host provider id, when provider-scoped rules are needed (e.g. DeepSeek's generic stream drop). */
+  readonly provider?: string;
   /** The sanitized failure text (already redacted of secrets by the boundary or {@link redactSecrets}). */
   readonly detail: string;
   /** HTTP-like status when known (401, 429, 503, …). */
@@ -104,6 +106,9 @@ const PROVIDER_UNAVAILABLE =
 const TRANSIENT_TRANSPORT =
   /websocket|\bws\b|socket hang ?up|\b1006\b|econnreset|econnrefused|enotfound|epipe|etimedout|enetunreach|connection (reset|closed|refused|aborted|error)|reset by peer|timed? ?out|fetch failed|stream (closed|interrupted|aborted unexpectedly)|premature close|aborted unexpectedly/i;
 
+const DEEPSEEK_TRANSPORT =
+  /stream failed|stream failure|response stream failed|upstream stream failed/i;
+
 const REQUEST_REJECTED =
   /\b400\b|bad request|invalid request|invalid[\s_-]*param|unprocessable|malformed|validation (failed|error)/i;
 
@@ -126,7 +131,7 @@ function verdict(
 export function classifyProviderFailure(
   signals: ProviderFailureSignals,
 ): ProviderFailureClassification {
-  const { detail, status, code, retryAfterMs, local } = signals;
+  const { detail, status, code, retryAfterMs, local, provider } = signals;
   const text = `${code ?? ""} ${detail}`;
 
   // Terminal, strongly-signalled classes first.
@@ -157,6 +162,9 @@ export function classifyProviderFailure(
     return verdict("provider_unavailable", "retry", retryAfterMs);
   }
   if (TRANSIENT_TRANSPORT.test(text)) {
+    return verdict("transient_transport", "retry");
+  }
+  if (provider === "deepseek" && DEEPSEEK_TRANSPORT.test(text)) {
     return verdict("transient_transport", "retry");
   }
 

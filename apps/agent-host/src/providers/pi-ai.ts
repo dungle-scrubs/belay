@@ -374,6 +374,7 @@ export function streamPiAiModel<TApi extends Api>(
           // NAMES - never a raw value. The classifier reads the strong signals; the rest is preserved.
           const evidence = extractFailureEvidence(cause, { gateway });
           const failure = classifyProviderFailure({
+            provider,
             detail,
             status: evidence.status,
             code: evidence.code,

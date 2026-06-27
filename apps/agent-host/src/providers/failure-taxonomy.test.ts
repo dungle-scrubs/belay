@@ -34,6 +34,25 @@ describe("classifyProviderFailure", () => {
     expect(v.userAction).toBe("compact");
   });
 
+  it("classifies DeepSeek context and unknown errors", () => {
+    const context = classifyProviderFailure({
+      provider: "deepseek",
+      detail: "the request exceeds the context window",
+      status: 400,
+    });
+    expect(context.class).toBe("context_overflow");
+    expect(context.retryable).toBe(false);
+    expect(context.userAction).toBe("compact");
+
+    const unknown = classifyProviderFailure({
+      provider: "deepseek",
+      detail: "opaque failure shape abc123",
+    });
+    expect(unknown.class).toBe("unknown");
+    expect(unknown.retryable).toBe(false);
+    expect(unknown.userAction).toBe("none");
+  });
+
   it("classifies transient transport faults as retryable", () => {
     for (const detail of [
       "socket hang up",
@@ -49,6 +68,20 @@ describe("classifyProviderFailure", () => {
     }
   });
 
+  it("classifies DeepSeek's generic stream failed text as provider-scoped transport loss", () => {
+    const deepseek = classifyProviderFailure({
+      provider: "deepseek",
+      detail: "stream failed",
+    });
+    expect(deepseek.class).toBe("transient_transport");
+    expect(deepseek.retryable).toBe(true);
+    expect(deepseek.userAction).toBe("retry");
+
+    const generic = classifyProviderFailure({ provider: "glm", detail: "stream failed" });
+    expect(generic.class).toBe("unknown");
+    expect(generic.retryable).toBe(false);
+  });
+
   it("classifies a 429 as rate_limited and carries retry-after", () => {
     const v = classifyProviderFailure({
       detail: "Too Many Requests",
@@ -59,6 +92,37 @@ describe("classifyProviderFailure", () => {
     expect(v.retryable).toBe(true);
     expect(v.retryAfterMs).toBe(2000);
     expect(v.userAction).toBe("wait");
+  });
+
+  it("classifies DeepSeek auth, quota, and rate-limit signals", () => {
+    const auth = classifyProviderFailure({
+      provider: "deepseek",
+      detail: "401 Unauthorized: invalid api key",
+      status: 401,
+    });
+    expect(auth.class).toBe("auth");
+    expect(auth.retryable).toBe(false);
+    expect(auth.userAction).toBe("reauth");
+
+    const quota = classifyProviderFailure({
+      provider: "deepseek",
+      detail: "You exceeded your current quota",
+      status: 429,
+      code: "insufficient_quota",
+    });
+    expect(quota.class).toBe("quota_billing");
+    expect(quota.retryable).toBe(false);
+    expect(quota.userAction).toBe("check_billing");
+
+    const rate = classifyProviderFailure({
+      provider: "deepseek",
+      detail: "rate limit reached",
+      status: 429,
+      retryAfterMs: 2_000,
+    });
+    expect(rate.class).toBe("rate_limited");
+    expect(rate.retryable).toBe(true);
+    expect(rate.retryAfterMs).toBe(2_000);
   });
 
   it("classifies overload (529 / 'overloaded') as provider_overloaded, retryable", () => {

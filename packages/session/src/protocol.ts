@@ -33,6 +33,52 @@ export interface Usage {
   readonly genMs: number;
 }
 
+/** The provider boundary phase that produced a provider incident. */
+export type ProviderPhase = "model-step" | "stream" | "tool-protocol" | (string & {});
+
+/** A typed provider incident reason. Unknown future reasons stay renderable. */
+export type ProviderIncidentReason =
+  | "transport_loss"
+  | "auth"
+  | "rate_limited"
+  | "provider_overloaded"
+  | "provider_unavailable"
+  | "local_runtime_unavailable"
+  | "model_unavailable"
+  | "quota_billing"
+  | "request_rejected"
+  | "context_overflow"
+  | "protocol_anomaly"
+  | "unknown";
+
+/** Bounded streamed-output counters used to decide whether retry is side-effect safe. */
+export interface ProviderPartialCounts {
+  readonly textChars: number;
+  readonly thinkingChars: number;
+  readonly toolCalls: number;
+  readonly toolResults: number;
+}
+
+/**
+ * Structured provider incident data attached to lifecycle events. It is intentionally provider
+ * neutral: provider-specific prose is sanitized at the boundary, while the loop and web consume the
+ * typed reason, phase, retry verdict, and partial-output counters.
+ */
+export interface ProviderDiagnostic {
+  readonly provider: string;
+  readonly model?: string;
+  readonly phase: ProviderPhase;
+  readonly reason: ProviderIncidentReason;
+  readonly retryable: boolean;
+  readonly safeToRetry: boolean;
+  readonly attempt: number;
+  readonly detail: string;
+  readonly partials: ProviderPartialCounts;
+  readonly status?: number;
+  readonly code?: string;
+  readonly requestId?: string;
+}
+
 /** A typed reason for why a turn stopped. Unknown future causes stay renderable. */
 export type KnownTurnStopCause =
   | "answered"
@@ -277,9 +323,15 @@ export const events = {
     runId: string;
     attempt: number;
     detail: string;
+    diagnostic?: ProviderDiagnostic;
   }): TrevorEventInput => ({
     type: "assistant.reconnecting",
-    payload: { runId: p.runId, attempt: p.attempt, detail: p.detail },
+    payload: {
+      runId: p.runId,
+      attempt: p.attempt,
+      detail: p.detail,
+      ...(p.diagnostic ? { diagnostic: p.diagnostic } : {}),
+    },
   }),
   /**
    * A subagent delegation (D-046): this event on the PARENT session links the parent turn (`runId`)
@@ -377,6 +429,7 @@ export const events = {
     noReply?: boolean;
     stepLimit?: number;
     stop?: TurnStop;
+    diagnostic?: ProviderDiagnostic;
   }): TrevorEventInput => ({
     type: "assistant.completed",
     payload: {
@@ -394,6 +447,7 @@ export const events = {
       // omitted on a normal turn. A forced final answer still streams; this flags WHY.
       ...(p.stepLimit ? { stepLimit: p.stepLimit } : {}),
       ...(p.stop ? { stop: p.stop } : {}),
+      ...(p.diagnostic ? { diagnostic: p.diagnostic } : {}),
     },
   }),
   /** User asked to cancel the active run (hard steering / ESC). */
@@ -647,6 +701,46 @@ function coerceTurnStop(value: unknown): TurnStop | undefined {
   };
 }
 
+function coerceProviderDiagnostic(value: unknown): ProviderDiagnostic | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const provider = str(raw.provider);
+  const phase = str(raw.phase);
+  const reason = str(raw.reason);
+  if (!provider || !phase || !reason) {
+    return undefined;
+  }
+  const partialsRaw =
+    raw.partials && typeof raw.partials === "object" && !Array.isArray(raw.partials)
+      ? (raw.partials as Record<string, unknown>)
+      : {};
+  const model = optStr(raw.model);
+  const status = typeof raw.status === "number" ? raw.status : undefined;
+  const code = optStr(raw.code);
+  const requestId = optStr(raw.requestId);
+  return {
+    provider,
+    ...(model ? { model } : {}),
+    phase,
+    reason: reason as ProviderIncidentReason,
+    retryable: raw.retryable === true,
+    safeToRetry: raw.safeToRetry === true,
+    attempt: num(raw.attempt),
+    detail: str(raw.detail),
+    partials: {
+      textChars: num(partialsRaw.textChars),
+      thinkingChars: num(partialsRaw.thinkingChars),
+      toolCalls: num(partialsRaw.toolCalls),
+      toolResults: num(partialsRaw.toolResults),
+    },
+    ...(status !== undefined ? { status } : {}),
+    ...(code ? { code } : {}),
+    ...(requestId ? { requestId } : {}),
+  };
+}
+
 /** Coerces a payload array of objects via `map`, skipping non-objects and nulls. */
 function coerceArray<T>(value: unknown, map: (raw: Record<string, unknown>) => T | null): T[] {
   if (!Array.isArray(value)) {
@@ -847,6 +941,7 @@ export type DecodedEvent =
       readonly runId: string;
       readonly attempt: number;
       readonly detail: string;
+      readonly diagnostic?: ProviderDiagnostic;
     }
   | {
       readonly type: "delegated.to";
@@ -878,6 +973,7 @@ export type DecodedEvent =
       /** Steps run when the turn hit its budget (0 = not budget-terminated). */
       readonly stepLimit: number;
       readonly stop?: TurnStop;
+      readonly diagnostic?: ProviderDiagnostic;
     }
   | {
       readonly type: "context.compacted";
@@ -1003,6 +1099,9 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         runId,
         attempt: num(p.attempt),
         detail: str(p.detail),
+        ...(coerceProviderDiagnostic(p.diagnostic)
+          ? { diagnostic: coerceProviderDiagnostic(p.diagnostic) }
+          : {}),
       };
     case "delegated.to":
       return {
@@ -1035,6 +1134,9 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         noReply: p.noReply === true,
         stepLimit: typeof p.stepLimit === "number" ? p.stepLimit : 0,
         stop: coerceTurnStop(p.stop),
+        ...(coerceProviderDiagnostic(p.diagnostic)
+          ? { diagnostic: coerceProviderDiagnostic(p.diagnostic) }
+          : {}),
       };
     case "context.compacted":
       return {

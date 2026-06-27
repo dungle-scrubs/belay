@@ -250,6 +250,7 @@ export function publishTurn(
               runId,
               attempt: event.attempt,
               detail: event.detail,
+              ...(event.diagnostic ? { diagnostic: event.diagnostic } : {}),
             }),
           );
         } else if (event.type === "empty") {
@@ -343,8 +344,13 @@ export function publishTurn(
                 }),
               );
             }
+            const unavailable =
+              Option.isSome(failure) && failure.value instanceof ProviderUnavailable
+                ? failure.value
+                : undefined;
             yield* complete({
               error: Option.isSome(failure) ? failure.value.message : "stream failed",
+              ...(unavailable?.diagnostic ? { diagnostic: unavailable.diagnostic } : {}),
             });
           }
         }),

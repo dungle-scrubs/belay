@@ -3,6 +3,7 @@ import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
+import { ProviderUnavailable } from "../src/providers/errors";
 import { publishTurn } from "../src/turn";
 import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
 
@@ -112,6 +113,47 @@ test("assistant.completed publishes typed stop metadata for a low-context step b
     context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
   });
   assert.equal(completed?.text, "");
+});
+
+test("a terminal provider stream failure publishes structured diagnostic data with the legacy error", async () => {
+  const provider = fakeProvider({
+    id: "deepseek",
+    stream: () =>
+      Stream.concat(
+        Stream.fromIterable<ProviderEvent>([
+          { type: "text", text: "partial visible answer" },
+          { type: "thinking", text: "hidden reasoning" },
+        ]),
+        Stream.fail(
+          new ProviderUnavailable({
+            provider: "deepseek",
+            detail: "stream failed",
+            retryable: true,
+            classification: "transient_transport",
+          }),
+        ),
+      ),
+  });
+  const events = await runTurn(provider, history, { runId: "r1" });
+  const completed = events.find((e) => e.type === "assistant.completed")?.payload;
+
+  assert.equal(completed?.error, "deepseek unavailable: stream failed");
+  assert.equal((completed?.diagnostic as { phase?: string } | undefined)?.phase, "model-step");
+  assert.equal(
+    (completed?.diagnostic as { reason?: string } | undefined)?.reason,
+    "transport_loss",
+  );
+  assert.equal((completed?.diagnostic as { retryable?: boolean } | undefined)?.retryable, true);
+  assert.equal(
+    (completed?.diagnostic as { safeToRetry?: boolean } | undefined)?.safeToRetry,
+    false,
+  );
+  assert.deepEqual((completed?.diagnostic as { partials?: unknown } | undefined)?.partials, {
+    textChars: "partial visible answer".length,
+    thinkingChars: "hidden reasoning".length,
+    toolCalls: 0,
+    toolResults: 0,
+  });
 });
 
 test("cancellation interrupts a streaming turn before it completes", async () => {

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Exit, Fiber, Stream, TestClock } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, Option, Stream, TestClock } from "effect";
 import { afterEach, beforeEach, describe } from "vitest";
 import type { ChatMessage, Provider, ProviderError, ProviderEvent } from "../providers";
 import { ProviderAuthError, ProviderUnavailable } from "../providers/errors";
@@ -29,6 +29,8 @@ function flakyProvider(opts: {
   failBefore: number;
   error: () => ProviderError;
   emitBeforeFail?: boolean;
+  thinkBeforeFail?: boolean;
+  toolCallBeforeFail?: boolean;
   onCall?: () => void;
 }): Provider {
   let calls = 0;
@@ -51,6 +53,21 @@ function flakyProvider(opts: {
       opts.onCall?.();
       if (calls <= opts.failBefore) {
         const fail = Stream.fail(opts.error());
+        if (opts.thinkBeforeFail) {
+          return Stream.concat(
+            Stream.succeed<ProviderEvent>({ type: "thinking", text: "checking the repo" }),
+            fail,
+          );
+        }
+        if (opts.toolCallBeforeFail) {
+          return Stream.concat(
+            Stream.succeed<ProviderEvent>({
+              type: "tool_call",
+              call: { id: "c1", name: "bash", arguments: "{}" },
+            }),
+            fail,
+          );
+        }
         return opts.emitBeforeFail
           ? Stream.concat(Stream.succeed<ProviderEvent>({ type: "text", text: "partial" }), fail)
           : fail;
@@ -61,7 +78,12 @@ function flakyProvider(opts: {
 }
 
 const retryable = () =>
-  new ProviderUnavailable({ provider: "fake", detail: "websocket 1006 closed", retryable: true });
+  new ProviderUnavailable({
+    provider: "fake",
+    detail: "websocket 1006 closed",
+    retryable: true,
+    classification: "transient_transport",
+  });
 const nonRetryable = () =>
   new ProviderUnavailable({ provider: "fake", detail: "model not found", retryable: false });
 const authError = () => new ProviderAuthError({ provider: "fake", detail: "401 unauthorized" });
@@ -73,6 +95,13 @@ const unknownClassified = () =>
     retryable: false,
     classification: "unknown",
     evidence: { status: 418, code: "teapot", shapeFields: ["error", "status"] },
+  });
+const secretBearingRetryable = () =>
+  new ProviderUnavailable({
+    provider: "fake",
+    detail: "stream failed with Authorization: Bearer sk-secret123456789",
+    retryable: true,
+    classification: "transient_transport",
   });
 
 const HISTORY: ChatMessage[] = [{ role: "user", content: "go" }];
@@ -115,6 +144,39 @@ it.effect("a transient drop before the first token recovers transparently", () =
   }),
 );
 
+it.effect("a DeepSeek-style thinking-only stream drop retries with a provider diagnostic", () =>
+  Effect.gen(function* () {
+    const { events, exit } = yield* drive(
+      flakyProvider({ failBefore: 1, error: retryable, thinkBeforeFail: true }),
+    );
+    assert.ok(Exit.isSuccess(exit), "thinking-only partials are safe to retry");
+    const [marker] = reconnects(events);
+    assert.equal(marker?.attempt, 2);
+    assert.deepEqual(marker?.diagnostic?.partials, {
+      textChars: 0,
+      thinkingChars: "checking the repo".length,
+      toolCalls: 0,
+      toolResults: 0,
+    });
+    assert.equal(marker?.diagnostic?.reason, "transport_loss");
+    assert.equal(marker?.diagnostic?.retryable, true);
+    assert.equal(marker?.diagnostic?.safeToRetry, true);
+    assert.equal(answerText(events), "DONE");
+  }),
+);
+
+it.effect("provider diagnostics redact secret-bearing detail fields", () =>
+  Effect.gen(function* () {
+    const { events, exit } = yield* drive(
+      flakyProvider({ failBefore: 1, error: secretBearingRetryable, thinkBeforeFail: true }),
+    );
+    assert.ok(Exit.isSuccess(exit), "the retry still succeeds");
+    const [marker] = reconnects(events);
+    assert.ok(marker?.diagnostic?.detail.includes("«redacted»"));
+    assert.ok(!marker?.diagnostic?.detail.includes("sk-secret123456789"));
+  }),
+);
+
 it.effect("a drop AFTER output has streamed is terminal (never retried)", () =>
   Effect.gen(function* () {
     const { events, exit } = yield* drive(
@@ -127,6 +189,30 @@ it.effect("a drop AFTER output has streamed is terminal (never retried)", () =>
       "partial",
       "the partial output is what streamed before the drop",
     );
+    const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none();
+    assert.equal(Option.isSome(failure), true);
+    if (Option.isSome(failure)) {
+      assert.equal(failure.value._tag, "ProviderUnavailable");
+      assert.equal(failure.value.diagnostic?.safeToRetry, false);
+      assert.equal(failure.value.diagnostic?.partials.textChars, "partial".length);
+    }
+  }),
+);
+
+it.effect("a drop after a typed tool call is terminal and records unsafe retry state", () =>
+  Effect.gen(function* () {
+    const { events, exit } = yield* drive(
+      flakyProvider({ failBefore: 1, error: retryable, toolCallBeforeFail: true }),
+    );
+    assert.ok(Exit.isFailure(exit), "a tool-call boundary is terminal");
+    assert.equal(reconnects(events).length, 0, "no reconnect once a tool call crossed");
+    const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none();
+    assert.equal(Option.isSome(failure), true);
+    if (Option.isSome(failure)) {
+      assert.equal(failure.value._tag, "ProviderUnavailable");
+      assert.equal(failure.value.diagnostic?.safeToRetry, false);
+      assert.equal(failure.value.diagnostic?.partials.toolCalls, 1);
+    }
   }),
 );
 

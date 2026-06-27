@@ -1,3 +1,4 @@
+import type { ProviderDiagnostic } from "@trevor/session";
 import { Data } from "effect";
 import type { ProviderFailureClass, ProviderUserAction } from "./failure-taxonomy";
 
@@ -39,6 +40,8 @@ export class ProviderUnavailable extends Data.TaggedError("ProviderUnavailable")
     readonly upstreamProvider?: string;
     readonly shapeFields?: readonly string[];
   };
+  /** Structured provider incident detail for assistant events and /doctor correlation. */
+  readonly diagnostic?: ProviderDiagnostic;
 }> {
   override get message(): string {
     return `${this.provider} unavailable: ${this.detail}`;
