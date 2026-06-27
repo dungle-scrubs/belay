@@ -66,6 +66,7 @@ export interface TranscriptScroll {
   readonly atBottom: boolean;
   readonly bottomRequestId: number;
   readonly onScroll: () => void;
+  readonly onUserScrollIntent: () => void;
   readonly scrollToBottom: () => void;
 }
 
@@ -199,6 +200,17 @@ export function PanelHost(props: {
           <div
             ref={scroll.transcriptRef}
             onScroll={onTranscriptScroll}
+            onWheel={(event) => {
+              if (event.deltaY < 0) {
+                scroll.onUserScrollIntent();
+              }
+            }}
+            onTouchStart={scroll.onUserScrollIntent}
+            onPointerDown={(event) => {
+              if (event.target === event.currentTarget) {
+                scroll.onUserScrollIntent();
+              }
+            }}
             data-transcript-scroll
             className="flex flex-1 flex-col overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >

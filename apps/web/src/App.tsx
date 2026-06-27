@@ -573,14 +573,29 @@ export function App() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [bottomRequestId, setBottomRequestId] = useState(0);
+  const atBottomRef = useRef(atBottom);
+  atBottomRef.current = atBottom;
+  const userScrollIntentUntilRef = useRef(0);
+  const onUserScrollIntent = () => {
+    userScrollIntentUntilRef.current = performance.now() + 700;
+  };
   const onTranscriptScroll = () => {
     const el = transcriptRef.current;
-    if (el) {
-      setAtBottom(atBottomOf(el));
+    if (!el) {
+      return;
+    }
+    if (atBottomOf(el)) {
+      setAtBottom(true);
+      return;
+    }
+    const userIsScrolling = performance.now() <= userScrollIntentUntilRef.current;
+    if (userIsScrolling || !atBottomRef.current) {
+      setAtBottom(false);
     }
   };
   const scrollToBottom = () => {
     setAtBottom(true);
+    userScrollIntentUntilRef.current = 0;
     setBottomRequestId((id) => id + 1);
   };
 
@@ -681,6 +696,7 @@ export function App() {
         atBottom,
         bottomRequestId,
         onScroll: onTranscriptScroll,
+        onUserScrollIntent,
         scrollToBottom,
       }}
       tasks={tasks}

@@ -132,7 +132,7 @@ export function TranscriptRowView({
 }: TranscriptRowViewProps) {
   if (row.kind === "tool_batch") {
     return (
-      <div className={cn("pl-3.5", row.compactAbove && "-mt-6")}>
+      <div className="pl-3.5">
         <ConcurrentTools tools={row.tools.map(toConcurrentTool)} />
       </div>
     );
@@ -156,13 +156,7 @@ export function TranscriptRowView({
 
   const message = row.message;
   if (message.kind === "tool") {
-    return (
-      <ToolMessage
-        message={message}
-        className={cn("pl-3.5", row.compactAbove && "-mt-6")}
-        onOpenPath={onOpenPath}
-      />
-    );
+    return <ToolMessage message={message} className="pl-3.5" onOpenPath={onOpenPath} />;
   }
 
   if (message.kind === "result") {

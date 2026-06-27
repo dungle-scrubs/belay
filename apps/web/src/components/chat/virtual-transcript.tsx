@@ -100,9 +100,14 @@ export function VirtualTranscript({
         return;
       }
       virtualizer.scrollToEnd({ behavior });
+      const scrollElement = scrollRef.current;
+      if (scrollElement) {
+        scrollElement.scrollTo({ top: scrollElement.scrollHeight, behavior });
+      }
     },
-    [rows.length, virtualizer],
+    [rows.length, scrollRef, virtualizer],
   );
+  const totalSize = virtualizer.getTotalSize();
 
   useLayoutEffect(() => {
     const last = rows.at(-1)?.id ?? null;
@@ -174,6 +179,24 @@ export function VirtualTranscript({
     return () => cancelAnimationFrame(frame);
   }, [pinned, readyToReveal, scrollToLiveEdge]);
 
+  useLayoutEffect(() => {
+    void totalSize;
+    if (!readyToReveal || !pinned) {
+      return;
+    }
+    let secondFrame: number | null = null;
+    const frame = requestAnimationFrame(() => {
+      scrollToLiveEdge();
+      secondFrame = requestAnimationFrame(() => scrollToLiveEdge());
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (secondFrame !== null) {
+        cancelAnimationFrame(secondFrame);
+      }
+    };
+  }, [pinned, readyToReveal, scrollToLiveEdge, totalSize]);
+
   return (
     <div
       className={cn("relative", readyToReveal ? "fade-in animate-in duration-150" : "opacity-0")}
@@ -194,7 +217,7 @@ export function VirtualTranscript({
             data-index={item.index}
             data-transcript-virtual-row={row.kind}
             className={cn(
-              "absolute top-0 left-0 w-full",
+              "absolute top-0 left-0 flow-root w-full",
               row.kind === "message" && row.compactAbove ? "pb-2" : "pb-8",
             )}
             style={{ transform: `translateY(${item.start}px)` }}

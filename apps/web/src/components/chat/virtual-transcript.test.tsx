@@ -23,6 +23,22 @@ function userRow(index: number): TranscriptRow {
   };
 }
 
+function toolRow(index: number, compactAbove = true): TranscriptRow {
+  return {
+    kind: "message",
+    id: `message:t-${index}`,
+    compactAbove,
+    message: {
+      kind: "tool",
+      id: `t-${index}`,
+      name: "task_create",
+      args: JSON.stringify({ subject: `task ${index}` }),
+      done: true,
+      result: "created",
+    },
+  };
+}
+
 function Harness({
   rows,
   pinned = true,
@@ -171,5 +187,16 @@ describe("VirtualTranscript", () => {
         ?.getAttribute("data-transcript-row-count"),
       "3",
     );
+  });
+
+  test("compact tool rows do not use negative-margin overlap inside virtual rows", async () => {
+    const rows = [userRow(0), toolRow(1, false), toolRow(2, true), toolRow(3, true), userRow(4)];
+    const { container } = render(<Harness rows={rows} />);
+
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+
+    assert.equal(container.querySelector(".-mt-6"), null);
   });
 });
