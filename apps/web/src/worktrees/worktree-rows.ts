@@ -1,10 +1,10 @@
-import type { WorktreeSummary } from "@trevor/session";
+import type { SessionActivity, WorktreeSummary } from "@trevor/session";
 import type { CommandRow, RowTone } from "@/components/command-modal";
 
 /** Per-session activity decoration, cross-referenced from the resume inventory when available. */
 export interface WorktreeActivity {
   readonly host: "live" | "stale" | "none";
-  readonly activity: "running" | "idle";
+  readonly activity: SessionActivity;
 }
 
 export interface WorktreeRowsContext {

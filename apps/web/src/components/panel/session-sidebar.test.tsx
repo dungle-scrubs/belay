@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
 import type { SessionSummary } from "@trevor/session";
 import { test } from "vitest";
-import { SessionSidebar, visibleSessions } from "./session-sidebar";
+import { effectiveActivity, SessionSidebar, visibleSessions } from "./session-sidebar";
 
 /**
- * D-093 M1/M2: the session navigation sidebar. Pins current-project scope, archived exclusion,
- * recency order, the selected state, row rendering, selection callback, and accessibility - over
- * production SessionSummary fixtures.
+ * D-093 M1/M2/M3: the session navigation sidebar. Pins current-project scope, archived exclusion,
+ * recency order, the selected state, row rendering, selection callback, accessibility, and the
+ * running/queued/settled activity states (M3) - over production SessionSummary fixtures.
  */
 
 const NOW = Date.parse("2026-06-27T12:00:00.000Z");
@@ -91,6 +91,80 @@ test("a running session shows a running indicator", () => {
     />,
   );
   assert.ok((container.textContent ?? "").includes("running"));
+});
+
+test("rows show running, queued, and settled states distinctly (D-093 M3)", () => {
+  const { container, getByText } = render(
+    <SessionSidebar
+      sessions={[
+        summary({ sessionId: "run", title: "running one", activity: "running", host: "live" }),
+        summary({ sessionId: "queue", title: "queued one", activity: "running", host: "live" }),
+        summary({
+          sessionId: "done",
+          title: "settled one",
+          activity: "settled",
+          host: "live",
+          updatedAt: ago(1000 * 60 * 10),
+        }),
+      ]}
+      currentSessionId="run"
+      currentProject="trevorV2"
+      // The live send-queue owner marks "queue" as having work waiting behind its active turn.
+      liveActivity={new Map([["queue", "queued"]])}
+      onSelect={noop}
+      nowMs={NOW}
+    />,
+  );
+  const text = container.textContent ?? "";
+  assert.ok(text.includes("running"), "the running row shows a running label");
+  assert.ok(text.includes("queued"), "the live-queued row shows a queued label");
+  // The settled row shows a relative time, not a live status word.
+  assert.ok(getByText("10m ago"), "the settled row shows when it last settled");
+  assert.ok(!text.includes("idle"), "settled is distinct from idle - no idle label");
+  // A green (running) and an amber (queued) pulse dot are both present and distinct.
+  assert.equal(container.querySelectorAll(".bg-smui-green.animate-pulse").length, 1);
+  assert.equal(container.querySelectorAll(".bg-amber-400.animate-pulse").length, 1);
+});
+
+test("activity stays visible for a session the user is NOT currently viewing (D-093 M3)", () => {
+  // The viewed session is "cur"; a DIFFERENT session "bg" is running. Its activity must still show.
+  const { getByText, container } = render(
+    <SessionSidebar
+      sessions={[
+        summary({ sessionId: "cur", title: "viewing this", activity: "idle", host: "live" }),
+        summary({ sessionId: "bg", title: "background run", activity: "running", host: "live" }),
+      ]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={noop}
+      nowMs={NOW}
+    />,
+  );
+  const bgRow = getByText("background run").closest("button");
+  assert.ok(bgRow, "the non-current row renders");
+  assert.ok((bgRow?.textContent ?? "").includes("running"), "its running state is visible");
+  assert.ok(
+    bgRow?.querySelector(".bg-smui-green.animate-pulse"),
+    "the running dot shows on the non-current row",
+  );
+  // And it is not the selected row.
+  assert.notEqual(bgRow?.getAttribute("aria-current"), "true");
+  assert.ok(container.querySelector('[aria-current="true"]'), "a different row is selected");
+});
+
+test("effectiveActivity prefers a live override, else the durable activity (D-093 M3)", () => {
+  const s = summary({ sessionId: "x", activity: "settled" });
+  assert.equal(effectiveActivity(s), "settled", "no override -> durable activity");
+  assert.equal(
+    effectiveActivity(s, new Map([["x", "queued"]])),
+    "queued",
+    "a live override wins over the durable activity",
+  );
+  assert.equal(
+    effectiveActivity(s, new Map([["other", "running"]])),
+    "settled",
+    "an override for a different session does not apply",
+  );
 });
 
 test("clicking a row selects that session", () => {

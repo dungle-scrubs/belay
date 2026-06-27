@@ -109,7 +109,7 @@ test("git/branch carry through from the latest host.online", () => {
   assert.deepEqual(s.git, git);
 });
 
-test("activity is running for an unfinished run, idle once completed", () => {
+test("activity is running for an unfinished run, settled once completed, idle when never ran", () => {
   const started = events.assistantStarted({
     runId: "r1",
     warm: true,
@@ -119,23 +119,34 @@ test("activity is running for an unfinished run, idle once completed", () => {
   const completed = events.assistantCompleted({ runId: "r1", text: "done" });
   const startedEv = ev(started.type, started.payload as Record<string, unknown>);
   const completedEv = ev(completed.type, completed.payload as Record<string, unknown>);
+  assert.equal(summarizeSession(baseRow({ lifecycle: [] })).activity, "idle");
   assert.equal(summarizeSession(baseRow({ lifecycle: [startedEv] })).activity, "running");
-  assert.equal(summarizeSession(baseRow({ lifecycle: [startedEv, completedEv] })).activity, "idle");
+  assert.equal(
+    summarizeSession(baseRow({ lifecycle: [startedEv, completedEv] })).activity,
+    "settled",
+    "a finished run reads as settled, distinct from a never-ran idle session",
+  );
 });
 
-test("a /clear resets activity: a pre-clear orphan run does not count", () => {
+test("a /clear resets activity to idle: a pre-clear orphan run and prior work do not count", () => {
   const started = events.assistantStarted({
     runId: "r1",
     warm: true,
     model: "m",
     provider: "qwen",
   });
+  const completed = events.assistantCompleted({ runId: "r1", text: "done" });
   const clear = events.userCommand({ command: "/clear", args: "" });
   const lifecycle = [
     ev(started.type, started.payload as Record<string, unknown>),
+    ev(completed.type, completed.payload as Record<string, unknown>),
     ev(clear.type, clear.payload as Record<string, unknown>),
   ];
-  assert.equal(summarizeSession(baseRow({ lifecycle })).activity, "idle");
+  assert.equal(
+    summarizeSession(baseRow({ lifecycle })).activity,
+    "idle",
+    "after /clear the session is idle again, not settled from the cleared work",
+  );
 });
 
 test("sortInventory puts the current project first, each block by recency desc", () => {

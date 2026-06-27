@@ -3,9 +3,10 @@ import type { SessionSummary } from "@trevor/session";
 import { SessionSidebar } from "./session-sidebar";
 
 /**
- * D-093 M1: the session navigation sidebar, Storybook-first. Covers empty, current-only, many
- * sessions, long titles, long branch, narrow width, and tall lists. Fixtures are production-shaped
- * `SessionSummary`s (the D-090 inventory read model), not story-only row data.
+ * D-093 M1/M3: the session navigation sidebar, Storybook-first. Covers empty, current-only, many
+ * sessions, long titles, long branch, narrow width, tall lists, and the running/queued/settled
+ * activity states (M3). Fixtures are production-shaped `SessionSummary`s (the D-090 inventory read
+ * model), not story-only row data.
  */
 
 const meta: Meta<typeof SessionSidebar> = {
@@ -107,6 +108,44 @@ export const CurrentOnly: Story = {
         ]}
         currentSessionId="cur"
         currentProject="trevorV2"
+        onSelect={noop}
+        nowMs={NOW}
+        className="h-full"
+      />
+    </Frame>
+  ),
+};
+
+/**
+ * The three live activity states side by side (D-093 M3): a running turn (green pulse), work queued
+ * behind it (amber pulse, via the live-activity override the send-queue owner supplies), and a
+ * settled session showing when it last finished. A never-run session stays a faint idle dot.
+ */
+export const ActivityStates: Story = {
+  render: () => (
+    <Frame>
+      <SessionSidebar
+        sessions={[
+          summary({ sessionId: "run", title: "running a turn", activity: "running", host: "live" }),
+          summary({ sessionId: "queue", title: "work queued", activity: "running", host: "live" }),
+          summary({
+            sessionId: "done",
+            title: "just settled",
+            activity: "settled",
+            host: "live",
+            updatedAt: ago(1000 * 60 * 12),
+          }),
+          summary({
+            sessionId: "idle",
+            title: "never run yet",
+            activity: "idle",
+            host: "none",
+            updatedAt: ago(1000 * 60 * 60 * 26),
+          }),
+        ]}
+        currentSessionId="run"
+        currentProject="trevorV2"
+        liveActivity={new Map([["queue", "queued"]])}
         onSelect={noop}
         nowMs={NOW}
         className="h-full"

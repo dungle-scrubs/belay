@@ -27,14 +27,21 @@ export interface SessionSummary {
    * Distinguishing stale from none is the M1 requirement that a dead host reads differently.
    */
   readonly host: HostPresenceState;
-  /** Coarse activity from the durable log: a turn in flight vs settled. */
+  /** Coarse activity from the durable log: a turn in flight, settled after running, or never-ran. */
   readonly activity: SessionActivity;
   /** Whether the session is archived (D-094): hidden from the default UI/sidebar/resume views. */
   readonly archived: boolean;
 }
 
 export type HostPresenceState = "live" | "stale" | "none";
-export type SessionActivity = "running" | "idle";
+
+/**
+ * A session's coarse run state for the sidebar (D-093 M3). Three of the four are derivable from the
+ * durable log - `running` (a turn in flight), `settled` (ran work, now finished), `idle` (never ran);
+ * `queued` (work waiting behind the active turn) is NOT durable - the browser/host that owns the live
+ * send-queue supplies it as a live override on top of the durable activity (see the session sidebar).
+ */
+export type SessionActivity = "running" | "queued" | "settled" | "idle";
 
 /**
  * The raw per-session bits the store gathers before projecting a SessionSummary. Kept as
@@ -74,14 +81,17 @@ function titleFrom(firstUser: SessionEvent | null, sessionId: string): string {
 }
 
 /**
- * Whether the session has a turn in flight, by the same rule as the web's activeRunId: the
- * last started run with no completion is active, an older started-without-completed is a
- * dead orphan that does not count, and a `/clear` resets the detection. Pure over the
- * lifecycle slice (started/completed/command events).
+ * The session's durable activity (D-093 M3): `running` when a turn is in flight (the same rule as the
+ * web's activeRunId - the last started run with no completion is active, an older
+ * started-without-completed is a dead orphan that does not count), `settled` once it has finished real
+ * work, or `idle` when it has never run. A `/clear` resets the detection, so a freshly cleared session
+ * reads `idle` again. Pure over the lifecycle slice (started/completed/command events). `queued` is not
+ * derivable here - it is layered on by the live send-queue owner.
  */
-function runActive(lifecycle: readonly SessionEvent[]): boolean {
+function deriveActivity(lifecycle: readonly SessionEvent[]): SessionActivity {
   const completed = new Set<string>();
   let lastStarted: string | null = null;
+  let everCompleted = false;
   for (const event of lifecycle) {
     const decoded = decodeTrevorEvent(event);
     if (!decoded) {
@@ -90,13 +100,18 @@ function runActive(lifecycle: readonly SessionEvent[]): boolean {
     if (decoded.type === "user.command" && decoded.command === "/clear") {
       lastStarted = null;
       completed.clear();
+      everCompleted = false;
     } else if (decoded.type === "assistant.started") {
       lastStarted = decoded.runId;
     } else if (decoded.type === "assistant.completed") {
       completed.add(decoded.runId);
+      everCompleted = true;
     }
   }
-  return lastStarted != null && !completed.has(lastStarted);
+  if (lastStarted != null && !completed.has(lastStarted)) {
+    return "running";
+  }
+  return everCompleted ? "settled" : "idle";
 }
 
 function projectOf(workspace: string | null, cwd: string | null): string | null {
@@ -133,7 +148,7 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     updatedAt: row.updatedAt,
     eventCount: row.eventCount,
     host: presence,
-    activity: runActive(row.lifecycle) ? "running" : "idle",
+    activity: deriveActivity(row.lifecycle),
     archived,
   };
 }
