@@ -176,12 +176,15 @@ export function PanelHost(props: {
   sidebar: SidebarBinding;
   /** A short name for the open session, shown in the main header strip (D-093). */
   sessionName: string;
+  /** The full model chooser (D-065), rendered as a takeover of the transcript/composer center column
+   *  while the sidebars stay visible. Undefined (the common case) when the chooser is closed. */
+  chooser?: ReactNode;
   /** Whether the open session is archived (D-094): gates the composer behind an unarchive notice. */
   archived: boolean;
   onUnarchive: () => void;
 }) {
   const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
-  const { sidebar, sessionName, archived, onUnarchive } = props;
+  const { sidebar, sessionName, chooser, archived, onUnarchive } = props;
   const { replayed } = stream;
   const {
     transcript,
@@ -251,6 +254,14 @@ export function PanelHost(props: {
             ) : null}
           </span>
         </header>
+        {/* The model chooser takeover (D-065): fills the transcript + composer space below the header
+          while the left/right drawers stay visible. Rendered over the column (the transcript/composer
+          stay mounted underneath, preserving scroll + draft) only while open. */}
+        {chooser ? (
+          <div className="absolute inset-x-4 top-8 bottom-0 z-20 flex flex-col overflow-hidden bg-smui-surface-sunken">
+            {chooser}
+          </div>
+        ) : null}
         {/* Transcript fills the view; the composer + footer pin to the bottom.
           Scrollbar is hidden but the region still scrolls. The relative wrapper anchors
           the jump-to-bottom chevron over the transcript's lower edge. */}

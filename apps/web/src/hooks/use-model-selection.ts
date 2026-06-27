@@ -51,11 +51,17 @@ export interface ModelSelection {
 
 export function useModelSelection({
   roster,
+  hostSources,
+  hostCatalog,
   legacyProvider,
   legacyReasoning,
 }: {
-  /** The host-announced provider roster (host.online `models`). */
+  /** The host-announced provider roster (host.online `models`), the pre-catalog fallback. */
   readonly roster: Readonly<Record<string, ProviderModel>>;
+  /** The host-owned model SOURCES (host.online `sources`, D-065); preferred once the catalog loads. */
+  readonly hostSources: readonly SourceSummary[];
+  /** The host-owned per-source catalog (host.online `catalog`, D-065). */
+  readonly hostCatalog: Readonly<Record<string, readonly CatalogEntry[]>>;
   /** Today's sidebar provider selection, the active fallback until an explicit chooser pick. */
   readonly legacyProvider: string;
   /** Today's chosen reasoning level for the active provider (null = provider default). */
@@ -68,9 +74,32 @@ export function useModelSelection({
   // unusable refs) rather than trusting the raw JSON ahooks hands back.
   const preferences = useMemo(() => decodeModelPreferences(rawPrefs), [rawPrefs]);
 
-  const sources = useMemo(() => sourcesFromRoster(roster), [roster]);
-  const catalogBySource = useMemo(() => catalogFromRoster(roster), [roster]);
-  const { sourceLabels, modelLabels } = useMemo(() => rosterLabels(roster), [roster]);
+  // Prefer the host-owned source/catalog read model (real types, live model lists, auth state); fall
+  // back to projecting the legacy provider roster only until the host's first catalog load lands.
+  const sources = useMemo(
+    () => (hostSources.length > 0 ? hostSources : sourcesFromRoster(roster)),
+    [hostSources, roster],
+  );
+  const catalogBySource = useMemo(
+    () => (Object.keys(hostCatalog).length > 0 ? hostCatalog : catalogFromRoster(roster)),
+    [hostCatalog, roster],
+  );
+  const { sourceLabels, modelLabels } = useMemo(() => {
+    if (hostSources.length > 0 || Object.keys(hostCatalog).length > 0) {
+      const sl: Record<string, string> = {};
+      for (const s of sources) {
+        sl[s.sourceId] = s.label;
+      }
+      const ml: Record<string, string> = {};
+      for (const entries of Object.values(catalogBySource)) {
+        for (const e of entries) {
+          ml[e.modelId] = e.displayName;
+        }
+      }
+      return { sourceLabels: sl, modelLabels: ml };
+    }
+    return rosterLabels(roster);
+  }, [hostSources, hostCatalog, sources, catalogBySource, roster]);
   const quickGroups = useMemo(() => quickPickerModels(preferences), [preferences]);
 
   const legacyRef = useMemo(

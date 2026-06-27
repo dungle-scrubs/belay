@@ -220,6 +220,55 @@ test("host.online round-trips the announced subagents (D-045)", () => {
   ]);
 });
 
+test("host.online round-trips the model sources + catalog, defaulting to empty when absent (D-065)", () => {
+  const source = {
+    sourceId: "zai",
+    type: "api-key" as const,
+    label: "Z.ai",
+    status: "ready" as const,
+    modelCount: 1,
+    auth: "authenticated" as const,
+    freshness: { refreshedAt: null, stale: false },
+    actions: ["refresh" as const],
+  };
+  const entry = {
+    sourceId: "zai",
+    modelId: "glm-5.2",
+    displayName: "GLM-5.2",
+    kind: "cloud" as const,
+    capabilities: ["tools", "reasoning"],
+    contextLength: 200000,
+    costTier: null,
+    aliases: [],
+    freshness: { refreshedAt: null, stale: false },
+  };
+  const base = {
+    providers: ["qwen"],
+    default: "qwen",
+    models: {},
+    instanceId: "i",
+    cwd: "~",
+    workspace: "~",
+    commands: [],
+    agents: [],
+  };
+  const decoded = decodeTrevorEvent(
+    stored(events.hostOnline({ ...base, sources: [source], catalog: { zai: [entry] } })),
+  );
+  assert.equal(decoded?.type, "host.online");
+  if (decoded?.type !== "host.online") return;
+  assert.deepEqual(decoded.sources, [source]);
+  assert.deepEqual(decoded.catalog.zai, [entry]);
+
+  // A host that announces neither decodes to empty (not undefined), so consumers never branch on it.
+  const bare = decodeTrevorEvent(stored(events.hostOnline(base)));
+  assert.equal(
+    bare?.type === "host.online" && Array.isArray(bare.sources) && bare.sources.length,
+    0,
+  );
+  assert.deepEqual(bare?.type === "host.online" ? bare.catalog : null, {});
+});
+
 test("host.online round-trips the structured git status (D-088)", () => {
   const decoded = decodeTrevorEvent(
     stored(

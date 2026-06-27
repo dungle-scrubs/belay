@@ -1,25 +1,27 @@
-import { ModelSelector } from "@/components/assistant-ui/model-selector";
+import type { ModelRef, QuickPickerGroup } from "@trevor/session";
+import { SplitModelControl } from "@/components/chooser/split-model-control";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-/** One pickable model in the selector (id + display name, optionally grouped local/cloud). */
-export interface ModelOption {
-  readonly id: string;
-  readonly name: string;
-  readonly group?: string;
-}
-
 /**
  * The model + reasoning + show-thinking controls that ride in the SidePanel (its `controls` slot).
- * Pure presentation over the selection state: the picked model, the model's available reasoning levels
- * + current pick, and the show-thinking toggle. App owns the state and persistence; this owns the row,
- * so the App shell is no longer the place that assembles the controls markup.
+ * The model row is the D-065 split control: a larger left region that opens the full chooser (a
+ * takeover) and a right chevron that opens the small categorized quick picker of recent models. Pure
+ * presentation over the selection state; App owns the persistence and the chooser open/close.
  */
 export function PanelControls(props: {
-  models: readonly ModelOption[];
-  activeProvider: string;
-  onProviderChange: (id: string) => void;
+  /** The active model's display label, shown in the split control's left region. */
+  activeLabel: string;
+  /** The recently-used models, grouped by source, for the quick picker. */
+  quickGroups: readonly QuickPickerGroup[];
+  sourceLabels?: Readonly<Record<string, string>>;
+  modelLabels?: Readonly<Record<string, string>>;
+  activeModel?: ModelRef | null;
+  /** Open the full model chooser (the larger left region). */
+  onOpenChooser: () => void;
+  /** Pick a model from the quick picker - the same selection contract the full chooser uses. */
+  onSelectModel: (ref: ModelRef) => void;
   reasoningLevels: readonly string[];
   reasoning: string;
   onReasoningChange: (level: string) => void;
@@ -27,9 +29,13 @@ export function PanelControls(props: {
   onShowThinkingChange: (on: boolean) => void;
 }) {
   const {
-    models,
-    activeProvider,
-    onProviderChange,
+    activeLabel,
+    quickGroups,
+    sourceLabels,
+    modelLabels,
+    activeModel,
+    onOpenChooser,
+    onSelectModel,
     reasoningLevels,
     reasoning,
     onReasoningChange,
@@ -39,13 +45,16 @@ export function PanelControls(props: {
 
   return (
     <>
-      <ModelSelector.Root models={models} value={activeProvider} onValueChange={onProviderChange}>
-        <ModelSelector.Trigger className="w-full justify-between text-label" />
-        <ModelSelector.Content>
-          <ModelSelector.Search />
-          <ModelSelector.List />
-        </ModelSelector.Content>
-      </ModelSelector.Root>
+      <SplitModelControl
+        activeLabel={activeLabel}
+        quickGroups={quickGroups}
+        sourceLabels={sourceLabels}
+        modelLabels={modelLabels}
+        activeModel={activeModel}
+        onOpenChooser={onOpenChooser}
+        onSelectModel={onSelectModel}
+        className="w-full"
+      />
 
       {reasoningLevels.length > 0 ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">

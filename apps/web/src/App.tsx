@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_SESSION_ID, modelRefFromProvider, type SessionActivity } from "@trevor/session";
+import {
+  constrainReasoning,
+  DEFAULT_SESSION_ID,
+  type ModelRef,
+  modelRefFromProvider,
+  type SessionActivity,
+} from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { GitBranch, History } from "lucide-react";
+import { GitBranch, History, X } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -14,12 +20,16 @@ import {
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import type { ToolStatus } from "@/components/chat/message";
 import { parseToolArgs } from "@/components/chat/tool-message";
+import { ModelChooser } from "@/components/chooser/model-chooser";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { PanelControls } from "@/components/panel/panel-controls";
+import { useModelSelection } from "@/hooks/use-model-selection";
+import { reasoningSurfaceOf } from "@/model-selection";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeRunId,
   activeTurnStartedAt,
+  catalogFrom,
   commandsFrom,
   defaultProviderFrom,
   hostStatus,
@@ -28,6 +38,7 @@ import {
   parseBangShell,
   parseCommand,
   providerModelsFrom,
+  sourcesFrom,
   tasksFrom,
   toolSummary,
   worktreesFrom,
@@ -232,6 +243,11 @@ export function App() {
     return map;
   }, [inventory.sessions]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
+  // The host-owned model sources + catalog (D-065): the real provider/runtime/subscription list with
+  // auth state and each configured source's live model catalog. Empty until the host's first catalog
+  // load re-announces, so the chooser falls back to the roster projection until then.
+  const hostSources = useMemo(() => sourcesFrom(events), [events]);
+  const hostCatalog = useMemo(() => catalogFrom(events), [events]);
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
   const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
@@ -370,16 +386,6 @@ export function App() {
   };
   // Model options for the picker, grouped local-first then cloud (the picker renders a
   // labeled section per group). Falls back to the active model before the host announces.
-  const modelOptions =
-    Object.keys(hostModels).length > 0
-      ? Object.entries(hostModels)
-          .map(([id, meta]) => ({
-            id,
-            name: meta.label,
-            group: meta.kind === "local" ? "Local" : "Cloud",
-          }))
-          .sort((a, b) => (a.group === b.group ? 0 : a.group === "Local" ? -1 : 1))
-      : [{ id: activeProvider, name: modelMeta.label }];
   // Keep a stale stored level from showing as selected if the model's options changed.
   const stored = reasoningMap?.[activeProvider];
   const reasoning =
@@ -390,9 +396,34 @@ export function App() {
   // The active selection as a stable ModelRef (D-065 migration): the source IS the provider key, the
   // model id comes from the host roster, and reasoning is the chosen level (null = provider default).
   // Sent ALONGSIDE the legacy provider/reasoning so the host resolves through resolveUserTurnModel
-  // while old clients keep working. Derived from the provider selection today; the split-control +
-  // ModelPreferences source-of-truth land in the next D-065 slice.
+  // while old clients keep working. Today each source carries one model, so this tracks the provider
+  // selection and the reasoning toggle; the chooser/quick-picker just sync the provider + record recents.
   const activeModelRef = modelRefFromProvider(activeProvider, modelMeta.model, reasoning || null);
+
+  // The model chooser (D-065 M3/M6): the persisted ModelPreferences + the source/catalog read models
+  // (projected from the announced roster), the quick-picker recents, and the select transition. The
+  // legacy provider/reasoning are the seed + stay in sync on a pick, so the existing sidebar behavior
+  // and the send path keep working unchanged.
+  const selection = useModelSelection({
+    roster: hostModels,
+    hostSources,
+    hostCatalog,
+    legacyProvider: activeProvider,
+    legacyReasoning: reasoning || null,
+  });
+  const [chooserOpen, setChooserOpen] = useState(false);
+  // A pick from the quick picker OR the full chooser: record it (recents + persisted active, reasoning
+  // clamped to the model's surface), sync the legacy provider + reasoning so the rest of the UI and the
+  // send path follow, and close the chooser.
+  const onSelectModel = (ref: ModelRef) => {
+    selection.select(ref);
+    setProvider(ref.sourceId);
+    const clamped = constrainReasoning(reasoningSurfaceOf(hostModels, ref), ref.reasoning);
+    if (clamped != null) {
+      setReasoningMap({ ...(reasoningMap ?? {}), [ref.sourceId]: clamped });
+    }
+    setChooserOpen(false);
+  };
 
   const hostCommand =
     target === DEFAULT_SESSION
@@ -669,9 +700,13 @@ export function App() {
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
     <PanelControls
-      models={modelOptions}
-      activeProvider={activeProvider}
-      onProviderChange={setProvider}
+      activeLabel={modelMeta.label}
+      quickGroups={selection.quickGroups}
+      sourceLabels={selection.sourceLabels}
+      modelLabels={selection.modelLabels}
+      activeModel={activeModelRef}
+      onOpenChooser={() => setChooserOpen(true)}
+      onSelectModel={onSelectModel}
       reasoningLevels={modelMeta.reasoningLevels}
       reasoning={reasoning}
       onReasoningChange={setReasoning}
@@ -679,6 +714,35 @@ export function App() {
       onShowThinkingChange={setShowThinking}
     />
   );
+
+  // The full model chooser (D-065 M2/M3): a takeover of the transcript/composer space (the sidebars
+  // stay visible), opened from the split control's left region. Source overview -> per-source model
+  // browse; picking a model routes through the same onSelectModel the quick picker uses. Rendered only
+  // while open so it never costs anything in the common case.
+  const chooser = chooserOpen ? (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-between px-1 py-2">
+        <span className="text-label tracking-wider uppercase text-muted-foreground">
+          Choose a model
+        </span>
+        <button
+          type="button"
+          onClick={() => setChooserOpen(false)}
+          aria-label="Close model chooser"
+          className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <ModelChooser
+        className="min-h-0 flex-1"
+        sources={selection.sources}
+        catalogBySource={selection.catalogBySource}
+        activeModel={activeModelRef}
+        onSelectModel={onSelectModel}
+      />
+    </div>
+  ) : undefined;
 
   // Session affordances, rendered inline at the bottom of the sidebar (not a floating bar): open the
   // resume chooser, the worktree switcher (when any exist), and the session id for orientation.
@@ -811,6 +875,7 @@ export function App() {
         nowMs: now,
       }}
       sessionName={sessionName}
+      chooser={chooser}
       archived={archived}
       onUnarchive={() => void unarchive()}
     />

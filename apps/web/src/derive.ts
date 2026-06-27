@@ -1,4 +1,5 @@
 import {
+  type CatalogEntry,
   type CommandSpec,
   type DecodedEvent,
   decodeTrevorEvent,
@@ -7,6 +8,7 @@ import {
   type HostPresence,
   type ProviderModel,
   type SessionEvent,
+  type SourceSummary,
   type TaskSnapshot,
   type WorktreeSummary,
 } from "@trevor/session";
@@ -261,6 +263,18 @@ export function hostStatus(
  */
 export function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {
   return latest(events, (d) => (d.type === "host.online" ? d.models : undefined)) ?? {};
+}
+
+/** The host-announced model SOURCES (D-065), or [] before the host's catalog load completes. */
+export function sourcesFrom(events: readonly SessionEvent[]): readonly SourceSummary[] {
+  return latest(events, (d) => (d.type === "host.online" ? d.sources : undefined)) ?? [];
+}
+
+/** The host-announced per-source model catalog (D-065), keyed by sourceId, or {} before load. */
+export function catalogFrom(
+  events: readonly SessionEvent[],
+): Readonly<Record<string, readonly CatalogEntry[]>> {
+  return latest(events, (d) => (d.type === "host.online" ? d.catalog : undefined)) ?? {};
 }
 
 /**

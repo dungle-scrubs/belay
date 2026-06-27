@@ -2,7 +2,14 @@ import { HEX64 } from "./blob";
 import { BREAKDOWN_CATEGORIES, type UsageBreakdown } from "./breakdown";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
-import { decodeModelRef, type ModelRef } from "./model-source";
+import {
+  type CatalogEntry,
+  decodeCatalogEntry,
+  decodeModelRef,
+  decodeSourceSummary,
+  type ModelRef,
+  type SourceSummary,
+} from "./model-source";
 
 export type { UsageBreakdown };
 
@@ -584,6 +591,10 @@ export const events = {
     worktrees?: readonly WorktreeSummary[];
     /** The latest internet snapshot, so a joining client sees connectivity without waiting. */
     internet?: InternetSnapshot;
+    /** The host-owned model SOURCES (D-065): provider/runtime/subscription summaries with auth state. */
+    sources?: readonly SourceSummary[];
+    /** The per-source model catalog (D-065), keyed by sourceId. */
+    catalog?: Readonly<Record<string, readonly CatalogEntry[]>>;
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
@@ -599,6 +610,8 @@ export const events = {
       agents: p.agents,
       ...(p.worktrees ? { worktrees: p.worktrees } : {}),
       ...(p.internet ? { internet: p.internet } : {}),
+      ...(p.sources ? { sources: p.sources } : {}),
+      ...(p.catalog ? { catalog: p.catalog } : {}),
     },
   }),
   /**
@@ -889,6 +902,18 @@ function coerceArtifacts(value: unknown): ArtifactRef[] {
   });
 }
 
+/** Coerces the announced per-source catalog (D-065): `{ sourceId: CatalogEntry[] }`, tolerant of junk. */
+function coerceCatalog(value: unknown): Record<string, readonly CatalogEntry[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const out: Record<string, readonly CatalogEntry[]> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = Array.isArray(raw) ? raw.map(decodeCatalogEntry) : [];
+  }
+  return out;
+}
+
 function coerceProviderModels(value: unknown): Record<string, ProviderModel> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -1055,6 +1080,10 @@ export type DecodedEvent =
       readonly worktrees: readonly WorktreeSummary[];
       /** Latest internet snapshot (D-060), or unknown when the host announced none. */
       readonly internet: InternetSnapshot;
+      /** Host-owned model sources (D-065), empty when the host announced none. */
+      readonly sources: readonly SourceSummary[];
+      /** Per-source model catalog (D-065), keyed by sourceId; empty when none announced. */
+      readonly catalog: Readonly<Record<string, readonly CatalogEntry[]>>;
     }
   | { readonly type: "host.internet"; readonly internet: InternetSnapshot }
   | { readonly type: "host.hello"; readonly instanceId?: string }
@@ -1246,6 +1275,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         agents: coerceAgents(p.agents),
         worktrees: coerceWorktrees(p.worktrees),
         internet: coerceInternetSnapshot(p.internet),
+        sources: Array.isArray(p.sources) ? p.sources.map(decodeSourceSummary) : [],
+        catalog: coerceCatalog(p.catalog),
       };
     case "host.internet":
       return { type: "host.internet", internet: coerceInternetSnapshot(p.internet) };

@@ -54,6 +54,7 @@ import {
   type ProviderError,
   pickProvider,
 } from "./providers";
+import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./providers/catalog";
 import { Emit } from "./services";
 import { type StopOutcome, stopSession } from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
@@ -96,6 +97,20 @@ const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? "http://127.0.0.1:174
 const transport = RICHTER_URL ? richterTransport(RICHTER_URL) : streamTransport(SESSION_STORE_URL);
 const providers = buildProviders();
 const commands = buildCommandRegistry();
+// The host-owned model source + catalog read model (D-065): which provider sources exist, their auth
+// state, and each configured source's live model list. Loaded async (it hits each provider's /models),
+// cached here, and announced on host.online; a re-announce fills it in once the first load resolves.
+let catalog: CatalogSnapshot = { sources: [], catalogBySource: {} };
+function refreshCatalog(): void {
+  loadCatalog()
+    .then((next) => {
+      catalog = next;
+      if (live && lease.isLeader()) {
+        announceOnline();
+      }
+    })
+    .catch((error) => warn("catalog", "load failed", { error: msg(error) }));
+}
 // Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_HOME. abbrevPath is
 // a hoisted declaration, so referencing it here is fine.
 const worktrees = nodeWorktreeManager(abbrevPath);
@@ -351,7 +366,12 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
   // `model` ModelRef wins (its sourceId is the provider key, its reasoning is authoritative), else
   // the legacy provider/reasoning strings. pickProvider defaults an unknown/undefined source.
   const turnModel = resolveUserTurnModel(decoded);
-  const provider = pickProvider(providers, turnModel.sourceId);
+  // Resolve the turn's provider (D-065): a ModelRef into a known catalog SOURCE builds a provider for
+  // that exact model (so any catalog model runs, not just the ~6 registered keys); otherwise fall back
+  // to the legacy registered providers keyed by the provider string. pickProvider defaults an unknown.
+  const provider =
+    (decoded.model ? buildSourceProvider(decoded.model.sourceId, decoded.model.modelId) : null) ??
+    pickProvider(providers, turnModel.sourceId);
   // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
   lastProvider = provider;
   // A cloud turn may want fresh connectivity for the advisory (D-060): refresh if stale, never block
@@ -791,6 +811,11 @@ function announceOnline(): void {
       // The latest internet snapshot (D-060), so a joining client sees connectivity without waiting
       // for the next probe transition.
       internet: internet.current(),
+      // The host-owned model sources + per-source catalog (D-065): the provider/runtime/subscription
+      // summaries with auth state, and each configured source's live model list. Empty until the
+      // first async load completes (then a re-announce fills them in).
+      sources: catalog.sources,
+      catalog: catalog.catalogBySource,
     }),
   ).catch(() => {});
 }
@@ -1895,6 +1920,9 @@ process.once("SIGTERM", () => {
 });
 
 configureRecall();
+// Kick the async source/catalog load (D-065); it re-announces host.online once the live model lists
+// are in. Fire-and-forget - the host comes up immediately with empty sources, then fills them in.
+refreshCatalog();
 log("host", "starting", {
   participant: PARTICIPANT_ID,
   session: SESSION_ID,

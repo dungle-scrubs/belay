@@ -31,7 +31,13 @@ beforeEach(() => localStorage.clear());
 
 test("active falls back to the legacy provider selection until an explicit pick", () => {
   const { result } = renderHook(() =>
-    useModelSelection({ roster, legacyProvider: "deepseek", legacyReasoning: "high" }),
+    useModelSelection({
+      roster,
+      hostSources: [],
+      hostCatalog: {},
+      legacyProvider: "deepseek",
+      legacyReasoning: "high",
+    }),
   );
   assert.deepEqual(result.current.active, {
     sourceId: "deepseek",
@@ -44,7 +50,13 @@ test("active falls back to the legacy provider selection until an explicit pick"
 
 test("select records the active + recent and clamps reasoning to the model's surface", () => {
   const { result } = renderHook(() =>
-    useModelSelection({ roster, legacyProvider: "qwen", legacyReasoning: "low" }),
+    useModelSelection({
+      roster,
+      hostSources: [],
+      hostCatalog: {},
+      legacyProvider: "qwen",
+      legacyReasoning: "low",
+    }),
   );
   // Pick deepseek carrying an unsupported reasoning - it clamps to deepseek's surface default.
   act(() =>
@@ -57,13 +69,67 @@ test("select records the active + recent and clamps reasoning to the model's sur
   assert.equal(result.current.quickGroups[0]?.models[0]?.modelId, "deepseek-v4");
 });
 
-test("sources and catalog are projected from the announced roster", () => {
+test("sources and catalog fall back to the roster projection before the host catalog loads", () => {
   const { result } = renderHook(() =>
-    useModelSelection({ roster, legacyProvider: "qwen", legacyReasoning: null }),
+    useModelSelection({
+      roster,
+      hostSources: [],
+      hostCatalog: {},
+      legacyProvider: "qwen",
+      legacyReasoning: null,
+    }),
   );
   assert.deepEqual(
     result.current.sources.map((s) => s.sourceId),
     ["qwen", "deepseek"],
   );
   assert.equal(result.current.catalogBySource.qwen?.[0]?.modelId, "qwen3-coder");
+});
+
+test("the host-announced sources + catalog are preferred once they arrive (D-065)", () => {
+  const hostSources = [
+    {
+      sourceId: "zai",
+      type: "api-key" as const,
+      label: "Z.ai",
+      status: "ready" as const,
+      modelCount: 2,
+      auth: "authenticated" as const,
+      freshness: { refreshedAt: null, stale: false },
+      actions: [],
+    },
+  ];
+  const hostCatalog = {
+    zai: [
+      {
+        sourceId: "zai",
+        modelId: "glm-5.2",
+        displayName: "GLM-5.2",
+        kind: "cloud" as const,
+        capabilities: ["tools", "reasoning"],
+        contextLength: 200000,
+        costTier: null,
+        aliases: [],
+        freshness: { refreshedAt: null, stale: false },
+      },
+    ],
+  };
+  const { result } = renderHook(() =>
+    useModelSelection({
+      roster,
+      hostSources,
+      hostCatalog,
+      legacyProvider: "qwen",
+      legacyReasoning: null,
+    }),
+  );
+  // The real host source wins over the roster projection (no "qwen"/"deepseek" projected sources).
+  assert.deepEqual(
+    result.current.sources.map((s) => s.sourceId),
+    ["zai"],
+  );
+  assert.equal(result.current.catalogBySource.zai?.[0]?.modelId, "glm-5.2");
+  // Labels come from the host source/catalog (source label vs model display name).
+  assert.equal(result.current.sourceLabels.zai, "Z.ai");
+  assert.equal(result.current.modelLabels["glm-5.2"], "GLM-5.2");
 });
