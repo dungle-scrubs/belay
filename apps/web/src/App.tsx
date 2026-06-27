@@ -424,6 +424,12 @@ export function App() {
     }
     setChooserOpen(false);
   };
+  // The active model for DISPLAY + SEND: the explicit/persisted selection (a catalog ModelRef, e.g.
+  // {zai, glm-5.2}) wins; before any pick it's the legacy provider-derived ref. Routing the send
+  // through this is what carries the real modelId to the host (not the legacy provider key). The label
+  // keeps the legacy roster's curated name for a registered provider, else the catalog display name.
+  const sendModel = selection.active ?? activeModelRef;
+  const activeLabel = hostModels[activeProvider] ? modelMeta.label : selection.activeLabel;
 
   const hostCommand =
     target === DEFAULT_SESSION
@@ -492,7 +498,7 @@ export function App() {
       text,
       provider: activeProvider,
       reasoning: reasoning || undefined,
-      model: activeModelRef,
+      model: sendModel,
       artifacts,
     });
     // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
@@ -585,7 +591,7 @@ export function App() {
       id: crypto.randomUUID(),
       provider: activeProvider,
       reasoning: reasoning || undefined,
-      model: activeModelRef,
+      model: sendModel,
     });
     setDraft("");
     setAttachments([]);
@@ -700,11 +706,11 @@ export function App() {
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
     <PanelControls
-      activeLabel={modelMeta.label}
+      activeLabel={activeLabel}
       quickGroups={selection.quickGroups}
       sourceLabels={selection.sourceLabels}
       modelLabels={selection.modelLabels}
-      activeModel={activeModelRef}
+      activeModel={sendModel}
       onOpenChooser={() => setChooserOpen(true)}
       onSelectModel={onSelectModel}
       reasoningLevels={modelMeta.reasoningLevels}
@@ -738,7 +744,7 @@ export function App() {
         className="min-h-0 flex-1"
         sources={selection.sources}
         catalogBySource={selection.catalogBySource}
-        activeModel={activeModelRef}
+        activeModel={sendModel}
         onSelectModel={onSelectModel}
       />
     </div>
@@ -805,7 +811,7 @@ export function App() {
         slashQuery,
         acceptCommand,
         disabled: !sessionId,
-        placeholder: `message ${modelMeta.label}… (/ for commands, ! for shell)`,
+        placeholder: `message ${activeLabel}… (/ for commands, ! for shell)`,
       }}
       stream={stream}
       host={host}
