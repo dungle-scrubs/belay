@@ -219,6 +219,42 @@ export function providerStringOf(ref: ModelRef): string {
 }
 
 /**
+ * Tolerantly decodes a {@link ModelRef} from wire/persisted JSON, or null when the shape is unusable
+ * (no source/model id). The single decode for a model reference - the protocol's `user.message.model`
+ * field and the persisted preferences both route through it - so a partial or garbled ref loads to
+ * null instead of throwing. `reasoning` decodes to null when absent (the provider default).
+ */
+export function decodeModelRef(v: unknown): ModelRef | null {
+  const r = asRecord(v);
+  if (typeof r.sourceId !== "string" || typeof r.modelId !== "string") {
+    return null;
+  }
+  return {
+    sourceId: r.sourceId,
+    modelId: r.modelId,
+    reasoning: typeof r.reasoning === "string" ? r.reasoning : null,
+  };
+}
+
+/**
+ * Resolves a user turn's provider source + reasoning during the migration: a present {@link ModelRef}
+ * (the new contract) WINS - its `sourceId` is the provider key and its `reasoning` is authoritative
+ * (null = the provider default) - otherwise the legacy `provider` / `reasoning` strings. So an old
+ * event keeps resolving and a new event drives selection through one path. The host feeds `sourceId`
+ * to `pickProvider` (which defaults an unknown/undefined key) and `reasoning` to the turn.
+ */
+export function resolveUserTurnModel(msg: {
+  readonly model?: ModelRef;
+  readonly provider?: string;
+  readonly reasoning?: string;
+}): { readonly sourceId: string | undefined; readonly reasoning: string | undefined } {
+  if (msg.model) {
+    return { sourceId: msg.model.sourceId, reasoning: msg.model.reasoning ?? undefined };
+  }
+  return { sourceId: msg.provider, reasoning: msg.reasoning };
+}
+
+/**
  * Projects a legacy {@link ProviderModel} (announced under a `provider` string) into a
  * {@link CatalogEntry}, so the old host.online model list renders through the new catalog contract
  * during migration. Freshness is unknown for a legacy projection (never-refreshed, not stale).

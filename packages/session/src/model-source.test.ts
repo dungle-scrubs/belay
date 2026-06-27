@@ -5,12 +5,14 @@ import {
   type CatalogEntry,
   catalogEntryFromProviderModel,
   decodeCatalogEntry,
+  decodeModelRef,
   decodeSourceSummary,
   decodeSourceType,
   modelRefFromProvider,
   projectSourceState,
   providerStringOf,
   queryCatalog,
+  resolveUserTurnModel,
   type SourceSummary,
 } from "./model-source";
 import type { ProviderModel } from "./protocol";
@@ -259,4 +261,50 @@ test("a legacy ProviderModel projects into a catalog entry under its provider so
   // A single-reasoning-level model advertises no reasoning capability.
   const flat = catalogEntryFromProviderModel("x", { ...pm, reasoningLevels: ["off"] });
   assert.deepEqual(flat.capabilities, []);
+});
+
+// --- D-065 migration: decodeModelRef + resolveUserTurnModel (the new-vs-legacy turn bridge) ---
+
+test("decodeModelRef tolerates partial/garbled refs and defaults reasoning to null", () => {
+  assert.deepEqual(decodeModelRef({ sourceId: "deepseek", modelId: "v4", reasoning: "high" }), {
+    sourceId: "deepseek",
+    modelId: "v4",
+    reasoning: "high",
+  });
+  // Missing reasoning -> null (the provider default).
+  assert.deepEqual(decodeModelRef({ sourceId: "qwen", modelId: "coder" }), {
+    sourceId: "qwen",
+    modelId: "coder",
+    reasoning: null,
+  });
+  // Unusable shapes decode to null, never a throw.
+  assert.equal(decodeModelRef({ sourceId: 5, modelId: "x" }), null);
+  assert.equal(decodeModelRef({ modelId: "x" }), null);
+  assert.equal(decodeModelRef(null), null);
+  assert.equal(decodeModelRef("nope"), null);
+});
+
+test("resolveUserTurnModel: a present ModelRef wins over the legacy provider/reasoning", () => {
+  const resolved = resolveUserTurnModel({
+    model: { sourceId: "deepseek", modelId: "v4", reasoning: "high" },
+    provider: "qwen",
+    reasoning: "low",
+  });
+  assert.deepEqual(resolved, { sourceId: "deepseek", reasoning: "high" });
+});
+
+test("resolveUserTurnModel: a ModelRef with null reasoning means the provider default", () => {
+  const resolved = resolveUserTurnModel({
+    model: { sourceId: "deepseek", modelId: "v4", reasoning: null },
+  });
+  assert.deepEqual(resolved, { sourceId: "deepseek", reasoning: undefined });
+});
+
+test("resolveUserTurnModel: no ModelRef falls back to the legacy provider/reasoning strings", () => {
+  assert.deepEqual(resolveUserTurnModel({ provider: "qwen", reasoning: "low" }), {
+    sourceId: "qwen",
+    reasoning: "low",
+  });
+  // An empty legacy turn yields undefined source (pickProvider then defaults it).
+  assert.deepEqual(resolveUserTurnModel({}), { sourceId: undefined, reasoning: undefined });
 });

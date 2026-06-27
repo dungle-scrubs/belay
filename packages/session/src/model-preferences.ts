@@ -1,4 +1,4 @@
-import type { ModelRef } from "./model-source";
+import { decodeModelRef, type ModelRef } from "./model-source";
 
 /**
  * Model selection + reasoning preferences (D-065 M6).
@@ -158,21 +158,10 @@ export function quickPickerModels(
 const asRecord = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" ? (v as Record<string, unknown>) : {};
 
-/** Decodes a persisted {@link ModelRef}, or null when the shape is unusable (no source/model id). */
-function decodeRef(v: unknown): ModelRef | null {
-  const r = asRecord(v);
-  if (typeof r.sourceId !== "string" || typeof r.modelId !== "string") {
-    return null;
-  }
-  return {
-    sourceId: r.sourceId,
-    modelId: r.modelId,
-    reasoning: typeof r.reasoning === "string" ? r.reasoning : null,
-  };
-}
-
+// The single ModelRef decode lives in model-source.ts (shared by the protocol's `user.message.model`
+// and these persisted preferences), so a partial/garbled ref loads to null in both places identically.
 const decodeRefList = (v: unknown): ModelRef[] =>
-  Array.isArray(v) ? v.map(decodeRef).filter((r): r is ModelRef => r != null) : [];
+  Array.isArray(v) ? v.map(decodeModelRef).filter((r): r is ModelRef => r != null) : [];
 
 /**
  * Decodes persisted preferences from JSON, dropping any unusable entries so a corrupt or partial
@@ -187,8 +176,8 @@ export function decodeModelPreferences(v: unknown): ModelPreferences {
     }
   }
   return {
-    active: decodeRef(r.active),
-    default: decodeRef(r.default),
+    active: decodeModelRef(r.active),
+    default: decodeModelRef(r.default),
     recent: decodeRefList(r.recent).slice(0, RECENT_LIMIT),
     pinned: decodeRefList(r.pinned),
     reasoningByModel,

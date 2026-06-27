@@ -2,6 +2,7 @@ import { HEX64 } from "./blob";
 import { BREAKDOWN_CATEGORIES, type UsageBreakdown } from "./breakdown";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
+import { decodeModelRef, type ModelRef } from "./model-source";
 
 export type { UsageBreakdown };
 
@@ -274,6 +275,9 @@ export const events = {
     text: string;
     provider: string;
     reasoning?: string;
+    /** The selected model reference (D-065 migration). Carried ALONGSIDE the legacy `provider`/
+     *  `reasoning` so old consumers keep working; the host prefers it via resolveUserTurnModel. */
+    model?: ModelRef;
     artifacts?: readonly ArtifactRef[];
   }): TrevorEventInput => ({
     type: "user.message",
@@ -281,6 +285,7 @@ export const events = {
       text: p.text,
       provider: p.provider,
       ...(p.reasoning ? { reasoning: p.reasoning } : {}),
+      ...(p.model ? { model: p.model } : {}),
       ...(p.artifacts?.length ? { artifacts: p.artifacts } : {}),
     },
   }),
@@ -917,6 +922,8 @@ export type DecodedEvent =
       readonly text: string;
       readonly provider?: string;
       readonly reasoning?: string;
+      /** The selected model reference (D-065 migration), when the producer sent one. */
+      readonly model?: ModelRef;
       readonly artifacts: readonly ArtifactRef[];
     }
   | {
@@ -1063,14 +1070,19 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
   const p = event.payload;
   const runId = str(p.runId, event.eventId);
   switch (event.type) {
-    case "user.message":
+    case "user.message": {
+      // The new model reference (D-065), decoded tolerantly: a garbled/absent ref reads as undefined
+      // and the host falls back to the legacy provider/reasoning below.
+      const model = decodeModelRef(p.model);
       return {
         type: "user.message",
         text: str(p.text),
         provider: optStr(p.provider),
         reasoning: optStr(p.reasoning),
+        ...(model ? { model } : {}),
         artifacts: coerceArtifacts(p.artifacts),
       };
+    }
     case "assistant.started":
       return {
         type: "assistant.started",

@@ -10,6 +10,7 @@ import {
   type InternetSnapshot,
   PRODUCER_IDS,
   RUNTIME_KIND,
+  resolveUserTurnModel,
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
@@ -346,7 +347,11 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     return null;
   }
   const runId = crypto.randomUUID();
-  const provider = pickProvider(providers, decoded.provider);
+  // Resolve the turn's source + reasoning through the migration bridge (D-065): a new event's
+  // `model` ModelRef wins (its sourceId is the provider key, its reasoning is authoritative), else
+  // the legacy provider/reasoning strings. pickProvider defaults an unknown/undefined source.
+  const turnModel = resolveUserTurnModel(decoded);
+  const provider = pickProvider(providers, turnModel.sourceId);
   // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
   lastProvider = provider;
   // A cloud turn may want fresh connectivity for the advisory (D-060): refresh if stale, never block

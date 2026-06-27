@@ -43,6 +43,41 @@ test("optional fields are omitted on the wire, not sent as null", () => {
   const msg = events.userMessage({ text: "hi", provider: "qwen" });
   assert.equal("reasoning" in msg.payload, false);
   assert.equal("artifacts" in msg.payload, false);
+  assert.equal("model" in msg.payload, false);
+});
+
+test("user.message carries a ModelRef alongside the legacy provider, and round-trips it (D-065)", () => {
+  const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
+  const msg = events.userMessage({ text: "hi", provider: "deepseek", model });
+  assert.deepEqual(msg.payload.model, model, "the ref rides the wire next to provider");
+  assert.deepEqual(decodeTrevorEvent(stored(msg)), {
+    type: "user.message",
+    text: "hi",
+    provider: "deepseek",
+    reasoning: undefined,
+    model,
+    artifacts: [],
+  });
+});
+
+test("a legacy user.message (no model) decodes with no model key", () => {
+  const decoded = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
+  assert.equal(decoded?.type === "user.message" && "model" in decoded, false);
+});
+
+test("a garbled user.message model is dropped so the host falls back to provider (D-065)", () => {
+  const decoded = decodeTrevorEvent(
+    stored({
+      type: "user.message",
+      payload: { text: "hi", provider: "qwen", model: { sourceId: 5 } },
+    }),
+  );
+  assert.equal(decoded?.type, "user.message");
+  assert.equal(
+    decoded?.type === "user.message" && "model" in decoded,
+    false,
+    "unusable ref dropped",
+  );
 });
 
 test("an unknown event type decodes to null (forward-compatible)", () => {
