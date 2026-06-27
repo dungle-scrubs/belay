@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, test } from "vitest";
 import {
   buildSkillRoster,
+  buildSkillTool,
   discoverSkillsIn,
   expandSkill,
   renderSkillsList,
@@ -167,6 +168,16 @@ test("buildSkillRoster caps the roster and marks the surplus with counts + a ski
     roster.includes("skills_list(query)"),
     "points to search, not a speculative all-body load",
   );
+});
+
+test("the skill tool description frames skills as optional, not mandatory (D-075 M5)", () => {
+  const tool = buildSkillTool([inMemorySkill("alpha", "Do alpha things")]);
+  // The roster is still advertised so the model knows skills exist...
+  assert.ok(tool.description.includes("- alpha: Do alpha things"));
+  // ...but the model is told to proceed without a skill when context and tools already cover the task,
+  // so ordinary coding work isn't forced through a skill.
+  assert.match(tool.description, /optional, not mandatory/i);
+  assert.match(tool.description, /proceed without loading/i);
 });
 
 test("a project-local skill body does NOT auto-run shell interpolation while the gate is off", async () => {

@@ -42,9 +42,22 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   ...(astGrepPath() ? [astGrepTool] : []),
 ];
 
-// The skill tool is added only when the library is non-empty, so an empty skills
-// dir advertises nothing. Its description carries the skill inventory (level-1
-// progressive disclosure); skill(name) loads one body on demand (level 2).
+// Skill discovery (D-075). Two tool surfaces coexist over one registry:
+//
+//   - The canonical, forward path is the two-tool drill-in: `skills_list(query?, limit?)`
+//     searches the compact registry METADATA, then `skill_view(skill_id)` loads exactly one
+//     chosen body. Always present (they self-describe an empty registry), so non-web clients
+//     and future resource types ride the same contract.
+//   - The legacy `skill(name)` tool is kept as a COMPATIBILITY SHIM, added only when the
+//     library is non-empty. It fuses the two levels: its description carries the ambient
+//     roster (an always-on, cap-40 `skills_list()` with no query) and `skill(name)` loads one
+//     body (the `skill_view(name)` step).
+//
+// Migration behavior: `skill(name)` is exactly `skill_view(name)` for the load, and its embedded
+// roster is the no-query `skills_list()` for discovery. New clients should prefer
+// `skills_list` + `skill_view`; the shim stays until ambient-roster delivery moves off the tool
+// description (at which point `skill` is dropped, not re-pointed), so removing it never changes the
+// canonical path - it only retires the fused alias.
 const discoveredSkills = discoverSkills();
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous tool params; each tool stays typed.
 const TOOLS: readonly Tool<any>[] = discoveredSkills.length

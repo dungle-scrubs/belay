@@ -432,7 +432,7 @@ export function buildSkillTool(skills: readonly Skill[]): Tool<typeof SkillParam
 
   return {
     name: "skill",
-    description: `Load a skill's full instructions by id and then follow them. Use a skill when the task matches its description or triggers. Available skills:\n${list}`,
+    description: `Load a skill's full instructions by id and then follow them. Use a skill when the task matches its description or triggers. Skills are optional, not mandatory: when ordinary repository context, files, and tools already cover the task, proceed without loading one. Available skills:\n${list}`,
     params: SkillParams,
     execute: (args) => {
       const id = args.name.trim();
