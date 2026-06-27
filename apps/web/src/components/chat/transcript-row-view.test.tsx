@@ -62,7 +62,7 @@ test("renders typed stop notes for non-automatic adaptive termination causes", (
   }
 });
 
-test("hides automatic step backstop stops because the host continues without user choice", () => {
+test("renders step backstop stops so a paused turn is never silent", () => {
   renderRow(
     assistant({
       stop: {
@@ -73,8 +73,8 @@ test("hides automatic step backstop stops because the host continues without use
     }),
   );
 
-  assert.equal(screen.queryByText("paused at step backstop"), null);
-  assert.equal(screen.queryByText("Paused at the step backstop."), null);
+  assert.ok(screen.getByText("paused at step backstop"));
+  assert.ok(screen.getByText("Paused at the step backstop."));
   assert.equal(screen.queryByRole("button", { name: /continue/i }), null);
 });
 

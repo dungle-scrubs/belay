@@ -231,9 +231,7 @@ export function TranscriptRowView({
 
   let stepLimitNote: ReactNode = null;
   if (message.kind === "assistant") {
-    if (message.stop?.cause === "step_backstop") {
-      stepLimitNote = null;
-    } else if (message.stop) {
+    if (message.stop) {
       stepLimitNote = (
         <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
           <TriangleAlert className="h-3.5 w-3.5" />

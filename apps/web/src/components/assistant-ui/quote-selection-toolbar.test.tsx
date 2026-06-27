@@ -24,6 +24,7 @@ function selectText(text: string, node: Node) {
     removeAllRanges: vi.fn(),
   } as unknown as Selection;
   vi.spyOn(window, "getSelection").mockReturnValue(selection);
+  return selection as Selection & { removeAllRanges: ReturnType<typeof vi.fn> };
 }
 
 /** Render the toolbar over a message, select text, and release the mouse to summon it. */
@@ -68,4 +69,32 @@ test("Quote hands the selected text to onQuote (the composer)", async () => {
 
   fireEvent.click(screen.getByText("Quote"));
   assert.equal(onQuote.mock.calls[0]?.[0], "quote me into the composer");
+});
+
+test("scrolling keeps the active selection and repositions the toolbar", async () => {
+  const onQuote = vi.fn();
+  const { container } = render(
+    <div data-message-id="m1">
+      <span>long selectable passage</span>
+      <QuoteSelectionToolbar onQuote={onQuote} />
+    </div>,
+  );
+  const message = container.querySelector("[data-message-id]") as Node;
+  const selection = selectText("long selectable passage", message);
+
+  await act(async () => {
+    fireEvent.mouseUp(message as Element, { clientX: 120, clientY: 40 });
+    await flushRaf();
+    await flushRaf();
+  });
+  assert.ok(screen.getByText("Quote"));
+
+  await act(async () => {
+    fireEvent.scroll(document);
+    await flushRaf();
+    await flushRaf();
+  });
+
+  assert.ok(screen.getByText("Quote"));
+  assert.equal(selection.removeAllRanges.mock.calls.length, 0);
 });

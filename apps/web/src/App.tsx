@@ -564,6 +564,10 @@ export function App() {
   const userScrollIntentUntilRef = useRef(0);
   const onUserScrollIntent = () => {
     userScrollIntentUntilRef.current = performance.now() + 700;
+    const el = transcriptRef.current;
+    if (el && !atBottomOf(el)) {
+      setAtBottom(false);
+    }
   };
   const onTranscriptScroll = () => {
     const el = transcriptRef.current;

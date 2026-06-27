@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { type RefObject, useRef } from "react";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
@@ -158,6 +158,28 @@ describe("VirtualTranscript", () => {
     await waitFor(() => {
       assert.ok(vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length > callsBefore);
     });
+  });
+
+  test("does not scroll to bottom on appended rows while unpinned", async () => {
+    const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
+    const { container, rerender } = render(<Harness rows={rows} pinned={false} />);
+
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+    const callsBefore = vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
+
+    await act(async () => {
+      rerender(<Harness rows={[...rows, userRow(100)]} pinned={false} />);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+
+    assert.equal(
+      vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length,
+      callsBefore,
+      "append while unpinned must not force the viewport back to the bottom",
+    );
   });
 
   test("does not mount read-only batch continuations as placeholder rows", async () => {

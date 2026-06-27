@@ -87,7 +87,7 @@ export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> 
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) setAnchor(null);
     };
-    const onScroll = () => setAnchor(null);
+    const onScroll = () => show(null);
 
     document.addEventListener("mouseup", onMouseUp);
     document.addEventListener("keyup", onKeyUp);

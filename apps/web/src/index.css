@@ -292,6 +292,14 @@
   border-color: hsl(var(--border));
   border-radius: 0;
 }
+.smui-md .trevor-md pre code {
+  background: transparent;
+}
+.smui-md .trevor-md-code-copy {
+  background: hsl(var(--smui-surface-2));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
 .smui-md .trevor-md blockquote {
   border-left-color: hsl(var(--border));
   color: hsl(var(--muted-foreground));

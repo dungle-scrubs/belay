@@ -198,7 +198,7 @@ export function PanelHost(props: {
             ref={scroll.transcriptRef}
             onScroll={onTranscriptScroll}
             onWheel={(event) => {
-              if (event.deltaY < 0) {
+              if (event.deltaY !== 0) {
                 scroll.onUserScrollIntent();
               }
             }}
