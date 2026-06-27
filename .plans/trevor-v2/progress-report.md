@@ -289,11 +289,19 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 
 ### M4: UI and debug boundaries
 
-- [ ] Normal UI keeps Escape/cancel as the primary active-work control
+Owner decision (2026-06-27): the debug lifecycle controls are exposed as DEBUG-ONLY HOST SLASH COMMANDS
+(`/archive`, `/unarchive`, `/stop`), gated by `/debug` and surfaced through the existing slash menu -
+no new sidebar UI, no per-row reflow, consistent with `/restart`. `/stop` requires an explicit
+`/stop confirm` (it ends the session) and its bare form describes the effect first. KILL is intentionally
+NOT a web/debug control: a wedged host cannot process its own kill, so force-termination stays the CLI's
+`trevor kill` (D-094 M3). Gating + the confirm predicate live in `apps/agent-host/src/debug-commands.ts`
+(pure, unit-tested); the handlers are in `main.ts` and reuse the SIGTERM graceful-stop orchestration.
+
+- [x] Normal UI keeps Escape/cancel as the primary active-work control (lifecycle ops are separate debug slash commands; Escape/cancel is untouched)
 - [x] Normal sidebar rows do not expose stop, kill, or archive as ordinary actions
-- [ ] Debug mode may expose stop, kill, archive, and unarchive controls
-- [ ] Debug stop/kill controls are gated or confirmed and clearly describe lifecycle effects
-- [ ] Stale or inactive status is visible without implying the user must stop or kill anything
+- [x] Debug mode may expose stop, kill, archive, and unarchive controls (archive/unarchive/stop as debug slash commands; kill stays CLI-only per the owner decision above)
+- [x] Debug stop/kill controls are gated or confirmed and clearly describe lifecycle effects (debug-gated + `/stop confirm` two-step; bare `/stop` and each spec summary describe the effect)
+- [x] Stale or inactive status is visible without implying the user must stop or kill anything (sidebar shows activity/host state with no lifecycle affordances)
 - [x] Normal UI filters archived sessions out of D-093 and D-090 surfaces
 - [x] Web tests assert stop, kill, and archive controls are absent from the normal sidebar
 
@@ -304,7 +312,7 @@ commands. Source: launcher/host registry, session-store/Richter metadata, curren
 - [x] Tests prove kill force terminates the host while preserving durable history
 - [x] Tests prove archive and unarchive update metadata and filtering without deleting logs
 - [x] Tests cover CLI list, list --archived, open, archive, unarchive, stop, and kill
-- [ ] Tests cover debug-only UI exposure and normal-UI absence of lifecycle controls
+- [x] Tests cover debug-only UI exposure and normal-UI absence of lifecycle controls (debug-commands.test.ts: gated exposure + no-kill + `/stop` confirm; session-sidebar.test.tsx: no lifecycle controls in the normal sidebar)
 - [ ] Manual EZE repro: cancel a turn, stop a session, archive/unarchive it, and verify the sidebar/resume filtering plus durable history behavior
 
 ## Next-Up: provider auth/catalog + full model chooser
@@ -711,11 +719,11 @@ rename handling.
 - Live open follow-up (D-092 image attachment UX): 53 features, 51 completed, 2 remaining (manual EZE repros)
 - Live open follow-up (D-060 internet connectivity awareness): 40 features, 39 completed, 1 remaining (manual EZE repro). Explicit UI refresh now wired: host intercepts the `/internet-refresh` programmatic command and runs `internet.refresh()` (apps/agent-host/src/main.ts), exposed as the `refreshInternet()` session action (apps/web/src/session/use-session.ts).
 - Live open follow-up (D-093 session navigation sidebar): 39 features, 34 completed, 2 partial, 3 remaining. M4 navigation/safety wired live: the sidebar renders as a collapsible left rail (PanelHost) toggled by an upper-left dashboard icon, selection routes through the same `navigateToSession` safe-switch path as `/resume`, and active execution disables non-current rows with a clear reason. Remaining: the Storybook sidebar↔resume relationship story, a dashboard-entry-point/keyboard web test, and 2 manual EZE repros.
-- Live open follow-up (D-094 session lifecycle controls): 38 features, 32 completed, 6 remaining. Unarchive-before-open now enforced: the web derives the open session's archived state (`isSessionArchived`, apps/web/src/derive.ts) and gates the composer behind an `ArchivedNotice` + Unarchive action; `trevor open` refuses an archived session and points to `trevor unarchive`. Remaining: debug-only lifecycle UI + Escape-primary tests + manual EZE.
+- Live open follow-up (D-094 session lifecycle controls): 38 features, 37 completed, 1 remaining (manual EZE repro). M4/M5 landed: debug lifecycle controls are exposed as debug-only host slash commands (`/archive`, `/unarchive`, `/stop` with a `/stop confirm` two-step), gated via `/debug` and surfaced through the existing slash menu - no new sidebar UI; kill stays CLI-only (a wedged host can't self-kill) per owner decision. Gating + confirm are pure/unit-tested (`apps/agent-host/src/debug-commands.ts`); handlers reuse the SIGTERM graceful-stop path. Unarchive-before-open remains enforced (web `ArchivedNotice` gate; `trevor open` refuses archived).
 - Live open follow-up (D-065 provider auth/catalog + full model chooser): 62 features, 35 completed, 27 remaining (M1 contract + M2 chooser surface + M5 no-secret auth UI built; M3 split-control UI partial - quick-picker component built, App split-control wiring remains; M4 catalog browsing UI, M6 selection wiring, M7 verification remain)
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 55 completed, 2 remaining (2 manual EZE repros)
 - Live open follow-up (D-073 doctor health surface): 57 features, 48 completed, 9 remaining. M6 landed: the `/doctor` snapshot is now a READ-ONLY `doctor` model tool (diagnostics-only) over the shared `buildLiveDoctorSnapshot` accessor + registered source, with system-prompt guidance and unit/prompt tests. Remaining: M4 visual review; the D-065 auth/catalog and D-093/D-094 session-lifecycle doctor explanations (ride those features); M7 storybook review + manual EZE repros; and the gated live model-behavioral eval.
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 43 completed, 8 remaining (M5 live-model evals; M7 web UI + manual repros)
 - New (proposed, not yet in plan.db) editable session titles: 13 features, 0 completed, 13 remaining (durable rename event + sidebar inline edit + scope/consistency) - needs planner ratification before build
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 87 unchecked items plus 5 partial/gated carry-forward items (D-073 M6 doctor model tool landed this pass: 4 items completed, 2 moved to partial)
+- Remaining implementable work in this report: 82 unchecked items plus 5 partial/gated carry-forward items (this pass: D-073 M6 doctor model tool - 4 completed, 2 partial; D-094 M4/M5 debug lifecycle slash commands - 5 completed, leaving only the manual EZE)

@@ -36,6 +36,7 @@ import { probeLogLine } from "./connectivity/log";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
+import { debugCommandSpecs, isStopConfirmed } from "./debug-commands";
 import { buildLiveDoctorSnapshot, type DoctorFacts } from "./doctor/build";
 import { registerDoctorSnapshotSource } from "./doctor/source";
 import { nodeGitRunner, readGitStatus } from "./git-status";
@@ -53,7 +54,7 @@ import {
   pickProvider,
 } from "./providers";
 import { Emit } from "./services";
-import { stopSession } from "./session-lifecycle";
+import { type StopOutcome, stopSession } from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
@@ -100,18 +101,10 @@ const worktrees = nodeWorktreeManager(abbrevPath);
 
 // Debug mode: a runtime flag (booted from `TREVOR_DEBUG`, set by `trevor --debug`, toggled at
 // runtime by `/debug`) that gates a collection of dev-only host commands - hidden from a normal
-// session. `/restart` is the headline one: re-exec the host to pick up code changes on demand,
-// instead of an auto-watch restart that orphans a live turn.
+// session. `/restart` re-execs the host to pick up code changes on demand; `/archive`, `/unarchive`,
+// and `/stop` are the debug lifecycle controls (D-094 M4). The gated set + the `/stop` confirm live in
+// debug-commands.ts (pure, unit-tested); the handlers stay here (they touch the live host state).
 let debugMode = process.env.TREVOR_DEBUG === "1";
-const DEBUG_TOGGLE_SPEC = { name: "/debug", summary: "Toggle debug command mode" };
-const DEBUG_ONLY_SPECS = [
-  { name: "/restart", summary: "Restart the host to pick up code changes (debug)" },
-];
-
-/** The debug-surface command specs to announce: the always-present toggle + the gated collection. */
-function debugCommandSpecs(): { name: string; summary: string }[] {
-  return [DEBUG_TOGGLE_SPEC, ...(debugMode ? DEBUG_ONLY_SPECS : [])];
-}
 
 /** Stable per-process identity: shared producerId on events, unique stream id + instance. */
 const INSTANCE_ID = crypto.randomUUID();
@@ -784,7 +777,7 @@ function announceOnline(): void {
       // The immediate-command inventory, so the browser knows which slashes route
       // to the host's command lane (and can drive a slash menu). Debug-mode adds /restart
       // (and friends) to this set; toggling /debug re-announces with the set updated.
-      commands: [...commands.specs, ...debugCommandSpecs()],
+      commands: [...commands.specs, ...debugCommandSpecs(debugMode)],
       // The discovered subagents (D-045), so the model picks one to delegate to by description.
       agents: discoverAgents().map(describeAgent),
       // The managed worktrees for this base repo (D-091), so the browser's switcher renders
@@ -1318,6 +1311,114 @@ async function restartHost(): Promise<void> {
   }
 }
 
+/**
+ * Runs the graceful session teardown (D-094): abort active work (a clean cancelled completion where
+ * the turn can still flush), clear the deferred queue so no successor answers stale prompts, and tear
+ * down background jobs - in that order. Shared by the SIGTERM path (`trevor stop`) and the debug
+ * `/stop` command; the CALLER exits the process afterward (which lapses the lease). The durable log is
+ * never touched - nothing here can reach it.
+ */
+function performGracefulStop(): StopOutcome {
+  return stopSession({
+    abortActive: () => {
+      for (const runId of [...inFlightRuns]) {
+        closeRun(runId, "cancelled");
+      }
+      scheduler.cancel("");
+    },
+    clearQueue: () => scheduler.clearPending(),
+    killJobs: () => supervisor.killAll(),
+    isBusy: () => scheduler.isBusy(),
+    queuedCount: () => scheduler.debug().queued,
+  });
+}
+
+/**
+ * The debug `/archive` and `/unarchive` commands (D-094 M4): flip the durable `session.archived` flag
+ * for the CURRENT session. Archiving hides it from the sidebar and `/resume` (the open browser then
+ * gates behind its unarchive notice); it never deletes history, and `/unarchive` is the exact inverse.
+ * Debug-gated like `/restart` (the handler re-checks even though the spec is only announced in debug).
+ */
+async function setArchived(archived: boolean): Promise<void> {
+  const command = archived ? "/archive" : "/unarchive";
+  if (!debugMode) {
+    await emit(
+      events.commandResult({
+        command,
+        text: `Run /debug first — ${command} is a debug-mode command.`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+  await emit(events.sessionArchived({ archived }));
+  await emit(
+    events.commandResult({
+      command,
+      text: archived
+        ? "✓ archived — hidden from the sidebar and /resume (history preserved; /unarchive to restore)."
+        : "✓ unarchived — restored to the sidebar and /resume.",
+      ok: true,
+    }),
+  );
+}
+
+/**
+ * The debug `/stop` command (D-094 M4): graceful session shutdown, gated behind debug mode AND an
+ * explicit confirm because it ends the session. Bare `/stop` only describes the effect; `/stop
+ * confirm` runs the same teardown as `trevor stop` (SIGTERM), reports what it tore down, then exits so
+ * the lease lapses and the launcher reaps the ownership record. History is preserved throughout.
+ */
+async function stopCurrentSession(args: string): Promise<void> {
+  if (!debugMode) {
+    await emit(
+      events.commandResult({
+        command: "/stop",
+        text: "Run /debug first — /stop is a debug-mode command.",
+        ok: false,
+      }),
+    );
+    return;
+  }
+  if (!isStopConfirmed(args)) {
+    await emit(
+      events.commandResult({
+        command: "/stop",
+        text: "Stop ends this session: it cancels the active turn, clears the queue, tears down background jobs, and shuts the host down. History is preserved. Run `/stop confirm` to proceed.",
+        ok: true,
+      }),
+    );
+    return;
+  }
+  let outcome: StopOutcome;
+  try {
+    outcome = performGracefulStop();
+  } catch (error) {
+    warn("host", "graceful stop failed; tearing down anyway", { error: msg(error) });
+    supervisor.killAll();
+    await emit(
+      events.commandResult({
+        command: "/stop",
+        text: `Stopped (forced): ${msg(error)}`,
+        ok: false,
+      }),
+    );
+    process.exit(0);
+  }
+  log("host", "stopping (/stop)", {
+    cancelledActive: outcome.cancelledActive,
+    clearedQueued: outcome.clearedQueued,
+  });
+  await emit(
+    events.commandResult({
+      command: "/stop",
+      text: `✓ stopped — ${outcome.cancelledActive ? "cancelled the active turn" : "no active turn"}, cleared ${outcome.clearedQueued} queued. Shutting down; history is preserved.`,
+      ok: true,
+    }),
+  );
+  process.exit(0);
+}
+
 /** Reconciles the registry against the filesystem, dropping worktrees whose path is gone (M5). */
 async function worktreeReconcile(): Promise<void> {
   const ctx = worktreeContextFor(process.cwd());
@@ -1605,6 +1706,25 @@ function handleEvent(message: SessionEvent): void {
         restartHost().catch((error) => warn("host", "restart failed", { error: msg(error) }));
         return;
       }
+      // Debug lifecycle controls (D-094 M4): archive/unarchive flip the durable session flag; /stop is
+      // graceful shutdown behind an explicit confirm. Each handler re-checks debug mode. Kill is NOT
+      // here - a wedged host can't self-kill, so force-termination stays the CLI's `trevor kill`.
+      if (command === "/archive") {
+        setArchived(true).catch((error) => warn("host", "archive failed", { error: msg(error) }));
+        return;
+      }
+      if (command === "/unarchive") {
+        setArchived(false).catch((error) =>
+          warn("host", "unarchive failed", { error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/stop") {
+        stopCurrentSession(args).catch((error) =>
+          warn("host", "stop failed", { error: msg(error) }),
+        );
+        return;
+      }
       runCommand(command, args).catch((error) =>
         warn("host", "command failed", { command, error: msg(error) }),
       );
@@ -1757,18 +1877,7 @@ process.once("SIGINT", () => {
 // lets the launcher reap the ownership record. The durable log is never touched.
 process.once("SIGTERM", () => {
   try {
-    const outcome = stopSession({
-      abortActive: () => {
-        for (const runId of [...inFlightRuns]) {
-          closeRun(runId, "cancelled");
-        }
-        scheduler.cancel("");
-      },
-      clearQueue: () => scheduler.clearPending(),
-      killJobs: () => supervisor.killAll(),
-      isBusy: () => scheduler.isBusy(),
-      queuedCount: () => scheduler.debug().queued,
-    });
+    const outcome = performGracefulStop();
     log("host", "stopping (SIGTERM)", {
       cancelledActive: outcome.cancelledActive,
       clearedQueued: outcome.clearedQueued,
