@@ -41,7 +41,7 @@ export function TasksPanel({ tasks }: { tasks: readonly TaskSnapshot[] }) {
   }
   const done = tasks.filter((t) => t.status === "completed").length;
   return (
-    <div className="flex flex-col gap-1 font-mono text-sm">
+    <div className="flex flex-col gap-1 py-1 font-mono text-sm">
       <div className="text-label tracking-wider uppercase text-muted-foreground">
         tasks {done}/{tasks.length}
       </div>

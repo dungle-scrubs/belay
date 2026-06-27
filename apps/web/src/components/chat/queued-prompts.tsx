@@ -8,7 +8,7 @@ function Md({ text, muted = false }: { readonly text: string; readonly muted?: b
   return (
     <div
       className={cn(
-        "smui-md text-xs leading-5",
+        "smui-md text-[11px] leading-5",
         muted ? "text-muted-foreground" : "text-foreground",
       )}
     >
@@ -23,7 +23,7 @@ export function QueuedPrompts({ queue }: { readonly queue: readonly QueuedPrompt
   }
 
   return (
-    <div className="flex max-h-40 flex-col gap-1 overflow-y-auto border-border/70 border-t px-3 pt-2 pb-1 [scrollbar-width:none] opacity-75 [&::-webkit-scrollbar]:hidden">
+    <div className="flex max-h-40 flex-col gap-1 overflow-y-auto px-3 pt-1 pb-2 [scrollbar-width:none] opacity-75 [&::-webkit-scrollbar]:hidden">
       {queue.map((q) => (
         <div key={q.id} className="flex items-baseline gap-1.5 text-muted-foreground">
           <ChevronRight aria-hidden className="size-3 shrink-0 translate-y-0.5" />
