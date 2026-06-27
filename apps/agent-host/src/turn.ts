@@ -1,7 +1,9 @@
-import { events } from "@trevor/session";
+import { events, type TurnStop } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
 import { type AgentEvent, type DelegateCapability, runAgent } from "./agent/loop";
+import { recordTurnStopMetric } from "./agent/turn-stop-metrics";
 import { resolveHistoryImages } from "./artifacts";
+import { log } from "./log";
 import type { ChatMessage, Provider, Usage } from "./providers";
 import { ProviderUnavailable } from "./providers/errors";
 import { providerFailures } from "./providers/provider-failure-log";
@@ -152,6 +154,7 @@ export function publishTurn(
     // completion as budget-terminated (a forced final answer follows) - distinct from a clean
     // answer, so the UI can show "stopped after N steps" (D-051).
     let stepLimitSteps = 0;
+    let stop: TurnStop | undefined;
     // How many auto-reconnect attempts the loop emitted this turn (D-076 M6): if the turn still
     // ends in a provider failure, a nonzero count means the bounded retry budget was EXHAUSTED (a
     // transient outage that gave up) - distinct from a non-retryable terminal failure, which never
@@ -181,6 +184,7 @@ export function publishTurn(
           breakdown: breakdown.snapshot(),
           ...(noReply ? { noReply: true } : {}),
           ...(stepLimitSteps > 0 ? { stepLimit: stepLimitSteps } : {}),
+          ...(stop ? { stop } : {}),
           ...extra,
         }),
       );
@@ -253,6 +257,31 @@ export function publishTurn(
           // so the terminal completion shows a notice instead of an empty bubble.
           yield* flushAll;
           noReply = true;
+        } else if (event.type === "stop") {
+          yield* flushAll;
+          stop = event.stop;
+          yield* Effect.promise(() =>
+            recordTurnStopMetric({
+              runId,
+              provider: provider.id,
+              model: provider.model,
+              stop: event.stop,
+              at: new Date().toISOString(),
+            }),
+          );
+          yield* Effect.sync(() =>
+            log("turn", "stop", {
+              runId,
+              provider: provider.id,
+              model: provider.model,
+              cause: event.stop.cause,
+              action: event.stop.action,
+              steps: event.stop.steps,
+              inputTokens: event.stop.context?.inputTokens,
+              contextWindow: event.stop.context?.contextWindow,
+              pressure: event.stop.context?.pressure,
+            }),
+          );
         } else if (event.type === "step_limit") {
           // The loop hit its budget and is forcing a final answer (which streams after this
           // as ordinary text). Record the step count so the completion is flagged with WHY,

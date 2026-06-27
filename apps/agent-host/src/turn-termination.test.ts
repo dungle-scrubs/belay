@@ -33,6 +33,56 @@ test("a terminal error outranks a budget cut", () => {
   );
 });
 
+test("typed stop data outranks legacy budget flags", () => {
+  assert.equal(
+    terminationReason(
+      {
+        ...answered,
+        stepLimit: 32,
+        stop: {
+          cause: "step_backstop",
+          action: "paused",
+          summary: "Paused at the 32-step backstop before context pressure.",
+          steps: 32,
+        },
+      },
+      false,
+    ),
+    "step_backstop: Paused at the 32-step backstop before context pressure.",
+  );
+});
+
+test("typed stop summaries are deterministic for all initial stop causes", () => {
+  const causes = [
+    "answered",
+    "context_pressure",
+    "step_backstop",
+    "loop_stalled",
+    "provider_protocol_anomaly",
+    "overflow",
+    "no_reply",
+    "cancelled",
+    "interrupted",
+    "error",
+  ] as const;
+  for (const cause of causes) {
+    assert.equal(
+      terminationReason(
+        {
+          ...answered,
+          stop: {
+            cause,
+            action: cause === "answered" ? "completed" : "paused",
+            summary: `${cause} summary`,
+          },
+        },
+        false,
+      ),
+      `${cause}: ${cause} summary`,
+    );
+  }
+});
+
 test("a budget-terminated turn reports the step count", () => {
   assert.equal(terminationReason({ ...answered, stepLimit: 12 }, false), "step_limit (12 steps)");
 });

@@ -187,6 +187,45 @@ test("the Providers area shows retry exhaustion separately from non-retryable te
   assert.ok(!onlyExhausted?.findings?.some((f) => f.id === "providers.terminal"));
 });
 
+test("the Session area explains the latest non-answered adaptive stop", () => {
+  const session = buildDoctorSnapshot(
+    input({
+      session: {
+        activeRun: undefined,
+        queued: 0,
+        lastTurn: "step_backstop: Paused at the 32-step backstop before context pressure.",
+      },
+    }),
+  ).areas.find((a) => a.id === "session");
+  assert.equal(session?.status, "warn");
+  const finding = session?.findings?.find((f) => f.id === "session.run");
+  assert.equal(
+    finding?.evidence,
+    "step_backstop: Paused at the 32-step backstop before context pressure.",
+  );
+  assert.match(finding?.nextAction?.label ?? "", /Continue/);
+  assert.ok(
+    session?.facts?.some((f) => f.label === "last turn" && f.status === "warn"),
+    "the last turn fact is visibly marked",
+  );
+});
+
+test("the Session area has next-action text for adaptive stop causes", () => {
+  for (const cause of [
+    "context_pressure",
+    "step_backstop",
+    "loop_stalled",
+    "provider_protocol_anomaly",
+    "overflow",
+  ]) {
+    const session = buildDoctorSnapshot(
+      input({ session: { activeRun: undefined, queued: 0, lastTurn: `${cause}: summary` } }),
+    ).areas.find((a) => a.id === "session");
+    const finding = session?.findings?.find((f) => f.id === "session.run");
+    assert.ok(finding?.nextAction?.label, `${cause} has next-action text`);
+  }
+});
+
 test("MCP/LSP/Hooks areas map each peripheral state to the right status + next action", () => {
   const mcpState = (state: PeripheralState) => {
     const snap = buildDoctorSnapshot(

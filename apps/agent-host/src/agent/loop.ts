@@ -1,3 +1,4 @@
+import type { TurnStop } from "@trevor/session";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
 import { debug } from "../log";
 import type {
@@ -10,9 +11,11 @@ import type {
 } from "../providers";
 import { ProviderUnavailable } from "../providers/errors";
 import { recordObservation } from "../providers/observation-store";
+import { classifyProviderProtocolAnomaly } from "../providers/protocol-anomaly";
 import { providerFailureLogFields } from "../providers/provider-failure-log";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
+import { evaluateTurnTermination } from "./turn-policy";
 
 /**
  * Emits the structured, redacted provider-failure log line (D-076 M6): the classification, retry
@@ -234,6 +237,7 @@ export type AgentEvent =
       readonly detail: string;
       readonly reclaimed: number;
     }
+  | { readonly type: "stop"; readonly stop: TurnStop }
   | { readonly type: "step_limit"; readonly steps: number }
   | { readonly type: "reconnecting"; readonly attempt: number; readonly detail: string }
   | { readonly type: "empty" };
@@ -319,6 +323,9 @@ export function runAgent(
   // final answer instead of opening more tool calls. Both 0 until the first usage arrives.
   let lastInputTokens = 0;
   let lastContextWindow = 0;
+  let repeatedToolName: string | undefined;
+  let repeatedToolSignature: string | undefined;
+  let repeatedToolRounds = 0;
 
   // One overflow adjustment: mutate the conversation/reasoning in place and return a
   // `recovered` event, or null when nothing cheap is left. Cheapest-first and
@@ -372,7 +379,7 @@ export function runAgent(
   // no tools to recurse on). An empty result falls through to the `empty` -> noReply path, so a
   // capped turn still never dead-ends in silence. `step_limit` is emitted first as the
   // observable termination signal, then the forced answer streams as ordinary text.
-  const synthesize = (n: number): Stream.Stream<AgentEvent, ProviderError> =>
+  const synthesize = (n: number, stop: TurnStop): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
       conversation.push({
         role: "user",
@@ -403,8 +410,11 @@ export function runAgent(
         ),
       );
       return Stream.concat(
-        Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }),
-        Stream.concat(model, afterSynthesis),
+        Stream.succeed<AgentEvent>({ type: "stop", stop }),
+        Stream.concat(
+          Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }),
+          Stream.concat(model, afterSynthesis),
+        ),
       );
     });
 
@@ -417,10 +427,23 @@ export function runAgent(
       // governor - the prior step's prompt crossing CONTEXT_BUDGET_FRACTION of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are
       // clear (no prior usage), so the first round always runs.
-      const overContext =
-        lastContextWindow > 0 && lastInputTokens >= CONTEXT_BUDGET_FRACTION * lastContextWindow;
-      if (n >= MAX_STEPS || overContext) {
-        return synthesize(n);
+      const decision = evaluateTurnTermination({
+        steps: n,
+        maxSteps: MAX_STEPS,
+        inputTokens: lastInputTokens,
+        contextWindow: lastContextWindow,
+        contextBudgetFraction: CONTEXT_BUDGET_FRACTION,
+        repeatedToolName,
+        repeatedToolRounds,
+      });
+      if (decision.type === "synthesize") {
+        return synthesize(n, decision.stop);
+      }
+      if (decision.type === "pause" || decision.type === "fail") {
+        return Stream.concat(
+          Stream.succeed<AgentEvent>({ type: "stop", stop: decision.stop }),
+          Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }),
+        );
       }
       const toolCalls: ToolCall[] = [];
       let assistantText = "";
@@ -532,6 +555,30 @@ export function runAgent(
               }
               return Stream.succeed<AgentEvent>({ type: "empty" });
             }
+            const protocolDiagnostic = classifyProviderProtocolAnomaly({
+              providerId: provider.id,
+              text: assistantText,
+              toolCalls,
+            });
+            if (protocolDiagnostic) {
+              const decision = evaluateTurnTermination({
+                steps: n,
+                maxSteps: MAX_STEPS,
+                inputTokens: lastInputTokens,
+                contextWindow: lastContextWindow,
+                contextBudgetFraction: CONTEXT_BUDGET_FRACTION,
+                repeatedToolName,
+                repeatedToolRounds,
+                providerDiagnostic: protocolDiagnostic,
+              });
+              if (decision.type === "continue") {
+                return Stream.empty;
+              }
+              return Stream.succeed<AgentEvent>({
+                type: "stop",
+                stop: decision.stop,
+              });
+            }
             // Non-empty text, no tool call. Normally this IS the final answer - but if the text
             // trails off announcing more work it never did, nudge it once to carry it out. If it
             // still answers without tools after the nudge, accept it (bounded, can't loop).
@@ -552,6 +599,16 @@ export function runAgent(
             content: assistantText,
             toolCalls: [...toolCalls],
           });
+          const toolCall = toolCalls.length === 1 ? toolCalls[0] : undefined;
+          const toolName = toolCall?.name;
+          const toolSignature = toolCall ? `${toolCall.name}:${toolCall.arguments}` : undefined;
+          if (toolSignature && toolSignature === repeatedToolSignature) {
+            repeatedToolRounds += 1;
+          } else {
+            repeatedToolName = toolName;
+            repeatedToolSignature = toolSignature;
+            repeatedToolRounds = toolName ? 1 : 0;
+          }
           // Each call writes its result into an index-keyed slot instead of pushing to
           // `conversation` on completion: concurrent read children finish in any order, but
           // the slots commit to history deterministically in CALL order after the batch drains

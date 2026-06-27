@@ -28,8 +28,10 @@ function loopingProvider(opts: {
   input: number;
   window: number;
   synthesisText?: string;
+  repeatedTool?: boolean;
   onMessages?: (messages: readonly ChatMessage[], tools: number) => void;
 }): Provider {
+  let calls = 0;
   return {
     id: "fake",
     label: "Fake",
@@ -49,6 +51,7 @@ function loopingProvider(opts: {
     warm: () => Effect.void,
     stream: (messages, tools) => {
       opts.onMessages?.(messages, tools.length);
+      calls += 1;
       if (tools.length === 0) {
         // Synthesis step (tools removed): answer (or stay empty to test noReply).
         const text = opts.synthesisText ?? "FINAL ANSWER";
@@ -61,7 +64,14 @@ function loopingProvider(opts: {
       // Tool-calling step: call an unknown tool (executeTool returns an error string with no
       // process spawn) so the loop threads a result and recurses cheaply, never answering.
       return Stream.fromIterable<ProviderEvent>([
-        { type: "tool_call", call: { id: "c", name: "noop", arguments: "{}" } },
+        {
+          type: "tool_call",
+          call: {
+            id: `c${calls}`,
+            name: "noop",
+            arguments: opts.repeatedTool ? "{}" : JSON.stringify({ round: calls }),
+          },
+        },
         { type: "usage", usage: usage(opts.input, opts.window) },
       ]);
     },
@@ -77,17 +87,21 @@ const collect = (provider: Provider): Promise<AgentEvent[]> => {
   ).then(() => events);
 };
 
-test("M1+M2: hitting the step backstop emits one step_limit and a forced non-empty answer", async () => {
+test("M1+M2: DeepSeek-like low-context 32-step backstop pauses instead of forcing a normal answer", async () => {
   // Huge window so the context gate never fires - the turn runs to the MAX_STEPS backstop.
-  const events = await collect(loopingProvider({ input: 10, window: 1_000_000 }));
+  const events = await collect(loopingProvider({ input: 89_022, window: 1_000_000 }));
   const limits = events.filter((e) => e.type === "step_limit");
   assert.equal(limits.length, 1, "exactly one step_limit");
   assert.equal((limits[0] as { steps: number }).steps, 32, "fires at the MAX_STEPS backstop");
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "step_backstop");
+  assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
+  assert.equal(stop?.type === "stop" && stop.stop.context?.pressure, 0.089022);
   const answer = events
     .filter((e): e is Extract<AgentEvent, { type: "text" }> => e.type === "text")
     .map((e) => e.text)
     .join("");
-  assert.equal(answer, "FINAL ANSWER", "the forced synthesis produced the final answer");
+  assert.equal(answer, "", "the low-context backstop does not pose as a final answer");
   assert.ok(!events.some((e) => e.type === "empty"), "not an empty/noReply turn");
 });
 
@@ -96,6 +110,9 @@ test("M3: the context gate stops early under a small window, later under a large
   const small = await collect(loopingProvider({ input: 100, window: 100 }));
   const smallSteps = (small.find((e) => e.type === "step_limit") as { steps: number }).steps;
   assert.equal(smallSteps, 1, "context gate fires after the first round, not at MAX_STEPS");
+  const smallStop = small.find((e) => e.type === "stop");
+  assert.equal(smallStop?.type === "stop" && smallStop.stop.cause, "context_pressure");
+  assert.equal(smallStop?.type === "stop" && smallStop.stop.action, "synthesized");
 
   // input 100 of a 100k window = 0.1%: nowhere near the gate, so it runs to the backstop.
   const large = await collect(loopingProvider({ input: 100, window: 100_000 }));
@@ -103,7 +120,7 @@ test("M3: the context gate stops early under a small window, later under a large
   assert.equal(largeSteps, 32, "a roomy window runs to the backstop, not the context gate");
 });
 
-test("M2: an empty synthesis falls through to the empty (noReply) path, still after step_limit", async () => {
+test("M2: an empty context-pressure synthesis falls through to the empty path after step_limit", async () => {
   const events = await collect(loopingProvider({ input: 100, window: 100, synthesisText: "" }));
   assert.equal(events.filter((e) => e.type === "step_limit").length, 1);
   assert.ok(
@@ -117,11 +134,12 @@ test("M2: an empty synthesis falls through to the empty (noReply) path, still af
 function textProvider(opts: {
   first: string;
   second: string;
+  providerId?: string;
   onMessages?: (messages: readonly ChatMessage[], tools: number) => void;
 }): Provider {
   let calls = 0;
   return {
-    id: "fake",
+    id: opts.providerId ?? "fake",
     label: "Fake",
     model: "fake-1",
     reasoningLevels: ["off", "low"],
@@ -212,6 +230,24 @@ test("a genuine final answer (no trailing announcement) is NOT nudged", async ()
   assert.equal(calls, 1, "a real answer ends the turn with no extra model call");
 });
 
+test("provider-rendered tool markup stops as a protocol anomaly", async () => {
+  const events = await collect(
+    textProvider({
+      providerId: "deepseek",
+      first: '<tool_call>{"name":"read","arguments":{"path":"AGENTS.md"}}</tool_call>',
+      second: "should-not-be-reached",
+    }),
+  );
+
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "provider_protocol_anomaly");
+  assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
+  assert.match(
+    stop?.type === "stop" ? stop.stop.summary : "",
+    /DeepSeek rendered raw tool-call markup/i,
+  );
+});
+
 test("M2: the budget nudge reaches the model but is never emitted as an event", async () => {
   let synthesisPrompt = "";
   const events = await collect(
@@ -233,4 +269,13 @@ test("M2: the budget nudge reaches the model but is never emitted as an event", 
     .map((e) => e.text)
     .join("");
   assert.doesNotMatch(emittedText, /tool-call budget/i, "the nudge is never emitted/persisted");
+});
+
+test("M1: a repeated-tool fixture represents a true loop stall", async () => {
+  const events = await collect(
+    loopingProvider({ input: 100, window: 1_000_000, repeatedTool: true }),
+  );
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "loop_stalled");
+  assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
 });

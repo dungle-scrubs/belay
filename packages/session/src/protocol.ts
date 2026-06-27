@@ -33,6 +33,61 @@ export interface Usage {
   readonly genMs: number;
 }
 
+/** A typed reason for why a turn stopped. Unknown future causes stay renderable. */
+export type KnownTurnStopCause =
+  | "answered"
+  | "context_pressure"
+  | "step_backstop"
+  | "loop_stalled"
+  | "provider_protocol_anomaly"
+  | "overflow"
+  | "no_reply"
+  | "cancelled"
+  | "interrupted"
+  | "error";
+
+export type TurnStopCause = KnownTurnStopCause | (string & {});
+
+export const TURN_STOP_CAUSE_DESCRIPTIONS = {
+  /** The model produced an ordinary final answer. */
+  answered: "The model produced an ordinary final answer.",
+  /** The prompt is close enough to the context window that the host synthesized before more tools. */
+  context_pressure: "The prompt approached the context window.",
+  /** The high runaway circuit breaker fired before context pressure. */
+  step_backstop: "The high step circuit breaker fired.",
+  /** The host saw repeated tool cycles without enough progress. */
+  loop_stalled: "The tool loop repeated without enough progress.",
+  /** The provider boundary reported malformed or protocol-leaking output. */
+  provider_protocol_anomaly: "The provider boundary reported malformed output.",
+  /** Context overflow recovery exhausted its cheap rungs. */
+  overflow: "Context overflow recovery was exhausted.",
+  /** The provider ended without assistant content. */
+  no_reply: "The provider ended with no assistant reply.",
+  /** The user or host cancelled the run. */
+  cancelled: "The run was cancelled.",
+  /** The host runtime interrupted or reaped the run. */
+  interrupted: "The host interrupted the run.",
+  /** A generic terminal host, provider, or tool error stopped the run. */
+  error: "A terminal error stopped the run.",
+} as const satisfies Record<KnownTurnStopCause, string>;
+
+/** What the host did after selecting a stop cause. */
+export type TurnStopAction = "completed" | "synthesized" | "paused" | "recovering" | "failed";
+
+/** Durable stop metadata for assistant.completed. Keep summaries bounded and prompt-safe. */
+export interface TurnStop {
+  readonly cause: TurnStopCause;
+  readonly action: TurnStopAction;
+  readonly summary: string;
+  readonly steps?: number;
+  readonly context?: {
+    readonly inputTokens: number;
+    readonly contextWindow: number;
+    readonly pressure: number;
+  };
+  readonly diagnosticRef?: string | null;
+}
+
 // The wire `UsageBreakdown` type and its category schema live in ./breakdown (the
 // single source host accumulation, this decoder, and the web treemap all derive from);
 // re-exported above so existing `@trevor/session` importers are unaffected.
@@ -321,6 +376,7 @@ export const events = {
     interrupted?: boolean;
     noReply?: boolean;
     stepLimit?: number;
+    stop?: TurnStop;
   }): TrevorEventInput => ({
     type: "assistant.completed",
     payload: {
@@ -337,6 +393,7 @@ export const events = {
       // Step count when the turn was budget-terminated (step backstop or context gate);
       // omitted on a normal turn. A forced final answer still streams; this flags WHY.
       ...(p.stepLimit ? { stepLimit: p.stepLimit } : {}),
+      ...(p.stop ? { stop: p.stop } : {}),
     },
   }),
   /** User asked to cancel the active run (hard steering / ESC). */
@@ -555,6 +612,39 @@ function coerceBreakdown(value: unknown): UsageBreakdown | undefined {
     }
   }
   return { input, output } as UsageBreakdown;
+}
+
+function coerceTurnStop(value: unknown): TurnStop | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const cause = str(raw.cause);
+  const action = str(raw.action);
+  if (!cause || !action) {
+    return undefined;
+  }
+  const contextRaw =
+    raw.context && typeof raw.context === "object" && !Array.isArray(raw.context)
+      ? (raw.context as Record<string, unknown>)
+      : undefined;
+  return {
+    cause,
+    action: action as TurnStopAction,
+    summary: str(raw.summary),
+    ...(typeof raw.steps === "number" ? { steps: raw.steps } : {}),
+    ...(contextRaw
+      ? {
+          context: {
+            inputTokens: num(contextRaw.inputTokens),
+            contextWindow: num(contextRaw.contextWindow),
+            pressure: num(contextRaw.pressure),
+          },
+        }
+      : {}),
+    ...(raw.diagnosticRef === null ? { diagnosticRef: null } : {}),
+    ...(typeof raw.diagnosticRef === "string" ? { diagnosticRef: raw.diagnosticRef } : {}),
+  };
 }
 
 /** Coerces a payload array of objects via `map`, skipping non-objects and nulls. */
@@ -787,6 +877,7 @@ export type DecodedEvent =
       readonly noReply: boolean;
       /** Steps run when the turn hit its budget (0 = not budget-terminated). */
       readonly stepLimit: number;
+      readonly stop?: TurnStop;
     }
   | {
       readonly type: "context.compacted";
@@ -943,6 +1034,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         interrupted: p.interrupted === true,
         noReply: p.noReply === true,
         stepLimit: typeof p.stepLimit === "number" ? p.stepLimit : 0,
+        stop: coerceTurnStop(p.stop),
       };
     case "context.compacted":
       return {

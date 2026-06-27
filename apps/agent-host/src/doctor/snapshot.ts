@@ -158,15 +158,42 @@ function coreArea(input: DoctorProbeInput): DoctorArea {
   );
 }
 
+function lastTurnCause(lastTurn: string | undefined): string | undefined {
+  return lastTurn?.match(/^([a-z_]+):/)?.[1];
+}
+
+function lastTurnNextAction(cause: string | undefined): DoctorNextAction | undefined {
+  switch (cause) {
+    case "step_backstop":
+      return { label: "Continue with a follow-up prompt or narrow the task" };
+    case "context_pressure":
+      return { label: "Let the synthesized answer finish, then compact or continue" };
+    case "loop_stalled":
+      return { label: "Inspect repeated tool calls and continue with a narrower instruction" };
+    case "provider_protocol_anomaly":
+      return { label: "Inspect provider diagnostics or switch models before retrying" };
+    case "overflow":
+      return { label: "Run /compact or reduce context before retrying" };
+    default:
+      return undefined;
+  }
+}
+
 function sessionArea(input: DoctorProbeInput): DoctorArea {
   const { activeRun, queued, lastTurn, compacting } = input.session;
-  // A last-turn reason of error/overflow/noReply is worth a warning; everything else is fine.
-  const bad = lastTurn ? /error|overflow|noreply|interrupted/i.test(lastTurn) : false;
+  const cause = lastTurnCause(lastTurn);
+  const bad = lastTurn
+    ? /error|overflow|noreply|interrupted|context_pressure|step_backstop|loop_stalled|provider_protocol_anomaly/i.test(
+        lastTurn,
+      )
+    : false;
   const finding: DoctorFinding = {
     id: "session.run",
     status: bad ? "warn" : "ok",
     title: "Session / run",
     message: activeRun ? "a turn is running" : "idle",
+    ...(bad && lastTurn ? { evidence: lastTurn } : {}),
+    ...(bad ? { nextAction: lastTurnNextAction(cause) } : {}),
   };
   const facts: DoctorArea["facts"] = [
     { label: "active run", value: activeRun ?? "none" },

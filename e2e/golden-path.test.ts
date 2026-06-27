@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
-import type { SessionEvent } from "@trevor/session";
+import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
 import {
   type RunningServer,
   startSessionStore,
@@ -8,6 +8,7 @@ import {
   testTransport,
   waitFor,
 } from "@trevor/test-kit";
+import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
@@ -61,6 +62,100 @@ test("a fake-provider turn streams through the store to a subscriber, tool resul
   const completed = viewer.events.find((e) => e.type === "assistant.completed");
   assert.equal(completed?.payload.error, undefined);
   assert.ok(String(completed?.payload.text ?? "").includes("the tool ran."));
+
+  viewer.connection.close();
+});
+
+test("a DeepSeek-like low-context 32-step stop replays as step_backstop", async () => {
+  const transport = testTransport(store.url);
+  await transport.ensureSession("low-context-stop");
+
+  const viewer = subscribe(transport, "low-context-stop", "viewer");
+  await waitFor(viewer.isReplayed);
+
+  let calls = 0;
+  await publishTurnVia(
+    transportEmit(transport, "low-context-stop", "host"),
+    fakeProvider({
+      stream: (_messages, tools) => {
+        calls += 1;
+        if (tools.length === 0) {
+          return Stream.empty;
+        }
+        return Stream.fromIterable([
+          {
+            type: "tool_call" as const,
+            call: {
+              id: `c${calls}`,
+              name: "noop",
+              arguments: JSON.stringify({ round: calls }),
+            },
+          },
+          {
+            type: "usage" as const,
+            usage: { input: 89_022, output: 1, contextWindow: 1_000_000, genMs: 1 },
+          },
+        ]);
+      },
+    }),
+    [{ role: "user", content: "keep working" }],
+    { runId: "r-low" },
+  );
+
+  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+    label: "assistant.completed step_backstop",
+  });
+  const completed = viewer.events.find((e) => e.type === "assistant.completed");
+  const decoded = completed ? decodeTrevorEvent(completed) : null;
+  assert.equal(decoded?.type, "assistant.completed");
+  if (decoded?.type !== "assistant.completed") return;
+  assert.equal(decoded.stepLimit, 32);
+  assert.equal(decoded.stop?.cause, "step_backstop");
+  assert.equal(decoded.stop?.action, "paused");
+  assert.equal(decoded.stop?.context?.pressure, 0.089022);
+
+  viewer.connection.close();
+});
+
+test("a high-context pressure stop replays as context_pressure after synthesis", async () => {
+  const transport = testTransport(store.url);
+  await transport.ensureSession("context-pressure-stop");
+
+  const viewer = subscribe(transport, "context-pressure-stop", "viewer");
+  await waitFor(viewer.isReplayed);
+
+  await publishTurnVia(
+    transportEmit(transport, "context-pressure-stop", "host"),
+    fakeProvider({
+      stream: (_messages, tools) =>
+        tools.length === 0
+          ? Stream.fromIterable([{ type: "text" as const, text: "synthesized answer" }])
+          : Stream.fromIterable([
+              {
+                type: "tool_call" as const,
+                call: { id: "c1", name: "noop", arguments: "{}" },
+              },
+              {
+                type: "usage" as const,
+                usage: { input: 850_000, output: 1, contextWindow: 1_000_000, genMs: 1 },
+              },
+            ]),
+    }),
+    [{ role: "user", content: "large context task" }],
+    { runId: "r-pressure" },
+  );
+
+  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+    label: "assistant.completed context_pressure",
+  });
+  const completed = viewer.events.find((e) => e.type === "assistant.completed");
+  const decoded = completed ? decodeTrevorEvent(completed) : null;
+  assert.equal(decoded?.type, "assistant.completed");
+  if (decoded?.type !== "assistant.completed") return;
+  assert.equal(decoded.stepLimit, 1);
+  assert.equal(decoded.stop?.cause, "context_pressure");
+  assert.equal(decoded.stop?.action, "synthesized");
+  assert.equal(decoded.text, "synthesized answer");
 
   viewer.connection.close();
 });

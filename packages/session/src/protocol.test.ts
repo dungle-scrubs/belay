@@ -61,6 +61,47 @@ test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () 
   });
 });
 
+test("assistant.completed stop metadata round-trips through decodeTrevorEvent", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.assistantCompleted({
+        runId: "r",
+        text: "",
+        stepLimit: 32,
+        stop: {
+          cause: "step_backstop",
+          action: "paused",
+          summary: "Paused at the step backstop before context pressure.",
+          steps: 32,
+          context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
+          diagnosticRef: null,
+        },
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "assistant.completed");
+  if (decoded?.type !== "assistant.completed") return;
+  assert.equal(decoded.stepLimit, 32);
+  assert.deepEqual(decoded.stop, {
+    cause: "step_backstop",
+    action: "paused",
+    summary: "Paused at the step backstop before context pressure.",
+    steps: 32,
+    context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
+    diagnosticRef: null,
+  });
+});
+
+test("legacy assistant.completed events decode with no stop object", () => {
+  const decoded = decodeTrevorEvent(
+    stored(events.assistantCompleted({ runId: "r", text: "legacy", stepLimit: 32 })),
+  );
+  assert.equal(decoded?.type, "assistant.completed");
+  if (decoded?.type !== "assistant.completed") return;
+  assert.equal(decoded.stepLimit, 32);
+  assert.equal(decoded.stop, undefined);
+});
+
 test("host.online round-trips the announced subagents (D-045)", () => {
   const decoded = decodeTrevorEvent(
     stored(

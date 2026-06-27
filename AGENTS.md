@@ -36,6 +36,36 @@ not a dependency of Trevor V2 and must not become one. Provider integration live
 in `apps/agent-host/src/providers` and speaks to LM Studio (and Codex/pi-ai)
 directly.
 
+## Local storage taxonomy
+
+Before adding any file-backed feature, reuse the existing storage roots. Do not
+invent a new dot-directory, cache root, or home-relative path unless the plan
+explicitly adds a new root.
+
+- **User settings and durable Trevor state** live under `TREVOR_HOME`, defaulting
+  to `~/.trevorV2`. This includes user-global `AGENTS.md`, project/session
+  mappings, host ownership records, locks, managed worktrees, launcher logs, and
+  product state that must survive restarts. Host code should import
+  `TREVOR_HOME` from `apps/agent-host/src/paths.ts`; CLI code mirrors that
+  constant in `apps/trevor-cli/src/project.ts`.
+- **Debug metrics, traces, and generated diagnostic artifacts** live under
+  `${XDG_STATE_HOME:-~/.local/state}/trevorV2`. This is for append-only JSONL,
+  performance snapshots, provider/turn diagnostics that are not user settings,
+  and other stateful debug output. Keep writes best-effort and never let debug
+  metric failures affect a user turn.
+- **Legacy shared service data** currently exists under `~/.trevor` for the
+  session-store SQLite database and blob-store bytes. Do not add new features
+  there; only touch it when maintaining or migrating those existing services.
+- **Temporary scratch** belongs in the OS temp directory (`tmpdir()`), for tests,
+  transcodes, and short-lived intermediate files that can disappear at any time.
+- **Browser-only ephemeral UI state** belongs in browser storage, currently
+  `sessionStorage` for tab-scoped composer drafts and prompt history. Do not put
+  browser drafts in the durable session log or host filesystem.
+- **External shared roots** are not Trevor storage: `~/.pi/auth.json` is the
+  pi-ai credential store, and `~/.agents` holds shared agents/skills. Trevor may
+  read them when integrating with those tools, but new Trevor-owned data should
+  not be written there.
+
 ## Testing
 
 Tests are organized by **scope, not by one global placement rule**. "Where does

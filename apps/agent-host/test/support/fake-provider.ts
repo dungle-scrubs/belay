@@ -1,6 +1,12 @@
 import { events, type SessionTransport, type TrevorEventInput } from "@trevor/session";
 import { Effect, Layer, Stream } from "effect";
-import type { ChatMessage, Provider, ProviderError, ProviderEvent } from "../../src/providers";
+import type {
+  ChatMessage,
+  Provider,
+  ProviderError,
+  ProviderEvent,
+  ToolDef,
+} from "../../src/providers";
 import { Emit } from "../../src/services";
 import { publishTurn } from "../../src/turn";
 
@@ -27,6 +33,7 @@ export interface FakeProviderOptions {
   /** Full control over the step Stream, for non-terminating / overflow cases. Overrides `step`. */
   readonly stream?: (
     messages: readonly ChatMessage[],
+    tools: readonly ToolDef[],
   ) => Stream.Stream<ProviderEvent, ProviderError>;
 }
 
@@ -75,7 +82,8 @@ export function fakeProvider(opts: FakeProviderOptions = {}): Provider {
     readiness: () => Effect.succeed({ ready: true, warm: true }),
     capabilities: () => Effect.succeed(caps),
     warm: () => Effect.void,
-    stream: (messages) => opts.stream?.(messages) ?? Stream.fromIterable(step(messages)),
+    stream: (messages, tools) =>
+      opts.stream?.(messages, tools) ?? Stream.fromIterable(step(messages)),
   };
 }
 

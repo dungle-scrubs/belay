@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
-import type { ChatMessage, ProviderEvent } from "../src/providers";
+import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
 import { publishTurn } from "../src/turn";
 import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
 
@@ -17,6 +17,47 @@ import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
 const history: ChatMessage[] = [{ role: "user", content: "Please run echo hello-from-tool." }];
 const payloadOf = (events: TrevorEventInput[], type: string) =>
   events.find((e) => e.type === type)?.payload;
+
+function lowContextBackstopProvider(): Provider {
+  let calls = 0;
+  return {
+    id: "fake",
+    label: "Fake",
+    model: "fake-1",
+    reasoningLevels: ["off"],
+    defaultReasoning: "off",
+    kind: "cloud",
+    describe: () => ({
+      label: "Fake",
+      model: "fake-1",
+      reasoningLevels: ["off"],
+      defaultReasoning: "off",
+      kind: "cloud",
+    }),
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: (_messages, tools) => {
+      calls += 1;
+      if (tools.length === 0) {
+        return Stream.fromIterable<ProviderEvent>([
+          { type: "text", text: "should not synthesize" },
+        ]);
+      }
+      return Stream.fromIterable<ProviderEvent>([
+        {
+          type: "tool_call",
+          call: {
+            id: `c${calls}`,
+            name: "noop",
+            arguments: JSON.stringify({ round: calls }),
+          },
+        },
+        { type: "usage", usage: { input: 89_022, output: 1, contextWindow: 1_000_000, genMs: 1 } },
+      ]);
+    },
+  };
+}
 
 test("a turn streams started -> tool.started -> tool.completed -> completed, in order", async () => {
   const events = await runTurn(fakeProvider(), history, { runId: "r1" });
@@ -57,6 +98,20 @@ test("one live progress snapshot per model step, each carrying usage + breakdown
   assert.ok(
     progress.every((e) => (e.payload.breakdown as { input?: unknown } | undefined)?.input != null),
   );
+});
+
+test("assistant.completed publishes typed stop metadata for a low-context step backstop", async () => {
+  const events = await runTurn(lowContextBackstopProvider(), history, { runId: "r1" });
+  const completed = events.find((e) => e.type === "assistant.completed")?.payload;
+  assert.equal(completed?.stepLimit, 32);
+  assert.deepEqual(completed?.stop, {
+    cause: "step_backstop",
+    action: "paused",
+    summary: "Paused at the 32-step backstop before context pressure.",
+    steps: 32,
+    context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
+  });
+  assert.equal(completed?.text, "");
 });
 
 test("cancellation interrupts a streaming turn before it completes", async () => {

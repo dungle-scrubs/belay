@@ -15,6 +15,11 @@ import { join, resolve, sep } from "node:path";
 
 export const TREVOR_HOME = resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"));
 
+export const TREVOR_STATE_HOME = resolve(
+  process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
+  "trevorV2",
+);
+
 /** The user-global `AGENTS.md`, the lowest-precedence (loaded-first) source of the eager context (D-080). */
 export const USER_AGENTS_MD = join(TREVOR_HOME, "AGENTS.md");
 

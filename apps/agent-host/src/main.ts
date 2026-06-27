@@ -83,6 +83,7 @@ import { nodeWorktreeManager, worktreeContextFor, worktreeSessionId } from "./wo
 
 const SESSION_ID = process.env.SESSION_ID ?? DEFAULT_SESSION_ID;
 const PRODUCER_ID = PRODUCER_IDS.host;
+const CONTROL_PRODUCER_ID = `${PRODUCER_ID}:control`;
 // Backend selection (the plugin seam): default to the local session-store; set
 // RICHTER_URL to opt into the Richter durable substrate instead. The host speaks
 // the SessionTransport contract either way.
@@ -462,11 +463,87 @@ let lastTermination: string | null = null;
 /** Runs that emitted a terminal assistant.overflow (recovery exhausted). A turn that then ends with no
  *  real answer reports "overflow" rather than a bare "noReply". Cleared when the run's completion lands. */
 const overflowedRuns = new Set<string>();
+const autoContinuedRuns = new Set<string>();
 
 /** Background subagents currently running across the session (Phase 5 / D-048), keyed by child run id.
  *  Each OUTLIVES the parent turn that started it - the registry is session-level, not per-turn - so the
  *  cap holds across turns and /doctor can report active children. An entry clears when the child settles. */
 const backgroundChildren = new Map<string, BackgroundChildInfo>();
+
+function lastUserPrompt(): Extract<
+  ReturnType<typeof decodeTrevorEvent>,
+  { type: "user.message" }
+> | null {
+  for (let index = historyEvents.length - 1; index >= 0; index -= 1) {
+    const event = historyEvents[index];
+    const decoded = event ? decodeTrevorEvent(event) : null;
+    if (decoded?.type === "user.message") {
+      return decoded;
+    }
+  }
+  return null;
+}
+
+function controlProvider(): string {
+  return lastProvider?.id ?? DEFAULT_PROVIDER;
+}
+
+async function publishControlPrompt(text: string, provider = controlProvider()): Promise<void> {
+  await transport.publishEvent(SESSION_ID, {
+    ...events.userMessage({ text, provider }),
+    producerId: CONTROL_PRODUCER_ID,
+  });
+}
+
+async function continueAfterStop(reason: string): Promise<void> {
+  await publishControlPrompt(
+    `Continue from the paused turn. Reason: ${reason}. Do not repeat completed work; proceed from the current transcript and finish the user's request.`,
+  );
+}
+
+async function retryLastPrompt(): Promise<{ readonly ok: boolean; readonly text: string }> {
+  const last = lastUserPrompt();
+  if (!last) {
+    return { ok: false, text: "No prior user prompt to retry." };
+  }
+  await transport.publishEvent(SESSION_ID, {
+    ...events.userMessage({
+      text: last.text,
+      provider: last.provider ?? controlProvider(),
+      reasoning: last.reasoning,
+      artifacts: last.artifacts,
+    }),
+    producerId: CONTROL_PRODUCER_ID,
+  });
+  return { ok: true, text: "Retrying the last user prompt." };
+}
+
+async function compressThenContinue(): Promise<{ readonly ok: boolean; readonly text: string }> {
+  const compacted = await forceCompact();
+  if (
+    compacted.startsWith("A turn is in progress") ||
+    compacted.startsWith("A compaction is already running") ||
+    compacted.startsWith("No provider available") ||
+    compacted.startsWith("Compaction failed")
+  ) {
+    return { ok: false, text: compacted };
+  }
+  await continueAfterStop(`context was compacted first: ${compacted}`);
+  return { ok: true, text: `${compacted}\nContinuing after compaction.` };
+}
+
+function shouldAutoContinue(
+  decoded: Extract<ReturnType<typeof decodeTrevorEvent>, { type: "assistant.completed" }>,
+): boolean {
+  if (decoded.stop?.cause !== "step_backstop") {
+    return false;
+  }
+  if (autoContinuedRuns.has(decoded.runId)) {
+    return false;
+  }
+  const last = lastUserPrompt();
+  return !last?.text.startsWith("Continue from the paused turn.");
+}
 
 /**
  * Publishes the terminal completion for a run being closed WITHOUT a completion of its own - a user
@@ -1353,6 +1430,12 @@ function handleEvent(message: SessionEvent): void {
     // next turn's prompt view already includes this reply (admitted just above). Inert off-live: the
     // forked `start` returns null during replay and the proactive fold gates on liveness.
     scheduler.processCompletion(decoded.runId, message.seq);
+    if (live && lease.isLeader() && shouldAutoContinue(decoded)) {
+      autoContinuedRuns.add(decoded.runId);
+      continueAfterStop(decoded.stop?.summary ?? lastTermination ?? "turn paused").catch((error) =>
+        warn("host", "auto-continue failed", { run: decoded.runId.slice(0, 8), error: msg(error) }),
+      );
+    }
   } else if (decoded.type === "context.compacted") {
     // A fold landed (our own echo, or the leader's on a standby): admit it so the projection
     // shrinks to pins + summary + recent, drop the budget estimate to its post-fold size, and
@@ -1427,6 +1510,32 @@ function handleEvent(message: SessionEvent): void {
         cdToFreshSession(args).catch((error) =>
           warn("host", "cd failed", { command, error: msg(error) }),
         );
+        return;
+      }
+      if (command === "/continue") {
+        continueAfterStop(args.trim() || lastTermination || "manual continue")
+          .then(() =>
+            emit(
+              events.commandResult({
+                command,
+                text: "Continuing from the paused turn.",
+                ok: true,
+              }),
+            ),
+          )
+          .catch((error) => warn("host", "continue failed", { error: msg(error) }));
+        return;
+      }
+      if (command === "/compress") {
+        compressThenContinue()
+          .then((result) => emit(events.commandResult({ command, ...result })))
+          .catch((error) => warn("host", "compress failed", { error: msg(error) }));
+        return;
+      }
+      if (command === "/retry") {
+        retryLastPrompt()
+          .then((result) => emit(events.commandResult({ command, ...result })))
+          .catch((error) => warn("host", "retry failed", { error: msg(error) }));
         return;
       }
       // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so

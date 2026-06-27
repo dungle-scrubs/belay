@@ -197,6 +197,11 @@ These are **not** in V2 and **not** in the backlog. Permanent removals.
   the stream wire-param names now live once in `packages/session` (`identity.ts`, stream codec). The host
   announces `default`/`providers`, which the decoder now surfaces instead of the web hardcoding them.
   Prompted by a domain-drift audit; see §6.
+- **Adaptive turn termination** (**shipped 2026-06-27**): generic turn stops now carry typed
+  `assistant.completed.stop` data. Context pressure, low-context step backstops, loop stalls,
+  provider protocol anomalies, overflow, no-reply, cancellation, interruption, errors, and ordinary
+  answers are distinct protocol causes; the fixed 32-step ceiling is a pause/backstop, not a normal
+  answer signal.
 
 ## 6. Roadmap - remaining work, sequenced
 

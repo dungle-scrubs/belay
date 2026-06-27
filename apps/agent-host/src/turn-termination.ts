@@ -1,9 +1,8 @@
+import type { TurnStop } from "@trevor/session";
+
 /**
- * Why a turn ended, for /doctor (Phase 2 M4 / D-051…D-053). The host tracks the most recent turn's
- * termination reason so `/doctor` can report it: answered | step_limit | overflow | noReply |
- * cancelled | interrupted | error. The reason is derived purely from the terminal `assistant.completed`
- * flags plus whether the run hit a terminal context overflow (a separate `assistant.overflow` event,
- * since overflow is a within-turn recovery signal, not a completion flag).
+ * Why a turn ended, for /doctor. New completions carry a typed stop object; legacy completions are
+ * still summarized from the old flags so stored sessions remain readable without migration.
  */
 
 /** The terminal-completion fields a reason is derived from (structural - no protocol import). */
@@ -16,6 +15,7 @@ export interface CompletionOutcome {
   readonly stepLimit: number;
   /** The final answer text (empty/whitespace = no real reply). */
   readonly text: string;
+  readonly stop?: TurnStop;
 }
 
 /**
@@ -24,6 +24,9 @@ export interface CompletionOutcome {
  * budget cut, which outranks an exhausted-context overflow, which outranks a bare empty reply.
  */
 export function terminationReason(c: CompletionOutcome, overflowed: boolean): string {
+  if (c.stop) {
+    return `${c.stop.cause}: ${c.stop.summary}`;
+  }
   if (c.cancelled) return "cancelled";
   if (c.interrupted) return "interrupted";
   if (c.error) return "error";

@@ -326,6 +326,27 @@ export function buildCommandRegistry(): CommandRegistry {
     },
   });
 
+  for (const spec of [
+    {
+      name: "/continue",
+      summary: "Continue after a paused turn",
+    },
+    {
+      name: "/compress",
+      summary: "Compact context, then continue",
+    },
+    {
+      name: "/retry",
+      summary: "Retry the last user prompt",
+    },
+  ] as const) {
+    add({
+      spec,
+      select: none,
+      run: () => `${spec.name} is handled by the live host.`,
+    });
+  }
+
   // /skills is owned by skills.ts (it knows skill discovery); registered here as one line.
   add(buildSkillCommand());
 
