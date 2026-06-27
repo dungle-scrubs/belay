@@ -98,10 +98,17 @@ export function DoctorAreaRow({
   const findings = area.findings ?? [];
   const Icon = AREA_ICON[area.id];
   const [expanded, setExpanded] = useState(false);
-  const canExpand = facts.length > 0;
+  // A warning/error area always shows its findings (a problem can never be collapsed away). A healthy
+  // (ok / not-checked) area instead keeps its findings AND facts as collapsible detail, so it rests as
+  // one quiet line - the host attaches an informational finding to every area, and without this an
+  // all-healthy panel would expand every row into a wall of green.
+  const isProblem = area.status === "warn" || area.status === "error";
+  const findingsVisible = isProblem || expanded;
+  const collapsible = !isProblem && (findings.length > 0 || area.nextAction != null);
+  const canExpand = facts.length > 0 || collapsible;
 
   const header = (
-    <div className="flex w-full items-baseline gap-2 text-left">
+    <>
       <Icon className={cn("size-4 shrink-0 translate-y-0.5", iconTint(area.status))} />
       <h3 className="shrink-0 text-ui font-medium text-foreground">{area.label}</h3>
       <span className="min-w-0 flex-1 break-words text-ui text-muted-foreground">
@@ -116,53 +123,60 @@ export function DoctorAreaRow({
           )}
         />
       ) : null}
-    </div>
+    </>
   );
 
+  const showFacts = expanded && facts.length > 0;
+  const showFindings = findingsVisible && findings.length > 0;
+  const showNextAction = findingsVisible && area.nextAction != null;
+
   return (
-    <div className={cn("flex flex-col gap-2 px-3 py-2.5", spine(area.status))}>
+    <div className={cn("flex flex-col", spine(area.status))}>
+      {/* The whole header row is the hover/click target (full width), not an inset inner box. */}
       {canExpand ? (
         <button
           type="button"
           onClick={() => setExpanded((open) => !open)}
           aria-expanded={expanded}
           aria-label={`${area.label} area details`}
-          className="-mx-1 rounded-sm px-1 transition-colors hover:bg-secondary/40"
+          className="flex w-full items-baseline gap-2 px-3 py-2.5 text-left transition-colors hover:bg-secondary/40"
         >
           {header}
         </button>
       ) : (
-        header
+        <div className="flex w-full items-baseline gap-2 px-3 py-2.5">{header}</div>
       )}
 
-      {/* Facts are secondary - revealed on expand so the resting row stays one line. */}
-      {expanded && facts.length > 0 ? (
-        <dl className="flex flex-col gap-1 pl-6">
-          {facts.map((fact) => (
-            <div key={fact.label} className="flex items-baseline gap-3 text-ui">
-              <dt className="w-20 shrink-0 text-label tracking-wider text-muted-foreground uppercase">
-                {fact.label}
-              </dt>
-              <dd className={cn("min-w-0 flex-1 break-words", factTint(fact.status))}>
-                {fact.value}
-              </dd>
+      {showFacts || showFindings || showNextAction ? (
+        <div className="flex flex-col gap-2 pr-3 pb-2.5 pl-9">
+          {/* Facts are secondary - revealed on expand so the resting row stays one line. */}
+          {showFacts ? (
+            <dl className="flex flex-col gap-1">
+              {facts.map((fact) => (
+                <div key={fact.label} className="flex items-baseline gap-3 text-ui">
+                  <dt className="w-20 shrink-0 text-label tracking-wider text-muted-foreground uppercase">
+                    {fact.label}
+                  </dt>
+                  <dd className={cn("min-w-0 flex-1 break-words", factTint(fact.status))}>
+                    {fact.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+
+          {/* A problem's findings are always shown; a healthy area's reveal on expand. */}
+          {showFindings ? (
+            <div className="flex flex-col gap-2">
+              {findings.map((finding) => (
+                <DoctorFindingRow key={finding.id} finding={finding} onAction={onAction} />
+              ))}
             </div>
-          ))}
-        </dl>
-      ) : null}
+          ) : null}
 
-      {/* Findings are always shown - a warning or error can't be collapsed away. */}
-      {findings.length > 0 ? (
-        <div className="flex flex-col gap-2 pl-6">
-          {findings.map((finding) => (
-            <DoctorFindingRow key={finding.id} finding={finding} onAction={onAction} />
-          ))}
-        </div>
-      ) : null}
-
-      {area.nextAction ? (
-        <div className="pl-6">
-          <DoctorNextActionLine action={area.nextAction} />
+          {showNextAction && area.nextAction ? (
+            <DoctorNextActionLine action={area.nextAction} />
+          ) : null}
         </div>
       ) : null}
     </div>

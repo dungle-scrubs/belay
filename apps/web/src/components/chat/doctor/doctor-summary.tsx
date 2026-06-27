@@ -1,4 +1,4 @@
-import { Braces, Clock, Copy, ListFilter, Loader, RefreshCw } from "lucide-react";
+import { Braces, Copy, ListFilter, RefreshCw } from "lucide-react";
 import type { DoctorSnapshotState, DoctorStatus, DoctorSummary } from "@/commands/doctor";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -44,32 +44,6 @@ function CountChip({
   );
 }
 
-/** Freshness / probe state, right of the counts. Refreshing spins; stale warns. */
-function Freshness({ state, checkedAt }: { state: DoctorSnapshotState; checkedAt?: string }) {
-  if (state === "refreshing") {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-ui text-smui-yellow">
-        <Loader className="size-3.5 animate-spin" />
-        Refreshing…
-      </span>
-    );
-  }
-  if (state === "stale") {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-ui text-smui-yellow">
-        <Clock className="size-3.5" />
-        {checkedAt ?? "stale snapshot"} · stale
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 text-ui text-muted-foreground">
-      <Clock className="size-3.5" />
-      {checkedAt ?? "checked"}
-    </span>
-  );
-}
-
 /** Optional callbacks for the inspection affordances. All no-ops if unset. */
 export interface DoctorSummaryActions {
   readonly onRefresh?: () => void;
@@ -78,10 +52,10 @@ export interface DoctorSummaryActions {
 }
 
 /**
- * The top summary strip: overall status and headline, the four always-visible
- * count buckets (errors and warnings can never be hidden here), the freshness /
- * refresh state, the "issues only" toggle, and the refresh / copy / JSON
- * affordances. Stacks on a narrow card, spreads into one row when there's room.
+ * The top summary strip: one thin inline row - overall status + headline, the four always-visible
+ * count buckets (errors and warnings can never be hidden here), and the "issues only" toggle +
+ * refresh / copy / JSON affordances on the right. No area count or freshness line; the refresh button
+ * itself spins while a probe runs.
  *
  * Presentational: the parent owns `issuesOnly` and passes the action handlers.
  */
@@ -89,7 +63,6 @@ export function DoctorSummaryStrip({
   status,
   summary,
   state,
-  checkedAt,
   issuesOnly,
   onIssuesOnlyChange,
   jsonOpen,
@@ -109,21 +82,16 @@ export function DoctorSummaryStrip({
   const issueCount = summary.error + summary.warn;
 
   return (
-    <div className="@container/summary flex flex-col gap-3 border-b border-border p-3 @2xl/summary:flex-row @2xl/summary:items-center @2xl/summary:justify-between">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2">
-          <StatusIcon status={status} className="size-5" />
-          <div className="leading-tight">
-            <div className={cn("text-ui font-medium", headlineTint)}>
-              {OVERALL_HEADLINE[status]}
-            </div>
-            <div className="text-label tracking-wider text-muted-foreground uppercase">
-              {summary.total} areas
-            </div>
-          </div>
-        </div>
+    <div className="@container/summary flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-border px-3 py-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="inline-flex items-center gap-1.5">
+          <StatusIcon status={status} className="size-4" />
+          <span className={cn("text-ui font-medium", headlineTint)}>
+            {OVERALL_HEADLINE[status]}
+          </span>
+        </span>
 
-        <Separator orientation="vertical" className="hidden h-8 @xs/summary:block" />
+        <Separator orientation="vertical" className="hidden h-4 @xs/summary:block" />
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {COUNT_ORDER.map(({ status: countStatus, key, label }) => {
@@ -134,8 +102,6 @@ export function DoctorSummaryStrip({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Freshness state={state} checkedAt={checkedAt} />
-
         <Button
           variant={issuesOnly ? "secondary" : "outline"}
           size="xs"

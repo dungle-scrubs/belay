@@ -60,6 +60,23 @@ test("an area expands to reveal its secondary facts", () => {
   assert.ok(queryByText("2h 14m"), "expanding the area reveals the fact");
 });
 
+test("a healthy area keeps its findings collapsed so the panel rests compact (D-073)", () => {
+  // The host attaches an informational finding to EVERY area; on a healthy area it must stay
+  // collapsed, or an all-green panel expands into a wall of findings (the reported "way too big").
+  const { getByRole, queryByText } = render(<DoctorPanel snapshot={SNAPSHOT} />);
+  assert.equal(queryByText("Host process"), null, "the OK area's finding is collapsed at rest");
+  fireEvent.click(getByRole("button", { name: /core area details/i }));
+  assert.ok(queryByText("Host process"), "expanding the healthy area reveals its finding");
+});
+
+test("a problem area always shows its findings without expanding (D-073)", () => {
+  const { queryByText } = render(<DoctorPanel snapshot={SNAPSHOT} />);
+  assert.ok(
+    queryByText("GPT-5.5 missing API key"),
+    "an error area's finding is always shown - a problem can never be collapsed away",
+  );
+});
+
 test("clicking a finding's next action fires onAction with that finding", () => {
   let clicked: DoctorFinding | null = null;
   const { getByRole } = render(
