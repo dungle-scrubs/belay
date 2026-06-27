@@ -246,7 +246,9 @@ export function ToolRenderer({
   /** Opens a local file in the editor (path-bearing tools wire the path to this). */
   onOpenPath: (path: string) => void;
 }) {
-  const status: ToolStatus = message.done ? "done" : "running";
+  // A tool aborted by a cancel/interrupt (the run ended before it completed) shows the error state,
+  // not a successful "done" - and crucially never an endless "running" spinner.
+  const status: ToolStatus = message.aborted ? "error" : message.done ? "done" : "running";
   const ctx: RenderContext = { message, status, onOpenPath, className };
 
   const arm = Object.hasOwn(TOOL_RENDERERS, message.name)

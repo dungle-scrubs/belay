@@ -42,6 +42,10 @@ export type ToolMessage = {
   name: string;
   args: string;
   done: boolean;
+  /** True when the run ended (cancel/interrupt/error) before this tool produced its own
+   *  `tool.completed` - so a concurrently-dispatched read-only tool never hangs on "running" after
+   *  ESC. Rendered as the error/aborted state, never a successful "done". */
+  aborted?: boolean;
   /** The tool's rendered output (from tool.completed), used by renderers like web_search. */
   result?: string;
 };
@@ -246,6 +250,14 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
   const openByRun = new Map<string, AssistantMessage>();
   const lastByRun = new Map<string, AssistantMessage>();
   const toolByCall = new Map<string, ToolMessage>();
+  // The tools dispatched per run, and the runs that have already terminated. Together they finalize a
+  // tool that never got its own `tool.completed` because the run was cancelled/interrupted mid-flight
+  // (a concurrently-dispatched read-only tool like session_recall): on the run's terminal completion
+  // every still-open tool is marked aborted, and a LATE `tool.started` that races in after the
+  // completion (the cancel publishes the completion first, then the fiber emits one more start) is
+  // marked aborted on arrival. Without this the transcript shows that tool "running" forever.
+  const toolsByRun = new Map<string, ToolMessage[]>();
+  const terminatedRuns = new Set<string>();
   // The latest live usage/breakdown per run (from assistant.progress). A cancelled turn's completion
   // carries no usage, so without this its panel data (ctx meter + Request treemap) would vanish on
   // cancel; we fall the segment back to its last progress snapshot so the current context survives.
@@ -533,14 +545,26 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           open.done = true;
           openByRun.delete(decoded.runId);
         }
+        // A start that arrives AFTER its run already terminated (the cancel race) is aborted on
+        // arrival; otherwise it joins the run's open-tool list so the completion can finalize it.
+        const aborted = terminatedRuns.has(decoded.runId);
         const tool: ToolMessage = {
           kind: "tool",
           id: decoded.callId,
           name: decoded.name,
           args: decoded.arguments,
-          done: false,
+          done: aborted,
+          ...(aborted ? { aborted: true } : {}),
         };
         toolByCall.set(decoded.callId, tool);
+        if (!aborted) {
+          const open = toolsByRun.get(decoded.runId);
+          if (open) {
+            open.push(tool);
+          } else {
+            toolsByRun.set(decoded.runId, [tool]);
+          }
+        }
         messages.push(tool);
         break;
       }
@@ -548,11 +572,24 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         const tool = toolByCall.get(decoded.callId);
         if (tool) {
           tool.done = true;
+          // A real completion wins over a prior abort (defensive; an interrupted tool emits none).
+          tool.aborted = false;
           tool.result = decoded.result;
         }
         break;
       }
       case "assistant.completed": {
+        // The run is terminal now: finalize any tool that never got its own completion (a read-only
+        // tool still in flight when the user cancelled), so it stops rendering as "running". Marking
+        // the run terminated also aborts a `tool.started` that races in after this completion.
+        terminatedRuns.add(decoded.runId);
+        for (const tool of toolsByRun.get(decoded.runId) ?? []) {
+          if (!tool.done) {
+            tool.done = true;
+            tool.aborted = true;
+          }
+        }
+        toolsByRun.delete(decoded.runId);
         // Land the final state on the run's last segment (or a fresh one if the turn
         // produced nothing visible, so an error still has somewhere to show).
         const segment =

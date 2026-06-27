@@ -153,11 +153,15 @@ export function App() {
   // Maps one batched read-only tool message to a ConcurrentTools row: status from done + an
   // `error:` result, args via the shared summary, and a clickable path for path-bearing tools.
   const toConcurrentTool = (tool: ToolMessageData): ConcurrentTool => {
-    const status: ToolStatus = !tool.done
-      ? "running"
-      : tool.result?.startsWith("error:")
-        ? "error"
-        : "done";
+    // An aborted tool (run cancelled before it completed) is an error state, not "running" or a
+    // successful "done" - so a parallel read-only batch stops counting it as in-flight after ESC.
+    const status: ToolStatus = tool.aborted
+      ? "error"
+      : !tool.done
+        ? "running"
+        : tool.result?.startsWith("error:")
+          ? "error"
+          : "done";
     const path = parseToolArgs(tool.args).path;
     return {
       id: tool.id,

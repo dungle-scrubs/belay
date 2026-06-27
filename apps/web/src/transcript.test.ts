@@ -78,6 +78,59 @@ test("M4: tool results land by call id when tool.completed arrives out of call o
   );
 });
 
+test("a tool left in flight when the run is cancelled is finalized as aborted, not stuck running", () => {
+  // ESC cancels mid-tool: the host publishes assistant.completed{cancelled} and interrupts the fiber,
+  // so a concurrently-dispatched read-only tool (session_recall) never gets its own tool.completed.
+  // The transcript must finalize it as aborted instead of rendering "recalling…" forever.
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(2, events.toolStarted({ runId: "r1", callId: "c0", name: "read", arguments: "{}" })),
+    ev(3, events.toolCompleted({ runId: "r1", callId: "c0", name: "read", result: "ok" })),
+    ev(
+      4,
+      events.toolStarted({ runId: "r1", callId: "c1", name: "session_recall", arguments: "{}" }),
+    ),
+    // No tool.completed for c1 - the user cancels here.
+    ev(5, events.assistantCompleted({ runId: "r1", text: "", cancelled: true })),
+  ];
+  const tools = toTranscript(log).filter((m) => m.kind === "tool");
+  assert.deepEqual(
+    tools.map((t) => ({ id: t.id, done: t.done, aborted: t.aborted ?? false })),
+    [
+      { id: "c0", done: true, aborted: false }, // completed normally
+      { id: "c1", done: true, aborted: true }, // finalized by the cancel
+    ],
+  );
+});
+
+test("a tool.started that races in AFTER the cancelled completion is aborted on arrival", () => {
+  // The cancel publishes the completion FIRST, then the interrupted fiber emits one last tool.started.
+  // That late start belongs to an already-terminated run, so it renders aborted (never running).
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(2, events.assistantCompleted({ runId: "r1", text: "", cancelled: true })),
+    ev(
+      3,
+      events.toolStarted({ runId: "r1", callId: "late", name: "session_recall", arguments: "{}" }),
+    ),
+  ];
+  const tool = toTranscript(log).find((m) => m.kind === "tool");
+  assert.equal(tool?.kind === "tool" && tool.done, true);
+  assert.equal(tool?.kind === "tool" && tool.aborted, true);
+});
+
+test("a normally completed tool is never marked aborted (regression)", () => {
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(2, events.toolStarted({ runId: "r1", callId: "c0", name: "read", arguments: "{}" })),
+    ev(3, events.toolCompleted({ runId: "r1", callId: "c0", name: "read", result: "ok" })),
+    ev(4, events.assistantCompleted({ runId: "r1", text: "done" })),
+  ];
+  const tool = toTranscript(log).find((m) => m.kind === "tool");
+  assert.equal(tool?.kind === "tool" && tool.done, true);
+  assert.equal(tool?.kind === "tool" && (tool.aborted ?? false), false);
+});
+
 test("M2: a context.compacted fold leaves the rendered transcript full (no collapse)", () => {
   // Compaction shapes only the host prompt projection; the durable log + UI transcript keep the
   // full history (D-042). So a fold event in the log must not collapse or drop any turn - and it
