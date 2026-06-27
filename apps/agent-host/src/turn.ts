@@ -3,6 +3,8 @@ import { Cause, Effect, Exit, Option, Stream } from "effect";
 import { type AgentEvent, type DelegateCapability, runAgent } from "./agent/loop";
 import { resolveHistoryImages } from "./artifacts";
 import type { ChatMessage, Provider, Usage } from "./providers";
+import { ProviderUnavailable } from "./providers/errors";
+import { providerFailures } from "./providers/provider-failure-log";
 import { buildSystemPrompt } from "./providers/system-prompt";
 import { Emit } from "./services";
 import { TOOL_DEFS } from "./tools";
@@ -150,6 +152,11 @@ export function publishTurn(
     // completion as budget-terminated (a forced final answer follows) - distinct from a clean
     // answer, so the UI can show "stopped after N steps" (D-051).
     let stepLimitSteps = 0;
+    // How many auto-reconnect attempts the loop emitted this turn (D-076 M6): if the turn still
+    // ends in a provider failure, a nonzero count means the bounded retry budget was EXHAUSTED (a
+    // transient outage that gave up) - distinct from a non-retryable terminal failure, which never
+    // reconnects. The /doctor surface reads the two categories separately.
+    let reconnectAttempts = 0;
 
     const text = new DeltaBuffer((delta) =>
       emit.publish(events.assistantDelta({ runId, text: delta })),
@@ -231,6 +238,8 @@ export function publishTurn(
         } else if (event.type === "reconnecting") {
           // A transient provider outage is being auto-retried before any token streamed (D-079):
           // surface a live "reconnecting (attempt k)" status; the retry's output streams below it.
+          // Track the count so a turn that still fails is recorded as retry-EXHAUSTED (D-076 M6).
+          reconnectAttempts = event.attempt;
           yield* flushAll;
           yield* emit.publish(
             events.assistantReconnecting({
@@ -283,6 +292,28 @@ export function publishTurn(
             yield* complete({ cancelled: true });
           } else {
             const failure = Cause.failureOption(exit.cause);
+            // Record the terminal provider failure for /doctor (D-076 M6), tagged retry-exhausted
+            // (the loop emitted reconnect attempts and still failed) vs non-retryable terminal. The
+            // detail is the already-sanitized error message; the log re-redacts defensively.
+            if (Option.isSome(failure)) {
+              const error = failure.value;
+              const unavailable = error instanceof ProviderUnavailable ? error : undefined;
+              yield* Effect.sync(() =>
+                providerFailures.record({
+                  provider: provider.id,
+                  model: provider.model,
+                  classification: unavailable?.classification,
+                  userAction: unavailable?.userAction,
+                  retryExhausted: reconnectAttempts > 0,
+                  attempts: reconnectAttempts,
+                  status: unavailable?.evidence?.status,
+                  code: unavailable?.evidence?.code,
+                  shapeFields: unavailable?.evidence?.shapeFields,
+                  detail: error.message,
+                  at: new Date().toISOString(),
+                }),
+              );
+            }
             yield* complete({
               error: Option.isSome(failure) ? failure.value.message : "stream failed",
             });

@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Duration, Effect, Exit, Fiber, Stream, TestClock } from "effect";
+import { afterEach, beforeEach, describe } from "vitest";
 import type { ChatMessage, Provider, ProviderError, ProviderEvent } from "../providers";
 import { ProviderAuthError, ProviderUnavailable } from "../providers/errors";
+import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { type AgentEvent, runAgent } from "./loop";
 
 /**
@@ -60,6 +65,15 @@ const retryable = () =>
 const nonRetryable = () =>
   new ProviderUnavailable({ provider: "fake", detail: "model not found", retryable: false });
 const authError = () => new ProviderAuthError({ provider: "fake", detail: "401 unauthorized" });
+/** A terminal failure whose SHAPE the classifier didn't recognize - the observation-store case. */
+const unknownClassified = () =>
+  new ProviderUnavailable({
+    provider: "fake",
+    detail: "weird never-before-seen provider failure 9f3a",
+    retryable: false,
+    classification: "unknown",
+    evidence: { status: 418, code: "teapot", shapeFields: ["error", "status"] },
+  });
 
 const HISTORY: ChatMessage[] = [{ role: "user", content: "go" }];
 
@@ -131,6 +145,52 @@ it.effect("an auth failure is terminal and unchanged (never retried)", () =>
     assert.equal(reconnects(events).length, 0, "auth keeps its own dedicated handling");
   }),
 );
+
+describe("M5: an unknown terminal failure is recorded as a redacted observation", () => {
+  let obsHome: string;
+  const savedHome = process.env.TREVOR_HOME;
+
+  beforeEach(() => {
+    obsHome = mkdtempSync(join(tmpdir(), "trevor-recon-obs-"));
+    process.env.TREVOR_HOME = obsHome;
+  });
+
+  afterEach(() => {
+    if (savedHome === undefined) {
+      delete process.env.TREVOR_HOME;
+    } else {
+      process.env.TREVOR_HOME = savedHome;
+    }
+    rmSync(obsHome, { recursive: true, force: true });
+  });
+
+  it.effect("records one unknown shape with the output-started flag and field names", () =>
+    Effect.gen(function* () {
+      const { exit } = yield* drive(flakyProvider({ failBefore: 1, error: unknownClassified }));
+      assert.ok(Exit.isFailure(exit), "an unknown failure is still terminal");
+      const store = yield* Effect.promise(() => readObservations());
+      const summary = summarizeObservations(store);
+      assert.equal(summary.distinct, 1, "exactly one observed shape");
+      assert.equal(summary.unknown, 1, "classified unknown");
+      const rec = Object.values(store)[0];
+      assert.equal(rec?.classification, "unknown");
+      assert.equal(rec?.outputStarted, false, "no token had streamed before the failure");
+      assert.deepEqual(rec?.shapeFields, ["error", "status"], "field NAMES only");
+    }),
+  );
+
+  it.effect("a well-classified (non-retryable) failure is NOT observed", () =>
+    Effect.gen(function* () {
+      yield* drive(flakyProvider({ failBefore: 1, error: nonRetryable }));
+      const store = yield* Effect.promise(() => readObservations());
+      assert.equal(
+        Object.keys(store).length,
+        0,
+        "model_unavailable carries its own action, not observed",
+      );
+    }),
+  );
+});
 
 it.effect("the reconnect budget is bounded: all-failing goes terminal after the last attempt", () =>
   Effect.gen(function* () {

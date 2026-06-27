@@ -37,19 +37,13 @@ export function isContextLengthError(detail: string): boolean {
 }
 
 /**
- * A TRANSIENT transport fault the agent loop may auto-retry (D-076…D-078): a dropped WebSocket
- * (the Codex transport), a reset/closed connection, a timeout, or an HTTP 429/5xx. Matched from the
- * error text. Auth failures and context overflow are NOT here - they keep their own dedicated
- * handling (re-auth message / overflow recovery); every other outage stays terminal. This is the one
- * place the retryable verdict lives; the loop reads the boolean off `ProviderUnavailable.retryable`.
+ * The transient-transport / outage retry verdict moved to the normalized failure taxonomy
+ * (failure-taxonomy.ts, D-076 M1): `classifyProviderFailure` now owns the full set of classes
+ * (transient transport, rate limited, overloaded, provider/local-runtime/model unavailable, quota,
+ * request rejected, unknown) and derives `retryable` from the class. The provider boundary calls it
+ * directly; `isAuthError` / `isContextLengthError` above stay here because they also gate the
+ * dedicated auth and overflow paths inside the adapter.
  */
-const RETRYABLE_OUTAGE =
-  /websocket|\bws\b|socket hang ?up|\b1006\b|econnreset|econnrefused|epipe|etimedout|enetunreach|enotfound|connection (reset|closed|refused|aborted|error)|reset by peer|timed? ?out|\b429\b|\b50[0234]\b|service unavailable|bad gateway|gateway time ?out|temporarily unavailable|stream (closed|interrupted|aborted unexpectedly)|premature close|aborted unexpectedly/i;
-
-/** True when a provider outage is a transient transport fault worth a bounded auto-retry. */
-export function isRetryableOutage(detail: string): boolean {
-  return RETRYABLE_OUTAGE.test(detail);
-}
 
 /**
  * The "prompt doesn't fit" overflow reason, built once so the pre-request estimate guard and LM

@@ -4,6 +4,7 @@ import type { Model } from "@earendil-works/pi-ai/compat";
 import { debug, log, warn } from "../log";
 import { msg } from "../messages";
 import { ModelLoadError, ProviderUnavailable } from "./errors";
+import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
 import type { ModelCapabilities, Readiness } from "./types";
 
 const execAsync = promisify(exec);
@@ -224,14 +225,19 @@ export class LmStudioClient {
     };
   }
 
-  /** Load/context state for /doctor: what we serve, the cap, and why if not at max. */
+  /** Load/context state for /doctor: what we serve, the cap, and why if not at max. The last error
+   *  is surfaced WITH its normalized taxonomy class (D-076 M6) and redacted of any secret first. */
   debugInfo(): Record<string, unknown> {
+    const failure = this.lastError
+      ? classifyProviderFailure({ detail: this.lastError.message, local: true })
+      : null;
     return {
       served: this.contextWindow || null,
       cap: Number.isFinite(this.config.contextCap) ? this.config.contextCap : "model-max",
       reloading: this.ensuring !== null,
       lastReloadMs: this.lastReloadMs,
-      lastError: this.lastError ? this.lastError.message : null,
+      lastError: this.lastError ? redactSecrets(this.lastError.message) : null,
+      lastErrorClass: failure?.class ?? null,
     };
   }
 }

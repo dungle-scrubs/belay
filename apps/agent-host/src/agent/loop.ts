@@ -1,4 +1,5 @@
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
+import { debug } from "../log";
 import type {
   ChatMessage,
   ModelEvent,
@@ -8,8 +9,79 @@ import type {
   ToolDef,
 } from "../providers";
 import { ProviderUnavailable } from "../providers/errors";
+import { recordObservation } from "../providers/observation-store";
+import { providerFailureLogFields } from "../providers/provider-failure-log";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
+
+/**
+ * Emits the structured, redacted provider-failure log line (D-076 M6): the classification, retry
+ * decision, attempt number, source/model, phase, and stable fingerprint - behind the verbose
+ * `provider` debug scope, where the richer shape metadata (status/code/field names) is useful. Never
+ * logs a raw payload; the detail is re-redacted by the field builder.
+ */
+function logProviderFailure(
+  provider: Provider,
+  error: ProviderError,
+  attempt: number,
+  outcome: "reconnect" | "terminal",
+): void {
+  const unavailable = error instanceof ProviderUnavailable ? error : undefined;
+  debug(
+    "provider",
+    outcome === "reconnect" ? "reconnect" : "failure",
+    providerFailureLogFields({
+      provider: provider.id,
+      model: provider.model,
+      phase: "model-step",
+      classification: unavailable?.classification,
+      retryable: unavailable?.retryable ?? false,
+      userAction: unavailable?.userAction,
+      attempt,
+      outcome,
+      status: unavailable?.evidence?.status,
+      code: unavailable?.evidence?.code,
+      shapeFields: unavailable?.evidence?.shapeFields,
+      detail: unavailable?.detail ?? error.message,
+    }),
+  );
+}
+
+/**
+ * Best-effort: when a model step fails terminally with an UNKNOWN provider failure shape, record it
+ * as a redacted, deduped observation under TREVOR_HOME (D-076 M5). Emits nothing and never fails -
+ * the underlying store swallows any write error - so it can be `concat`-ed ahead of the real failure
+ * without changing the turn's outcome. Only `unknown` is observed; well-classified terminal failures
+ * (auth, quota, model/runtime unavailable, request rejected) already carry their own action.
+ */
+function observeUnknownFailure(
+  provider: Provider,
+  error: ProviderError,
+  outputStarted: boolean,
+): Stream.Stream<never, never> {
+  if (error._tag !== "ProviderUnavailable" || error.classification !== "unknown") {
+    return Stream.empty;
+  }
+  return Stream.fromEffect(
+    Effect.promise(() =>
+      recordObservation(
+        {
+          provider: error.provider,
+          model: provider.model,
+          phase: "model-step",
+          classification: "unknown",
+          retryable: error.retryable ?? false,
+          status: error.evidence?.status,
+          code: error.evidence?.code,
+          message: error.detail,
+          shapeFields: error.evidence?.shapeFields,
+          outputStarted,
+        },
+        new Date().toISOString(),
+      ),
+    ),
+  ).pipe(Stream.drain);
+}
 
 /**
  * Provider-stream idle watchdog (ms): if a model stream produces no event for this long, treat it as
@@ -403,6 +475,7 @@ export function runAgent(
               const next = attempt + 1;
               const base = RECONNECT_BACKOFFS_MS[attempt - 1] ?? 0;
               const wait = base + Math.round(Math.random() * 150); // small jitter, no lockstep
+              logProviderFailure(provider, error, next, "reconnect");
               return Stream.concat(
                 Stream.succeed<AgentEvent>({
                   type: "reconnecting",
@@ -414,7 +487,15 @@ export function runAgent(
                 ),
               );
             }
-            return Stream.fail(error);
+            // Terminal: log the classified failure with its fingerprint (D-076 M6), then - for an
+            // UNKNOWN shape only - record a redacted, deduped observation (D-076 M5) so the
+            // classifier's rules can improve later. Best-effort and output-started-aware; never fails
+            // the turn.
+            logProviderFailure(provider, error, attempt, "terminal");
+            return Stream.concat(
+              observeUnknownFailure(provider, error, sawEvent),
+              Stream.fail(error),
+            );
           }),
         );
       };

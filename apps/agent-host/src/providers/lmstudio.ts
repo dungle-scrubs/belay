@@ -133,6 +133,9 @@ export class LmStudioProvider extends DescribableProvider {
             contextWindow,
             reasoning: thinking ? "high" : undefined,
             provider: this.id,
+            // A local runtime: a connection refusal classifies as "runtime not running" (actionable),
+            // not a retryable transport fault (D-076 M2).
+            local: true,
           });
         }),
       ),

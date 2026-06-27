@@ -29,6 +29,7 @@ test("debugInfo starts empty: nothing served, no reload, no error", () => {
     reloading: false,
     lastReloadMs: null,
     lastError: null,
+    lastErrorClass: null,
   });
 });
 
@@ -59,6 +60,9 @@ test("ensureMaxContext on an unreachable server serves the fallback window and r
   assert.equal(info.served, null);
   assert.equal(info.reloading, false, "the in-flight load is cleared after it resolves");
   assert.match(String(info.lastError), /LM Studio not reachable/);
+  // The last failure is surfaced WITH its normalized taxonomy class (D-076 M6): a local runtime
+  // that isn't reachable, not a generic outage.
+  assert.equal(info.lastErrorClass, "local_runtime_unavailable");
 });
 
 test("buildModel sizes the pi-ai model to the served window and the configured base URL", () => {

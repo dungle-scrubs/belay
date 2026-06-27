@@ -14,10 +14,11 @@ import {
   classifyResponseOverflow,
   isAuthError,
   isContextLengthError,
-  isRetryableOutage,
   promptTooBig,
 } from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
+import { extractFailureEvidence } from "./failure-evidence";
+import { classifyProviderFailure, isRetryableClass, redactSecrets } from "./failure-taxonomy";
 import { reasoningStreamFields } from "./reasoning-policy";
 import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
@@ -337,9 +338,15 @@ export function streamPiAiModel<TApi extends Api>(
     /** The turn's system prompt. Defaults to the one derived from `tools`; passing it lets the
      *  turn-runner build it once. Either way piAiEvents just consumes it (it owns no prompt policy). */
     readonly systemPrompt?: string;
+    /** Whether this provider is a local runtime (LM Studio): refines how a connection refusal
+     *  classifies in the failure taxonomy (D-076 M2). Defaults to false (cloud). */
+    readonly local?: boolean;
+    /** Whether this provider is a gateway/catalog source proxying upstream model providers: turns on
+     *  gateway-vs-upstream origin attribution on a failure (D-076 M2). Defaults to false. */
+    readonly gateway?: boolean;
   },
 ): Stream.Stream<ProviderEvent, ProviderError> {
-  const { messages, tools, provider, systemPrompt, ...streamOptions } = options;
+  const { messages, tools, provider, systemPrompt, local, gateway, ...streamOptions } = options;
   return Stream.unwrapScoped(
     Effect.gen(function* () {
       const model = yield* buildModel;
@@ -353,17 +360,54 @@ export function streamPiAiModel<TApi extends Api>(
           systemPrompt: systemPrompt ?? buildSystemPrompt(tools),
         }),
         // A classified auth failure (see error-classifier) rides through as-is; anything else is
-        // an outage -> ProviderUnavailable, tagged retryable when the text is a transient transport
-        // fault so the loop can auto-reconnect before any token streams (D-076…D-078).
-        (cause) =>
-          cause instanceof ProviderAuthError
-            ? cause
-            : new ProviderUnavailable({
-                provider,
-                detail: msg(cause),
-                cause,
-                retryable: isRetryableOutage(msg(cause)),
-              }),
+        // normalized into the failure taxonomy (D-076 M1/M2) -> ProviderUnavailable carrying its
+        // class + user action, with `retryable` DERIVED from the class so the loop can auto-reconnect
+        // before any token streams (D-077). The detail is redacted of secrets before it lands on the
+        // typed error payload (and, later, the observation store).
+        (cause) => {
+          if (cause instanceof ProviderAuthError) {
+            return cause;
+          }
+          const detail = redactSecrets(msg(cause));
+          // Normalize the raw cause into sanitized structured evidence once (D-076 M2): HTTP status,
+          // SDK code, retry-after, request id, gateway-vs-upstream origin, and the top-level field
+          // NAMES - never a raw value. The classifier reads the strong signals; the rest is preserved.
+          const evidence = extractFailureEvidence(cause, { gateway });
+          const failure = classifyProviderFailure({
+            detail,
+            status: evidence.status,
+            code: evidence.code,
+            retryAfterMs: evidence.retryAfterMs,
+            local,
+          });
+          // Structured, redacted classification log (D-076 M6): the class, retry decision, source,
+          // and preserved HTTP/code/retry-after/request-id/origin signals - never the secret-bearing
+          // raw payload, only the sanitized detail.
+          debug("provider", "classified-failure", {
+            provider,
+            class: failure.class,
+            retryable: failure.retryable,
+            action: failure.userAction,
+            status: evidence.status,
+            code: evidence.code,
+            retryAfterMs: evidence.retryAfterMs,
+            requestId: evidence.requestId,
+            origin: evidence.origin,
+            upstream: evidence.upstreamProvider,
+            detail,
+          });
+          return new ProviderUnavailable({
+            provider,
+            detail,
+            cause,
+            retryable: isRetryableClass(failure.class),
+            classification: failure.class,
+            userAction: failure.userAction,
+            retryAfterMs: failure.retryAfterMs,
+            // Names + shape only, never values - the raw cause payload is never copied (D-076 M2/M5).
+            evidence,
+          });
+        },
       );
     }),
   );
