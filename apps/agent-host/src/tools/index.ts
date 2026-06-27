@@ -78,7 +78,13 @@ export function toParametersJsonSchema(
   // biome-ignore lint/suspicious/noExplicitAny: matches the Tool.params Encoded erasure.
   schema: Schema.Schema<unknown, any>,
 ): Record<string, unknown> {
-  const { $schema, $defs, ...rest } = JSONSchema.make(schema) as unknown as Record<string, unknown>;
+  // Drop the draft `$schema` AND `$id`: both are doc-level metadata the provider never needs, and
+  // `$id` is emitted as a RELATIVE URL (e.g. `/schemas/%7B%7D` for an empty struct) that
+  // OpenAI-compatible providers try to resolve and reject with "relative URL without a base".
+  const { $schema, $id, $defs, ...rest } = JSONSchema.make(schema) as unknown as Record<
+    string,
+    unknown
+  >;
   if ($defs) {
     // Every params schema is flat by construction; a $defs means a cross-reference slipped
     // in (e.g. a bare Schema.Int) and the provider would receive an unusable $ref. Inline it.

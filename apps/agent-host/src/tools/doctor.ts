@@ -16,7 +16,13 @@ import { defineTool } from "./shared";
  * loop may run it concurrently with other reads.
  */
 
-const Params = Schema.Struct({});
+// A no-arg tool: an EMPTY object params schema. The explicit `jsonSchema` annotation is load-bearing -
+// a bare `Schema.Struct({})` emits an `anyOf` carrying a RELATIVE `$id` URL ("/schemas/%7B%7D"), which
+// OpenAI-compatible providers (DeepSeek) reject with "relative URL without a base". The annotation pins
+// the clean `{ type: "object", properties: {} }` a no-arg function expects.
+const Params = Schema.Struct({}).annotations({
+  jsonSchema: { type: "object", properties: {}, additionalProperties: false },
+});
 
 export const doctorTool = defineTool({
   name: "doctor",

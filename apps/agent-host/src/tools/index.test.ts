@@ -10,7 +10,7 @@ import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
-import { READ_ONLY_TOOLS } from "./index";
+import { READ_ONLY_TOOLS, TOOL_DEFS } from "./index";
 import { multiEditTool } from "./multi-edit";
 import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
@@ -100,4 +100,24 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
 
 test("READ_ONLY_TOOLS is the shared READ_ONLY_TOOL_NAMES (single source)", () => {
   assert.strictEqual(READ_ONLY_TOOLS, READ_ONLY_TOOL_NAMES);
+});
+
+/**
+ * Regression guard: every advertised tool's parameter schema must be a clean JSON OBJECT schema with
+ * no doc-level `$`-meta keys. A no-arg tool (`doctor`) declared as a bare `Schema.Struct({})` leaked
+ * an `anyOf` carrying a relative `$id` URL, which OpenAI-compatible providers (DeepSeek) reject with
+ * "relative URL without a base" - breaking every turn. Pinning `type: "object"` + no `$`-keys catches
+ * both that shape and any future schema that emits `$id`/`$schema`/`$ref`/`$defs`.
+ */
+test("every advertised tool parameter schema is a clean object (type: object, no $-meta keys)", () => {
+  for (const def of TOOL_DEFS) {
+    const params = def.parameters as Record<string, unknown>;
+    assert.equal(params.type, "object", `${def.name} parameters must be a JSON object schema`);
+    for (const key of Object.keys(params)) {
+      assert.ok(
+        !key.startsWith("$"),
+        `${def.name} parameters leaked a "${key}" meta key (breaks OpenAI-compatible providers)`,
+      );
+    }
+  }
 });
