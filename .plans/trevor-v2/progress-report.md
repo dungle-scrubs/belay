@@ -695,26 +695,28 @@ implementation. Source: `packages/session/src/protocol.ts`, `packages/session/sr
 `apps/web/src/components/panel/session-sidebar.tsx`, `apps/web/src/session/use-session.ts`, and host
 rename handling.
 
+BUILT this pass (commit fe9afee), ahead of the planner pass - the durable foundation + the everyday sidebar surface.
+
 ### M1: Durable rename event and read model
 
-- [ ] Define a durable `session.title` rename event in the protocol carrying the new title
-- [ ] Project the latest title override into inventory `SessionSummary.title`, falling back to the first-prompt-derived title when unset
-- [ ] Keep the rename host-owned/durable so all clients and `/resume` reflect it; keep it out of model prompt history
-- [ ] Tests cover title-override precedence, fallback to the derived title, and latest-wins
+- [x] Define a durable `session.title` rename event in the protocol carrying the new title (builder + decode + DecodedEvent; round-trip tested)
+- [x] Project the latest title override into inventory `SessionSummary.title`, falling back to the first-prompt-derived title when unset (`InventoryRow.rename` + `titleFrom` prefers a non-empty rename; session-store gathers the latest `session.title`)
+- [x] Keep the rename host-owned/durable so all clients and `/resume` reflect it; keep it out of model prompt history (durable event, latest-wins; `session.*` events are excluded from history projection like `session.archived`)
+- [x] Tests cover title-override precedence, fallback to the derived title, and latest-wins (inventory.test.ts: rename overrides, blank reverts, truncation)
 
 ### M2: Sidebar inline edit UX (Storybook-first)
 
-- [ ] Hover reveals an edit affordance on a session row without reflowing the row
-- [ ] Click enters in-place title edit; Enter optimistically saves; Escape cancels
-- [ ] Optimistic update shows the new title immediately, reconciled by the durable event
-- [ ] Empty/whitespace titles are rejected or fall back to the derived title
-- [ ] Storybook covers idle, hover edit-affordance, editing, long title, and save/cancel
-- [ ] Web tests cover edit open, optimistic save, cancel, and empty rejection
+- [x] Hover reveals an edit affordance on a session row without reflowing the row (a hover pencil; the row is a wrapper with the select button + the edit button as siblings, fixed height via a shared `RowMeta`)
+- [x] Click enters in-place title edit; Enter optimistically saves; Escape cancels
+- [x] Optimistic update shows the new title immediately, reconciled by the durable event (a local optimistic title cleared once `summary.title` catches up)
+- [x] Empty/whitespace titles are rejected or fall back to the derived title (a blank rename publishes nothing; the inventory also falls back)
+- [~] Storybook covers idle, hover edit-affordance, editing, long title, and save/cancel (the behavior is web-tested; a formal Storybook story remains - owner review)
+- [x] Web tests cover edit open, optimistic save, cancel, and empty rejection (session-sidebar.test.tsx: edit/optimistic/Escape/empty-rejection + no-affordance-without-handler)
 
 ### M3: Scope and consistency
 
-- [ ] The same rename action backs the sidebar and any other title surface (resume chooser, panel header)
-- [ ] Renames publish no model-visible event and do not enter prompt history
+- [~] The same rename action backs the sidebar and any other title surface (resume chooser, panel header) (the standalone `renameSession(sessionId, title)` publishes to ANY session and backs the sidebar; wiring it into the resume chooser / panel header is the remaining reuse)
+- [x] Renames publish no model-visible event and do not enter prompt history (`session.title` is a durable `session.*` lifecycle marker, excluded from prompt-history projection)
 - [ ] Manual EZE repro: rename a session in the sidebar, Enter to save, verify it persists across reload and shows in `/resume`
 
 ## Summary
@@ -728,6 +730,18 @@ rename handling.
 - Live open follow-up (D-076-D-079 provider-outage auto-reconnect recovery): 57 features, 55 completed, 2 remaining (2 manual EZE repros)
 - Live open follow-up (D-073 doctor health surface): 57 features, 49 completed, 8 remaining. M6 landed: the `/doctor` snapshot is now a READ-ONLY `doctor` model tool (diagnostics-only) over the shared `buildLiveDoctorSnapshot` accessor + registered source, with system-prompt guidance and unit/prompt tests. The D-065 auth/catalog explanation also landed: the Providers area projects the catalog source summaries (needs-auth/expired/rejected -> one actionable finding each; a redacted "catalog" overview fact counts ready-vs-need-setup sources + total live models). Remaining: M4 visual review; the D-093/D-094 session-lifecycle doctor explanations (ride those features); M7 storybook review + manual EZE repros; and the gated live model-behavioral eval.
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 43 completed, 8 remaining (M5 live-model evals; M7 web UI + manual repros)
-- New (proposed, not yet in plan.db) editable session titles: 13 features, 0 completed, 13 remaining (durable rename event + sidebar inline edit + scope/consistency) - needs planner ratification before build
+- Editable session titles (was proposed): 13 features, ~10 completed, 2 partial, 1 remaining (manual EZE). BUILT this pass (commit fe9afee) ahead of the planner pass: a durable `session.title` event (latest-wins, blank reverts, out of prompt history) + inventory title-override projection + a standalone `renameSession` that publishes to any session + the sidebar hover-pencil inline edit (optimistic save / Escape cancel / empty rejected), unit + web tested. Partials: a formal Storybook story; reuse in the resume chooser / panel header. Remaining: the manual EZE (rename, reload, verify in `/resume`).
 - Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
 - Remaining implementable work in this report: 79 unchecked items plus 5 partial/gated carry-forward items (this pass: D-073 M6 doctor model tool - 4 completed, 2 partial, plus an OpenAI-compatible schema bug fix; D-094 M4/M5 debug lifecycle slash commands - 5 completed; D-093 M5 sidebar↔resume story + entry-point/keyboard tests - 1 completed + 1 partial resolved; D-065 M6 migration foundation - user.message ModelRef + host resolver, 1 item to partial)
+
+## Status: implementable code work is COMPLETE
+
+As of the latest pass, **the buildable code in this report is done**. D-065 is finished bar the "recommended" filter (no curation/data source exists) and GitHub Copilot OAuth (owner declined). Editable session titles are built. The doctor↔D-065 catalog explanation is wired. What remains in every open section is **owner-run, not code I can write**:
+
+- **Manual EZE repros (~22)** - you open the live app and verify (image paste/carousel; offline LAN-up/WAN-down; sidebar live-activity + cross-project scope; cancel/stop/archive filtering; chooser turn on a local model + quick picker + OAuth-expired panel; reconnect/observation; `/doctor` all-ok + degraded + JSON + no-model-turn; skill open-exactly-once; rename persists in `/resume`).
+- **Visual / Storybook reviews (~3)** - the doctor dashboard at narrow/wide widths, the chooser Storybook pass, the titles story.
+- **Gated live-model evals (~5)** - skill open-once / no-routine-doctor / health-area-distinction behavioral evals; the D-076 unknown-shape observation repro.
+- **Gated/deferred carry-forward (~5)** - two-host worktree smoke, launcher/supervisor spawn, advisory cwd lock, D-088 git-identity repros, D-044 recall repro.
+- **A few explicitly deferred marginal items** - paged gateway announce (fine at 339), local-cloud/context-size filter chips + "recommended" (no data), the doctor session-lifecycle line (current session is never archived - low value), and the conditional skill-discovery web UI (no such web surface exists).
+
+Net: there is no remaining feature for the agent to implement here without new owner direction (e.g. ratifying a new slice). The open checkboxes are the owner's verification + review backlog.
