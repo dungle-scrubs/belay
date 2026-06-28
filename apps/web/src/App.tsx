@@ -38,6 +38,7 @@ import {
   parseBangShell,
   parseCommand,
   providerModelsFrom,
+  sourceSignInFrom,
   sourcesFrom,
   tasksFrom,
   toolSummary,
@@ -134,7 +135,7 @@ export function App() {
 
   const stream = useSession(sessionId);
   const { events, presence, replayed, replayThroughSeq, status } = stream;
-  const { publish, cancel, command, shell, openInEditor, refreshCatalog, unarchive } =
+  const { publish, cancel, command, shell, openInEditor, refreshCatalog, signInSource, unarchive } =
     useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
@@ -249,6 +250,12 @@ export function App() {
   // load re-announces, so the chooser falls back to the roster projection until then.
   const hostSources = useMemo(() => sourcesFrom(events), [events]);
   const hostCatalog = useMemo(() => catalogFrom(events), [events]);
+  // The in-flight source sign-in (D-065 M5): show the device code only while the flow is active.
+  const signIn = useMemo(() => sourceSignInFrom(events), [events]);
+  const signInDeviceCode =
+    signIn?.phase === "device-code" && signIn.verificationUri && signIn.userCode
+      ? { verificationUrl: signIn.verificationUri, userCode: signIn.userCode }
+      : null;
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
   const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
@@ -771,12 +778,17 @@ export function App() {
         recentKeys={selection.recentKeys}
         pinnedKeys={selection.pinnedKeys}
         onTogglePin={selection.togglePin}
+        deviceCode={signInDeviceCode}
+        deviceCodeSourceId={signIn?.sourceId}
         onSelectModel={onSelectModel}
-        onSourceAction={(_id, action) => {
-          // Today the only host-owned source action wired is refreshing the catalog (re-query live
-          // /models). Auth/setup flows (sign-in, configure) ride D-065 M5's host flows later.
+        onSourceAction={(id, action) => {
+          // refresh re-queries each source's live /models; authenticate/re-authenticate runs the
+          // host-owned OAuth device-code sign-in (D-065 M5). configure (add an API key) stays manual
+          // - the host store, never a paste form.
           if (action === "refresh") {
             void refreshCatalog();
+          } else if (action === "authenticate" || action === "reauthenticate") {
+            void signInSource(id);
           }
         }}
       />

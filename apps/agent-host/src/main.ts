@@ -55,6 +55,7 @@ import {
   pickProvider,
 } from "./providers";
 import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./providers/catalog";
+import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/source-auth";
 import { Emit } from "./services";
 import { type StopOutcome, stopSession } from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
@@ -110,6 +111,48 @@ function refreshCatalog(): void {
       }
     })
     .catch((error) => warn("catalog", "load failed", { error: msg(error) }));
+}
+
+// Host-driven source SIGN-IN (D-065 M5): the chooser's authenticate/re-authenticate action asks the
+// host to run an OAuth device-code flow. The host emits the device code (URL + short code), waits for
+// the user to authorize, persists the credential, and refreshes the catalog so the source flips to
+// ready. One flow at a time - a new sign-in (or a cancel) aborts the in-flight one.
+let signInAbort: AbortController | null = null;
+function startSourceSignIn(sourceId: string): void {
+  const target = signInTargetFor(sourceId);
+  if (!target) {
+    void emit(
+      events.hostSourceAuth({
+        state: { sourceId, phase: "error", detail: "this source has no sign-in flow" },
+      }),
+    );
+    return;
+  }
+  signInAbort?.abort();
+  const controller = new AbortController();
+  signInAbort = controller;
+  let completed = false;
+  void runSourceSignIn({
+    sourceId,
+    oauthName: target.oauthName,
+    login: target.login,
+    authPath: SOURCE_AUTH_PATH,
+    signal: controller.signal,
+    emit: (state) => {
+      if (state.phase === "complete") {
+        completed = true;
+      }
+      void emit(events.hostSourceAuth({ state }));
+    },
+  }).then(() => {
+    if (signInAbort === controller) {
+      signInAbort = null;
+    }
+    // Re-read auth only on success: the new credential makes the source ready in the next catalog.
+    if (completed) {
+      refreshCatalog();
+    }
+  });
 }
 // Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_HOME. abbrevPath is
 // a hoisted declaration, so referencing it here is fine.
@@ -1701,6 +1744,17 @@ function handleEvent(message: SessionEvent): void {
       // command.result - the refreshed catalog rides the host.online re-announce.
       if (command === "/catalog-refresh") {
         refreshCatalog();
+        return;
+      }
+      // Source sign-in (D-065 M5): start/cancel a host-owned OAuth device-code flow for a source.
+      // Programmatic (sent by the chooser's authenticate action), not a typed slash; the flow's
+      // progress rides host.sourceAuth events, so there is no command.result.
+      if (command === "/source-signin") {
+        startSourceSignIn(args.trim());
+        return;
+      }
+      if (command === "/source-signin-cancel") {
+        signInAbort?.abort();
         return;
       }
       // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so

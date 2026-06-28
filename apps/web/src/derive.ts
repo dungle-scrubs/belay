@@ -8,6 +8,7 @@ import {
   type HostPresence,
   type ProviderModel,
   type SessionEvent,
+  type SourceSignInState,
   type SourceSummary,
   type TaskSnapshot,
   type WorktreeSummary,
@@ -275,6 +276,15 @@ export function catalogFrom(
   events: readonly SessionEvent[],
 ): Readonly<Record<string, readonly CatalogEntry[]>> {
   return latest(events, (d) => (d.type === "host.online" ? d.catalog : undefined)) ?? {};
+}
+
+/**
+ * The latest host-driven source sign-in state (D-065 M5), or null when none is in flight. A
+ * `device-code` phase is shown in the chooser (URL + code); `complete`/`error`/`cancelled` are
+ * terminal, so the chooser clears the prompt (a complete also re-announces the source as ready).
+ */
+export function sourceSignInFrom(events: readonly SessionEvent[]): SourceSignInState | null {
+  return latest(events, (d) => (d.type === "host.sourceAuth" ? d.auth : undefined)) ?? null;
 }
 
 /**

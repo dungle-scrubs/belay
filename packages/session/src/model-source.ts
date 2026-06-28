@@ -174,6 +174,36 @@ function oneOfOrNull<T extends string>(opts: readonly T[], v: unknown): T | null
   return typeof v === "string" && (opts as readonly string[]).includes(v) ? (v as T) : null;
 }
 
+/** The phases of a host-driven source sign-in flow (D-065 M5). The host emits these as it runs an
+ *  OAuth/device-code login; `device-code` carries the URL + short user code to authorize. */
+export const SOURCE_SIGNIN_PHASES = ["device-code", "complete", "error", "cancelled"] as const;
+export type SourceSignInPhase = (typeof SOURCE_SIGNIN_PHASES)[number];
+
+/** A snapshot of a source's in-flight sign-in flow (D-065 M5). Carries NO API key - only the
+ *  device-code link + short user code (a verification code, never a secret) + a sanitized detail. */
+export interface SourceSignInState {
+  readonly sourceId: string;
+  readonly phase: SourceSignInPhase;
+  /** Device-code phase: the URL the user opens to authorize. */
+  readonly verificationUri?: string;
+  /** Device-code phase: the short user code to enter at that URL (NOT an API key). */
+  readonly userCode?: string;
+  /** Error phase: a sanitized one-line failure detail. */
+  readonly detail?: string;
+}
+
+/** Decodes a source sign-in state from wire JSON; a garbled value reads as a cancelled flow. */
+export function decodeSourceSignIn(v: unknown): SourceSignInState {
+  const r = asRecord(v);
+  return {
+    sourceId: asString(r.sourceId),
+    phase: oneOf(SOURCE_SIGNIN_PHASES, r.phase, "cancelled"),
+    ...(typeof r.verificationUri === "string" ? { verificationUri: r.verificationUri } : {}),
+    ...(typeof r.userCode === "string" ? { userCode: r.userCode } : {}),
+    ...(typeof r.detail === "string" ? { detail: r.detail } : {}),
+  };
+}
+
 /** The derived UI state of a source: can a model be picked now, and does it need the user's action. */
 export interface SourceState {
   readonly selectable: boolean;

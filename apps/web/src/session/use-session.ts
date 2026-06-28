@@ -261,6 +261,10 @@ export interface SessionActions {
   readonly refreshInternet: () => Promise<void>;
   /** Refresh the model catalog (D-065): re-query each source's live /models and re-announce. */
   readonly refreshCatalog: () => Promise<void>;
+  /** Start a host-owned source sign-in (D-065 M5): run the OAuth device-code flow for `sourceId`. */
+  readonly signInSource: (sourceId: string) => Promise<void>;
+  /** Cancel the in-flight source sign-in flow (D-065 M5). */
+  readonly cancelSignIn: () => Promise<void>;
   /** Unarchive this session (D-094): clear the durable archived flag so the main UI un-gates. */
   readonly unarchive: () => Promise<void>;
 }
@@ -329,6 +333,11 @@ export function useSessionActions(sessionId: string | null): SessionActions {
   // `checking` + settled snapshot ride the host.internet events the host already publishes.
   const refreshInternet = useCallback(() => command("/internet-refresh", ""), [command]);
   const refreshCatalog = useCallback(() => command("/catalog-refresh", ""), [command]);
+  const signInSource = useCallback(
+    (sourceId: string) => command("/source-signin", sourceId),
+    [command],
+  );
+  const cancelSignIn = useCallback(() => command("/source-signin-cancel", ""), [command]);
 
   // Unarchive this session (D-094): publish the durable `session.archived: false` flag so the main UI
   // gate clears and normal use resumes. The latest session.archived event wins, so this is the inverse
@@ -346,6 +355,8 @@ export function useSessionActions(sessionId: string | null): SessionActions {
     openInEditor,
     refreshInternet,
     refreshCatalog,
+    signInSource,
+    cancelSignIn,
     unarchive,
   };
 }

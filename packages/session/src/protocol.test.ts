@@ -271,6 +271,48 @@ test("host.online round-trips the model sources + catalog, defaulting to empty w
   assert.deepEqual(bare?.type === "host.online" ? bare.catalog : null, {});
 });
 
+test("host.sourceAuth round-trips a source sign-in flow (D-065 M5)", () => {
+  // Device-code phase: the verification URL + short user code (no API key) survive the round trip.
+  const dc = decodeTrevorEvent(
+    stored(
+      events.hostSourceAuth({
+        state: {
+          sourceId: "openai",
+          phase: "device-code",
+          verificationUri: "https://example.com/device",
+          userCode: "WXYZ-1234",
+        },
+      }),
+    ),
+  );
+  assert.equal(dc?.type, "host.sourceAuth");
+  if (dc?.type !== "host.sourceAuth") return;
+  assert.deepEqual(dc.auth, {
+    sourceId: "openai",
+    phase: "device-code",
+    verificationUri: "https://example.com/device",
+    userCode: "WXYZ-1234",
+  });
+
+  // Completion + error phases decode their phase (and a sanitized detail for error).
+  const done = decodeTrevorEvent(
+    stored(events.hostSourceAuth({ state: { sourceId: "openai", phase: "complete" } })),
+  );
+  assert.equal(done?.type === "host.sourceAuth" && done.auth.phase, "complete");
+  const err = decodeTrevorEvent(
+    stored(
+      events.hostSourceAuth({ state: { sourceId: "openai", phase: "error", detail: "timed out" } }),
+    ),
+  );
+  assert.equal(err?.type === "host.sourceAuth" && err.auth.detail, "timed out");
+
+  // A garbled phase decodes to a cancelled flow (never throws).
+  const bad = decodeTrevorEvent(
+    stored({ type: "host.sourceAuth", payload: { sourceId: "x", phase: "?" } }),
+  );
+  assert.equal(bad?.type === "host.sourceAuth" && bad.auth.phase, "cancelled");
+});
+
 test("host.online round-trips the structured git status (D-088)", () => {
   const decoded = decodeTrevorEvent(
     stored(

@@ -84,8 +84,10 @@ export interface ModelChooserProps {
   readonly onSelectModel: (ref: ModelRef) => void;
   /** Invoked from the source-detail auth/setup action (host-owned flows). */
   readonly onSourceAction?: (sourceId: string, action: SourceAction) => void;
-  /** An in-progress device/provider-code flow for the OPEN source (host-started), shown in its detail. */
+  /** An in-progress device/provider-code flow (host-started), shown in its source's detail. */
   readonly deviceCode?: DeviceCodeFlow | null;
+  /** The source the device-code flow belongs to, so it shows only on that source's detail. */
+  readonly deviceCodeSourceId?: string;
   /** Submit a non-key provider code for the open source's device-code flow. */
   readonly onSubmitCode?: (code: string) => void;
   /** Open directly on a source's detail view (deep link / Storybook); defaults to the overview. */
@@ -125,6 +127,7 @@ export function ModelChooser({
   onSelectModel,
   onSourceAction,
   deviceCode,
+  deviceCodeSourceId,
   onSubmitCode,
   initialSourceId,
   recentKeys,
@@ -164,7 +167,7 @@ export function ModelChooser({
           onToggleFilter={(f) => setFilters((prev) => ({ ...prev, [f]: !prev[f] }))}
           onSelectModel={onSelectModel}
           onSourceAction={onSourceAction}
-          deviceCode={deviceCode}
+          deviceCode={deviceCodeSourceId === openSource.sourceId ? deviceCode : null}
           onSubmitCode={onSubmitCode}
         />
       ) : (

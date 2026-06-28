@@ -221,6 +221,34 @@ test("the Configured only toggle is absent when every source is configured (no-o
   assert.equal(queryByText("Configured only"), null, "no toggle when every source is configured");
 });
 
+test("a host device-code sign-in shows only on its own source's detail (D-065 M5)", () => {
+  const deviceCode = { verificationUrl: "https://auth.example/device", userCode: "WXYZ-9999" };
+  const { getByLabelText, getByText, queryByText, rerender } = render(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      onSelectModel={noop}
+      deviceCode={deviceCode}
+      deviceCodeSourceId="codex"
+    />,
+  );
+  // The flow belongs to codex: opening it shows the device code in its auth panel.
+  fireEvent.click(getByLabelText("Open OpenAI (Codex)"));
+  assert.ok(getByText("WXYZ-9999"), "the user code shows on the flow's own source");
+
+  // Re-point the flow at another source: codex's detail no longer shows the code (gated by sourceId).
+  rerender(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      onSelectModel={noop}
+      deviceCode={deviceCode}
+      deviceCodeSourceId="anthropic"
+    />,
+  );
+  assert.equal(queryByText("WXYZ-9999"), null, "the device code is gated to its own source");
+});
+
 test("loading shows a skeleton; empty shows a configure-a-source message", () => {
   const loading = render(
     <ModelChooser sources={[]} catalogBySource={{}} loading onSelectModel={noop} />,

@@ -6,8 +6,10 @@ import {
   type CatalogEntry,
   decodeCatalogEntry,
   decodeModelRef,
+  decodeSourceSignIn,
   decodeSourceSummary,
   type ModelRef,
+  type SourceSignInState,
   type SourceSummary,
 } from "./model-source";
 
@@ -577,6 +579,16 @@ export const events = {
     type: "host.internet",
     payload: { internet: p.snapshot },
   }),
+  /**
+   * A host-driven source sign-in flow's state (D-065 M5): emitted as the host runs an OAuth/device-code
+   * login - the `device-code` phase carries the verification URL + short user code, then `complete`
+   * (the catalog re-announce flips the source to ready) or `error`. Advisory/presence-style, kept OUT
+   * of conversation memory (like host.internet); carries a verification code, never an API key.
+   */
+  hostSourceAuth: (p: { state: SourceSignInState }): TrevorEventInput => ({
+    type: "host.sourceAuth",
+    payload: { ...p.state },
+  }),
   hostOnline: (p: {
     branch?: string;
     git?: GitStatus;
@@ -1086,6 +1098,7 @@ export type DecodedEvent =
       readonly catalog: Readonly<Record<string, readonly CatalogEntry[]>>;
     }
   | { readonly type: "host.internet"; readonly internet: InternetSnapshot }
+  | { readonly type: "host.sourceAuth"; readonly auth: SourceSignInState }
   | { readonly type: "host.hello"; readonly instanceId?: string }
   | { readonly type: "host.beat"; readonly instanceId?: string }
   | { readonly type: "host.role"; readonly instanceId?: string; readonly role?: string };
@@ -1280,6 +1293,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       };
     case "host.internet":
       return { type: "host.internet", internet: coerceInternetSnapshot(p.internet) };
+    case "host.sourceAuth":
+      return { type: "host.sourceAuth", auth: decodeSourceSignIn(p) };
     case "host.hello":
       return { type: "host.hello", instanceId: optStr(p.instanceId) };
     case "host.beat":
