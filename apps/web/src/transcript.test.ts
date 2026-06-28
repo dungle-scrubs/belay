@@ -181,16 +181,17 @@ test("typed stop causes survive transcript replay", () => {
   const stop = {
     cause: "step_backstop",
     action: "paused" as const,
-    summary: "Paused at the 32-step backstop before context pressure.",
-    steps: 32,
+    summary:
+      "Paused at the adaptive 96-step budget before context pressure (>=1M context, 8.9% pressure -> 96 steps).",
+    steps: 96,
     context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
   };
   const log = [
     ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
-    ev(2, events.assistantCompleted({ runId: "r1", text: "", stepLimit: 32, stop })),
+    ev(2, events.assistantCompleted({ runId: "r1", text: "", stepLimit: 96, stop })),
   ];
   const [message] = toTranscript(log).filter((m) => m.kind === "assistant");
-  assert.equal(message?.kind === "assistant" && message.stepLimit, 32);
+  assert.equal(message?.kind === "assistant" && message.stepLimit, 96);
   assert.deepEqual(message?.kind === "assistant" && message.stop, stop);
 });
 

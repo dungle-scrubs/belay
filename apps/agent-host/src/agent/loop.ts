@@ -22,6 +22,7 @@ import { providerFailureLogFields } from "../providers/provider-failure-log";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
+import { deriveTurnBudget, EMERGENCY_MAX_STEPS, type TurnBudget } from "./turn-budget";
 import { TurnTerminationGate } from "./turn-policy";
 
 /**
@@ -161,8 +162,10 @@ const DEFAULT_STREAM_STALL_MS = (() => {
 })();
 
 export interface TurnLoopConfig {
-  /** Runaway backstop for a pathological tool loop. */
-  readonly maxSteps: number;
+  /** Absolute runaway ceiling, independent of the adaptive per-step budget (D-011): the loop derives
+   *  an effective step budget each round (see turn-budget.ts) and clamps it to never exceed this. Only
+   *  binds when the adaptive budget would exceed it or telemetry is unusable - the genuine backstop. */
+  readonly emergencyMaxSteps: number;
   /** Max read-only tool calls a single step runs concurrently. */
   readonly toolConcurrency: number;
   /** Prompt-token fraction of the context window where the loop stops opening tool rounds. */
@@ -176,7 +179,7 @@ export interface TurnLoopConfig {
 }
 
 export const DEFAULT_TURN_LOOP_CONFIG: TurnLoopConfig = {
-  maxSteps: 32,
+  emergencyMaxSteps: EMERGENCY_MAX_STEPS,
   toolConcurrency: 8,
   contextBudgetFraction: 0.8,
   maxRecovery: 2,
@@ -412,6 +415,26 @@ export function runAgent(
   let repeatedToolSignature: string | undefined;
   let repeatedToolRounds = 0;
 
+  // The adaptive per-step budget (D-009…D-013): derived fresh from the live facts (served context
+  // window, prompt pressure, repeated-tool progress, reasoning level) so a large-context, low-pressure
+  // turn gets far more room than the old static 32, while a near-overflow or near-stalled turn gets
+  // less. The emergency ceiling (config) clamps it so a bad loop or unusable telemetry can never spin.
+  // Read at each gate check, so it tracks the latest usage/repeat state.
+  const currentBudget = (): TurnBudget =>
+    deriveTurnBudget({
+      providerId: provider.id,
+      providerKind: provider.kind,
+      model: provider.model,
+      reasoning: currentReasoning,
+      reasoningLevels: provider.reasoningLevels,
+      inputTokens: lastInputTokens,
+      contextWindow: lastContextWindow,
+      contextBudgetFraction: config.contextBudgetFraction,
+      repeatedToolName,
+      repeatedToolRounds,
+      emergencyMaxSteps: config.emergencyMaxSteps,
+    });
+
   // One overflow adjustment: mutate the conversation/reasoning in place and return a
   // `recovered` event, or null when nothing cheap is left. Cheapest-first and
   // provider-aware - cut thinking (the output lever) when the model hit the wall
@@ -513,14 +536,32 @@ export function runAgent(
       // governor - the prior step's prompt crossing the configured fraction of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are
       // clear (no prior usage), so the first round always runs.
+      const budget = currentBudget();
+      // Structured budget factors behind the verbose `agent` scope (D-026): a postmortem can tell a
+      // healthy large-context budget exhaustion from an unknown-telemetry fallback via tier/telemetry.
+      debug("agent", "turn-budget", {
+        step: n,
+        effective: budget.effectiveMaxSteps,
+        emergency: budget.emergencyMaxSteps,
+        tier: budget.factors.contextTier,
+        telemetry: budget.factors.telemetryQuality,
+        pressure: budget.factors.pressure,
+        contextWindow: budget.factors.contextWindow,
+        repeatedRounds: budget.factors.repeatedToolRounds,
+        repeatedPenalty: budget.factors.repeatedToolPenalty,
+        reasoningPenalty: budget.factors.reasoningPenalty,
+        providerKind: budget.factors.providerKind,
+        reason: budget.reason,
+      });
       const stop = TurnTerminationGate.decide({
         steps: n,
-        maxSteps: config.maxSteps,
+        maxSteps: budget.effectiveMaxSteps,
         inputTokens: lastInputTokens,
         contextWindow: lastContextWindow,
         contextBudgetFraction: config.contextBudgetFraction,
         repeatedToolName,
         repeatedToolRounds,
+        budgetReason: budget.reason,
       });
       if (stop?.action === "synthesized") {
         return synthesize(n, stop);
@@ -670,14 +711,16 @@ export function runAgent(
               toolCalls,
             });
             if (protocolDiagnostic) {
+              const anomalyBudget = currentBudget();
               const stop = TurnTerminationGate.decide({
                 steps: n,
-                maxSteps: config.maxSteps,
+                maxSteps: anomalyBudget.effectiveMaxSteps,
                 inputTokens: lastInputTokens,
                 contextWindow: lastContextWindow,
                 contextBudgetFraction: config.contextBudgetFraction,
                 repeatedToolName,
                 repeatedToolRounds,
+                budgetReason: anomalyBudget.reason,
                 providerDiagnostic: protocolDiagnostic,
               });
               if (!stop) {

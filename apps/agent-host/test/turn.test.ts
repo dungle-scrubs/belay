@@ -101,15 +101,18 @@ test("one live progress snapshot per model step, each carrying usage + breakdown
   );
 });
 
-test("assistant.completed publishes typed stop metadata for a low-context step backstop", async () => {
+test("assistant.completed publishes typed stop metadata for an adaptive step backstop", async () => {
+  // A 1M window at ~8.9% pressure earns the >=1M tier budget (96), so the backstop fires at 96, not the
+  // old static 32, and the summary names the adaptive budget and its reason (D-021, D-025).
   const events = await runTurn(lowContextBackstopProvider(), history, { runId: "r1" });
   const completed = events.find((e) => e.type === "assistant.completed")?.payload;
-  assert.equal(completed?.stepLimit, 32);
+  assert.equal(completed?.stepLimit, 96);
   assert.deepEqual(completed?.stop, {
     cause: "step_backstop",
     action: "paused",
-    summary: "Paused at the 32-step backstop before context pressure.",
-    steps: 32,
+    summary:
+      "Paused at the adaptive 96-step budget before context pressure (>=1M context, 8.9% pressure -> 96 steps).",
+    steps: 96,
     context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
   });
   assert.equal(completed?.text, "");

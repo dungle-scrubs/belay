@@ -88,21 +88,31 @@ const collect = (provider: Provider, opts: RunAgentOptions = {}): Promise<AgentE
   ).then(() => events);
 };
 
-test("M1+M2: DeepSeek-like low-context 32-step backstop pauses instead of forcing a normal answer", async () => {
-  // Huge window so the context gate never fires - the turn runs to the MAX_STEPS backstop.
+test("M3: a 1M-context low-pressure loop runs past 32 to the large-context budget, then pauses", async () => {
+  // Huge window, ~8.9% pressure: the context gate never fires and the old static 32-step cap is gone,
+  // so the adaptive >=1M tier budget (96) governs - exactly the DeepSeek-V4-Pro case from the RFC.
   const events = await collect(loopingProvider({ input: 89_022, window: 1_000_000 }));
   const limits = events.filter((e) => e.type === "step_limit");
   assert.equal(limits.length, 1, "exactly one step_limit");
-  assert.equal((limits[0] as { steps: number }).steps, 32, "fires at the MAX_STEPS backstop");
+  assert.equal(
+    (limits[0] as { steps: number }).steps,
+    96,
+    "a low-pressure 1M turn runs to the large-context budget, not the old 32",
+  );
   const stop = events.find((e) => e.type === "stop");
   assert.equal(stop?.type === "stop" && stop.stop.cause, "step_backstop");
   assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
   assert.equal(stop?.type === "stop" && stop.stop.context?.pressure, 0.089022);
+  assert.match(
+    stop?.type === "stop" ? stop.stop.summary : "",
+    /adaptive 96-step budget/,
+    "the pause names the adaptive budget, not a static backstop",
+  );
   const answer = events
     .filter((e): e is Extract<AgentEvent, { type: "text" }> => e.type === "text")
     .map((e) => e.text)
     .join("");
-  assert.equal(answer, "", "the low-context backstop does not pose as a final answer");
+  assert.equal(answer, "", "the backstop does not pose as a final answer");
   assert.ok(!events.some((e) => e.type === "empty"), "not an empty/noReply turn");
 });
 
@@ -121,9 +131,11 @@ test("M3: the context gate stops early under a small window, later under a large
   assert.equal(largeSteps, 32, "a roomy window runs to the backstop, not the context gate");
 });
 
-test("turn loop config overrides the step backstop per call", async () => {
+test("the emergency ceiling clamps the adaptive budget per call", async () => {
+  // A low emergency override wins over the generous 1M tier budget (96): the absolute ceiling is the
+  // hard backstop the adaptive budget can never exceed.
   const events = await collect(loopingProvider({ input: 1, window: 1_000_000 }), {
-    loop: { maxSteps: 3 },
+    loop: { emergencyMaxSteps: 3 },
   });
   const limit = events.find((e) => e.type === "step_limit");
 
@@ -288,4 +300,69 @@ test("M1: a repeated-tool fixture represents a true loop stall", async () => {
   const stop = events.find((e) => e.type === "stop");
   assert.equal(stop?.type === "stop" && stop.stop.cause, "loop_stalled");
   assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
+});
+
+test("M3: unknown context (no served window) pauses at the conservative fallback", async () => {
+  // window 0 => "missing" telemetry: the budget stays at the 32-step fallback rather than adapting up,
+  // and the context gate (which needs a positive window) never fires, so it runs to the backstop.
+  const events = await collect(loopingProvider({ input: 100, window: 0 }));
+  const limit = events.find((e) => e.type === "step_limit");
+  assert.equal(
+    limit?.type === "step_limit" && limit.steps,
+    32,
+    "unknown context stays conservative, not adaptive",
+  );
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "step_backstop");
+});
+
+test("M4: context pressure synthesizes before the adaptive budget is spent", async () => {
+  // 85% of a 1M window is past the 80% gate: even with the generous 1M tier budget, context pressure
+  // wins on the very next round rather than burning the whole adaptive budget first.
+  const events = await collect(loopingProvider({ input: 850_000, window: 1_000_000 }));
+  const limit = events.find((e) => e.type === "step_limit");
+  assert.equal(
+    limit?.type === "step_limit" && limit.steps,
+    1,
+    "the context gate fires immediately",
+  );
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "context_pressure");
+  assert.equal(stop?.type === "stop" && stop.stop.action, "synthesized");
+});
+
+test("M4: a repeated-tool stall pauses well before the large-context budget", async () => {
+  // A 1M window earns a 96-step budget, but a same-tool loop must still pause at the loop-stall gate.
+  const events = await collect(
+    loopingProvider({ input: 100, window: 1_000_000, repeatedTool: true }),
+  );
+  const limit = events.find((e) => e.type === "step_limit");
+  assert.equal(
+    limit?.type === "step_limit" && limit.steps,
+    6,
+    "the stall gate pauses at 6 rounds, not at the 96-step budget",
+  );
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "loop_stalled");
+});
+
+test("M7: each representative context tier pauses at its adaptive budget", async () => {
+  const stepsFor = async (window: number) => {
+    const events = await collect(loopingProvider({ input: 100, window }));
+    return (events.find((e) => e.type === "step_limit") as { steps: number }).steps;
+  };
+  assert.equal(await stepsFor(16_000), 24, "small (<32k) context stays conservative");
+  assert.equal(await stepsFor(128_000), 48, "128k context lifts the budget");
+  assert.equal(await stepsFor(1_000_000), 96, "1M context earns the largest budget");
+});
+
+test("M7: a 1M context at 14% pressure does not stop at 32", async () => {
+  const events = await collect(loopingProvider({ input: 140_000, window: 1_000_000 }));
+  const steps = (events.find((e) => e.type === "step_limit") as { steps: number }).steps;
+  assert.notEqual(
+    steps,
+    32,
+    "14% pressure is far from the gate; the 1M budget is not pinned to 32",
+  );
+  assert.equal(steps, 96, "the full 1M tier budget governs at low pressure");
 });

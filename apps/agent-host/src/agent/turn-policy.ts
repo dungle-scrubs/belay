@@ -12,12 +12,17 @@ import type { TurnStop } from "@trevor/session";
 
 export interface TurnPolicyObservation {
   readonly steps: number;
+  /** The effective step budget for this evaluation. The loop derives it adaptively (see
+   *  turn-budget.ts); the gate only compares `steps` against it and never derives it itself (D-019). */
   readonly maxSteps: number;
   readonly inputTokens: number;
   readonly contextWindow: number;
   readonly contextBudgetFraction: number;
   readonly repeatedToolName?: string;
   readonly repeatedToolRounds: number;
+  /** Optional one-line reason from the budget derivation, used only to enrich the step-backstop
+   *  summary; the gate stays ignorant of how the budget was computed (D-019, D-025). */
+  readonly budgetReason?: string;
   readonly providerDiagnostic?: {
     readonly reason: string;
     readonly retryable: boolean;
@@ -152,14 +157,16 @@ function decideTermination(obs: TurnPolicyObservation): TurnTerminationDecision 
       stop: {
         cause: "step_backstop",
         action: "paused",
-        summary: `Paused at the ${obs.maxSteps}-step backstop before context pressure.`,
+        summary: obs.budgetReason
+          ? `Paused at the adaptive ${obs.maxSteps}-step budget before context pressure (${obs.budgetReason}).`
+          : `Paused at the ${obs.maxSteps}-step backstop before context pressure.`,
         steps: obs.steps,
         ...(analysis.context ? { context: analysis.context } : {}),
       },
       debug: withDebug(
         "step_backstop",
         analysis,
-        "fixed step ceiling is a runaway circuit breaker",
+        "adaptive step budget is a runaway circuit breaker",
       ),
     };
   }

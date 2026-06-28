@@ -78,6 +78,28 @@ test("renders step backstop stops so a paused turn is never silent", () => {
   assert.equal(screen.queryByRole("button", { name: /continue/i }), null);
 });
 
+test("renders the adaptive step-budget summary verbatim, without special-casing wording", () => {
+  // The host now derives the budget per turn (turn-budget.ts), so the summary names an adaptive
+  // budget and reason instead of a static "32-step" backstop. The row renders whatever summary the
+  // host sends, so no static wording is baked into the view.
+  renderRow(
+    assistant({
+      stop: {
+        cause: "step_backstop",
+        action: "paused",
+        summary:
+          "Paused at the adaptive 96-step budget before context pressure (>=1M context -> 96 steps).",
+      },
+    }),
+  );
+
+  assert.ok(screen.getByText("paused at step backstop"));
+  assert.ok(
+    screen.getByText(/Paused at the adaptive 96-step budget before context pressure/),
+    "the adaptive budget and reason render from the host's summary",
+  );
+});
+
 test("renders legacy stepLimit events without calling them answered", () => {
   renderRow(assistant({ text: "best effort", stepLimit: 32 }));
   assert.ok(screen.getByText("legacy step budget reached after 32 steps"));

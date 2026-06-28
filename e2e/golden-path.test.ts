@@ -62,7 +62,7 @@ test("a fake-provider turn streams through the store to a subscriber, tool resul
   viewer.connection.close();
 });
 
-test("a DeepSeek-like low-context 32-step stop replays as step_backstop", async () => {
+test("a DeepSeek-like 1M-context low-pressure stop replays as an adaptive step_backstop", async () => {
   const transport = testTransport(store.url);
   await transport.ensureSession("low-context-stop");
 
@@ -105,7 +105,9 @@ test("a DeepSeek-like low-context 32-step stop replays as step_backstop", async 
   const decoded = completed ? decodeTrevorEvent(completed) : null;
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
-  assert.equal(decoded.stepLimit, 32);
+  // A 1M window at ~8.9% pressure earns the >=1M tier budget (96), so the backstop replays at the
+  // adaptive budget rather than the old static 32.
+  assert.equal(decoded.stepLimit, 96);
   assert.equal(decoded.stop?.cause, "step_backstop");
   assert.equal(decoded.stop?.action, "paused");
   assert.equal(decoded.stop?.context?.pressure, 0.089022);
