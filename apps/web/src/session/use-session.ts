@@ -302,6 +302,9 @@ export interface SessionActions {
   readonly unarchive: () => Promise<void>;
   /** Answer a pending ask_user question: publish the answer so the host resumes the blocked tool call. */
   readonly answerQuestion: (questionId: string, answer: ProviderQuestionAnswer) => Promise<void>;
+  /** Recover an orphaned turn (no host connected to ever finish it): publish the same interrupted
+   *  terminal event the host's reaper would, so the in-flight latch clears and the session resumes. */
+  readonly reconcileTurn: (runId: string) => Promise<void>;
 }
 
 type PublishVia = (built: TrevorEventInput) => Promise<void>;
@@ -332,6 +335,21 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
     unarchive: () => publishVia(sessionEvents.sessionArchived({ archived: false })),
     answerQuestion: (questionId: string, answer: ProviderQuestionAnswer) =>
       publishVia(sessionEvents.providerQuestionAnswer({ questionId, answer })),
+    // Mirrors the host's `reapExcept` reconcile: an interrupted (not user-cancelled) completion, so the
+    // transcript renders it as a host-style reap rather than an ESC, and the in-flight latch releases.
+    reconcileTurn: (runId: string) =>
+      publishVia(
+        sessionEvents.assistantCompleted({
+          runId,
+          text: "",
+          interrupted: true,
+          stop: {
+            cause: "interrupted",
+            action: "failed",
+            summary: "No host was connected to finish this turn; the browser recovered it.",
+          },
+        }),
+      ),
   };
 }
 

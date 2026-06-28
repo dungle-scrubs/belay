@@ -30,6 +30,7 @@ import {
   catalogFrom,
   commandsFrom,
   defaultProviderFrom,
+  detectOrphanedTurn,
   hostStatus,
   isSessionArchived,
   latestSessionSwitch,
@@ -96,6 +97,13 @@ function urlForSession(sessionId: string): URL {
 // them (the busy/in-flight latch + release/drain effects) lives in ./hooks/use-send-queue.
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
 
+// How long an in-flight turn may go silent with no leader host connected before the browser recovers
+// it (see detectOrphanedTurn). Comfortably longer than the host's own reconnect-reconcile window, so a
+// host that is merely restarting finishes its turn first; short enough that a truly dead session does
+// not leave a phantom "Working" spinner for long. The live clock ticks every 4s, so detection lands
+// within ~4s of crossing this.
+const ORPHAN_GRACE_MS = 12_000;
+
 export function App() {
   const [target, setTarget] = useState(() => targetFromLocation());
   const navigateToSession = useCallback(
@@ -154,6 +162,7 @@ export function App() {
     submitSignInCode,
     unarchive,
     answerQuestion,
+    reconcileTurn,
   } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
@@ -258,6 +267,35 @@ export function App() {
   }, [transcript, target]);
   // The in-flight turn's start time (ms epoch), driving the live "Working (elapsed)" timer.
   const turnStartedAt = useMemo(() => activeTurnStartedAt(events), [events]);
+  // Web stall guard: a turn left in flight by a host that crashed/restarted mid-turn (or a socket
+  // flap that dropped the terminal event) with nothing rejoining to finish it would spin "Working"
+  // forever. When no leader host is connected to ever close it, the browser closes it itself - the
+  // client-side mirror of the host's reap-on-reconnect. Gated on a live, replayed view so it never
+  // acts on a partial log; the per-runId ref makes it fire exactly once per orphaned turn.
+  const orphanedTurn = useMemo(
+    () =>
+      detectOrphanedTurn(events, {
+        leaderPresent: host.leaderId !== null,
+        connected: status === "open" && replayed,
+        now,
+        graceMs: ORPHAN_GRACE_MS,
+      }),
+    [events, host.leaderId, status, replayed, now],
+  );
+  const reconciledRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (orphanedTurn && reconciledRunRef.current !== orphanedTurn.runId) {
+      const { runId } = orphanedTurn;
+      reconciledRunRef.current = runId;
+      reconcileTurn(runId).catch(() => {
+        // The recovery publish failed (transient transport error); drop the latch so the next clock
+        // tick re-evaluates and retries, rather than leaving the spinner stuck behind a one-shot guard.
+        if (reconciledRunRef.current === runId) {
+          reconciledRunRef.current = null;
+        }
+      });
+    }
+  }, [orphanedTurn, reconcileTurn]);
   // True while a manual /compact fold is streaming (a transient bar in the transcript). ESC cancels
   // it (manual folds are interruptible; automatic ones run to completion).
   const compacting = useMemo(() => transcript.some((m) => m.kind === "compacting"), [transcript]);

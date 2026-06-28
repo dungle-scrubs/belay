@@ -403,3 +403,62 @@ export function activeTurnStartedAt(events: readonly SessionEvent[]): number | n
   }
   return null;
 }
+
+/** The epoch-ms timestamp of the most recent event with a parseable `createdAt`, or null. */
+function lastEventAt(events: readonly SessionEvent[]): number | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const ms = Date.parse(events[i]?.createdAt ?? "");
+    if (!Number.isNaN(ms)) {
+      return ms;
+    }
+  }
+  return null;
+}
+
+/** An orphaned in-flight turn the browser can recover, with how long it has been silent. */
+export interface OrphanedTurn {
+  readonly runId: string;
+  readonly silentMs: number;
+}
+
+/** Inputs for {@link detectOrphanedTurn}, all sampled in App from the live stream + host presence. */
+export interface OrphanCheck {
+  /** A leader host is currently connected (could still produce the terminal event). */
+  readonly leaderPresent: boolean;
+  /** The browser has a live, fully-replayed view of the log (not mid-connect / mid-replay). */
+  readonly connected: boolean;
+  /** Current wall clock (ms epoch); ticks periodically so the check re-evaluates. */
+  readonly now: number;
+  /** How long the log must be silent before the browser steps in (ms). */
+  readonly graceMs: number;
+}
+
+/**
+ * Detects an in-flight turn that is ORPHANED - one with no terminal event, while no leader host is
+ * connected to ever write one. This is the client-side mirror of the host's reap-on-reconnect
+ * (turn-machine `reapExcept`): when a host restarts/crashes mid-turn, or the host<->store socket
+ * flapped exactly at turn-end, and nothing rejoins to win the lease, no host will EVER emit the
+ * `assistant.completed` - so the "Working" spinner latches forever. The browser may then close the
+ * turn itself, but only when it is certain no host can: an in-flight run, no leader present, a live
+ * replayed view of the log, and no new event for `graceMs` (so a host that is merely mid-reconnect
+ * gets first crack at its own reconcile before the browser does). Returns the orphaned run, or null.
+ *
+ * Deliberately conservative: it never fires while a leader is connected (a live but slow/stalled turn
+ * is the host's to finish), nor while the browser is disconnected or replaying (it would be acting on
+ * a partial or stale view). Pure over the inputs, so the firing policy is unit-testable without a DOM.
+ */
+export function detectOrphanedTurn(
+  events: readonly SessionEvent[],
+  check: OrphanCheck,
+): OrphanedTurn | null {
+  const runId = activeTurnRunId(events);
+  if (!runId || check.leaderPresent || !check.connected) {
+    return null;
+  }
+  const lastAt = lastEventAt(events);
+  if (lastAt === null) {
+    return null;
+  }
+  const silentMs = check.now - lastAt;
+  return silentMs >= check.graceMs ? { runId, silentMs } : null;
+}

@@ -119,6 +119,7 @@ test("createSessionActions maps user intents to Trevor events", async () => {
     answer: "Postgres",
     questions: [{ id: "db", answer: "Postgres", selected: [{ id: "pg", label: "Postgres" }] }],
   });
+  await actions.reconcileTurn("r9");
 
   assert.deepEqual(
     built.map((event) => event.type),
@@ -135,8 +136,13 @@ test("createSessionActions maps user intents to Trevor events", async () => {
       "user.command",
       "session.archived",
       "provider.question.answer",
+      "assistant.completed",
     ],
   );
+  // The web stall guard's recovery: an interrupted (not user-cancelled) terminal event for the run.
+  assert.equal(built[12]?.payload.runId, "r9");
+  assert.equal(built[12]?.payload.interrupted, true);
+  assert.equal((built[12]?.payload.stop as { cause: string } | undefined)?.cause, "interrupted");
   assert.deepEqual(built[11]?.payload, {
     questionId: "q-1",
     answer: {

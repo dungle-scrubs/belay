@@ -9,6 +9,7 @@ import { test } from "vitest";
 import {
   commandsFrom,
   defaultProviderFrom,
+  detectOrphanedTurn,
   fmtCtx,
   fmtTokens,
   hostStatus,
@@ -283,4 +284,77 @@ test("pendingQuestionFrom skips a resolved question and returns a later unresolv
 
 test("pendingQuestionFrom is null when there are no questions", () => {
   assert.equal(pendingQuestionFrom([]), null);
+});
+
+/**
+ * detectOrphanedTurn: the web stall guard's firing policy. It recovers an in-flight turn ONLY when no
+ * leader host can ever finish it, the browser has a live replayed view, and the log has been silent
+ * past the grace window. Each test pins one of those guards.
+ */
+const AT = "2026-06-25T00:00:00.000Z";
+const inFlight = () => [
+  evt("user.message", { text: "hi" }, AT),
+  evt("assistant.started", { runId: "r1" }, AT),
+];
+
+test("detectOrphanedTurn recovers an in-flight turn when no leader can finish it", () => {
+  const now = Date.parse(AT) + 20_000;
+  const orphan = detectOrphanedTurn(inFlight(), {
+    leaderPresent: false,
+    connected: true,
+    now,
+    graceMs: 12_000,
+  });
+  assert.deepEqual(orphan, { runId: "r1", silentMs: 20_000 });
+});
+
+test("detectOrphanedTurn stays out while a leader host is connected (its turn to finish)", () => {
+  const now = Date.parse(AT) + 60_000;
+  assert.equal(
+    detectOrphanedTurn(inFlight(), { leaderPresent: true, connected: true, now, graceMs: 12_000 }),
+    null,
+  );
+});
+
+test("detectOrphanedTurn stays out while the browser is disconnected or replaying", () => {
+  const now = Date.parse(AT) + 60_000;
+  assert.equal(
+    detectOrphanedTurn(inFlight(), {
+      leaderPresent: false,
+      connected: false,
+      now,
+      graceMs: 12_000,
+    }),
+    null,
+  );
+});
+
+test("detectOrphanedTurn waits out the grace window so a reconnecting host reconciles first", () => {
+  const now = Date.parse(AT) + 5_000; // under the 12s grace
+  assert.equal(
+    detectOrphanedTurn(inFlight(), { leaderPresent: false, connected: true, now, graceMs: 12_000 }),
+    null,
+  );
+});
+
+test("detectOrphanedTurn does not fire for a completed turn", () => {
+  const events = [...inFlight(), evt("assistant.completed", { runId: "r1", text: "done" }, AT)];
+  const now = Date.parse(AT) + 60_000;
+  assert.equal(
+    detectOrphanedTurn(events, { leaderPresent: false, connected: true, now, graceMs: 12_000 }),
+    null,
+  );
+});
+
+test("detectOrphanedTurn does not fire on an idle session with no in-flight turn", () => {
+  const now = Date.parse(AT) + 60_000;
+  assert.equal(
+    detectOrphanedTurn([evt("user.message", { text: "hi" }, AT)], {
+      leaderPresent: false,
+      connected: true,
+      now,
+      graceMs: 12_000,
+    }),
+    null,
+  );
 });
