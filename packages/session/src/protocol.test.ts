@@ -562,6 +562,19 @@ test("session.switch round-trips the host-authored handoff target", () => {
   });
 });
 
+test("session.switch carries the continuation-handoff reason (02, M2)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.sessionSwitch({ sessionId: "trevor-20260626-123456z-abcdef12", reason: "handoff" }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "session.switch",
+    sessionId: "trevor-20260626-123456z-abcdef12",
+    reason: "handoff",
+  });
+});
+
 test("user.shell + shell.result round-trip through decodeTrevorEvent (D-082)", () => {
   const shell = decodeTrevorEvent(
     stored(events.userShell({ requestId: "req-1", command: "printf hello" })),

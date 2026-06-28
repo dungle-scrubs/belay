@@ -29,7 +29,7 @@ import { providerQuestionRuntime } from "./agent/provider-questions";
 import { recallEngine } from "./agent/recall/engine";
 import { createSiblingReader } from "./agent/recall/reader";
 import { TurnMachine } from "./agent/turn-machine";
-import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
+import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
@@ -44,6 +44,8 @@ import {
 } from "./doctor/build";
 import { registerDoctorSnapshotSource } from "./doctor/source";
 import { nodeGitRunner, readGitStatus } from "./git-status";
+import { parseHandoff } from "./handoff";
+import { type DirectHandoffDeps, runDirectHandoff } from "./handoff-flow";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { msg } from "./messages";
@@ -423,7 +425,7 @@ function abbrevPath(absolute: string): string {
  * is no "already active" case to guard here.
  */
 function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): ActiveTurn | null {
-  if (event.producerId === PRODUCER_ID || !lease.isLeader()) {
+  if (!isAnswerablePrompt(event.producerId, PRODUCER_ID) || !lease.isLeader()) {
     return null;
   }
   const decoded = decodeTrevorEvent(event);
@@ -1127,6 +1129,85 @@ async function switchToWorkspace(opts: {
   retireAfterSessionSwitch();
 }
 
+/**
+ * `/handoff` (02, M2): continue this session's work in a FRESH target session. Direct mode
+ * (`--direct <prompt>`) injects the prompt verbatim; generated mode arrives in a later milestone. The
+ * pure event ordering lives in `runDirectHandoff`; this wires the real transport/mint/spawn/switch and
+ * reuses the same `spawnReplacementHost` + `session.switch` + retire mechanic as `/clear` and `/cd`.
+ * Gated by the workspace-switch blocker so a handoff never abandons a running source turn (which would
+ * leave it stuck mid-flight - the exact failure the turn reconcile guards against).
+ */
+async function runHandoff(args: string): Promise<void> {
+  const { mode, prompt } = parseHandoff(args);
+  if (mode === "generate") {
+    await emit(
+      events.commandResult({
+        command: "/handoff",
+        text: "Generated handoff is not available yet - use /handoff --direct <prompt>.",
+        ok: false,
+      }),
+    );
+    return;
+  }
+
+  const blocker = workspaceSwitchBlocker();
+  if (blocker) {
+    await emit(
+      events.commandResult({
+        command: "/handoff",
+        text: `Cannot hand off while ${blocker}.`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+
+  const deps: DirectHandoffDeps = {
+    sourceSessionId: SESSION_ID,
+    cwd: process.cwd(),
+    workspace: WORKSPACE_ROOT,
+    newHandoffId: () => crypto.randomUUID(),
+    newSessionId: () => freshSessionId(),
+    targetModel: () => ({ provider: controlProvider(), model: lastTurnModel() }),
+    publish: (sessionId, event) =>
+      transport.publishEvent(sessionId, { ...event, producerId: PRODUCER_ID }),
+    // The injected prompt rides the control producer (not PRODUCER_ID) so the target host schedules a
+    // turn for it instead of ignoring it as a self-echo - the bug that left a handed-off session
+    // "Working" forever. Same path host control prompts (continue/retry) use.
+    publishPrompt: (sessionId, event) =>
+      transport.publishEvent(sessionId, { ...event, producerId: CONTROL_PRODUCER_ID }),
+    ensureSession: async (sessionId) => {
+      await transport.ensureSession(sessionId);
+    },
+    spawnHost: (target) => {
+      spawnReplacementHost(target);
+    },
+    switchAndRetire: async (targetSessionId) => {
+      await emit(events.sessionSwitch({ sessionId: targetSessionId, reason: "handoff" }));
+      scheduler.clearPending();
+      contextRegistry.reset();
+      retireAfterSessionSwitch();
+    },
+  };
+
+  try {
+    const result = await runDirectHandoff(prompt, deps);
+    await emit(events.commandResult({ command: "/handoff", text: result.text, ok: result.ok }));
+    if (result.ok) {
+      log("host", "handoff: switched session", { from: SESSION_ID, to: result.targetSessionId });
+    }
+  } catch (error) {
+    warn("host", "handoff failed", { error: msg(error) });
+    await emit(
+      events.commandResult({
+        command: "/handoff",
+        text: `Failed to hand off: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  }
+}
+
 /** Switches to a managed worktree (or the baseline checkout) by row id, gated like `/cd`. */
 async function worktreeSwitch(id: string): Promise<void> {
   const blocker = workspaceSwitchBlocker();
@@ -1541,7 +1622,7 @@ function handleEvent(message: SessionEvent): void {
   if (!decoded) {
     return;
   }
-  if (decoded.type === "user.message" && message.producerId !== PRODUCER_ID) {
+  if (decoded.type === "user.message" && isAnswerablePrompt(message.producerId, PRODUCER_ID)) {
     scheduler.noteTurn(message);
   } else if (decoded.type === "assistant.started") {
     // Track the run as in flight (a started with no completion) so a later leader can reap it if a
@@ -1784,6 +1865,10 @@ function handleEvent(message: SessionEvent): void {
         stopCurrentSession(args).catch((error) =>
           warn("host", "stop failed", { error: msg(error) }),
         );
+        return;
+      }
+      if (command === "/handoff") {
+        runHandoff(args).catch((error) => warn("host", "handoff failed", { error: msg(error) }));
         return;
       }
       runCommand(command, args).catch((error) =>

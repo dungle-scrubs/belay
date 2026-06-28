@@ -1,12 +1,12 @@
 # Continuation Handoff - Progress Report
 
 > Scope: new standalone planner plan for migrating V1 continuation handoff into Trevor V2. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 1, M2 - direct handoff flow (M1 command parser + protocol events done).
+> Current focus: Phase 2, M3 - source-session generation state (M1 parser + protocol, M2 direct flow done).
 
 ## Summary
 
-- Current cutoff blockers: 60
-- Completed: 5
+- Current cutoff blockers: 50
+- Completed: 15
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -22,19 +22,19 @@
 
 ### M2: Direct handoff flow
 
-- [ ] RED: Add host tests proving direct handoff rejects empty prompts and does not switch
-- [ ] GREEN: Implement direct prompt validation
-- [ ] RED: Add host tests proving accepted direct handoff ensures target session before switch
-- [ ] GREEN: Append target provenance plus target `user.message`, attach or spawn host, and publish `session.switch`
-- [ ] RED: Add web tests proving source command result and target first prompt render correctly
-- [ ] REFACTOR: Share target-session switch ordering with existing `/clear` or workspace-switch helpers where practical
+- [x] RED: Add host tests proving direct handoff rejects empty prompts and does not switch
+- [x] GREEN: Implement direct prompt validation
+- [x] RED: Add host tests proving accepted direct handoff ensures target session before switch
+- [x] GREEN: Append target provenance plus target `user.message`, attach or spawn host, and publish `session.switch`
+- [x] RED: Add web tests proving source command result and target first prompt render correctly
+- [x] REFACTOR: Share target-session switch ordering with existing `/clear` or workspace-switch helpers where practical
 
 ### Gate 1 to 2
 
-- [ ] `/handoff --direct` works without model generation
-- [ ] Direct mode does not write generated-prompt events
-- [ ] Target prompt appears once, in the target session
-- [ ] `pnpm test:unit` passes for command and protocol tests
+- [x] `/handoff --direct` works without model generation
+- [x] Direct mode does not write generated-prompt events
+- [x] Target prompt appears once, in the target session
+- [x] `pnpm test:unit` passes for command and protocol tests
 
 ## Phase 2: Generated Prompt Timing
 

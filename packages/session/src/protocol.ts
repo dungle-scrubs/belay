@@ -475,11 +475,12 @@ export const events = {
   }),
   /**
    * Host-authored session handoff. Used by /clear to move the browser into a newly minted durable
-   * session after the leader has ensured it and spawned an attached replacement host.
+   * session after the leader has ensured it and spawned an attached replacement host. `handoff` is the
+   * continuation handoff (02): the browser follows into the target session the leader prepared.
    */
   sessionSwitch: (p: {
     sessionId: string;
-    reason: "clear" | "cd" | "resume" | "worktree";
+    reason: "clear" | "cd" | "resume" | "worktree" | "handoff";
   }): TrevorEventInput => ({
     type: "session.switch",
     payload: { sessionId: p.sessionId, reason: p.reason },

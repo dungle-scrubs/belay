@@ -5,4 +5,9 @@
 // The ask_user pending-question runtime singleton, exposed so cross-service e2e can wire its emitter to
 // the store and drive submitAnswer (the role main.ts's inbound lane plays in the real host).
 export { providerQuestionRuntime } from "../../src/agent/provider-questions";
+export { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "../../src/agent/turn-scheduler";
+// Continuation handoff (02): the direct-flow orchestration + the turn-dispatch scheduler and the
+// self-echo predicate, so cross-service e2e can drive a handoff through a real store and replay the
+// target log through the same scheduling logic the real host uses (the role main.ts plays live).
+export { type DirectHandoffDeps, runDirectHandoff } from "../../src/handoff-flow";
 export * from "./fake-provider";

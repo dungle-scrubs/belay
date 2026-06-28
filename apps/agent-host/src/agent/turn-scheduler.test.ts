@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import type { SessionEvent } from "@trevor/session";
+import { PRODUCER_IDS, type SessionEvent } from "@trevor/session";
 import { test } from "vitest";
-import { type ActiveTurn, TurnScheduler } from "./turn-scheduler";
+import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./turn-scheduler";
 
 /**
  * Characterization tests for the turn scheduler (M1 / D-004).
@@ -324,4 +324,24 @@ test("compaction gating is inert when the scheduler has no compaction deps", () 
   assert.equal(h.scheduler.isBusy(), true);
   h.scheduler.processCompletion("run0", 0); // exercises the (no-op) maybeCompact path
   assert.equal(h.scheduler.debug().compacting, false);
+});
+
+/**
+ * isAnswerablePrompt: the self-echo contract handoff prompt injection depends on. Browser prompts and
+ * host CONTROL prompts (continue/retry, and the handoff target injection - `${self}:control`) are
+ * answerable; the host's OWN bare producer id is not. A control prompt being answerable is the load-
+ * bearing case: stamping a handoff prompt with the bare host id silently drops it (forever-Working).
+ */
+const HOST = PRODUCER_IDS.host;
+
+test("isAnswerablePrompt: a host control/handoff prompt (self + ':control') is answerable", () => {
+  assert.equal(isAnswerablePrompt(`${HOST}:control`, HOST), true);
+});
+
+test("isAnswerablePrompt: a browser prompt is answerable", () => {
+  assert.equal(isAnswerablePrompt(PRODUCER_IDS.web, HOST), true);
+});
+
+test("isAnswerablePrompt: the host's own prompt is NOT answerable (self-echo)", () => {
+  assert.equal(isAnswerablePrompt(HOST, HOST), false);
 });

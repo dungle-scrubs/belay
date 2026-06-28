@@ -1,5 +1,18 @@
 import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
 
+/**
+ * Whether this host should ANSWER a `user.message`, i.e. it is not the host's own echo. A browser
+ * prompt (web producer) and a host CONTROL prompt (`/continue`, `/retry`, and the continuation-handoff
+ * target injection - all stamped `${self}:control`) are answerable; the host's own bare producerId is
+ * NOT (answering it would re-run the host's own writes). The handoff injection leans on this exactly:
+ * a target prompt stamped with the host's BARE producerId is silently dropped and never runs - it must
+ * ride the control producer. A plain inequality, but named + tested so that contract can't regress
+ * into, say, a `startsWith(self)` check that would wrongly swallow `${self}:control`.
+ */
+export function isAnswerablePrompt(producerId: string, selfProducerId: string): boolean {
+  return producerId !== selfProducerId;
+}
+
 /** A turn in flight: its run id and a function to abort it (interrupts its fiber). */
 export interface ActiveTurn {
   readonly runId: string;

@@ -807,3 +807,61 @@ test("a non-ask_user tool call still renders (the suppression is name-scoped)", 
   const tool = toTranscript(log).find((m) => m.kind === "tool");
   assert.ok(tool && tool.kind === "tool" && tool.name === "read");
 });
+
+test("handoff (M2): the target session shows the injected prompt as its first user message", () => {
+  // The target log carries handoff provenance (suppressed) + the first user.message (the prompt).
+  const log = [
+    ev(
+      1,
+      events.handoffAccepted({
+        handoffId: "h1",
+        targetSessionId: "tgt",
+        prompt: "ship the feature",
+      }),
+    ),
+    ev(2, events.userMessage({ text: "ship the feature", provider: "qwen" })),
+  ];
+  const transcript = toTranscript(log);
+  // Exactly one row: the prompt as a user message. The provenance event renders nothing.
+  assert.deepEqual(
+    transcript.map((m) => m.kind),
+    ["user"],
+  );
+  const first = transcript[0];
+  assert.ok(first && first.kind === "user" && first.text === "ship the feature");
+});
+
+test("handoff (M2): the source session shows the command result, never the prompt as a transcript item", () => {
+  // The source log: the typed command (not echoed), the handoff lifecycle (suppressed), and the result.
+  const log = [
+    ev(1, events.userCommand({ command: "/handoff", args: "--direct ship the feature" })),
+    ev(
+      2,
+      events.handoffRequested({
+        handoffId: "h1",
+        mode: "direct",
+        sourceSessionId: "src",
+        prompt: "ship the feature",
+      }),
+    ),
+    ev(
+      3,
+      events.handoffAccepted({
+        handoffId: "h1",
+        targetSessionId: "tgt",
+        prompt: "ship the feature",
+      }),
+    ),
+    ev(4, events.commandResult({ command: "/handoff", text: "✓ handed off to tgt", ok: true })),
+  ];
+  const transcript = toTranscript(log);
+  // Only the command result renders - the lifecycle events and the typed command produce no rows, and
+  // the prompt never appears as a source transcript item (it lives only in the target).
+  assert.deepEqual(
+    transcript.map((m) => m.kind),
+    ["result"],
+  );
+  const result = transcript[0];
+  assert.ok(result && result.kind === "result" && result.command === "/handoff" && result.ok);
+  assert.ok(!transcript.some((m) => m.kind === "user"));
+});
