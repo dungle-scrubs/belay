@@ -7,6 +7,7 @@ import {
   freshSessionId,
   type GitStatus,
   type InternetSnapshot,
+  type ModelRef,
   PRODUCER_IDS,
   RUNTIME_KIND,
   resolveUserTurnModel,
@@ -36,6 +37,7 @@ import { probeLogLine } from "./connectivity/log";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
+import { controlPromptModel } from "./control-model";
 import { debugCommandSpecs, isStopConfirmed } from "./debug-commands";
 import { buildLiveDoctorSnapshot, type DoctorFacts } from "./doctor/build";
 import { registerDoctorSnapshotSource } from "./doctor/source";
@@ -568,9 +570,24 @@ function controlProvider(): string {
   return lastProvider?.id ?? DEFAULT_PROVIDER;
 }
 
+/** The catalog model the in-flight turn was started with, so a host-issued control prompt resumes on
+ *  the user's selected model instead of falling back to the default provider (the bare `provider`
+ *  string carried a source id that does not round-trip through `pickProvider`). */
+function lastTurnModel(): ModelRef | undefined {
+  const turns: { readonly model?: ModelRef }[] = [];
+  for (const event of historyEvents) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "user.message") {
+      turns.push(decoded);
+    }
+  }
+  return controlPromptModel(turns);
+}
+
 async function publishControlPrompt(text: string, provider = controlProvider()): Promise<void> {
+  const model = lastTurnModel();
   await transport.publishEvent(SESSION_ID, {
-    ...events.userMessage({ text, provider }),
+    ...events.userMessage({ text, provider, ...(model ? { model } : {}) }),
     producerId: CONTROL_PRODUCER_ID,
   });
 }
@@ -586,10 +603,12 @@ async function retryLastPrompt(): Promise<{ readonly ok: boolean; readonly text:
   if (!last) {
     return { ok: false, text: "No prior user prompt to retry." };
   }
+  const model = last.model ?? lastTurnModel();
   await transport.publishEvent(SESSION_ID, {
     ...events.userMessage({
       text: last.text,
       provider: last.provider ?? controlProvider(),
+      ...(model ? { model } : {}),
       reasoning: last.reasoning,
       artifacts: last.artifacts,
     }),
