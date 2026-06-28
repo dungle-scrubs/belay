@@ -10,6 +10,7 @@ import type {
 } from "@trevor/session";
 import { CodexProvider } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
+import { OpenAICompatProvider } from "./openai-compat";
 import { PiKeyProvider } from "./pi-key";
 import type { Provider } from "./types";
 
@@ -38,6 +39,9 @@ interface SourceDef {
   readonly authName?: string;
   /** `~/.pi/auth.json` OAuth entry for an oauth source. */
   readonly oauthName?: string;
+  /** A fixed OpenAI-compatible base URL for a source NOT in pi-ai's registry (e.g. Ollama Cloud);
+   *  overrides the registry-derived URL and is what `/models` is queried against. */
+  readonly baseUrl?: string;
 }
 
 /** The sources the host knows about (a new provider is one row here). */
@@ -73,6 +77,16 @@ const SOURCES: readonly SourceDef[] = [
     label: "OpenRouter",
     piProvider: "openrouter",
     authName: "openrouter",
+  },
+  // Ollama Cloud: an OpenAI-compatible gateway that runs hosted models behind one key. pi-ai has NO
+  // `ollama` provider, so there's no piProvider - the live `/models` query and the per-model provider
+  // both work off the fixed base URL (https://ollama.com/v1) instead of the registry.
+  {
+    sourceId: "ollama",
+    type: "gateway",
+    label: "Ollama Cloud",
+    authName: "ollama",
+    baseUrl: "https://ollama.com/v1",
   },
 ];
 
@@ -117,10 +131,14 @@ function staticKeyOf(source: SourceDef, auth: Record<string, unknown>): string |
   return typeof entry?.key === "string" && entry.key.length > 0 ? entry.key : null;
 }
 
-/** The provider's base URL (from any of its pi-ai registry models), or null when unknown. */
+/** The provider's base URL: the fixed one (registry-less endpoints), LM Studio's local URL, else
+ *  derived from any of the source's pi-ai registry models. Null when unknown. */
 function baseUrlOf(source: SourceDef): string | null {
   if (source.type === "local") {
     return LMSTUDIO_URL;
+  }
+  if (source.baseUrl) {
+    return source.baseUrl;
   }
   if (!source.piProvider) {
     return null;
@@ -299,6 +317,23 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
   }
   if (source.type === "oauth") {
     return new CodexProvider({ model: modelId, label: modelId });
+  }
+  // A gateway/api-key source NOT in pi-ai's registry (Ollama Cloud) streams through its fixed
+  // OpenAI-compatible base URL with a static key; the Model is constructed directly (no sibling to
+  // clone). This branch comes first because it needs no piProvider.
+  if (
+    (source.type === "api-key" || source.type === "gateway") &&
+    source.baseUrl &&
+    source.authName &&
+    !source.piProvider
+  ) {
+    return new OpenAICompatProvider({
+      id: source.sourceId,
+      authName: source.authName,
+      baseUrl: source.baseUrl,
+      model: modelId,
+      label: modelId,
+    });
   }
   // Direct API-key AND gateway (OpenRouter) sources both stream through a static-key pi provider; the
   // gateway just routes the chosen upstream model id through its single key.

@@ -115,6 +115,15 @@ test("the OpenRouter gateway resolves any of its upstream models to a runnable p
   assert.equal(or?.model, "anthropic/claude-3.5-sonnet");
 });
 
+test("Ollama Cloud (no pi-ai registry) resolves any live model id to a runnable provider", () => {
+  // Ollama has no piProvider, so this exercises the registry-less OpenAI-compatible branch: the
+  // Model is built directly from the fixed base URL, not cloned from a sibling.
+  const ollama = buildSourceProvider("ollama", "gpt-oss:120b");
+  assert.equal(ollama?.kind, "cloud");
+  assert.equal(ollama?.id, "ollama");
+  assert.equal(ollama?.model, "gpt-oss:120b");
+});
+
 test("an unknown source returns null (caller falls back to the registered providers)", () => {
   assert.equal(buildSourceProvider("nope", "whatever"), null);
 });
@@ -127,4 +136,31 @@ test("OpenRouter is announced as a gateway source", () => {
   assert.equal(or?.label, "OpenRouter");
   assert.equal(or?.status, "needs-auth");
   assert.deepEqual(or?.actions, ["configure"]);
+});
+
+test("Ollama Cloud is a gateway source: needs-auth without a key, ready with its live models", () => {
+  const without = buildCatalogSnapshot(auth, {});
+  const needsAuth = without.sources.find((s) => s.sourceId === "ollama");
+  assert.equal(needsAuth?.type, "gateway");
+  assert.equal(needsAuth?.label, "Ollama Cloud");
+  assert.equal(needsAuth?.status, "needs-auth");
+  assert.deepEqual(needsAuth?.actions, ["configure"]);
+
+  // With an ollama key present, its live model ids form the catalog (no pi-ai registry to enrich from,
+  // so entries carry the raw id as the display name).
+  const OLLAMA_SECRET = "ollama-cloud-key-9f8e7d6c5b4a";
+  const configured = buildCatalogSnapshot(
+    { ...auth, ollama: { key: OLLAMA_SECRET } },
+    { ollama: ["gpt-oss:120b", "qwen3-coder:480b-cloud", "glm-5:cloud"] },
+  );
+  const ready = configured.sources.find((s) => s.sourceId === "ollama");
+  assert.equal(ready?.status, "ready");
+  assert.equal(ready?.auth, "authenticated");
+  assert.equal(ready?.modelCount, 3);
+  assert.deepEqual(
+    configured.catalogBySource.ollama?.map((e) => e.modelId),
+    ["gpt-oss:120b", "qwen3-coder:480b-cloud", "glm-5:cloud"],
+  );
+  // REDACTION: the ollama key value never reaches the announced snapshot.
+  assert.ok(!JSON.stringify(configured).includes(OLLAMA_SECRET));
 });
