@@ -32,8 +32,9 @@ const HOST_AUTH_STORE = "~/.pi/auth.json";
 export interface DeviceCodeFlow {
   /** The URL the user opens to authorize (host-provided). */
   readonly verificationUrl: string;
-  /** The short user code to enter at that URL - a device code, NOT an API key. */
-  readonly userCode: string;
+  /** The short user code to enter at that URL - a device code, NOT an API key. Absent for a
+   *  browser+paste flow (the code is returned at the URL and pasted back). */
+  readonly userCode?: string;
   /**
    * Whether this provider's protocol needs the user to paste a code BACK into Trevor (a non-key
    * provider code). When true, a small code input is shown; it is never used for an API key.
@@ -139,7 +140,11 @@ export function SourceAuthPanel({
       {deviceCode ? (
         <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">
           <p className="text-xs text-muted-foreground">
-            Open the authorization page and enter this code:
+            {deviceCode.userCode
+              ? "Open the authorization page and enter this code:"
+              : deviceCode.acceptsCode
+                ? "Open the authorization page, then paste the code it gives you below:"
+                : "Open the authorization page to continue:"}
           </p>
           <div className="flex items-center gap-2">
             <a
@@ -151,9 +156,11 @@ export function SourceAuthPanel({
               {deviceCode.verificationUrl}
               <ExternalLink className="size-3.5" />
             </a>
-            <code className="rounded bg-muted px-2 py-0.5 font-mono text-sm tracking-widest">
-              {deviceCode.userCode}
-            </code>
+            {deviceCode.userCode ? (
+              <code className="rounded bg-muted px-2 py-0.5 font-mono text-sm tracking-widest">
+                {deviceCode.userCode}
+              </code>
+            ) : null}
           </div>
           {deviceCode.acceptsCode ? (
             <form

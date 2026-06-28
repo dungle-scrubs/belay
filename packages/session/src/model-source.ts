@@ -188,6 +188,9 @@ export interface SourceSignInState {
   readonly verificationUri?: string;
   /** Device-code phase: the short user code to enter at that URL (NOT an API key). */
   readonly userCode?: string;
+  /** Device-code phase: true when the user pastes a code BACK after authorizing (Anthropic's flow:
+   *  open the URL, copy the returned code, paste it here). A device-code flow (Codex) leaves it off. */
+  readonly acceptsCode?: boolean;
   /** Error phase: a sanitized one-line failure detail. */
   readonly detail?: string;
 }
@@ -200,6 +203,7 @@ export function decodeSourceSignIn(v: unknown): SourceSignInState {
     phase: oneOf(SOURCE_SIGNIN_PHASES, r.phase, "cancelled"),
     ...(typeof r.verificationUri === "string" ? { verificationUri: r.verificationUri } : {}),
     ...(typeof r.userCode === "string" ? { userCode: r.userCode } : {}),
+    ...(r.acceptsCode === true ? { acceptsCode: true } : {}),
     ...(typeof r.detail === "string" ? { detail: r.detail } : {}),
   };
 }

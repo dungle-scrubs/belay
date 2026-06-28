@@ -135,8 +135,17 @@ export function App() {
 
   const stream = useSession(sessionId);
   const { events, presence, replayed, replayThroughSeq, status } = stream;
-  const { publish, cancel, command, shell, openInEditor, refreshCatalog, signInSource, unarchive } =
-    useSessionActions(sessionId);
+  const {
+    publish,
+    cancel,
+    command,
+    shell,
+    openInEditor,
+    refreshCatalog,
+    signInSource,
+    submitSignInCode,
+    unarchive,
+  } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
   // kept in sessionStorage (tab-scoped, survives a reload). Draft persistence restores an unsubmitted
@@ -250,11 +259,17 @@ export function App() {
   // load re-announces, so the chooser falls back to the roster projection until then.
   const hostSources = useMemo(() => sourcesFrom(events), [events]);
   const hostCatalog = useMemo(() => catalogFrom(events), [events]);
-  // The in-flight source sign-in (D-065 M5): show the device code only while the flow is active.
+  // The in-flight source sign-in (D-065 M5): show the verification URL while the flow is active. A
+  // device-code flow (Codex) carries a userCode; a browser+paste flow (Anthropic) carries acceptsCode
+  // and the user pastes the returned code back.
   const signIn = useMemo(() => sourceSignInFrom(events), [events]);
   const signInDeviceCode =
-    signIn?.phase === "device-code" && signIn.verificationUri && signIn.userCode
-      ? { verificationUrl: signIn.verificationUri, userCode: signIn.userCode }
+    signIn?.phase === "device-code" && signIn.verificationUri
+      ? {
+          verificationUrl: signIn.verificationUri,
+          ...(signIn.userCode ? { userCode: signIn.userCode } : {}),
+          ...(signIn.acceptsCode ? { acceptsCode: true } : {}),
+        }
       : null;
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
@@ -780,6 +795,7 @@ export function App() {
         onTogglePin={selection.togglePin}
         deviceCode={signInDeviceCode}
         deviceCodeSourceId={signIn?.sourceId}
+        onSubmitCode={(code) => void submitSignInCode(code)}
         onSelectModel={onSelectModel}
         onSourceAction={(id, action) => {
           // refresh re-queries each source's live /models; authenticate/re-authenticate runs the

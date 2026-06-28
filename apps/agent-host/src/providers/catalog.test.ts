@@ -169,8 +169,24 @@ test("Ollama Cloud (no pi-ai registry) resolves any live model id to a runnable 
   assert.equal(ollama?.model, "gpt-oss:120b");
 });
 
+test("the Anthropic OAuth source resolves to a Claude provider", () => {
+  const a = buildSourceProvider("anthropic", "claude-opus-4-0");
+  assert.equal(a?.kind, "cloud");
+  assert.equal(a?.id, "anthropic");
+  assert.equal(a?.model, "claude-opus-4-0");
+});
+
 test("an unknown source returns null (caller falls back to the registered providers)", () => {
   assert.equal(buildSourceProvider("nope", "whatever"), null);
+});
+
+test("Anthropic is announced as an OAuth source needing sign-in until configured", () => {
+  // `auth` configures openai-codex but not anthropic, so anthropic reads needs-auth with a sign-in action.
+  const snap = buildCatalogSnapshot(auth, {});
+  const a = snap.sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(a?.type, "oauth");
+  assert.equal(a?.status, "needs-auth");
+  assert.deepEqual(a?.actions, ["authenticate"]);
 });
 
 test("OpenRouter is announced as a gateway source", () => {

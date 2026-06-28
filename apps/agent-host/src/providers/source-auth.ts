@@ -23,19 +23,22 @@ export interface DeviceCode {
 }
 
 /**
- * A login flow: reports a device code, then resolves with the OAuth credentials to persist (or
- * rejects/aborts). Injectable so the orchestration is tested with a fake login.
+ * The callbacks a login flow drives. Two shapes are covered, both rendered by the same no-key panel:
+ *  - DEVICE-CODE (Codex): `onDeviceCode` shows a URL + a short code; the provider polls, no paste.
+ *  - BROWSER + PASTE (Anthropic): `onAuthUrl` shows a URL; after authorizing the user pastes the
+ *    returned code back, awaited via `requestCode`.
+ * Injectable so the orchestration is tested with a fake login (no network).
  */
-export type OAuthLogin = (cb: {
+export interface LoginCallbacks {
   readonly onDeviceCode: (dc: DeviceCode) => void;
+  readonly onAuthUrl: (info: { url: string; instructions?: string }) => void;
+  readonly requestCode: () => Promise<string>;
   readonly signal: AbortSignal;
-}) => Promise<Record<string, unknown>>;
+}
+export type OAuthLogin = (cb: LoginCallbacks) => Promise<Record<string, unknown>>;
 
 /** The real OpenAI Codex device-code login (pi-ai), imported lazily so tests never load the network path. */
-async function codexDeviceCodeLogin(cb: {
-  readonly onDeviceCode: (dc: DeviceCode) => void;
-  readonly signal: AbortSignal;
-}): Promise<Record<string, unknown>> {
+async function codexDeviceCodeLogin(cb: LoginCallbacks): Promise<Record<string, unknown>> {
   const { loginOpenAICodexDeviceCode } = await import("@earendil-works/pi-ai/oauth");
   const credentials = await loginOpenAICodexDeviceCode({
     onDeviceCode: (info) =>
@@ -45,10 +48,22 @@ async function codexDeviceCodeLogin(cb: {
   return credentials as unknown as Record<string, unknown>;
 }
 
-/** The sources that support a host-driven sign-in. Only the OpenAI/Codex OAuth source today; the
- *  api-key sources are configured by adding a key to the auth store, not by a sign-in flow. */
+/** The real Anthropic (Claude Pro/Max) login (pi-ai): opens a URL, then the user pastes the returned
+ *  code back. `requestCode` resolves with that code (and rejects on abort, unwinding the login). */
+async function anthropicLogin(cb: LoginCallbacks): Promise<Record<string, unknown>> {
+  const { loginAnthropic } = await import("@earendil-works/pi-ai/oauth");
+  const credentials = await loginAnthropic({
+    onAuth: (info) => cb.onAuthUrl({ url: info.url, instructions: info.instructions }),
+    onPrompt: () => cb.requestCode(),
+  });
+  return credentials as unknown as Record<string, unknown>;
+}
+
+/** The sources that support a host-driven sign-in (the OAuth subscriptions). The api-key sources are
+ *  configured by adding a key to the auth store, not by a sign-in flow. */
 const SIGN_IN_TARGETS: Readonly<Record<string, { oauthName: string; login: OAuthLogin }>> = {
   openai: { oauthName: "openai-codex", login: codexDeviceCodeLogin },
+  anthropic: { oauthName: "anthropic", login: anthropicLogin },
 };
 
 /** The sign-in target (auth.json entry + login flow) for a source, or null when it has no sign-in. */
@@ -89,6 +104,9 @@ export async function runSourceSignIn(opts: {
   readonly authPath: string;
   readonly signal: AbortSignal;
   readonly emit: (state: SourceSignInState) => void;
+  /** Awaits a user-pasted code for the browser+paste flow (Anthropic); the caller resolves it when a
+   *  code arrives. Device-code flows never call it. */
+  readonly requestCode: () => Promise<string>;
 }): Promise<void> {
   try {
     const credentials = await opts.login({
@@ -99,6 +117,14 @@ export async function runSourceSignIn(opts: {
           verificationUri: dc.verificationUri,
           userCode: dc.userCode,
         }),
+      onAuthUrl: (info) =>
+        opts.emit({
+          sourceId: opts.sourceId,
+          phase: "device-code",
+          verificationUri: info.url,
+          acceptsCode: true,
+        }),
+      requestCode: opts.requestCode,
       signal: opts.signal,
     });
     await writeOAuthCredential(opts.authPath, opts.oauthName, credentials);

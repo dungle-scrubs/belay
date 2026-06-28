@@ -37,10 +37,41 @@ const fakeLoginOk: OAuthLogin = async ({ onDeviceCode }) => {
   return { access: SECRET, refresh: "refresh-tok", expires: 123, accountId: "acct-1" };
 };
 
-test("signInTargetFor maps the OpenAI source to its codex oauth entry, and nothing else", () => {
+test("signInTargetFor maps the OAuth sources to their auth entries, and nothing else", () => {
   assert.equal(signInTargetFor("openai")?.oauthName, "openai-codex");
+  assert.equal(signInTargetFor("anthropic")?.oauthName, "anthropic");
   assert.equal(signInTargetFor("deepseek"), null, "api-key sources have no sign-in flow");
   assert.equal(signInTargetFor("nope"), null);
+});
+
+test("a browser+paste sign-in (Anthropic) emits the URL with acceptsCode, then completes on the code", async () => {
+  const states: SourceSignInState[] = [];
+  // A fake Anthropic-style login: shows a URL, awaits the pasted code, then returns credentials.
+  const fakeAnthropicLogin: OAuthLogin = async ({ onAuthUrl, requestCode }) => {
+    onAuthUrl({ url: "https://claude.ai/oauth/authorize?x=1" });
+    const code = await requestCode();
+    return { access: "anthropic-token", refresh: "r", expires: 1, via: code };
+  };
+  await runSourceSignIn({
+    sourceId: "anthropic",
+    oauthName: "anthropic",
+    login: fakeAnthropicLogin,
+    authPath,
+    signal: new AbortController().signal,
+    emit: (s) => states.push(s),
+    requestCode: async () => "PASTED-CODE",
+  });
+  assert.deepEqual(states, [
+    {
+      sourceId: "anthropic",
+      phase: "device-code",
+      verificationUri: "https://claude.ai/oauth/authorize?x=1",
+      acceptsCode: true,
+    },
+    { sourceId: "anthropic", phase: "complete" },
+  ]);
+  const stored = JSON.parse(await readFile(authPath, "utf8")) as Record<string, { type?: string }>;
+  assert.equal(stored.anthropic?.type, "oauth", "the anthropic OAuth credential is persisted");
 });
 
 test("a successful sign-in emits device-code then complete, and persists the credential", async () => {
@@ -52,6 +83,7 @@ test("a successful sign-in emits device-code then complete, and persists the cre
     authPath,
     signal: new AbortController().signal,
     emit: (s) => states.push(s),
+    requestCode: async () => "",
   });
 
   assert.deepEqual(states, [
@@ -100,6 +132,7 @@ test("a failed login emits an error phase with a sanitized detail, never throwin
     authPath,
     signal: new AbortController().signal,
     emit: (s) => states.push(s),
+    requestCode: async () => "",
   });
   assert.deepEqual(states, [{ sourceId: "openai", phase: "error", detail: "device code expired" }]);
   // Nothing was written on failure.
@@ -119,6 +152,7 @@ test("an aborted sign-in emits cancelled (not error), with no detail", async () 
     authPath,
     signal: controller.signal,
     emit: (s) => states.push(s),
+    requestCode: async () => "",
   });
   assert.deepEqual(states, [{ sourceId: "openai", phase: "cancelled" }]);
 });

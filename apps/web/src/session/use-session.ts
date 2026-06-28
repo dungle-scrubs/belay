@@ -265,6 +265,8 @@ export interface SessionActions {
   readonly signInSource: (sourceId: string) => Promise<void>;
   /** Cancel the in-flight source sign-in flow (D-065 M5). */
   readonly cancelSignIn: () => Promise<void>;
+  /** Submit the user-pasted code for a browser+paste sign-in (D-065 M5, Anthropic). */
+  readonly submitSignInCode: (code: string) => Promise<void>;
   /** Unarchive this session (D-094): clear the durable archived flag so the main UI un-gates. */
   readonly unarchive: () => Promise<void>;
 }
@@ -338,6 +340,10 @@ export function useSessionActions(sessionId: string | null): SessionActions {
     [command],
   );
   const cancelSignIn = useCallback(() => command("/source-signin-cancel", ""), [command]);
+  const submitSignInCode = useCallback(
+    (code: string) => command("/source-signin-code", code),
+    [command],
+  );
 
   // Unarchive this session (D-094): publish the durable `session.archived: false` flag so the main UI
   // gate clears and normal use resumes. The latest session.archived event wins, so this is the inverse
@@ -357,6 +363,7 @@ export function useSessionActions(sessionId: string | null): SessionActions {
     refreshCatalog,
     signInSource,
     cancelSignIn,
+    submitSignInCode,
     unarchive,
   };
 }

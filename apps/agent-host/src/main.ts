@@ -118,6 +118,8 @@ function refreshCatalog(): void {
 // the user to authorize, persists the credential, and refreshes the catalog so the source flips to
 // ready. One flow at a time - a new sign-in (or a cancel) aborts the in-flight one.
 let signInAbort: AbortController | null = null;
+// The browser+paste flow (Anthropic) awaits a user-pasted code; `/source-signin-code` resolves this.
+let signInCodeResolver: ((code: string) => void) | null = null;
 function startSourceSignIn(sourceId: string): void {
   const target = signInTargetFor(sourceId);
   if (!target) {
@@ -144,10 +146,24 @@ function startSourceSignIn(sourceId: string): void {
       }
       void emit(events.hostSourceAuth({ state }));
     },
+    // Browser+paste flow: hold the resolver until `/source-signin-code` arrives; reject on abort so
+    // the login unwinds to a cancelled phase.
+    requestCode: () =>
+      new Promise<string>((resolve, reject) => {
+        if (controller.signal.aborted) {
+          reject(new Error("aborted"));
+          return;
+        }
+        signInCodeResolver = resolve;
+        controller.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+          once: true,
+        });
+      }),
   }).then(() => {
     if (signInAbort === controller) {
       signInAbort = null;
     }
+    signInCodeResolver = null;
     // Re-read auth only on success: the new credential makes the source ready in the next catalog.
     if (completed) {
       refreshCatalog();
@@ -1755,6 +1771,12 @@ function handleEvent(message: SessionEvent): void {
       }
       if (command === "/source-signin-cancel") {
         signInAbort?.abort();
+        return;
+      }
+      // The user-pasted code for a browser+paste sign-in (Anthropic): resolve the host's pending wait.
+      if (command === "/source-signin-code") {
+        signInCodeResolver?.(args.trim());
+        signInCodeResolver = null;
         return;
       }
       // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so

@@ -9,6 +9,7 @@ import type {
   SourceSummary,
   SourceType,
 } from "@trevor/session";
+import { AnthropicProvider } from "./anthropic";
 import { CodexProvider } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { OpenAICompatProvider } from "./openai-compat";
@@ -54,6 +55,13 @@ const SOURCES: readonly SourceDef[] = [
     label: "OpenAI",
     piProvider: "openai",
     oauthName: "openai-codex",
+  },
+  {
+    sourceId: "anthropic",
+    type: "oauth",
+    label: "Anthropic (Claude)",
+    piProvider: "anthropic",
+    oauthName: "anthropic",
   },
   {
     sourceId: "deepseek",
@@ -269,7 +277,10 @@ async function fetchSourceModels(
   const baseUrl = baseUrlOf(source);
   let models: LiveModel[] = [];
   let stale = false;
-  if (baseUrl) {
+  // A live /models query needs auth: attempt it only when there's a key (api-key/gateway) or it's a
+  // local runtime (LM Studio needs none). An OAuth source has no static key here, so it uses the
+  // static registry WITHOUT a (misleading) stale flag - its token is resolved per-turn, not for listing.
+  if (baseUrl != null && (key !== null || source.type === "local")) {
     try {
       models = await fetchLiveModels(baseUrl, key);
     } catch {
@@ -350,7 +361,11 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
     return lmStudioProvider({ model: modelId, label: modelId });
   }
   if (source.type === "oauth") {
-    return new CodexProvider({ model: modelId, label: modelId });
+    // Each OAuth subscription has its own provider (different registry + token shape); Codex for
+    // OpenAI, Anthropic for Claude Pro/Max.
+    return source.sourceId === "anthropic"
+      ? new AnthropicProvider({ model: modelId, label: modelId })
+      : new CodexProvider({ model: modelId, label: modelId });
   }
   // A gateway/api-key source NOT in pi-ai's registry (Ollama Cloud) streams through its fixed
   // OpenAI-compatible base URL with a static key; the Model is constructed directly (no sibling to
