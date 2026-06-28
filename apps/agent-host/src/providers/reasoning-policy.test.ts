@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { getModel } from "@earendil-works/pi-ai/compat";
 import { test } from "vitest";
 import {
-  isGradedReasoningModel,
+  explicitOffEffortFor,
   reasoningEffortFor,
   reasoningStreamFields,
 } from "./reasoning-policy";
@@ -10,29 +10,33 @@ import {
 /**
  * `off` must actually turn reasoning OFF (D-062 follow-up). pi-ai's `streamSimple` collapses "off" to
  * an omitted parameter, so a graded-effort model falls back to its DEFAULT (medium for GPT-5.5)
- * instead of disabling. We stream through the lower-level `stream` and compute `reasoningEffort` here,
- * keyed on the model's ADAPTER (`model.api`): a graded Responses-family adapter gets an explicit
- * "none" (documented, truly disables); every other adapter disables on a FALSY effort, so "off" stays
- * undefined there (where "none" would read as enabled). Every real level is clamped to what the model
- * supports.
+ * instead of disabling. We stream through the lower-level `stream` and compute `reasoningEffort` here.
+ * The off value comes from the model descriptor's `thinkingLevelMap.off` when present; toggle-style
+ * adapters omit it and disable on a falsy effort, so "off" stays undefined there. Codex Responses is
+ * pinned as a temporary descriptor-gap fallback until its model entry carries `off: "none"`.
  */
 
 // gpt-5.5 -> api "openai-codex-responses": the graded Responses family.
 const graded = getModel("openai-codex", "gpt-5.5");
+// gpt-5.2 -> api "openai-responses": its descriptor carries off -> none directly.
+const descriptorOff = getModel("openai", "gpt-5.2");
 // deepseek -> api "openai-completions": a toggle adapter (disables on a falsy effort).
 const toggle = getModel("deepseek", "deepseek-v4-pro");
+// Claude adaptive thinking uses a different option surface; off still means omit reasoningEffort.
+const anthropic = getModel("anthropic", "claude-opus-4-7");
 
-test("the Responses-family adapter is classified graded; openai-completions is not", () => {
-  assert.equal(isGradedReasoningModel(graded), true);
-  assert.equal(isGradedReasoningModel(toggle), false);
+test("explicit off comes from the descriptor when available", () => {
+  assert.equal(explicitOffEffortFor(descriptorOff), "none");
 });
 
-test("a graded model's 'off' becomes an explicit 'none' (reasoning actually disabled, not defaulted)", () => {
+test("Codex's descriptor gap falls back to explicit 'none'", () => {
+  assert.equal(explicitOffEffortFor(graded), "none");
   assert.equal(reasoningEffortFor(graded, "off"), "none");
 });
 
-test("a toggle adapter keeps 'off' as undefined (it disables on a falsy effort)", () => {
+test("toggle and non-reasoningEffort adapters keep 'off' undefined", () => {
   assert.equal(reasoningEffortFor(toggle, "off"), undefined);
+  assert.equal(reasoningEffortFor(anthropic, "off"), undefined);
 });
 
 test("an absent level stays undefined (use the model default)", () => {

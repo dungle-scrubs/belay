@@ -1,3 +1,4 @@
+import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { LmStudioClient } from "./lmstudio-client";
 import { streamPiAiModel } from "./pi-ai";
@@ -50,7 +51,7 @@ export function lmStudioProvider(opts: {
   readonly maxContext?: number;
 }): LmStudioProvider {
   return new LmStudioProvider({
-    url: process.env.LMSTUDIO_URL ?? "http://localhost:1234/v1",
+    url: process.env.LMSTUDIO_URL ?? DEFAULT_LMSTUDIO_URL,
     model: opts.model,
     label: opts.label,
     contextCap:

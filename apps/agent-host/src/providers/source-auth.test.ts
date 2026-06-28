@@ -9,7 +9,7 @@ import {
   runSourceSignIn,
   signInTargetFor,
   writeOAuthCredential,
-} from "./source-auth";
+} from "./provider-auth";
 
 /**
  * D-065 M5 host-driven source sign-in. The orchestration is pure-ish (the login is injected), so the

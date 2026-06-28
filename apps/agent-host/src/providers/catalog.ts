@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { getModel, getModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
+import { getModel, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import type {
   CatalogEntry,
   CatalogFreshness,
@@ -9,11 +8,13 @@ import type {
   SourceSummary,
   SourceType,
 } from "@trevor/session";
-import { AnthropicProvider } from "./anthropic";
-import { CodexProvider } from "./codex";
+import { anthropicProvider } from "./anthropic";
+import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
-import { OpenAICompatProvider } from "./openai-compat";
-import { PI_KEY_PROVIDERS, PiKeyProvider } from "./pi-key";
+import { openAICompatProvider } from "./openai-compat";
+import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
+import { AUTH_PATH } from "./provider-auth";
+import { asLiveModel, fetchSourceModels, type LiveModel } from "./source-models";
 import type { Provider } from "./types";
 
 /**
@@ -96,9 +97,6 @@ const SOURCES: readonly SourceDef[] = [
   },
 ];
 
-const AUTH_PATH = `${homedir()}/.pi/auth.json`;
-const LMSTUDIO_URL = process.env.LMSTUDIO_URL ?? "http://localhost:1234/v1";
-
 /** The result of a catalog load: lightweight source summaries + the per-source model entries. */
 export interface CatalogSnapshot {
   readonly sources: readonly SourceSummary[];
@@ -135,50 +133,6 @@ function staticKeyOf(source: SourceDef, auth: Record<string, unknown>): string |
   }
   const entry = auth[source.authName] as { key?: unknown } | undefined;
   return typeof entry?.key === "string" && entry.key.length > 0 ? entry.key : null;
-}
-
-/** The provider's base URL: the fixed one (registry-less endpoints), LM Studio's local URL, else
- *  derived from any of the source's pi-ai registry models. Null when unknown. */
-function baseUrlOf(source: SourceDef): string | null {
-  if (source.type === "local") {
-    return LMSTUDIO_URL;
-  }
-  if (source.baseUrl) {
-    return source.baseUrl;
-  }
-  if (!source.piProvider) {
-    return null;
-  }
-  const model = (getModels(source.piProvider as "deepseek") as Array<{ baseUrl?: string }>)[0];
-  return typeof model?.baseUrl === "string" ? model.baseUrl : null;
-}
-
-/** One model a source advertises: its id plus an optional provider-supplied display name. */
-export interface LiveModel {
-  readonly id: string;
-  /** The provider's own display name (e.g. OpenRouter's "Anthropic: Claude Opus 4.8"), when given. */
-  readonly name?: string;
-}
-
-/** Normalizes a raw id or a {@link LiveModel} into a LiveModel (so callers can pass plain ids). */
-function asLiveModel(model: string | LiveModel): LiveModel {
-  return typeof model === "string" ? { id: model } : model;
-}
-
-/** Live OpenAI-compatible models from `{baseUrl}/models` (id + display name), bearer-authed when a
- *  key is given. The `name` field is what gives ids pi-ai doesn't know a real label, not a bare id. */
-async function fetchLiveModels(baseUrl: string, key: string | null): Promise<LiveModel[]> {
-  const res = await fetch(`${baseUrl}/models`, {
-    headers: key ? { Authorization: `Bearer ${key}` } : {},
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) {
-    throw new Error(`models query failed (${res.status})`);
-  }
-  const json = (await res.json()) as { data?: Array<{ id?: unknown; name?: unknown }> };
-  return (json.data ?? [])
-    .filter((m): m is { id: string; name?: unknown } => typeof m.id === "string" && m.id.length > 0)
-    .map((m) => ({ id: m.id, name: typeof m.name === "string" && m.name ? m.name : undefined }));
 }
 
 /** The pi-ai registry Model for an id (full object), for shape + reasoning enrichment, or undefined. */
@@ -264,35 +218,6 @@ function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshnes
   };
 }
 
-/** The RAW models a source advertises plus whether the catalog is STALE: a live `/models` query that
- *  was attempted and FAILED falls back to pi-ai's registry (or empty) but flags `stale`, so the chooser
- *  can show "(catalog stale)" + a refresh action instead of silently presenting old/missing data. */
-async function fetchSourceModels(
-  source: SourceDef,
-  key: string | null,
-): Promise<{ models: LiveModel[]; stale: boolean }> {
-  const baseUrl = baseUrlOf(source);
-  let models: LiveModel[] = [];
-  let stale = false;
-  // A live /models query needs auth: attempt it only when there's a key (api-key/gateway) or it's a
-  // local runtime (LM Studio needs none). An OAuth source has no static key here, so it uses the
-  // static registry WITHOUT a (misleading) stale flag - its token is resolved per-turn, not for listing.
-  if (baseUrl != null && (key !== null || source.type === "local")) {
-    try {
-      models = await fetchLiveModels(baseUrl, key);
-    } catch {
-      // The live query failed: fall back to the static registry below, but mark the catalog stale.
-      stale = true;
-    }
-  }
-  if (models.length === 0 && source.piProvider) {
-    models = (
-      getModels(source.piProvider as "deepseek") as Array<{ id: string; name?: string }>
-    ).map((m) => ({ id: m.id, name: m.name }));
-  }
-  return { models, stale };
-}
-
 function statusFor(configured: boolean): SourceStatus {
   return configured ? "ready" : "needs-auth";
 }
@@ -361,8 +286,8 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
     // Each OAuth subscription has its own provider (different registry + token shape); Codex for
     // OpenAI, Anthropic for Claude Pro/Max.
     return source.sourceId === "anthropic"
-      ? new AnthropicProvider({ model: modelId, label: modelId })
-      : new CodexProvider({ model: modelId, label: modelId });
+      ? anthropicProvider({ model: modelId, label: modelId })
+      : codexProviderFromConfig({ model: modelId, label: modelId });
   }
   // A gateway/api-key source NOT in pi-ai's registry (Ollama Cloud) streams through its fixed
   // OpenAI-compatible base URL with a static key; the Model is constructed directly (no sibling to
@@ -373,7 +298,7 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
     source.authName &&
     !source.piProvider
   ) {
-    return new OpenAICompatProvider({
+    return openAICompatProvider({
       id: source.sourceId,
       authName: source.authName,
       baseUrl: source.baseUrl,
@@ -388,7 +313,7 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
     source.piProvider &&
     source.authName
   ) {
-    return new PiKeyProvider({
+    return piKeyProviderFromConfig({
       id: source.sourceId,
       piProvider: source.piProvider,
       authName: source.authName,

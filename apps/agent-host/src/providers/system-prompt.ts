@@ -109,6 +109,24 @@ export interface SystemPromptContext {
   readonly cwd?: string;
 }
 
+interface PromptRegistrySnapshot {
+  readonly contextBlock: string;
+  readonly checklist: string;
+}
+
+interface PromptBlock {
+  readonly enabled?: boolean;
+  readonly render: () => string;
+}
+
+function renderBlocks(blocks: readonly PromptBlock[]): string {
+  return blocks
+    .filter((block) => block.enabled ?? true)
+    .map((block) => block.render())
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+}
+
 function executionContext(workspaceRoot: string, cwd: string): string {
   const lines = [`Workspace root: ${workspaceRoot}`];
   if (cwd !== workspaceRoot) {
@@ -136,6 +154,13 @@ export class SystemPromptBuilder {
     private readonly tasks: TaskRegistry = taskRegistry,
   ) {}
 
+  private registrySnapshot(cwd: string, workspaceRoot: string): PromptRegistrySnapshot {
+    return {
+      contextBlock: this.context.renderForPrompt(cwd, workspaceRoot),
+      checklist: this.tasks.renderForPrompt(),
+    };
+  }
+
   /**
    * Builds the system prompt for one model request. The tool inventory is rendered
    * from the same `tools` array the provider sends to the model, so the advertised
@@ -146,14 +171,15 @@ export class SystemPromptBuilder {
   build(tools: readonly ToolDef[] = [], context: SystemPromptContext = {}): string {
     const workspaceRoot = context.workspaceRoot ?? WORKSPACE_ROOT;
     const cwd = context.cwd ?? process.cwd();
+    const snapshot = this.registrySnapshot(cwd, workspaceRoot);
 
     if (tools.length === 0) {
-      return [
-        IDENTITY,
-        executionContext(workspaceRoot, cwd),
-        RESPONSE_CALIBRATION_GUIDANCE.join("\n"),
-        "No tools are available on this route; answer directly in ordinary text.",
-      ].join("\n\n");
+      return renderBlocks([
+        { render: () => IDENTITY },
+        { render: () => executionContext(workspaceRoot, cwd) },
+        { render: () => RESPONSE_CALIBRATION_GUIDANCE.join("\n") },
+        { render: () => "No tools are available on this route; answer directly in ordinary text." },
+      ]);
     }
 
     const guidance = [
@@ -164,22 +190,14 @@ export class SystemPromptBuilder {
       ...RESPONSE_CALIBRATION_GUIDANCE,
     ].join("\n");
 
-    // The eager + lazy AGENTS.md context (D-080), re-read from disk every turn so it survives compaction
-    // the same way the live checklist does (D-040). Rendered BEFORE the guidance so the reworded
-    // guardrail's "project-context block above" reference holds; omitted entirely when no AGENTS.md exists
-    // (the prompt is then byte-for-byte unchanged).
-    const contextBlock = this.context.renderForPrompt(cwd, workspaceRoot);
-    // The live checklist is re-rendered every turn, so the model's plan survives
-    // history compaction instead of living only in the (compactable) transcript.
-    const checklist = this.tasks.renderForPrompt();
-    return [
-      IDENTITY,
-      executionContext(workspaceRoot, cwd),
-      toolInventory(tools),
-      ...(contextBlock ? [contextBlock] : []),
-      guidance,
-      ...(checklist ? [checklist] : []),
-    ].join("\n\n");
+    return renderBlocks([
+      { render: () => IDENTITY },
+      { render: () => executionContext(workspaceRoot, cwd) },
+      { render: () => toolInventory(tools) },
+      { enabled: snapshot.contextBlock.length > 0, render: () => snapshot.contextBlock },
+      { render: () => guidance },
+      { enabled: snapshot.checklist.length > 0, render: () => snapshot.checklist },
+    ]);
   }
 }
 

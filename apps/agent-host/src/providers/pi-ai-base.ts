@@ -6,9 +6,9 @@ import {
 } from "@earendil-works/pi-ai/compat";
 import { Effect, Stream } from "effect";
 import { msg } from "../messages";
-import type { CredentialResolver } from "./credentials";
 import { ProviderAuthError } from "./errors";
 import { streamPiAiModel } from "./pi-ai";
+import type { CredentialResolver } from "./provider-auth";
 import {
   type ChatMessage,
   DescribableProvider,
@@ -129,4 +129,8 @@ export class PiAiProviderBase extends DescribableProvider {
       ),
     );
   }
+}
+
+export function piAiProvider(params: PiAiProviderParams): PiAiProviderBase {
+  return new PiAiProviderBase(params);
 }

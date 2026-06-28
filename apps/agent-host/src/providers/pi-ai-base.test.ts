@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { type Api, getSupportedThinkingLevels, type Model } from "@earendil-works/pi-ai/compat";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
-import type { CredentialResolver } from "./credentials";
 import { ProviderAuthError } from "./errors";
 import { PiAiProviderBase, type PiAiProviderParams } from "./pi-ai-base";
+import type { CredentialResolver } from "./provider-auth";
 
 /**
  * Characterization tests for the shared pi-ai provider base (M2 / D-005).

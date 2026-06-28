@@ -3,8 +3,8 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
-import { oauthCredentialResolver, staticKeyCredentialResolver } from "./credentials";
 import { ProviderAuthError } from "./errors";
+import { oauthCredentialResolver, staticKeyCredentialResolver } from "./provider-auth";
 
 /**
  * Characterization tests for the credential strategies (M2 / D-005).

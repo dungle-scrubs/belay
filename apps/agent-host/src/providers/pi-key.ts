@@ -1,6 +1,6 @@
 import { type Api, getModel, getModels, type Model } from "@earendil-works/pi-ai/compat";
-import { staticKeyCredentialResolver } from "./credentials";
-import { PiAiProviderBase } from "./pi-ai-base";
+import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
+import { staticKeyCredentialResolver } from "./provider-auth";
 
 /** Length of the common leading run of two ids (for picking the closest sibling model). */
 function sharedPrefix(a: string, b: string): number {
@@ -63,30 +63,28 @@ export interface PiKeyConfig {
  * A cloud provider reached through pi-ai with a bearer API key from ~/.pi/auth.json (DeepSeek,
  * Z.ai/GLM, MiniMax). It is a PiAiProviderBase with the static-key credential strategy and the
  * sibling-synthesis model lookup - the streaming/readiness/capabilities template is shared with
- * CodexProvider in the base; only the credential (a static key, not an OAuth token to refresh)
+ * Codex in the base; only the credential (a static key, not an OAuth token to refresh)
  * and the model resolution (synthesis for a not-yet-registered id) differ. Reasoning options and
  * image support come from the pi-ai model, defaulting to medium, then high, then off.
  */
-export class PiKeyProvider extends PiAiProviderBase {
-  constructor(config: PiKeyConfig) {
-    super({
-      id: config.id,
-      label: config.label,
-      model: config.model,
-      credentials: staticKeyCredentialResolver({
-        providerId: config.id,
-        authName: config.authName,
-      }),
-      resolveModel: () => resolvePiModel(config.piProvider, config.model),
-      fallback: { levels: ["off", "high"], images: false },
-      pickDefaultReasoning: (levels) =>
-        levels.includes("medium")
-          ? "medium"
-          : levels.includes("high")
-            ? "high"
-            : (levels[Math.floor(levels.length / 2)] ?? "off"),
-    });
-  }
+export function piKeyProviderFromConfig(config: PiKeyConfig): PiAiProviderBase {
+  return piAiProvider({
+    id: config.id,
+    label: config.label,
+    model: config.model,
+    credentials: staticKeyCredentialResolver({
+      providerId: config.id,
+      authName: config.authName,
+    }),
+    resolveModel: () => resolvePiModel(config.piProvider, config.model),
+    fallback: { levels: ["off", "high"], images: false },
+    pickDefaultReasoning: (levels) =>
+      levels.includes("medium")
+        ? "medium"
+        : levels.includes("high")
+          ? "high"
+          : (levels[Math.floor(levels.length / 2)] ?? "off"),
+  });
 }
 
 /**
@@ -143,12 +141,12 @@ export const PI_KEY_PROVIDERS: readonly PiKeyProviderDef[] = [
 ];
 
 /**
- * Builds the {@link PiKeyProvider} for one registry row, resolving its model from the env override
+ * Builds the pi-ai provider for one registry row, resolving its model from the env override
  * or the default. This is the single parameterized factory the three former named factories collapsed
  * into; the roster label comes from the row.
  */
-export function piKeyProvider(def: PiKeyProviderDef): PiKeyProvider {
-  return new PiKeyProvider({
+export function piKeyProvider(def: PiKeyProviderDef): PiAiProviderBase {
+  return piKeyProviderFromConfig({
     id: def.key,
     piProvider: def.piProvider,
     authName: def.piProvider,

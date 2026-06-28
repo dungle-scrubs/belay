@@ -1,4 +1,4 @@
-import { isAuthError, isContextLengthError } from "./error-classifier";
+import { isAuthFailure, isContextOverflow, isRetryable } from "./error-classifier";
 
 /**
  * The normalized provider-failure taxonomy (D-076 M1). One vocabulary across every provider shape -
@@ -37,23 +37,6 @@ export type ProviderUserAction =
   | "fix_request"
   | "compact"
   | "none";
-
-/**
- * Classes Trevor may auto-retry for the current step BEFORE any output has streamed (D-077). Every
- * other class - auth, overflow, quota, model/runtime unavailable, request rejected, unknown - is
- * terminal for the outage-retry path and surfaces its own actionable failure instead.
- */
-export const RETRYABLE_CLASSES: ReadonlySet<ProviderFailureClass> = new Set([
-  "transient_transport",
-  "rate_limited",
-  "provider_overloaded",
-  "provider_unavailable",
-]);
-
-/** Whether a class is eligible for bounded pre-output auto-retry. */
-export function isRetryableClass(cls: ProviderFailureClass): boolean {
-  return RETRYABLE_CLASSES.has(cls);
-}
 
 /**
  * Structured signals from the provider boundary, used BEFORE falling back to message matching (M2).
@@ -117,7 +100,7 @@ function verdict(
   userAction: ProviderUserAction,
   retryAfterMs?: number,
 ): ProviderFailureClassification {
-  return { class: cls, retryable: isRetryableClass(cls), userAction, retryAfterMs };
+  return { class: cls, retryable: isRetryable(cls), userAction, retryAfterMs };
 }
 
 /**
@@ -135,10 +118,10 @@ export function classifyProviderFailure(
   const text = `${code ?? ""} ${detail}`;
 
   // Terminal, strongly-signalled classes first.
-  if (status === 401 || status === 403 || isAuthError(text)) {
+  if (status === 401 || status === 403 || isAuthFailure(text)) {
     return verdict("auth", "reauth");
   }
-  if (isContextLengthError(text)) {
+  if (isContextOverflow(text)) {
     return verdict("context_overflow", "compact");
   }
   if (status === 402 || QUOTA_BILLING.test(text)) {

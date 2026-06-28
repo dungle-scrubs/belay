@@ -1,4 +1,6 @@
-import { isContextOverflow } from "@earendil-works/pi-ai/compat";
+import { isContextOverflow as piAiIsContextOverflow } from "@earendil-works/pi-ai/compat";
+import { isContextOverflowText } from "@trevor/session";
+import type { ProviderFailureClass } from "./failure-taxonomy";
 
 /**
  * The provider error + overflow classification pi-ai.ts used to inline. It is the one place that
@@ -20,7 +22,7 @@ const AUTH_ERROR =
   /\b401\b|\b403\b|unauthor|forbidden|invalid[\s_-]*(api[\s_-]*key|token|x-api-key)|authentication|api[\s_-]*key.*(invalid|expired|missing)|token.*expired|expired.*token/i;
 
 /** True when a provider error text is a refused-credential failure (re-auth needed). */
-export function isAuthError(detail: string): boolean {
+export function isAuthFailure(detail: string): boolean {
   return AUTH_ERROR.test(detail);
 }
 
@@ -29,21 +31,27 @@ export function isAuthError(detail: string): boolean {
  * varies ("context length", "tokens to keep", "larger context", "context window"); match any so the
  * adapter can surface overflow (and recover) instead of swallowing it as an empty turn.
  */
-const CONTEXT_LENGTH_ERROR = /context length|tokens to keep|larger context|context window/i;
-
 /** True when a provider error text is LM Studio's context-length rejection. */
-export function isContextLengthError(detail: string): boolean {
-  return CONTEXT_LENGTH_ERROR.test(detail);
+export function isContextOverflow(detail: string): boolean {
+  return isContextOverflowText(detail);
 }
 
 /**
- * The transient-transport / outage retry verdict moved to the normalized failure taxonomy
- * (failure-taxonomy.ts, D-076 M1): `classifyProviderFailure` now owns the full set of classes
- * (transient transport, rate limited, overloaded, provider/local-runtime/model unavailable, quota,
- * request rejected, unknown) and derives `retryable` from the class. The provider boundary calls it
- * directly; `isAuthError` / `isContextLengthError` above stay here because they also gate the
- * dedicated auth and overflow paths inside the adapter.
+ * Classes Trevor may auto-retry for the current step before any output has streamed. Every other
+ * class - auth, overflow, quota, model/runtime unavailable, request rejected, unknown - is terminal
+ * for the outage-retry path and surfaces its own actionable failure instead.
  */
+const RETRYABLE_CLASSES: ReadonlySet<ProviderFailureClass> = new Set([
+  "transient_transport",
+  "rate_limited",
+  "provider_overloaded",
+  "provider_unavailable",
+]);
+
+/** Whether a normalized provider-failure class is eligible for bounded pre-output auto-retry. */
+export function isRetryable(cls: ProviderFailureClass): boolean {
+  return RETRYABLE_CLASSES.has(cls);
+}
 
 /**
  * The "prompt doesn't fit" overflow reason, built once so the pre-request estimate guard and LM
@@ -62,7 +70,7 @@ export function promptTooBig(promptTokensEst: number, contextWindow: number): st
  * response ended normally.
  */
 export function classifyResponseOverflow(
-  message: Parameters<typeof isContextOverflow>[0] | undefined,
+  message: Parameters<typeof piAiIsContextOverflow>[0] | undefined,
   contextWindow: number,
 ): string | null {
   if (!message) {
@@ -72,7 +80,7 @@ export function classifyResponseOverflow(
   const used = (usage?.input ?? 0) + (usage?.output ?? 0);
   const hitWall =
     (message as { stopReason?: string }).stopReason === "length" && used >= contextWindow * 0.98;
-  if (hitWall || isContextOverflow(message, contextWindow)) {
+  if (hitWall || piAiIsContextOverflow(message, contextWindow)) {
     return hitWall
       ? "hit the context window mid-response — output was truncated"
       : "the prompt exceeded the model's context window";

@@ -12,13 +12,13 @@ import { debug } from "../log";
 import { msg } from "../messages";
 import {
   classifyResponseOverflow,
-  isAuthError,
-  isContextLengthError,
+  isAuthFailure,
+  isContextOverflow,
   promptTooBig,
 } from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
 import { extractFailureEvidence } from "./failure-evidence";
-import { classifyProviderFailure, isRetryableClass, redactSecrets } from "./failure-taxonomy";
+import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
 import { reasoningStreamFields } from "./reasoning-policy";
 import { buildSystemPrompt } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
@@ -298,7 +298,7 @@ async function* piAiEvents<TApi extends Api>(
       // are tool results, or surfaces a clear too-small-window message when there aren't -
       // LM Studio's message omits the sizes, so we attach the estimate and the window.
       const detail = event.error.errorMessage ?? "provider stream error";
-      if (isContextLengthError(detail)) {
+      if (isContextOverflow(detail)) {
         yield {
           type: "overflow",
           reason: promptTooBig(promptTokensEst, options.contextWindow),
@@ -307,7 +307,7 @@ async function* piAiEvents<TApi extends Api>(
       }
       // A refused credential is an auth failure, not an outage: surface it as such so the
       // UI tells the user to re-auth rather than "provider unavailable".
-      if (isAuthError(detail)) {
+      if (isAuthFailure(detail)) {
         throw new ProviderAuthError({ provider: options.provider, detail });
       }
       throw new Error(detail);
@@ -401,7 +401,7 @@ export function streamPiAiModel<TApi extends Api>(
             provider,
             detail,
             cause,
-            retryable: isRetryableClass(failure.class),
+            retryable: failure.retryable,
             classification: failure.class,
             userAction: failure.userAction,
             retryAfterMs: failure.retryAfterMs,

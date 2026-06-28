@@ -1,6 +1,6 @@
 import type { Api, Model } from "@earendil-works/pi-ai/compat";
-import { staticKeyCredentialResolver } from "./credentials";
-import { PiAiProviderBase } from "./pi-ai-base";
+import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
+import { staticKeyCredentialResolver } from "./provider-auth";
 
 /**
  * A cloud provider reached over a plain OpenAI-compatible endpoint (`/v1/chat/completions`,
@@ -54,25 +54,23 @@ export function openAICompatModel(config: {
   } as Model<Api>;
 }
 
-export class OpenAICompatProvider extends PiAiProviderBase {
-  constructor(config: OpenAICompatConfig) {
-    super({
-      id: config.id,
-      label: config.label,
-      model: config.model,
-      credentials: staticKeyCredentialResolver({
-        providerId: config.id,
-        authName: config.authName,
+export function openAICompatProvider(config: OpenAICompatConfig): PiAiProviderBase {
+  return piAiProvider({
+    id: config.id,
+    label: config.label,
+    model: config.model,
+    credentials: staticKeyCredentialResolver({
+      providerId: config.id,
+      authName: config.authName,
+    }),
+    resolveModel: () =>
+      openAICompatModel({
+        id: config.model,
+        provider: config.id,
+        baseUrl: config.baseUrl,
+        contextWindow: config.contextWindow ?? 131072,
       }),
-      resolveModel: () =>
-        openAICompatModel({
-          id: config.model,
-          provider: config.id,
-          baseUrl: config.baseUrl,
-          contextWindow: config.contextWindow ?? 131072,
-        }),
-      fallback: { levels: ["off"], images: false },
-      pickDefaultReasoning: () => "off",
-    });
-  }
+    fallback: { levels: ["off"], images: false },
+    pickDefaultReasoning: () => "off",
+  });
 }

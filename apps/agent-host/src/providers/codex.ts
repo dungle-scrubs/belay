@@ -1,6 +1,6 @@
 import { getModel } from "@earendil-works/pi-ai/compat";
-import { oauthCredentialResolver } from "./credentials";
-import { PiAiProviderBase } from "./pi-ai-base";
+import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
+import { oauthCredentialResolver } from "./provider-auth";
 
 /** The pi-ai registry + OAuth key for GPT-5.x (distinct from this provider's "codex" id). */
 const CODEX = "openai-codex";
@@ -20,25 +20,23 @@ export interface CodexConfig {
  * defaulting to medium; a model id newer than the installed registry falls back to that shape so
  * the host still starts.
  */
-export class CodexProvider extends PiAiProviderBase {
-  constructor(config: CodexConfig) {
-    super({
-      id: "codex",
-      label: config.label,
-      model: config.model,
-      credentials: oauthCredentialResolver({ providerId: "codex", oauthName: CODEX }),
-      // The model id is configurable at runtime; pi-ai validates it against its registry, so the
-      // literal cast only satisfies getModel's strict typing.
-      resolveModel: () => getModel(CODEX, config.model as "gpt-5.5"),
-      fallback: { levels: ["minimal", "low", "medium", "high", "xhigh"], images: true },
-      pickDefaultReasoning: (levels) =>
-        levels.includes("medium") ? "medium" : (levels[Math.floor(levels.length / 2)] ?? "medium"),
-    });
-  }
+export function codexProviderFromConfig(config: CodexConfig): PiAiProviderBase {
+  return piAiProvider({
+    id: "codex",
+    label: config.label,
+    model: config.model,
+    credentials: oauthCredentialResolver({ providerId: "codex", oauthName: CODEX }),
+    // The model id is configurable at runtime; pi-ai validates it against its registry, so the
+    // literal cast only satisfies getModel's strict typing.
+    resolveModel: () => getModel(CODEX, config.model as "gpt-5.5"),
+    fallback: { levels: ["minimal", "low", "medium", "high", "xhigh"], images: true },
+    pickDefaultReasoning: (levels) =>
+      levels.includes("medium") ? "medium" : (levels[Math.floor(levels.length / 2)] ?? "medium"),
+  });
 }
 
 /** Builds the Codex provider for the roster, resolving its model env (PIAI_MODEL) here so
  *  registration in buildProviders is one line. The label is the curated roster string. */
-export function codexProvider(label: string): CodexProvider {
-  return new CodexProvider({ model: process.env.PIAI_MODEL ?? "gpt-5.5", label });
+export function codexProvider(label: string): PiAiProviderBase {
+  return codexProviderFromConfig({ model: process.env.PIAI_MODEL ?? "gpt-5.5", label });
 }

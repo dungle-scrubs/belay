@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   classifyResponseOverflow,
-  isAuthError,
-  isContextLengthError,
+  isAuthFailure,
+  isContextOverflow,
+  isRetryable,
   promptTooBig,
 } from "./error-classifier";
 
@@ -14,7 +15,7 @@ import {
  * counts as overflow - so the classification can move out of the adapter without changing behavior.
  */
 
-test("isAuthError matches refused-credential signals, not generic outages", () => {
+test("isAuthFailure matches refused-credential signals, not generic outages", () => {
   for (const detail of [
     "HTTP 401 Unauthorized",
     "403 Forbidden",
@@ -23,23 +24,33 @@ test("isAuthError matches refused-credential signals, not generic outages", () =
     "your token has expired",
     "x-api-key invalid",
   ]) {
-    assert.ok(isAuthError(detail), `should classify as auth: ${detail}`);
+    assert.ok(isAuthFailure(detail), `should classify as auth: ${detail}`);
   }
   for (const detail of ["connection refused", "ECONNRESET", "503 service unavailable", "timeout"]) {
-    assert.ok(!isAuthError(detail), `should NOT classify as auth: ${detail}`);
+    assert.ok(!isAuthFailure(detail), `should NOT classify as auth: ${detail}`);
   }
 });
 
-test("isContextLengthError matches LM Studio's context-length rejection variants", () => {
+test("isContextOverflow matches LM Studio's context-length rejection variants", () => {
   for (const detail of [
     "the context length is exceeded",
     "not enough tokens to keep",
     "model requires a larger context",
     "exceeds the context window",
   ]) {
-    assert.ok(isContextLengthError(detail), `should be context-length: ${detail}`);
+    assert.ok(isContextOverflow(detail), `should be context-length: ${detail}`);
   }
-  assert.ok(!isContextLengthError("invalid api key"), "auth errors are not context-length");
+  assert.ok(!isContextOverflow("invalid api key"), "auth errors are not context-length");
+});
+
+test("isRetryable derives retry eligibility from the normalized failure class", () => {
+  assert.equal(isRetryable("transient_transport"), true);
+  assert.equal(isRetryable("rate_limited"), true);
+  assert.equal(isRetryable("provider_overloaded"), true);
+  assert.equal(isRetryable("provider_unavailable"), true);
+  assert.equal(isRetryable("auth"), false);
+  assert.equal(isRetryable("context_overflow"), false);
+  assert.equal(isRetryable("unknown"), false);
 });
 
 test("promptTooBig formats the one too-big message with the estimate and window", () => {

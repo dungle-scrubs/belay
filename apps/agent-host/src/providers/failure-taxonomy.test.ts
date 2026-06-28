@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { isRetryable } from "./error-classifier";
 import {
   classifyProviderFailure,
-  isRetryableClass,
   type ProviderFailureClass,
   redactSecrets,
 } from "./failure-taxonomy";
@@ -128,7 +128,7 @@ describe("classifyProviderFailure", () => {
   it("classifies overload (529 / 'overloaded') as provider_overloaded, retryable", () => {
     expect(classOf({ detail: "Overloaded" })).toBe("provider_overloaded");
     expect(classOf({ detail: "boom", status: 529 })).toBe("provider_overloaded");
-    expect(isRetryableClass("provider_overloaded")).toBe(true);
+    expect(isRetryable("provider_overloaded")).toBe(true);
   });
 
   it("classifies a gateway/upstream 5xx as provider_unavailable, retryable", () => {
@@ -168,7 +168,7 @@ describe("classifyProviderFailure", () => {
     expect(classOf({ detail: "invalid request: bad params", status: 400 })).toBe(
       "request_rejected",
     );
-    expect(isRetryableClass("request_rejected")).toBe(false);
+    expect(isRetryable("request_rejected")).toBe(false);
   });
 
   it("defaults an unrecognized shape to unknown and NON-retryable", () => {

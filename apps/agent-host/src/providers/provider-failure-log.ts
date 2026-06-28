@@ -1,7 +1,17 @@
 import type { Fields } from "../log";
-import type { ProviderFailureClass, ProviderUserAction } from "./failure-taxonomy";
-import { redactSecrets } from "./failure-taxonomy";
-import { failureFingerprint } from "./observation-store";
+import {
+  buildProviderFailureLogFields,
+  buildProviderFailureRecord,
+  type ProviderFailureLogInput,
+  type ProviderFailureRecord,
+  type RecordFailureInput,
+} from "./failure-record-schema";
+
+export type {
+  ProviderFailureLogInput,
+  ProviderFailureRecord,
+  RecordFailureInput,
+} from "./failure-record-schema";
 
 /**
  * The host's recent-provider-failure diagnostics (D-076 M6). Two jobs, one cohesive module:
@@ -18,25 +28,6 @@ import { failureFingerprint } from "./observation-store";
  * only - no prompt, key, token, or raw payload ever lands here.
  */
 
-/** The inputs to a structured failure log line (already-redacted detail in, sanitized fields out). */
-export interface ProviderFailureLogInput {
-  readonly provider: string;
-  readonly model: string;
-  readonly phase: string;
-  readonly classification?: ProviderFailureClass;
-  readonly retryable: boolean;
-  readonly userAction?: ProviderUserAction;
-  /** The reconnect attempt this line is about (0 = the initial attempt / a terminal with no retries). */
-  readonly attempt: number;
-  /** Whether this line is a between-retries reconnect or the terminal outcome. */
-  readonly outcome: "reconnect" | "terminal";
-  readonly status?: number;
-  readonly code?: string;
-  readonly shapeFields?: readonly string[];
-  /** A human detail; re-redacted defensively so a caller that forgot to sanitize still can't leak. */
-  readonly detail: string;
-}
-
 /**
  * The flat, greppable fields for a provider-failure log line (D-076 M6). Carries the classification,
  * retry decision, attempt, source/model, phase, and the stable fingerprint - plus the richer shape
@@ -44,46 +35,7 @@ export interface ProviderFailureLogInput {
  * Every value is shape or a sanitized string; no secret can ride here.
  */
 export function providerFailureLogFields(input: ProviderFailureLogInput): Fields {
-  const classification = input.classification ?? "unknown";
-  return {
-    provider: input.provider,
-    model: input.model,
-    phase: input.phase,
-    class: classification,
-    retryable: input.retryable,
-    action: input.userAction,
-    attempt: input.attempt,
-    outcome: input.outcome,
-    status: input.status,
-    code: input.code,
-    shapeFields: input.shapeFields?.length ? input.shapeFields.join(",") : undefined,
-    fingerprint: failureFingerprint({
-      provider: input.provider,
-      classification,
-      status: input.status,
-      code: input.code,
-      shapeFields: input.shapeFields,
-      message: input.detail,
-    }),
-    detail: redactSecrets(input.detail),
-  };
-}
-
-/** One recorded terminal provider failure (the recent-failures ring; counts/fingerprints only). */
-export interface ProviderFailureRecord {
-  readonly provider: string;
-  readonly model: string;
-  readonly classification?: ProviderFailureClass;
-  readonly userAction?: ProviderUserAction;
-  /** True when the loop exhausted its bounded reconnect budget (a transient outage that gave up);
-   *  false when the failure was a non-retryable terminal one (auth, quota, rejected, …). */
-  readonly retryExhausted: boolean;
-  /** How many reconnect attempts were made before going terminal (0 when never retryable). */
-  readonly attempts: number;
-  readonly fingerprint: string;
-  /** A sanitized one-line detail (re-redacted on record). */
-  readonly detail: string;
-  readonly at: string;
+  return buildProviderFailureLogFields(input);
 }
 
 /** The redaction-safe summary `/doctor` reads: the two terminal categories, kept distinct. */
@@ -117,21 +69,6 @@ export function summarizeFailures(
   return { retryExhausted, nonRetryableTerminal, lastRetryExhausted, lastTerminal };
 }
 
-/** The inputs the turn consumer records on a terminal provider failure (detail re-redacted here). */
-export interface RecordFailureInput {
-  readonly provider: string;
-  readonly model: string;
-  readonly classification?: ProviderFailureClass;
-  readonly userAction?: ProviderUserAction;
-  readonly retryExhausted: boolean;
-  readonly attempts: number;
-  readonly status?: number;
-  readonly code?: string;
-  readonly shapeFields?: readonly string[];
-  readonly detail: string;
-  readonly at: string;
-}
-
 /** Recent terminal provider failures, capped so the ring can't grow unbounded. */
 const MAX_RECORDS = 50;
 
@@ -144,24 +81,7 @@ export class ProviderFailureLog {
   private records: ProviderFailureRecord[] = [];
 
   record(input: RecordFailureInput): ProviderFailureRecord {
-    const record: ProviderFailureRecord = {
-      provider: input.provider,
-      model: input.model,
-      classification: input.classification,
-      userAction: input.userAction,
-      retryExhausted: input.retryExhausted,
-      attempts: input.attempts,
-      fingerprint: failureFingerprint({
-        provider: input.provider,
-        classification: input.classification ?? "unknown",
-        status: input.status,
-        code: input.code,
-        shapeFields: input.shapeFields,
-        message: input.detail,
-      }),
-      detail: redactSecrets(input.detail),
-      at: input.at,
-    };
+    const record = buildProviderFailureRecord(input);
     this.records.push(record);
     if (this.records.length > MAX_RECORDS) {
       this.records.splice(0, this.records.length - MAX_RECORDS);

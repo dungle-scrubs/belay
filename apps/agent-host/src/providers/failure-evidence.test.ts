@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  extractFailureEvidence,
-  gatewayOriginOf,
-  requestIdOf,
-  retryAfterMsOf,
-} from "./failure-evidence";
+import { extractFailureEvidence } from "./failure-evidence";
 import { classifyProviderFailure } from "./failure-taxonomy";
 
 /**
@@ -30,34 +25,44 @@ function evidenceClass(cause: unknown, opts?: { local?: boolean; gateway?: boole
 
 describe("extractFailureEvidence - retry-after", () => {
   it("reads an integer-seconds retry-after header into ms", () => {
-    expect(retryAfterMsOf({ status: 429, headers: { "retry-after": "2" } })).toBe(2000);
+    expect(
+      extractFailureEvidence({ status: 429, headers: { "retry-after": "2" } }).retryAfterMs,
+    ).toBe(2000);
   });
 
   it("reads a fetch Headers-like container via .get()", () => {
     const headers = new Map([["retry-after", "3"]]);
-    expect(retryAfterMsOf({ headers })).toBe(3000);
+    expect(extractFailureEvidence({ headers }).retryAfterMs).toBe(3000);
   });
 
   it("reads a structured numeric retryAfterMs / retryAfter (seconds) field", () => {
-    expect(retryAfterMsOf({ retryAfterMs: 1500 })).toBe(1500);
-    expect(retryAfterMsOf({ retryAfter: 4 })).toBe(4000);
+    expect(extractFailureEvidence({ retryAfterMs: 1500 }).retryAfterMs).toBe(1500);
+    expect(extractFailureEvidence({ retryAfter: 4 }).retryAfterMs).toBe(4000);
   });
 
   it("is undefined when no retry-after is present", () => {
-    expect(retryAfterMsOf({ status: 500 })).toBeUndefined();
-    expect(retryAfterMsOf("plain string error")).toBeUndefined();
+    expect(extractFailureEvidence({ status: 500 }).retryAfterMs).toBeUndefined();
+    expect(extractFailureEvidence("plain string error").retryAfterMs).toBeUndefined();
   });
 });
 
 describe("extractFailureEvidence - request id", () => {
   it("reads a top-level request_id", () => {
-    expect(requestIdOf({ status: 401, request_id: "req_abc123" })).toBe("req_abc123");
+    expect(extractFailureEvidence({ status: 401, request_id: "req_abc123" }).requestId).toBe(
+      "req_abc123",
+    );
   });
 
   it("reads error.request_id and an x-request-id header", () => {
-    expect(requestIdOf({ error: { request_id: "req_nested" } })).toBe("req_nested");
-    expect(requestIdOf({ headers: { "x-request-id": "req_hdr" } })).toBe("req_hdr");
-    expect(requestIdOf({ headers: { "anthropic-request-id": "req_anth" } })).toBe("req_anth");
+    expect(extractFailureEvidence({ error: { request_id: "req_nested" } }).requestId).toBe(
+      "req_nested",
+    );
+    expect(extractFailureEvidence({ headers: { "x-request-id": "req_hdr" } }).requestId).toBe(
+      "req_hdr",
+    );
+    expect(
+      extractFailureEvidence({ headers: { "anthropic-request-id": "req_anth" } }).requestId,
+    ).toBe("req_anth");
   });
 });
 
@@ -170,9 +175,10 @@ describe("Gateway shaped failures - origin attribution", () => {
   });
 
   it("infers upstream from an 'upstream' message even without metadata", () => {
-    expect(gatewayOriginOf({ error: { message: "upstream connect error" } }).origin).toBe(
-      "upstream",
-    );
+    expect(
+      extractFailureEvidence({ error: { message: "upstream connect error" } }, { gateway: true })
+        .origin,
+    ).toBe("upstream");
   });
 
   it("leaves origin undefined for a non-gateway source", () => {

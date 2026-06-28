@@ -37,7 +37,7 @@ export interface FailureEvidence {
  * `statusCode`, `response.status`). Returns undefined when no numeric status is present (e.g. a plain
  * transport `Error`).
  */
-export function httpStatusOf(cause: unknown): number | undefined {
+function httpStatusOf(cause: unknown): number | undefined {
   if (typeof cause !== "object" || cause === null) {
     return undefined;
   }
@@ -51,7 +51,7 @@ export function httpStatusOf(cause: unknown): number | undefined {
  * Best-effort SDK error code/type off a thrown error (`code`, `error.code`, `error.type`), preserved
  * so the classifier can use a structured signal (e.g. `insufficient_quota`) over message matching.
  */
-export function errorCodeOf(cause: unknown): string | undefined {
+function errorCodeOf(cause: unknown): string | undefined {
   if (typeof cause !== "object" || cause === null) {
     return undefined;
   }
@@ -106,7 +106,7 @@ function headerValue(cause: unknown, name: string): string | undefined {
  * error. The HTTP-date form of the header is deliberately ignored so this stays deterministic and
  * clock-independent - the SDKs we target use integer seconds.
  */
-export function retryAfterMsOf(cause: unknown): number | undefined {
+function retryAfterMsOf(cause: unknown): number | undefined {
   const header = headerValue(cause, "retry-after");
   if (header !== undefined) {
     const seconds = Number(header);
@@ -131,7 +131,7 @@ export function retryAfterMsOf(cause: unknown): number | undefined {
  * `error.request_id`/`error.requestId`, or an `x-request-id` / `request-id` / `anthropic-request-id`
  * header. A correlation id for support, never a credential.
  */
-export function requestIdOf(cause: unknown): string | undefined {
+function requestIdOf(cause: unknown): string | undefined {
   if (typeof cause === "object" && cause !== null) {
     const c = cause as Record<string, unknown>;
     const error = c.error as Record<string, unknown> | undefined;
@@ -155,7 +155,7 @@ export function requestIdOf(cause: unknown): string | undefined {
  * `error.metadata.provider_name`, or an "upstream"/"provider error" message). Only call this for a
  * gateway source; for a direct source the origin is meaningless and stays undefined.
  */
-export function gatewayOriginOf(cause: unknown): {
+function gatewayOriginOf(cause: unknown): {
   origin: "gateway" | "upstream";
   upstreamProvider?: string;
 } {
@@ -184,7 +184,7 @@ export function gatewayOriginOf(cause: unknown): {
  * shape can be observed (D-076 M5) - "which fields did this error carry?" - without copying any raw
  * payload that might hold secrets. Sorted and capped so a pathological object can't bloat the record.
  */
-export function topLevelFields(cause: unknown): readonly string[] | undefined {
+function topLevelFields(cause: unknown): readonly string[] | undefined {
   if (typeof cause !== "object" || cause === null) {
     return undefined;
   }
