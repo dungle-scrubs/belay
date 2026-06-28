@@ -1,0 +1,79 @@
+# Vim Motions UI - Progress Report
+
+> Current focus: Hard Dependencies
+
+## Summary
+
+- Current cutoff blockers: 41
+- Deferred follow-up: 0
+- Superseded checklist debt: 0
+
+## Hard Dependencies
+
+- [ ] `03-filesystem-root-taxonomy` complete before adding the `~/.trevorV2` Vim preference
+- [x] `.plans/trevor-v2` D-083/D-084 prompt composer recovery/history exists
+- [x] `.plans/trevor-v2` D-092 image attachment UX exists
+
+## M1: Config Preference Boundary
+
+- [ ] RED: Add tests for reading a Vim-mode preference from the `~/.trevorV2` config file with `TREVOR_HOME` override support
+- [ ] GREEN: Implement a typed config reader/writer or extend the existing config model for `vim.enabled`
+- [ ] RED: Add tests for missing config, malformed config, and explicit disabled state
+- [ ] GREEN: Default Vim mode to disabled and surface parse errors without blocking Trevor startup
+- [ ] REFACTOR: Document the config key and keep browser-only storage out of the preference source of truth
+
+## M2: Storybook Mode Indicator Contract
+
+- [ ] RED: Add Storybook/state tests or stories for the prompt bottom row with insert, normal, visual, disabled, shell lane, and narrow widths
+- [ ] GREEN: Render a compact stable mode indicator next to the upload `+` button when Vim mode is enabled
+- [ ] RED: Add visual states with the shell glyph replacing `+`, upload disabled, uploading, and upload error
+- [ ] GREEN: Keep indicator placement stable beside the `+`/shell glyph without composer height reflow
+- [ ] REFACTOR: Extract a small presentational component for mode indicator states
+
+## M3: `vimeejs/vimee` Evaluation Spike
+
+- [ ] RED: Build a throwaway Storybook or test harness that exercises `vimeejs/vimee` against the production textarea constraints
+- [ ] GREEN: Evaluate insert, normal, visual, cursor movement, selection, undo/redo interaction, IME/composition behavior, and textarea selection APIs
+- [ ] RED: Add comparison cases for image tokens, slash menu, shell lane, history recall, and Enter submit
+- [ ] GREEN: Record whether to adopt `vimeejs/vimee`, wrap it, or write a small local prompt-only controller
+- [ ] REFACTOR: Remove spike-only code unless it becomes the chosen implementation
+
+## M4: Prompt Vim State Machine
+
+- [ ] RED: Add unit tests for mode transitions: focus starts insert, Esc to normal, normal to visual, visual Esc to normal, normal insert commands back to insert
+- [ ] GREEN: Implement the prompt-local Vim mode state machine
+- [ ] RED: Add tests proving insert mode preserves existing textarea typing, paste, composition, and text selection behavior
+- [ ] GREEN: Route only normal/visual-mode keys through Vim handling; leave insert-mode typing native
+- [ ] REFACTOR: Keep the controller independent of React rendering so it is testable without jsdom where possible
+
+## M5: Motion and Editing Subset
+
+- [ ] RED: Add tests for first-cut motions: `h/j/k/l`, `w`, `b`, `0`, `$`, `gg`, `G`, and line-aware movement in a textarea
+- [ ] GREEN: Implement the approved first-cut normal-mode movement subset
+- [ ] RED: Add tests for visual selection, yanking/copy semantics if included, deletion/change commands if included, and unsupported-key no-ops
+- [ ] GREEN: Implement the smallest useful visual-mode subset without breaking native clipboard shortcuts
+- [ ] REFACTOR: Keep destructive edit commands conservative and explicit; defer ambiguous Vim features
+
+## M6: Composer Integration
+
+- [ ] RED: Add web tests proving Vim mode is inactive when the preference is disabled
+- [ ] GREEN: Wire enabled preference into `PromptInput` and the composer keydown path
+- [ ] RED: Add tests for slash menu, prompt shell lane, Enter submit, Shift+Enter newline, Up/Down history recall, and image-token atomic delete under Vim mode
+- [ ] GREEN: Resolve key precedence so mode handling never swallows existing composer behaviors incorrectly
+- [ ] REFACTOR: Keep App-owned slash/submit/history wiring outside the Vim controller
+
+## M7: Accessibility and Conflict Handling
+
+- [ ] RED: Add tests for screen-reader labels and keyboard accessibility of the mode indicator
+- [ ] GREEN: Give the indicator accessible text without adding visible instructional copy
+- [ ] RED: Add tests for browser/system shortcuts: Cmd/Ctrl+C, Cmd/Ctrl+V, Cmd/Ctrl+A, Escape behavior around modals/menus, and IME composition
+- [ ] GREEN: Preserve platform shortcuts and menu/modal Escape ownership
+- [ ] REFACTOR: Document conflict precedence between slash menu, command menus, shell lane, and Vim mode
+
+## M8: Storybook and E2E Verification
+
+- [ ] RED: Add Storybook interaction tests for mode transitions and indicator updates
+- [ ] GREEN: Make Storybook states pass for insert, normal, visual, shell, slash, image tokens, upload, and narrow/mobile widths
+- [ ] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting
+- [ ] GREEN: Verify live behavior with preference enabled and disabled
+- [ ] REFACTOR: Update user-facing config docs and AGENTS guidance for the Vim preference

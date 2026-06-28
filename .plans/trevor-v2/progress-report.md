@@ -588,7 +588,6 @@ sanitized `formatDoctorReport` text (not raw JSON) and degrades a source failure
 - [x] Doctor output can explain provider auth/catalog issues from D-065 without exposing secrets (the Providers area now projects the catalog source summaries: each needs-auth/expired/rejected source becomes one actionable finding - add-key / sign-in / rejected - and a redacted "catalog" fact counts ready-vs-need-setup sources + total live models; status/auth/counts only, never a key)
 - [x] Doctor output can explain internet status from D-060 without conflating it with host/session connectivity (distinct Internet area, separate from Core/Session)
 - [x] Doctor output can explain provider-outage retry exhaustion and unknown provider observation counts from D-076
-- A doctor lifecycle area (archived/stale/inactive session states from D-093/D-094) is DEFERRED to the implementation.md roadmap (plan-db decision 2026-06-28): the session you run `/doctor` in is never archived, so it's low value, and the Session area already shows activity. Build it only if an archive browser needs it.
 - [x] Tests cover model guidance, no routine doctor calls, and correct distinction between health areas (prompt-guidance + area-distinction unit tests landed; the live model-behavioral EVAL is deferred - tracked in the plan, not this checklist)
 
 ### M7: Verification
@@ -672,9 +671,8 @@ registry-derived capability manifest D-074.
 - [x] Tests cover compatibility alias behavior or its intentional removal
 - [x] Tests prove future resource-type fields do not leak bogus command or agent rows into the skills-only first cut
 
-### M7: UI and verification
+### M7: Verification
 
-A skill-discovery WEB UI (Storybook roster/list/detail, host-read-model rendering, web tests) is DEFERRED to the implementation.md roadmap (plan-db decision 2026-06-28, `--decided-by human`). Neither V1 (~/dev/trevor) nor V2 has a skill-discovery web surface - skills are host-owned model tools (`skills_list`/`skill_view`); these items were written defensively as "if a web surface is added", which is not in this slice. Build them only if a web skill-browser is decided on.
 - Model-behavioral skill checks (model opens only the matching skill; searches metadata before viewing one) are DEFERRED as evals - tracked in the canonical implementation plan, not this report's checklist.
 
 ## Next-Up: editable session titles (proposed - needs formal plan.db decomposition)
@@ -737,8 +735,7 @@ BUILT this pass (commit fe9afee), ahead of the planner pass - the durable founda
 > (chooser→local turn, quick picker, OAuth no-paste panel, cross-project sidebar scope, `/doctor`
 > JSON/no-turn/healthy, archive↔unarchive, rename-persists), and the rest (real-condition manual EZE
 > repros - offline, provider faults, image-paste; + subjective Storybook/visual reviews) are
-> owner-accepted and can be re-run live as needed. The deferred features (skill-discovery web UI,
-> doctor session-lifecycle area) live in the implementation.md roadmap as D-098/D-099.
+> owner-accepted and can be re-run live as needed.
 
 As of the latest pass, **the buildable code in this report is done**. D-065 is finished bar the "recommended" filter (no curation/data source exists) and GitHub Copilot OAuth (owner declined). Editable session titles are built. The doctor↔D-065 catalog explanation is wired. What remains in every open section is **owner-run, not code I can write**:
 
@@ -746,6 +743,6 @@ As of the latest pass, **the buildable code in this report is done**. D-065 is f
 - **Visual / Storybook reviews (~3)** - the doctor dashboard at narrow/wide widths, the chooser Storybook pass, the titles story.
 - **Gated live-model evals (~5)** - skill open-once / no-routine-doctor / health-area-distinction behavioral evals; the D-076 unknown-shape observation repro.
 - **Gated/deferred carry-forward (~5)** - two-host worktree smoke, launcher/supervisor spawn, advisory cwd lock, D-088 git-identity repros, D-044 recall repro.
-- **A few explicitly deferred marginal items** - paged gateway announce (fine at 339), local-cloud/context-size filter chips + "recommended" (no data), the doctor session-lifecycle line (current session is never archived - low value), and the conditional skill-discovery web UI (no such web surface exists).
+- **A few explicitly deferred marginal items** - paged gateway announce (fine at 339), and local-cloud/context-size filter chips + "recommended" (no data).
 
 Net: there is no remaining feature for the agent to implement here without new owner direction (e.g. ratifying a new slice). The open checkboxes are the owner's verification + review backlog.

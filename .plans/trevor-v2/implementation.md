@@ -1191,10 +1191,13 @@ transport faults instead of context pressure.
   "reconnecting… (attempt k/3)" marker; the terminal error block is unchanged and appears only when the
   budget is exhausted or the failure is non-retryable. Correlated by `runId`.
 - **Unknown-shape observation capture.** Provider failure shapes that are unknown or low-confidence are stored as
-  redacted, deduped observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so the classifier can
-  improve over time. The record keeps provider/source/model, phase, status/code fields, sanitized message,
-  top-level shape/field names, output-started flag, classifier verdict, retry decision, and a fingerprint. It
-  never stores prompts, API keys, auth headers, raw response bodies, or raw tool outputs by default.
+  redacted, deduped observations so the classifier can improve over time. The first D-076 implementation writes
+  the provider observation file under `TREVOR_HOME`; D-096 has been extracted to
+  `.plans/23-local-observation-corpus` to migrate this diagnostic corpus under `TREVOR_STATE_HOME`
+  (`${XDG_STATE_HOME:-~/.local/state}/trevorV2`) and generalize it. The record keeps provider/source/model,
+  phase, status/code fields, sanitized message, top-level shape/field names, output-started flag, classifier
+  verdict, retry decision, and a fingerprint. It never stores prompts, API keys, auth headers, raw response
+  bodies, or raw tool outputs by default.
 - **Validation.** Deterministic with `@effect/vitest` + `TestClock` (no real waits) and a fake provider
   that fails N times then succeeds: a transient drop before the first token recovers transparently; a drop
   after output goes terminal; an interrupt during backoff cancels cleanly; auth/overflow paths unchanged.
@@ -1215,14 +1218,19 @@ Sequence as each is picked up (no hard order locked here):
   switch semantics with resume.
 - **Session lifecycle controls** are specified above as D-094: cancel vs stop vs kill semantics, archive/unarchive
   metadata, CLI list/open/archive/unarchive/stop/kill, debug-only lifecycle UI, and normal UI archive filtering.
-- **Headless CLI / TypeScript SDK / harness** is deferred below as D-095: Trevor is already headless-capable at
-  the transport/runtime layer, but a first-class CLI, TypeScript SDK, and code-harness API need later discussion
-  before decomposition.
-- **Local observation corpus / classifier learning** is deferred below as D-096: provider failure observations
-  are the first concrete use, with later expansion to tool-result patterns, repeated calls, attempts-to-goal
-  signals, prompt/harness guidance, and possible future task classification.
-- **Vim motions in UI/UX** is deferred below as D-097: evaluate `vimeejs/vimee` and start small with prompt input
-  motions before broader UI adoption.
+  The future archive browser and permanent-delete surface are extracted to
+  `.plans/26-archive-browser-and-delete`: it is Storybook-first, uses the model chooser's transcript-takeover
+  pattern with a top-left back arrow, makes the archive area visually explicit, and exposes unarchive plus
+  strong-confirmation permanent delete only from that archive area.
+- **Headless CLI / TypeScript SDK / harness** is extracted to `.plans/22-headless-cli-sdk-harness`: Trevor is
+  already headless-capable at the transport/runtime layer; the extracted plan defines the SDK package boundary,
+  CLI-over-SDK split, local orchestration limits, and harness/eval usage.
+- **Local observation corpus / classifier learning** is extracted to `.plans/23-local-observation-corpus`:
+  provider failure observations are the first concrete producer, with storage corrected to XDG diagnostic state
+  and later expansion gated behind explicit inspect/export/delete and non-consumption boundaries.
+- **Vim motions in UI/UX** is extracted to `.plans/24-vim-motions-ui`: start with prompt-input-only Vim
+  behavior, preference-gated through the `~/.trevorV2` config, Storybook-first, with insert as the starting
+  mode, Esc to normal, and visual mode reachable from normal.
 - **Prompt composer recovery/history** is specified above as D-083/D-084: debounced tab-local draft
   persistence plus terminal-style Up-arrow/Down-arrow prompt recall for submitted prompts and bang shell
   commands.
@@ -1271,7 +1279,7 @@ Artifacts (item 1) are **done** (§5). Remaining:
 ### Phase 3 - desktop shell (Tauri v2) <!-- D-021 -->
 
 Package `apps/web` as a self-contained desktop app: one window managing many sessions (sidebar/tabs), each
-bound to a cwd like a single-process harness. **Not milestone-decomposed yet** - decompose at phase entry.
+bound to a cwd like a single-process harness. This phase is extracted to `.plans/30-desktop-shell-tauri`.
 - <!-- D-021 --> **Shell = Tauri v2.** The OS webview renders `apps/web`; the Tauri (Rust) core is the host
   supervisor. Electron rejected for heft/coupling.
 - <!-- D-022 --> **One host runtime per session/cwd.** The supervisor spawns/restarts/tears down one host
@@ -1308,10 +1316,15 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Discovery registry + skill drill-in** | H-166, H-167, H-168 | <!-- D-075 --> deferred. Host-owned, UI-agnostic discovery for skills, slash commands, command families, and later agents. Preserve ambient skill awareness through a compact prompt roster, but move search/detail/full bodies behind `skills_list(query?, limit?)` and `skill_view(skillId)` |
 | **Subagents: teams, verifier, bounded child, mutating background agents** | H-165 | general-purpose + explorer + ephemeral definitions + inline/async read-only background **promoted to §6 (D-045…D-049)**; multi-agent **teams**, the **verifier** flavor, **bounded-child**, and mutating background agents remain future. Mutating background agents depend on managed worktrees + cwd locks + merge protocol |
 | **Shell interpolation (commands)** | H-175 | done for skills; extend `!cmd` / ` ```! ` to command files, same gating |
-| **`shell.promote`** | H-035 | auto-promote-on-timeout: route bash/`/shell` through the supervisor and adopt a command that outlives its timeout as a tracked `pN` job. Sequenced after the Tasks tool (which is done) |
-| **Headless CLI / TypeScript SDK / harness** | new | <!-- D-095 --> deferred discussion. V2 is currently headless-capable at the session transport and host-runtime layer, but the productized access surface is not designed yet. Later discussion must cover CLI commands, TypeScript package boundaries, launch/attach semantics, prompt streaming, session inventory/lifecycle, artifact upload, cancellation, safety, and test-harness ergonomics. This is separate from the dropped single-prompt `SDK ask()` shortcut and does not reintroduce that API by default |
-| **Local observation corpus / classifier learning** | new | <!-- D-096 --> deferred pattern. Store redacted, deduped unclassified observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so Trevor can improve classifiers and harness guidance over time. Provider failure observations from D-076 are the first use; later candidates include tool-result patterns, repeated tool calls, number of attempts to reach a goal, prompt/harness guidance signals, and possible model task classification. Observations are inspectable on demand and never automatically injected into prompts |
-| **Vim motions in UI/UX** | new | <!-- D-097 --> deferred discussion. Evaluate https://github.com/vimeejs/vimee for adding Vim-style motions to Trevor UI/UX, starting small with the prompt input before considering broader navigation or editing surfaces |
+| **`shell.promote`** | H-035 | extracted to `.plans/29-shell-promote-background-jobs`. Auto-promote eligible overlong bash/prompt-shell commands into supervisor-tracked `pN` jobs, surface them in a V1-inspired task/background support panel, and align promoted-process inspection with the tool-detail takeover |
+| **Headless CLI / TypeScript SDK / harness** | new | <!-- D-095 --> extracted to `.plans/22-headless-cli-sdk-harness`. V2 is currently headless-capable at the session transport and host-runtime layer; the extracted plan covers CLI commands, TypeScript package boundaries, launch/attach semantics, prompt streaming, session inventory/lifecycle, artifact upload, cancellation, safety, and test-harness ergonomics. This is separate from the dropped single-prompt `SDK ask()` shortcut and does not reintroduce that API by default |
+| **Local observation corpus / classifier learning** | new | <!-- D-096 --> extracted to `.plans/23-local-observation-corpus`. Store redacted, deduped observations under diagnostic state (`TREVOR_STATE_HOME`, default `${XDG_STATE_HOME:-~/.local/state}/trevorV2`) so Trevor can inspect classifier and harness evidence over time. Provider failure observations from D-076 are the first use; later candidates include tool-result patterns, repeated tool calls, number of attempts to reach a goal, prompt/harness guidance signals, and possible model task classification. Observations are inspectable/exportable/deletable on demand and never automatically injected into prompts |
+| **Vim motions in UI/UX** | new | <!-- D-097 --> extracted to `.plans/24-vim-motions-ui`. Evaluate https://github.com/vimeejs/vimee as an implementation candidate, but start with prompt-input-only behavior before broader navigation or editing surfaces. Vim mode starts in insert, Esc enters normal, normal can enter visual, the mode indicator appears next to the `+` upload button, and the feature is preference-gated via `~/.trevorV2` config |
+| **Archive browser and permanent delete** | D-094 follow-up | extracted to `.plans/26-archive-browser-and-delete`. The archive browser is a Storybook-first transcript-takeover surface like the model chooser, with a top-left back arrow, clear archive-area identity, unarchive actions, and permanent delete behind strong confirmation only from this archive area |
+| **Compact transcript layout** | new | extracted to `.plans/27-compact-transcript-layout`. The compact transcript mode is Storybook-first, user-toggleable at any time, and keeps user prompts/final assistant responses readable while collapsing thinking, tool use, status, command, and other non-primary transcript items into consistent one-line rows |
+| **Tool detail takeover** | new | extracted to `.plans/28-tool-detail-takeover`. Detail-eligible transcript items can open a Storybook-first transcript-takeover inspection view with a top-left back arrow and Escape-to-chat behavior; the view shows live running/streaming tool details for bash, filesystem tools, web/docs, MCP, and fallback tools where data is available |
+| **File mention autocomplete** | new | extracted to `.plans/31-file-mention-autocomplete`. Typing `@` in the composer opens a fuzzy, workspace-confined file picker using the same autocomplete pattern as slash commands. The first slice inserts visible workspace-relative `@path` mentions and records structured selected-path metadata; it does not automatically read or inject file contents |
+| **Action shimmer status** | new | extracted to `.plans/32-action-shimmer-status`. Replace generic `working...` pulse placeholders with assistant-ui-style shimmer text whose label reflects the active structured action: thinking, applying steering, reading, searching, running shell, classifying, reconnecting, recovering, compacting, or tool progress |
 
 **Nested command menu / `/style` (extracted).** The former D-072 output-style registry item has been moved to
 `.plans/18-nested-command-menu`. The extracted plan reframes the work as a reusable nested command-menu pattern
@@ -1624,11 +1637,10 @@ first control surface is CLI plus debug-mode UI, with normal UI limited to filte
 main sidebar/resume views. D-094 is authored here in markdown and still needs syncing into `plan.db` alongside
 D-040-D-093._
 
-_Updated 2026-06-26: **Headless CLI / TypeScript SDK / harness** added to the unsequenced backlog as D-095.
-Trevor is already headless-capable at the transport/runtime layer, but the first-class CLI, TypeScript SDK, and
-code-harness API remain a later discussion before decomposition. This is explicitly separate from the dropped
-single-prompt `SDK ask()` shortcut. D-095 is authored here in markdown and still needs syncing into `plan.db`
-alongside D-040-D-094._
+_Updated 2026-06-28: **Headless CLI / TypeScript SDK / harness** extracted from D-095 into
+`.plans/22-headless-cli-sdk-harness`. Trevor is already headless-capable at the transport/runtime layer; the
+first-class CLI, TypeScript SDK, and code-harness API now have their own numbered implementation plan. This is
+explicitly separate from the dropped single-prompt `SDK ask()` shortcut._
 
 _Updated 2026-06-26: **Provider auth/catalog + full model chooser** (D-065) clarified before decomposition.
 The chooser is source/model selection for one active chat model, not routing. The UI replaces the transcript and
@@ -1639,24 +1651,61 @@ larger left side opens the full chooser, while the right chevron keeps a small c
 recently used models. Both hit targets should use `cursor-pointer`, with a visible vertical divider between
 the quick-popup chevron and full-chooser regions._
 
-_Updated 2026-06-26: **Provider-outage auto-reconnect recovery** (D-076-D-079) clarified before decomposition.
-Provider adapters normalize inconsistent OAuth, SDK, gateway, direct API, and local-runtime failures into
-Trevor's typed failure taxonomy; unknown or low-confidence provider failure shapes are captured as redacted,
-deduped observations under Trevor home (`TREVOR_HOME`, default `~/.trevorV2`) so classifier rules can be improved
-from real evidence without storing prompts, secrets, auth headers, raw response bodies, or raw tool outputs._
+_Updated 2026-06-28: **Provider-outage auto-reconnect recovery** (D-076-D-079) now treats its existing
+provider-observation file as the first producer for the extracted D-096 corpus. The original implementation
+stores the file under `TREVOR_HOME`; `.plans/23-local-observation-corpus` owns the migration to
+`TREVOR_STATE_HOME` diagnostic state._
 
-_Updated 2026-06-26: **Local observation corpus / classifier learning** added to the unsequenced backlog as
-D-096. Provider failure observations are the first concrete use, but the broader deferred pattern also covers
-tool-result patterns, repeated tool calls, attempts-to-goal signals, prompt/harness guidance, and possible future
-task classification. **Vim motions in UI/UX** added to the unsequenced backlog as D-097, starting later with
-prompt input motions and evaluating `vimeejs/vimee` before broader UI adoption._
+_Updated 2026-06-28: **Local observation corpus / classifier learning** extracted from D-096 into
+`.plans/23-local-observation-corpus`. Provider failure observations are the first concrete use; the extracted
+plan corrects the storage root to `TREVOR_STATE_HOME`, adds inspect/export/delete control surfaces, and keeps
+classifier/runtime consumption explicitly out of scope._
 
-_Updated 2026-06-28 (plan-db decision, `--decided-by human`): two items pulled OUT of
-`progress-report.md`'s active checklist into this unsequenced backlog, since both were written
-defensively for surfaces not in the current slice. **Skill-discovery web UI** added as D-098 - a
-Storybook-first roster/list/detail browser over the host's `skills_list`/`skill_view` read models,
-with web tests for read-model rendering (no filesystem scans). Neither V1 (`~/dev/trevor`) nor V2 has
-a skill-discovery web surface today; skills are host-owned model tools, so this is build-only-if a web
-skill-browser is decided on. **Doctor session-lifecycle area** added as D-099 - surface
-archived/stale/inactive session states (from D-093/D-094) in `/doctor`; low value while the session
-you run `/doctor` in is never archived, so build it only if an archive browser needs it._
+_Updated 2026-06-28: **Vim motions in UI/UX** extracted from D-097 into `.plans/24-vim-motions-ui`. The first
+cut is prompt-input-only, Storybook-first, preference-gated via the `~/.trevorV2` config, starts in insert mode,
+uses Esc to enter normal mode, and reaches visual mode only through normal mode. The mode indicator lives next
+to the `+` upload button._
+
+_Updated 2026-06-28: **Keyboard shortcuts / hotkeys** extracted into `.plans/25-keyboard-shortcuts`. The plan
+uses `apps/web/HOTKEYS.md` as the browser/OS policy ledger, depends on Vim-mode keyboard ownership, opens the
+command palette with `Mod+K`, starts with a persisted Vim toggle command backed by the `~/.trevorV2` config,
+and requires frontmost-surface focus guards so shortcuts never affect UI behind the active modal/menu/panel._
+
+_Updated 2026-06-28: **Archive browser and permanent delete** extracted into
+`.plans/26-archive-browser-and-delete`. The archive browser follows the full model chooser's transcript-takeover
+UX rather than an overlay: it replaces the chat transcript/prompt area, keeps a top-left back arrow, clearly
+labels the user as being in the archive area, and supports unarchive plus strong-confirmation permanent delete
+from that archive-only surface._
+
+_Updated 2026-06-28: **Compact transcript layout** extracted into `.plans/27-compact-transcript-layout`. The
+feature is a Storybook-first display toggle that can be changed at any time. User prompts and final assistant
+responses remain readable; thinking, tool use, status rows, command output, and similar non-primary transcript
+items collapse into consistent one-line rows with status/action/progress affordances._
+
+_Updated 2026-06-28: **Tool detail takeover** extracted into `.plans/28-tool-detail-takeover`. The feature uses
+the same transcript-takeover pattern as the model chooser and archive browser: a detail-eligible transcript item
+opens a focused detail view with a top-left back arrow, Escape returns to chat, and running/streaming tools update
+live in the detail view where tool events provide enough data._
+
+_Updated 2026-06-28: **Shell promotion / background jobs** extracted into
+`.plans/29-shell-promote-background-jobs`. The plan connects existing bash/prompt-shell execution to the existing
+`ProcessSupervisor` so eligible long-running commands can become tracked `pN` jobs. It also brings forward the
+V1 support-surface layout: tasks on the left and background activity on the right when width permits; background
+subagents above promoted/background processes; one column when only one section exists or space is constrained._
+
+_Updated 2026-06-28: **Desktop shell / Tauri v2** extracted into `.plans/30-desktop-shell-tauri`. The extracted
+plan keeps D-014 intact: Tauri supervises desktop lifecycle, shared services, windows, packaging, and host
+sidecars, while web and host still communicate only through the session transport. It covers runtime backend
+config, Tauri CSP/capabilities, spawnable host packaging, one host per session/cwd, desktop session restore,
+packaging/signing/update setup, and desktop smoke/e2e validation._
+
+_Updated 2026-06-28: **File mention autocomplete** extracted into
+`.plans/31-file-mention-autocomplete`. The feature adds an `@path` composer picker backed by host-owned,
+workspace-confined fuzzy file search and reuses the slash-command autocomplete pattern. The first slice inserts
+visible path mentions and preserves structured selected-path metadata; automatic file-content injection remains
+out of scope for this plan._
+
+_Updated 2026-06-28: **Action shimmer status** extracted into `.plans/32-action-shimmer-status`. The feature
+replaces generic `working...` pulse-dot placeholders with assistant-ui-style shimmer text whose label is derived
+from structured turn/tool/progress events. V1's `Working...`, `Exploring...`, `Classifying with ...`, steering,
+and tool-progress vocabulary is reference material, not a direct port._
