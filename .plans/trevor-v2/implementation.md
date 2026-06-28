@@ -115,8 +115,8 @@ what V2's scope cuts changed.
 | **Assistant output style** | Named presentation preference selected through the nested command menu to shape response density and structure | Extracted to `.plans/18-nested-command-menu`; presentation-only, must not change model routing, work kind, execution mode, tool access, agent selection, or validation policy |
 | **Doctor snapshot** | Structured host health report with areas, checks, findings, evidence, and next actions | <!-- D-073 --> `/doctor` should render actionable diagnostics, not raw host/debug state dumps |
 | **Capability manifest** | Registry-derived self-description of Trevor tools, commands, contracts, agents, skills, runtime surfaces, and the `trevor-expert` explainer skill | Extracted to `.plans/19-capability-manifest-and-trevor-expert`; full/compact export plus built-in expert consumer; never a permission system or giant prompt dump |
-| **Subagent** | Delegated agent in its own isolated context | <!-- D-045 --> **general-purpose + explorer + ephemeral definitions** being built (D-045…D-049); verifier / teams / bounded-child deferred |
-| **Bounded child** | Internal constrained helper; host-owned, returns a structured artifact | <!-- D-033 --> Backlog |
+| **Subagent** | Delegated agent in its own isolated context | <!-- D-045 --> **general-purpose + explorer + ephemeral definitions** being built (D-045…D-049); verifier / teams deferred |
+| **Bounded child** | Internal constrained helper; host-owned, returns a structured artifact | Extracted to `.plans/47-bounded-child-takeover`; still needs V1/V2 provenance audit before implementation |
 | **Steering / hard steering** | User control mid-request; ordinary = recorded via turn/run; hard = interrupts the provider path | - |
 | **Transcript** | Durable record of turns/runs/tools/events; primary truth | The Richter event log |
 | **Prompt view** | The filtered subset of session state actually sent to the model | - |
@@ -416,8 +416,8 @@ the substrate session recall (D-044) later rides on.
     V1 "worker", which was vague - the reference set in `~/dev/cc` has no "worker", just this catch-all).
   - **explorer** - **read-only** (no write/edit tools); simple, for fan-out search/reading.
   Deferred: **verifier** (independent adversarial review - tackled separately; note inline self-validation
-  stays cut, §4, but a verifier *subagent* is distinct), **teams** (multi-agent fan-out), **bounded child**
-  (constrained structured-artifact helper). All stay backlog.
+  stays cut, §4, but a verifier *subagent* is distinct) and **teams** (multi-agent fan-out). Bounded child
+  is extracted separately to `.plans/47-bounded-child-takeover`.
 - <!-- D-046 --> **File-based discovery**, like skills/commands. An agent definition is a file with
   `{ description, tools, skills?, body = system prompt }`; the host discovers built-in + user-defined agents
   and announces them (the model picks by `description`). `tools` and `skills` are separate allow-lists:
@@ -1326,7 +1326,7 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Transcript Mermaid rendering** | new | extracted to `.plans/36-transcript-mermaid-rendering`. Render explicit fenced `mermaid` blocks in assistant transcript markdown with safe fallback/source controls, Storybook coverage, and system-prompt guidance that uses Mermaid for inline visual explanations while leaving Lucid/artifacts for reviewable iteration |
 | **Ghosted reasoning rendering** | new | extracted to `.plans/37-ghosted-reasoning-rendering`. Replace the simple `ThinkingMessage` treatment with an assistant-ui-inspired ghosted reasoning surface while preserving `assistant.thinking`, the `show thinking` toggle, transcript scroll behavior, and a compact-mode integration contract |
 | **Syntax highlighting** | new | extracted to `.plans/38-syntax-highlighting`. Add explicit-language syntax highlighting to transcript markdown code blocks while preserving copy behavior, DOMPurify safety, Mermaid language precedence, plain fallback, Storybook coverage, and streaming performance |
-| **Subagents: teams, verifier, bounded child, mutating background agents** | H-165 | deferred later by user request. General-purpose + explorer + ephemeral definitions + inline/async read-only background are already promoted to §6 (D-045…D-049); remaining multi-agent **teams**, **verifier** flavor, **bounded-child**, and mutating background agents stay parked. Mutating background agents depend on managed worktrees + cwd locks + merge protocol |
+| **Subagents: teams, verifier, mutating background agents** | H-165 | deferred later by user request. General-purpose + explorer + ephemeral definitions + inline/async read-only background are already promoted to §6 (D-045…D-049); **bounded-child** has moved to `.plans/47-bounded-child-takeover`; remaining multi-agent **teams**, **verifier** flavor, and mutating background agents stay parked. Mutating background agents depend on managed worktrees + cwd locks + merge protocol |
 
 **Nested command menu / `/style` (extracted).** The former D-072 output-style registry item has been moved to
 `.plans/18-nested-command-menu`. The extracted plan reframes the work as a reusable nested command-menu pattern
@@ -1406,8 +1406,8 @@ event with a per-fold delta manifest; tool-less ~1k summary on the turn model wi
 a post-subagents layer (D-044: isolated sub-agent, BM25 + neighborhood expansion over compacted-away current-session detail plus other durable sessions for the same project).
 **Subagents** promoted from backlog to the feature after compaction (D-045…D-049: reusable
 general-purpose + explorer agents, file-based discovery, inline + read-only background modes, strict context
-isolation with forkable child runs, and runtime-minted ephemeral definitions; verifier/teams/bounded-child stay
-backlog).
+isolation with forkable child runs, and runtime-minted ephemeral definitions; verifier/teams stay backlog;
+bounded-child moved to `.plans/47-bounded-child-takeover`).
 **Concurrent read-only tool execution** added as a small near-term phase after compaction (D-050: read-only
 tools run concurrently under a bounded cap, mutating tools stay serial barriers, tool purity declared per-tool
 via a defaulted `readOnly` flag and derived from the registry, results committed to the conversation in call
