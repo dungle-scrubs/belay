@@ -7,7 +7,7 @@ import {
   type SessionActivity,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { GitBranch, History, X } from "lucide-react";
+import { ArrowLeft, GitBranch, History } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -733,7 +733,7 @@ export function App() {
       sourceLabels={selection.sourceLabels}
       modelLabels={selection.modelLabels}
       activeModel={sendModel}
-      onOpenChooser={() => setChooserOpen(true)}
+      onOpenChooser={() => setChooserOpen((open) => !open)}
       onSelectModel={onSelectModel}
       reasoningLevels={activeReasoningLevels}
       reasoning={activeReasoning}
@@ -749,17 +749,17 @@ export function App() {
   // while open so it never costs anything in the common case.
   const chooser = chooserOpen ? (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between px-1 py-2">
-        <span className="text-label tracking-wider uppercase text-muted-foreground">
-          Choose a model
-        </span>
+      {/* A back arrow on the upper LEFT returns to the chat without changing the selection (the model
+        button also toggles the chooser closed). The chooser's own "Choose a model" heading is the title. */}
+      <div className="flex shrink-0 items-center px-1 py-2">
         <button
           type="button"
           onClick={() => setChooserOpen(false)}
-          aria-label="Close model chooser"
-          className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          aria-label="Back to chat"
+          className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-label tracking-wider uppercase text-muted-foreground transition-colors hover:text-foreground"
         >
-          <X className="size-4" />
+          <ArrowLeft className="size-4" />
+          Back
         </button>
       </div>
       <ModelChooser
