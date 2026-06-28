@@ -1,12 +1,12 @@
 # Continuation Handoff - Progress Report
 
 > Scope: new standalone planner plan for migrating V1 continuation handoff into Trevor V2. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 1, M1 - command protocol and parser.
+> Current focus: Phase 1, M2 - direct handoff flow (M1 command parser + protocol events done).
 
 ## Summary
 
-- Current cutoff blockers: 65
-- Completed: 0
+- Current cutoff blockers: 60
+- Completed: 5
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -14,11 +14,11 @@
 
 ### M1: Command protocol and parser
 
-- [ ] RED: Add parser tests for `/handoff`, `/handoff --generate`, `/handoff --direct`, empty direct prompt, and quoted arguments
-- [ ] GREEN: Implement command parsing and command inventory spec
-- [ ] RED: Add protocol tests for handoff request and lifecycle events
-- [ ] GREEN: Add typed handoff event constructors and decoders
-- [ ] REFACTOR: Keep handoff argument parsing separate from host orchestration
+- [x] RED: Add parser tests for `/handoff`, `/handoff --generate`, `/handoff --direct`, empty direct prompt, and quoted arguments
+- [x] GREEN: Implement command parsing and command inventory spec
+- [x] RED: Add protocol tests for handoff request and lifecycle events
+- [x] GREEN: Add typed handoff event constructors and decoders
+- [x] REFACTOR: Keep handoff argument parsing separate from host orchestration
 
 ### M2: Direct handoff flow
 

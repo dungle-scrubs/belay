@@ -774,3 +774,105 @@ test("LIFECYCLE_TYPES names exactly the lifecycle events, drawn from their const
   assert.equal(events.assistantCompleted({ runId: "r", text: "x" }).type, LIFECYCLE_TYPES[1]);
   assert.equal(events.userCommand({ command: "/x", args: "" }).type, LIFECYCLE_TYPES[2]);
 });
+
+// --- continuation handoff events (02, M1) ---
+
+test("handoff.requested round-trips mode/source/prompt, defaulting proposed to false", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.handoffRequested({
+        handoffId: "h1",
+        mode: "direct",
+        sourceSessionId: "s-src",
+        prompt: "do the thing",
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "handoff.requested",
+    handoffId: "h1",
+    mode: "direct",
+    sourceSessionId: "s-src",
+    prompt: "do the thing",
+    proposed: false,
+  });
+});
+
+test("a model-proposed generate handoff carries proposed:true and omits prompt", () => {
+  const built = events.handoffRequested({
+    handoffId: "h2",
+    mode: "generate",
+    sourceSessionId: "s-src",
+    proposed: true,
+  });
+  assert.equal("prompt" in built.payload, false);
+  const decoded = decodeTrevorEvent(stored(built));
+  assert.equal(decoded?.type === "handoff.requested" && decoded.proposed, true);
+  assert.equal(decoded?.type === "handoff.requested" && decoded.mode, "generate");
+});
+
+test("the handoff lifecycle events round-trip through decodeTrevorEvent", () => {
+  assert.deepEqual(
+    decodeTrevorEvent(stored(events.handoffGenerating({ handoffId: "h1", detail: "summarizing" }))),
+    {
+      type: "handoff.generating",
+      handoffId: "h1",
+      detail: "summarizing",
+    },
+  );
+  assert.deepEqual(
+    decodeTrevorEvent(
+      stored(events.handoffGenerated({ handoffId: "h1", prompt: "the target prompt" })),
+    ),
+    { type: "handoff.generated", handoffId: "h1", prompt: "the target prompt" },
+  );
+  assert.deepEqual(
+    decodeTrevorEvent(stored(events.handoffApproved({ handoffId: "h1", prompt: "edited" }))),
+    {
+      type: "handoff.approved",
+      handoffId: "h1",
+      prompt: "edited",
+    },
+  );
+  assert.deepEqual(
+    decodeTrevorEvent(stored(events.handoffRejected({ handoffId: "h1", reason: "not now" }))),
+    {
+      type: "handoff.rejected",
+      handoffId: "h1",
+      reason: "not now",
+    },
+  );
+  assert.deepEqual(
+    decodeTrevorEvent(
+      stored(events.handoffFailed({ handoffId: "h1", code: "HO001", detail: "empty" })),
+    ),
+    {
+      type: "handoff.failed",
+      handoffId: "h1",
+      code: "HO001",
+      detail: "empty",
+    },
+  );
+  assert.deepEqual(
+    decodeTrevorEvent(
+      stored(events.handoffAccepted({ handoffId: "h1", targetSessionId: "s-tgt", prompt: "go" })),
+    ),
+    { type: "handoff.accepted", handoffId: "h1", targetSessionId: "s-tgt", prompt: "go" },
+  );
+});
+
+test("handoff.requested decodes a sparse/forward-compat payload with safe defaults", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      { type: "handoff.requested", payload: { mode: "???" } },
+      { eventId: "ev-h", sessionId: "s-fallback" },
+    ),
+  );
+  assert.equal(decoded?.type, "handoff.requested");
+  if (decoded?.type !== "handoff.requested") return;
+  assert.equal(decoded.handoffId, "ev-h"); // missing id falls back to the event id
+  assert.equal(decoded.mode, "generate"); // an unknown mode coerces to generate
+  assert.equal(decoded.sourceSessionId, "s-fallback"); // missing source falls back to the event's session
+  assert.equal(decoded.proposed, false);
+  assert.equal("prompt" in decoded, false);
+});

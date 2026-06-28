@@ -116,3 +116,11 @@ test("buildSkillCommand owns the /skills spec and needs no context", () => {
   const out = command.run("", command.select(baseCtx));
   assert.equal(typeof out, "string");
 });
+
+test("/handoff is announced in the inventory with its generate/direct usage (02 M1)", () => {
+  const registry = buildCommandRegistry();
+  const spec = registry.specs.find((item) => item.name === "/handoff");
+  assert.ok(spec, "/handoff is in the announced inventory");
+  assert.match(spec.usage ?? "", /--generate/);
+  assert.match(spec.usage ?? "", /--direct/);
+});

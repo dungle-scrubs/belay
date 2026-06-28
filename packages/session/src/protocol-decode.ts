@@ -18,6 +18,7 @@ import type {
   CommandSpec,
   CompactionManifest,
   GitStatus,
+  HandoffMode,
   ProviderDiagnostic,
   ProviderIncidentReason,
   ProviderModel,
@@ -510,6 +511,35 @@ export type DecodedEvent =
       readonly outcome: string;
       readonly summary: string;
     }
+  | {
+      readonly type: "handoff.requested";
+      readonly handoffId: string;
+      readonly mode: HandoffMode;
+      readonly sourceSessionId: string;
+      readonly prompt?: string;
+      readonly proposed: boolean;
+    }
+  | { readonly type: "handoff.generating"; readonly handoffId: string; readonly detail?: string }
+  | {
+      readonly type: "handoff.generated";
+      readonly handoffId: string;
+      readonly prompt: string;
+      readonly summary?: string;
+    }
+  | { readonly type: "handoff.approved"; readonly handoffId: string; readonly prompt?: string }
+  | { readonly type: "handoff.rejected"; readonly handoffId: string; readonly reason?: string }
+  | {
+      readonly type: "handoff.failed";
+      readonly handoffId: string;
+      readonly code: string;
+      readonly detail?: string;
+    }
+  | {
+      readonly type: "handoff.accepted";
+      readonly handoffId: string;
+      readonly targetSessionId: string;
+      readonly prompt: string;
+    }
   | { readonly type: "host.internet"; readonly internet: InternetSnapshot }
   | { readonly type: "host.sourceAuth"; readonly auth: SourceSignInState }
   | { readonly type: "host.hello"; readonly instanceId?: string }
@@ -732,6 +762,54 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         toolCallId: str(p.toolCallId, event.eventId),
         outcome: str(p.outcome, "answered"),
         summary: str(p.summary),
+      };
+    case "handoff.requested":
+      return {
+        type: "handoff.requested",
+        handoffId: str(p.handoffId, event.eventId),
+        mode: p.mode === "direct" ? "direct" : "generate",
+        sourceSessionId: str(p.sourceSessionId, event.sessionId),
+        ...(typeof p.prompt === "string" ? { prompt: p.prompt } : {}),
+        proposed: p.proposed === true,
+      };
+    case "handoff.generating":
+      return {
+        type: "handoff.generating",
+        handoffId: str(p.handoffId, event.eventId),
+        ...(optStr(p.detail) ? { detail: str(p.detail) } : {}),
+      };
+    case "handoff.generated":
+      return {
+        type: "handoff.generated",
+        handoffId: str(p.handoffId, event.eventId),
+        prompt: str(p.prompt),
+        ...(optStr(p.summary) ? { summary: str(p.summary) } : {}),
+      };
+    case "handoff.approved":
+      return {
+        type: "handoff.approved",
+        handoffId: str(p.handoffId, event.eventId),
+        ...(typeof p.prompt === "string" ? { prompt: p.prompt } : {}),
+      };
+    case "handoff.rejected":
+      return {
+        type: "handoff.rejected",
+        handoffId: str(p.handoffId, event.eventId),
+        ...(optStr(p.reason) ? { reason: str(p.reason) } : {}),
+      };
+    case "handoff.failed":
+      return {
+        type: "handoff.failed",
+        handoffId: str(p.handoffId, event.eventId),
+        code: str(p.code, "unknown"),
+        ...(optStr(p.detail) ? { detail: str(p.detail) } : {}),
+      };
+    case "handoff.accepted":
+      return {
+        type: "handoff.accepted",
+        handoffId: str(p.handoffId, event.eventId),
+        targetSessionId: str(p.targetSessionId),
+        prompt: str(p.prompt),
       };
     case "host.internet":
       return { type: "host.internet", internet: coerceInternetSnapshot(p.internet) };

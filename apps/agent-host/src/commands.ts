@@ -231,6 +231,16 @@ export function buildCommandRegistry(): CommandRegistry {
     ),
   );
   add(buildCompactCommand());
+  add(
+    buildHostOwnedCommand(
+      {
+        name: "/handoff",
+        summary: "Hand off to a fresh session with a continuation prompt",
+        usage: "/handoff [--generate | --direct] <prompt>",
+      },
+      "Handoff is handled by the live host.",
+    ),
+  );
 
   for (const spec of [
     {

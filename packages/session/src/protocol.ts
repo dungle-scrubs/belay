@@ -256,6 +256,9 @@ export interface CompactionManifest {
   readonly topics: readonly string[];
 }
 
+/** How a continuation handoff produces the target prompt: model-generated, or the supplied text as-is. */
+export type HandoffMode = "generate" | "direct";
+
 /** A publishable event before a producerId is attached: `{ type, payload }`. */
 export interface TrevorEventInput {
   readonly type: string;
@@ -687,6 +690,72 @@ export const events = {
       outcome: p.outcome,
       summary: p.summary,
     },
+  }),
+  /**
+   * Continuation handoff (02): create a clean prompt for a FRESH target session from the current one.
+   * The lifecycle rides the source session's log - requested -> generating -> generated -> (approved /
+   * rejected / failed) -> accepted - then the host ensures the target, appends its provenance + first
+   * `user.message`, and publishes `session.switch`. `proposed` marks a model-initiated request (which
+   * needs explicit approval); the generated/approved/accepted prompt is a control field, never a
+   * source-session transcript item (it renders only as the target's first prompt).
+   */
+  handoffRequested: (p: {
+    handoffId: string;
+    mode: HandoffMode;
+    sourceSessionId: string;
+    prompt?: string;
+    proposed?: boolean;
+  }): TrevorEventInput => ({
+    type: "handoff.requested",
+    payload: {
+      handoffId: p.handoffId,
+      mode: p.mode,
+      sourceSessionId: p.sourceSessionId,
+      ...(p.prompt != null ? { prompt: p.prompt } : {}),
+      ...(p.proposed ? { proposed: true } : {}),
+    },
+  }),
+  /** Advisory progress while the model generates the target prompt (source-session feedback). */
+  handoffGenerating: (p: { handoffId: string; detail?: string }): TrevorEventInput => ({
+    type: "handoff.generating",
+    payload: { handoffId: p.handoffId, ...(p.detail ? { detail: p.detail } : {}) },
+  }),
+  /** The target prompt was generated. `prompt` is a control field (not a source transcript item). */
+  handoffGenerated: (p: {
+    handoffId: string;
+    prompt: string;
+    summary?: string;
+  }): TrevorEventInput => ({
+    type: "handoff.generated",
+    payload: {
+      handoffId: p.handoffId,
+      prompt: p.prompt,
+      ...(p.summary ? { summary: p.summary } : {}),
+    },
+  }),
+  /** The user approved a model-initiated handoff; `prompt` overrides the generated text when edited. */
+  handoffApproved: (p: { handoffId: string; prompt?: string }): TrevorEventInput => ({
+    type: "handoff.approved",
+    payload: { handoffId: p.handoffId, ...(p.prompt != null ? { prompt: p.prompt } : {}) },
+  }),
+  /** The user rejected a model-initiated handoff; the source session stays active. */
+  handoffRejected: (p: { handoffId: string; reason?: string }): TrevorEventInput => ({
+    type: "handoff.rejected",
+    payload: { handoffId: p.handoffId, ...(p.reason ? { reason: p.reason } : {}) },
+  }),
+  /** The handoff failed (empty direct prompt, generation error, target ensure/attach); source stays. */
+  handoffFailed: (p: { handoffId: string; code: string; detail?: string }): TrevorEventInput => ({
+    type: "handoff.failed",
+    payload: { handoffId: p.handoffId, code: p.code, ...(p.detail ? { detail: p.detail } : {}) },
+  }),
+  /** The handoff was accepted: the host has ensured `targetSessionId` and will inject `prompt` there. */
+  handoffAccepted: (p: {
+    handoffId: string;
+    targetSessionId: string;
+    prompt: string;
+  }): TrevorEventInput => ({
+    type: "handoff.accepted",
+    payload: { handoffId: p.handoffId, targetSessionId: p.targetSessionId, prompt: p.prompt },
   }),
   /**
    * Escape hatch for an arbitrary `{ type, payload }`: the same envelope every typed builder
