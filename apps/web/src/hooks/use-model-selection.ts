@@ -4,11 +4,8 @@ import {
   EMPTY_PREFERENCES,
   type ModelPreferences,
   type ModelRef,
-  modelRefKey,
   type ProviderModel,
   pinModel,
-  type QuickPickerGroup,
-  quickPickerModels,
   type SourceSummary,
   sameModel,
   selectModel,
@@ -16,7 +13,7 @@ import {
 } from "@trevor/session";
 import { useLocalStorageState } from "ahooks";
 import { useCallback, useMemo } from "react";
-import { legacyActiveRef, reasoningSurfaceOf, rosterLabels } from "@/model-selection";
+import { buildModelSelection, type ModelSelectionProjection } from "@/model-selection";
 
 /**
  * The model-selection state hook (D-065 M3/M6): owns the persisted {@link ModelPreferences} (active /
@@ -31,24 +28,9 @@ import { legacyActiveRef, reasoningSurfaceOf, rosterLabels } from "@/model-selec
 
 const MODEL_PREFS_KEY = "trevor.modelPreferences";
 
-export interface ModelSelection {
-  readonly preferences: ModelPreferences;
-  /** The active model: the persisted `active` ref, else the legacy provider-derived ref (null before host.online). */
-  readonly active: ModelRef | null;
-  /** The active model's display label for the split control's left region. */
-  readonly activeLabel: string;
-  /** The recently-used models, grouped by source, for the quick picker. */
-  readonly quickGroups: QuickPickerGroup[];
-  readonly sources: readonly SourceSummary[];
-  readonly catalogBySource: Readonly<Record<string, readonly CatalogEntry[]>>;
-  readonly sourceLabels: Readonly<Record<string, string>>;
-  readonly modelLabels: Readonly<Record<string, string>>;
+export interface ModelSelection extends ModelSelectionProjection {
   /** Select a model: clamps its reasoning to the model's surface, records active + recent, persists. */
   readonly select: (ref: ModelRef) => void;
-  /** The `modelRefKey`s of the recently-used models, for the chooser's "Recent" preference filter. */
-  readonly recentKeys: ReadonlySet<string>;
-  /** The `modelRefKey`s of the pinned models, for the chooser's "Pinned" filter + the row pin state. */
-  readonly pinnedKeys: ReadonlySet<string>;
   /** Pin or unpin a model (idempotent), persisting the change. */
   readonly togglePin: (ref: ModelRef) => void;
 }
@@ -78,59 +60,27 @@ export function useModelSelection({
   // unusable refs) rather than trusting the raw JSON ahooks hands back.
   const preferences = useMemo(() => decodeModelPreferences(rawPrefs), [rawPrefs]);
 
-  // The source/catalog the chooser renders is purely host-owned (real provider types, live model
-  // lists, auth state). It is NOT projected from the legacy provider roster: that projection produced
-  // a wrong structure (one source per provider, OAuth shown as direct-API, "1 models" each), so when
-  // the host has not reported sources the chooser shows an explicit empty state instead of fake data.
-  const sources = hostSources;
-  const catalogBySource = hostCatalog;
-  // Labels merge the roster's curated names (for the active model before/without a host catalog) with
-  // the host source/catalog labels, which win when present.
-  const { sourceLabels, modelLabels } = useMemo(() => {
-    const roster0 = rosterLabels(roster);
-    const sl: Record<string, string> = { ...roster0.sourceLabels };
-    for (const s of hostSources) {
-      sl[s.sourceId] = s.label;
-    }
-    const ml: Record<string, string> = { ...roster0.modelLabels };
-    for (const entries of Object.values(hostCatalog)) {
-      for (const e of entries) {
-        ml[e.modelId] = e.displayName;
-      }
-    }
-    return { sourceLabels: sl, modelLabels: ml };
-  }, [hostSources, hostCatalog, roster]);
-  const quickGroups = useMemo(() => quickPickerModels(preferences), [preferences]);
-
-  const legacyRef = useMemo(
-    () => legacyActiveRef(roster, legacyProvider, legacyReasoning),
-    [roster, legacyProvider, legacyReasoning],
+  const selection = useMemo(
+    () =>
+      buildModelSelection({
+        preferences,
+        roster,
+        hostSources,
+        hostCatalog,
+        legacyProvider,
+        legacyReasoning,
+      }),
+    [preferences, roster, hostSources, hostCatalog, legacyProvider, legacyReasoning],
   );
-  const active = preferences.active ?? legacyRef;
-
-  const activeLabel = useMemo(() => {
-    if (!active) {
-      return legacyProvider;
-    }
-    return modelLabels[active.modelId] ?? sourceLabels[active.sourceId] ?? active.modelId;
-  }, [active, modelLabels, sourceLabels, legacyProvider]);
 
   const select = useCallback(
     (ref: ModelRef) => {
-      const surface = reasoningSurfaceOf(roster, ref);
+      const surface = selection.reasoningSurface(ref);
       setRawPrefs((prev) => selectModel(decodeModelPreferences(prev), ref, surface));
     },
-    [roster, setRawPrefs],
+    [selection, setRawPrefs],
   );
 
-  const recentKeys = useMemo(
-    () => new Set(preferences.recent.map(modelRefKey)),
-    [preferences.recent],
-  );
-  const pinnedKeys = useMemo(
-    () => new Set(preferences.pinned.map(modelRefKey)),
-    [preferences.pinned],
-  );
   const togglePin = useCallback(
     (ref: ModelRef) => {
       setRawPrefs((prev) => {
@@ -142,17 +92,8 @@ export function useModelSelection({
   );
 
   return {
-    preferences,
-    active,
-    activeLabel,
-    quickGroups,
-    sources,
-    catalogBySource,
-    sourceLabels,
-    modelLabels,
+    ...selection,
     select,
-    recentKeys,
-    pinnedKeys,
     togglePin,
   };
 }
