@@ -1650,3 +1650,13 @@ D-096. Provider failure observations are the first concrete use, but the broader
 tool-result patterns, repeated tool calls, attempts-to-goal signals, prompt/harness guidance, and possible future
 task classification. **Vim motions in UI/UX** added to the unsequenced backlog as D-097, starting later with
 prompt input motions and evaluating `vimeejs/vimee` before broader UI adoption._
+
+_Updated 2026-06-28 (plan-db decision, `--decided-by human`): two items pulled OUT of
+`progress-report.md`'s active checklist into this unsequenced backlog, since both were written
+defensively for surfaces not in the current slice. **Skill-discovery web UI** added as D-098 - a
+Storybook-first roster/list/detail browser over the host's `skills_list`/`skill_view` read models,
+with web tests for read-model rendering (no filesystem scans). Neither V1 (`~/dev/trevor`) nor V2 has
+a skill-discovery web surface today; skills are host-owned model tools, so this is build-only-if a web
+skill-browser is decided on. **Doctor session-lifecycle area** added as D-099 - surface
+archived/stale/inactive session states (from D-093/D-094) in `/doctor`; low value while the session
+you run `/doctor` in is never archived, so build it only if an archive browser needs it._

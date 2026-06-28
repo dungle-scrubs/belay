@@ -587,7 +587,7 @@ sanitized `formatDoctorReport` text (not raw JSON) and degrades a source failure
 - [x] Doctor output can explain provider auth/catalog issues from D-065 without exposing secrets (the Providers area now projects the catalog source summaries: each needs-auth/expired/rejected source becomes one actionable finding - add-key / sign-in / rejected - and a redacted "catalog" fact counts ready-vs-need-setup sources + total live models; status/auth/counts only, never a key)
 - [x] Doctor output can explain internet status from D-060 without conflating it with host/session connectivity (distinct Internet area, separate from Core/Session)
 - [x] Doctor output can explain provider-outage retry exhaustion and unknown provider observation counts from D-076
-- [ ] Doctor output can explain archived/stale/inactive session states from D-093/D-094 when available (no lifecycle area in the snapshot yet; rides D-093/D-094)
+- A doctor lifecycle area (archived/stale/inactive session states from D-093/D-094) is DEFERRED to the implementation.md roadmap (plan-db decision 2026-06-28): the session you run `/doctor` in is never archived, so it's low value, and the Session area already shows activity. Build it only if an archive browser needs it.
 - [x] Tests cover model guidance, no routine doctor calls, and correct distinction between health areas (prompt-guidance + area-distinction unit tests landed; the live model-behavioral EVAL is deferred - tracked in the plan, not this checklist)
 
 ### M7: Verification
@@ -673,10 +673,7 @@ registry-derived capability manifest D-074.
 
 ### M7: UI and verification
 
-- [ ] If Trevor web renders skill discovery, build the discovery/list/detail states in Storybook before live wiring
-- [ ] UI renders from host read models only
-- [ ] Storybook covers compact roster, list search, no matches, disabled/malformed skills, truncated results, selected skill detail, and long descriptions
-- [ ] Web tests cover read-model rendering without filesystem scans if a web surface is added
+A skill-discovery WEB UI (Storybook roster/list/detail, host-read-model rendering, web tests) is DEFERRED to the implementation.md roadmap (plan-db decision 2026-06-28, `--decided-by human`). Neither V1 (~/dev/trevor) nor V2 has a skill-discovery web surface - skills are host-owned model tools (`skills_list`/`skill_view`); these items were written defensively as "if a web surface is added", which is not in this slice. Build them only if a web skill-browser is decided on.
 - Model-behavioral skill checks (model opens only the matching skill; searches metadata before viewing one) are DEFERRED as evals - tracked in the canonical implementation plan, not this report's checklist.
 
 ## Next-Up: editable session titles (proposed - needs formal plan.db decomposition)
