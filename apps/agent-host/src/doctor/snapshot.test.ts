@@ -192,6 +192,112 @@ test("the Providers area shows retry exhaustion separately from non-retryable te
   assert.ok(!onlyExhausted?.findings?.some((f) => f.id === "providers.terminal"));
 });
 
+test("the Providers area surfaces D-065 catalog sources: action findings + a redacted overview fact", () => {
+  const providers = buildDoctorSnapshot(
+    input({
+      catalogSources: [
+        // configured + ready -> no finding, contributes to the ready count + model total
+        {
+          sourceId: "deepseek",
+          label: "DeepSeek",
+          type: "api-key",
+          status: "ready",
+          auth: "authenticated",
+          modelCount: 2,
+        },
+        {
+          sourceId: "ollama",
+          label: "Ollama Cloud",
+          type: "gateway",
+          status: "ready",
+          auth: "authenticated",
+          modelCount: 35,
+        },
+        // each of these NEEDS action and the legacy roster can't show them
+        {
+          sourceId: "minimax",
+          label: "MiniMax",
+          type: "api-key",
+          status: "needs-auth",
+          auth: "none",
+          modelCount: 0,
+        },
+        {
+          sourceId: "openai",
+          label: "OpenAI",
+          type: "oauth",
+          status: "ready",
+          auth: "expired",
+          modelCount: 0,
+        },
+        {
+          sourceId: "zai",
+          label: "Z.ai",
+          type: "api-key",
+          status: "error",
+          auth: "authenticated",
+          modelCount: 0,
+        },
+      ],
+    }),
+  ).areas.find((a) => a.id === "providers");
+
+  // ready sources add no finding; unconfigured/expired/rejected each add one actionable finding.
+  assert.ok(!providers?.findings?.some((f) => f.id === "providers.source.deepseek"));
+  assert.ok(!providers?.findings?.some((f) => f.id === "providers.source.ollama"));
+
+  const minimax = providers?.findings?.find((f) => f.id === "providers.source.minimax");
+  assert.equal(minimax?.status, "warn");
+  assert.match(minimax?.nextAction?.label ?? "", /Add the MiniMax key to ~\/\.pi\/auth\.json/);
+
+  const openai = providers?.findings?.find((f) => f.id === "providers.source.openai");
+  assert.equal(openai?.status, "warn");
+  assert.match(openai?.message ?? "", /sign-in has expired/);
+  assert.match(openai?.nextAction?.label ?? "", /Sign in to OpenAI/);
+
+  const zai = providers?.findings?.find((f) => f.id === "providers.source.zai");
+  assert.equal(zai?.status, "error");
+  assert.match(zai?.message ?? "", /rejected/);
+
+  // a rejected source lifts the whole Providers area to error.
+  assert.equal(providers?.status, "error");
+
+  // the overview fact agrees with the findings (3 need setup) and totals the live model counts.
+  const fact = providers?.facts?.find((f) => f.label === "catalog");
+  assert.equal(fact?.value, "5 sources (2 ready, 3 need setup) · 37 models");
+});
+
+test("a fully-configured catalog adds only the overview fact and does not warn", () => {
+  const providers = buildDoctorSnapshot(
+    input({
+      catalogSources: [
+        {
+          sourceId: "deepseek",
+          label: "DeepSeek",
+          type: "api-key",
+          status: "ready",
+          auth: "authenticated",
+          modelCount: 2,
+        },
+        {
+          sourceId: "lmstudio",
+          label: "LM Studio",
+          type: "local",
+          status: "ready",
+          auth: "authenticated",
+          modelCount: 12,
+        },
+      ],
+    }),
+  ).areas.find((a) => a.id === "providers");
+  assert.ok(!providers?.findings?.some((f) => f.id.startsWith("providers.source.")));
+  assert.equal(providers?.status, "ok");
+  assert.equal(
+    providers?.facts?.find((f) => f.label === "catalog")?.value,
+    "2 sources (2 ready) · 14 models",
+  );
+});
+
 test("the Session area explains the latest non-answered adaptive stop", () => {
   const session = buildDoctorSnapshot(
     input({

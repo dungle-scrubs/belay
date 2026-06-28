@@ -1,6 +1,7 @@
 import {
   type DoctorArea,
   type DoctorAreaId,
+  type DoctorFact,
   type DoctorFinding,
   type DoctorNextAction,
   type DoctorSnapshot,
@@ -57,7 +58,24 @@ export interface DoctorProbeInput {
    *  surfaced as DISTINCT Providers findings so a transient outage that gave up reads differently from
    *  an auth/quota/rejected failure that was never eligible for retry. */
   readonly providerFailures?: DoctorProviderFailures;
+  /** D-065 catalog SOURCES (provider/runtime/subscription auth + config state). The legacy `providers`
+   *  roster above lists only the configured runnable providers, so an unconfigured/expired/rejected
+   *  source is invisible there; these surface its auth/setup state (status + counts only, never a key). */
+  readonly catalogSources?: readonly DoctorCatalogSource[];
   readonly checkedAt: string;
+}
+
+/** One D-065 catalog source's auth/config state for the Providers area (redaction-safe: no key value). */
+export interface DoctorCatalogSource {
+  readonly sourceId: string;
+  readonly label: string;
+  /** local | oauth | api-key | gateway. */
+  readonly type: string;
+  /** ready | needs-auth | error | unavailable. */
+  readonly status: string;
+  /** authenticated | none | expired. */
+  readonly auth: string;
+  readonly modelCount: number;
 }
 
 /** The compact, redaction-safe provider-observation summary the Providers area surfaces (D-076 M6). */
@@ -248,24 +266,74 @@ function providersArea(input: DoctorProbeInput): DoctorArea {
       ...(pf.lastTerminal ? { evidence: pf.lastTerminal } : {}),
     });
   }
+  // D-065 catalog source auth/config state: surface the sources that need ACTION. The legacy roster
+  // above lists only configured runnable providers, so a needs-auth / expired / rejected source would
+  // otherwise be invisible in /doctor. Status + counts only - a key never enters a finding.
+  const catalog = input.catalogSources ?? [];
+  // One predicate drives BOTH the per-source findings and the "N ready / M need setup" overview, so
+  // the count can never disagree with the findings shown.
+  const needsSetup = (s: DoctorCatalogSource): boolean =>
+    s.status === "error" || s.status === "needs-auth" || s.auth === "none" || s.auth === "expired";
+  for (const s of catalog) {
+    if (!needsSetup(s)) {
+      continue;
+    }
+    const errored = s.status === "error";
+    const expired = s.auth === "expired";
+    const nextAction: DoctorNextAction =
+      s.type === "oauth"
+        ? { label: `Sign in to ${s.label}` }
+        : s.type === "local"
+          ? { label: `Start the ${s.label} runtime` }
+          : { label: `Add the ${s.label} key to ~/.pi/auth.json` };
+    findings.push({
+      id: `providers.source.${s.sourceId}`,
+      status: errored ? "error" : "warn",
+      title: `${s.label} source`,
+      message: errored
+        ? "the configured key was rejected by the provider"
+        : expired
+          ? "the sign-in has expired - re-authenticate"
+          : "not configured - no key or sign-in present",
+      nextAction,
+    });
+  }
+
   const sourceCount = input.providers.length;
   const verdict = sourceCount
     ? `${sourceCount} source${sourceCount === 1 ? "" : "s"}`
     : "no providers";
+
+  const facts: DoctorFact[] = [];
+  // A one-line catalog overview (D-065): how many sources are ready vs need setup, and the total live
+  // model count across configured sources. Counts only - this is the source/catalog picture the
+  // legacy roster can't give (it omits unconfigured sources entirely).
+  if (catalog.length > 0) {
+    const setupCount = catalog.filter(needsSetup).length;
+    const ready = catalog.length - setupCount;
+    const models = catalog.reduce((total, s) => total + s.modelCount, 0);
+    facts.push({
+      label: "catalog",
+      value: `${catalog.length} source${catalog.length === 1 ? "" : "s"} (${ready} ready${setupCount ? `, ${setupCount} need setup` : ""}) · ${models} model${models === 1 ? "" : "s"}`,
+    });
+  }
   // Unclassified-failure observations (D-076 M6): a redacted diagnostic FACT (counts only), so it
   // informs without inflating the area severity - an unknown shape isn't a current health problem,
   // it's a breadcrumb for improving the classifier. Omitted entirely when nothing has been observed.
   const obs = input.observations;
-  const facts: DoctorArea["facts"] =
-    obs && obs.distinct > 0
-      ? [
-          {
-            label: "observations",
-            value: `${obs.distinct} unclassified shape${obs.distinct === 1 ? "" : "s"} · ${obs.unknown} sighting${obs.unknown === 1 ? "" : "s"}`,
-          },
-        ]
-      : undefined;
-  return area("providers", "Providers / Models / Auth", verdict, findings, facts);
+  if (obs && obs.distinct > 0) {
+    facts.push({
+      label: "observations",
+      value: `${obs.distinct} unclassified shape${obs.distinct === 1 ? "" : "s"} · ${obs.unknown} sighting${obs.unknown === 1 ? "" : "s"}`,
+    });
+  }
+  return area(
+    "providers",
+    "Providers / Models / Auth",
+    verdict,
+    findings,
+    facts.length > 0 ? facts : undefined,
+  );
 }
 
 function internetArea(input: DoctorProbeInput): DoctorArea {

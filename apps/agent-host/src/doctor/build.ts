@@ -5,6 +5,7 @@ import {
   type DoctorSnapshot,
   type InternetSnapshot,
   RUNTIME_KIND,
+  type SourceSummary,
   UNKNOWN_INTERNET,
 } from "@trevor/session";
 import { Effect } from "effect";
@@ -38,6 +39,8 @@ export interface DoctorFacts {
   readonly internet?: InternetSnapshot;
   readonly branch?: string;
   readonly host?: Record<string, unknown>;
+  /** D-065 catalog source summaries (auth/config + model counts), surfaced in the Providers area. */
+  readonly catalog?: readonly SourceSummary[];
 }
 
 /** Structured provider reachability for the snapshot (warm/cold/unreachable + kind), defensively probed. */
@@ -146,6 +149,16 @@ export async function buildLiveDoctorSnapshot(facts: DoctorFacts): Promise<Docto
       lastRetryExhausted: summary.lastRetryExhausted?.detail,
       lastTerminal: summary.lastTerminal?.detail,
     },
+    // D-065 catalog sources: a redaction-safe projection (status/auth/counts only) so /doctor can
+    // explain provider auth/setup state and the live model picture without exposing any key.
+    catalogSources: (facts.catalog ?? []).map((s) => ({
+      sourceId: s.sourceId,
+      label: s.label,
+      type: s.type,
+      status: s.status,
+      auth: s.auth,
+      modelCount: s.modelCount,
+    })),
     checkedAt: new Date().toISOString(),
   });
 }

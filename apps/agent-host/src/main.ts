@@ -1484,6 +1484,7 @@ function doctorFacts(): DoctorFacts {
     host: hostState(),
     internet: internet.current(),
     branch: currentGit().branch,
+    catalog: catalog.sources,
   };
 }
 
