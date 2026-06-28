@@ -5,7 +5,7 @@ import type {
   TurnStop,
 } from "@trevor/session";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
-import { debug } from "../log";
+import { debug, warn } from "../log";
 import type {
   ChatMessage,
   ModelEvent,
@@ -161,6 +161,29 @@ const DEFAULT_STREAM_STALL_MS = (() => {
   return raw !== undefined && Number.isFinite(Number(raw)) ? Number(raw) : 90_000;
 })();
 
+/**
+ * Per-tool-call wall-clock watchdog (ms): the tool-side analog of the provider-stream idle watchdog
+ * above, which only covers the MODEL stream - not tool execution. A tool that returns no result for
+ * this long is treated as a hung call (a half-open socket, a wedged subprocess, a delegation waiting on
+ * a dead child) and aborted, so the loop continues instead of latching "Working" forever. Generous by
+ * default: bash self-bounds at 30s (run-shell.ts) and reads/greps/edits are local, so the ceiling only
+ * trips on a genuine hang, never on legitimately slow work. Env-overridable; set to 0 to disable.
+ * Default 300s.
+ */
+const DEFAULT_TOOL_STALL_MS = (() => {
+  const raw = process.env.TREVOR_TOOL_STALL_MS;
+  return raw !== undefined && Number.isFinite(Number(raw)) ? Number(raw) : 300_000;
+})();
+
+/**
+ * Tools that block by design and must be EXEMPT from the per-tool stall watchdog: `ask_user` pauses the
+ * turn on a human answer with no upper bound (a slow human is not a hung tool). Delegation tools are not
+ * listed because the loop routes them to the injected runner (not `executeTool`), where the child turn's
+ * own stream + tool watchdogs bound them transitively - capping them here too would double-bound a
+ * legitimately long child.
+ */
+const UNBOUNDED_TOOLS: ReadonlySet<string> = new Set(["ask_user"]);
+
 export interface TurnLoopConfig {
   /** Absolute runaway ceiling, independent of the adaptive per-step budget (D-011): the loop derives
    *  an effective step budget each round (see turn-budget.ts) and clamps it to never exceed this. Only
@@ -174,6 +197,8 @@ export interface TurnLoopConfig {
   readonly maxRecovery: number;
   /** Provider-stream idle watchdog in ms; 0 disables it. */
   readonly streamStallMs: number;
+  /** Per-tool-call wall-clock watchdog in ms; 0 disables it. */
+  readonly toolStallMs: number;
   /** Reconnect backoff before retries; length + 1 is the attempt budget. */
   readonly reconnectBackoffsMs: readonly number[];
 }
@@ -184,6 +209,7 @@ export const DEFAULT_TURN_LOOP_CONFIG: TurnLoopConfig = {
   contextBudgetFraction: 0.8,
   maxRecovery: 2,
   streamStallMs: DEFAULT_STREAM_STALL_MS,
+  toolStallMs: DEFAULT_TOOL_STALL_MS,
   reconnectBackoffsMs: [300, 900],
 };
 
@@ -242,6 +268,41 @@ function withStallTimeout<A>(
       // haltStrategy "left": the merged stream ends when the SOURCE ends (we don't wait on the
       // never-resolving watchdog); a stall failure still propagates immediately from either side.
       return Stream.merge(guarded, failOnStall, { haltStrategy: "left" });
+    }),
+  );
+}
+
+/**
+ * Wraps a single tool-call execution with the per-tool wall-clock watchdog (`toolStallMs`). Unlike the
+ * provider-stream watchdog this does NOT fail the turn: `executeTool` resolves to a string and never
+ * throws, so on timeout we resolve to an `error:` string the model reads as the tool result. The turn
+ * keeps going - the other concurrent results in the batch still commit, and the model gets to react to
+ * the timeout - rather than the whole turn going terminal or latching "Working" forever.
+ *
+ * `toolStallMs <= 0` disables it; tools in {@link UNBOUNDED_TOOLS} are passed through (they block by
+ * design). The timeout interrupts the tool's Effect, which frees the loop; an underlying uncancelable
+ * promise (a raw fetch, a detached subprocess) may still run to completion in the background, but it no
+ * longer blocks the turn.
+ */
+export function withToolStallTimeout(
+  name: string,
+  effect: Effect.Effect<string>,
+  toolStallMs: number,
+): Effect.Effect<string> {
+  if (toolStallMs <= 0 || UNBOUNDED_TOOLS.has(name)) {
+    return effect;
+  }
+  return effect.pipe(
+    Effect.timeoutTo({
+      duration: Duration.millis(toolStallMs),
+      onSuccess: (result: string) => result,
+      onTimeout: () => {
+        warn("tool", "stalled", { name, ms: toolStallMs });
+        return (
+          `error: tool "${name}" produced no result after ${Math.round(toolStallMs / 1000)}s and was ` +
+          "aborted as a hung call; do not retry it blindly - try a different approach or a smaller scope"
+        );
+      },
     }),
   );
 }
@@ -386,9 +447,10 @@ export function runAgent(
     if (delegate?.names.has(name)) {
       return Effect.promise(() => delegate.run(name, args));
     }
-    return opts.toolNames && !opts.toolNames.has(name)
-      ? Effect.succeed(`error: tool "${name}" is not available to this agent`)
-      : executeTool(name, args, runId, callId);
+    if (opts.toolNames && !opts.toolNames.has(name)) {
+      return Effect.succeed(`error: tool "${name}" is not available to this agent`);
+    }
+    return withToolStallTimeout(name, executeTool(name, args, runId, callId), config.toolStallMs);
   };
   // One retry budget for an empty answer (the model ending a turn with no text and no
   // tool calls). A single nudge often gets it to synthesize; if it stays empty we

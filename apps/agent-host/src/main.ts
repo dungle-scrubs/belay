@@ -61,7 +61,14 @@ import {
 import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./providers/catalog";
 import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
 import { Emit } from "./services";
-import { type StopOutcome, stopSession } from "./session-lifecycle";
+import {
+  countRestartResumes,
+  MAX_RESTART_RESUMES,
+  type ResumeMarker,
+  resumeAfterStop,
+  type StopOutcome,
+  stopSession,
+} from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
@@ -579,9 +586,18 @@ async function publishControlPrompt(text: string, provider = controlProvider()):
   });
 }
 
+/** The prefix every continuation prompt shares; used to recognise a turn that is itself a continuation
+ *  (so a step-budget pause is not auto-stacked). */
+const CONTINUATION_PREFIX = "Continue from the paused turn.";
+/** The reason a host-restart auto-resume stamps on its continuation, so the crash-loop bound can spot
+ *  its own prior resumes in the durable log (see `trailingResumeMarkers`). Keep in sync with the prefix
+ *  match below. */
+const RESTART_RESUME_REASON = "host restarted";
+const RESTART_RESUME_PREFIX = `${CONTINUATION_PREFIX} Reason: ${RESTART_RESUME_REASON}`;
+
 async function continueAfterStop(reason: string): Promise<void> {
   await publishControlPrompt(
-    `Continue from the paused turn. Reason: ${reason}. Do not repeat completed work; proceed from the current transcript and finish the user's request.`,
+    `${CONTINUATION_PREFIX} Reason: ${reason}. Do not repeat completed work; proceed from the current transcript and finish the user's request.`,
   );
 }
 
@@ -618,17 +634,118 @@ async function compressThenContinue(): Promise<{ readonly ok: boolean; readonly 
   return { ok: true, text: `${compacted}\nContinuing after compaction.` };
 }
 
-function shouldAutoContinue(
-  decoded: Extract<ReturnType<typeof decodeTrevorEvent>, { type: "assistant.completed" }>,
-): boolean {
-  if (decoded.stop?.cause !== "step_backstop") {
-    return false;
+/** The trailing turn's terminal state, read from the log, that the resume policy decides on. `continued`
+ *  = a user prompt already follows this completion, so it is not the un-continued tail and is left alone. */
+interface TrailingTurn {
+  readonly runId: string;
+  readonly interrupted: boolean;
+  readonly cancelled: boolean;
+  readonly stopCause?: string;
+  readonly stopSummary?: string;
+  readonly continued: boolean;
+}
+
+/** Scans history back to the most recent `assistant.completed`, noting whether any user prompt follows
+ *  it. Null when no turn has completed yet. A pure read over the replayed log projection. */
+function trailingTurn(): TrailingTurn | null {
+  let continued = false;
+  for (let index = historyEvents.length - 1; index >= 0; index -= 1) {
+    const event = historyEvents[index];
+    const decoded = event ? decodeTrevorEvent(event) : null;
+    if (!decoded) {
+      continue;
+    }
+    if (decoded.type === "user.message") {
+      continued = true;
+      continue;
+    }
+    if (decoded.type === "assistant.completed") {
+      return {
+        runId: decoded.runId,
+        interrupted: decoded.interrupted,
+        cancelled: decoded.cancelled,
+        stopCause: decoded.stop?.cause,
+        stopSummary: decoded.stop?.summary,
+        continued,
+      };
+    }
   }
-  if (autoContinuedRuns.has(decoded.runId)) {
-    return false;
+  return null;
+}
+
+/** The trailing resume-bound markers (oldest-to-newest), walking back only as far as the streak needs:
+ *  a restart-resume continuation extends it; a genuine user prompt or a normal (non-interrupted)
+ *  completion ends it. Interrupt completions and all streaming events between resumes are skipped.
+ *  `countRestartResumes` reads this to bound the crash-loop durably from the log. */
+function trailingResumeMarkers(): ResumeMarker[] {
+  const markers: ResumeMarker[] = [];
+  for (let index = historyEvents.length - 1; index >= 0; index -= 1) {
+    const event = historyEvents[index];
+    const decoded = event ? decodeTrevorEvent(event) : null;
+    if (!decoded) {
+      continue;
+    }
+    let marker: ResumeMarker | null = null;
+    if (decoded.type === "user.message") {
+      marker = decoded.text.startsWith(RESTART_RESUME_PREFIX) ? "restart-resume" : "user-prompt";
+    } else if (decoded.type === "assistant.completed" && !decoded.interrupted) {
+      marker = "normal-completion";
+    }
+    if (!marker) {
+      continue;
+    }
+    markers.push(marker);
+    if (marker !== "restart-resume") {
+      break; // a boundary: everything earlier is a prior, already-settled streak
+    }
   }
-  const last = lastUserPrompt();
-  return !last?.text.startsWith("Continue from the paused turn.");
+  return markers.reverse();
+}
+
+/**
+ * Auto-resume the trailing turn when the log shows it stopped without finishing the user's request: a
+ * host-restart interrupt (this host reaped it, or the browser recovered the orphan while no host was up)
+ * is re-issued from the transcript, bounded to {@link MAX_RESTART_RESUMES} consecutive resumes before
+ * falling back to a manual Resume so a crash-looping host cannot spin; a step-budget pause keeps the
+ * existing auto-continue. Idempotent per run via `autoContinuedRuns`; callers gate it on live + leader,
+ * so replay and standbys never fire. The decision is read from the durable log (not in-memory counters),
+ * so the crash-loop bound survives the very restarts it guards.
+ */
+function maybeAutoResume(): void {
+  const turn = trailingTurn();
+  if (!turn || turn.continued || autoContinuedRuns.has(turn.runId)) {
+    return;
+  }
+  const decision = resumeAfterStop({
+    interrupted: turn.interrupted,
+    cancelled: turn.cancelled,
+    stopCause: turn.stopCause,
+    lastWasContinuation: lastUserPrompt()?.text.startsWith(CONTINUATION_PREFIX) ?? false,
+    restartResumesSpent: countRestartResumes(trailingResumeMarkers()),
+  });
+  if (decision.kind === "none") {
+    return;
+  }
+  autoContinuedRuns.add(turn.runId);
+  if (decision.kind === "manual") {
+    warn("host", "auto-resume exhausted; awaiting manual Resume", {
+      run: turn.runId.slice(0, 8),
+      after: MAX_RESTART_RESUMES,
+    });
+    return;
+  }
+  const reason =
+    decision.cause === "restart"
+      ? RESTART_RESUME_REASON
+      : (turn.stopSummary ?? turnMachine.lastTermination ?? "turn paused");
+  log("host", "auto-resuming turn", {
+    run: turn.runId.slice(0, 8),
+    cause: decision.cause,
+    ...(decision.cause === "restart" ? { attempt: decision.attempt } : {}),
+  });
+  continueAfterStop(reason).catch((error) =>
+    warn("host", "auto-resume failed", { run: turn.runId.slice(0, 8), error: msg(error) }),
+  );
 }
 
 /**
@@ -753,10 +870,16 @@ function onBecomeLeader(): void {
   if (turnMachine.hasInFlight) {
     // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
     // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
-    // the pending prompt - it was already attempted and interrupted, so the host idles clean instead
-    // of auto-re-running a slow turn; the user re-submits if they want it.
+    // the stale pending prompt. Each reap's interrupted completion echoes back to the completion handler,
+    // which auto-resumes it from the transcript (bounded) - so the work continues instead of stranding
+    // the user mid-turn, while a user ESC (cancelled, not interrupted) still stays put.
     reapOrphans();
     scheduler.clearPending();
+  } else if (live) {
+    // No dangling run, but the trailing turn may be an un-continued interrupt a prior host never
+    // resumed (e.g. the browser recovered the orphan, then this host took leadership while already
+    // live - the path goLive's post-replay reconcile doesn't re-run). Pick it up.
+    maybeAutoResume();
   }
   // A /compact whose fold a previous leader was interrupted mid-run (restart/crash) left its command
   // with no result - a dangling "/compact" that looks broken. Give it one. `!manualCompactFiber`
@@ -881,6 +1004,10 @@ function goLive(): void {
   // onBecomeLeader; this adds the reconnect-as-existing-leader path that case misses.)
   if (lease.isLeader()) {
     reapOrphans();
+    // After reaping, auto-resume an un-continued trailing interrupt that is already settled in the log
+    // (the browser recovered the orphan while no host was up - tonight's nimoy/lucid case). A run this
+    // reap just closed is still mid-echo, so it is picked up by the completion handler, not here.
+    maybeAutoResume();
   }
 }
 
@@ -1640,8 +1767,8 @@ function handleEvent(message: SessionEvent): void {
     }
   } else if (decoded.type === "assistant.completed") {
     // Record WHY this turn ended (Phase 2 M4) before the overflow flag is reaped, so /doctor can
-    // report the reason for the most recent turn.
-    const lastTermination = turnMachine.complete(decoded);
+    // report the reason for the most recent turn (read back via `turnMachine.lastTermination`).
+    turnMachine.complete(decoded);
     // Invariant: history stays strictly paired - an assistant reply lands only on top
     // of the user turn it answers. A different role on top means the pairing the loop
     // depends on has drifted (e.g. a missed/duplicated turn). Checked against the
@@ -1667,11 +1794,11 @@ function handleEvent(message: SessionEvent): void {
     // next turn's prompt view already includes this reply (admitted just above). Inert off-live: the
     // forked `start` returns null during replay and the proactive fold gates on liveness.
     scheduler.processCompletion(decoded.runId, message.seq);
-    if (live && lease.isLeader() && shouldAutoContinue(decoded)) {
-      autoContinuedRuns.add(decoded.runId);
-      continueAfterStop(decoded.stop?.summary ?? lastTermination ?? "turn paused").catch((error) =>
-        warn("host", "auto-continue failed", { run: decoded.runId.slice(0, 8), error: msg(error) }),
-      );
+    // Auto-resume from the just-admitted completion: a step-budget pause, or a host-restart interrupt
+    // this leader reaped live (its echo lands here). The browser-recovered case - an interrupt already
+    // in the log when this host took over - is caught by goLive/onBecomeLeader instead.
+    if (live && lease.isLeader()) {
+      maybeAutoResume();
     }
   } else if (decoded.type === "context.compacted") {
     // A fold landed (our own echo, or the leader's on a standby): admit it so the projection

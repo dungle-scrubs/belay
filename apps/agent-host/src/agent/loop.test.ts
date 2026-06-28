@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
-import { type AgentEvent, looksUnfinished, type RunAgentOptions, runAgent } from "./loop";
+import {
+  type AgentEvent,
+  looksUnfinished,
+  type RunAgentOptions,
+  runAgent,
+  withToolStallTimeout,
+} from "./loop";
 
 /**
  * Phase 2 (graceful turn-budget termination, D-051..D-053): a turn must never end silently
@@ -365,4 +371,35 @@ test("M7: a 1M context at 14% pressure does not stop at 32", async () => {
     "14% pressure is far from the gate; the 1M budget is not pinned to 32",
   );
   assert.equal(steps, 96, "the full 1M tier budget governs at low pressure");
+});
+
+// Per-tool-call stall watchdog (the tool-side analog of the provider-stream idle watchdog): a tool
+// that never returns is aborted with an `error:` result so the loop keeps going instead of latching
+// "Working" forever, while legitimately-blocking and disabled cases pass straight through.
+
+test("tool stall: a hung tool resolves to an `error:` result, never a thrown turn failure", async () => {
+  const result = await Effect.runPromise(
+    // Effect.never models a half-open call that produces no result; a tiny ceiling trips the watchdog
+    // in real time without a slow test.
+    withToolStallTimeout("bash", Effect.never as unknown as Effect.Effect<string>, 20),
+  );
+  assert.match(result, /^error: tool "bash" produced no result after 0s and was aborted/);
+});
+
+test("tool stall: a tool that finishes within the ceiling returns its result untouched", async () => {
+  const result = await Effect.runPromise(
+    withToolStallTimeout("read", Effect.succeed("the file contents"), 1_000),
+  );
+  assert.equal(result, "the file contents");
+});
+
+test("tool stall: ask_user is exempt (it blocks on the human), passed through unwrapped", () => {
+  const inner = Effect.never as unknown as Effect.Effect<string>;
+  // Identity, not a wrapped effect: the never-bounded human wait must not be timed out at all.
+  assert.equal(withToolStallTimeout("ask_user", inner, 20), inner);
+});
+
+test("tool stall: a non-positive ceiling disables the guard (identity)", () => {
+  const inner = Effect.succeed("x");
+  assert.equal(withToolStallTimeout("bash", inner, 0), inner);
 });
