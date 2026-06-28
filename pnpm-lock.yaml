@@ -71,6 +71,13 @@ importers:
         version: 6.0.3
 
   apps/blob-store:
+    dependencies:
+      '@trevor/server-kit':
+        specifier: workspace:*
+        version: link:../../packages/server-kit
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../../packages/session
     devDependencies:
       '@types/node':
         specifier: ^26.0.0

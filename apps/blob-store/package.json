@@ -10,6 +10,10 @@
     "start": "tsx src/main.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
+  "dependencies": {
+    "@trevor/server-kit": "workspace:*",
+    "@trevor/session": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^26.0.0",
     "tsx": "^4.22.4",

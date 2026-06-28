@@ -4,6 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./ports": "./src/ports.ts",
+    "./async": "./src/async.ts",
     "./conformance": "./test/transport-conformance.ts"
   },
   "types": "./src/index.ts",

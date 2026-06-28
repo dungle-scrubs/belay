@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { createServer, type Server } from "node:http";
-import { cors, json, readJson } from "@trevor/server-kit";
+import type { Server } from "node:http";
+import { createService, json, type Route, readJson } from "@trevor/server-kit";
 import {
   decodeStreamParams,
   frames,
@@ -119,79 +119,76 @@ export function createSessionStore(dbPath: string): Server {
   const broadcastPresence = (sessionId: string): void =>
     broadcast(sessionId, frames.presence(hostsOf(sessionId)));
 
-  const server = createServer((req, res) => {
-    cors(res, CORS_METHODS);
-    const method = req.method ?? "GET";
-    const path = new URL(req.url ?? "/", "http://localhost").pathname;
-
-    if (method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (path === "/health") {
-      json(res, 200, { ok: true });
-      return;
-    }
-    if (path === "/sessions" && method === "GET") {
-      // The session inventory read model (D-090): each session's distilled summary, with
-      // live host presence folded in from the in-memory socket map (the durable log can't
-      // know a host crashed). Assembly is the pure summarizeSession; the store just supplies
-      // the rows + presence.
-      const sessions = log
-        .inventory()
-        .map((row) => summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 }));
-      json(res, 200, { sessions });
-      return;
-    }
-    if (path === "/sessions" && method === "POST") {
-      readJson(req)
-        .then((body) => {
-          const sessionId = (body as { sessionId?: unknown }).sessionId;
-          if (typeof sessionId !== "string" || sessionId.length === 0) {
-            json(res, 400, { error: "sessionId required" });
-            return;
-          }
-          log.ensureSession(sessionId, new Date().toISOString());
-          json(res, 200, { session: { sessionId } });
-        })
-        .catch(() => json(res, 400, { error: "invalid JSON body" }));
-      return;
-    }
-    const eventsMatch = EVENTS_PATH.exec(path);
-    if (eventsMatch && method === "POST") {
-      const sessionId = decodeURIComponent(eventsMatch[1] as string);
-      readJson(req)
-        .then((body) => {
-          const input = body as Partial<PublishInput>;
-          if (typeof input.type !== "string" || typeof input.producerId !== "string") {
-            json(res, 400, { error: "type and producerId required" });
-            return;
-          }
-          const stored = log.append(
-            sessionId,
-            {
-              type: input.type,
-              producerId: input.producerId,
-              payload: (input.payload as Record<string, unknown>) ?? {},
-            },
-            randomUUID(),
-            new Date().toISOString(),
+  // The store's domain routes; CORS, the OPTIONS preflight, GET /health, and the 404 fallthrough are
+  // owned by createService. The stream (GET /sessions/<id>/stream) is a WebSocket, handled below.
+  const routes: Route[] = [
+    {
+      method: "GET",
+      match: "/sessions",
+      // The session inventory read model (D-090): each session's distilled summary, with live host
+      // presence folded in from the in-memory socket map (the durable log can't know a host crashed).
+      // Assembly is the pure summarizeSession; the store just supplies the rows + presence.
+      handler: ({ res }) => {
+        const sessions = log
+          .inventory()
+          .map((row) =>
+            summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 }),
           );
-          // The event "returns over the stream": fan out to every subscriber,
-          // including the publisher's own socket (matching the Richter round-trip).
-          // The log owns the wire framing (D-023); the server just fans out the frame.
-          for (const frame of log.readFrames(sessionId, stored.seq - 1)) {
-            broadcast(sessionId, frame);
-          }
-          json(res, 201, { ok: true, seq: stored.seq });
-        })
-        .catch(() => json(res, 400, { error: "invalid JSON body" }));
-      return;
-    }
-    res.writeHead(404);
-    res.end();
-  });
+        json(res, 200, { sessions });
+      },
+    },
+    {
+      method: "POST",
+      match: "/sessions",
+      handler: ({ req, res }) =>
+        readJson(req)
+          .then((body) => {
+            const sessionId = (body as { sessionId?: unknown }).sessionId;
+            if (typeof sessionId !== "string" || sessionId.length === 0) {
+              json(res, 400, { error: "sessionId required" });
+              return;
+            }
+            log.ensureSession(sessionId, new Date().toISOString());
+            json(res, 200, { session: { sessionId } });
+          })
+          .catch(() => json(res, 400, { error: "invalid JSON body" })),
+    },
+    {
+      method: "POST",
+      match: EVENTS_PATH,
+      handler: ({ req, res, params }) => {
+        const sessionId = decodeURIComponent(params[0] as string);
+        return readJson(req)
+          .then((body) => {
+            const input = body as Partial<PublishInput>;
+            if (typeof input.type !== "string" || typeof input.producerId !== "string") {
+              json(res, 400, { error: "type and producerId required" });
+              return;
+            }
+            const stored = log.append(
+              sessionId,
+              {
+                type: input.type,
+                producerId: input.producerId,
+                payload: (input.payload as Record<string, unknown>) ?? {},
+              },
+              randomUUID(),
+              new Date().toISOString(),
+            );
+            // The event "returns over the stream": fan out to every subscriber, including the
+            // publisher's own socket (matching the Richter round-trip). The log owns the wire
+            // framing (D-023); the server just fans out the frame.
+            for (const frame of log.readFrames(sessionId, stored.seq - 1)) {
+              broadcast(sessionId, frame);
+            }
+            json(res, 201, { ok: true, seq: stored.seq });
+          })
+          .catch(() => json(res, 400, { error: "invalid JSON body" }));
+      },
+    },
+  ];
+
+  const server = createService({ routes, corsMethods: CORS_METHODS });
 
   const wss = new WebSocketServer({ server });
   wss.on("connection", (socket, req) => {

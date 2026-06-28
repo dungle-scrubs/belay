@@ -1,13 +1,14 @@
 import { fileURLToPath, URL } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
+import { RESERVED_PORTS } from "@trevor/session/ports";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// Port 17420 is reserved for the Trevor web UI in ~/.agents/PORTS.md.
-// /sessions is proxied to the local session-store (REST + WebSocket, :17424) so the
+// RESERVED_PORTS.web is reserved for the Trevor web UI in ~/.agents/PORTS.md.
+// /sessions is proxied to the local session-store (REST + WebSocket, RESERVED_PORTS.store) so the
 // browser talks same-origin and avoids cross-origin (CORS) failures. Override
 // VITE_SESSION_PROXY to point at another backend; opt into Richter directly with
-// VITE_RICHTER_URL (see src/session/client.ts).
+// VITE_RICHTER_URL (see src/session/use-session.ts).
 // The Tailwind plugin only processes CSS that imports "tailwindcss", so the
 // live app (which does not yet import src/index.css) builds byte-identically;
 // Storybook opts in via .storybook/preview.ts. Shared by both since Storybook's
@@ -25,11 +26,11 @@ export default defineConfig({
     // the `trevor` launcher opens, and what the proxy target uses) gets ECONNREFUSED even though Vite
     // is "up". Pinning 127.0.0.1 makes the bind address match every consumer.
     host: "127.0.0.1",
-    port: 17420,
+    port: RESERVED_PORTS.web,
     strictPort: true,
     proxy: {
       "/sessions": {
-        target: process.env.VITE_SESSION_PROXY ?? "http://127.0.0.1:17424",
+        target: process.env.VITE_SESSION_PROXY ?? `http://127.0.0.1:${RESERVED_PORTS.store}`,
         changeOrigin: true,
         ws: true,
       },

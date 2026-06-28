@@ -1,4 +1,5 @@
 import { type ArtifactRef, artifactRef, blobUrl, putBlob } from "@trevor/session";
+import { RESERVED_PORTS } from "@trevor/session/ports";
 
 /**
  * Web binding for the content-addressed blob store (D-028): resolves the store URL
@@ -6,7 +7,8 @@ import { type ArtifactRef, artifactRef, blobUrl, putBlob } from "@trevor/session
  * and turns a stored hash into a GET url for rendering. The browser talks to the store
  * directly (it serves permissive CORS); the host later fetches the same bytes by hash.
  */
-const BLOB_STORE_URL = import.meta.env.VITE_BLOB_STORE_URL ?? "http://127.0.0.1:17423";
+const BLOB_STORE_URL =
+  import.meta.env.VITE_BLOB_STORE_URL ?? `http://127.0.0.1:${RESERVED_PORTS.blob}`;
 
 function kindOf(mimeType: string): ArtifactRef["kind"] {
   if (mimeType.startsWith("image/")) {

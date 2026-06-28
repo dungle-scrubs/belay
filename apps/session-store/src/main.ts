@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { startServer } from "@trevor/server-kit";
+import { RESERVED_PORTS } from "@trevor/session/ports";
 import { createSessionStore } from "./server";
 
 /**
@@ -11,7 +12,7 @@ import { createSessionStore } from "./server";
  * host/web to opt into Richter instead.
  */
 
-const PORT = Number(process.env.SESSION_STORE_PORT ?? 17424);
+const PORT = Number(process.env.SESSION_STORE_PORT ?? RESERVED_PORTS.store);
 const DB_PATH = process.env.SESSION_STORE_DB ?? join(homedir(), ".trevor", "sessions.db");
 
 startServer(createSessionStore(DB_PATH), {

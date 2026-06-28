@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { RESERVED_PORTS } from "@trevor/session/ports";
 import { createBlobServer } from "./server";
 
 /**
@@ -10,7 +11,7 @@ import { createBlobServer } from "./server";
  * shareable as the session log it is referenced from.
  */
 
-const PORT = Number(process.env.BLOB_STORE_PORT ?? 17423);
+const PORT = Number(process.env.BLOB_STORE_PORT ?? RESERVED_PORTS.blob);
 const ROOT = process.env.BLOB_STORE_DIR ?? join(homedir(), ".trevor", "blobs");
 const MAX_BYTES = Number(process.env.BLOB_STORE_MAX_BYTES ?? 25 * 1024 * 1024);
 

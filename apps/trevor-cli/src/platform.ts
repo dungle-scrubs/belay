@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
+import { raceTimeout } from "@trevor/session/async";
 import { nodeFs } from "./fs";
 import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
 import { TREVOR_HOME } from "./project";
@@ -46,16 +47,10 @@ function repoRoot(): string {
   }
 }
 
-async function fetchWithTimeout(url: string, ms: number): Promise<Response | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { signal: controller.signal });
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+/** A timed GET that degrades any failure (network error or timeout-abort) to null, so a probe reads
+ *  as "not listening" rather than throwing. The abort+timer protocol lives in `raceTimeout`. */
+function fetchWithTimeout(url: string, ms: number): Promise<Response | null> {
+  return raceTimeout((signal) => fetch(url, { signal }), ms).catch(() => null);
 }
 
 /** Probes one reserved port. store/blob expose `GET /health -> {ok:true}` (our identity); the web

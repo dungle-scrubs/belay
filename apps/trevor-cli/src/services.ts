@@ -1,17 +1,17 @@
+import { RESERVED_PORTS, type ServiceName } from "@trevor/session/ports";
+
 /**
  * Shared-service readiness for the launcher (D-085). The web UI, blob store, and session-store are
  * shared local services (one set across all projects, on reserved loopback ports) - the launcher
  * checks them before starting a project host, starts any that are missing, and flags a reserved port
  * that some OTHER process has taken. The classification is pure over an injected probe result; the
  * actual HTTP probing lives in the platform.
+ *
+ * The reserved ports themselves are owned by `@trevor/session/ports` (the one source of truth shared
+ * with the stores, the host, and the web); the launcher-specific filters/scripts below key off them.
  */
 
-/**
- * The reserved loopback ports the shared services bind (the source of truth is `~/.agents/PORTS.md`).
- * These are checked, never re-assigned - a port held by something else is a reported conflict.
- */
-export const RESERVED_PORTS = { web: 17420, blob: 17423, store: 17424 } as const;
-export type ServiceName = keyof typeof RESERVED_PORTS;
+export { RESERVED_PORTS, type ServiceName };
 export const SERVICE_NAMES = Object.keys(RESERVED_PORTS) as ServiceName[];
 
 /** The pnpm filter that starts each shared service (used by the real platform's startService). */
