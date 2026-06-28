@@ -1,7 +1,6 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { startServer } from "@trevor/server-kit";
 import { RESERVED_PORTS } from "@trevor/session/ports";
+import { sessionStoreDbPath } from "./config";
 import { createSessionStore } from "./server";
 
 /**
@@ -13,7 +12,7 @@ import { createSessionStore } from "./server";
  */
 
 const PORT = Number(process.env.SESSION_STORE_PORT ?? RESERVED_PORTS.store);
-const DB_PATH = process.env.SESSION_STORE_DB ?? join(homedir(), ".trevor", "sessions.db");
+const DB_PATH = sessionStoreDbPath();
 
 startServer(createSessionStore(DB_PATH), {
   port: PORT,

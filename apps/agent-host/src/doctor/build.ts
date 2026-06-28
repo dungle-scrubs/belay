@@ -1,6 +1,5 @@
 import { access, constants } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   type DoctorSnapshot,
   type InternetSnapshot,
@@ -8,6 +7,7 @@ import {
   type SourceSummary,
   UNKNOWN_INTERNET,
 } from "@trevor/session";
+import { resolveTrevorHome } from "@trevor/session/node-paths";
 import { Effect } from "effect";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
@@ -66,11 +66,6 @@ function abbrevHome(absolute: string): string {
     : absolute;
 }
 
-/** The TREVOR_HOME path (env override or `~/.trevorV2`). */
-function trevorHome(): string {
-  return process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2");
-}
-
 /** Whether a directory is writable (a bounded fs probe for the /doctor Storage area). */
 async function storageWritable(dir: string): Promise<boolean> {
   try {
@@ -89,7 +84,7 @@ function hostStr(host: Record<string, unknown> | undefined, key: string): string
 
 /** Assembles the current host-health snapshot: probes the bounded live facts, then builds the areas. */
 export async function buildLiveDoctorSnapshot(facts: DoctorFacts): Promise<DoctorSnapshot> {
-  const home = trevorHome();
+  const home = resolveTrevorHome();
   const [providers, writable, observationStore] = await Promise.all([
     Promise.all(
       Object.entries(facts.providers).map(([key, provider]) => doctorProviderProbe(key, provider)),

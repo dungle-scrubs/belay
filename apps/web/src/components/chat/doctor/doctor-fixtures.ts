@@ -5,7 +5,7 @@
  * stale, long paths). Shared by the dashboard and area-card stories.
  *
  * Content is Trevor-flavoured on purpose - qwen local + gpt cloud, the
- * ~/.trevorV2 / ~/.trevor / ~/.pi roots, rg + ast-grep, Firecrawl - so the
+ * ~/.trevorV2 / ~/.pi roots, rg + ast-grep, Firecrawl - so the
  * layout is exercised against believable text lengths.
  */
 import {
@@ -502,7 +502,7 @@ export const storageOk: DoctorArea = {
   verdict: "All roots resolved and writable.",
   facts: [
     { label: "config", value: "~/.trevorV2" },
-    { label: "state", value: "~/.trevor", status: "ok" },
+    { label: "state", value: "~/.trevorV2", status: "ok" },
     { label: "auth", value: "~/.pi" },
   ],
 };
@@ -514,7 +514,7 @@ export const storageRootInvalid: DoctorArea = {
   verdict: "State root is not writable.",
   facts: [
     { label: "config", value: "~/.trevorV2" },
-    { label: "state", value: "~/.trevor · not writable", status: "error" },
+    { label: "state", value: "~/.trevorV2 · not writable", status: "error" },
   ],
   findings: [
     {
@@ -522,9 +522,9 @@ export const storageRootInvalid: DoctorArea = {
       status: "error",
       title: "State root not writable",
       message: "Trevor can't write its state root, so durable loops, leases, and caches will fail.",
-      source: "~/.trevor",
+      source: "~/.trevorV2",
       evidence: "stat: EACCES permission denied\nowner: root  mode: 0755",
-      nextAction: { label: "Fix ownership", command: "chown -R $USER ~/.trevor" },
+      nextAction: { label: "Fix ownership", command: "chown -R $USER ~/.trevorV2" },
     },
   ],
 };

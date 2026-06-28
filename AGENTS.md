@@ -44,18 +44,20 @@ explicitly adds a new root.
 
 - **User settings and durable Trevor state** live under `TREVOR_HOME`, defaulting
   to `~/.trevorV2`. This includes user-global `AGENTS.md`, project/session
-  mappings, host ownership records, locks, managed worktrees, launcher logs, and
-  product state that must survive restarts. Host code should import
-  `TREVOR_HOME` from `apps/agent-host/src/paths.ts`; CLI code mirrors that
-  constant in `apps/trevor-cli/src/project.ts`.
+  mappings, host ownership records, locks, managed worktrees, launcher logs,
+  the session-store SQLite database, blob-store bytes, and product state that
+  must survive restarts. The single code owner for the env override and default
+  directory name is the node-only `@trevor/session/node-paths` subpath; Node
+  packages should import `TREVOR_HOME` or `resolveTrevorHome` from there instead
+  of spelling `~/.trevorV2` themselves.
 - **Debug metrics, traces, and generated diagnostic artifacts** live under
   `${XDG_STATE_HOME:-~/.local/state}/trevorV2`. This is for append-only JSONL,
   performance snapshots, provider/turn diagnostics that are not user settings,
   and other stateful debug output. Keep writes best-effort and never let debug
   metric failures affect a user turn.
-- **Legacy shared service data** currently exists under `~/.trevor` for the
-  session-store SQLite database and blob-store bytes. Do not add new features
-  there; only touch it when maintaining or migrating those existing services.
+- **Legacy shared service data** may still exist under `~/.trevor` from older
+  V2 runs or V1-era local tooling. Do not add new features or active V2 writes
+  there; only touch it when maintaining or migrating old data.
 - **Temporary scratch** belongs in the OS temp directory (`tmpdir()`), for tests,
   transcodes, and short-lived intermediate files that can disappear at any time.
 - **Browser-only ephemeral UI state** belongs in browser storage, currently

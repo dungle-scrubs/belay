@@ -1,7 +1,9 @@
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { projectSessionId } from "@trevor/session";
+import { TREVOR_HOME } from "@trevor/session/node-paths";
 import { type LauncherFs, readJson, writeJson } from "./fs";
+
+export { TREVOR_HOME };
 
 /**
  * Project identity for the launcher (D-085): resolve the project root from cwd, derive its stable
@@ -9,14 +11,6 @@ import { type LauncherFs, readJson, writeJson } from "./fs";
  * session. Pure over an injected `LauncherFs` so root-walking and mapping persistence are unit-tested
  * without touching the real disk.
  */
-
-/**
- * `~/.trevorV2` (or `$TREVOR_HOME`) - the same base directory the host's `paths.ts` uses. Duplicated
- * here (a one-liner) rather than imported, so the launcher does not depend on the host package, and so
- * the browser-bundled `@trevor/session` stays free of node built-ins (D-041); the env convention is
- * the shared contract.
- */
-export const TREVOR_HOME = resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"));
 
 /**
  * Resolves the project root as the nearest ancestor (from cwd up) that contains a `.git` marker - a

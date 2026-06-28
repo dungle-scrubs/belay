@@ -1,19 +1,19 @@
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { TREVOR_HOME } from "@trevor/session/node-paths";
+
+export { TREVOR_HOME };
 
 /**
  * The host's path/workspace owner: it owns BOTH the user-global base directory AND the workspace
  * root + confinement policy.
  *
- * - User-global (D-081): `TREVOR_HOME` is the ONE source for every user-scoped path. It lives here
- *   (a host, node-only module) rather than in `@trevor/session`, because that package is also
- *   bundled into the browser web app and must stay free of node built-ins (`node:os`/`node:path`).
- *   The launcher (`trevor-cli`) keeps its own one-line copy for the same reason (D-041).
+ * - User-global (D-081): `TREVOR_HOME` is imported from the node-only
+ *   `@trevor/session/node-paths` subpath, the one project-wide owner of the env override and default
+ *   directory name. Browser code imports only browser-safe subpaths.
  * - Workspace (D-028): `WORKSPACE_ROOT` plus the confinement policy that was previously in
  *   tools/workspace.ts. These are workspace/path concepts, not tool internals.
  */
-
-export const TREVOR_HOME = resolve(process.env.TREVOR_HOME ?? join(homedir(), ".trevorV2"));
 
 export const TREVOR_STATE_HOME = resolve(
   process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
