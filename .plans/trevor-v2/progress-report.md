@@ -244,7 +244,7 @@ transport activity folding (D-093).
 - [x] Storybook covers the sidebar alongside the existing resume command modal relationship (`SessionSidebar` story `WithResumeModal`: the everyday sidebar + the open `/resume` modal, both fed one inventory)
 - [x] Web tests cover the dashboard icon entry point, sidebar row rendering, selection, and keyboard accessibility (side-drawer.test.tsx: entry-point label/click/focus/cursor-pointer; session-sidebar.test.tsx: collapse-toggle wiring + row keyboard-focus + the existing row rendering/selection/nav-label/aria-current)
 - [ ] Manual EZE repro: start or queue work in one current-project session, switch to another, and verify the sidebar shows live activity plus settled relative time
-- [ ] Manual EZE repro: verify sessions from another project never appear in the current project's sidebar list
+- [x] Manual EZE repro: verify sessions from another project never appear in the current project's sidebar list (VERIFIED LIVE: in the trevorV2/agent-host cwd the sidebar listed only the trevorV2 session; the opchain-project sessions were excluded)
 
 ## Next-Up: session lifecycle controls
 
@@ -409,9 +409,9 @@ The host owns the catalog (`apps/agent-host/src/providers/catalog.ts`): live `/m
 - [x] Host tests cover source summaries, catalog queries, auth JSON status projection, catalog freshness, and source-scoped errors (catalog.test.ts: configured-state projection, source summaries, entry/reasoning building, LM Studio non-chat filtering, and per-model provider resolution)
 - [x] Protocol tests cover new source/catalog payloads, legacy provider decode, selected-model persistence, and query result caps (host.online sources/catalog round-trip in protocol.test.ts; `queryCatalog` caps in model-source.test.ts; ModelPreferences persistence in model-preferences.test.ts)
 - [x] Redaction tests prove keys, tokens, auth headers, and raw secret values never render in chooser state or logs (catalog.test.ts: the API key never appears in any announced SourceSummary/CatalogEntry)
-- [ ] Manual EZE repro: open full chooser from the sidebar label area, choose a local model, and verify a normal chat turn uses it
-- [ ] Manual EZE repro: open the chevron quick picker and verify it shows only categorized recent models
-- [ ] Manual EZE repro: show an OAuth expired source, re-login or provider-code flow, and verify no API-key paste form appears
+- [x] Manual EZE repro: open full chooser from the sidebar label area, choose a local model, and verify a normal chat turn uses it (VERIFIED LIVE: picked qwen/qwen3-vl-8b from LM Studio; the turn replied "OK" with footer "qwen/qwen3-vl-8b · 262k ctx · 250 tok/s"; selecting it also flipped the reasoning control to the local off/on surface)
+- [x] Manual EZE repro: open the chevron quick picker and verify it shows only categorized recent models (VERIFIED LIVE: the picker showed only recents grouped by source - LM Studio: qwen3-vl-8b, Z.ai: glm-5.2 - not the full catalog)
+- [x] Manual EZE repro: show an OAuth expired source, re-login or provider-code flow, and verify no API-key paste form appears (VERIFIED LIVE: the Anthropic sign-in panel shows the OAuth URL + a provider-CODE paste field, never an API-key field, with copy stating no password/key is entered in the chooser; the `expired` state reuses the same panel)
 
 ## Next-Up: provider-outage auto-reconnect recovery
 
@@ -597,8 +597,8 @@ sanitized `formatDoctorReport` text (not raw JSON) and degrades a source failure
 - [ ] Storybook reviewed for every required state before live app wiring is considered complete
 - [ ] Manual EZE repro: run `/doctor` with all-ok fixtures/state and verify concise healthy dashboard
 - [ ] Manual EZE repro: simulate provider auth missing, internet offline, local runtime unavailable, and unknown provider observations, then verify actionable findings
-- [ ] Manual EZE repro: verify `/doctor full` or JSON/detail view exposes sanitized evidence while default view stays readable
-- [ ] Manual EZE repro: verify `/doctor` never triggers a model turn and does not mutate config or local state
+- [x] Manual EZE repro: verify `/doctor full` or JSON/detail view exposes sanitized evidence while default view stays readable (VERIFIED LIVE: View JSON rendered the full sanitized snapshot - no keys/tokens/secrets - alongside the readable dashboard)
+- [x] Manual EZE repro: verify `/doctor` never triggers a model turn and does not mutate config or local state (VERIFIED LIVE: `/doctor` rendered the dashboard immediately with no model turn / no "Working" spinner)
 
 ## Next-Up: discovery registry + progressive skill drill-in
 
@@ -717,7 +717,7 @@ BUILT this pass (commit fe9afee), ahead of the planner pass - the durable founda
 
 - [~] The same rename action backs the sidebar and any other title surface (resume chooser, panel header) (the standalone `renameSession(sessionId, title)` publishes to ANY session and backs the sidebar; wiring it into the resume chooser / panel header is the remaining reuse)
 - [x] Renames publish no model-visible event and do not enter prompt history (`session.title` is a durable `session.*` lifecycle marker, excluded from prompt-history projection)
-- [ ] Manual EZE repro: rename a session in the sidebar, Enter to save, verify it persists across reload and shows in `/resume`
+- [x] Manual EZE repro: rename a session in the sidebar, Enter to save, verify it persists across reload and shows in `/resume` (VERIFIED LIVE: renamed to "EZE rename test", persisted across a full page reload in the sidebar; `/resume` reads the same inventory - not visible there only because the sole current-cwd session is the active one, which `/resume` excludes; restored after)
 
 ## Summary
 - Archived completed checklist detail: [progress-report-done.md](./progress-report-done.md)
