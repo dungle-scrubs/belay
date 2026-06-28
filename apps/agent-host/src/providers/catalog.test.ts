@@ -80,6 +80,28 @@ test("a catalog entry carries the model's reasoning surface + capabilities (from
   assert.ok(entry?.capabilities.includes("reasoning"));
 });
 
+test("a model pi-ai doesn't know uses the provider's live display name, not the raw id", () => {
+  // openrouter (gateway) configured with a key; its live /models carries a name for an id pi-ai's
+  // registry has never heard of - the entry shows that name, fixing label consistency.
+  const snap = buildCatalogSnapshot(
+    { ...auth, openrouter: { key: "sk-or-test" } },
+    { openrouter: [{ id: "sakana/fugu-ultra", name: "Sakana: Fugu Ultra" }] },
+  );
+  const entry = snap.catalogBySource.openrouter?.[0];
+  assert.equal(entry?.modelId, "sakana/fugu-ultra");
+  assert.equal(entry?.displayName, "Sakana: Fugu Ultra");
+});
+
+test("a model with neither a registry entry nor a live name falls back to its id", () => {
+  // ollama ids (e.g. gpt-oss:120b) are already readable, and its /v1/models carries no name - the id
+  // is the label, and a bare-id input still works (normalized to a LiveModel).
+  const snap = buildCatalogSnapshot(
+    { ...auth, ollama: { key: "ollama-test" } },
+    { ollama: ["gpt-oss:120b"] },
+  );
+  assert.equal(snap.catalogBySource.ollama?.[0]?.displayName, "gpt-oss:120b");
+});
+
 test("REDACTION: the API key never appears in any announced source or catalog entry", () => {
   const snap = buildCatalogSnapshot(auth, {
     deepseek: ["deepseek-v4-pro"],

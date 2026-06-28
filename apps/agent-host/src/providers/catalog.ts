@@ -147,8 +147,21 @@ function baseUrlOf(source: SourceDef): string | null {
   return typeof model?.baseUrl === "string" ? model.baseUrl : null;
 }
 
-/** Live OpenAI-compatible `/models` ids from `{baseUrl}/models`, bearer-authed when a key is given. */
-async function fetchLiveModelIds(baseUrl: string, key: string | null): Promise<string[]> {
+/** One model a source advertises: its id plus an optional provider-supplied display name. */
+export interface LiveModel {
+  readonly id: string;
+  /** The provider's own display name (e.g. OpenRouter's "Anthropic: Claude Opus 4.8"), when given. */
+  readonly name?: string;
+}
+
+/** Normalizes a raw id or a {@link LiveModel} into a LiveModel (so callers can pass plain ids). */
+function asLiveModel(model: string | LiveModel): LiveModel {
+  return typeof model === "string" ? { id: model } : model;
+}
+
+/** Live OpenAI-compatible models from `{baseUrl}/models` (id + display name), bearer-authed when a
+ *  key is given. The `name` field is what gives ids pi-ai doesn't know a real label, not a bare id. */
+async function fetchLiveModels(baseUrl: string, key: string | null): Promise<LiveModel[]> {
   const res = await fetch(`${baseUrl}/models`, {
     headers: key ? { Authorization: `Bearer ${key}` } : {},
     signal: AbortSignal.timeout(8000),
@@ -156,10 +169,10 @@ async function fetchLiveModelIds(baseUrl: string, key: string | null): Promise<s
   if (!res.ok) {
     throw new Error(`models query failed (${res.status})`);
   }
-  const json = (await res.json()) as { data?: Array<{ id?: unknown }> };
+  const json = (await res.json()) as { data?: Array<{ id?: unknown; name?: unknown }> };
   return (json.data ?? [])
-    .map((m) => m.id)
-    .filter((id): id is string => typeof id === "string" && id.length > 0);
+    .filter((m): m is { id: string; name?: unknown } => typeof m.id === "string" && m.id.length > 0)
+    .map((m) => ({ id: m.id, name: typeof m.name === "string" && m.name ? m.name : undefined }));
 }
 
 /** The pi-ai registry Model for an id (full object), for shape + reasoning enrichment, or undefined. */
@@ -215,9 +228,11 @@ function defaultReasoningFor(levels: readonly string[]): string {
 const NON_CHAT_LOCAL =
   /embed|embedding|gliner|rerank|reranker|privacy-filter|whisper|\btts\b|bge-/i;
 
-/** Builds a {@link CatalogEntry} for one model id under a source, enriched from the pi-ai shape. */
-function entryFor(source: SourceDef, id: string): CatalogEntry {
-  const model = piModelOf(source.piProvider, id);
+/** Builds a {@link CatalogEntry} for one source model, enriched from the pi-ai shape. The display
+ *  name prefers pi-ai's curated name, then the provider's live name, then the raw id - so a model
+ *  pi-ai has never heard of still shows the provider's label instead of a bare id. */
+function entryFor(source: SourceDef, live: LiveModel): CatalogEntry {
+  const model = piModelOf(source.piProvider, live.id);
   const kind: ModelKind = source.type === "local" ? "local" : "cloud";
   const reasoningLevels = reasoningLevelsFor(source, model);
   const capabilities: string[] = ["tools"];
@@ -229,8 +244,8 @@ function entryFor(source: SourceDef, id: string): CatalogEntry {
   }
   return {
     sourceId: source.sourceId,
-    modelId: id,
-    displayName: model?.name ?? id,
+    modelId: live.id,
+    displayName: model?.name ?? live.name ?? live.id,
     kind,
     capabilities,
     contextLength: typeof model?.contextWindow === "number" ? model.contextWindow : null,
@@ -242,21 +257,24 @@ function entryFor(source: SourceDef, id: string): CatalogEntry {
   };
 }
 
-/** The RAW model ids a source advertises: live `/models`, else pi-ai's registry (no filtering here). */
-async function fetchSourceModelIds(source: SourceDef, key: string | null): Promise<string[]> {
+/** The RAW models a source advertises: live `/models` (id + name), else pi-ai's registry (which also
+ *  carries names). No filtering here. */
+async function fetchSourceModels(source: SourceDef, key: string | null): Promise<LiveModel[]> {
   const baseUrl = baseUrlOf(source);
-  let ids: string[] = [];
+  let models: LiveModel[] = [];
   if (baseUrl) {
     try {
-      ids = await fetchLiveModelIds(baseUrl, key);
+      models = await fetchLiveModels(baseUrl, key);
     } catch {
       // fall through to the static registry
     }
   }
-  if (ids.length === 0 && source.piProvider) {
-    ids = (getModels(source.piProvider as "deepseek") as Array<{ id: string }>).map((m) => m.id);
+  if (models.length === 0 && source.piProvider) {
+    models = (
+      getModels(source.piProvider as "deepseek") as Array<{ id: string; name?: string }>
+    ).map((m) => ({ id: m.id, name: m.name }));
   }
-  return ids;
+  return models;
 }
 
 function statusFor(configured: boolean): SourceStatus {
@@ -265,22 +283,23 @@ function statusFor(configured: boolean): SourceStatus {
 
 /**
  * Builds the announced source + catalog snapshot PURELY from the auth (the configured signal - key
- * PRESENCE only, never the value) and the already-fetched per-source model ids. Local non-chat models
+ * PRESENCE only, never the value) and the already-fetched per-source models (id + optional name; a
+ * plain id is accepted and normalized, so tests can pass bare ids). Local non-chat models
  * (embeddings, rerankers) are dropped here; an unconfigured source carries no catalog, just a
  * needs-auth summary. Pure + secret-free by construction (the key never flows into a summary/entry), so
  * the configured projection, summaries, filtering, and redaction are unit-tested without any network.
  */
 export function buildCatalogSnapshot(
   auth: Record<string, unknown>,
-  idsBySource: Readonly<Record<string, readonly string[]>>,
+  modelsBySource: Readonly<Record<string, readonly (string | LiveModel)[]>>,
 ): CatalogSnapshot {
   const catalogBySource: Record<string, CatalogEntry[]> = {};
   const sources: SourceSummary[] = [];
   for (const source of SOURCES) {
     const configured = isConfigured(source, auth);
-    const raw = idsBySource[source.sourceId] ?? [];
-    const ids = source.type === "local" ? raw.filter((id) => !NON_CHAT_LOCAL.test(id)) : raw;
-    const entries = configured ? ids.map((id) => entryFor(source, id)) : [];
+    const raw = (modelsBySource[source.sourceId] ?? []).map(asLiveModel);
+    const models = source.type === "local" ? raw.filter((m) => !NON_CHAT_LOCAL.test(m.id)) : raw;
+    const entries = configured ? models.map((m) => entryFor(source, m)) : [];
     catalogBySource[source.sourceId] = entries;
     sources.push({
       sourceId: source.sourceId,
@@ -361,13 +380,14 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
  */
 export async function loadCatalog(): Promise<CatalogSnapshot> {
   const auth = await readAuthJson();
-  // Fetch the raw model ids for each CONFIGURED source (a key/sign-in is present), then build the
-  // snapshot purely. Unconfigured sources are skipped (no fetch) and carry a needs-auth summary.
-  const idsBySource: Record<string, readonly string[]> = {};
+  // Fetch the raw models (id + name) for each CONFIGURED source (a key/sign-in is present), then
+  // build the snapshot purely. Unconfigured sources are skipped (no fetch) and carry a needs-auth
+  // summary.
+  const modelsBySource: Record<string, readonly LiveModel[]> = {};
   await Promise.all(
     SOURCES.filter((source) => isConfigured(source, auth)).map(async (source) => {
-      idsBySource[source.sourceId] = await fetchSourceModelIds(source, staticKeyOf(source, auth));
+      modelsBySource[source.sourceId] = await fetchSourceModels(source, staticKeyOf(source, auth));
     }),
   );
-  return buildCatalogSnapshot(auth, idsBySource);
+  return buildCatalogSnapshot(auth, modelsBySource);
 }
