@@ -169,7 +169,7 @@ test("activity stays visible for a session the user is NOT currently viewing (D-
 
 test("a row inline-renames: edit -> Enter saves (optimistic) and reports the new title", () => {
   const renames: [string, string][] = [];
-  const { getByLabelText, getByText, getByDisplayValue } = render(
+  const { getByText, getByDisplayValue } = render(
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "old name" })]}
       currentSessionId="s1"
@@ -179,8 +179,9 @@ test("a row inline-renames: edit -> Enter saves (optimistic) and reports the new
       nowMs={NOW}
     />,
   );
-  // The edit affordance opens an input seeded with the current title.
-  fireEvent.click(getByLabelText("Rename old name"));
+  // Right-click → Rename opens an input seeded with the current title.
+  fireEvent.contextMenu(getByText("old name"));
+  fireEvent.click(getByText("Rename"));
   const input = getByDisplayValue("old name");
   fireEvent.change(input, { target: { value: "Auth refactor" } });
   fireEvent.keyDown(input, { key: "Enter" });
@@ -202,7 +203,8 @@ test("Escape cancels a rename without reporting it; an empty title is rejected",
     />,
   );
   // Escape discards the edit (the input is found by its stable aria-label, not its value).
-  fireEvent.click(getByLabelText("Rename keep me"));
+  fireEvent.contextMenu(getByText("keep me"));
+  fireEvent.click(getByText("Rename"));
   const escInput = getByLabelText("Session title");
   fireEvent.change(escInput, { target: { value: "discarded" } });
   fireEvent.keyDown(escInput, { key: "Escape" });
@@ -210,15 +212,16 @@ test("Escape cancels a rename without reporting it; an empty title is rejected",
   assert.ok(getByText("keep me"), "the original title remains");
 
   // A whitespace-only title is rejected (no event published).
-  fireEvent.click(getByLabelText("Rename keep me"));
+  fireEvent.contextMenu(getByText("keep me"));
+  fireEvent.click(getByText("Rename"));
   const emptyInput = getByLabelText("Session title");
   fireEvent.change(emptyInput, { target: { value: "   " } });
   fireEvent.keyDown(emptyInput, { key: "Enter" });
   assert.equal(renames.length, 0, "an empty title publishes nothing");
 });
 
-test("without onRename, no edit affordance appears (Storybook/standalone)", () => {
-  const { queryByLabelText } = render(
+test("without action handlers, there is no rename affordance and right-click opens no menu", () => {
+  const { getByText, queryByRole, queryByLabelText } = render(
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "no edit" })]}
       currentSessionId="s1"
@@ -227,7 +230,10 @@ test("without onRename, no edit affordance appears (Storybook/standalone)", () =
       nowMs={NOW}
     />,
   );
-  assert.equal(queryByLabelText("Rename no edit"), null, "no rename pencil without the handler");
+  // Rename lives only in the right-click menu, which is wired only when an action handler is passed.
+  fireEvent.contextMenu(getByText("no edit"));
+  assert.equal(queryByRole("menu"), null, "no right-click menu without handlers");
+  assert.equal(queryByLabelText("Session title"), null, "no inline edit is reachable");
 });
 
 test("effectiveActivity prefers a live override, else the durable activity (D-093 M3)", () => {
@@ -304,7 +310,7 @@ test("with no action handlers the sidebar is presentational: no controls, no lif
 
   // With no onRename/onArchive/onDelete wired (Storybook/standalone), the only interactive controls
   // are the one-per-visible-session select rows (the archived "filed" session is excluded), so there
-  // are exactly two buttons - no edit pencil and no right-click menu hook. Lifecycle stays opt-in.
+  // are exactly two buttons - no right-click menu hook. Lifecycle stays opt-in.
   const buttons = [...container.querySelectorAll("button")];
   assert.equal(buttons.length, 2, "only the per-session select rows are interactive");
 
@@ -381,7 +387,7 @@ test("the menu's Delete confirms first, then fires onDelete (soft delete)", () =
   assert.deepEqual(deleted, ["s1"], "confirmed Delete soft-deletes that session");
 });
 
-test("the menu's Rename opens the same inline edit the pencil does", () => {
+test("the menu's Rename opens the inline title edit", () => {
   const renames: Array<[string, string]> = [];
   const { getByText, getByLabelText } = render(
     <SessionSidebar

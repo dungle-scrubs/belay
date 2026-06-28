@@ -97,7 +97,7 @@ export const ManySessions: Story = {
 };
 
 /** Right-click a row to open the Rename / Archive / Delete menu (D-094). Wiring the three action
- *  handlers is what turns on the menu; Rename opens the same inline edit the hover pencil does, and
+ *  handlers is what turns on the menu; Rename opens the inline title edit, and
  *  Delete asks for confirmation first (it is a soft delete - hidden everywhere, log retained). */
 export const RowActions: Story = {
   render: () => (

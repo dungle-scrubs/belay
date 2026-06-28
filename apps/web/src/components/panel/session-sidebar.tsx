@@ -165,7 +165,6 @@ function SessionRow({
   activity,
   selected,
   editing,
-  onBeginEdit,
   onEndEdit,
   onSelect,
   onRename,
@@ -175,9 +174,8 @@ function SessionRow({
   summary: SessionSummary;
   activity: SessionActivity;
   selected: boolean;
-  /** Edit state is owned by the sidebar so the pencil AND the right-click Rename open the same input. */
+  /** Edit state is owned by the sidebar so the right-click Rename can open the inline input. */
   editing: boolean;
-  onBeginEdit: () => void;
   onEndEdit: () => void;
   onSelect: (sessionId: string) => void;
   onRename?: (sessionId: string, title: string) => void;
@@ -253,30 +251,20 @@ function SessionRow({
           <RowMeta summary={summary} activity={activity} nowMs={nowMs} />
         </div>
       ) : (
-        <>
-          <button
-            type="button"
-            onClick={() => onSelect(summary.sessionId)}
-            aria-current={selected ? "true" : undefined}
-            // Always selectable - switching is allowed even while a session is running (the turn keeps
-            // running on the host; the row's activity bar shows it). Never blocked or disabled.
-            className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 py-1.5 pr-2.5 pl-3 text-left"
-          >
-            {/* Top row: the title, truncating before it can widen the row. */}
-            <span className="truncate text-sm leading-tight">{title}</span>
-            <RowMeta summary={summary} activity={activity} nowMs={nowMs} />
-          </button>
-          {onRename ? (
-            <button
-              type="button"
-              onClick={onBeginEdit}
-              aria-label={`Rename ${title}`}
-              className="absolute top-1 right-1 cursor-pointer rounded p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
-            >
-              <Pencil className="size-3" />
-            </button>
-          ) : null}
-        </>
+        // Rename is reached only via the right-click menu (no hover pencil) - the whole row is the
+        // select target.
+        <button
+          type="button"
+          onClick={() => onSelect(summary.sessionId)}
+          aria-current={selected ? "true" : undefined}
+          // Always selectable - switching is allowed even while a session is running (the turn keeps
+          // running on the host; the row's activity bar shows it). Never blocked or disabled.
+          className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 py-1.5 pr-2.5 pl-3 text-left"
+        >
+          {/* Top row: the title, truncating before it can widen the row. */}
+          <span className="truncate text-sm leading-tight">{title}</span>
+          <RowMeta summary={summary} activity={activity} nowMs={nowMs} />
+        </button>
       )}
     </div>
   );
@@ -444,7 +432,7 @@ export function SessionSidebar({
   const rows = visibleSessions(sessions, currentProject);
 
   // Edit, right-click menu, and delete-confirm state all live here (not in the row) so the menu's
-  // Rename opens the same inline edit the pencil does, and one menu/dialog shows at a time.
+  // Rename can open the row's inline edit, and one menu/dialog shows at a time.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{
     sessionId: string;
@@ -510,7 +498,6 @@ export function SessionSidebar({
                 activity={effectiveActivity(summary, liveActivity)}
                 selected={summary.sessionId === currentSessionId}
                 editing={editingId === summary.sessionId}
-                onBeginEdit={() => setEditingId(summary.sessionId)}
                 onEndEdit={() => setEditingId((id) => (id === summary.sessionId ? null : id))}
                 onSelect={onSelect}
                 onRename={onRename}
