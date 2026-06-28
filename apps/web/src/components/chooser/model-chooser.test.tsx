@@ -198,6 +198,29 @@ test("the source-detail auth/setup action invokes the host-owned flow", () => {
   assert.deepEqual(actions, [["codex", "reauthenticate"]]);
 });
 
+test("the Configured only toggle hides needs-setup sources", () => {
+  // SOURCES has the needs-auth Codex source, so the toggle appears; toggling it hides Codex.
+  const { getByText, getByLabelText, queryByLabelText } = render(
+    <ModelChooser sources={SOURCES} catalogBySource={CATALOG} onSelectModel={noop} />,
+  );
+  assert.ok(getByLabelText("Open OpenAI (Codex)"), "the needs-auth source shows by default");
+  fireEvent.click(getByText("Configured only"));
+  assert.equal(
+    queryByLabelText("Open OpenAI (Codex)"),
+    null,
+    "the needs-auth source is hidden when Configured only is on",
+  );
+  assert.ok(getByLabelText("Open LM Studio"), "configured sources remain");
+});
+
+test("the Configured only toggle is absent when every source is configured (no-op control)", () => {
+  const configured = SOURCES.filter((s) => s.sourceId !== "codex");
+  const { queryByText } = render(
+    <ModelChooser sources={configured} catalogBySource={CATALOG} onSelectModel={noop} />,
+  );
+  assert.equal(queryByText("Configured only"), null, "no toggle when every source is configured");
+});
+
 test("loading shows a skeleton; empty shows a configure-a-source message", () => {
   const loading = render(
     <ModelChooser sources={[]} catalogBySource={{}} loading onSelectModel={noop} />,

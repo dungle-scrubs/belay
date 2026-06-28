@@ -191,6 +191,15 @@ function SourceOverview({
   loading?: boolean;
   onOpenSource: (sourceId: string) => void;
 }) {
+  // "Configured only" hides sources that still need auth/setup. The toggle only appears when there is
+  // something to hide, so an all-configured overview never carries a no-op control.
+  const [configuredOnly, setConfiguredOnly] = useState(false);
+  const needsSetupCount = sources.filter((s) => projectSourceState(s).needsAttention).length;
+  const visible =
+    configuredOnly && needsSetupCount > 0
+      ? sources.filter((s) => !projectSourceState(s).needsAttention)
+      : sources;
+
   if (loading) {
     return (
       <div
@@ -219,14 +228,31 @@ function SourceOverview({
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <header>
-        <h2 className="text-base font-medium">Choose a model</h2>
-        <p className="text-sm text-muted-foreground">
-          Pick a source to browse its models. Sources and their status are reported by the host.
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-medium">Choose a model</h2>
+          <p className="text-sm text-muted-foreground">
+            Pick a source to browse its models. Sources and their status are reported by the host.
+          </p>
+        </div>
+        {needsSetupCount > 0 ? (
+          <button
+            type="button"
+            aria-pressed={configuredOnly}
+            onClick={() => setConfiguredOnly((on) => !on)}
+            className={cn(
+              "shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+              configuredOnly
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:bg-card",
+            )}
+          >
+            Configured only
+          </button>
+        ) : null}
       </header>
       {SECTIONS.map(({ type, label }) => {
-        const rows = sources.filter((s) => s.type === type);
+        const rows = visible.filter((s) => s.type === type);
         if (rows.length === 0) {
           return null;
         }
@@ -245,6 +271,11 @@ function SourceOverview({
           </section>
         );
       })}
+      {visible.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Every source needs setup. Turn off "Configured only" to sign in or add a key.
+        </p>
+      ) : null}
     </div>
   );
 }
