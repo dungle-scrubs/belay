@@ -316,7 +316,7 @@ NOT a web/debug control: a wedged host cannot process its own kill, so force-ter
 - [x] Tests cover debug-only UI exposure and normal-UI absence of lifecycle controls (debug-commands.test.ts: gated exposure + no-kill + `/stop` confirm; session-sidebar.test.tsx: no lifecycle controls in the normal sidebar)
 - [x] Manual EZE repro: cancel a turn, stop a session, archive/unarchive it, and verify the sidebar/resume filtering plus durable history behavior (VERIFIED LIVE on trevor-local: `/debug` → `/archive` hid it from the sidebar ("No sessions") + `/resume` and gated the UI with an unarchive prompt, history preserved (12740 events); the Unarchive button restored it to the sidebar + ungated the composer. Cancel is the everyday Esc (verified throughout); `/stop` is unit-tested + destructive, so not run live)
 
-## Next-Up: provider auth/catalog + full model chooser
+## Completed: provider auth/catalog + full model chooser
 
 D-065 is captured in the implementation plan as the full model-source and catalog chooser. This is not routing:
 the first cut selects one active chat model source only. The full chooser replaces the transcript and prompt

@@ -137,6 +137,7 @@ These are **not** in V2 and **not** in the backlog. Permanent removals.
 | **Native extension dispatch** | run/tool boundary extension hooks (H-059) | <!-- D-033 --> | Not wanted |
 | **Domain-drift contracts** | milestones/source-of-truth/compat fallbacks (H-170) | <!-- D-033 --> | Not wanted |
 | **Routing observation/telemetry** | window comparison, helper rates (H-033/090) | <!-- D-033 --> | Moot - the routing engine is gone |
+| **Native Ollama provider adapter** | native Ollama `/api/chat` provider outside pi-ai (H-046) | <!-- D-063 --> | No clear coding-agent benefit over LM Studio for local runtime, and pi-ai already supports Ollama through OpenAI-compatible model descriptors when needed. Keep any future Ollama work inside provider/catalog as OpenAI-compatible source handling unless a concrete native-only benefit appears |
 
 ## 5. Status re-baseline (what is DONE)
 
@@ -1084,13 +1085,14 @@ lists without deleting its history.
   history, kill preserving logs while terminating a host, archive/unarchive filtering, CLI list/open/archive/
   unarchive/stop/kill behavior, debug-only UI exposure, and D-093 excluding archived rows by default.
 
-### Deferred: provider auth/catalog + full model chooser <!-- D-065 -->
+### Completed: provider auth/catalog + full model chooser <!-- D-065 -->
 
-The current web selector is intentionally simple: it renders the host-announced provider roster from D-059.
-That does not scale to OAuth subscriptions, single-endpoint gateways with hundreds or thousands of models,
-manual local entries, direct API-key providers, and per-model reasoning controls. When picked up, build a
-host-owned model-source/catalog layer and a chooser surface that can browse large dynamic catalogs without
-turning the chat input into a giant dropdown.
+This was originally deferred, then built in the current codebase. The implementation now has the host-owned
+model-source/catalog layer and transcript-takeover chooser described below: source summaries, live catalogs,
+gateway catalogs, OAuth sign-in flows, split sidebar control, stable `{sourceId, modelId, reasoning}` selection,
+per-model reasoning choices, recent/pinned/configured filters, and host-side provider resolution. GitHub Copilot
+OAuth and a "recommended" filter are not current blockers: Copilot OAuth was declined and recommended ranking has
+no curation source yet.
 
 - <!-- D-065 --> **Model sources are the product unit above providers.** A source is one configured runtime,
   account, endpoint, or gateway. First-class source types are `local` (LM Studio, local Ollama, manually
@@ -1301,16 +1303,15 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 
 | Bucket | V1 ref | Notes |
 |---|---|---|
-| **Tangents** | H-030 | lateral exploration side-threads |
+| **Selection copy toolbar reliability** | new | extracted to `.plans/02.5-selection-copy-toolbar-reliability`. Fix drag-highlight-copy in the transcript by snapshotting selected text/source message at selection time, making Copy/Quote reliable after native selection collapses, and making the floating toolbar edge-aware so it cannot clip offscreen |
+| **Tangents** | H-030 | extracted to `.plans/39-tangents`. Tangents are isolated related conversations started from highlighted transcript text, not forks. They use a transcript takeover surface with a back arrow, store parent/source metadata, exclude parent history from tangent prompts, and only affect the parent through explicit visible fold-back |
 | **Bounded-child + takeover** | H-024, H-025, H-086 | host-owned constrained helpers + route escalation/takeover |
 | **Managed worktrees + cwd locks + merge protocol** | H-140 | <!-- D-091 --> promoted to §6. Stable per-session git worktrees (paths/branches/hashes), cwd-level advisory locks, and a merge/reconciliation protocol remain prerequisite for mutating background subagents |
-| **Code retrieval / search** | H-112, H-138, H-139 | code_search/code_index/project_retrieve/source_recall + retrieval daemon |
-| **Archive tools** | H-114 | archive_read / archive_unpack + validators / media processors |
-| **`video_inspect`** | H-115 | frame extraction from video |
-| **`tool_script`** | H-118 | sandboxed read-only TS scripting with a tool bridge |
-| **Ollama provider** | H-046 | native Ollama adapter (beyond LM Studio + Codex/pi-ai) |
-| **Provider auth/catalog + model chooser** | H-019, H-031, H-034, H-046, H-155 | <!-- D-065 --> deferred. Host-owned model sources and catalog entries for local/manual models, OAuth subscriptions, large gateway catalogs, and direct API-key providers. Includes source-aware auth/setup actions, queryable large catalogs, per-model reasoning capability/selection, stable `{sourceId, modelId, reasoning}` preference/wire contract, and a full chat-area chooser opened from the sidebar model name |
-| **Local admission control** | H-057 | token reservation, queue, concurrency for local models |
+| **Indexed source recall / code retrieval** | H-112, H-138, H-139 | extracted to `.plans/40-indexed-source-recall`. Provider-neutral indexed codebase recall for `source_recall`/code search/status/refresh over multiple external services, distinct from D-044 session recall. First adapters target `/Users/kevin/dev/source-recall` and Aleutian Trace/AleutianFOSS capability discovery |
+| **Archive tools** | H-114 | extracted to `.plans/41-archive-tools`. Bring forward V1 `archive_read` / `archive_unpack` zip handling as a later V2 plan, including validators, bounded previews, media processors/artifacts, safe extraction, transcript rows, and tool-detail inspection |
+| **`video_inspect`** | H-115 | extracted to `.plans/42-video-inspect`. Bring forward V1 `video_inspect` as a later V2 plan for bounded local video frame extraction, ffmpeg/ffprobe availability handling, run-scoped frame artifacts, provider vision feedback, transcript rows, compact rows, and tool-detail inspection |
+| **`tool_script`** | H-118 | extracted to `.plans/43-tool-script`. Bring forward V1 read-only TypeScript tool scripting as a later V2 plan, but replace V1 in-process script execution with a child-process runner, Agent Safehouse/sandbox-exec OS boundary where available, host-enforced toolsets/budgets, visible transcript rows, and tool-detail inspection |
+| **Local admission control** | H-057 | extracted to `.plans/44-local-admission-control`. Machine-level local-provider admission for LM Studio and future local runtimes: cross-process leases/queues under `TREVOR_HOME`, conservative default concurrency, lifecycle reload serialization, visible waiting state, cancellation-safe reservations, and parallel subagent readiness |
 | **Secret resolution** | H-061 | runtime `op://` and `!command` resolution, gated/opt-in |
 | **Deep telemetry** | H-072, H-073, H-101 | OTel span export + opt-in provider attempt JSONL traces + tool result cache |
 | **Discovery registry + skill drill-in** | H-166, H-167, H-168 | <!-- D-075 --> deferred. Host-owned, UI-agnostic discovery for skills, slash commands, command families, and later agents. Preserve ambient skill awareness through a compact prompt roster, but move search/detail/full bodies behind `skills_list(query?, limit?)` and `skill_view(skillId)` |
@@ -1325,6 +1326,12 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Tool detail takeover** | new | extracted to `.plans/28-tool-detail-takeover`. Detail-eligible transcript items can open a Storybook-first transcript-takeover inspection view with a top-left back arrow and Escape-to-chat behavior; the view shows live running/streaming tool details for bash, filesystem tools, web/docs, MCP, and fallback tools where data is available |
 | **File mention autocomplete** | new | extracted to `.plans/31-file-mention-autocomplete`. Typing `@` in the composer opens a fuzzy, workspace-confined file picker using the same autocomplete pattern as slash commands. The first slice inserts visible workspace-relative `@path` mentions and records structured selected-path metadata; it does not automatically read or inject file contents |
 | **Action shimmer status** | new | extracted to `.plans/32-action-shimmer-status`. Replace generic `working...` pulse placeholders with assistant-ui-style shimmer text whose label reflects the active structured action: thinking, applying steering, reading, searching, running shell, classifying, reconnecting, recovering, compacting, or tool progress |
+| **Context pressure meter** | new | extracted to `.plans/33-context-pressure-meter`. The side-panel context meter uses semantic pressure bands: normal below `70%`, warning from `70%`, danger from `85%`, and critical from `95%`, with token-plus-percent labels and accessible band state |
+| **Custom transcript scrollbar** | new | extracted to `.plans/34-custom-transcript-scrollbar`. Replace the hidden transcript scrollbar with a themed native scrollbar scoped to the transcript scroll element while preserving `PanelHost` scroll refs, `useScrollFollow`, `VirtualTranscript`, and jump-to-bottom behavior |
+| **Transcript image rendering** | new | extracted to `.plans/35-transcript-image-rendering`. Adopt assistant-ui-inspired image presentation for uploaded images in transcript messages while preserving D-092 `ArtifactRef` flow, inline `MessageAttachments`, and same-message carousel behavior |
+| **Transcript Mermaid rendering** | new | extracted to `.plans/36-transcript-mermaid-rendering`. Render explicit fenced `mermaid` blocks in assistant transcript markdown with safe fallback/source controls, Storybook coverage, and system-prompt guidance that uses Mermaid for inline visual explanations while leaving Lucid/artifacts for reviewable iteration |
+| **Ghosted reasoning rendering** | new | extracted to `.plans/37-ghosted-reasoning-rendering`. Replace the simple `ThinkingMessage` treatment with an assistant-ui-inspired ghosted reasoning surface while preserving `assistant.thinking`, the `show thinking` toggle, transcript scroll behavior, and a compact-mode integration contract |
+| **Syntax highlighting** | new | extracted to `.plans/38-syntax-highlighting`. Add explicit-language syntax highlighting to transcript markdown code blocks while preserving copy behavior, DOMPurify safety, Mermaid language precedence, plain fallback, Storybook coverage, and streaming performance |
 
 **Nested command menu / `/style` (extracted).** The former D-072 output-style registry item has been moved to
 `.plans/18-nested-command-menu`. The extracted plan reframes the work as a reusable nested command-menu pattern
@@ -1709,3 +1716,86 @@ _Updated 2026-06-28: **Action shimmer status** extracted into `.plans/32-action-
 replaces generic `working...` pulse-dot placeholders with assistant-ui-style shimmer text whose label is derived
 from structured turn/tool/progress events. V1's `Working...`, `Exploring...`, `Classifying with ...`, steering,
 and tool-progress vocabulary is reference material, not a direct port._
+
+_Updated 2026-06-28: **Context pressure meter** extracted into `.plans/33-context-pressure-meter`. The plan
+adds semantic pressure bands to the existing side-panel context meter: normal below `70%`, warning from `70%`,
+danger from `85%`, and critical from `95%`. The meter remains driven by existing `Usage`/`assistant.progress`
+data and displays token count plus percent while exposing the band through accessible labels._
+
+_Updated 2026-06-28: **Custom transcript scrollbar** extracted into
+`.plans/34-custom-transcript-scrollbar`. The plan replaces the currently hidden transcript scrollbar with a
+themed, native custom scrollbar scoped to the transcript scroll element. It explicitly preserves the existing
+`PanelHost` scroll ref, `useScrollFollow` pinned/live-edge behavior, TanStack virtualization, and
+jump-to-bottom affordance._
+
+_Updated 2026-06-28: **Transcript image rendering** extracted into
+`.plans/35-transcript-image-rendering`. The plan uses the assistant-ui image component as interaction reference
+for uploaded images in transcript messages: polished loading/unavailable states, responsive contained sizing,
+filename/metadata affordances, accessibility, and same-prompt inspection while preserving the existing D-092
+composer image-token, `ArtifactRef`, `MessageAttachments`, and `ImageCarousel` model._
+
+_Updated 2026-06-28: **Transcript Mermaid rendering** extracted into
+`.plans/36-transcript-mermaid-rendering`. The plan renders explicit fenced `mermaid` blocks in transcript
+markdown with locked configuration, safe source fallback, Storybook coverage, and prompt guidance that tells the
+model Mermaid is available for inline visual explanations of flows, sequences, states, dependencies, and
+architecture relationships. It also records the boundary with Lucid: Mermaid is inline response explanation,
+while Lucid/artifacts remain the reviewable, addressable surface for plan/document iteration._
+
+_Updated 2026-06-28: **Ghosted reasoning rendering** extracted into
+`.plans/37-ghosted-reasoning-rendering`. The plan keeps the current `assistant.thinking` event and
+`show thinking` gate, but replaces the simple collapsible thinking block with a ghosted assistant-ui-inspired
+reasoning surface: muted secondary styling, streaming shimmer/auto-open behavior, manual-toggle precedence,
+Storybook coverage, accessibility checks, and a documented one-line compact transcript contract._
+
+_Updated 2026-06-28: **Syntax highlighting** extracted into `.plans/38-syntax-highlighting`. The plan upgrades
+transcript markdown code blocks with explicit-language syntax highlighting based on the assistant-ui/Shiki
+direction, while preserving the current `marked`/DOMPurify safety boundary, dedent/copy behavior, plain fallback
+for unknown/no-language blocks, Mermaid precedence from `.plans/36-transcript-mermaid-rendering`, Storybook
+coverage, and streaming performance safeguards._
+
+_Updated 2026-06-28: **Selection copy toolbar reliability** extracted into
+`.plans/02.5-selection-copy-toolbar-reliability`. This urgent plan owns the transcript drag-highlight-copy bug:
+snapshot selected text and source message when the selection is made, drive Copy/Quote/future Tangent from that
+snapshot instead of a later live `window.getSelection()` read, and clamp the toolbar inside the viewport near
+left/right edges._
+
+_Updated 2026-06-28: **Tangents** extracted into `.plans/39-tangents`. A tangent is a separate, related
+conversation started from selected transcript text. It records parent/source metadata but does not replay or
+inherit the parent transcript, takes over the center chat surface like model/archive/detail views, and feeds
+nothing back to the parent unless the user explicitly folds visible content into the parent composer._
+
+_Updated 2026-06-28: **Indexed source recall / code retrieval** extracted into
+`.plans/40-indexed-source-recall`. This plan keeps D-044 session recall separate from indexed source recall:
+session recall searches Trevor conversation history, while indexed source recall searches codebase indexes,
+symbols, chunks, graph/context data, and provider-owned retrieval services. The extracted plan defines a
+provider-neutral `SourceRecallProvider` boundary with first adapters for the local `source-recall` HTTP daemon
+and Aleutian Trace/AleutianFOSS capability discovery._
+
+_Updated 2026-06-28: **Archive tools** extracted into `.plans/41-archive-tools`. V1 does have real
+`archive_read` and `archive_unpack` tooling under `/Users/kevin/dev/trevor/packages/agent-host/src/tools`,
+with validators, media processors, provider metadata, runtime normalization, and `core-archive.test.ts`
+coverage. The later V2 plan targets zip parity first, keeps `archive_read` read-only and bounded, keeps
+`archive_unpack` mutating with an explicit validated destination, and adapts V1 behavior to V2 storage,
+network-policy, transcript, compact-row, and tool-detail contracts._
+
+_Updated 2026-06-28: **`video_inspect`** extracted into `.plans/42-video-inspect`. V1 has real
+`video_inspect` tooling under `/Users/kevin/dev/trevor/packages/agent-host/src/tools/video-processor.ts`,
+with direct processor tests, agent-loop finalization tests, provider tool-result image encoding, observability,
+metadata, and archive media integration. The later V2 plan targets bounded local video frame extraction with
+ffmpeg/ffprobe, structured unavailable output when binaries are missing, run-scoped frame artifacts, provider
+vision feedback, direct-answer post-video loop behavior, transcript compact rows, and tool-detail inspection._
+
+_Updated 2026-06-28: **`tool_script`** extracted into `.plans/43-tool-script`. V1 has real
+`tool_script` tooling under `/Users/kevin/dev/trevor/packages/agent-host/src/tools/tool-script-runner.ts`,
+with safe-read bridge behavior, timeout/cancel/failure results, intermediate-output summarization, metadata,
+runtime normalization, observability, and tests. The later V2 plan keeps `tool_script` as a normal visible
+model-facing tool for bounded read-only batch analysis, but replaces V1's in-process `AsyncFunction` boundary
+with a dedicated child runner, Agent Safehouse/sandbox-exec where available, and host-enforced toolsets,
+budgets, bridge auditing, transcript rows, and tool-detail inspection._
+
+_Updated 2026-06-28: **Native Ollama provider adapter** moved from kept backlog to the DROP list. The default
+position is that Trevor does not need a standalone native Ollama `/api/chat` adapter for this coding-agent use
+case unless a concrete native-only benefit appears. pi-ai already supports custom OpenAI-compatible providers,
+including local Ollama at `http://localhost:11434/v1`, when Trevor supplies the model descriptor and compatibility
+flags. Any future Ollama source/catalog work belongs in the broader provider auth/catalog plan, not as a separate
+native provider plan._
