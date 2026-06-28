@@ -1,3 +1,4 @@
+export * from "./approval";
 export * from "./blob";
 export * from "./breakdown";
 export * from "./connectivity";
@@ -11,6 +12,7 @@ export * from "./inventory";
 export * from "./model-preferences";
 export * from "./model-source";
 export * from "./protocol";
+export * from "./provider-question";
 export * from "./recall";
 export * from "./stream-transport";
 export * from "./tools";

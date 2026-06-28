@@ -4,6 +4,7 @@ import { log, warn } from "../log";
 import { supervisor } from "../processes";
 import { buildSkillTool, discoverSkills } from "../skills";
 import { buildTaskTools } from "../tasks";
+import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
 import { bashTool } from "./bash";
@@ -33,6 +34,7 @@ export type { Tool } from "./types";
 // `Tool<any>`; each per-tool definition stays strongly typed at its own declaration.
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous tool params; each tool stays typed.
 const FILE_TOOLS: readonly Tool<any>[] = [
+  askUserTool,
   readTool,
   bashTool,
   writeTool,
@@ -134,6 +136,7 @@ export function executeTool(
   name: string,
   argumentsJson: string,
   runId?: string,
+  callId?: string,
 ): Effect.Effect<string> {
   const tool = TOOLS.find((candidate) => candidate.name === name);
   if (!tool) {
@@ -151,7 +154,7 @@ export function executeTool(
     return renderFailure(name, new ToolInputError({ tool: name, detail }), runId, Date.now());
   }
   const startedAt = Date.now();
-  return tool.execute(decoded.right).pipe(
+  return tool.execute(decoded.right, { runId, callId }).pipe(
     Effect.tap(() =>
       Effect.sync(() =>
         log("tool", "executed", { run: runId, name, ms: Date.now() - startedAt, ok: true }),

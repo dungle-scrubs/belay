@@ -20,6 +20,8 @@ export interface ToolDescriptor {
 }
 
 export const TOOL_DESCRIPTORS = [
+  // ask_user pauses the turn for a user decision, so it is a serial barrier, never run concurrently.
+  { name: "ask_user", readOnly: false },
   { name: "read", readOnly: true },
   { name: "glob", readOnly: true },
   { name: "grep", readOnly: true },

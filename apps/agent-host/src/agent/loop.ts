@@ -379,15 +379,16 @@ export function runAgent(
     : registryTools;
   const delegate = opts.delegate;
   const tools = delegate ? [...allowed, ...delegate.defs] : allowed;
-  const runTool = (name: string, args: string): Effect.Effect<string> => {
+  const runTool = (name: string, args: string, callId: string): Effect.Effect<string> => {
     // A delegation tool-call is routed to the injected runner (it has the provider + transport the
-    // generic executor lacks); everything else goes to the executor, gated by the allow-list.
+    // generic executor lacks); everything else goes to the executor, gated by the allow-list. `callId`
+    // is forwarded so a tool that needs the active tool-call id (ask_user) can correlate its UI events.
     if (delegate?.names.has(name)) {
       return Effect.promise(() => delegate.run(name, args));
     }
     return opts.toolNames && !opts.toolNames.has(name)
       ? Effect.succeed(`error: tool "${name}" is not available to this agent`)
-      : executeTool(name, args, runId);
+      : executeTool(name, args, runId, callId);
   };
   // One retry budget for an empty answer (the model ending a turn with no text and no
   // tool calls). A single nudge often gets it to synthesize; if it stays empty we
@@ -777,7 +778,7 @@ export function runAgent(
             index: number,
           ): Stream.Stream<AgentEvent, ProviderError> =>
             Stream.fromEffect(
-              runTool(call.name, call.arguments).pipe(
+              runTool(call.name, call.arguments, call.id).pipe(
                 Effect.map((result): AgentEvent => {
                   slots[index] = result;
                   return { type: "tool_end", call, result };

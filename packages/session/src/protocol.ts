@@ -2,6 +2,7 @@ import type { UsageBreakdown } from "./breakdown";
 import type { InternetSnapshot } from "./connectivity";
 import type { CatalogEntry, ModelRef, SourceSignInState, SourceSummary } from "./model-source";
 import type { DecodedEvent } from "./protocol-decode";
+import type { ProviderQuestionAnswer, ProviderQuestionContract } from "./provider-question";
 
 export type { UsageBreakdown };
 
@@ -633,6 +634,58 @@ export const events = {
       ...(p.internet ? { internet: p.internet } : {}),
       ...(p.sources ? { sources: p.sources } : {}),
       ...(p.catalog ? { catalog: p.catalog } : {}),
+    },
+  }),
+  /**
+   * A model-asked user question (ask_user): the host emits this when the tool blocks the active tool
+   * call, carrying the run + tool-call it belongs to, the originating `adapter`/`toolName`, and the
+   * normalized question `contract`. The browser renders it and publishes `provider.question.answer`; the
+   * host injects that answer as the tool result and closes it with `provider.question.resolved`.
+   */
+  providerQuestionRequested: (p: {
+    questionId: string;
+    runId: string;
+    toolCallId: string;
+    toolName: string;
+    adapter: string;
+    contract: ProviderQuestionContract;
+  }): TrevorEventInput => ({
+    type: "provider.question.requested",
+    payload: {
+      questionId: p.questionId,
+      runId: p.runId,
+      toolCallId: p.toolCallId,
+      toolName: p.toolName,
+      adapter: p.adapter,
+      contract: p.contract,
+    },
+  }),
+  /** The user's answer to a pending question: an accept with per-question entries, or decline/cancel. */
+  providerQuestionAnswer: (p: {
+    questionId: string;
+    answer: ProviderQuestionAnswer;
+  }): TrevorEventInput => ({
+    type: "provider.question.answer",
+    payload: { questionId: p.questionId, answer: p.answer },
+  }),
+  /**
+   * The host closing a pending question: it injected the answer (or the run ended first) and names the
+   * `outcome`. `summary` is a sanitized one-liner for the transcript/diagnostics - never the raw answer body.
+   */
+  providerQuestionResolved: (p: {
+    questionId: string;
+    runId: string;
+    toolCallId: string;
+    outcome: "answered" | "declined" | "cancelled" | "expired";
+    summary: string;
+  }): TrevorEventInput => ({
+    type: "provider.question.resolved",
+    payload: {
+      questionId: p.questionId,
+      runId: p.runId,
+      toolCallId: p.toolCallId,
+      outcome: p.outcome,
+      summary: p.summary,
     },
   }),
   /**

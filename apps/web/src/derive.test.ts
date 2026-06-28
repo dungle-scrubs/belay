@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { HOST_ROLE, type HostPresence, type SessionEvent } from "@trevor/session";
+import {
+  HOST_ROLE,
+  type HostPresence,
+  type ProviderQuestionContract,
+  type SessionEvent,
+} from "@trevor/session";
 import { test } from "vitest";
 import {
   commandsFrom,
@@ -11,6 +16,7 @@ import {
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
+  pendingQuestionFrom,
   providerModelsFrom,
   tasksFrom,
   toolSummary,
@@ -222,4 +228,59 @@ test("hostStatus (no live presence): latches present from host.online, leader fr
   const status = hostStatus(events, null, Date.parse(at) + 1000);
   assert.equal(status.present, true);
   assert.equal(status.leaderId, "h1");
+});
+
+/**
+ * pendingQuestionFrom (M5): the live ask_user surface reads this to know which question, if any, is
+ * open. A requested is pending until a resolved with the same questionId arrives.
+ */
+const QUESTION: ProviderQuestionContract = {
+  schemaVersion: 1,
+  questions: [
+    {
+      id: "q1",
+      question: "Pick one?",
+      answerShape: "free_text",
+      multiSelect: false,
+      requiresReason: false,
+      allowDefer: false,
+      choices: [],
+    },
+  ],
+};
+const requested = (questionId: string) =>
+  evt("provider.question.requested", {
+    questionId,
+    runId: "r1",
+    toolCallId: "tc1",
+    toolName: "ask_user",
+    adapter: "ask_user",
+    contract: QUESTION,
+  });
+const resolved = (questionId: string) =>
+  evt("provider.question.resolved", {
+    questionId,
+    runId: "r1",
+    toolCallId: "tc1",
+    outcome: "answered",
+    summary: "Answered 1 question",
+  });
+
+test("pendingQuestionFrom returns the latest unresolved question with its contract", () => {
+  const pending = pendingQuestionFrom([requested("a")]);
+  assert.equal(pending?.questionId, "a");
+  assert.deepEqual(pending?.contract, QUESTION);
+});
+
+test("pendingQuestionFrom is null once the question is resolved", () => {
+  assert.equal(pendingQuestionFrom([requested("a"), resolved("a")]), null);
+});
+
+test("pendingQuestionFrom skips a resolved question and returns a later unresolved one", () => {
+  const pending = pendingQuestionFrom([requested("a"), resolved("a"), requested("b")]);
+  assert.equal(pending?.questionId, "b");
+});
+
+test("pendingQuestionFrom is null when there are no questions", () => {
+  assert.equal(pendingQuestionFrom([]), null);
 });

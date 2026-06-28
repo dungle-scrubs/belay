@@ -2,6 +2,15 @@ import type { Effect, Schema } from "effect";
 import type { ToolError } from "./errors";
 
 /**
+ * The active turn + tool-call correlation a tool MAY use. Passed to `execute` by the executor; nearly
+ * every tool ignores it. `ask_user` needs it to tie its pending question to the run/tool-call in the UI.
+ */
+export interface ToolContext {
+  readonly runId?: string;
+  readonly callId?: string;
+}
+
+/**
  * A tool the model can call: a name, a description, an Effect `Schema` for its
  * parameters, and a typed Effect executor.
  *
@@ -29,5 +38,5 @@ export interface Tool<A = unknown> {
    * alone in emission order. Only set this `true` for a tool with no observable side effects.
    */
   readonly readOnly?: boolean;
-  execute(args: A): Effect.Effect<string, ToolError>;
+  execute(args: A, ctx?: ToolContext): Effect.Effect<string, ToolError>;
 }

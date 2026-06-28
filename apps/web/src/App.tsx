@@ -35,6 +35,7 @@ import {
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
+  pendingQuestionFrom,
   providerModelsFrom,
   sourceSignInFrom,
   sourcesFrom,
@@ -152,6 +153,7 @@ export function App() {
     signInSource,
     submitSignInCode,
     unarchive,
+    answerQuestion,
   } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
@@ -262,6 +264,8 @@ export function App() {
 
   // The agent's live task checklist (host-published snapshots), rendered in the header.
   const tasks = useMemo(() => tasksFrom(events), [events]);
+  // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
+  const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);
 
   // The SidePanel's whole view-model in one pure selector: live-vs-completed precedence
   // for the Request data (ctx meter + treemap) and the per-category context aggregation,
@@ -817,6 +821,14 @@ export function App() {
       chooser={chooser}
       archived={archived}
       onUnarchive={() => void unarchive()}
+      question={{
+        pending: pendingQuestion,
+        onAnswer: (answer) => {
+          if (pendingQuestion) {
+            void answerQuestion(pendingQuestion.questionId, answer);
+          }
+        },
+      }}
     />
   );
 }

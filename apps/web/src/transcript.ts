@@ -545,6 +545,11 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           open.done = true;
           openByRun.delete(decoded.runId);
         }
+        // ask_user renders as the live QuestionSurface (M5), not a transcript tool row: suppress its
+        // tool.started/tool.completed so the pending question + its answer never show as a tool block.
+        if (decoded.name === "ask_user") {
+          break;
+        }
         // A start that arrives AFTER its run already terminated (the cancel race) is aborted on
         // arrival; otherwise it joins the run's open-tool list so the completion can finalize it.
         const aborted = terminatedRuns.has(decoded.runId);

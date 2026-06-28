@@ -758,3 +758,52 @@ test("/clear failure result remains visible after the transcript reset", () => {
   assert.equal(result.ok, false);
   assert.match(result.text, /spawn failed/);
 });
+
+test("ask_user tool calls and provider.question.* events stay out of the transcript (M5)", () => {
+  const contract = { schemaVersion: 1 as const, questions: [] };
+  const log = [
+    ev(1, events.userMessage({ text: "ask me something", provider: "qwen" })),
+    ev(2, events.toolStarted({ runId: "r", callId: "c", name: "ask_user", arguments: "{}" })),
+    ev(
+      3,
+      events.providerQuestionRequested({
+        questionId: "a",
+        runId: "r",
+        toolCallId: "c",
+        toolName: "ask_user",
+        adapter: "ask_user",
+        contract,
+      }),
+    ),
+    ev(4, events.providerQuestionAnswer({ questionId: "a", answer: { action: "decline" } })),
+    ev(
+      5,
+      events.providerQuestionResolved({
+        questionId: "a",
+        runId: "r",
+        toolCallId: "c",
+        outcome: "declined",
+        summary: "Declined",
+      }),
+    ),
+    ev(6, events.toolCompleted({ runId: "r", callId: "c", name: "ask_user", result: "declined" })),
+  ];
+  const transcript = toTranscript(log);
+  // Only the user message survives - the ask_user tool block and the question control events are hidden.
+  assert.deepEqual(
+    transcript.map((m) => m.kind),
+    ["user"],
+  );
+});
+
+test("a non-ask_user tool call still renders (the suppression is name-scoped)", () => {
+  const log = [
+    ev(
+      1,
+      events.toolStarted({ runId: "r", callId: "c", name: "read", arguments: '{"path":"a.ts"}' }),
+    ),
+    ev(2, events.toolCompleted({ runId: "r", callId: "c", name: "read", result: "ok" })),
+  ];
+  const tool = toTranscript(log).find((m) => m.kind === "tool");
+  assert.ok(tool && tool.kind === "tool" && tool.name === "read");
+});

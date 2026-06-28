@@ -4,6 +4,7 @@ import {
   type HostPresence,
   type ModelRef,
   PRODUCER_IDS,
+  type ProviderQuestionAnswer,
   type PublishInput,
   RUNTIME_KIND,
   type SessionConnection,
@@ -299,6 +300,8 @@ export interface SessionActions {
   readonly submitSignInCode: (code: string) => Promise<void>;
   /** Unarchive this session (D-094): clear the durable archived flag so the main UI un-gates. */
   readonly unarchive: () => Promise<void>;
+  /** Answer a pending ask_user question: publish the answer so the host resumes the blocked tool call. */
+  readonly answerQuestion: (questionId: string, answer: ProviderQuestionAnswer) => Promise<void>;
 }
 
 type PublishVia = (built: TrevorEventInput) => Promise<void>;
@@ -327,6 +330,8 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
     cancelSignIn: () => command("/source-signin-cancel", ""),
     submitSignInCode: (code: string) => command("/source-signin-code", code),
     unarchive: () => publishVia(sessionEvents.sessionArchived({ archived: false })),
+    answerQuestion: (questionId: string, answer: ProviderQuestionAnswer) =>
+      publishVia(sessionEvents.providerQuestionAnswer({ questionId, answer })),
   };
 }
 

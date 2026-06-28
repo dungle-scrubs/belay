@@ -204,6 +204,9 @@ const renderGeneric: RenderArm = ({ message, status, onOpenPath, className }) =>
  * union) are NOT in this table and fall through to the generic default in `ToolRenderer`.
  */
 const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
+  // Placeholder row for now: Phase 3 (live wiring) projects the pending question from the session log
+  // and renders the QuestionSurface inline, hiding this raw tool row. Until then it shows a plain row.
+  ask_user: renderGeneric,
   read: renderGeneric,
   glob: renderGeneric,
   grep: renderOutput,

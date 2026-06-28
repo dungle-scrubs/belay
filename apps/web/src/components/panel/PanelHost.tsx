@@ -1,6 +1,7 @@
 import type {
   CommandSpec,
   GitStatus,
+  ProviderQuestionAnswer,
   SessionActivity,
   SessionSummary,
   TaskSnapshot,
@@ -27,10 +28,11 @@ import { RowChooserModal } from "@/components/command-modal";
 import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/SidePanel";
 import { SessionSidebar } from "@/components/panel/session-sidebar";
 import { DrawerToggle } from "@/components/panel/side-drawer";
+import { QuestionSurface } from "@/components/question";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 import type { SessionStream } from "@/session/use-session";
-import type { HostStatus } from "../../derive";
+import type { HostStatus, PendingQuestion } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
 import { TasksPanel } from "../../TasksPanel";
@@ -189,9 +191,14 @@ export function PanelHost(props: {
   /** Whether the open session is archived (D-094): gates the composer behind an unarchive notice. */
   archived: boolean;
   onUnarchive: () => void;
+  /** The pending ask_user question (M5): when set, the QuestionSurface takes over the composer area. */
+  question: {
+    readonly pending: PendingQuestion | null;
+    readonly onAnswer: (answer: ProviderQuestionAnswer) => void;
+  };
 }) {
   const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
-  const { sidebar, sessionName, chooser, archived, onUnarchive } = props;
+  const { sidebar, sessionName, chooser, archived, onUnarchive, question } = props;
   const { replayed } = stream;
   const {
     transcript,
@@ -360,6 +367,10 @@ export function PanelHost(props: {
             The transcript history stays readable above; only sending is blocked. */}
           {archived ? (
             <ArchivedNotice onUnarchive={onUnarchive} />
+          ) : question.pending ? (
+            // A pending ask_user question takes over the composer until answered (M5). The draft stays
+            // in tab-scoped state, so it is restored when the question resolves and the input returns.
+            <QuestionSurface contract={question.pending.contract} onAnswer={question.onAnswer} />
           ) : (
             <>
               {/* Slash menu: overlays above the composer (absolute, so it never pushes the

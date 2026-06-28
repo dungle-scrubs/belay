@@ -114,6 +114,11 @@ test("createSessionActions maps user intents to Trevor events", async () => {
   await actions.cancelSignIn();
   await actions.submitSignInCode("abc123");
   await actions.unarchive();
+  await actions.answerQuestion("q-1", {
+    action: "accept",
+    answer: "Postgres",
+    questions: [{ id: "db", answer: "Postgres", selected: [{ id: "pg", label: "Postgres" }] }],
+  });
 
   assert.deepEqual(
     built.map((event) => event.type),
@@ -129,8 +134,17 @@ test("createSessionActions maps user intents to Trevor events", async () => {
       "user.command",
       "user.command",
       "session.archived",
+      "provider.question.answer",
     ],
   );
+  assert.deepEqual(built[11]?.payload, {
+    questionId: "q-1",
+    answer: {
+      action: "accept",
+      answer: "Postgres",
+      questions: [{ id: "db", answer: "Postgres", selected: [{ id: "pg", label: "Postgres" }] }],
+    },
+  });
   assert.deepEqual(built[0]?.payload, {
     text: "hello",
     provider: "qwen",

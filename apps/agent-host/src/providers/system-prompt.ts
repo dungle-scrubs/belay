@@ -66,6 +66,7 @@ const TOOL_SELECTION_GUIDANCE = [
   "The doctor tool runs Trevor's own host self-diagnostic (provider/model auth readiness, internet reachability, available tools, storage, and workspace) and returns a health report; call it only when the user asks about Trevor's own health, setup, why a turn failed, or whether a provider/model/tool is available - never as routine context-gathering for ordinary coding work.",
   "Independent read-only lookups (read, glob, grep, web_search) run in parallel when you request several in a single step, so batch them together instead of one at a time; edits, writes, and bash run sequentially, so issue those one per step.",
   "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
+  "Use ask_user ONLY when a concrete missing decision blocks useful progress - it pauses the turn until the user answers. Offer concrete choices and mark the one you recommend; do not use it to gather broad open-ended preferences or to ask what you can determine yourself by reading the code.",
   CONFINEMENT_GUIDANCE,
   "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
 ];

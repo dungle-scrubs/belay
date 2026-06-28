@@ -28,6 +28,12 @@ import type {
   Usage,
   WorktreeSummary,
 } from "./protocol";
+import {
+  decodeProviderQuestionAnswer,
+  decodeProviderQuestionContract,
+  type ProviderQuestionAnswer,
+  type ProviderQuestionContract,
+} from "./provider-question";
 
 // --- consume side: permissive coercion + discriminated decode ---
 
@@ -481,6 +487,29 @@ export type DecodedEvent =
       /** Per-source model catalog (D-065), keyed by sourceId; empty when none announced. */
       readonly catalog: Readonly<Record<string, readonly CatalogEntry[]>>;
     }
+  | {
+      readonly type: "provider.question.requested";
+      readonly questionId: string;
+      readonly runId: string;
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly adapter: string;
+      readonly contract: ProviderQuestionContract;
+    }
+  | {
+      readonly type: "provider.question.answer";
+      readonly questionId: string;
+      readonly answer: ProviderQuestionAnswer;
+    }
+  | {
+      readonly type: "provider.question.resolved";
+      readonly questionId: string;
+      readonly runId: string;
+      readonly toolCallId: string;
+      /** "answered" | "declined" | "cancelled" | "expired"; kept open for forward-compat outcomes. */
+      readonly outcome: string;
+      readonly summary: string;
+    }
   | { readonly type: "host.internet"; readonly internet: InternetSnapshot }
   | { readonly type: "host.sourceAuth"; readonly auth: SourceSignInState }
   | { readonly type: "host.hello"; readonly instanceId?: string }
@@ -678,6 +707,31 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         internet: coerceInternetSnapshot(p.internet),
         sources: Array.isArray(p.sources) ? p.sources.map(decodeSourceSummary) : [],
         catalog: coerceCatalog(p.catalog),
+      };
+    case "provider.question.requested":
+      return {
+        type: "provider.question.requested",
+        questionId: str(p.questionId, event.eventId),
+        runId,
+        toolCallId: str(p.toolCallId, event.eventId),
+        toolName: str(p.toolName, "ask_user"),
+        adapter: str(p.adapter, "ask_user"),
+        contract: decodeProviderQuestionContract(p.contract),
+      };
+    case "provider.question.answer":
+      return {
+        type: "provider.question.answer",
+        questionId: str(p.questionId, event.eventId),
+        answer: decodeProviderQuestionAnswer(p.answer),
+      };
+    case "provider.question.resolved":
+      return {
+        type: "provider.question.resolved",
+        questionId: str(p.questionId, event.eventId),
+        runId,
+        toolCallId: str(p.toolCallId, event.eventId),
+        outcome: str(p.outcome, "answered"),
+        summary: str(p.summary),
       };
     case "host.internet":
       return { type: "host.internet", internet: coerceInternetSnapshot(p.internet) };

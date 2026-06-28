@@ -8,6 +8,7 @@ import {
   HOST_ROLE,
   type HostPresence,
   type ProviderModel,
+  type ProviderQuestionContract,
   type SessionEvent,
   type SourceSignInState,
   type SourceSummary,
@@ -262,6 +263,42 @@ export function defaultProviderFrom(events: readonly SessionEvent[]): string | u
 /** The latest task checklist the host published (empty when there are no tasks / cleared). */
 export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
   return [...(latest(events, (d) => (d.type === "tasks.current" ? d.tasks : undefined)) ?? [])];
+}
+
+/** A pending ask_user question projected from the log: the contract to render + its lifecycle ids. */
+export interface PendingQuestion {
+  readonly questionId: string;
+  readonly runId: string;
+  readonly contract: ProviderQuestionContract;
+}
+
+/**
+ * The newest UNRESOLVED ask_user question, or null. A `provider.question.requested` is pending until a
+ * `provider.question.resolved` for the same `questionId` arrives (the host emits that on answer, decline,
+ * or run-end). Drives the live QuestionSurface (M5); ask_user is a serial barrier so at most one is open.
+ */
+export function pendingQuestionFrom(events: readonly SessionEvent[]): PendingQuestion | null {
+  const requested = new Map<string, PendingQuestion>();
+  const resolved = new Set<string>();
+  for (const event of events) {
+    const d = decodeTrevorEvent(event);
+    if (d?.type === "provider.question.requested") {
+      requested.set(d.questionId, {
+        questionId: d.questionId,
+        runId: d.runId,
+        contract: d.contract,
+      });
+    } else if (d?.type === "provider.question.resolved") {
+      resolved.add(d.questionId);
+    }
+  }
+  let pending: PendingQuestion | null = null;
+  for (const [id, question] of requested) {
+    if (!resolved.has(id)) {
+      pending = question;
+    }
+  }
+  return pending;
 }
 
 /** The immediate-command inventory the host last announced (empty until one is online). */

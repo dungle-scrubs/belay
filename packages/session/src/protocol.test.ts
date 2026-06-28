@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
 import { decodeTrevorEvent, events, LIFECYCLE_TYPES, type TrevorEventInput } from "./protocol";
+import type { ProviderQuestionAnswer, ProviderQuestionContract } from "./provider-question";
 
 /**
  * The protocol is the single source of truth shared by host and web: `events.*` builds
@@ -630,6 +631,134 @@ test("a malformed context.compacted manifest coerces to empty arrays, never thro
     tools: [],
     topics: [],
   });
+});
+
+// --- ask_user provider-question events (M3) ---
+
+const QUESTION_CONTRACT: ProviderQuestionContract = {
+  schemaVersion: 1,
+  questions: [
+    {
+      id: "db",
+      question: "Which database?",
+      answerShape: "single_choice",
+      multiSelect: false,
+      requiresReason: false,
+      allowDefer: false,
+      choices: [
+        { id: "pg", label: "Postgres", recommended: true },
+        { id: "sqlite", label: "SQLite" },
+      ],
+    },
+  ],
+};
+
+test("provider.question.requested round-trips the contract + correlation ids", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.providerQuestionRequested({
+        questionId: "q-1",
+        runId: "r-1",
+        toolCallId: "tc-1",
+        toolName: "ask_user",
+        adapter: "ask_user",
+        contract: QUESTION_CONTRACT,
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "provider.question.requested");
+  if (decoded?.type !== "provider.question.requested") return;
+  assert.equal(decoded.questionId, "q-1");
+  assert.equal(decoded.runId, "r-1");
+  assert.equal(decoded.toolCallId, "tc-1");
+  assert.equal(decoded.toolName, "ask_user");
+  assert.deepEqual(decoded.contract, QUESTION_CONTRACT);
+});
+
+test("provider.question.answer round-trips an accept (with per-question entries) and a decline", () => {
+  const accept: ProviderQuestionAnswer = {
+    action: "accept",
+    answer: "Postgres",
+    questions: [{ id: "db", answer: "Postgres", selected: [{ id: "pg", label: "Postgres" }] }],
+  };
+  const acc = decodeTrevorEvent(
+    stored(events.providerQuestionAnswer({ questionId: "q-1", answer: accept })),
+  );
+  assert.equal(acc?.type, "provider.question.answer");
+  if (acc?.type !== "provider.question.answer") return;
+  assert.equal(acc.questionId, "q-1");
+  assert.deepEqual(acc.answer, accept);
+
+  const dec = decodeTrevorEvent(
+    stored(events.providerQuestionAnswer({ questionId: "q-1", answer: { action: "decline" } })),
+  );
+  assert.deepEqual(dec?.type === "provider.question.answer" ? dec.answer : null, {
+    action: "decline",
+  });
+});
+
+test("provider.question.resolved round-trips the outcome + sanitized summary", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.providerQuestionResolved({
+        questionId: "q-1",
+        runId: "r-1",
+        toolCallId: "tc-1",
+        outcome: "answered",
+        summary: "Answered (1 question)",
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "provider.question.resolved",
+    questionId: "q-1",
+    runId: "r-1",
+    toolCallId: "tc-1",
+    outcome: "answered",
+    summary: "Answered (1 question)",
+  });
+});
+
+test("provider.question.requested decodes a sparse/forward-compat payload with safe defaults", () => {
+  // No questionId/toolName/adapter; a choice with unknown extra metadata; a string preview; no flags.
+  const decoded = decodeTrevorEvent(
+    stored(
+      {
+        type: "provider.question.requested",
+        payload: {
+          runId: "r",
+          contract: {
+            questions: [
+              { question: "Pick?", choices: [{ label: "A", preview: "+--+", futuristicField: 9 }] },
+            ],
+          },
+        },
+      },
+      { eventId: "ev-q" },
+    ),
+  );
+  assert.equal(decoded?.type, "provider.question.requested");
+  if (decoded?.type !== "provider.question.requested") return;
+  assert.equal(decoded.questionId, "ev-q"); // missing id falls back to the event id
+  assert.equal(decoded.toolName, "ask_user"); // default
+  assert.equal(decoded.adapter, "ask_user"); // default
+  const q0 = decoded.contract.questions[0];
+  assert.equal(q0?.id, "question_1"); // filled deterministically
+  assert.equal(q0?.answerShape, "single_choice"); // derived from the presence of choices
+  assert.equal(q0?.choices[0]?.id, "choice_1");
+  assert.equal(q0?.choices[0]?.preview?.text, "+--+"); // string preview -> structured
+  // Unknown metadata is dropped rather than carried through.
+  assert.equal("futuristicField" in (q0?.choices[0] ?? {}), false);
+});
+
+test("provider.question.answer decodes a garbled/missing action as an accept (forward-compatible)", () => {
+  const decoded = decodeTrevorEvent(
+    stored({
+      type: "provider.question.answer",
+      payload: { questionId: "q", answer: { questions: [] } },
+    }),
+  );
+  assert.equal(decoded?.type === "provider.question.answer" && decoded.answer.action, "accept");
 });
 
 test("LIFECYCLE_TYPES names exactly the lifecycle events, drawn from their constructors (D-032)", () => {

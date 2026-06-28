@@ -4,6 +4,7 @@ import { test } from "vitest";
 import { supervisor } from "../processes";
 import { buildSkillTool } from "../skills";
 import { buildTaskTools } from "../tasks";
+import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { bashTool } from "./bash";
 import { doctorTool } from "./doctor";
@@ -65,6 +66,7 @@ test("a tool without the readOnly flag is absent from READ_ONLY_TOOLS", () => {
 test("the shared tool table matches the host's actual tool defs (names + readOnly)", () => {
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous tool params; only name/readOnly read here.
   const hostTools: readonly Tool<any>[] = [
+    askUserTool,
     readTool,
     bashTool,
     writeTool,

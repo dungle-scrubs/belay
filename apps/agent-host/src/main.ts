@@ -25,6 +25,7 @@ import {
   runDelegatedChild,
 } from "./agent/delegate";
 import { buildHistory } from "./agent/history-projection";
+import { providerQuestionRuntime } from "./agent/provider-questions";
 import { recallEngine } from "./agent/recall/engine";
 import { createSiblingReader } from "./agent/recall/reader";
 import { TurnMachine } from "./agent/turn-machine";
@@ -206,6 +207,12 @@ let leaseRunning = false;
 function emit(event: TrevorEventInput): Promise<void> {
   return transport.publishEvent(SESSION_ID, { ...event, producerId: PRODUCER_ID });
 }
+
+// The ask_user pending-question runtime publishes its request/resolved events through this host's emit
+// (fire-and-forget). The blocking + answer routing live in the runtime; main.ts only wires the boundary.
+providerQuestionRuntime.configure((event) => {
+  void emit(event);
+});
 
 const turnMachine = new TurnMachine();
 const compactionController = new CompactionController();
@@ -1785,6 +1792,22 @@ function handleEvent(message: SessionEvent): void {
       runShellCommand(decoded.requestId, decoded.command).catch((error) =>
         warn("host", "shell failed", { error: msg(error) }),
       );
+    }
+  } else if (decoded.type === "provider.question.answer" && message.producerId !== PRODUCER_ID) {
+    // The browser answered a pending ask_user question. Only the live leader (which owns the blocked
+    // tool call) resolves it; the runtime validates the answer, unblocks the tool, and emits the
+    // resolution. An unknown id (AQ001) or an answer that fails validation (AQ002) is logged and left
+    // for the browser to correct - it never disturbs an active run.
+    if (live && lease.isLeader()) {
+      const result = providerQuestionRuntime.submitAnswer(decoded.questionId, decoded.answer);
+      if (result.status === "unknown") {
+        warn("host", "ask_user answer for unknown question", { questionId: decoded.questionId });
+      } else if (result.status === "invalid") {
+        warn("host", "ask_user answer failed validation", {
+          questionId: decoded.questionId,
+          issues: result.issues,
+        });
+      }
     }
   } else if (decoded.type === "tasks.current") {
     // Recorded WITHOUT a rebuild: the task list only matters as a compaction pin (history-projection)
