@@ -215,9 +215,8 @@ function entryFor(source: SourceDef, id: string): CatalogEntry {
   };
 }
 
-/** The model ids available under a configured source: live `/models`, else pi-ai's registry. Local
- *  sources drop non-chat models (embeddings, rerankers) that the runtime also serves. */
-async function modelIdsFor(source: SourceDef, key: string | null): Promise<string[]> {
+/** The RAW model ids a source advertises: live `/models`, else pi-ai's registry (no filtering here). */
+async function fetchSourceModelIds(source: SourceDef, key: string | null): Promise<string[]> {
   const baseUrl = baseUrlOf(source);
   let ids: string[] = [];
   if (baseUrl) {
@@ -230,11 +229,48 @@ async function modelIdsFor(source: SourceDef, key: string | null): Promise<strin
   if (ids.length === 0 && source.piProvider) {
     ids = (getModels(source.piProvider as "deepseek") as Array<{ id: string }>).map((m) => m.id);
   }
-  return source.type === "local" ? ids.filter((id) => !NON_CHAT_LOCAL.test(id)) : ids;
+  return ids;
 }
 
 function statusFor(configured: boolean): SourceStatus {
   return configured ? "ready" : "needs-auth";
+}
+
+/**
+ * Builds the announced source + catalog snapshot PURELY from the auth (the configured signal - key
+ * PRESENCE only, never the value) and the already-fetched per-source model ids. Local non-chat models
+ * (embeddings, rerankers) are dropped here; an unconfigured source carries no catalog, just a
+ * needs-auth summary. Pure + secret-free by construction (the key never flows into a summary/entry), so
+ * the configured projection, summaries, filtering, and redaction are unit-tested without any network.
+ */
+export function buildCatalogSnapshot(
+  auth: Record<string, unknown>,
+  idsBySource: Readonly<Record<string, readonly string[]>>,
+): CatalogSnapshot {
+  const catalogBySource: Record<string, CatalogEntry[]> = {};
+  const sources: SourceSummary[] = [];
+  for (const source of SOURCES) {
+    const configured = isConfigured(source, auth);
+    const raw = idsBySource[source.sourceId] ?? [];
+    const ids = source.type === "local" ? raw.filter((id) => !NON_CHAT_LOCAL.test(id)) : raw;
+    const entries = configured ? ids.map((id) => entryFor(source, id)) : [];
+    catalogBySource[source.sourceId] = entries;
+    sources.push({
+      sourceId: source.sourceId,
+      type: source.type,
+      label: source.label,
+      status: statusFor(configured),
+      modelCount: entries.length,
+      auth: configured ? "authenticated" : "none",
+      freshness: { refreshedAt: null, stale: false },
+      actions: configured
+        ? ["refresh"]
+        : source.type === "oauth"
+          ? ["authenticate"]
+          : ["configure"],
+    });
+  }
+  return { sources, catalogBySource };
 }
 
 /**
@@ -275,28 +311,13 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
  */
 export async function loadCatalog(): Promise<CatalogSnapshot> {
   const auth = await readAuthJson();
-  const catalogBySource: Record<string, CatalogEntry[]> = {};
-  const sources: SourceSummary[] = [];
-  for (const source of SOURCES) {
-    const configured = isConfigured(source, auth);
-    const entries = configured
-      ? (await modelIdsFor(source, staticKeyOf(source, auth))).map((id) => entryFor(source, id))
-      : [];
-    catalogBySource[source.sourceId] = entries;
-    sources.push({
-      sourceId: source.sourceId,
-      type: source.type,
-      label: source.label,
-      status: statusFor(configured),
-      modelCount: entries.length,
-      auth: configured ? "authenticated" : "none",
-      freshness: { refreshedAt: null, stale: false },
-      actions: configured
-        ? ["refresh"]
-        : source.type === "oauth"
-          ? ["authenticate"]
-          : ["configure"],
-    });
-  }
-  return { sources, catalogBySource };
+  // Fetch the raw model ids for each CONFIGURED source (a key/sign-in is present), then build the
+  // snapshot purely. Unconfigured sources are skipped (no fetch) and carry a needs-auth summary.
+  const idsBySource: Record<string, readonly string[]> = {};
+  await Promise.all(
+    SOURCES.filter((source) => isConfigured(source, auth)).map(async (source) => {
+      idsBySource[source.sourceId] = await fetchSourceModelIds(source, staticKeyOf(source, auth));
+    }),
+  );
+  return buildCatalogSnapshot(auth, idsBySource);
 }
