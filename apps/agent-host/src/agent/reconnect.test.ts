@@ -234,18 +234,18 @@ it.effect("an auth failure is terminal and unchanged (never retried)", () =>
 
 describe("M5: an unknown terminal failure is recorded as a redacted observation", () => {
   let obsHome: string;
-  const savedHome = process.env.TREVOR_HOME;
+  const savedHome = process.env.TREVOR_STATE_HOME;
 
   beforeEach(() => {
     obsHome = mkdtempSync(join(tmpdir(), "trevor-recon-obs-"));
-    process.env.TREVOR_HOME = obsHome;
+    process.env.TREVOR_STATE_HOME = obsHome;
   });
 
   afterEach(() => {
     if (savedHome === undefined) {
-      delete process.env.TREVOR_HOME;
+      delete process.env.TREVOR_STATE_HOME;
     } else {
-      process.env.TREVOR_HOME = savedHome;
+      process.env.TREVOR_STATE_HOME = savedHome;
     }
     rmSync(obsHome, { recursive: true, force: true });
   });

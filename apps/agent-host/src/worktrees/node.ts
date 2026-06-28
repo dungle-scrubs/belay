@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { basename, dirname } from "node:path";
 import { projectSessionId } from "@trevor/session";
 import { type GitRunner, nodeGitRunner } from "../git-status";
-import { TREVOR_HOME } from "../paths";
+import { TREVOR_STATE_HOME } from "../paths";
 import { mainWorktreeRoot } from "./git";
 import { type WorktreeContext, WorktreeManager } from "./manager";
 import type { WorktreeFs } from "./registry";
@@ -33,11 +33,11 @@ export const nodeWorktreeFs: WorktreeFs = {
   },
 };
 
-/** A node-backed worktree manager rooted at TREVOR_HOME; `abbrev` shortens display paths. */
+/** A node-backed worktree manager rooted at the STATE home; `abbrev` shortens display paths. */
 export function nodeWorktreeManager(abbrev: (path: string) => string): WorktreeManager {
   return new WorktreeManager({
     fs: nodeWorktreeFs,
-    home: TREVOR_HOME,
+    home: TREVOR_STATE_HOME,
     gitRunnerFor: (cwd) => nodeGitRunner(cwd),
     abbrev,
     now: () => new Date().toISOString(),

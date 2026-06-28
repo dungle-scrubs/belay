@@ -7,7 +7,7 @@ import {
   type SourceSummary,
   UNKNOWN_INTERNET,
 } from "@trevor/session";
-import { resolveTrevorHome } from "@trevor/session/node-paths";
+import { resolveTrevorStateHome } from "@trevor/session/node-paths";
 import { Effect } from "effect";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
@@ -84,7 +84,7 @@ function hostStr(host: Record<string, unknown> | undefined, key: string): string
 
 /** Assembles the current host-health snapshot: probes the bounded live facts, then builds the areas. */
 export async function buildLiveDoctorSnapshot(facts: DoctorFacts): Promise<DoctorSnapshot> {
-  const home = resolveTrevorHome();
+  const home = resolveTrevorStateHome();
   const [providers, writable, observationStore] = await Promise.all([
     Promise.all(
       Object.entries(facts.providers).map(([key, provider]) => doctorProviderProbe(key, provider)),

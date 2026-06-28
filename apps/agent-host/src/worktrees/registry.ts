@@ -3,7 +3,7 @@ import { shortHash } from "@trevor/session";
 
 /**
  * The Trevor-managed worktree registry (D-091): persistent bookkeeping for worktrees Trevor
- * creates under `~/.trevorV2/.worktrees/<repo-hash>/<branch-slug>-<id>`, grouped by base repo.
+ * creates under `<state-home>/.worktrees/<repo-hash>/<branch-slug>-<id>`, grouped by base repo.
  * Pure over an injected `WorktreeFs` so every branch (load, add, reconcile stale paths, group)
  * is unit-tested with an in-memory fake. The base-repo identity is the realpath'd repo root,
  * hashed - so the same repo reached by a different spelling, a symlink, or a nested cwd groups

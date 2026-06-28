@@ -13,7 +13,7 @@ import {
   runStop,
 } from "./lifecycle";
 import { nodePlatform } from "./platform";
-import { resolveProjectRoot, TREVOR_HOME } from "./project";
+import { resolveProjectRoot, TREVOR_STATE_HOME } from "./project";
 import { RESERVED_PORTS } from "./services";
 import { createSpinner } from "./spinner";
 
@@ -47,7 +47,7 @@ function lifecycleIo(): LifecycleIo {
 function hostControlIo(): HostControlIo {
   return {
     lookupHost: (sessionId) => {
-      const record = loadHosts(nodeFs, TREVOR_HOME)[sessionId];
+      const record = loadHosts(nodeFs, TREVOR_STATE_HOME)[sessionId];
       return record ? { pid: record.pid } : null;
     },
     processAlive: (pid) => {
@@ -59,7 +59,7 @@ function hostControlIo(): HostControlIo {
       }
     },
     signal: (pid, sig) => process.kill(pid, sig),
-    removeHost: (sessionId) => removeHost(nodeFs, TREVOR_HOME, sessionId),
+    removeHost: (sessionId) => removeHost(nodeFs, TREVOR_STATE_HOME, sessionId),
   };
 }
 

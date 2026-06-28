@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { resolveTrevorHome } from "@trevor/session/node-paths";
+import { resolveTrevorStateHome } from "@trevor/session/node-paths";
 import type { ProviderFailureClass } from "./failure-taxonomy";
 import { redactSecrets } from "./failure-taxonomy";
 
@@ -58,9 +58,9 @@ export interface ProviderObservation {
   readonly count: number;
 }
 
-/** The JSON file backing the store: `<TREVOR_HOME>/provider-observations.json`. */
+/** The JSON file backing the store: `<TREVOR_STATE_HOME>/provider-observations.json`. */
 export function observationsPath(): string {
-  return join(resolveTrevorHome(), "provider-observations.json");
+  return join(resolveTrevorStateHome(), "provider-observations.json");
 }
 
 /**

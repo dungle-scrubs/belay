@@ -13,26 +13,26 @@ import {
 } from "./observation-store";
 
 /**
- * D-076 M5: the redacted, deduped provider-observation store. Pins the TREVOR_HOME override, stable
- * fingerprinting (transient values collapse so repeats dedupe), dedupe with first/last-seen + count,
- * best-effort write failure (never throws), redaction (no key/token/header/body in the record), and
- * the /doctor summary shape.
+ * D-076 M5: the redacted, deduped provider-observation store. Pins the TREVOR_STATE_HOME override,
+ * stable fingerprinting (transient values collapse so repeats dedupe), dedupe with first/last-seen +
+ * count, best-effort write failure (never throws), redaction (no key/token/header/body in the
+ * record), and the /doctor summary shape.
  */
 
 const NOW = "2026-06-27T12:00:00.000Z";
 let home: string;
-const savedHome = process.env.TREVOR_HOME;
+const savedHome = process.env.TREVOR_STATE_HOME;
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "trevor-obs-"));
-  process.env.TREVOR_HOME = home;
+  process.env.TREVOR_STATE_HOME = home;
 });
 
 afterEach(() => {
   if (savedHome === undefined) {
-    delete process.env.TREVOR_HOME;
+    delete process.env.TREVOR_STATE_HOME;
   } else {
-    process.env.TREVOR_HOME = savedHome;
+    process.env.TREVOR_STATE_HOME = savedHome;
   }
   rmSync(home, { recursive: true, force: true });
 });
@@ -53,7 +53,7 @@ function input(over: Partial<ObservationInput> = {}): ObservationInput {
 }
 
 describe("observationsPath", () => {
-  it("resolves under the runtime TREVOR_HOME override", () => {
+  it("resolves under the runtime TREVOR_STATE_HOME override", () => {
     expect(observationsPath()).toBe(join(home, "provider-observations.json"));
   });
 });
@@ -117,10 +117,10 @@ describe("recordObservation", () => {
   });
 
   it("is best-effort: a write failure returns null and does not throw", async () => {
-    // Point TREVOR_HOME at a path whose parent is a FILE, so mkdir/write fails.
+    // Point TREVOR_STATE_HOME at a path whose parent is a FILE, so mkdir/write fails.
     const filePath = join(home, "not-a-dir");
     writeFileSync(filePath, "x");
-    process.env.TREVOR_HOME = join(filePath, "nested");
+    process.env.TREVOR_STATE_HOME = join(filePath, "nested");
     const rec = await recordObservation(input(), NOW);
     expect(rec).toBeNull();
   });

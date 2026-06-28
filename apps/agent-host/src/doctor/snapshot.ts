@@ -374,7 +374,7 @@ function storageArea(input: DoctorProbeInput): DoctorArea {
   const finding: DoctorFinding = {
     id: "storage.home",
     status: input.storage.writable ? "ok" : "error",
-    title: "TREVOR_HOME",
+    title: "state home",
     message: input.storage.writable ? "writable" : "not writable",
     source: input.storage.home,
     ...(input.storage.writable

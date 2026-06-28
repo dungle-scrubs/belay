@@ -7,7 +7,7 @@ import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/s
 import { raceTimeout } from "@trevor/session/async";
 import { nodeFs } from "./fs";
 import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
-import { TREVOR_HOME } from "./project";
+import { TREVOR_HOME, TREVOR_STATE_HOME } from "./project";
 import {
   RESERVED_PORTS,
   SERVICE_FILTERS,
@@ -80,22 +80,22 @@ async function probeService(name: ServiceName, port: number): Promise<ServicePro
 }
 
 /**
- * Opens (append) a log file under `<TREVOR_HOME>/logs/<name>.log` and returns its fd, so a detached
- * child's stdout/stderr is captured instead of discarded - the launcher spawns everything detached,
- * and without this a crash or a stalled stream leaves NO trace (the stuck-turn diagnosis had to read
- * the SQLite event log directly). Falls back to "ignore" if the log can't be opened.
+ * Opens (append) a log file under `<TREVOR_STATE_HOME>/logs/<name>.log` and returns its fd, so a
+ * detached child's stdout/stderr is captured instead of discarded - the launcher spawns everything
+ * detached, and without this a crash or a stalled stream leaves NO trace (the stuck-turn diagnosis
+ * had to read the SQLite event log directly). Falls back to "ignore" if the log can't be opened.
  */
 function logFd(name: string): number | "ignore" {
   try {
-    mkdirSync(join(TREVOR_HOME, "logs"), { recursive: true });
-    return openSync(join(TREVOR_HOME, "logs", `${name}.log`), "a");
+    mkdirSync(join(TREVOR_STATE_HOME, "logs"), { recursive: true });
+    return openSync(join(TREVOR_STATE_HOME, "logs", `${name}.log`), "a");
   } catch {
     return "ignore";
   }
 }
 
 /** Spawns a shared service detached through the repo's pnpm runner, so it outlives this launcher
- *  and only one set exists across projects. Its output goes to `<TREVOR_HOME>/logs/<name>.log`. */
+ *  and only one set exists across projects. Its output goes to `<TREVOR_STATE_HOME>/logs/<name>.log`. */
 function startService(name: ServiceName): Promise<void> {
   const out = logFd(name);
   const child = spawn("pnpm", ["--filter", SERVICE_FILTERS[name], SERVICE_SCRIPTS[name]], {
@@ -274,7 +274,9 @@ async function openBrowser(url: string): Promise<void> {
 export function nodePlatform(reporter: Reporter = { step: () => {} }): LaunchPlatform {
   return {
     fs: nodeFs,
-    home: TREVOR_HOME,
+    // The launcher's `home` drives the host + project registries (hosts.json, locks/, projects.json),
+    // which are runtime STATE, so it points at the state home. `.env.op` (config) stays on TREVOR_HOME.
+    home: TREVOR_STATE_HOME,
     cwd: process.cwd(),
     pid: process.pid,
     reporter,

@@ -1,24 +1,18 @@
-import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { TREVOR_HOME } from "@trevor/session/node-paths";
+import { TREVOR_HOME, TREVOR_STATE_HOME } from "@trevor/session/node-paths";
 
-export { TREVOR_HOME };
+export { TREVOR_HOME, TREVOR_STATE_HOME };
 
 /**
- * The host's path/workspace owner: it owns BOTH the user-global base directory AND the workspace
+ * The host's path/workspace owner: it owns BOTH the user-global base directories AND the workspace
  * root + confinement policy.
  *
- * - User-global (D-081): `TREVOR_HOME` is imported from the node-only
- *   `@trevor/session/node-paths` subpath, the one project-wide owner of the env override and default
- *   directory name. Browser code imports only browser-safe subpaths.
+ * - User-global (D-081): `TREVOR_HOME` (config) and `TREVOR_STATE_HOME` (runtime state) are imported
+ *   from the node-only `@trevor/session/node-paths` subpath, the one project-wide owner of the env
+ *   overrides and default directory names. Browser code imports only browser-safe subpaths.
  * - Workspace (D-028): `WORKSPACE_ROOT` plus the confinement policy that was previously in
  *   tools/workspace.ts. These are workspace/path concepts, not tool internals.
  */
-
-export const TREVOR_STATE_HOME = resolve(
-  process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
-  "trevorV2",
-);
 
 /** The user-global `AGENTS.md`, the lowest-precedence (loaded-first) source of the eager context (D-080). */
 export const USER_AGENTS_MD = join(TREVOR_HOME, "AGENTS.md");
