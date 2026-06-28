@@ -40,7 +40,7 @@ interface SourceDef {
   readonly oauthName?: string;
 }
 
-/** The sources the host knows about. Gateways (OpenRouter and friends) join here later. */
+/** The sources the host knows about (a new provider is one row here). */
 const SOURCES: readonly SourceDef[] = [
   { sourceId: "lmstudio", type: "local", label: "LM Studio" },
   {
@@ -64,6 +64,15 @@ const SOURCES: readonly SourceDef[] = [
     label: "MiniMax",
     piProvider: "minimax",
     authName: "minimax",
+  },
+  // A cloud gateway/proxy: one key fronts hundreds of upstream models (256+ in pi-ai's registry, more
+  // live). Its catalog is the large one the chooser virtualizes.
+  {
+    sourceId: "openrouter",
+    type: "gateway",
+    label: "OpenRouter",
+    piProvider: "openrouter",
+    authName: "openrouter",
   },
 ];
 
@@ -291,7 +300,13 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
   if (source.type === "oauth") {
     return new CodexProvider({ model: modelId, label: modelId });
   }
-  if (source.type === "api-key" && source.piProvider && source.authName) {
+  // Direct API-key AND gateway (OpenRouter) sources both stream through a static-key pi provider; the
+  // gateway just routes the chosen upstream model id through its single key.
+  if (
+    (source.type === "api-key" || source.type === "gateway") &&
+    source.piProvider &&
+    source.authName
+  ) {
     return new PiKeyProvider({
       id: source.sourceId,
       piProvider: source.piProvider,

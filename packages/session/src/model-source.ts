@@ -368,10 +368,7 @@ function passesText(entry: CatalogEntry, terms: readonly string[]): boolean {
  * (staleness is a display concern, not an exclusion).
  */
 export function queryCatalog(all: readonly CatalogEntry[], query: CatalogQuery = {}): CatalogPage {
-  const terms = (query.text ?? "").toLowerCase().split(/\s+/).filter(Boolean);
-  const filters = query.filters ?? {};
-  const matched = all.filter((e) => passesFilters(e, filters) && passesText(e, terms));
-
+  const matched = filterCatalog(all, query);
   const limit = Math.min(
     Math.max(Math.floor(query.limit ?? CATALOG_PAGE_DEFAULT), 1),
     CATALOG_PAGE_MAX,
@@ -380,4 +377,19 @@ export function queryCatalog(all: readonly CatalogEntry[], query: CatalogQuery =
   const entries = matched.slice(start, start + limit);
   const end = start + entries.length;
   return { entries, total: matched.length, nextCursor: end < matched.length ? end : null };
+}
+
+/**
+ * The UNBOUNDED filtered+searched matches over a catalog (the {@link queryCatalog} match step without
+ * the page cap). The browser uses this for a single in-memory source's catalog so it can render the
+ * full filtered set (then virtualize it for a large gateway), where the bounded page is for the
+ * host-backed wire query. Pure + order-preserving.
+ */
+export function filterCatalog(
+  all: readonly CatalogEntry[],
+  query: Pick<CatalogQuery, "text" | "filters"> = {},
+): CatalogEntry[] {
+  const terms = (query.text ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+  const filters = query.filters ?? {};
+  return all.filter((e) => passesFilters(e, filters) && passesText(e, terms));
 }

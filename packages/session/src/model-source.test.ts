@@ -8,6 +8,7 @@ import {
   decodeModelRef,
   decodeSourceSummary,
   decodeSourceType,
+  filterCatalog,
   modelRefFromProvider,
   projectSourceState,
   providerStringOf,
@@ -245,6 +246,22 @@ test("queryCatalog returns stale entries (staleness is display, not exclusion) a
   assert.deepEqual(none.entries, []);
   assert.equal(none.total, 0);
   assert.equal(none.nextCursor, null);
+});
+
+test("filterCatalog returns ALL matches (no page cap), unlike the bounded queryCatalog page", () => {
+  // A gateway-sized catalog (256) the browser renders in full + virtualizes; queryCatalog caps at 200.
+  const all = Array.from({ length: 256 }, (_, i) => entry({ modelId: `m${i}` }));
+  assert.equal(filterCatalog(all).length, 256, "the full matched set is returned uncapped");
+  assert.equal(queryCatalog(all, { limit: 1000 }).entries.length, CATALOG_PAGE_MAX);
+  // Filters still apply: only the reasoning-capable models come back.
+  const withReasoning = [
+    entry({ modelId: "r", capabilities: ["reasoning"] }),
+    entry({ modelId: "plain", capabilities: [] }),
+  ];
+  assert.deepEqual(
+    filterCatalog(withReasoning, { filters: { reasoning: true } }).map((e) => e.modelId),
+    ["r"],
+  );
 });
 
 test("a legacy ProviderModel projects into a catalog entry under its provider source", () => {

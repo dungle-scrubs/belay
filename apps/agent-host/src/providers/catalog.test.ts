@@ -108,6 +108,23 @@ test("builds a per-model provider for each known source type", () => {
   assert.equal(local?.model, "qwen/qwen3-vl-8b");
 });
 
+test("the OpenRouter gateway resolves any of its upstream models to a runnable provider", () => {
+  const or = buildSourceProvider("openrouter", "anthropic/claude-3.5-sonnet");
+  assert.equal(or?.kind, "cloud");
+  assert.equal(or?.id, "openrouter");
+  assert.equal(or?.model, "anthropic/claude-3.5-sonnet");
+});
+
 test("an unknown source returns null (caller falls back to the registered providers)", () => {
   assert.equal(buildSourceProvider("nope", "whatever"), null);
+});
+
+test("OpenRouter is announced as a gateway source", () => {
+  // openrouter has no key in this auth, so it reads needs-auth with a configure action.
+  const snap = buildCatalogSnapshot(auth, {});
+  const or = snap.sources.find((s) => s.sourceId === "openrouter");
+  assert.equal(or?.type, "gateway");
+  assert.equal(or?.label, "OpenRouter");
+  assert.equal(or?.status, "needs-auth");
+  assert.deepEqual(or?.actions, ["configure"]);
 });

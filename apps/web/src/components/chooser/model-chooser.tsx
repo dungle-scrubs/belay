@@ -1,8 +1,9 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type CatalogEntry,
+  filterCatalog,
   type ModelRef,
   projectSourceState,
-  queryCatalog,
   type SourceAction,
   type SourceSummary,
   type SourceType,
@@ -18,7 +19,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -299,9 +300,11 @@ function SourceDetail({
   const action = primaryAction(source);
   const showAuth = needsAuthPanel(source, deviceCode);
 
-  const page = useMemo(
+  // The FULL filtered set (no page cap), so a large gateway catalog (OpenRouter, 256+) is browsable;
+  // ModelList virtualizes it when it is large.
+  const matched = useMemo(
     () =>
-      queryCatalog(entries, {
+      filterCatalog(entries, {
         text: search,
         filters: {
           tools: filters.tools || undefined,
@@ -373,7 +376,7 @@ function SourceDetail({
         />
       ) : null}
 
-      {page.entries.length === 0 ? (
+      {matched.length === 0 ? (
         <p className="p-6 text-sm text-muted-foreground">
           {entries.length === 0
             ? source.status === "needs-auth"
@@ -382,21 +385,76 @@ function SourceDetail({
             : "No models match your search and filters."}
         </p>
       ) : (
-        <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {page.entries.map((entry) => (
-            <li key={entry.modelId}>
-              <ModelRow
-                entry={entry}
-                selected={activeModel != null && sameModel(activeModel, entry)}
-                onSelect={() =>
-                  onSelectModel({
-                    sourceId: entry.sourceId,
-                    modelId: entry.modelId,
-                    reasoning: null,
-                  })
-                }
-              />
-            </li>
+        <ModelList entries={matched} activeModel={activeModel} onSelectModel={onSelectModel} />
+      )}
+    </div>
+  );
+}
+
+/** Above this many models the list is virtualized; smaller lists render fully (jsdom-test friendly). */
+const VIRTUALIZE_OVER = 80;
+
+/**
+ * The per-source model list. It renders every matched entry; for a large gateway catalog (OpenRouter)
+ * it virtualizes so hundreds of rows stay smooth, while a small source renders its handful of rows
+ * directly. `measureElement` keeps the virtual rows correctly sized despite variable row height.
+ */
+function ModelList({
+  entries,
+  activeModel,
+  onSelectModel,
+}: {
+  entries: readonly CatalogEntry[];
+  activeModel?: ModelRef | null;
+  onSelectModel: (ref: ModelRef) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualize = entries.length > VIRTUALIZE_OVER;
+  const virtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 60,
+    overscan: 12,
+    enabled: virtualize,
+  });
+  const rowOf = (entry: CatalogEntry) => (
+    <ModelRow
+      entry={entry}
+      selected={activeModel != null && sameModel(activeModel, entry)}
+      onSelect={() =>
+        onSelectModel({ sourceId: entry.sourceId, modelId: entry.modelId, reasoning: null })
+      }
+    />
+  );
+  return (
+    <div
+      ref={scrollRef}
+      className="min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {virtualize ? (
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const entry = entries[item.index];
+            if (!entry) {
+              return null;
+            }
+            return (
+              <div
+                key={entry.modelId}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                className="absolute top-0 left-0 w-full pb-1"
+                style={{ transform: `translateY(${item.start}px)` }}
+              >
+                {rowOf(entry)}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {entries.map((entry) => (
+            <li key={entry.modelId}>{rowOf(entry)}</li>
           ))}
         </ul>
       )}
