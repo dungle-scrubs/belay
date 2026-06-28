@@ -32,6 +32,12 @@ const WEB_READY_TIMEOUT_MS = 30_000;
 const HOST_ONLINE_TIMEOUT_MS = 20_000;
 const HOST_PRESENT_TIMEOUT_MS = 1_500;
 
+export interface HostSpawnCommand {
+  readonly args: readonly string[];
+  readonly command: string;
+  readonly file: string;
+}
+
 /** The monorepo root (nearest ancestor of this file holding pnpm-workspace.yaml). */
 function repoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -177,6 +183,37 @@ function watchSession(
 const isHostOnline = (event: SessionEvent): boolean =>
   decodeTrevorEvent(event)?.type === "host.online";
 
+export function buildHostSpawnCommand(opts: {
+  readonly envFileExists: boolean;
+  readonly envFile: string;
+  readonly hostMain: string;
+  readonly nodePath: string;
+  readonly tsxCli: string;
+}): HostSpawnCommand {
+  if (!opts.envFileExists) {
+    return {
+      args: [opts.tsxCli, opts.hostMain],
+      command: "tsx agent-host",
+      file: opts.nodePath,
+    };
+  }
+  return {
+    args: [
+      "primary",
+      "--read",
+      "op",
+      "run",
+      `--env-file=${opts.envFile}`,
+      "--",
+      opts.nodePath,
+      opts.tsxCli,
+      opts.hostMain,
+    ],
+    command: "opchain primary --read op run --env-file=<TREVOR_HOME>/.env.op -- tsx agent-host",
+    file: "opchain",
+  };
+}
+
 async function spawnHost(opts: {
   sessionId: string;
   root: string;
@@ -189,9 +226,17 @@ async function spawnHost(opts: {
   const require = createRequire(import.meta.url);
   const tsxCli = require.resolve("tsx/cli");
   const hostMain = join(repoRoot(), "apps", "agent-host", "src", "main.ts");
+  const envFile = join(TREVOR_HOME, ".env.op");
+  const command = buildHostSpawnCommand({
+    envFile,
+    envFileExists: existsSync(envFile),
+    hostMain,
+    nodePath: process.execPath,
+    tsxCli,
+  });
   // Capture the host's logs per session (it's detached, so its output would otherwise vanish).
   const out = logFd(`host-${opts.sessionId}`);
-  const child: ChildProcess = spawn(process.execPath, [tsxCli, hostMain], {
+  const child: ChildProcess = spawn(command.file, command.args, {
     cwd: opts.root,
     detached: true,
     stdio: ["ignore", out, out],
@@ -206,7 +251,7 @@ async function spawnHost(opts: {
     },
   });
   child.unref();
-  return { pid: child.pid ?? -1, command: `tsx agent-host (SESSION_ID=${opts.sessionId})` };
+  return { pid: child.pid ?? -1, command: `${command.command} (SESSION_ID=${opts.sessionId})` };
 }
 
 async function openBrowser(url: string): Promise<void> {
