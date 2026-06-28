@@ -3,7 +3,7 @@
 ## Summary
 
 - Current focus: M1 - Prompt Registry Awareness
-- Current cutoff blockers: 55
+- Current cutoff blockers: 61
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 - Completed current work: 0
@@ -42,18 +42,23 @@
 - [ ] GREEN: Preserve stable ordering within each status group.
 - [ ] REFACTOR: Keep ordering logic out of JSX so host, UI, or story fixtures can reuse it if useful.
 
-#### M4: Five-Row Limit and Overflow
+#### M4: Five-Row Limit, Burst Grouping, and Overflow
 
 - [ ] RED: Add `TasksPanel` tests for exactly five tasks, six tasks, and more than six tasks.
 - [ ] GREEN: Render at most five task rows.
 - [ ] GREEN: Render an overflow row as `...N more` when hidden tasks exist.
 - [ ] RED: Add a test proving active and pending tasks are prioritized into the visible five before done/error states.
 - [ ] GREEN: Apply ordering before truncation.
+- [ ] RED: Add burst tests for 10-15 model-created tasks, including many pending tasks and mixed terminal states.
+- [ ] GREEN: Add a pure display-model helper that may emit `task` rows and `group` rows; group lower-priority pending or terminal tasks into broad rows like `8 upcoming tasks` or `5 completed / 2 failed`.
+- [ ] GREEN: Keep active `in_progress` tasks individual whenever possible, then group overflow active work only when the active bucket itself would consume the whole panel.
+- [ ] REFACTOR: Keep grouping display-only and deterministic; no model call, no semantic rewrite of task records, and no change to `TaskRegistry.renderForPrompt()`.
 - [ ] REFACTOR: Keep the header count based on the full task list, not only visible rows.
 
 ### Gate 2 -> 3
 
 - [ ] Task panel renders no more than five task rows.
+- [ ] Bursts of 10-15 fine-grained tasks coalesce into broader display groups when useful.
 - [ ] Overflow row appears only when tasks are hidden.
 - [ ] Active and upcoming tasks are visible before terminal states.
 - [ ] Prompt checklist still includes all tasks.
@@ -96,8 +101,8 @@
 
 - [ ] RED: Add an integration or hermetic e2e test that drives `task_create` and `task_update` through the host/session stream.
 - [ ] GREEN: Verify the emitted `tasks.current` events carry freshness metadata and the web derivation receives the newest state.
-- [ ] RED: Add browser or component coverage for a long task list rendering only five rows plus overflow.
-- [ ] GREEN: Verify visual order and overflow text match the requested behavior.
+- [ ] RED: Add browser or component coverage for a long task list rendering only five rows plus grouped burst rows and overflow.
+- [ ] GREEN: Verify visual order, grouped labels, counts, and overflow text match the requested behavior.
 - [ ] GREEN: Run host task registry tests, web task panel tests, derive tests, typecheck, lint, and hermetic e2e.
 - [ ] REFACTOR: Record exact verification commands and any gated live-model limitations in the progress report.
 
@@ -105,6 +110,7 @@
 
 - [ ] Each provider request is proven to receive the current full task registry at prompt-build time.
 - [ ] UI shows at most five tasks and `...N more` underneath when needed.
+- [ ] UI coalesces 10-15 task bursts into broader grouped rows when individual rows would make the panel noisy.
 - [ ] Visible task order is active, upcoming, then terminal states.
 - [ ] Stale task snapshots cannot overwrite newer task state.
 - [ ] Full verification commands pass.

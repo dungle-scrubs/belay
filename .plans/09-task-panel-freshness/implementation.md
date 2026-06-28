@@ -20,6 +20,7 @@ This plan keeps that architecture and tightens two gaps:
 | Prompt context stays complete | The model-facing checklist remains full-size even when the UI truncates to five rows. <!-- D-001 --> |
 | Visible panel is capped | The panel shows at most five visible task rows and an overflow row like `...3 more` when tasks are hidden. <!-- D-002 --> |
 | Visible ordering is semantic | Render active `in_progress` first, upcoming `pending` second, and terminal states last. <!-- D-003 --> |
+| Burst display is coalesced | When the model creates 10-15 fine-grained tasks at once, the UI may group lower-priority task rows into broader status buckets before truncation. The group is display-only; the registry and prompt checklist stay task-exact. <!-- D-008 --> |
 | Freshness is explicit | `tasks.current` needs monotonic metadata so consumers can ignore older snapshots. <!-- D-004 --> |
 | Status remains model-owned | This plan does not infer task completion from tool lifecycle or command completion. <!-- D-005 --> |
 | Request awareness is testable | Tests or diagnostics prove provider requests receive the current task registry at prompt-build time. <!-- D-006 --> |
@@ -33,11 +34,13 @@ Owned by this plan:
 - host emit/replay/standby freshness handling
 - `tasksFrom` derivation and stale-snapshot rejection
 - `TasksPanel` ordering, limit, overflow row, and tests
+- display-only task grouping for bursty snapshots
 - integration/e2e coverage for task stream freshness
 
 Not owned by this plan:
 
 - automatic status transitions from tool execution state
+- rewriting or merging model-owned task records
 - task tool schema changes beyond snapshot metadata
 - task persistence beyond the existing session event stream
 - unrelated panel/sidebar layout work
@@ -46,7 +49,7 @@ Not owned by this plan:
 
 Current prompt behavior is correct in shape: `SystemPromptBuilder` calls `this.tasks.renderForPrompt()` on each prompt build, so each request should see the latest in-memory registry state at that point. <!-- D-006 --> The task prompt block should stay complete regardless of UI truncation. <!-- D-001 -->
 
-Current UI behavior is incomplete: `TasksPanel` maps over every task in the order received, with no display cap, no semantic ordering, and no overflow row.
+Current UI behavior is incomplete: `TasksPanel` maps over every task in the order received, with no display cap, no semantic ordering, no overflow row, and no coalescing when the model creates a burst of 10-15 small tasks. The planned fix should derive a compact display model from the raw task registry: individual rows for the highest-priority tasks, plus broad grouped rows for remaining upcoming or terminal work where that makes the panel more scannable. <!-- D-008 -->
 
 Current freshness behavior is under-specified: `tasks.current` contains only `tasks`, and `tasksFrom` selects the latest event in the local event array. Without sequence or timestamp metadata, consumers cannot reject an older snapshot that arrives after or is replayed over newer state. <!-- D-004 -->
 
@@ -58,6 +61,7 @@ This work touches prompt context and host/session state, so it needs observable 
 - a host replay/standby test proving older `tasks.current` snapshots cannot clobber newer state
 - a web derivation test proving stale snapshots are ignored
 - a UI test proving the panel shows ordering, limit, and overflow behavior
+- a UI test proving a 10-15 task burst coalesces into broader display groups without changing prompt context
 
 ## Phases
 
@@ -110,7 +114,7 @@ This work touches prompt context and host/session state, so it needs observable 
   4. GREEN: Preserve stable ordering within each status group.
   5. REFACTOR: Keep ordering logic out of JSX so host, UI, or story fixtures can reuse it if useful.
 
-#### M4: Five-Row Limit and Overflow
+#### M4: Five-Row Limit, Burst Grouping, and Overflow
 
 - **Dependencies:** M3
 - **Effort:** S
@@ -120,11 +124,16 @@ This work touches prompt context and host/session state, so it needs observable 
   3. GREEN: Render an overflow row as `...N more` when hidden tasks exist. <!-- D-002 -->
   4. RED: Add a test proving active and pending tasks are prioritized into the visible five before done/error states.
   5. GREEN: Apply ordering before truncation. <!-- D-003 -->
-  6. REFACTOR: Keep the header count based on the full task list, not only visible rows.
+  6. RED: Add burst tests for 10-15 model-created tasks, including many pending tasks and mixed terminal states.
+  7. GREEN: Add a pure display-model helper that may emit `task` rows and `group` rows; group lower-priority pending or terminal tasks into broad rows like `8 upcoming tasks` or `5 completed / 2 failed`.
+  8. GREEN: Keep active `in_progress` tasks individual whenever possible, then group overflow active work only when the active bucket itself would consume the whole panel.
+  9. REFACTOR: Keep grouping display-only and deterministic; no model call, no semantic rewrite of task records, and no change to `TaskRegistry.renderForPrompt()`. <!-- D-008 -->
+  10. REFACTOR: Keep the header count based on the full task list, not only visible rows.
 
 ### Gate 2 -> 3
 
 - [ ] Task panel renders no more than five task rows.
+- [ ] Bursts of 10-15 fine-grained tasks coalesce into broader display groups when useful.
 - [ ] Overflow row appears only when tasks are hidden.
 - [ ] Active and upcoming tasks are visible before terminal states.
 - [ ] Prompt checklist still includes all tasks.
@@ -187,8 +196,8 @@ This work touches prompt context and host/session state, so it needs observable 
 - **Tasks:**
   1. RED: Add an integration or hermetic e2e test that drives `task_create` and `task_update` through the host/session stream.
   2. GREEN: Verify the emitted `tasks.current` events carry freshness metadata and the web derivation receives the newest state.
-  3. RED: Add browser or component coverage for a long task list rendering only five rows plus overflow.
-  4. GREEN: Verify visual order and overflow text match the requested behavior.
+  3. RED: Add browser or component coverage for a long task list rendering only five rows plus grouped burst rows and overflow.
+  4. GREEN: Verify visual order, grouped labels, counts, and overflow text match the requested behavior.
   5. GREEN: Run host task registry tests, web task panel tests, derive tests, typecheck, lint, and hermetic e2e. <!-- D-007 -->
   6. REFACTOR: Record exact verification commands and any gated live-model limitations in the progress report.
 
@@ -196,6 +205,7 @@ This work touches prompt context and host/session state, so it needs observable 
 
 - [ ] Each provider request is proven to receive the current full task registry at prompt-build time.
 - [ ] UI shows at most five tasks and `...N more` underneath when needed.
+- [ ] UI coalesces 10-15 task bursts into broader grouped rows when individual rows would make the panel noisy.
 - [ ] Visible task order is active, upcoming, then terminal states.
 - [ ] Stale task snapshots cannot overwrite newer task state.
 - [ ] Full verification commands pass. <!-- D-007 -->
@@ -209,12 +219,14 @@ This work touches prompt context and host/session state, so it needs observable 
 | Freshness comparison differs between host and web | medium | medium | Centralize comparison semantics or share fixtures across host/web tests. | implementer |
 | Users still see stale statuses because the model misses `task_update` | medium | high | This plan fixes stale snapshots, not model-owned update omissions; automatic status inference remains separate. <!-- D-005 --> | implementer |
 | Long task labels overflow after truncation | low | medium | Add component tests or visual checks for long labels and blocked-by text. | implementer |
+| Grouped rows hide too much useful detail | medium | medium | Keep active tasks individual first, show counts/status breakdowns in group labels, and retain the full task count/header plus prompt registry. | implementer |
 
 ## Escape Hatches
 
 1. **If protocol metadata is too invasive:** keep the wire payload backward-compatible by adding optional metadata and deriving freshness from event envelope metadata where available.
 2. **If host and web cannot share a comparison helper cleanly:** duplicate a tiny comparison function only with identical fixture tests in both packages.
 3. **If live-model task update omissions remain visible:** open a separate plan for host-assisted task lifecycle, because automatic status inference changes ownership semantics. <!-- D-005 -->
+4. **If grouped display rows are too opaque in practice:** keep the five-row cap and overflow row, but disable grouping except for terminal tasks.
 
 ## Progress Report Accounting
 

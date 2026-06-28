@@ -1260,9 +1260,6 @@ Sequence as each is picked up (no hard order locked here):
   `.plans/19-capability-manifest-and-trevor-expert`: registry-derived full/compact self-description,
   `trevor-export`, and the built-in `trevor-expert` consumer, with general command/skill interpolation kept
   separately gated and disabled by default (formerly D-074 / H-156).
-- **Agent / skill / slash discovery** depth (H-165 is now backlog under delegation; skill + slash discovery
-  KEEP) is specified below as D-075: host-owned discovery registry, hybrid ambient skill roster, and explicit
-  `skills_list` / `skill_view` drill-in (H-166, H-167, H-168).
 - **Fork-lineage navigator** (web) - the V1 "session tree" (H-004) is reframed onto fork lineage (D-025…),
   built in Phase 4.
 
@@ -1312,11 +1309,8 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **`video_inspect`** | H-115 | extracted to `.plans/42-video-inspect`. Bring forward V1 `video_inspect` as a later V2 plan for bounded local video frame extraction, ffmpeg/ffprobe availability handling, run-scoped frame artifacts, provider vision feedback, transcript rows, compact rows, and tool-detail inspection |
 | **`tool_script`** | H-118 | extracted to `.plans/43-tool-script`. Bring forward V1 read-only TypeScript tool scripting as a later V2 plan, but replace V1 in-process script execution with a child-process runner, Agent Safehouse/sandbox-exec OS boundary where available, host-enforced toolsets/budgets, visible transcript rows, and tool-detail inspection |
 | **Local admission control** | H-057 | extracted to `.plans/44-local-admission-control`. Machine-level local-provider admission for LM Studio and future local runtimes: cross-process leases/queues under `TREVOR_HOME`, conservative default concurrency, lifecycle reload serialization, visible waiting state, cancellation-safe reservations, and parallel subagent readiness |
-| **Secret resolution** | H-061 | runtime `op://` and `!command` resolution, gated/opt-in |
-| **Deep telemetry** | H-072, H-073, H-101 | OTel span export + opt-in provider attempt JSONL traces + tool result cache |
-| **Discovery registry + skill drill-in** | H-166, H-167, H-168 | <!-- D-075 --> deferred. Host-owned, UI-agnostic discovery for skills, slash commands, command families, and later agents. Preserve ambient skill awareness through a compact prompt roster, but move search/detail/full bodies behind `skills_list(query?, limit?)` and `skill_view(skillId)` |
-| **Subagents: teams, verifier, bounded child, mutating background agents** | H-165 | general-purpose + explorer + ephemeral definitions + inline/async read-only background **promoted to §6 (D-045…D-049)**; multi-agent **teams**, the **verifier** flavor, **bounded-child**, and mutating background agents remain future. Mutating background agents depend on managed worktrees + cwd locks + merge protocol |
-| **Shell interpolation (commands)** | H-175 | done for skills; extend `!cmd` / ` ```! ` to command files, same gating |
+| **Deep telemetry** | H-072, H-073, H-101 | rebaselined into `.plans/16-telemetry-observability`. One telemetry plan owns OTel span export, opt-in provider-attempt JSONL traces, and bounded diagnostic result artifacts; diagnostic artifacts are not behavioral tool-output caching |
+| **Shell interpolation (commands)** | H-175 | extracted to `.plans/45-command-shell-interpolation`. Skill interpolation is already implemented behind `TREVOR_SKILL_SHELL`; the extracted plan covers command-file interpolation only, disabled by default, trusted-root gated, using the same `!cmd` / fenced command forms and shared `runCommand` safety floor, without reintroducing runtime secret resolution |
 | **`shell.promote`** | H-035 | extracted to `.plans/29-shell-promote-background-jobs`. Auto-promote eligible overlong bash/prompt-shell commands into supervisor-tracked `pN` jobs, surface them in a V1-inspired task/background support panel, and align promoted-process inspection with the tool-detail takeover |
 | **Headless CLI / TypeScript SDK / harness** | new | <!-- D-095 --> extracted to `.plans/22-headless-cli-sdk-harness`. V2 is currently headless-capable at the session transport and host-runtime layer; the extracted plan covers CLI commands, TypeScript package boundaries, launch/attach semantics, prompt streaming, session inventory/lifecycle, artifact upload, cancellation, safety, and test-harness ergonomics. This is separate from the dropped single-prompt `SDK ask()` shortcut and does not reintroduce that API by default |
 | **Local observation corpus / classifier learning** | new | <!-- D-096 --> extracted to `.plans/23-local-observation-corpus`. Store redacted, deduped observations under diagnostic state (`TREVOR_STATE_HOME`, default `${XDG_STATE_HOME:-~/.local/state}/trevorV2`) so Trevor can inspect classifier and harness evidence over time. Provider failure observations from D-076 are the first use; later candidates include tool-result patterns, repeated tool calls, number of attempts to reach a goal, prompt/harness guidance signals, and possible model task classification. Observations are inspectable/exportable/deletable on demand and never automatically injected into prompts |
@@ -1332,6 +1326,7 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Transcript Mermaid rendering** | new | extracted to `.plans/36-transcript-mermaid-rendering`. Render explicit fenced `mermaid` blocks in assistant transcript markdown with safe fallback/source controls, Storybook coverage, and system-prompt guidance that uses Mermaid for inline visual explanations while leaving Lucid/artifacts for reviewable iteration |
 | **Ghosted reasoning rendering** | new | extracted to `.plans/37-ghosted-reasoning-rendering`. Replace the simple `ThinkingMessage` treatment with an assistant-ui-inspired ghosted reasoning surface while preserving `assistant.thinking`, the `show thinking` toggle, transcript scroll behavior, and a compact-mode integration contract |
 | **Syntax highlighting** | new | extracted to `.plans/38-syntax-highlighting`. Add explicit-language syntax highlighting to transcript markdown code blocks while preserving copy behavior, DOMPurify safety, Mermaid language precedence, plain fallback, Storybook coverage, and streaming performance |
+| **Subagents: teams, verifier, bounded child, mutating background agents** | H-165 | deferred later by user request. General-purpose + explorer + ephemeral definitions + inline/async read-only background are already promoted to §6 (D-045…D-049); remaining multi-agent **teams**, **verifier** flavor, **bounded-child**, and mutating background agents stay parked. Mutating background agents depend on managed worktrees + cwd locks + merge protocol |
 
 **Nested command menu / `/style` (extracted).** The former D-072 output-style registry item has been moved to
 `.plans/18-nested-command-menu`. The extracted plan reframes the work as a reusable nested command-menu pattern
@@ -1339,115 +1334,20 @@ with `/style` as its first consumer. Output styles are selected through command 
 and remain presentation-only: they must never change provider/model, reasoning level, work kind, execution mode,
 agent/subagent selection, tool access, validation policy, or whether a command/tool is allowed.
 
-**Doctor health surface (deferred).** <!-- D-073 --> Replace the current V2 `/doctor` debug-style text dump
-with a V1-inspired structured health surface. `/doctor` should answer: what is healthy, what is degraded or
-broken, what evidence supports that, and what should the user do next. Raw host internals stay available
-through debug/detail surfaces; they are not the default doctor experience.
-
-The first V2 doctor implementation should include:
-
-- **V1 behavior to carry forward.** `/doctor` is a host-owned immediate command with no model turn. The host
-  builds a structured snapshot and emits an event such as `doctor.current`. The snapshot has a summary plus
-  areas; checks/findings carry stable ids, status/severity, human labels, concise messages, evidence,
-  source paths when relevant, timestamps, and next actions. Keep `/doctor` distinct from `host.debugInfo`:
-  doctor is health and repair guidance; debug info is sanitized runtime internals.
-- **Actionable areas.** The initial area set should cover Core, Session/Run, Providers/Models/Auth, Internet,
-  Tools/Search, Web/Docs, MCP, LSP, Hooks, Storage/Roots, Workspace, and Updates/Version. Each area has a
-  short verdict and bounded key facts. Examples: provider auth missing, cloud unreachable, local runtime
-  unavailable, internet disconnected, `rg` available, `ast_grep` missing, Firecrawl unconfigured, docs cache
-  stale, MCP server auth needed, LSP command missing, hook script missing/slow, state root not writable,
-  workspace not a Git worktree, or active run stuck/turn ended without a clear reason.
-- **Default output is not raw internals.** The default `/doctor` result should not show low-level fields like
-  internal token caps, reload flags, lease timestamps, or raw provider structs unless they are directly needed
-  to explain a finding. Raw evidence belongs in expandable detail, `/doctor full`, `/doctor json`, copied
-  report output, or `host.debugInfo`.
-- **Fresh but bounded checks.** `/doctor` may run explicit probes because the user asked for diagnostics, but
-  every probe must be bounded by short per-check timeouts and an overall budget. Slow or unavailable checks
-  degrade to `not_checked` or `timeout` with a next action instead of blocking the command. Reuse cached state
-  where it is the authoritative source; do not run repairs or mutate config.
-- **Storybook-first gate.** Build the Trevor web diagnostic dashboard in Storybook before wiring it to live
-  app state. Use fixture `doctor.current` payloads to design and verify the responsive layout, density,
-  severity styling, empty states, long paths, and next-action affordances. App wiring starts only after the
-  stories cover the required states and look correct.
-- **Responsive web layout.** Trevor web should render `/doctor` as a dashboard, not terminal-shaped text:
-  summary strip, severity filters, responsive category grid, repeated diagnostic cards/items, clear status
-  icons, short verdicts, key-value rows, next-action buttons/links, and expandable evidence/details. Mobile is
-  one column; desktop uses a clean multi-column grid. The layout must avoid nested cards and oversized hero
-  treatment.
-- **Required Storybook states.** Stories must cover all-ok, mixed warnings/errors, many findings, all
-  not-checked, loading/refreshing, stale snapshot, provider auth missing, local runtime unreachable, cloud
-  unreachable, internet disconnected, MCP unconfigured/auth-needed/error, LSP missing/unavailable/diagnostic
-  warning, hooks missing script/slow/trust changed, web fetch unavailable, Firecrawl key absent, docs stale,
-  storage root invalid, workspace not Git, long paths/wrapping, mobile width, tablet width, and desktop
-  two/three-column widths.
-- **Command variants and actions.** Support refresh and inspection affordances without making the default noisy:
-  refresh diagnostics, copy report, view JSON, and open relevant settings/details. If slash variants are added,
-  prefer explicit forms such as `/doctor refresh`, `/doctor full`, and `/doctor json`.
-- **Prompt and model guidance.** The model should treat `/doctor` output as host diagnostics when the user asks
-  about Trevor health, setup, provider readiness, tool availability, or why a turn failed. It should not call
-  `/doctor` as routine context gathering for normal coding work.
-- **Validation required.** Tests/evals must cover snapshot schema stability, severity aggregation,
-  next-action rendering, redaction, bounded probe timeouts, no model turn for `/doctor`, default output without
-  raw debug dumps, `/doctor full` or JSON detail when implemented, Storybook coverage for every required
-  state, responsive visual checks for desktop/mobile, and regressions proving style/layout does not hide
-  errors, warnings, or next actions.
+**Doctor health surface (extracted).** <!-- D-073 --> Moved to
+`.plans/46-doctor-health-surface`. The extracted plan rebaselines the already-present V2 Doctor code
+(`packages/session/src/doctor.ts`, `apps/agent-host/src/doctor`, `apps/agent-host/src/tools/doctor.ts`,
+and `apps/web/src/components/chat/doctor`) and owns the remaining work to harden `/doctor` as a
+V1-inspired structured health surface: immediate host command, shared `doctor.current` snapshot,
+bounded non-mutating probes, actionable areas/findings/next actions, Storybook-first dashboard states,
+command variants, model-facing diagnostic guidance, redaction, and full test/e2e coverage. The umbrella
+plan no longer carries duplicate Doctor checklist detail.
 
 **Capability manifest + `trevor-expert` (extracted).** The former D-074 capability manifest item has been moved
 to `.plans/19-capability-manifest-and-trevor-expert`. The extracted plan owns the registry-derived full/compact
 manifest, `trevor-export`, and the built-in `trevor-expert` consumer. General command/skill interpolation is
 kept as a separate configurable feature, disabled by default unless explicitly enabled through an env/trust
 gate; built-in `trevor-expert` may use direct bounded host exports without depending on that global gate.
-
-**Discovery registry + progressive skill drill-in (deferred).** <!-- D-075 --> Carry forward Trevor V1's
-registry shape while preserving the useful current V2 behavior where the model knows that skills exist from
-the start of a turn. This is a host-owned discovery protocol, not a Trevor web-only command palette.
-
-The first V2 discovery implementation should include:
-
-- **V1 and current V2 baseline.** V1 used a compact ambient skill roster plus `skills_list(query?, limit?)`
-  and `skill_view(skillId)`. Current V2 uses a single `skill(name)` tool whose description carries skill ids
-  and blurbs, then loads one full body. The target keeps the ambient awareness advantage, but replaces the
-  single-tool-description roster with structured prompt context plus list/view tools. D-087 defines the
-  project-local plus global/configured root order that this registry must read from.
-- **First implementation slice is skills only.** The first cut should build the host-owned skill registry,
-  ambient skill roster, `skills_list`, and `skill_view` before broadening to slash-command, command-family, or
-  agent discovery. The registry data model should still be shaped so those later resource types can join
-  without a rewrite.
-- **Hybrid skill awareness contract.** Tool-enabled turns should receive a compact `Available skills` roster:
-  skill id, short description, and optional trigger summary, capped and explicitly marked when truncated. The
-  model must not be left in a state where it has to guess that skills exist before it can ask for them.
-- **Explicit skill drill-in tools.** Add `skills_list(query?, limit?)` for compact searchable metadata and
-  `skill_view(skillId)` for one full skill body. `skills_list` returns ids, descriptions, source/provenance,
-  status, truncation, and match counts; it does not return full bodies. `skill_view` loads one selected skill,
-  including body and source chain/override information when available.
-- **Tool-schema and prompt budget posture.** Keep tool descriptions short. Do not stuff the entire skill roster
-  into a tool schema. The compact prompt roster is the level-1 awareness surface; `skills_list` is level-1
-  search/detail; `skill_view` is level-2 body loading. Large or dynamic inventories are summarized and queried,
-  not dumped.
-- **Source-of-truth registry.** The host owns discovery for skills, slash commands, command families, and later
-  agents. Trevor web renders the structured registry/read models but does not independently scan the
-  filesystem or invent slash/skill/agent inventories. Non-web clients can still use the same protocol. Skill
-  rows include root kind, source path, selected/shadowed status, and disabled/truncated status where relevant.
-- **Slash and command-family metadata.** Extend the command inventory beyond current `{name, summary, usage}`
-  toward V1-style descriptors: owner, visibility, artifact type, argument metadata, routing mode, immediate
-  host action, and command-family contract pointers. Rich helper UIs are optional renderers over that shared
-  contract.
-- **Agent discovery alignment.** Agent/subagent discovery stays separate from skill discovery but uses the same
-  pattern: compact list/read model first, explicit body/detail view only when chosen, and no ambient dump of
-  every agent definition. H-165 mutating/background agent behavior remains governed by the subagent backlog.
-- **Prompt guidance.** Tell the model: if a visible skill matches the user's request, call `skill_view` before
-  acting; if the compact roster is missing, truncated, too broad, or insufficient, call `skills_list(query)`;
-  load only the specific skill intended for use; do not call `skill_view` for every listed skill; do not treat
-  skills as mandatory when ordinary tools and repository context are enough.
-- **Migration posture.** The current `skill(name)` tool may be kept temporarily as an alias or compatibility
-  shim, but the planned public contract is `skills_list` plus `skill_view` with ambient compact roster context.
-  Existing shell interpolation and skill parsing behavior should be preserved unless superseded by the
-  discovery registry implementation.
-- **Validation required.** Tests/evals must cover ambient skill awareness without full-body prompt bloat,
-  truncated roster behavior, `skills_list` search and limits, `skill_view` loading exactly one body, unknown or
-  disabled skill handling, source/override provenance, prompt guidance that prevents speculative all-skill
-  loading, UI rendering from host read models, non-web client usability, and a model-behavior eval where the
-  agent notices a relevant listed skill and opens only that skill.
 
 ## 8. Assumptions
 
@@ -1550,14 +1450,10 @@ choices, not prompt overlays. `/style` is the first consumer of the shared patte
 and run attribution. Styles remain presentation-only and must not affect routing, work kind, execution mode,
 tool access, agent selection, or validation._
 
-_Updated 2026-06-25: **Doctor health surface** added as D-073. The deferred V2 feature replaces the current
-debug-dump `/doctor` output with a V1-inspired structured health report: host-owned immediate command,
-`doctor.current`-style snapshot, areas/checks/findings, severity aggregation, evidence, redaction, and next
-actions. Trevor web must build the diagnostic dashboard in Storybook first using fixture snapshots, covering
-responsive grid layouts and healthy/warning/error/not-checked states before live app wiring. Fresh probes are
-allowed only when bounded and non-mutating; raw internals belong in detail/full/json/debug surfaces, not the
-default doctor view. D-073 is authored here in markdown and still needs syncing into `plan.db` alongside the
-remaining markdown-authored decisions._
+_Updated 2026-06-28: **Doctor health surface** extracted to `.plans/46-doctor-health-surface`. D-073 now lives
+there as a rebaseline/gap-closure plan over the existing V2 Doctor implementation: shared `doctor.current`
+snapshot, host command/probes, model-facing diagnostic tool, web panel, Storybook fixtures, command variants,
+redaction, and e2e validation._
 
 _Updated 2026-06-27: **Capability manifest + `trevor-expert`** extracted to
 `.plans/19-capability-manifest-and-trevor-expert`. The plan owns registry-derived full/compact manifests,
@@ -1565,18 +1461,9 @@ _Updated 2026-06-27: **Capability manifest + `trevor-expert`** extracted to
 skills/commands is a separate configurable feature, disabled by default unless enabled through an env/trust
 gate. Built-in `trevor-expert` can use direct bounded host exports either way._
 
-_Updated 2026-06-25: **Discovery registry + progressive skill drill-in** added as D-075. The deferred V2
-feature carries forward Trevor V1's useful discovery shape while preserving current V2's ambient skill
-awareness: every tool-enabled turn gets a compact skill roster, but searchable skill metadata and full bodies
-move behind `skills_list(query?, limit?)` and `skill_view(skillId)`. The host owns discovery for skills, slash
-commands, command families, and later agents; Trevor web renders structured read models instead of scanning or
-duplicating inventories. D-075 is authored here in markdown and still needs syncing into `plan.db` alongside
-D-040-D-073 and the extracted numbered plans._
-
-_Updated 2026-06-26: **Discovery registry + progressive skill drill-in** clarified for first-cut scope. The
-first implementation slice is skills only: host-owned skill registry, compact ambient roster, `skills_list`,
-and `skill_view`. Slash-command, command-family, and agent discovery remain later extensions over the same
-registry shape rather than first-cut scope._
+_Updated 2026-06-28: **Discovery registry + progressive skill drill-in** remains tracked in
+`.plans/trevor-v2/progress-report.md`, so it is removed from the standalone extraction queue instead of being
+split into a new numbered plan (D-072)._
 
 _Updated 2026-06-26: **Prompt shell lane** added and promoted as D-082. Leading `!` in the prompt composer
 runs immediately through the protected host shell path and renders as a dedicated user-visible shell transcript

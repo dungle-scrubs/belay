@@ -2,10 +2,11 @@
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
 > Current focus: Phase 1, M1 - state-root correction and telemetry config.
+> Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 79
+- Current cutoff blockers: 86
 - Completed: 0
 - Deferred follow-up: 2
 - Superseded: 0
@@ -60,15 +61,25 @@
 - [ ] GREEN: Implement local JSONL or OTLP JSON export with size caps and best-effort failure handling
 - [ ] REFACTOR: Add a send/drop ledger that records sanitized event metadata and drop reasons
 
+### M6: Provider attempts and diagnostic result artifacts
+
+- [ ] RED: Add tests proving provider-attempt JSONL traces are disabled by default and opt in through explicit local telemetry config
+- [ ] GREEN: Emit bounded provider-attempt JSONL records under `TREVOR_STATE_HOME` with provider id, model id, attempt id, failure class, token/count metadata, timing, retry state, and redacted request/response summaries
+- [ ] RED: Add tests proving raw prompts, transcript bodies, tool output, command output, auth headers, env values, and raw provider bodies are redacted or replaced with local artifact references
+- [ ] GREEN: Store bounded diagnostic result artifacts for oversized provider/tool evidence under the telemetry artifact root with size caps, retention policy, and `/doctor` visibility
+- [ ] REFACTOR: Prove diagnostic result artifacts are never used as a behavioral tool-output cache or to skip/replay a future tool call
+
 ### Gate 2 to 3
 
 - [ ] Host, web, store, blob, and CLI unit/integration tests cover fake sink instrumentation
 - [ ] Local file export works with no network
+- [ ] Provider-attempt JSONL traces are opt-in, local-only, bounded, and redacted
+- [ ] Diagnostic result artifacts are retained only for debugging and never used as tool-call output cache
 - [ ] Exporter failures never fail user turns, service writes, uploads, or CLI launches
 
 ## Phase 3: Doctor and Optional Local Collector Stack
 
-### M6: `/doctor` telemetry area
+### M7: `/doctor` telemetry area
 
 - [ ] RED: Add doctor snapshot tests for disabled, local-file, local-OTLP, Sentry-enabled, degraded, and exporter-drop states
 - [ ] GREEN: Add a telemetry area to `/doctor` with mode, exporter health, last success/failure, local roots, sampling, drops, and redaction self-test status
@@ -76,7 +87,7 @@
 - [ ] GREEN: Render telemetry diagnostics in the existing doctor UI
 - [ ] REFACTOR: Keep DSNs, tokens, endpoints with credentials, prompts, and raw paths out of doctor output
 
-### M7: Optional OTLP, Alloy, and Tempo
+### M8: Optional OTLP, Alloy, and Tempo
 
 - [ ] RED: Add config tests requiring non-loopback OTLP endpoints to opt in through `TREVOR_ALLOW_REMOTE_OTEL=1`
 - [ ] GREEN: Implement OTLP export behind explicit config and bounded retry/drop behavior
@@ -92,7 +103,7 @@
 
 ## Phase 4: Opt-in Sentry Errors
 
-### M8: Node Sentry error sink
+### M9: Node Sentry error sink
 
 - [ ] RED: Add tests proving Node Sentry is disabled without DSN and disabled in tests/CI by default
 - [ ] GREEN: Add Node Sentry bootstrap for `agent-host`, `session-store`, `blob-store`, and optionally `trevor-cli`
@@ -100,7 +111,7 @@
 - [ ] GREEN: Capture unhandled exceptions, unhandled rejections, invariant breaches, and fatal service failures as sanitized events
 - [ ] REFACTOR: Do not capture expected typed provider/tool/session failures as Sentry exceptions by default
 
-### M9: Web Sentry error sink
+### M10: Web Sentry error sink
 
 - [ ] RED: Add web tests proving Sentry is disabled without `VITE_TREVOR_SENTRY_DSN`
 - [ ] GREEN: Add React/browser Sentry bootstrap and an error boundary path for render crashes
@@ -108,7 +119,7 @@
 - [ ] GREEN: Capture sanitized React render crashes and unexpected browser exceptions
 - [ ] REFACTOR: Keep browser tracing, replay, logs, profiles, and metrics disabled by default
 
-### M10: Release and source map policy
+### M11: Release and source map policy
 
 - [ ] RED: Add script/config tests proving source map upload is skipped unless `SENTRY_AUTH_TOKEN` and explicit release env are present
 - [ ] GREEN: Add optional release/source-map upload scripts or docs without enabling them in default CI
@@ -124,7 +135,7 @@
 
 ## Phase 5: Cost, Redaction, and EZE Verification
 
-### M11: Cost guardrails
+### M12: Cost guardrails
 
 - [ ] RED: Add tests proving remote traces/logs/replays/profiles/metrics cannot turn on unless explicit env flags are present
 - [ ] GREEN: Add cost guardrails, sampling config, and drop counters
@@ -132,7 +143,7 @@
 - [ ] GREEN: Enforce caps locally and expose drop counts in `/doctor`
 - [ ] REFACTOR: Document free-tier posture and how to temporarily enable more telemetry for debugging
 
-### M12: End-to-end and manual validation
+### M13: End-to-end and manual validation
 
 - [ ] RED: Add hermetic e2e coverage for no-DSN no-outbound behavior
 - [ ] GREEN: Verify host, web, store, blob, and CLI still operate when exporters fail
