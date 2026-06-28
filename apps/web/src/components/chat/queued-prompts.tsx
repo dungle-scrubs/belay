@@ -1,21 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { ArtifactThumb } from "@/ArtifactThumb";
-import { cn } from "@/lib/utils";
-import { Markdown } from "@/markdown";
+import { MarkdownBody } from "@/components/chat/markdown-body";
 import type { QueuedPrompt } from "@/send-queue";
-
-function Md({ text, muted = false }: { readonly text: string; readonly muted?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "smui-md text-[11px] leading-5",
-        muted ? "text-muted-foreground" : "text-foreground",
-      )}
-    >
-      <Markdown text={text} muted={muted} />
-    </div>
-  );
-}
 
 export function QueuedPrompts({ queue }: { readonly queue: readonly QueuedPrompt[] }) {
   if (queue.length === 0) {
@@ -28,7 +14,7 @@ export function QueuedPrompts({ queue }: { readonly queue: readonly QueuedPrompt
         <div key={q.id} className="flex items-baseline gap-1.5 text-muted-foreground">
           <ChevronRight aria-hidden className="size-3 shrink-0 translate-y-0.5" />
           <div className="flex min-w-0 flex-col gap-1">
-            {q.text ? <Md text={q.text} muted /> : null}
+            {q.text ? <MarkdownBody text={q.text} muted className="text-[11px] leading-5" /> : null}
             {q.artifacts?.length ? (
               <div className="flex gap-1.5">
                 {q.artifacts.map((ref) => (

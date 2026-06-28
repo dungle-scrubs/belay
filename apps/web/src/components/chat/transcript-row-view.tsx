@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import { DoctorResult } from "@/components/chat/doctor/doctor-result";
+import { MarkdownBody } from "@/components/chat/markdown-body";
 import {
   CommandResult,
   MessageMeta,
@@ -11,21 +12,11 @@ import {
   WorkingIndicator,
 } from "@/components/chat/message";
 import { MessageAttachments } from "@/components/chat/message-attachments";
-import { ToolMessage } from "@/components/chat/tool-message";
+import { ToolRenderer } from "@/components/chat/tool-message";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
 import { fmtCtx, fmtTokens, isOverflowError } from "../../derive";
-import { Markdown } from "../../markdown";
 import type { ToolMessage as ToolMessageData } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
-
-function Md({ text, muted = false }: { text: string; muted?: boolean }) {
-  return (
-    <div className={cn("smui-md text-sm", muted ? "text-muted-foreground" : "text-foreground")}>
-      <Markdown text={text} muted={muted} />
-    </div>
-  );
-}
 
 function stopTitle(cause: string): string {
   switch (cause) {
@@ -91,7 +82,7 @@ export function TranscriptRowView({
 
   const message = row.message;
   if (message.kind === "tool") {
-    return <ToolMessage message={message} className="pl-3.5" onOpenPath={onOpenPath} />;
+    return <ToolRenderer message={message} className="pl-3.5" onOpenPath={onOpenPath} />;
   }
 
   if (message.kind === "result") {
@@ -279,7 +270,7 @@ export function TranscriptRowView({
         data-message-id={message.id}
         className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
       >
-        {message.text ? <Md text={message.text} /> : null}
+        {message.text ? <MarkdownBody text={message.text} /> : null}
         {message.artifacts.length ? <MessageAttachments artifacts={message.artifacts} /> : null}
       </div>
     );
@@ -288,7 +279,7 @@ export function TranscriptRowView({
   return (
     <div data-message-id={message.id} className="flex flex-col gap-3 pl-3.5">
       {thinking ? <ThinkingMessage content={thinking} /> : null}
-      {message.text ? <Md text={message.text} /> : null}
+      {message.text ? <MarkdownBody text={message.text} /> : null}
       {overflowNote}
       {errorNote}
       {cancelledNote}

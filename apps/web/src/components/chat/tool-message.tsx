@@ -257,15 +257,3 @@ export function ToolRenderer({
 
   return arm(ctx) ?? renderGeneric(ctx);
 }
-
-/**
- * Transcript wrapper kept as the caller-facing name (App.tsx). Delegates to `ToolRenderer`, the
- * single dispatch + status-derivation component; it adds nothing of its own.
- */
-export function ToolMessage(props: {
-  message: ToolMessageData;
-  className?: string;
-  onOpenPath: (path: string) => void;
-}) {
-  return <ToolRenderer {...props} />;
-}

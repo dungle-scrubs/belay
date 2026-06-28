@@ -3,7 +3,7 @@ import { ChevronRight, Wrench } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { Markdown } from "@/markdown";
+import { MarkdownBody } from "./markdown-body";
 import { ToolSection } from "./tool-section";
 import { type ToolStatus, toolStatusColor } from "./tool-status";
 
@@ -227,16 +227,6 @@ export function ToolCall({
         </div>
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-// Shared markdown body. Parsing/sanitizing is the app's existing Markdown
-// component; .smui-md re-themes its output with SMUI tokens (see index.css).
-function MarkdownBody({ text, muted = false }: { text: string; muted?: boolean }) {
-  return (
-    <div className={cn("smui-md text-sm", muted ? "text-muted-foreground" : "text-foreground")}>
-      <Markdown text={text} muted={muted} />
-    </div>
   );
 }
 
