@@ -510,6 +510,16 @@ export const events = {
     payload: { title: p.title },
   }),
   /**
+   * A durable SOFT-DELETE flag for a session (sidebar Delete): hides it from every view (sidebar,
+   * /resume, inventory) more permanently than archive, without purging the durable log (a hard purge
+   * is a future store operation). The LATEST `session.deleted` wins, so `deleted: false` is an undo. A
+   * lifecycle marker, kept out of prompt history.
+   */
+  sessionDeleted: (p: { deleted: boolean }): TrevorEventInput => ({
+    type: "session.deleted",
+    payload: { deleted: p.deleted },
+  }),
+  /**
    * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately
    * through the live leader's protected `runShell` path, bypassing the model and the turn queue.
    * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
@@ -1056,6 +1066,7 @@ export type DecodedEvent =
   | { readonly type: "session.switch"; readonly sessionId: string; readonly reason: string }
   | { readonly type: "session.archived"; readonly archived: boolean }
   | { readonly type: "session.title"; readonly title: string }
+  | { readonly type: "session.deleted"; readonly deleted: boolean }
   | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
   | {
       readonly type: "shell.result";
@@ -1244,6 +1255,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       return { type: "session.archived", archived: p.archived === true };
     case "session.title":
       return { type: "session.title", title: str(p.title) };
+    case "session.deleted":
+      return { type: "session.deleted", deleted: p.deleted === true };
     case "user.shell":
       // A missing requestId falls back to the event's own id, so a forward-compat event still
       // pairs with its result rather than collapsing distinct shell runs together.

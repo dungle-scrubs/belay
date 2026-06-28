@@ -1,6 +1,7 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
-import { GitBranch, Pencil } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Archive, GitBranch, Pencil, Trash2 } from "lucide-react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { DrawerToggle, SideDrawer } from "./side-drawer";
 
@@ -24,7 +25,7 @@ export function visibleSessions(
   sessions: readonly SessionSummary[],
   project: string | null,
 ): SessionSummary[] {
-  const active = sessions.filter((s) => !s.archived);
+  const active = sessions.filter((s) => !s.archived && !s.deleted);
   const scoped = project != null ? active.filter((s) => s.project === project) : active;
   return [...scoped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
@@ -36,6 +37,10 @@ export interface SessionSidebarProps {
   readonly onSelect: (sessionId: string) => void;
   /** Durably rename a session (editable session titles). When omitted, rows show no edit affordance. */
   readonly onRename?: (sessionId: string, title: string) => void;
+  /** Archive a session (right-click → Archive): hides it from the sidebar/resume. */
+  readonly onArchive?: (sessionId: string) => void;
+  /** Soft-delete a session (right-click → Delete, confirmed): hides it from every view. */
+  readonly onDelete?: (sessionId: string) => void;
   /**
    * Live run state per session (D-093 M3), layered over each row's durable activity: the owner of the
    * live send-queue (the browser for the viewed session, the host for others) supplies `queued` /
@@ -159,18 +164,26 @@ function SessionRow({
   summary,
   activity,
   selected,
+  editing,
+  onBeginEdit,
+  onEndEdit,
   onSelect,
   onRename,
+  onContextMenu,
   nowMs,
 }: {
   summary: SessionSummary;
   activity: SessionActivity;
   selected: boolean;
+  /** Edit state is owned by the sidebar so the pencil AND the right-click Rename open the same input. */
+  editing: boolean;
+  onBeginEdit: () => void;
+  onEndEdit: () => void;
   onSelect: (sessionId: string) => void;
   onRename?: (sessionId: string, title: string) => void;
+  onContextMenu?: (e: ReactMouseEvent) => void;
   nowMs: number;
 }) {
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   // Optimistic title: show the just-typed name immediately, then drop it once the durable rename
   // round-trips into summary.title (so live updates from elsewhere still win after reconciliation).
@@ -182,22 +195,21 @@ function SessionRow({
   }, [summary.title, optimistic]);
   const title = optimistic ?? summary.title;
 
-  // Focus the inline input when an edit opens (without `autoFocus`, which lint forbids, and without
-  // re-focusing on every keystroke).
+  // Seed the draft + focus only on the false->true edit transition (a live title update mid-edit must
+  // not overwrite what the user is typing), without `autoFocus` (lint forbids) or per-keystroke focus.
   const inputRef = useRef<HTMLInputElement>(null);
+  const wasEditing = useRef(false);
   useEffect(() => {
-    if (editing) {
+    if (editing && !wasEditing.current) {
+      setDraft(summary.title);
       inputRef.current?.focus();
       inputRef.current?.select();
     }
-  }, [editing]);
+    wasEditing.current = editing;
+  }, [editing, summary.title]);
 
-  const beginEdit = () => {
-    setDraft(title);
-    setEditing(true);
-  };
   const commit = () => {
-    setEditing(false);
+    onEndEdit();
     const next = draft.trim();
     // An empty/whitespace title is rejected (the inventory falls back to the derived title anyway);
     // a no-op rename is skipped so it does not publish a redundant event.
@@ -208,7 +220,9 @@ function SessionRow({
   };
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the row's controls are its button children; onContextMenu is a progressive right-click enhancement over the wrapper.
     <div
+      onContextMenu={onContextMenu}
       className={cn(
         "group relative flex w-full items-stretch",
         selected
@@ -229,10 +243,10 @@ function SessionRow({
                 commit();
               } else if (e.key === "Escape") {
                 e.preventDefault();
-                setEditing(false);
+                onEndEdit();
               }
             }}
-            onBlur={() => setEditing(false)}
+            onBlur={onEndEdit}
             aria-label="Session title"
             className="w-full rounded border border-input bg-background px-1 text-sm leading-tight outline-none"
           />
@@ -255,7 +269,7 @@ function SessionRow({
           {onRename ? (
             <button
               type="button"
-              onClick={beginEdit}
+              onClick={onBeginEdit}
               aria-label={`Rename ${title}`}
               className="absolute top-1 right-1 cursor-pointer rounded p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
             >
@@ -268,18 +282,202 @@ function SessionRow({
   );
 }
 
+/** One entry in the row's right-click menu. `icon` is a lucide component (same shape as Pencil). */
+interface RowMenuItem {
+  readonly label: string;
+  readonly icon: typeof Pencil;
+  readonly onSelect: () => void;
+  readonly danger?: boolean;
+}
+
+/**
+ * A right-click context menu for a session row (D-094): Rename, Archive, Delete. Styled with the
+ * shadcn popover tokens but with NO extra radix dependency - a portal'd menu positioned at the
+ * cursor over a transparent full-screen layer that dismisses it on an outside click/right-click;
+ * Escape dismisses it too.
+ */
+function RowContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  items: readonly RowMenuItem[];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <button
+      type="button"
+      aria-label="Close menu"
+      className="fixed inset-0 z-50 cursor-default"
+      onClick={onClose}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+    >
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape is handled at the window level above. */}
+      <div
+        role="menu"
+        style={{ position: "absolute", top: y, left: x }}
+        className="min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                item.onSelect();
+                onClose();
+              }}
+              className={cn(
+                "flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors",
+                item.danger
+                  ? "text-destructive hover:bg-destructive/10"
+                  : "hover:bg-accent hover:text-accent-foreground",
+              )}
+            >
+              <Icon className="size-3.5 shrink-0" />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+    </button>,
+    document.body,
+  );
+}
+
+/**
+ * A strong-confirmation dialog for the destructive Delete. Delete is a SOFT delete (the session is
+ * hidden from every view; its durable log is retained), so the copy is explicit that nothing is
+ * purged. Portal'd over a dimmed backdrop; the backdrop and Escape both cancel.
+ */
+function ConfirmDelete({
+  title,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return createPortal(
+    <button
+      type="button"
+      aria-label="Cancel"
+      className="fixed inset-0 z-50 flex cursor-default items-center justify-center bg-black/40 p-4"
+      onClick={onCancel}
+    >
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape is handled at the window level above. */}
+      <div
+        role="alertdialog"
+        aria-label="Delete session"
+        className="w-80 rounded-lg border border-border bg-card p-4 text-left shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-medium text-sm">Delete session?</h3>
+        <p className="mt-1 text-muted-foreground text-xs">
+          "{title}" will be hidden from every view. Its durable history is retained (no hard purge).
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="cursor-pointer rounded-md border border-border px-3 py-1.5 text-xs hover:bg-card/70"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-md bg-destructive px-3 py-1.5 text-destructive-foreground text-xs hover:bg-destructive/90"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </button>,
+    document.body,
+  );
+}
+
 export function SessionSidebar({
   sessions,
   currentSessionId,
   currentProject,
   onSelect,
   onRename,
+  onArchive,
+  onDelete,
   liveActivity,
   onToggle,
   nowMs = Date.now(),
   className,
 }: SessionSidebarProps) {
   const rows = visibleSessions(sessions, currentProject);
+
+  // Edit, right-click menu, and delete-confirm state all live here (not in the row) so the menu's
+  // Rename opens the same inline edit the pencil does, and one menu/dialog shows at a time.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{
+    sessionId: string;
+    title: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [confirm, setConfirm] = useState<{ sessionId: string; title: string } | null>(null);
+
+  // Rows show the right-click menu only when the app wires at least one action (Storybook stays
+  // presentational with no handlers).
+  const hasMenu = Boolean(onRename || onArchive || onDelete);
+
+  const menuItems: RowMenuItem[] = menu
+    ? [
+        ...(onRename
+          ? [{ label: "Rename", icon: Pencil, onSelect: () => setEditingId(menu.sessionId) }]
+          : []),
+        ...(onArchive
+          ? [{ label: "Archive", icon: Archive, onSelect: () => onArchive(menu.sessionId) }]
+          : []),
+        ...(onDelete
+          ? [
+              {
+                label: "Delete",
+                icon: Trash2,
+                danger: true,
+                onSelect: () => setConfirm({ sessionId: menu.sessionId, title: menu.title }),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   return (
     <SideDrawer
@@ -311,14 +509,43 @@ export function SessionSidebar({
                 summary={summary}
                 activity={effectiveActivity(summary, liveActivity)}
                 selected={summary.sessionId === currentSessionId}
+                editing={editingId === summary.sessionId}
+                onBeginEdit={() => setEditingId(summary.sessionId)}
+                onEndEdit={() => setEditingId((id) => (id === summary.sessionId ? null : id))}
                 onSelect={onSelect}
                 onRename={onRename}
+                onContextMenu={
+                  hasMenu
+                    ? (e) => {
+                        e.preventDefault();
+                        setMenu({
+                          sessionId: summary.sessionId,
+                          title: summary.title,
+                          x: e.clientX,
+                          y: e.clientY,
+                        });
+                      }
+                    : undefined
+                }
                 nowMs={nowMs}
               />
             </li>
           ))}
         </ul>
       )}
+      {menu ? (
+        <RowContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
+      ) : null}
+      {confirm ? (
+        <ConfirmDelete
+          title={confirm.title}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => {
+            onDelete?.(confirm.sessionId);
+            setConfirm(null);
+          }}
+        />
+      ) : null}
     </SideDrawer>
   );
 }

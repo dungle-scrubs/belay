@@ -53,6 +53,7 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
   lifecycle: [],
   archived: null,
   rename: null,
+  deleted: null,
   hostPresent: false,
   ...over,
 });
@@ -181,6 +182,7 @@ test("sortInventory puts the current project first, each block by recency desc",
     host: "none",
     activity: "idle",
     archived: false,
+    deleted: false,
   });
   const list = [
     mk("a", "other", "2026-06-26T05:00:00.000Z"),
@@ -258,5 +260,46 @@ test("activeSessions / archivedSessions partition the inventory by the archived 
     archivedSessions([a, b]).map((s) => s.sessionId),
     ["b"],
     "archived view keeps only archived",
+  );
+});
+
+test("summarizeSession derives deleted (newest wins); deleted hides from active AND archived", () => {
+  const noFlag = summarizeSession(baseRow());
+  assert.equal(noFlag.deleted, false, "no session.deleted event -> not deleted");
+
+  const del = events.sessionDeleted({ deleted: true });
+  const deleted = summarizeSession(
+    baseRow({ sessionId: "d", deleted: ev(del.type, del.payload as Record<string, unknown>) }),
+  );
+  assert.equal(deleted.deleted, true, "a deleted: true marker soft-deletes the session");
+
+  // The latest marker wins, so a restore (deleted: false) reads as not deleted again.
+  const restore = events.sessionDeleted({ deleted: false });
+  assert.equal(
+    summarizeSession(
+      baseRow({ deleted: ev(restore.type, restore.payload as Record<string, unknown>) }),
+    ).deleted,
+    false,
+    "the latest marker (restore) wins",
+  );
+
+  // A soft-deleted session is gone from EVERY default view - both the active list and the archive.
+  const archivedEvent = events.sessionArchived({ archived: true });
+  const deletedAndArchived = summarizeSession(
+    baseRow({
+      sessionId: "da",
+      archived: ev(archivedEvent.type, archivedEvent.payload as Record<string, unknown>),
+      deleted: ev(del.type, del.payload as Record<string, unknown>),
+    }),
+  );
+  assert.deepEqual(
+    activeSessions([deleted]).map((s) => s.sessionId),
+    [],
+    "deleted excluded from active",
+  );
+  assert.deepEqual(
+    archivedSessions([deletedAndArchived]).map((s) => s.sessionId),
+    [],
+    "deleted excluded from the archive too",
   );
 });

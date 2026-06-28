@@ -37,6 +37,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
     host: "none",
     activity: "idle",
     archived: false,
+    deleted: false,
     ...over,
   };
 }
@@ -88,6 +89,27 @@ export const ManySessions: Story = {
         currentSessionId="cur"
         currentProject="trevorV2"
         onSelect={noop}
+        nowMs={NOW}
+        className="h-full"
+      />
+    </Frame>
+  ),
+};
+
+/** Right-click a row to open the Rename / Archive / Delete menu (D-094). Wiring the three action
+ *  handlers is what turns on the menu; Rename opens the same inline edit the hover pencil does, and
+ *  Delete asks for confirmation first (it is a soft delete - hidden everywhere, log retained). */
+export const RowActions: Story = {
+  render: () => (
+    <Frame>
+      <SessionSidebar
+        sessions={MANY}
+        currentSessionId="cur"
+        currentProject="trevorV2"
+        onSelect={noop}
+        onRename={noop}
+        onArchive={noop}
+        onDelete={noop}
         nowMs={NOW}
         className="h-full"
       />

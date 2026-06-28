@@ -152,6 +152,10 @@ export interface SidebarBinding {
   readonly onSelect: (sessionId: string) => void;
   /** Durably rename a session row (editable session titles). */
   readonly onRename: (sessionId: string, title: string) => void;
+  /** Archive a session row (right-click → Archive): hides it from the sidebar/resume. */
+  readonly onArchive: (sessionId: string) => void;
+  /** Soft-delete a session row (right-click → Delete, confirmed): hides it from every view. */
+  readonly onDelete: (sessionId: string) => void;
   readonly liveActivity: ReadonlyMap<string, SessionActivity>;
   readonly nowMs: number;
 }
@@ -228,6 +232,8 @@ export function PanelHost(props: {
           currentProject={sidebar.currentProject}
           onSelect={sidebar.onSelect}
           onRename={sidebar.onRename}
+          onArchive={sidebar.onArchive}
+          onDelete={sidebar.onDelete}
           liveActivity={sidebar.liveActivity}
           onToggle={sidebar.onClose}
           nowMs={sidebar.nowMs}

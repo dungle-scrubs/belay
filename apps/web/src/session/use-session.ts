@@ -124,6 +124,24 @@ export function renameSession(sessionId: string, title: string): Promise<void> {
   });
 }
 
+/** Archives (or unarchives) ANY session from the sidebar - a durable `session.archived` flag that
+ *  hides it from the default sidebar/resume/inventory views (the log is retained). */
+export function archiveSession(sessionId: string, archived = true): Promise<void> {
+  return publishEvent(transport, sessionId, {
+    producerId: PRODUCER_IDS.web,
+    ...sessionEvents.sessionArchived({ archived }),
+  });
+}
+
+/** Soft-deletes (or restores) ANY session from the sidebar - a durable `session.deleted` flag that
+ *  hides it from EVERY view. The durable log is retained (a hard purge is a future store operation). */
+export function deleteSession(sessionId: string, deleted = true): Promise<void> {
+  return publishEvent(transport, sessionId, {
+    producerId: PRODUCER_IDS.web,
+    ...sessionEvents.sessionDeleted({ deleted }),
+  });
+}
+
 /** Ensures a session with the given id exists (idempotent) and returns it. */
 export function ensureSession(sessionId: string): Promise<string> {
   return transport.ensureSession(sessionId);

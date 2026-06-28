@@ -31,6 +31,8 @@ export interface SessionSummary {
   readonly activity: SessionActivity;
   /** Whether the session is archived (D-094): hidden from the default UI/sidebar/resume views. */
   readonly archived: boolean;
+  /** Whether the session is soft-deleted (sidebar Delete): hidden from EVERY view (log retained). */
+  readonly deleted: boolean;
 }
 
 export type HostPresenceState = "live" | "stale" | "none";
@@ -63,6 +65,8 @@ export interface InventoryRow {
   readonly archived: SessionEvent | null;
   /** The latest session.title rename, if any - overrides the first-prompt-derived title (newest wins). */
   readonly rename: SessionEvent | null;
+  /** The latest session.deleted event (sidebar Delete), if any - the newest wins (delete/undo). */
+  readonly deleted: SessionEvent | null;
   /** Whether a host socket is connected to this session right now. */
   readonly hostPresent: boolean;
 }
@@ -155,6 +159,8 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
 
   const archivedEvent = row.archived ? decodeTrevorEvent(row.archived) : null;
   const archived = archivedEvent?.type === "session.archived" ? archivedEvent.archived : false;
+  const deletedEvent = row.deleted ? decodeTrevorEvent(row.deleted) : null;
+  const deleted = deletedEvent?.type === "session.deleted" ? deletedEvent.deleted : false;
 
   return {
     sessionId: row.sessionId,
@@ -170,6 +176,7 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     host: presence,
     activity: deriveActivity(row.lifecycle),
     archived,
+    deleted,
   };
 }
 
@@ -179,12 +186,12 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
  * here unless a caller explicitly wants them (e.g. an archive browser or `trevor list --archived`).
  */
 export function activeSessions(summaries: readonly SessionSummary[]): SessionSummary[] {
-  return summaries.filter((s) => !s.archived);
+  return summaries.filter((s) => !s.archived && !s.deleted);
 }
 
-/** The archived sessions only (for an explicit archive filter / `trevor list --archived`). */
+/** The archived (not deleted) sessions only (for an explicit archive filter / `trevor list --archived`). */
 export function archivedSessions(summaries: readonly SessionSummary[]): SessionSummary[] {
-  return summaries.filter((s) => s.archived);
+  return summaries.filter((s) => s.archived && !s.deleted);
 }
 
 /**

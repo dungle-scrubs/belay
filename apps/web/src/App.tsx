@@ -51,6 +51,8 @@ import { useSendQueue } from "./hooks/use-send-queue";
 import { useInventory } from "./resume";
 import { atBottomOf } from "./scroll";
 import {
+  archiveSession,
+  deleteSession,
   ensureSession,
   renameSession,
   useSession,
@@ -945,6 +947,8 @@ export function App() {
         // the durable log and replay on return); the row's activity bar shows it from the other view.
         onSelect: navigateToSession,
         onRename: (id, title) => void renameSession(id, title),
+        onArchive: (id) => void archiveSession(id),
+        onDelete: (id) => void deleteSession(id),
         liveActivity: sidebarLiveActivity,
         nowMs: now,
       }}

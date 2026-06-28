@@ -144,6 +144,11 @@ export function resolveOpenTarget(
       error: `No session "${sessionId}" found. Run \`trevor list\` to see this project's sessions.`,
     };
   }
+  // A soft-deleted session is hidden from every view (sidebar Delete); opening one directly by id
+  // would resurrect it, so it is refused like archive but without an unarchive path here.
+  if (summary.deleted) {
+    return { error: `Session "${sessionId}" was deleted.` };
+  }
   // Archived sessions require an explicit unarchive before opening (D-094 M2): opening one directly
   // would resurrect a filed session without the user clearing its archived flag first.
   if (summary.archived) {

@@ -34,6 +34,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
     host: "none",
     activity: "idle",
     archived: false,
+    deleted: false,
     ...over,
   };
 }

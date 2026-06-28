@@ -27,6 +27,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
     host: "none",
     activity: "idle",
     archived: false,
+    deleted: false,
     ...over,
   };
 }
@@ -286,7 +287,7 @@ test("switching is allowed even while the current session is running (D-093 M4)"
   assert.deepEqual(picked, ["s2"], "selecting another session fires even mid-run");
 });
 
-test("the normal sidebar exposes no stop/kill/archive controls (D-094 M4)", () => {
+test("with no action handlers the sidebar is presentational: no controls, no lifecycle verbs", () => {
   const { container } = render(
     <SessionSidebar
       sessions={[
@@ -301,22 +302,106 @@ test("the normal sidebar exposes no stop/kill/archive controls (D-094 M4)", () =
     />,
   );
 
-  // The only interactive controls are the one-per-visible-session select rows (the archived "filed"
-  // session is excluded), so there are exactly two buttons and nothing else to click - no per-row
-  // stop/kill/archive affordances. Escape/cancel stays the active-work control; lifecycle operations
-  // live in the CLI and (later) a gated debug surface, never the everyday sidebar.
+  // With no onRename/onArchive/onDelete wired (Storybook/standalone), the only interactive controls
+  // are the one-per-visible-session select rows (the archived "filed" session is excluded), so there
+  // are exactly two buttons - no edit pencil and no right-click menu hook. Lifecycle stays opt-in.
   const buttons = [...container.querySelectorAll("button")];
   assert.equal(buttons.length, 2, "only the per-session select rows are interactive");
 
-  // Lifecycle verbs never appear as visible text or accessible labels in the everyday surface.
+  // Lifecycle verbs never appear as visible text or accessible labels until the menu is opened.
   const labels = [...container.querySelectorAll("[aria-label],[title]")].flatMap((el) => [
     el.getAttribute("aria-label") ?? "",
     el.getAttribute("title") ?? "",
   ]);
   const haystack = [container.textContent ?? "", ...labels].join(" ").toLowerCase();
   for (const verb of ["stop", "kill", "archive", "unarchive"]) {
-    assert.ok(!haystack.includes(verb), `no "${verb}" control in the normal sidebar`);
+    assert.ok(!haystack.includes(verb), `no "${verb}" control in the presentational sidebar`);
   }
+});
+
+test("right-click opens a Rename/Archive/Delete menu; Archive fires immediately (D-094)", () => {
+  const archived: string[] = [];
+  const { getByText, getByRole } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "s1", title: "ship it" })]}
+      currentSessionId="s1"
+      currentProject="trevorV2"
+      onSelect={noop}
+      onRename={noop}
+      onArchive={(id) => archived.push(id)}
+      onDelete={noop}
+      nowMs={NOW}
+    />,
+  );
+
+  fireEvent.contextMenu(getByText("ship it"));
+  const menu = getByRole("menu");
+  // Order is fixed: Rename, Archive, Delete (per owner direction).
+  const items = [...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent?.trim());
+  assert.deepEqual(items, ["Rename", "Archive", "Delete"]);
+
+  fireEvent.click(getByText("Archive"));
+  assert.deepEqual(archived, ["s1"], "Archive publishes for that session and closes the menu");
+});
+
+test("the menu's Delete confirms first, then fires onDelete (soft delete)", () => {
+  const deleted: string[] = [];
+  const { getByText, getByRole, queryByRole } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "s1", title: "scratch" })]}
+      currentSessionId="s1"
+      currentProject="trevorV2"
+      onSelect={noop}
+      onRename={noop}
+      onArchive={noop}
+      onDelete={(id) => deleted.push(id)}
+      nowMs={NOW}
+    />,
+  );
+
+  fireEvent.contextMenu(getByText("scratch"));
+  fireEvent.click(getByText("Delete"));
+  // A confirm dialog appears - nothing is deleted yet.
+  getByRole("alertdialog");
+  assert.deepEqual(deleted, [], "Delete does not fire until confirmed");
+
+  fireEvent.click(getByText("Cancel"));
+  assert.equal(queryByRole("alertdialog"), null, "Cancel dismisses without deleting");
+  assert.deepEqual(deleted, []);
+
+  fireEvent.contextMenu(getByText("scratch"));
+  fireEvent.click(getByText("Delete"));
+  // The confirm dialog's own Delete button is the one inside the alertdialog.
+  const confirm = getByRole("alertdialog");
+  const confirmDelete = [...confirm.querySelectorAll("button")].find(
+    (b) => b.textContent === "Delete",
+  );
+  assert.ok(confirmDelete, "the confirm dialog has its own Delete button");
+  fireEvent.click(confirmDelete);
+  assert.deepEqual(deleted, ["s1"], "confirmed Delete soft-deletes that session");
+});
+
+test("the menu's Rename opens the same inline edit the pencil does", () => {
+  const renames: Array<[string, string]> = [];
+  const { getByText, getByLabelText } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "s1", title: "old title" })]}
+      currentSessionId="s1"
+      currentProject="trevorV2"
+      onSelect={noop}
+      onRename={(id, title) => renames.push([id, title])}
+      onArchive={noop}
+      onDelete={noop}
+      nowMs={NOW}
+    />,
+  );
+
+  fireEvent.contextMenu(getByText("old title"));
+  fireEvent.click(getByText("Rename"));
+  const input = getByLabelText("Session title");
+  fireEvent.change(input, { target: { value: "new title" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  assert.deepEqual(renames, [["s1", "new title"]]);
 });
 
 test("an empty list shows a project-scoped empty state with an accessible nav label", () => {

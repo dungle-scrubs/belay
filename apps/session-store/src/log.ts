@@ -143,6 +143,7 @@ export class SessionLog {
       lifecycle: this.eventsOfTypes(s.sessionId, LIFECYCLE_TYPES),
       archived: this.latestOfType(s.sessionId, "session.archived"),
       rename: this.latestOfType(s.sessionId, "session.title"),
+      deleted: this.latestOfType(s.sessionId, "session.deleted"),
     }));
   }
 

@@ -21,6 +21,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   host: "live",
   activity: "idle",
   archived: false,
+  deleted: false,
   ...over,
 });
 
