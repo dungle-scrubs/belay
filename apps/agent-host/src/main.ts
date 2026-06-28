@@ -217,6 +217,13 @@ providerQuestionRuntime.configure((event) => {
 const turnMachine = new TurnMachine();
 const compactionController = new CompactionController();
 
+/**
+ * The run this host is ACTIVELY executing (its turn fiber is alive), or null. Set when a turn forks and
+ * cleared when its fiber exits, so the reconnect reconcile (`reapOrphans` from `goLive`) can tell a
+ * genuinely-live turn from an orphan whose terminal completion was lost to a store outage.
+ */
+let runningRunId: string | null = null;
+
 /** The live Emit service: the turn program's events go to the Richter log via emit(). A second
  *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
  *  is dropped. */
@@ -475,6 +482,7 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     mintRunId: () => crypto.randomUUID(),
     background,
   });
+  runningRunId = runId;
   const fiber = Effect.runFork(
     publishTurn(provider, turnHistory, {
       runId,
@@ -483,6 +491,11 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     }).pipe(Effect.provide(EmitLive)),
   );
   fiber.addObserver((exit) => {
+    // The fiber is no longer running this turn: clear the active marker so a reconnect reconcile treats
+    // a lingering in-flight entry for it as an orphan (its terminal completion may have been lost).
+    if (runningRunId === runId) {
+      runningRunId = null;
+    }
     // publishTurn handles provider failures internally, so a non-interrupt failure here
     // is an unexpected defect worth surfacing.
     if (Exit.isFailure(exit) && !Cause.isInterruptedOnly(exit.cause)) {
@@ -638,12 +651,12 @@ function closeRun(runId: string, kind: "cancelled" | "interrupted"): void {
  * emitted completion echoes back and the set is cleared.
  */
 function reapOrphans(): void {
-  if (!turnMachine.hasInFlight) {
-    return;
-  }
-  for (const runId of turnMachine.reap()) {
+  for (const event of turnMachine.reapExcept(runningRunId)) {
+    const runId = typeof event.payload.runId === "string" ? event.payload.runId : "";
     log("host", "reaping orphaned run", { run: runId.slice(0, 8) });
-    closeRun(runId, "interrupted");
+    // Emit directly (not via closeRun's dedup gate): a turn whose completion was lost to a store outage
+    // already tripped that gate, so going through it again would silently drop the reconciling event.
+    emit(event).catch(() => {});
   }
 }
 
@@ -858,6 +871,15 @@ function goLive(): void {
   }
   emit(events.hostHello({ instanceId: INSTANCE_ID })).catch(() => {});
   announceOnline();
+  // Reconnect reconcile: a turn that ended while the store was unreachable (a socket/store outage,
+  // e.g. a watch-lane restart mid-turn) had its terminal completion lost, leaving it
+  // started-with-no-completion in the log - a forever-"Working" phantom. Now that the stream is back,
+  // close every such orphan. A genuinely live turn (runningRunId) is excluded, so this never cuts a
+  // real turn short. Leader-only: only the owner closes runs. (Cold leadership also reaps via
+  // onBecomeLeader; this adds the reconnect-as-existing-leader path that case misses.)
+  if (lease.isLeader()) {
+    reapOrphans();
+  }
 }
 
 /**

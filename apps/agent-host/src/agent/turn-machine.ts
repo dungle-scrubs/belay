@@ -78,9 +78,34 @@ export class TurnMachine {
     }) satisfies CompletedEvent;
   }
 
-  reap(): string[] {
-    const runIds = this.inFlightIds();
-    this.inFlightRuns.clear();
-    return runIds;
+  /**
+   * Reconcile after a (re)connect: close every in-flight run EXCEPT `activeRunId` (a turn this host is
+   * genuinely still running), returning their terminal `interrupted` completions to emit. This is the
+   * durable safety net for a completion lost while the store was unreachable - the run sits
+   * started-with-no-completion in the log, so the host re-emits it once the stream is back and the UI
+   * stops reading it as forever-"Working". It is driven by the IN-FLIGHT set (the log truth), not the
+   * emit-dedup set, so a `markCompleted` that ran before a failed emit cannot suppress the re-emit.
+   */
+  reapExcept(activeRunId: string | null): TrevorEventInput[] {
+    const out: TrevorEventInput[] = [];
+    for (const runId of [...this.inFlightRuns]) {
+      if (runId === activeRunId) {
+        continue;
+      }
+      this.inFlightRuns.delete(runId);
+      this.completedRuns.add(runId);
+      const last = this.lastUsageByRun.get(runId);
+      this.lastUsageByRun.delete(runId);
+      out.push(
+        events.assistantCompleted({
+          runId,
+          text: "",
+          interrupted: true,
+          ...(last?.usage ? { usage: last.usage } : {}),
+          ...(last?.breakdown ? { breakdown: last.breakdown } : {}),
+        }),
+      );
+    }
+    return out;
   }
 }
