@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { events, type SessionEvent, type TrevorEventInput } from "@trevor/session";
+import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@trevor/session";
 import { test } from "vitest";
 import { assembleCorpus, buildRecords } from "./corpus";
 import type { RecallSessionRef } from "./types";
@@ -11,8 +11,8 @@ import type { RecallSessionRef } from "./types";
  * summary), while siblings contribute in full.
  */
 
-const SELF = "trevor-host";
-const WEB = "trevor-web";
+const SELF = PRODUCER_IDS.host;
+const WEB = PRODUCER_IDS.web;
 
 function ev(
   input: TrevorEventInput,

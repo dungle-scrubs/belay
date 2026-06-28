@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { events, type SessionEvent, type TrevorEventInput } from "@trevor/session";
+import {
+  events,
+  PRODUCER_IDS,
+  type ProducerId,
+  type SessionEvent,
+  type TrevorEventInput,
+} from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderEvent } from "../providers";
@@ -13,8 +19,8 @@ import { buildHistory } from "./history-projection";
  * adds the one tool-less summary call with a fake provider.
  */
 
-const SELF = "trevor-host";
-const WEB = "trevor-web";
+const SELF: ProducerId = PRODUCER_IDS.host;
+const WEB: ProducerId = PRODUCER_IDS.web;
 
 let seq = 0;
 function ev(input: TrevorEventInput, producerId = WEB): SessionEvent {

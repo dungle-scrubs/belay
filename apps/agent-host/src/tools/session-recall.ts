@@ -1,6 +1,7 @@
+import { RECALL_KINDS, type RecallKind } from "@trevor/session";
 import { Effect, Schema } from "effect";
 import { recallEngine } from "../agent/recall/engine";
-import type { RecallFilters, RecallKind } from "../agent/recall/types";
+import type { RecallFilters } from "../agent/recall/types";
 import { defineTool } from "./shared";
 
 /**
@@ -14,8 +15,6 @@ import { defineTool } from "./shared";
  * parses the same payload into the recall transcript surface. Recall is read-only - it only reads
  * durable logs - so the loop may run it concurrently with other reads.
  */
-
-const KINDS = ["user", "assistant", "tool", "fold"] as const;
 
 const Params = Schema.Struct({
   query: Schema.String.annotations({
@@ -31,7 +30,7 @@ const Params = Schema.Struct({
     description: "Only recall records anchored at or before this event seq.",
   }),
   kinds: Schema.optional(Schema.Array(Schema.String)).annotations({
-    description: "Restrict to record kinds: user, assistant, tool, fold.",
+    description: `Restrict to record kinds: ${RECALL_KINDS.join(", ")}.`,
   }),
   tool: Schema.optional(Schema.String).annotations({
     description: "Restrict tool records to this tool name (e.g. grep, read).",
@@ -49,7 +48,7 @@ type RecallArgs = Schema.Schema.Type<typeof Params>;
 /** Builds the engine filters from the flat tool args (kept flat so the params schema has no $defs). */
 function filtersOf(args: RecallArgs): RecallFilters {
   const kinds = args.kinds?.filter((kind): kind is RecallKind =>
-    (KINDS as readonly string[]).includes(kind),
+    (RECALL_KINDS as readonly string[]).includes(kind),
   );
   const turnRange =
     args.from_seq != null || args.to_seq != null

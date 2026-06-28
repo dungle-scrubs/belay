@@ -9,8 +9,15 @@
 /** Where a recalled source came from: this session's folded-away detail, or a sibling session. */
 export type RecallOrigin = "current-compacted" | "sibling-session";
 
+/**
+ * The kinds of conversational unit a recalled source can represent, as a runtime array so the host
+ * tool can build its filter schema/validation from the same source the type is derived from (the
+ * type and the runtime list cannot drift). Order is the canonical filter order.
+ */
+export const RECALL_KINDS = ["user", "assistant", "tool", "fold"] as const;
+
 /** The kind of conversational unit a recalled source represents. */
-export type RecallKind = "user" | "assistant" | "tool" | "fold";
+export type RecallKind = (typeof RECALL_KINDS)[number];
 
 /** Why a recall ended the way it did - the typed outcomes the result distinguishes. */
 export type RecallStatus =
