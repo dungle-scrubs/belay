@@ -89,3 +89,21 @@ export const LongBranch: Story = {
     },
   },
 };
+
+export const WithWorktrees: Story = {
+  args: {
+    cwd: "~/dev/saccade",
+    git: { ...base, branch: "feat/vision-via-hector-py" },
+    worktreeCount: 3,
+    onOpenWorktrees: () => {},
+  },
+};
+
+export const WithOneWorktree: Story = {
+  args: {
+    cwd: "~/dev/saccade",
+    git: { ...base, branch: "feat/vision-via-hector-py" },
+    worktreeCount: 1,
+    onOpenWorktrees: () => {},
+  },
+};

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import type { GitStatus } from "@trevor/session";
 import { test } from "vitest";
 import { gitLine, WorkspaceIdentity } from "./WorkspaceIdentity";
@@ -54,6 +54,51 @@ test("non-git cwd renders the path alone with no second line", () => {
   const { container } = render(<WorkspaceIdentity cwd="~/Downloads" git={null} />);
   const text = container.textContent ?? "";
   assert.equal(text, "~/Downloads");
+});
+
+test("shows a '+N worktrees' link that opens the switcher when other worktrees exist", () => {
+  let opened = 0;
+  const { getByRole } = render(
+    <WorkspaceIdentity
+      cwd="~/dev/saccade"
+      git={{ ...base, branch: "feat/x" }}
+      worktreeCount={3}
+      onOpenWorktrees={() => {
+        opened += 1;
+      }}
+    />,
+  );
+  const link = getByRole("button", { name: /\+3 worktrees/ });
+  fireEvent.click(link);
+  assert.equal(opened, 1);
+});
+
+test("the worktree link is singular for a count of one", () => {
+  const { container } = render(
+    <WorkspaceIdentity
+      cwd="~/dev/saccade"
+      git={base}
+      worktreeCount={1}
+      onOpenWorktrees={() => {}}
+    />,
+  );
+  const text = container.textContent ?? "";
+  assert.ok(text.includes("+1 worktree") && !text.includes("+1 worktrees"), text);
+});
+
+test("no worktree link when the count is zero or no handler is provided", () => {
+  const zero = render(
+    <WorkspaceIdentity
+      cwd="~/dev/saccade"
+      git={base}
+      worktreeCount={0}
+      onOpenWorktrees={() => {}}
+    />,
+  );
+  assert.equal(zero.queryByText(/worktree/), null);
+
+  const noHandler = render(<WorkspaceIdentity cwd="~/dev/saccade" git={base} worktreeCount={3} />);
+  assert.equal(noHandler.queryByText(/worktree/), null);
 });
 
 test("long path and branch truncate (the truncate class is applied)", () => {

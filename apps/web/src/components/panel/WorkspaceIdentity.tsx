@@ -1,4 +1,5 @@
 import type { GitStatus } from "@trevor/session";
+import { GitBranch } from "lucide-react";
 
 /**
  * The structured pieces of the sidebar git line, derived from a host `GitStatus`. Kept as
@@ -54,11 +55,18 @@ export function gitLine(git: GitStatus): GitLine | null {
 export function WorkspaceIdentity({
   cwd,
   git,
+  worktreeCount = 0,
+  onOpenWorktrees,
 }: {
   readonly cwd: string;
   readonly git?: GitStatus | null;
+  /** How many OTHER managed worktrees this project has (switch targets beyond the current one). */
+  readonly worktreeCount?: number;
+  /** Opens the worktree switcher (same as `/worktree`); the `+N worktrees` link is shown only when set. */
+  readonly onOpenWorktrees?: () => void;
 }) {
   const line = git ? gitLine(git) : null;
+  const showWorktrees = worktreeCount > 0 && onOpenWorktrees != null;
   return (
     <div className="flex flex-col gap-1 border border-border bg-background px-3 py-2 text-xs">
       <code className="truncate text-foreground">{cwd}</code>
@@ -79,6 +87,19 @@ export function WorkspaceIdentity({
             </span>
           ) : null}
         </div>
+      ) : null}
+      {showWorktrees ? (
+        <button
+          type="button"
+          onClick={onOpenWorktrees}
+          title="Switch worktree (/worktree)"
+          className="flex w-fit items-center gap-1 text-muted-foreground hover:text-foreground"
+        >
+          <GitBranch className="size-2.5 shrink-0" />
+          <span>
+            +{worktreeCount} worktree{worktreeCount === 1 ? "" : "s"}
+          </span>
+        </button>
       ) : null}
     </div>
   );
