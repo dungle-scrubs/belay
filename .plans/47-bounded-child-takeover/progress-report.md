@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 54
+- **Current cutoff blockers:** 42
 - **Completed current work:** 5
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
