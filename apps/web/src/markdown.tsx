@@ -23,6 +23,44 @@ function normalizeCodeText(text: string): string {
   return `${text.replace(/\n$/, "")}\n`;
 }
 
+/**
+ * Strips the COMMON leading whitespace shared by every non-blank line of a code block, so a snippet
+ * the model quoted from indented source (a method body, a nested config) renders flush-left instead of
+ * pushed in - while keeping each line's indentation RELATIVE to the others. The common indent is the
+ * longest shared whitespace prefix (so mixed tabs/spaces that don't agree dedent to nothing, never
+ * corrupting alignment). Blank lines don't count toward the common prefix and are left as-is.
+ */
+function dedentCode(text: string): string {
+  const lines = text.split("\n");
+  let common: string | null = null;
+  for (const line of lines) {
+    if (line.trim() === "") {
+      continue;
+    }
+    const indent = line.match(/^[ \t]*/)?.[0] ?? "";
+    if (common === null) {
+      common = indent;
+    } else {
+      let i = 0;
+      const max = Math.min(common.length, indent.length);
+      while (i < max && common[i] === indent[i]) {
+        i += 1;
+      }
+      common = common.slice(0, i);
+    }
+    if (common === "") {
+      return text;
+    }
+  }
+  if (!common) {
+    return text;
+  }
+  const prefix = common;
+  return lines
+    .map((line) => (line.startsWith(prefix) ? line.slice(prefix.length) : line))
+    .join("\n");
+}
+
 renderer.table = (token: Tokens.Table) =>
   `<div class="trevor-md-table-scroll">${renderTable(token)}</div>`;
 
@@ -34,9 +72,11 @@ const COPY_ICON =
 renderer.code = ({ text, lang, escaped }: Tokens.Code) => {
   const language = lang?.match(/\S*/)?.[0] ?? "";
   const className = language ? ` class="language-${escapeHtml(language)}"` : "";
-  const displayText = normalizeCodeText(text);
+  // Dedent so a block quoted from indented source renders flush-left; the copy matches what's shown.
+  const code = dedentCode(text);
+  const displayText = normalizeCodeText(code);
   const codeHtml = escaped ? displayText : escapeHtml(displayText);
-  const copyText = encodeURIComponent(text);
+  const copyText = encodeURIComponent(code);
 
   return `<div class="trevor-md-codeblock"><button type="button" class="trevor-md-code-copy" data-trevor-copy-code="${copyText}" aria-label="Copy code block" title="Copy code block">${COPY_ICON}</button><pre><code${className}>${codeHtml}</code></pre></div>\n`;
 };
