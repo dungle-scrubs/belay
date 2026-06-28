@@ -20,14 +20,9 @@ import { recordObservation } from "../providers/observation-store";
 import { classifyProviderProtocolAnomaly } from "../providers/protocol-anomaly";
 import { providerFailureLogFields } from "../providers/provider-failure-log";
 import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
-import { cheapestReasoning, reduceReasoning, trimLargestToolResult } from "./recovery";
-import {
-  initialRetrySafetyState,
-  isSafeToRetry,
-  noteProviderEvent,
-  outputStarted,
-} from "./retry-safety";
-import { evaluateTurnTermination } from "./turn-policy";
+import { trimLargestToolResult } from "./overflow-recovery";
+import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
+import { TurnTerminationGate } from "./turn-policy";
 
 /**
  * Emits the structured, redacted provider-failure log line (D-076 M6): the classification, retry
@@ -64,10 +59,10 @@ function logProviderFailure(
 
 /**
  * Best-effort: when a model step fails terminally with an UNKNOWN provider failure shape, record it
- * as a redacted, deduped observation under TREVOR_HOME (D-076 M5). Emits nothing and never fails -
- * the underlying store swallows any write error - so it can be `concat`-ed ahead of the real failure
- * without changing the turn's outcome. Only `unknown` is observed; well-classified terminal failures
- * (auth, quota, model/runtime unavailable, request rejected) already carry their own action.
+ * as a redacted, deduped observation under TREVOR_STATE_HOME (D-076 M5). Emits nothing and never
+ * fails - the underlying store swallows any write error - so it can be `concat`-ed ahead of the real
+ * failure without changing the turn's outcome. Only `unknown` is observed; well-classified terminal
+ * failures (auth, quota, model/runtime unavailable, request rejected) already carry their own action.
  */
 function observeUnknownFailure(
   provider: Provider,
@@ -160,14 +155,47 @@ function withDiagnostic(error: ProviderError, diagnostic: ProviderDiagnostic): P
  * tokens, close, or error. Env-overridable; set to 0 to disable. Default 90s (xhigh reasoning can
  * pause for a while, so the gap is generous - it only catches a genuinely dead stream).
  */
-const STREAM_STALL_MS = (() => {
+const DEFAULT_STREAM_STALL_MS = (() => {
   const raw = process.env.TREVOR_STREAM_STALL_MS;
   return raw !== undefined && Number.isFinite(Number(raw)) ? Number(raw) : 90_000;
 })();
 
+export interface TurnLoopConfig {
+  /** Runaway backstop for a pathological tool loop. */
+  readonly maxSteps: number;
+  /** Max read-only tool calls a single step runs concurrently. */
+  readonly toolConcurrency: number;
+  /** Prompt-token fraction of the context window where the loop stops opening tool rounds. */
+  readonly contextBudgetFraction: number;
+  /** Per-turn cap on in-loop overflow-recovery adjustments. */
+  readonly maxRecovery: number;
+  /** Provider-stream idle watchdog in ms; 0 disables it. */
+  readonly streamStallMs: number;
+  /** Reconnect backoff before retries; length + 1 is the attempt budget. */
+  readonly reconnectBackoffsMs: readonly number[];
+}
+
+export const DEFAULT_TURN_LOOP_CONFIG: TurnLoopConfig = {
+  maxSteps: 32,
+  toolConcurrency: 8,
+  contextBudgetFraction: 0.8,
+  maxRecovery: 2,
+  streamStallMs: DEFAULT_STREAM_STALL_MS,
+  reconnectBackoffsMs: [300, 900],
+};
+
+function turnLoopConfig(overrides?: Partial<TurnLoopConfig>): TurnLoopConfig {
+  return {
+    ...DEFAULT_TURN_LOOP_CONFIG,
+    ...overrides,
+    reconnectBackoffsMs:
+      overrides?.reconnectBackoffsMs ?? DEFAULT_TURN_LOOP_CONFIG.reconnectBackoffsMs,
+  };
+}
+
 /**
  * Wraps a provider stream with the idle watchdog: a scoped fiber polls the time since the last event
- * and, past STREAM_STALL_MS, fails the stream with a RETRYABLE ProviderUnavailable. The loop's
+ * and, past the configured stall timeout, fails the stream with a RETRYABLE ProviderUnavailable. The loop's
  * existing reconnect `catchAll` then retries (when nothing has streamed yet) or, once tokens have
  * flowed, surfaces it as a clear terminal error. A normal end, the stall failure, or an interrupt
  * (ESC/cancel) all close the stream scope and tear the watchdog down.
@@ -175,8 +203,9 @@ const STREAM_STALL_MS = (() => {
 function withStallTimeout<A>(
   source: Stream.Stream<A, ProviderError>,
   providerName: string,
+  streamStallMs: number,
 ): Stream.Stream<A, ProviderError> {
-  if (STREAM_STALL_MS <= 0) {
+  if (streamStallMs <= 0) {
     return source;
   }
   return Stream.unwrapScoped(
@@ -187,14 +216,14 @@ function withStallTimeout<A>(
       yield* Effect.forkScoped(
         Effect.gen(function* () {
           for (;;) {
-            yield* Effect.sleep(Duration.millis(Math.min(STREAM_STALL_MS, 5_000)));
+            yield* Effect.sleep(Duration.millis(Math.min(streamStallMs, 5_000)));
             const idle = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastSeen));
-            if (idle >= STREAM_STALL_MS) {
+            if (idle >= streamStallMs) {
               yield* Deferred.fail(
                 stalled,
                 new ProviderUnavailable({
                   provider: providerName,
-                  detail: `model stream stalled (no output for ${Math.round(STREAM_STALL_MS / 1000)}s)`,
+                  detail: `model stream stalled (no output for ${Math.round(streamStallMs / 1000)}s)`,
                   retryable: true,
                 }),
               );
@@ -218,26 +247,8 @@ function withStallTimeout<A>(
  * Bounded auto-reconnect for a transient provider outage (D-076…D-079): backoff (ms) BEFORE each
  * retry. Two entries = three total attempts (the initial plus two retries). A small jitter is added
  * so simultaneous turns don't reconnect in lockstep. The budget is per-step and independent of
- * MAX_STEPS and the overflow-recovery budget, so reconnection can never spin.
+ * the step and overflow-recovery budgets, so reconnection can never spin.
  */
-const RECONNECT_BACKOFFS_MS = [300, 900] as const;
-const MAX_RECONNECT_ATTEMPTS = RECONNECT_BACKOFFS_MS.length + 1;
-
-/** Runaway backstop, NOT the everyday governor: it only bounds a pathological tool loop
- *  that never converges. The real budget is context pressure (CONTEXT_BUDGET_FRACTION below),
- *  so a turn normally stops because it's out of ROOM, never at an arbitrary step count (D-053). */
-const MAX_STEPS = 32;
-/** Max read-only tool calls a single step runs concurrently (D-050). Mutating calls are never
- *  part of a concurrent run - each is a serial barrier - so this only bounds in-flight reads. */
-const TOOL_CONCURRENCY = 8;
-/** Stop opening new tool rounds once the latest prompt reaches this fraction of the model's
- *  context window, and force a final answer instead. Falls back to MAX_STEPS-only when the
- *  window is unknown (0). This is the governor; MAX_STEPS is the backstop (D-053). */
-const CONTEXT_BUDGET_FRACTION = 0.8;
-/** Per-turn cap on in-loop overflow-recovery adjustments, independent of MAX_STEPS so
- *  recovery can never spin (D-037). */
-const MAX_RECOVERY = 2;
-
 /**
  * Heuristic: did the model END a turn by ANNOUNCING an imminent action without calling a tool?
  * A weaker model sometimes trails off ("Let me continue reading the remaining files:") and stops
@@ -317,7 +328,7 @@ export type AgentEvent =
 /**
  * The model<->tools loop as a Stream of AgentEvents: stream a model step; if it
  * requested tools, execute them (emitting start/end) and recurse; otherwise the model
- * answered and the stream ends. Bounded by MAX_STEPS to prevent runaway tool loops.
+ * answered and the stream ends. Bounded by the loop config to prevent runaway tool loops.
  *
  * Cancellation is fiber interruption: interrupting the consumer halts the recursion and
  * the in-flight provider stream tears its request down (A-004) - no manual abort checks.
@@ -343,6 +354,7 @@ export interface DelegateCapability {
 export interface RunAgentOptions {
   readonly toolNames?: ReadonlySet<string>;
   readonly delegate?: DelegateCapability;
+  readonly loop?: Partial<TurnLoopConfig>;
 }
 
 export function runAgent(
@@ -354,6 +366,7 @@ export function runAgent(
   opts: RunAgentOptions = {},
 ): Stream.Stream<AgentEvent, ProviderError> {
   const conversation: ChatMessage[] = [...history];
+  const config = turnLoopConfig(opts.loop);
   // The model is OFFERED only the allow-listed tools; the executor enforces the same set below, so
   // a child can neither see nor run a tool outside its agent's allow-list. A parent additionally
   // gets the delegation tools (a child gets none - depth-1).
@@ -385,13 +398,13 @@ export function runAgent(
   // bounded so it can never spin. Recovery adjusts the reasoning level and the in-loop
   // tool results (everything appended after the prior history starts at baseIndex).
   const baseIndex = history.length;
-  let recoveryBudget = MAX_RECOVERY;
+  let recoveryBudget = config.maxRecovery;
   let currentReasoning = reasoning;
   let thinkingReduced = false;
 
   // The latest model step's prompt size + window, captured from its usage event (like
   // overflowReason). Drives the context-pressure budget (D-053): when the prompt that fed
-  // the last step crosses CONTEXT_BUDGET_FRACTION of the window, the next round forces a
+  // the last step crosses the configured fraction of the window, the next round forces a
   // final answer instead of opening more tool calls. Both 0 until the first usage arrives.
   let lastInputTokens = 0;
   let lastContextWindow = 0;
@@ -464,6 +477,7 @@ export function runAgent(
       const model = withStallTimeout(
         provider.stream(conversation, [], synthReasoning),
         provider.model,
+        config.streamStallMs,
       ).pipe(
         Stream.filterMap((event) => {
           // Tools were removed; drop any stray tool_call/overflow and keep text/thinking/usage.
@@ -496,24 +510,24 @@ export function runAgent(
   const step = (n: number): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
       // Budget gate before opening another tool round: the step backstop OR - the real
-      // governor - the prior step's prompt crossing CONTEXT_BUDGET_FRACTION of the window.
+      // governor - the prior step's prompt crossing the configured fraction of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are
       // clear (no prior usage), so the first round always runs.
-      const decision = evaluateTurnTermination({
+      const stop = TurnTerminationGate.decide({
         steps: n,
-        maxSteps: MAX_STEPS,
+        maxSteps: config.maxSteps,
         inputTokens: lastInputTokens,
         contextWindow: lastContextWindow,
-        contextBudgetFraction: CONTEXT_BUDGET_FRACTION,
+        contextBudgetFraction: config.contextBudgetFraction,
         repeatedToolName,
         repeatedToolRounds,
       });
-      if (decision.type === "synthesize") {
-        return synthesize(n, decision.stop);
+      if (stop?.action === "synthesized") {
+        return synthesize(n, stop);
       }
-      if (decision.type === "pause" || decision.type === "fail") {
+      if (stop) {
         return Stream.concat(
-          Stream.succeed<AgentEvent>({ type: "stop", stop: decision.stop }),
+          Stream.succeed<AgentEvent>({ type: "stop", stop }),
           Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }),
         );
       }
@@ -535,13 +549,31 @@ export function runAgent(
       // before. Interrupts (ESC/cancel) ride the interrupt channel, not this typed `E` channel, so
       // catchAll never sees them: they are never retried and cancel stays instant during a backoff.
       const connectStep = (attempt: number): Stream.Stream<AgentEvent, ProviderError> => {
-        let retrySafety = initialRetrySafetyState();
+        let textChars = 0;
+        let thinkingChars = 0;
+        let toolCallsStarted = 0;
+        const toolResults = 0;
+        const partials = (): ProviderPartialCounts => ({
+          textChars,
+          thinkingChars,
+          toolCalls: toolCallsStarted,
+          toolResults,
+        });
+        const safeToRetry = () => textChars === 0 && toolCallsStarted === 0 && toolResults === 0;
+        const outputStarted = () => textChars > 0;
         const mapped = withStallTimeout(
           provider.stream(conversation, tools, currentReasoning),
           provider.model,
+          config.streamStallMs,
         ).pipe(
           Stream.filterMap((event) => {
-            retrySafety = noteProviderEvent(retrySafety, event);
+            if (event.type === "text") {
+              textChars += event.text.length;
+            } else if (event.type === "thinking") {
+              thinkingChars += event.text.length;
+            } else if (event.type === "tool_call") {
+              toolCallsStarted += 1;
+            }
             if (event.type === "tool_call") {
               toolCalls.push(event.call);
               return Option.none<AgentEvent>();
@@ -566,19 +598,13 @@ export function runAgent(
         return mapped.pipe(
           Stream.catchAll((error) => {
             const retryable = error._tag === "ProviderUnavailable" && error.retryable === true;
-            const safeToRetry = isSafeToRetry(retrySafety);
-            if (safeToRetry && retryable && attempt < MAX_RECONNECT_ATTEMPTS) {
+            const retrySafe = safeToRetry();
+            if (retrySafe && retryable && attempt < config.reconnectBackoffsMs.length + 1) {
               const next = attempt + 1;
-              const base = RECONNECT_BACKOFFS_MS[attempt - 1] ?? 0;
+              const base = config.reconnectBackoffsMs[attempt - 1] ?? 0;
               const wait = base + Math.round(Math.random() * 150); // small jitter, no lockstep
               logProviderFailure(provider, error, next, "reconnect");
-              const diagnostic = providerDiagnostic(
-                provider,
-                error,
-                next,
-                true,
-                retrySafety.partials,
-              );
+              const diagnostic = providerDiagnostic(provider, error, next, true, partials());
               return Stream.concat(
                 Stream.succeed<AgentEvent>({
                   type: "reconnecting",
@@ -596,16 +622,10 @@ export function runAgent(
             // classifier's rules can improve later. Best-effort and output-started-aware; never fails
             // the turn.
             logProviderFailure(provider, error, attempt, "terminal");
-            const diagnostic = providerDiagnostic(
-              provider,
-              error,
-              attempt,
-              safeToRetry,
-              retrySafety.partials,
-            );
+            const diagnostic = providerDiagnostic(provider, error, attempt, retrySafe, partials());
             const diagnosticError = withDiagnostic(error, diagnostic);
             return Stream.concat(
-              observeUnknownFailure(provider, diagnosticError, outputStarted(retrySafety)),
+              observeUnknownFailure(provider, diagnosticError, outputStarted()),
               Stream.fail(diagnosticError),
             );
           }),
@@ -619,7 +639,7 @@ export function runAgent(
       const afterModel = Stream.unwrap(
         Effect.sync(() => {
           // Overflow recovery: try one cheap in-loop adjustment and re-run the SAME step
-          // (n unchanged, so recovery is independent of MAX_STEPS). Only when the budget
+          // (n unchanged, so recovery is independent of the step budget). Only when the budget
           // is spent does the terminal overflow surface (D-038).
           if (overflowReason !== null) {
             const recovered = tryRecover(overflowReason);
@@ -650,22 +670,22 @@ export function runAgent(
               toolCalls,
             });
             if (protocolDiagnostic) {
-              const decision = evaluateTurnTermination({
+              const stop = TurnTerminationGate.decide({
                 steps: n,
-                maxSteps: MAX_STEPS,
+                maxSteps: config.maxSteps,
                 inputTokens: lastInputTokens,
                 contextWindow: lastContextWindow,
-                contextBudgetFraction: CONTEXT_BUDGET_FRACTION,
+                contextBudgetFraction: config.contextBudgetFraction,
                 repeatedToolName,
                 repeatedToolRounds,
                 providerDiagnostic: protocolDiagnostic,
               });
-              if (decision.type === "continue") {
+              if (!stop) {
                 return Stream.empty;
               }
               return Stream.succeed<AgentEvent>({
                 type: "stop",
-                stop: decision.stop,
+                stop,
               });
             }
             // Non-empty text, no tool call. Normally this IS the final answer - but if the text
@@ -724,7 +744,7 @@ export function runAgent(
 
           // Partition into ordered segments (maximal read-only runs vs single mutating barriers)
           // and run them back-to-back. Within a read run the executes merge, bounded by
-          // TOOL_CONCURRENCY; a barrier is a one-element merge, so it runs alone. Because the
+          // configured tool concurrency; a barrier is a one-element merge, so it runs alone. Because the
           // segments are concatenated, a mutating call never overlaps the reads around it - two
           // edits to one path apply in call order with no lost update (D-050 / M3).
           const batch = partitionToolCalls(toolCalls).reduce(
@@ -734,7 +754,7 @@ export function runAgent(
               );
               const executes = Stream.mergeAll(
                 segment.map(({ call, index }) => execute(call, index)),
-                { concurrency: TOOL_CONCURRENCY },
+                { concurrency: config.toolConcurrency },
               );
               return Stream.concat(acc, Stream.concat(starts, executes));
             },

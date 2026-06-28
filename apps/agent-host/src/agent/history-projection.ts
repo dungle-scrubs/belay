@@ -1,11 +1,6 @@
-import {
-  type ArtifactRef,
-  decodeTrevorEvent,
-  type SessionEvent,
-  type TaskSnapshot,
-} from "@trevor/session";
+import type { ArtifactRef, SessionEvent, TaskSnapshot } from "@trevor/session";
 import type { ChatMessage } from "../providers";
-import { analyzeBaseline } from "./baseline";
+import { CompactionPlanner } from "./compaction-planner";
 import { toolCallGrouper } from "./tool-messages";
 
 /**
@@ -76,22 +71,12 @@ export function buildHistory(
       ? { role: "user", content: decoded.text, artifacts: decoded.artifacts }
       : { role: "user", content: decoded.text };
 
-  // Decode the log ONCE. buildHistory runs on every admit, and it walks the log twice (the baseline
-  // analysis, then the projection), so decoding per pass would double the per-admit decode work over
-  // a growing log. Both index into this shared array instead.
-  const decodedEvents = events.map((event) => decodeTrevorEvent(event));
-
   // The baseline (everything after the last /clear) and, within it, the latest fold plus the pins.
-  // Shared with the compaction planner (analyzeBaseline) so the fold and goal can't drift. The pins
+  // Shared with the compaction planner so the fold and goal can't drift. The pins
   // (D-040) re-enter the prompt OUTSIDE the fold: the original goal keeps the model anchored on the
   // objective after older turns collapse to a summary, and the live task list rides in the fold.
-  const {
-    start: baselineStart,
-    fold,
-    goal: goalPin,
-    tasks,
-  } = analyzeBaseline(events, decodedEvents, selfProducerId);
-  const goal = goalPin ? toUserTurn(goalPin) : null;
+  const analysis = CompactionPlanner.analyze(events, selfProducerId);
+  const goal = analysis.goal ? toUserTurn(analysis.goal) : null;
 
   // Pass 2 - project the baseline. When folded, the pins + rolling summary lead, then only the
   // RECENT turns (seq > throughSeq) are projected verbatim; the summary already represents the
@@ -99,11 +84,11 @@ export function buildHistory(
   // BEFORE the fold event was written - the blocking-before case - in the recent run. With no
   // fold, this is the plain projection, byte-for-byte the pre-compaction behaviour.
   const out: ChatMessage[] = [];
-  if (fold) {
+  if (analysis.fold) {
     if (goal) {
       out.push(goal);
     }
-    out.push({ role: "assistant", content: renderFold(fold.summary, tasks) });
+    out.push({ role: "assistant", content: renderFold(analysis.fold.summary, analysis.tasks) });
   }
   const pushUser = (turn: ChatMessage): void => {
     // Collapse consecutive user turns to the latest: with one-turn-at-a-time dispatch this only
@@ -118,13 +103,13 @@ export function buildHistory(
   // Tool-call reconstruction (the shared rule - see toolCallGrouper). out.length > 0 gates a leading
   // tool-call message so the prompt always opens on a user turn.
   const tools = toolCallGrouper((message) => out.push(message));
-  for (let index = baselineStart; index < events.length; index += 1) {
+  for (let index = analysis.baselineStart; index < events.length; index += 1) {
     const event = events[index];
-    const decoded = decodedEvents[index];
+    const decoded = analysis.decoded[index];
     if (!event || !decoded) {
       continue;
     }
-    if (fold && event.seq <= fold.throughSeq) {
+    if (analysis.fold && event.seq <= analysis.fold.throughSeq) {
       continue; // folded away - the summary stands in for it
     }
     if (decoded.type === "user.message") {

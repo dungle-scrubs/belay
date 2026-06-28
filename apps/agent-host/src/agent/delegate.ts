@@ -283,6 +283,11 @@ interface DelegateArgs {
   readonly define?: EphemeralSpec;
 }
 
+type EphemeralRegistry = {
+  readonly tools: ReadonlySet<string>;
+  readonly skills: ReadonlySet<string>;
+};
+
 function strArray(value: unknown): readonly string[] | undefined {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : undefined;
 }
@@ -310,56 +315,72 @@ function parseDelegateArgs(raw: string): DelegateArgs {
   }
 }
 
-/**
- * Resolves a delegation call to the agent it runs: a discovered id, or a runtime-only ("ephemeral")
- * definition the model minted inline (D-049). An ephemeral contract is validated STRICTLY against the
- * live registries before it runs - unknown tools/skills and policy-forbidden delegation tools are
- * rejected with a structured error, never silently dropped - and is runtime-only (no file written, no
- * registry entry). Either way the resolved agent gets the same isolation, allow-list, and depth-1
- * (no delegation capability) as a discovered one.
- */
-function resolveDelegationAgent(
-  args: DelegateArgs,
-  agents: readonly AgentDefinition[],
-  registry: { readonly tools: ReadonlySet<string>; readonly skills: ReadonlySet<string> },
-): { agent: AgentDefinition } | { error: string } {
-  if (args.define) {
-    const d = args.define;
-    if (!d.description.trim()) {
+class EphemeralAgentValidator {
+  constructor(private readonly registry: EphemeralRegistry) {}
+
+  validate(spec: EphemeralSpec): { agent: AgentDefinition } | { error: string } {
+    if (!spec.description.trim()) {
       return { error: 'error: an ephemeral agent needs a "description"' };
     }
-    if (!d.instructions.trim()) {
+    if (!spec.instructions.trim()) {
       return { error: 'error: an ephemeral agent needs "instructions"' };
     }
-    const tools = d.tools ?? ["*"];
+    const tools = spec.tools ?? ["*"];
     if (!tools.includes("*")) {
-      const forbidden = tools.filter((t) => DELEGATION_TOOL_NAMES.has(t));
-      if (forbidden.length) {
-        return {
-          error: `error: an ephemeral agent may not use delegation tools (${forbidden.join(", ")})`,
-        };
-      }
-      const unknown = tools.filter((t) => !registry.tools.has(t));
-      if (unknown.length) {
-        return { error: `error: unknown tool(s) for the ephemeral agent: ${unknown.join(", ")}` };
+      const toolError = this.validateTools(tools);
+      if (toolError) {
+        return { error: toolError };
       }
     }
-    if (d.skills && !d.skills.includes("*")) {
-      const unknown = d.skills.filter((s) => !registry.skills.has(s));
-      if (unknown.length) {
-        return { error: `error: unknown skill(s) for the ephemeral agent: ${unknown.join(", ")}` };
+    if (spec.skills && !spec.skills.includes("*")) {
+      const skillError = this.validateSkills(spec.skills);
+      if (skillError) {
+        return { error: skillError };
       }
     }
     return {
       agent: {
         id: "ephemeral",
-        description: d.description.trim(),
+        description: spec.description.trim(),
         tools,
-        skills: d.skills,
-        body: d.instructions,
+        skills: spec.skills,
+        body: spec.instructions,
         source: "ephemeral",
       },
     };
+  }
+
+  private validateTools(tools: readonly string[]): string | null {
+    const forbidden = tools.filter((t) => DELEGATION_TOOL_NAMES.has(t));
+    if (forbidden.length) {
+      return `error: an ephemeral agent may not use delegation tools (${forbidden.join(", ")})`;
+    }
+    const unknown = tools.filter((t) => !this.registry.tools.has(t));
+    return unknown.length
+      ? `error: unknown tool(s) for the ephemeral agent: ${unknown.join(", ")}`
+      : null;
+  }
+
+  private validateSkills(skills: readonly string[]): string | null {
+    const unknown = skills.filter((s) => !this.registry.skills.has(s));
+    return unknown.length
+      ? `error: unknown skill(s) for the ephemeral agent: ${unknown.join(", ")}`
+      : null;
+  }
+}
+
+/**
+ * Resolves a delegation call to the agent it runs: a discovered id, or a runtime-only ("ephemeral")
+ * definition the model minted inline (D-049). Ephemeral validation is delegated to
+ * EphemeralAgentValidator so the resolver only selects the agent source and handles unknown ids.
+ */
+function resolveDelegationAgent(
+  args: DelegateArgs,
+  agents: readonly AgentDefinition[],
+  validator: EphemeralAgentValidator,
+): { agent: AgentDefinition } | { error: string } {
+  if (args.define) {
+    return validator.validate(args.define);
   }
   if (args.agent) {
     const found = agents.find((a) => a.id === args.agent);
@@ -396,6 +417,7 @@ export function buildDelegateCapability(
     tools: new Set(TOOL_DEFS.map((t) => t.name)),
     skills: new Set(discoverSkills().map((s) => s.id)),
   };
+  const ephemeralValidator = new EphemeralAgentValidator(registry);
   const cap = params.background?.cap ?? MAX_BACKGROUND_CHILDREN_PER_SESSION;
   return {
     defs: buildDelegationDefs(params.agents, cap),
@@ -405,7 +427,7 @@ export function buildDelegateCapability(
       if (!args.task?.trim()) {
         return 'error: delegate requires a non-empty "task"';
       }
-      const resolved = resolveDelegationAgent(args, params.agents, registry);
+      const resolved = resolveDelegationAgent(args, params.agents, ephemeralValidator);
       if ("error" in resolved) {
         return resolved.error;
       }

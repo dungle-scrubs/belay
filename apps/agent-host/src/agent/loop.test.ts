@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
-import { type AgentEvent, looksUnfinished, runAgent } from "./loop";
+import { type AgentEvent, looksUnfinished, type RunAgentOptions, runAgent } from "./loop";
 
 /**
  * Phase 2 (graceful turn-budget termination, D-051..D-053): a turn must never end silently
@@ -78,11 +78,12 @@ function loopingProvider(opts: {
   };
 }
 
-const collect = (provider: Provider): Promise<AgentEvent[]> => {
+const collect = (provider: Provider, opts: RunAgentOptions = {}): Promise<AgentEvent[]> => {
   const events: AgentEvent[] = [];
   return Effect.runPromise(
-    Stream.runForEach(runAgent(provider, [{ role: "user", content: "go" }], "off", "r1"), (e) =>
-      Effect.sync(() => void events.push(e)),
+    Stream.runForEach(
+      runAgent(provider, [{ role: "user", content: "go" }], "off", "r1", true, opts),
+      (e) => Effect.sync(() => void events.push(e)),
     ),
   ).then(() => events);
 };
@@ -118,6 +119,15 @@ test("M3: the context gate stops early under a small window, later under a large
   const large = await collect(loopingProvider({ input: 100, window: 100_000 }));
   const largeSteps = (large.find((e) => e.type === "step_limit") as { steps: number }).steps;
   assert.equal(largeSteps, 32, "a roomy window runs to the backstop, not the context gate");
+});
+
+test("turn loop config overrides the step backstop per call", async () => {
+  const events = await collect(loopingProvider({ input: 1, window: 1_000_000 }), {
+    loop: { maxSteps: 3 },
+  });
+  const limit = events.find((e) => e.type === "step_limit");
+
+  assert.equal(limit?.type === "step_limit" && limit.steps, 3);
 });
 
 test("M2: an empty context-pressure synthesis falls through to the empty path after step_limit", async () => {

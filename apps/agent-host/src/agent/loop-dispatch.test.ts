@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Effect, Fiber, Stream } from "effect";
 import { test, vi } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
-import { trimLargestToolResult } from "./recovery";
+import { trimLargestToolResult } from "./overflow-recovery";
 
 /**
  * Phase 1 (concurrent read-only tool execution, D-050): M3 invariant tests. These replace the

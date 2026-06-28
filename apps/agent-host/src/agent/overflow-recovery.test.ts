@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { ChatMessage } from "../providers";
-import { ELISION, reduceReasoning, trimLargestToolResult } from "./recovery";
+import { ELISION, trimLargestToolResult } from "./overflow-recovery";
 
 test("trims the largest in-loop tool result, keeping head + tail with a marker", () => {
   const big = "X".repeat(5000);
@@ -24,9 +24,9 @@ test("trims the largest in-loop tool result, keeping head + tail with a marker",
 
 test("only trims this turn's results (index >= fromIndex), never prior history", () => {
   const conv: ChatMessage[] = [
-    { role: "tool", content: "Y".repeat(5000), toolCallId: "old", name: "read" }, // prior history
+    { role: "tool", content: "Y".repeat(5000), toolCallId: "old", name: "read" },
     { role: "user", content: "go" },
-    { role: "tool", content: "Z".repeat(3000), toolCallId: "c1", name: "grep" }, // in-loop
+    { role: "tool", content: "Z".repeat(3000), toolCallId: "c1", name: "grep" },
   ];
   const result = trimLargestToolResult(conv, 1);
 
@@ -50,12 +50,4 @@ test("does not re-trim an already-trimmed result", () => {
   assert.ok(first);
   const second = trimLargestToolResult(conv, 0);
   assert.equal(second, null, "the marker stops a second pass");
-});
-
-test("reduceReasoning steps down a notch, or null at the floor", () => {
-  assert.equal(reduceReasoning(["off", "on"], "on"), "off");
-  assert.equal(reduceReasoning(["off", "on"], "off"), null);
-  assert.equal(reduceReasoning(["minimal", "low", "high"], "high"), "low");
-  assert.equal(reduceReasoning(["minimal", "low", "high"], "minimal"), null);
-  assert.equal(reduceReasoning(["off", "on"], undefined), null);
 });
