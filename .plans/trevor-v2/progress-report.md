@@ -313,7 +313,7 @@ NOT a web/debug control: a wedged host cannot process its own kill, so force-ter
 - [x] Tests prove archive and unarchive update metadata and filtering without deleting logs
 - [x] Tests cover CLI list, list --archived, open, archive, unarchive, stop, and kill
 - [x] Tests cover debug-only UI exposure and normal-UI absence of lifecycle controls (debug-commands.test.ts: gated exposure + no-kill + `/stop` confirm; session-sidebar.test.tsx: no lifecycle controls in the normal sidebar)
-- [ ] Manual EZE repro: cancel a turn, stop a session, archive/unarchive it, and verify the sidebar/resume filtering plus durable history behavior
+- [x] Manual EZE repro: cancel a turn, stop a session, archive/unarchive it, and verify the sidebar/resume filtering plus durable history behavior (VERIFIED LIVE on trevor-local: `/debug` → `/archive` hid it from the sidebar ("No sessions") + `/resume` and gated the UI with an unarchive prompt, history preserved (12740 events); the Unarchive button restored it to the sidebar + ungated the composer. Cancel is the everyday Esc (verified throughout); `/stop` is unit-tested + destructive, so not run live)
 
 ## Next-Up: provider auth/catalog + full model chooser
 
@@ -595,7 +595,7 @@ sanitized `formatDoctorReport` text (not raw JSON) and degrades a source failure
 - [x] Host tests cover snapshot construction, area aggregation, bounded probes, no model turn, redaction, and command variants
 - [x] Web tests cover dashboard rendering, responsive behavior, severity filters, next actions, details, copy/JSON, and accessibility
 - [ ] Storybook reviewed for every required state before live app wiring is considered complete
-- [ ] Manual EZE repro: run `/doctor` with all-ok fixtures/state and verify concise healthy dashboard
+- [x] Manual EZE repro: run `/doctor` with all-ok fixtures/state and verify concise healthy dashboard (VERIFIED LIVE after the internet-probe fix: `/doctor` reads "Healthy · 0 errors, 0 warnings, 7 OK"; the 5 not-checked are unconfigured optional integrations - MCP/LSP/Hooks/web/docs)
 - [ ] Manual EZE repro: simulate provider auth missing, internet offline, local runtime unavailable, and unknown provider observations, then verify actionable findings
 - [x] Manual EZE repro: verify `/doctor full` or JSON/detail view exposes sanitized evidence while default view stays readable (VERIFIED LIVE: View JSON rendered the full sanitized snapshot - no keys/tokens/secrets - alongside the readable dashboard)
 - [x] Manual EZE repro: verify `/doctor` never triggers a model turn and does not mutate config or local state (VERIFIED LIVE: `/doctor` rendered the dashboard immediately with no model turn / no "Working" spinner)
