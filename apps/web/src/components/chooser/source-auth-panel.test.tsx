@@ -96,7 +96,7 @@ test("a direct API-key source with no key points to the host auth store and rend
   });
   const copy = authCopy(missing);
   assert.match(copy.title, /no api key/i);
-  assert.match(copy.body, /\.trevorV2\/auth\.json/);
+  assert.match(copy.body, /~\/\.pi\/auth\.json/);
   const { getByRole, container, getByText } = render(
     <SourceAuthPanel source={missing} onAction={noop} />,
   );

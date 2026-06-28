@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * OAuth, a device/provider-code flow (a link + a short NON-key code) where the protocol needs one,
  * "configure in the host auth store" for direct API keys, and "start the runtime" guidance for a local
  * source - but it NEVER renders an API-key paste form. Direct keys, env-derived credentials, and
- * provider secrets live in the host auth JSON store (`~/.trevorV2/auth.json`); the browser only ever
+ * provider secrets live in the host auth JSON store (`~/.pi/auth.json`); the browser only ever
  * sees state and triggers host flows.
  *
  * Scoped to one source: an auth failure here never blocks browsing or selecting other configured
@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
  */
 
 /** Where the host stores credentials - shown to the user as guidance, never an editable field. */
-const HOST_AUTH_STORE = "~/.trevorV2/auth.json";
+const HOST_AUTH_STORE = "~/.pi/auth.json";
 
 /** An in-progress device / provider-code flow the host started (a link + a short code to authorize). */
 export interface DeviceCodeFlow {
