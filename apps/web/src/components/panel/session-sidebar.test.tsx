@@ -150,16 +150,83 @@ test("activity stays visible for a session the user is NOT currently viewing (D-
       nowMs={NOW}
     />,
   );
-  const bgRow = getByText("background run").closest("button");
+  const bgRow = getByText("background run").closest("li");
   assert.ok(bgRow, "the non-current row renders");
   assert.ok(bgRow?.querySelector('[aria-label="running"]'), "its running indicator is visible");
   assert.ok(
     bgRow?.querySelector(".bg-smui-green"),
     "the green active bar shows on the non-current row",
   );
-  // And it is not the selected row.
-  assert.notEqual(bgRow?.getAttribute("aria-current"), "true");
+  // And it is not the selected row (the select button carries aria-current, not the running row).
+  assert.notEqual(
+    bgRow?.querySelector("button")?.getAttribute("aria-current"),
+    "true",
+    "the running row is not the selected one",
+  );
   assert.ok(container.querySelector('[aria-current="true"]'), "a different row is selected");
+});
+
+test("a row inline-renames: edit -> Enter saves (optimistic) and reports the new title", () => {
+  const renames: [string, string][] = [];
+  const { getByLabelText, getByText, getByDisplayValue } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "s1", title: "old name" })]}
+      currentSessionId="s1"
+      currentProject="trevorV2"
+      onSelect={noop}
+      onRename={(id, title) => renames.push([id, title])}
+      nowMs={NOW}
+    />,
+  );
+  // The edit affordance opens an input seeded with the current title.
+  fireEvent.click(getByLabelText("Rename old name"));
+  const input = getByDisplayValue("old name");
+  fireEvent.change(input, { target: { value: "Auth refactor" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  assert.deepEqual(renames, [["s1", "Auth refactor"]], "Enter publishes the durable rename");
+  // Optimistic: the new title shows immediately, before the durable summary updates.
+  assert.ok(getByText("Auth refactor"), "the new title shows optimistically");
+});
+
+test("Escape cancels a rename without reporting it; an empty title is rejected", () => {
+  const renames: [string, string][] = [];
+  const { getByLabelText, getByText } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "s1", title: "keep me" })]}
+      currentSessionId="s1"
+      currentProject="trevorV2"
+      onSelect={noop}
+      onRename={(id, title) => renames.push([id, title])}
+      nowMs={NOW}
+    />,
+  );
+  // Escape discards the edit (the input is found by its stable aria-label, not its value).
+  fireEvent.click(getByLabelText("Rename keep me"));
+  const escInput = getByLabelText("Session title");
+  fireEvent.change(escInput, { target: { value: "discarded" } });
+  fireEvent.keyDown(escInput, { key: "Escape" });
+  assert.equal(renames.length, 0, "Escape reports no rename");
+  assert.ok(getByText("keep me"), "the original title remains");
+
+  // A whitespace-only title is rejected (no event published).
+  fireEvent.click(getByLabelText("Rename keep me"));
+  const emptyInput = getByLabelText("Session title");
+  fireEvent.change(emptyInput, { target: { value: "   " } });
+  fireEvent.keyDown(emptyInput, { key: "Enter" });
+  assert.equal(renames.length, 0, "an empty title publishes nothing");
+});
+
+test("without onRename, no edit affordance appears (Storybook/standalone)", () => {
+  const { queryByLabelText } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "s1", title: "no edit" })]}
+      currentSessionId="s1"
+      currentProject="trevorV2"
+      onSelect={noop}
+      nowMs={NOW}
+    />,
+  );
+  assert.equal(queryByLabelText("Rename no edit"), null, "no rename pencil without the handler");
 });
 
 test("effectiveActivity prefers a live override, else the durable activity (D-093 M3)", () => {

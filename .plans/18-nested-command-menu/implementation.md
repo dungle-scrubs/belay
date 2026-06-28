@@ -2,7 +2,7 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `02-filesystem-root-taxonomy` - `/style` selection persistence must use the approved Trevor user/settings root.
+- [ ] `03-filesystem-root-taxonomy` - `/style` selection persistence must use the approved Trevor user/settings root.
 
 ## 1. Architecture
 
@@ -26,7 +26,7 @@ The first consumer is `/style`: a nested command menu for selecting assistant ou
 - **Host command contract:** owns command-family descriptors, nested menu nodes, action ids, disabled reasons, and result payloads.
 - **Trevor web:** renders generic nested command menus from host data and sends selected actions back through the command path.
 - **`/style` command family:** first consumer. It exposes list/select/reset/default choices and returns structured results.
-- **Preference storage:** persists explicit style selection only through the root policy from `02-filesystem-root-taxonomy`.
+- **Preference storage:** persists explicit style selection only through the root policy from `03-filesystem-root-taxonomy`.
 - **Model/run context:** receives only the active style facts needed to shape the next answer; it must not infer tool, model, or routing changes from style.
 
 ### Observability
@@ -43,7 +43,7 @@ This is UI and command-contract work, not provider/transport recovery work. Obse
 
 **Goal:** A command family can describe hierarchical choices without bespoke web code.
 
-**Gate from previous:** `02-filesystem-root-taxonomy` is complete or accepted as the persistence contract for later `/style` storage.
+**Gate from previous:** `03-filesystem-root-taxonomy` is complete or accepted as the persistence contract for later `/style` storage.
 
 #### M1: Command Menu Data Model
 
@@ -97,7 +97,7 @@ This is UI and command-contract work, not provider/transport recovery work. Obse
 
 #### M5: Style Preference Persistence and Run Attribution
 
-- **Dependencies:** M4, `02-filesystem-root-taxonomy`
+- **Dependencies:** M4, `03-filesystem-root-taxonomy`
 - **Effort:** M
 - **Tasks:**
   1. RED: Add tests for user-selected style persistence under the approved Trevor settings root.

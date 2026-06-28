@@ -112,6 +112,18 @@ function publishEvent(
   return sessionTransport.publishEvent(sessionId, input);
 }
 
+/**
+ * Durably renames ANY session (editable session titles), independent of the current selection - the
+ * sidebar renames the row you point at, not just the active session. Publishes a `session.title` to
+ * that session's log; the latest wins, and a blank title reverts to the first-prompt-derived one.
+ */
+export function renameSession(sessionId: string, title: string): Promise<void> {
+  return publishEvent(transport, sessionId, {
+    producerId: PRODUCER_IDS.web,
+    ...sessionEvents.sessionTitle({ title }),
+  });
+}
+
 /** Ensures a session with the given id exists (idempotent) and returns it. */
 export function ensureSession(sessionId: string): Promise<string> {
   return transport.ensureSession(sessionId);

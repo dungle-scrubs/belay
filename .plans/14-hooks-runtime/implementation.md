@@ -2,8 +2,8 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `00-ask-user-tool` - project/user hook approval requires an explicit user approval surface before trusted execution.
-- [ ] `02-filesystem-root-taxonomy` - hook trust/approval state uses the approved Trevor config/state roots.
+- [ ] `01-ask-user-tool` - project/user hook approval requires an explicit user approval surface before trusted execution.
+- [ ] `03-filesystem-root-taxonomy` - hook trust/approval state uses the approved Trevor config/state roots.
 
 ## Architecture
 

@@ -1,5 +1,6 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
-import { GitBranch } from "lucide-react";
+import { GitBranch, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DrawerToggle, SideDrawer } from "./side-drawer";
 
@@ -33,6 +34,8 @@ export interface SessionSidebarProps {
   readonly currentSessionId: string;
   readonly currentProject: string | null;
   readonly onSelect: (sessionId: string) => void;
+  /** Durably rename a session (editable session titles). When omitted, rows show no edit affordance. */
+  readonly onRename?: (sessionId: string, title: string) => void;
   /**
    * Live run state per session (D-093 M3), layered over each row's durable activity: the owner of the
    * live send-queue (the browser for the viewed session, the host for others) supplies `queued` /
@@ -124,53 +127,144 @@ function ActivityLabel({
   return <>{relativeTime(updatedAt, nowMs)}</>;
 }
 
+/** The fixed-height second line (branch + activity/time), shared by the view + edit states so the row
+ *  never changes height when you start editing. */
+function RowMeta({
+  summary,
+  activity,
+  nowMs,
+}: {
+  summary: SessionSummary;
+  activity: SessionActivity;
+  nowMs: number;
+}) {
+  return (
+    <span className="flex items-center justify-between gap-2 text-label tracking-wider text-muted-foreground/60">
+      <span className="inline-flex min-w-0 items-center gap-1">
+        {summary.branch ? (
+          <>
+            <GitBranch className="size-2.5 shrink-0" />
+            <span className="truncate">{summary.branch}</span>
+          </>
+        ) : null}
+      </span>
+      <span className="flex shrink-0 items-center">
+        <ActivityLabel activity={activity} updatedAt={summary.updatedAt} nowMs={nowMs} />
+      </span>
+    </span>
+  );
+}
+
 function SessionRow({
   summary,
   activity,
   selected,
   onSelect,
+  onRename,
   nowMs,
 }: {
   summary: SessionSummary;
   activity: SessionActivity;
   selected: boolean;
   onSelect: (sessionId: string) => void;
+  onRename?: (sessionId: string, title: string) => void;
   nowMs: number;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Optimistic title: show the just-typed name immediately, then drop it once the durable rename
+  // round-trips into summary.title (so live updates from elsewhere still win after reconciliation).
+  const [optimistic, setOptimistic] = useState<string | null>(null);
+  useEffect(() => {
+    if (optimistic !== null && summary.title === optimistic) {
+      setOptimistic(null);
+    }
+  }, [summary.title, optimistic]);
+  const title = optimistic ?? summary.title;
+
+  // Focus the inline input when an edit opens (without `autoFocus`, which lint forbids, and without
+  // re-focusing on every keystroke).
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const beginEdit = () => {
+    setDraft(title);
+    setEditing(true);
+  };
+  const commit = () => {
+    setEditing(false);
+    const next = draft.trim();
+    // An empty/whitespace title is rejected (the inventory falls back to the derived title anyway);
+    // a no-op rename is skipped so it does not publish a redundant event.
+    if (next && next !== summary.title) {
+      setOptimistic(next);
+      onRename?.(summary.sessionId, next);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(summary.sessionId)}
-      aria-current={selected ? "true" : undefined}
+    <div
       className={cn(
-        // Always selectable - switching is allowed even while a session is running (the turn keeps
-        // running on the host; the row's activity bar shows it). Never blocked or disabled.
-        "relative flex w-full cursor-pointer flex-col gap-0.5 py-1.5 pr-2.5 pl-3 text-left",
+        "group relative flex w-full items-stretch",
         selected
           ? "bg-card text-foreground"
           : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
       )}
     >
       <ActivityBar activity={activity} host={summary.host} />
-      {/* Top row: the title, truncating before it can widen the row. */}
-      <span className="truncate text-sm leading-tight">{summary.title}</span>
-      {/* Bottom row: branch (left, truncates) and the activity/time (right, fixed) with space between -
-        the time never shrinks, only the branch truncates. Rendered even without a branch, so every row
-        is the same two-line height and live status changes never reflow the list. */}
-      <span className="flex items-center justify-between gap-2 text-label tracking-wider text-muted-foreground/60">
-        <span className="inline-flex min-w-0 items-center gap-1">
-          {summary.branch ? (
-            <>
-              <GitBranch className="size-2.5 shrink-0" />
-              <span className="truncate">{summary.branch}</span>
-            </>
+      {editing ? (
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 py-1.5 pr-2.5 pl-3">
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setEditing(false);
+              }
+            }}
+            onBlur={() => setEditing(false)}
+            aria-label="Session title"
+            className="w-full rounded border border-input bg-background px-1 text-sm leading-tight outline-none"
+          />
+          <RowMeta summary={summary} activity={activity} nowMs={nowMs} />
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => onSelect(summary.sessionId)}
+            aria-current={selected ? "true" : undefined}
+            // Always selectable - switching is allowed even while a session is running (the turn keeps
+            // running on the host; the row's activity bar shows it). Never blocked or disabled.
+            className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 py-1.5 pr-2.5 pl-3 text-left"
+          >
+            {/* Top row: the title, truncating before it can widen the row. */}
+            <span className="truncate text-sm leading-tight">{title}</span>
+            <RowMeta summary={summary} activity={activity} nowMs={nowMs} />
+          </button>
+          {onRename ? (
+            <button
+              type="button"
+              onClick={beginEdit}
+              aria-label={`Rename ${title}`}
+              className="absolute top-1 right-1 cursor-pointer rounded p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              <Pencil className="size-3" />
+            </button>
           ) : null}
-        </span>
-        <span className="flex shrink-0 items-center">
-          <ActivityLabel activity={activity} updatedAt={summary.updatedAt} nowMs={nowMs} />
-        </span>
-      </span>
-    </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -179,6 +273,7 @@ export function SessionSidebar({
   currentSessionId,
   currentProject,
   onSelect,
+  onRename,
   liveActivity,
   onToggle,
   nowMs = Date.now(),
@@ -217,6 +312,7 @@ export function SessionSidebar({
                 activity={effectiveActivity(summary, liveActivity)}
                 selected={summary.sessionId === currentSessionId}
                 onSelect={onSelect}
+                onRename={onRename}
                 nowMs={nowMs}
               />
             </li>

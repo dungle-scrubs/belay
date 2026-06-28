@@ -313,6 +313,14 @@ test("host.sourceAuth round-trips a source sign-in flow (D-065 M5)", () => {
   assert.equal(bad?.type === "host.sourceAuth" && bad.auth.phase, "cancelled");
 });
 
+test("session.title round-trips a durable rename (editable session titles)", () => {
+  const decoded = decodeTrevorEvent(stored(events.sessionTitle({ title: "Auth refactor" })));
+  assert.deepEqual(decoded, { type: "session.title", title: "Auth refactor" });
+  // A garbled/missing title coerces to an empty string (the inventory then falls back to the derived title).
+  const bad = decodeTrevorEvent(stored({ type: "session.title", payload: { title: 42 } }));
+  assert.equal(bad?.type === "session.title" && bad.title, "");
+});
+
 test("host.online round-trips the structured git status (D-088)", () => {
   const decoded = decodeTrevorEvent(
     stored(

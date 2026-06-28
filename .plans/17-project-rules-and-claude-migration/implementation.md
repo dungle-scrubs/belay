@@ -2,7 +2,7 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `00-ask-user-tool` - `CLAUDE.md` conversion, merge, and pointer rewrites require an explicit required-response user decision.
+- [ ] `01-ask-user-tool` - `CLAUDE.md` conversion, merge, and pointer rewrites require an explicit required-response user decision.
 
 ## Architecture
 

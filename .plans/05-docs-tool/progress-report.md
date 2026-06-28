@@ -8,8 +8,8 @@
 
 ## Hard Dependencies
 
-- [x] `03-web-fetch-tool` complete before implementation starts
-- [x] `02-filesystem-root-taxonomy` complete before implementation starts
+- [x] `04-web-fetch-tool` complete before implementation starts
+- [x] `03-filesystem-root-taxonomy` complete before implementation starts
 
 For this extraction pass, both dependencies are assumed finished for sequencing purposes.
 
@@ -40,7 +40,7 @@ Blockers
 
 - [ ] RED: Add corpus-key tests for subject, root URL, version, and source identity.
 - [ ] GREEN: Implement stable corpus/page keys.
-- [ ] RED: Add storage tests proving the selected root comes from `02-filesystem-root-taxonomy`.
+- [ ] RED: Add storage tests proving the selected root comes from `03-filesystem-root-taxonomy`.
 - [ ] GREEN: Persist corpus metadata, page metadata, normalized content, hashes, and diagnostics.
 - [ ] RED: Add corruption/partial-write tests.
 - [ ] GREEN: Make writes atomic enough that partial corpora are visible as partial, not silently healthy.

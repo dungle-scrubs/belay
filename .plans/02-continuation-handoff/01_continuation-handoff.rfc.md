@@ -66,7 +66,7 @@ Generated prompt text is produced in the source session with visible progress fe
 A model MAY propose handoff through a tool, but the model MUST NOT switch sessions or submit the target prompt without explicit user approval.
 
 <!-- D-007 -->
-The model-initiated approval path depends on the `00-ask-user-tool` plan and SHOULD reuse its approval surface. The slash-command path can be implemented independently, but this handoff plan is not complete until proposal approval uses `ask_user`.
+The model-initiated approval path depends on the `01-ask-user-tool` plan and SHOULD reuse its approval surface. The slash-command path can be implemented independently, but this handoff plan is not complete until proposal approval uses `ask_user`.
 
 <!-- D-006 -->
 For accepted handoff, the host MUST ensure the target session, append target-session provenance and `user.message`, attach or spawn the correct host, and publish `session.switch` only after the target is ready.
@@ -146,4 +146,4 @@ Handoff prompt generation moves model-authored text into a fresh session as a us
 - Normative: `apps/web/src/transcript.ts` - transcript projection rules for command and session-switch events.
 - Informative: `/Users/kevin/dev/trevor/packages/agent-host/src/server/rpc/host-commands.ts` - V1 handoff capsule creation.
 - Informative: `/Users/kevin/dev/trevor/tui/src/app/handoff.rs` - V1 handoff acceptance into a fresh session.
-- Informative: `.plans/00-ask-user-tool/implementation.md` - planned V2 approval surface for model-initiated handoff.
+- Informative: `.plans/01-ask-user-tool/implementation.md` - planned V2 approval surface for model-initiated handoff.

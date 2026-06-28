@@ -52,6 +52,7 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
   firstUser: ev("user.message", { text: "add the resume chooser please" }),
   lifecycle: [],
   archived: null,
+  rename: null,
   hostPresent: false,
   ...over,
 });
@@ -73,6 +74,22 @@ test("title falls back to the session id when there is no user message", () => {
 test("title truncates a long first message", () => {
   const long = "x".repeat(120);
   const s = summarizeSession(baseRow({ firstUser: ev("user.message", { text: long }) }));
+  assert.ok(s.title.endsWith("…"));
+  assert.ok(s.title.length <= 61);
+});
+
+test("a user rename (session.title) overrides the first-prompt-derived title", () => {
+  const s = summarizeSession(baseRow({ rename: ev("session.title", { title: "Auth refactor" }) }));
+  assert.equal(s.title, "Auth refactor", "the rename wins over the first message");
+});
+
+test("a blank/whitespace rename falls back to the derived title (clearing reverts)", () => {
+  const s = summarizeSession(baseRow({ rename: ev("session.title", { title: "   " }) }));
+  assert.equal(s.title, "add the resume chooser please", "an empty rename does not blank the row");
+});
+
+test("a rename truncates like the derived title", () => {
+  const s = summarizeSession(baseRow({ rename: ev("session.title", { title: "y".repeat(120) }) }));
   assert.ok(s.title.endsWith("…"));
   assert.ok(s.title.length <= 61);
 });

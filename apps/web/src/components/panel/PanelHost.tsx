@@ -150,6 +150,8 @@ export interface SidebarBinding {
   readonly currentSessionId: string;
   readonly currentProject: string | null;
   readonly onSelect: (sessionId: string) => void;
+  /** Durably rename a session row (editable session titles). */
+  readonly onRename: (sessionId: string, title: string) => void;
   readonly liveActivity: ReadonlyMap<string, SessionActivity>;
   readonly nowMs: number;
 }
@@ -225,6 +227,7 @@ export function PanelHost(props: {
           currentSessionId={sidebar.currentSessionId}
           currentProject={sidebar.currentProject}
           onSelect={sidebar.onSelect}
+          onRename={sidebar.onRename}
           liveActivity={sidebar.liveActivity}
           onToggle={sidebar.onClose}
           nowMs={sidebar.nowMs}

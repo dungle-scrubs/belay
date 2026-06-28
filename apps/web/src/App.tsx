@@ -50,7 +50,13 @@ import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { useInventory } from "./resume";
 import { atBottomOf } from "./scroll";
-import { ensureSession, useSession, useSessionActions, webTabId } from "./session/use-session";
+import {
+  ensureSession,
+  renameSession,
+  useSession,
+  useSessionActions,
+  webTabId,
+} from "./session/use-session";
 import {
   panelModel,
   readOnlyToolBatches,
@@ -938,6 +944,7 @@ export function App() {
         // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
         // the durable log and replay on return); the row's activity bar shows it from the other view.
         onSelect: navigateToSession,
+        onRename: (id, title) => void renameSession(id, title),
         liveActivity: sidebarLiveActivity,
         nowMs: now,
       }}

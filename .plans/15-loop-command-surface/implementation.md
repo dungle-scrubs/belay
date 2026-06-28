@@ -2,8 +2,8 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `00-ask-user-tool` - confirmation-gated loop drafts need a reusable user confirmation surface.
-- [ ] `02-filesystem-root-taxonomy` - durable loop state uses the approved Trevor storage root.
+- [ ] `01-ask-user-tool` - confirmation-gated loop drafts need a reusable user confirmation surface.
+- [ ] `03-filesystem-root-taxonomy` - durable loop state uses the approved Trevor storage root.
 
 ## Architecture
 

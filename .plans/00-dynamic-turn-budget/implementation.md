@@ -212,4 +212,4 @@ pnpm biome check apps/agent-host/src/agent/turn-budget.ts apps/agent-host/src/ag
 
 ## Decisions
 
-Canonical decisions are in `.plans/06-dynamic-turn-budget/plan.db`. Inline markers in this document reference those decisions.
+Canonical decisions are in `.plans/00-dynamic-turn-budget/plan.db`. Inline markers in this document reference those decisions.

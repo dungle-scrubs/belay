@@ -2,15 +2,15 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `00-ask-user-tool` - model-initiated handoff proposals require an explicit approval/edit/reject question surface.
+- [ ] `01-ask-user-tool` - model-initiated handoff proposals require an explicit approval/edit/reject question surface.
 
 ## Execution Protocol
 
-A progress report exists at `.plans/01-continuation-handoff/progress-report.md`. It lists every current-cutoff behavior for every milestone as a checkbox.
+A progress report exists at `.plans/02-continuation-handoff/progress-report.md`. It lists every current-cutoff behavior for every milestone as a checkbox.
 
 Mandatory rules for agents working on this plan:
 
-1. Before starting a milestone, run `mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "01-continuation-handoff"` and read that milestone in the progress report.
+1. Before starting a milestone, run `mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "02-continuation-handoff"` and read that milestone in the progress report.
 2. Check each progress-report box as soon as the behavior is implemented and verified.
 3. A milestone is not done until every current-cutoff checkbox under it is checked.
 4. If implementation discovers missing behavior, add it to the progress report before building it.
@@ -49,7 +49,7 @@ Model-initiated handoff is proposal-only until the user approves.
 - `apps/agent-host/src/commands.ts` owns command specs and lightweight parsing.
 - `apps/agent-host/src/main.ts` owns orchestration, target session ensuring, host attach/spawn, and `session.switch`.
 - `apps/web/src/transcript.ts` owns source transcript hiding and target transcript rendering rules.
-- The `00-ask-user-tool` plan owns the generic approval question surface; handoff adapts to it.
+- The `01-ask-user-tool` plan owns the generic approval question surface; handoff adapts to it.
 
 ### Observability
 
@@ -136,7 +136,7 @@ Handoff diagnostics SHOULD include handoff id, source session id, target session
 
 **Goal:** The model can propose a handoff, but execution is gated by explicit user approval.
 
-**Gate from previous:** Generated slash flow is green, and `00-ask-user-tool` approval adapter is available.
+**Gate from previous:** Generated slash flow is green, and `01-ask-user-tool` approval adapter is available.
 
 #### M5: Handoff proposal tool
 
@@ -152,7 +152,7 @@ Handoff diagnostics SHOULD include handoff id, source session id, target session
 
 #### M6: ask_user approval bridge
 
-- **Dependencies:** M5, `00-ask-user-tool` M7
+- **Dependencies:** M5, `01-ask-user-tool` M7
 - **Effort:** M
 - **Tasks:**
   1. RED: Add integration tests proving proposal approval uses `ask_user`.
@@ -218,7 +218,7 @@ Handoff diagnostics SHOULD include handoff id, source session id, target session
 ## Escape Hatches
 
 1. If generated handoff is blocked by provider orchestration, ship `/handoff --direct` first but keep the plan incomplete.
-2. If `00-ask-user-tool` is not ready, slash commands can proceed, but model proposal approval remains blocked and this plan does not reach complete.
+2. If `01-ask-user-tool` is not ready, slash commands can proceed, but model proposal approval remains blocked and this plan does not reach complete.
 3. If target host attach fails, keep the source session active and surface a retryable failure instead of publishing `session.switch`.
 
 ## Progress Report Accounting
@@ -226,7 +226,7 @@ Handoff diagnostics SHOULD include handoff id, source session id, target session
 The progress report is the implementation resume state. Current cutoff blockers count only active unchecked work. Deferred follow-up is excluded from current blockers. Before resuming implementation, run:
 
 ```bash
-mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "01-continuation-handoff"
+mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "02-continuation-handoff"
 ```
 
 ## Validation Commands
@@ -243,8 +243,8 @@ pnpm test
 
 ## Decisions
 
-Canonical decisions live in `.plans/01-continuation-handoff/plan.db`. Query them with:
+Canonical decisions live in `.plans/02-continuation-handoff/plan.db`. Query them with:
 
 ```bash
-mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "01-continuation-handoff"
+mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "02-continuation-handoff"
 ```

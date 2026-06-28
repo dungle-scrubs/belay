@@ -10,7 +10,7 @@
 
 ## Hard Dependencies
 
-- [ ] `02-filesystem-root-taxonomy` complete before `/style` preference persistence starts
+- [ ] `03-filesystem-root-taxonomy` complete before `/style` preference persistence starts
 
 ## M1: Command Menu Data Model
 

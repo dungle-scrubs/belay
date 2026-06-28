@@ -61,13 +61,33 @@ export interface InventoryRow {
   readonly lifecycle: readonly SessionEvent[];
   /** The latest session.archived event (D-094), if any - the newest wins (archive/unarchive). */
   readonly archived: SessionEvent | null;
+  /** The latest session.title rename, if any - overrides the first-prompt-derived title (newest wins). */
+  readonly rename: SessionEvent | null;
   /** Whether a host socket is connected to this session right now. */
   readonly hostPresent: boolean;
 }
 
 const TITLE_CAP = 60;
 
-function titleFrom(firstUser: SessionEvent | null, sessionId: string): string {
+/**
+ * The session's display title: a user-set rename (latest `session.title` with non-empty text) wins;
+ * otherwise the first user message (truncated); otherwise the session id. A blank rename falls back to
+ * the derived title, so clearing a name reverts rather than showing an empty row.
+ */
+function titleFrom(
+  firstUser: SessionEvent | null,
+  rename: SessionEvent | null,
+  sessionId: string,
+): string {
+  if (rename) {
+    const decoded = decodeTrevorEvent(rename);
+    if (decoded?.type === "session.title") {
+      const renamed = decoded.title.trim().replace(/\s+/g, " ");
+      if (renamed) {
+        return renamed.length > TITLE_CAP ? `${renamed.slice(0, TITLE_CAP)}…` : renamed;
+      }
+    }
+  }
   if (firstUser) {
     const decoded = decodeTrevorEvent(firstUser);
     if (decoded?.type === "user.message") {
@@ -138,7 +158,7 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
 
   return {
     sessionId: row.sessionId,
-    title: titleFrom(row.firstUser, row.sessionId),
+    title: titleFrom(row.firstUser, row.rename, row.sessionId),
     cwd,
     workspace,
     project: projectOf(workspace, cwd),

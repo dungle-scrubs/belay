@@ -283,7 +283,7 @@ The progress report is the implementation resume state. It must distinguish curr
 Before resuming implementation or declaring convergence, run:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "03-web-fetch-tool"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "04-web-fetch-tool"
 ```
 
 ## Validation Commands
@@ -299,8 +299,8 @@ pnpm test -- --project e2e
 
 ## Decisions
 
-Canonical decisions are in `.plans/03-web-fetch-tool/plan.db`. Query them with:
+Canonical decisions are in `.plans/04-web-fetch-tool/plan.db`. Query them with:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "03-web-fetch-tool"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "04-web-fetch-tool"
 ```

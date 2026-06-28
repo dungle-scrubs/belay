@@ -134,13 +134,13 @@ The useful surface is:
 Run:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "05-clipboard-write-surface"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "06-clipboard-write-surface"
 ```
 
 ## 7. Decision Ledger
 
-Canonical decisions are in `.plans/05-clipboard-write-surface/plan.db`. Query them with:
+Canonical decisions are in `.plans/06-clipboard-write-surface/plan.db`. Query them with:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "05-clipboard-write-surface"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "06-clipboard-write-surface"
 ```

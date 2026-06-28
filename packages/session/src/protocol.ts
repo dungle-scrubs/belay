@@ -501,6 +501,15 @@ export const events = {
     payload: { archived: p.archived },
   }),
   /**
+   * A durable, user-set session TITLE (editable session names): overrides the first-prompt-derived
+   * title in the inventory. The LATEST `session.title` wins (latest rename), and an empty title falls
+   * back to the derived one. A lifecycle marker, not transcript content - kept out of prompt history.
+   */
+  sessionTitle: (p: { title: string }): TrevorEventInput => ({
+    type: "session.title",
+    payload: { title: p.title },
+  }),
+  /**
    * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately
    * through the live leader's protected `runShell` path, bypassing the model and the turn queue.
    * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
@@ -1046,6 +1055,7 @@ export type DecodedEvent =
     }
   | { readonly type: "session.switch"; readonly sessionId: string; readonly reason: string }
   | { readonly type: "session.archived"; readonly archived: boolean }
+  | { readonly type: "session.title"; readonly title: string }
   | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
   | {
       readonly type: "shell.result";
@@ -1232,6 +1242,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       };
     case "session.archived":
       return { type: "session.archived", archived: p.archived === true };
+    case "session.title":
+      return { type: "session.title", title: str(p.title) };
     case "user.shell":
       // A missing requestId falls back to the event's own id, so a forward-compat event still
       // pairs with its result rather than collapsing distinct shell runs together.

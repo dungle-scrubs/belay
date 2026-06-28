@@ -2,7 +2,7 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `02-filesystem-root-taxonomy` - telemetry artifacts and diagnostic streams use `TREVOR_STATE_HOME` instead of `TREVOR_HOME`.
+- [ ] `03-filesystem-root-taxonomy` - telemetry artifacts and diagnostic streams use `TREVOR_STATE_HOME` instead of `TREVOR_HOME`.
 
 ## Architecture
 

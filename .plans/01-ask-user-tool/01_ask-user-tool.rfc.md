@@ -64,7 +64,7 @@ An accepted answer resumes the active tool call as a tool result. It MUST NOT be
 The system prompt and tool description SHOULD tell models to call `ask_user` only when a concrete missing decision blocks useful progress. The tool SHOULD prefer concrete choices over broad free-form preference gathering unless the user explicitly requested free-form input.
 
 <!-- D-007 -->
-The `01-continuation-handoff` plan uses this feature as the approval surface for model-initiated handoff proposals.
+The `02-continuation-handoff` plan uses this feature as the approval surface for model-initiated handoff proposals.
 
 ## State Machine
 
@@ -116,7 +116,7 @@ Question text, previews, and choices are model-provided content and MUST be rend
 2. Add protocol constructors, decoders, and tests in `packages/session`.
 3. Add host pending-question runtime, model tool registration, and answer injection into the active provider tool call.
 4. Wire the web surface to pending provider-question events and answer publishing.
-5. Reuse the same surface for `01-continuation-handoff` approval.
+5. Reuse the same surface for `02-continuation-handoff` approval.
 6. Add unit, web, integration, and hermetic e2e coverage.
 
 ## Open Questions

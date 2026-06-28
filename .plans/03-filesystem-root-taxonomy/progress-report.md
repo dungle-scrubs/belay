@@ -94,7 +94,7 @@ Blockers
 - [ ] RED: Add tests or lint-style checks for forbidden new Trevor-owned home dotdirs.
 - [ ] GREEN: Add developer guidance pointing new file-backed features to the root helpers.
 - [ ] GREEN: Update standalone plans that mention storage roots to point to this plan when they need durable state, debug artifacts, or service data.
-- [ ] GREEN: Ensure `04-docs-tool`, `15-loop-command-surface`, `14-hooks-runtime`, `13-lsp-integration`, `16-telemetry-observability`, `10-large-paste-placeholders`, and future command plans do not invent conflicting roots.
+- [ ] GREEN: Ensure `05-docs-tool`, `15-loop-command-surface`, `14-hooks-runtime`, `13-lsp-integration`, `16-telemetry-observability`, `10-large-paste-placeholders`, and future command plans do not invent conflicting roots.
 - [ ] REFACTOR: Keep the root taxonomy summarized in `AGENTS.md` and detailed here.
 - [ ] New plans/features have a single place to cite for storage placement.
 - [ ] Root usage remains reviewable.

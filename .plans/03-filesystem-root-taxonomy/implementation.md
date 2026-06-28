@@ -146,7 +146,7 @@ This plan extracts the old D-069 filesystem-root taxonomy from `.plans/trevor-v2
 1. RED: Add tests or lint-style checks for forbidden new Trevor-owned home dotdirs.
 2. GREEN: Add developer guidance pointing new file-backed features to the root helpers.
 3. GREEN: Update standalone plans that mention storage roots to point to this plan when they need durable state, debug artifacts, or service data. <!-- D-006 -->
-4. GREEN: Ensure `04-docs-tool`, `15-loop-command-surface`, `14-hooks-runtime`, `13-lsp-integration`, `16-telemetry-observability`, `10-large-paste-placeholders`, and future command plans do not invent conflicting roots.
+4. GREEN: Ensure `05-docs-tool`, `15-loop-command-surface`, `14-hooks-runtime`, `13-lsp-integration`, `16-telemetry-observability`, `10-large-paste-placeholders`, and future command plans do not invent conflicting roots.
 5. REFACTOR: Keep the root taxonomy summarized in `AGENTS.md` and detailed here.
 
 **Acceptance:**
@@ -174,13 +174,13 @@ The progress report is the implementation resume state. It must distinguish curr
 Run:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "02-filesystem-root-taxonomy"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "03-filesystem-root-taxonomy"
 ```
 
 ## 8. Decision Ledger
 
-Canonical decisions are in `.plans/02-filesystem-root-taxonomy/plan.db`. Query them with:
+Canonical decisions are in `.plans/03-filesystem-root-taxonomy/plan.db`. Query them with:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "02-filesystem-root-taxonomy"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "03-filesystem-root-taxonomy"
 ```

@@ -142,6 +142,7 @@ export class SessionLog {
       firstUser: this.firstOfType(s.sessionId, "user.message"),
       lifecycle: this.eventsOfTypes(s.sessionId, LIFECYCLE_TYPES),
       archived: this.latestOfType(s.sessionId, "session.archived"),
+      rename: this.latestOfType(s.sessionId, "session.title"),
     }));
   }
 

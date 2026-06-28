@@ -6,11 +6,11 @@ None.
 
 ## Execution Protocol
 
-A progress report exists at `.plans/00-ask-user-tool/progress-report.md`. It lists every current-cutoff behavior for every milestone as a checkbox.
+A progress report exists at `.plans/01-ask-user-tool/progress-report.md`. It lists every current-cutoff behavior for every milestone as a checkbox.
 
 Mandatory rules for agents working on this plan:
 
-1. Before starting a milestone, run `mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "00-ask-user-tool"` and read that milestone in the progress report.
+1. Before starting a milestone, run `mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "01-ask-user-tool"` and read that milestone in the progress report.
 2. Check each progress-report box as soon as the behavior is implemented and verified.
 3. A milestone is not done until every current-cutoff checkbox under it is checked.
 4. If implementation discovers missing behavior, add it to the progress report before building it.
@@ -216,7 +216,7 @@ The host SHOULD emit structured debug data for question lifecycle without loggin
 The progress report is the implementation resume state. Current cutoff blockers count only active unchecked work. Deferred follow-up is excluded from current blockers. Before resuming implementation, run:
 
 ```bash
-mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "00-ask-user-tool"
+mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "01-ask-user-tool"
 ```
 
 ## Validation Commands
@@ -233,8 +233,8 @@ pnpm test
 
 ## Decisions
 
-Canonical decisions live in `.plans/00-ask-user-tool/plan.db`. Query them with:
+Canonical decisions live in `.plans/01-ask-user-tool/plan.db`. Query them with:
 
 ```bash
-mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "00-ask-user-tool"
+mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "01-ask-user-tool"
 ```

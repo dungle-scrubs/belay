@@ -4,8 +4,8 @@
 
 Implementation must not start until these plans are complete:
 
-- [x] `03-web-fetch-tool` - `docs` uses `web_fetch` for all page reads, URL safety, static/Jina/Firecrawl fallback, caps, and provenance. <!-- D-001 -->
-- [x] `02-filesystem-root-taxonomy` - `docs` stores corpora under the approved Trevor root policy and must not invent a new storage root. <!-- D-001 -->
+- [x] `04-web-fetch-tool` - `docs` uses `web_fetch` for all page reads, URL safety, static/Jina/Firecrawl fallback, caps, and provenance. <!-- D-001 -->
+- [x] `03-filesystem-root-taxonomy` - `docs` stores corpora under the approved Trevor root policy and must not invent a new storage root. <!-- D-001 -->
 
 For this extraction pass, both dependencies are assumed finished for sequencing purposes. <!-- D-001 -->
 
@@ -13,13 +13,13 @@ For this extraction pass, both dependencies are assumed finished for sequencing 
 
 `docs` is a model-facing documentation lookup/cache tool for external documentation: products, APIs, libraries, services, SaaS platforms, SDKs, provider setup, admin workflows, limits, and operational references. <!-- D-002 --> It is not a general web crawler, not browser automation, and not a source-code truth mechanism for the active workspace.
 
-The tool reuses `web_search` for discovery and `web_fetch` for source page reads. <!-- D-003 --> It stores normalized documentation corpora under the root policy selected by `02-filesystem-root-taxonomy`. <!-- D-004 -->
+The tool reuses `web_search` for discovery and `web_fetch` for source page reads. <!-- D-003 --> It stores normalized documentation corpora under the root policy selected by `03-filesystem-root-taxonomy`. <!-- D-004 -->
 
 ## 2. Architecture
 
 | Area | Decision |
 |---|---|
-| Hard dependencies | `03-web-fetch-tool` and `02-filesystem-root-taxonomy` must be completed first. <!-- D-001 --> |
+| Hard dependencies | `04-web-fetch-tool` and `03-filesystem-root-taxonomy` must be completed first. <!-- D-001 --> |
 | Tool purpose | `docs` handles external documentation lookup/cache, not workspace code search. <!-- D-002 --> |
 | Fetch stack | Discovery uses `web_search`; page reads use `web_fetch`; `docs` never calls Firecrawl directly. <!-- D-003 --> |
 | Corpus storage | Store stable-keyed corpora with source metadata, content hashes, freshness metadata, and crawl/discovery metadata under the approved root. <!-- D-004 --> |
@@ -101,7 +101,7 @@ Results return compact ranked excerpts with citations, not full corpora. <!-- D-
 
 1. RED: Add corpus-key tests for subject, root URL, version, and source identity.
 2. GREEN: Implement stable corpus/page keys.
-3. RED: Add storage tests proving the selected root comes from `02-filesystem-root-taxonomy`.
+3. RED: Add storage tests proving the selected root comes from `03-filesystem-root-taxonomy`.
 4. GREEN: Persist corpus metadata, page metadata, normalized content, hashes, and diagnostics. <!-- D-004 -->
 5. RED: Add corruption/partial-write tests.
 6. GREEN: Make writes atomic enough that partial corpora are visible as partial, not silently healthy.
@@ -248,13 +248,13 @@ The progress report is the implementation resume state. It must distinguish curr
 Run:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "04-docs-tool"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "05-docs-tool"
 ```
 
 ## 8. Decision Ledger
 
-Canonical decisions are in `.plans/04-docs-tool/plan.db`. Query them with:
+Canonical decisions are in `.plans/05-docs-tool/plan.db`. Query them with:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "04-docs-tool"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts query-decisions --plan "05-docs-tool"
 ```
