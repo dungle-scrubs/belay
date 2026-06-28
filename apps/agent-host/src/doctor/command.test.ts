@@ -1,54 +1,97 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
-import { type DoctorCommand, parseDoctorCommand } from "./command";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Effect, Stream } from "effect";
+import { afterEach, beforeEach, test } from "vitest";
+import type { ProviderRegistry } from "../providers";
+import { buildDoctorCommandResult, type DoctorCommandInput } from "./build";
 
 /**
- * D-073 M1: `/doctor` command-variant parsing. Pins the default view, each view alias, the
- * refresh/copy flags, token combination, last-view-wins, case-insensitivity, and lenient handling of
- * unknown tokens.
+ * D-073 M1 / D-020: `/doctor` command-variant parsing is private to the doctor builder. These tests
+ * pin the public command result behavior: default structured JSON, text/plain aliases, lenient
+ * unknown tokens, case-insensitivity, and last-view-wins where the selected view changes the output
+ * shape.
  */
 
-const cmd = (over: Partial<DoctorCommand>): DoctorCommand => ({
-  view: "summary",
-  refresh: false,
-  copy: false,
-  ...over,
+let stateHome: string;
+const savedStateHome = process.env.TREVOR_STATE_HOME;
+
+beforeEach(() => {
+  stateHome = mkdtempSync(join(tmpdir(), "trevor-doctor-command-"));
+  process.env.TREVOR_STATE_HOME = stateHome;
 });
 
-test("no args is the default structured summary view", () => {
-  assert.deepEqual(parseDoctorCommand(""), cmd({}));
-  assert.deepEqual(parseDoctorCommand("   "), cmd({}));
+afterEach(() => {
+  if (savedStateHome === undefined) {
+    delete process.env.TREVOR_STATE_HOME;
+  } else {
+    process.env.TREVOR_STATE_HOME = savedStateHome;
+  }
+  rmSync(stateHome, { recursive: true, force: true });
 });
 
-test("view tokens and their aliases map to the right view", () => {
-  assert.equal(parseDoctorCommand("text").view, "text");
-  assert.equal(parseDoctorCommand("plain").view, "text");
-  assert.equal(parseDoctorCommand("full").view, "full");
-  assert.equal(parseDoctorCommand("detail").view, "full");
-  assert.equal(parseDoctorCommand("details").view, "full");
-  assert.equal(parseDoctorCommand("json").view, "json");
-  assert.equal(parseDoctorCommand("summary").view, "summary");
+const providers = {
+  qwen: {
+    id: "qwen",
+    label: "Qwen",
+    model: "qwen3",
+    reasoningLevels: [],
+    defaultReasoning: "off",
+    kind: "local",
+    describe: () => ({
+      label: "Qwen",
+      model: "qwen3",
+      reasoningLevels: [],
+      defaultReasoning: "off",
+      kind: "local",
+    }),
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 8192 }),
+    warm: () => Effect.void,
+    stream: () => Stream.empty,
+  },
+} as unknown as ProviderRegistry;
+
+function facts(): DoctorCommandInput {
+  return {
+    providers,
+    cwd: "/repo",
+    workspace: "/repo",
+    instanceId: "host-1",
+    role: "leader",
+    host: { queued: 0, lastTurn: "answered" },
+  };
+}
+
+function isJson(text: string): boolean {
+  JSON.parse(text);
+  return true;
+}
+
+test("no args returns the default structured snapshot JSON", async () => {
+  const result = await buildDoctorCommandResult("", facts());
+  assert.equal(isJson(result), true);
+  assert.equal(JSON.parse(result).host.instanceId, "host-1");
 });
 
-test("refresh and copy are orthogonal flags that combine with any view", () => {
-  assert.deepEqual(parseDoctorCommand("refresh"), cmd({ refresh: true }));
-  assert.deepEqual(parseDoctorCommand("recheck"), cmd({ refresh: true }));
-  assert.deepEqual(parseDoctorCommand("copy"), cmd({ copy: true }));
-  assert.deepEqual(
-    parseDoctorCommand("full refresh copy"),
-    cmd({ view: "full", refresh: true, copy: true }),
-  );
-  assert.deepEqual(parseDoctorCommand("json copy"), cmd({ view: "json", copy: true }));
+test("text view aliases return the legacy plaintext report", async () => {
+  const text = await buildDoctorCommandResult("text", facts());
+  assert.match(text, /^workspace: \/repo/u);
+  assert.match(text, /qwen - Qwen \(qwen3\) - warm/u);
+
+  const plain = await buildDoctorCommandResult("plain", facts());
+  assert.equal(plain, text);
 });
 
-test("tokens are case-insensitive and order-independent; the last view wins", () => {
-  assert.equal(parseDoctorCommand("FULL").view, "full");
-  assert.deepEqual(parseDoctorCommand("COPY Refresh"), cmd({ refresh: true, copy: true }));
-  assert.equal(parseDoctorCommand("full json").view, "json", "a later view token wins");
-  assert.equal(parseDoctorCommand("json full").view, "full");
+test("tokens are case-insensitive, unknown tokens are ignored, and the last view wins", async () => {
+  assert.match(await buildDoctorCommandResult("PLAIN wat", facts()), /^workspace: \/repo/u);
+  assert.equal(isJson(await buildDoctorCommandResult("wat", facts())), true);
+  assert.equal(isJson(await buildDoctorCommandResult("text json", facts())), true);
+  assert.match(await buildDoctorCommandResult("json text", facts()), /^workspace: \/repo/u);
 });
 
-test("an unrecognised token is ignored (no error), keeping the rest of the command", () => {
-  assert.deepEqual(parseDoctorCommand("wat"), cmd({}));
-  assert.deepEqual(parseDoctorCommand("full wat refresh"), cmd({ view: "full", refresh: true }));
+test("refresh and copy flags combine with structured views without changing the result shape", async () => {
+  assert.equal(isJson(await buildDoctorCommandResult("full refresh copy", facts())), true);
+  assert.equal(isJson(await buildDoctorCommandResult("json copy", facts())), true);
 });
