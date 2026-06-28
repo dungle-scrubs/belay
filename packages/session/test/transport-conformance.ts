@@ -8,8 +8,8 @@ import type { SessionEvent, SessionIdentity, SessionTransport } from "../src/ind
  * It is owned HERE, by the protocol package, not by any one implementor - the caller
  * provides a freshly-booted transport and this file owns the assertions. The local
  * session-store runs it hermetically (apps/session-store/test); Richter runs the very
- * same suite against a live service (packages/richter/test, gated on RICHTER_URL), so
- * the two backends are proven identical rather than merely similar.
+ * same suite against a live service (richter-transport.test.ts here, gated on RICHTER_URL),
+ * so the two backends are proven identical rather than merely similar.
  */
 
 export interface ConformanceContext {

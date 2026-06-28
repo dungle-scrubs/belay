@@ -4,10 +4,11 @@ import type { SessionEvent } from "./event";
 /**
  * The session transport seam: the contract a participant uses to join a session,
  * receive its replay-then-tail event stream, and publish new events - independent
- * of where the durable log lives. A local in-process backend and the Richter
- * client (@trevor/richter) are both implementations of this interface; selecting
- * one is how a deployment plugs in a backend. The event shape (./event) and the
- * trevor protocol (./protocol) are shared by every transport.
+ * of where the durable log lives. The local session-store and a Richter service are
+ * both reached through the one `streamTransport` implementation of this interface
+ * (they speak the identical wire); selecting one is just the URL a deployment points
+ * it at. The event shape (./event) and the trevor protocol (./protocol) are shared by
+ * every transport.
  */
 
 export type ConnectionStatus = "connecting" | "open" | "closed";

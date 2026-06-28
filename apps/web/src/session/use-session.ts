@@ -1,4 +1,3 @@
-import { richterTransport } from "@trevor/richter";
 import {
   type ArtifactRef,
   type ConnectionStatus,
@@ -24,17 +23,18 @@ export type { ConnectionStatus, HostPresence };
  * two React hooks the app subscribes through. Receiving and acting are split (D-018):
  *   - `useSession` accumulates the replay-then-tail event stream into state (read side),
  *   - `useSessionActions` publishes user intents - prompt / cancel / command / editor-open (write side).
- * The thin transport pass-through that used to live in a separate `client.ts` is folded in here, so the
- * web's view of the contract is one module. The stream URL, decode loop, and REST calls live in
- * `@trevor/session`, so host and browser can never drift on the protocol.
+ * Backend selection is a single `streamTransport(url)` call - Richter speaks the same `/sessions`
+ * REST + WS contract as the local store, so it is just that URL, not a separate adapter. The stream
+ * URL, decode loop, and REST calls live in `@trevor/session`, so host and browser can never drift on
+ * the protocol.
  */
 
-// Backend selection (the plugin seam): by default the browser talks same-origin to the local
-// session-store, which the Vite dev proxy forwards /sessions (REST + WS) to (no CORS). Set
-// VITE_RICHTER_URL to opt into Richter instead (a Richter that serves CORS directly).
+// Backend selection: by default the browser talks same-origin to the local session-store, which the
+// Vite dev proxy forwards /sessions (REST + WS) to (no CORS). Set VITE_RICHTER_URL to point the same
+// transport at a Richter durable substrate instead (a Richter that serves CORS directly).
 const RICHTER_URL = import.meta.env.VITE_RICHTER_URL;
 const transport = RICHTER_URL
-  ? richterTransport(RICHTER_URL)
+  ? streamTransport(RICHTER_URL)
   : streamTransport(window.location.origin);
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 2_000;

@@ -41,9 +41,6 @@ importers:
       '@earendil-works/pi-ai':
         specifier: 0.80.2
         version: 0.80.2(ws@8.21.0)(zod@4.4.3)
-      '@trevor/richter':
-        specifier: workspace:*
-        version: link:../../packages/richter
       '@trevor/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -147,9 +144,6 @@ importers:
       '@tanstack/react-virtual':
         specifier: 3.14.4
         version: 3.14.4(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@trevor/richter':
-        specifier: workspace:*
-        version: link:../../packages/richter
       '@trevor/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -272,16 +266,6 @@ importers:
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-
-  packages/richter:
-    dependencies:
-      '@trevor/session':
-        specifier: workspace:*
-        version: link:../session
-    devDependencies:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

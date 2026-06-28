@@ -15,7 +15,6 @@
   "dependencies": {
     "@ast-grep/cli": "0.44.0",
     "@earendil-works/pi-ai": "0.80.2",
-    "@trevor/richter": "workspace:*",
     "@trevor/session": "workspace:*",
     "@vscode/ripgrep": "1.18.0",
     "effect": "^3.21.4",

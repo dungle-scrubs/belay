@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { richterTransport } from "@trevor/richter";
 import {
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
@@ -95,7 +94,9 @@ const CONTROL_PRODUCER_ID = `${PRODUCER_ID}:control`;
 // the SessionTransport contract either way.
 const RICHTER_URL = process.env.RICHTER_URL;
 const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? "http://127.0.0.1:17424";
-const transport = RICHTER_URL ? richterTransport(RICHTER_URL) : streamTransport(SESSION_STORE_URL);
+// Richter speaks the same SessionTransport contract as the local store, so backend selection is just
+// which URL the stream transport points at (no separate adapter until Richter needs real divergence).
+const transport = streamTransport(RICHTER_URL ?? SESSION_STORE_URL);
 const providers = buildProviders();
 const commands = buildCommandRegistry();
 // The host-owned model source + catalog read model (D-065): which provider sources exist, their auth

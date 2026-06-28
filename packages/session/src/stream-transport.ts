@@ -25,8 +25,8 @@ export { decodeStreamParams, encodeStreamParams } from "./identity";
  *
  * Isomorphic: `fetch`, `WebSocket`, and `URL` are globals in both the browser and
  * Node >= 22, so the same client serves the Vite app, the host, and tests. Point
- * it at a local store for local sessions, or at Richter (@trevor/richter) for the
- * durable substrate - the wire is identical, so the choice is just the URL.
+ * it at a local store for local sessions, or at a Richter service for the durable
+ * substrate - the wire is identical, so the choice is just the URL.
  *
  * Single-connection: it does not reconnect. Callers layer their own reconnect
  * policy (the host loops on close; the web relies on React effect re-runs), since
