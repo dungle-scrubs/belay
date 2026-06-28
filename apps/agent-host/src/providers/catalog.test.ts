@@ -102,6 +102,29 @@ test("a model with neither a registry entry nor a live name falls back to its id
   assert.equal(snap.catalogBySource.ollama?.[0]?.displayName, "gpt-oss:120b");
 });
 
+test("a configured source whose live /models fetch failed is flagged catalog-stale", () => {
+  // openrouter configured; its live query is in the stale set (it failed and fell back to the static
+  // registry), so the summary + its entries read stale and the chooser shows "(catalog stale)".
+  const snap = buildCatalogSnapshot(
+    { ...auth, openrouter: { key: "sk-or" } },
+    { deepseek: ["deepseek-v4-pro"], openrouter: ["anthropic/claude-3.5-sonnet"] },
+    new Set(["openrouter"]),
+  );
+  const or = snap.sources.find((s) => s.sourceId === "openrouter");
+  assert.equal(or?.freshness.stale, true, "the failed-fetch source is stale");
+  assert.equal(snap.catalogBySource.openrouter?.[0]?.freshness.stale, true, "entries carry it too");
+
+  // deepseek fetched fine (not in the stale set) -> fresh.
+  const ds = snap.sources.find((s) => s.sourceId === "deepseek");
+  assert.equal(ds?.freshness.stale, false);
+
+  // an UNCONFIGURED source is never "stale" (it has no catalog to be stale), even if named.
+  const minimax = buildCatalogSnapshot(auth, {}, new Set(["minimax"])).sources.find(
+    (s) => s.sourceId === "minimax",
+  );
+  assert.equal(minimax?.freshness.stale, false);
+});
+
 test("REDACTION: the API key never appears in any announced source or catalog entry", () => {
   const snap = buildCatalogSnapshot(auth, {
     deepseek: ["deepseek-v4-pro"],

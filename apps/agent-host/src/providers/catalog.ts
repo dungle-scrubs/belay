@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { getModel, getModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import type {
   CatalogEntry,
+  CatalogFreshness,
   ModelKind,
   SourceStatus,
   SourceSummary,
@@ -230,8 +231,9 @@ const NON_CHAT_LOCAL =
 
 /** Builds a {@link CatalogEntry} for one source model, enriched from the pi-ai shape. The display
  *  name prefers pi-ai's curated name, then the provider's live name, then the raw id - so a model
- *  pi-ai has never heard of still shows the provider's label instead of a bare id. */
-function entryFor(source: SourceDef, live: LiveModel): CatalogEntry {
+ *  pi-ai has never heard of still shows the provider's label instead of a bare id. The source's
+ *  freshness (stale when its live /models fetch failed) is carried onto each entry. */
+function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshness): CatalogEntry {
   const model = piModelOf(source.piProvider, live.id);
   const kind: ModelKind = source.type === "local" ? "local" : "cloud";
   const reasoningLevels = reasoningLevelsFor(source, model);
@@ -251,22 +253,28 @@ function entryFor(source: SourceDef, live: LiveModel): CatalogEntry {
     contextLength: typeof model?.contextWindow === "number" ? model.contextWindow : null,
     costTier: null,
     aliases: [],
-    freshness: { refreshedAt: null, stale: false },
+    freshness,
     reasoningLevels,
     defaultReasoning: defaultReasoningFor(reasoningLevels),
   };
 }
 
-/** The RAW models a source advertises: live `/models` (id + name), else pi-ai's registry (which also
- *  carries names). No filtering here. */
-async function fetchSourceModels(source: SourceDef, key: string | null): Promise<LiveModel[]> {
+/** The RAW models a source advertises plus whether the catalog is STALE: a live `/models` query that
+ *  was attempted and FAILED falls back to pi-ai's registry (or empty) but flags `stale`, so the chooser
+ *  can show "(catalog stale)" + a refresh action instead of silently presenting old/missing data. */
+async function fetchSourceModels(
+  source: SourceDef,
+  key: string | null,
+): Promise<{ models: LiveModel[]; stale: boolean }> {
   const baseUrl = baseUrlOf(source);
   let models: LiveModel[] = [];
+  let stale = false;
   if (baseUrl) {
     try {
       models = await fetchLiveModels(baseUrl, key);
     } catch {
-      // fall through to the static registry
+      // The live query failed: fall back to the static registry below, but mark the catalog stale.
+      stale = true;
     }
   }
   if (models.length === 0 && source.piProvider) {
@@ -274,7 +282,7 @@ async function fetchSourceModels(source: SourceDef, key: string | null): Promise
       getModels(source.piProvider as "deepseek") as Array<{ id: string; name?: string }>
     ).map((m) => ({ id: m.id, name: m.name }));
   }
-  return models;
+  return { models, stale };
 }
 
 function statusFor(configured: boolean): SourceStatus {
@@ -292,14 +300,21 @@ function statusFor(configured: boolean): SourceStatus {
 export function buildCatalogSnapshot(
   auth: Record<string, unknown>,
   modelsBySource: Readonly<Record<string, readonly (string | LiveModel)[]>>,
+  staleSources: ReadonlySet<string> = new Set(),
 ): CatalogSnapshot {
   const catalogBySource: Record<string, CatalogEntry[]> = {};
   const sources: SourceSummary[] = [];
   for (const source of SOURCES) {
     const configured = isConfigured(source, auth);
+    // Stale only applies to a configured source whose live /models query failed (an unconfigured
+    // source has no catalog to be stale).
+    const freshness: CatalogFreshness = {
+      refreshedAt: null,
+      stale: configured && staleSources.has(source.sourceId),
+    };
     const raw = (modelsBySource[source.sourceId] ?? []).map(asLiveModel);
     const models = source.type === "local" ? raw.filter((m) => !NON_CHAT_LOCAL.test(m.id)) : raw;
-    const entries = configured ? models.map((m) => entryFor(source, m)) : [];
+    const entries = configured ? models.map((m) => entryFor(source, m, freshness)) : [];
     catalogBySource[source.sourceId] = entries;
     sources.push({
       sourceId: source.sourceId,
@@ -308,7 +323,7 @@ export function buildCatalogSnapshot(
       status: statusFor(configured),
       modelCount: entries.length,
       auth: configured ? "authenticated" : "none",
-      freshness: { refreshedAt: null, stale: false },
+      freshness,
       actions: configured
         ? ["refresh"]
         : source.type === "oauth"
@@ -384,10 +399,15 @@ export async function loadCatalog(): Promise<CatalogSnapshot> {
   // build the snapshot purely. Unconfigured sources are skipped (no fetch) and carry a needs-auth
   // summary.
   const modelsBySource: Record<string, readonly LiveModel[]> = {};
+  const staleSources = new Set<string>();
   await Promise.all(
     SOURCES.filter((source) => isConfigured(source, auth)).map(async (source) => {
-      modelsBySource[source.sourceId] = await fetchSourceModels(source, staticKeyOf(source, auth));
+      const { models, stale } = await fetchSourceModels(source, staticKeyOf(source, auth));
+      modelsBySource[source.sourceId] = models;
+      if (stale) {
+        staleSources.add(source.sourceId);
+      }
     }),
   );
-  return buildCatalogSnapshot(auth, modelsBySource);
+  return buildCatalogSnapshot(auth, modelsBySource, staleSources);
 }
