@@ -1695,6 +1695,13 @@ function handleEvent(message: SessionEvent): void {
         internet.refresh().catch(() => {});
         return;
       }
+      // Catalog refresh (D-065): the chooser's "Refresh catalog" action re-queries each source's live
+      // /models and re-announces sources+catalog. Programmatic (not a typed slash); produces no
+      // command.result - the refreshed catalog rides the host.online re-announce.
+      if (command === "/catalog-refresh") {
+        refreshCatalog();
+        return;
+      }
       // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so
       // they're intercepted here rather than registered as slash commands.
       if (command === "/worktree-switch") {

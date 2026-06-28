@@ -134,7 +134,8 @@ export function App() {
 
   const stream = useSession(sessionId);
   const { events, presence, replayed, replayThroughSeq, status } = stream;
-  const { publish, cancel, command, shell, openInEditor, unarchive } = useSessionActions(sessionId);
+  const { publish, cancel, command, shell, openInEditor, refreshCatalog, unarchive } =
+    useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
   // kept in sessionStorage (tab-scoped, survives a reload). Draft persistence restores an unsubmitted
@@ -768,6 +769,13 @@ export function App() {
         catalogBySource={selection.catalogBySource}
         activeModel={sendModel}
         onSelectModel={onSelectModel}
+        onSourceAction={(_id, action) => {
+          // Today the only host-owned source action wired is refreshing the catalog (re-query live
+          // /models). Auth/setup flows (sign-in, configure) ride D-065 M5's host flows later.
+          if (action === "refresh") {
+            void refreshCatalog();
+          }
+        }}
       />
     </div>
   ) : undefined;
