@@ -1,13 +1,19 @@
 import type { SessionSummary } from "@trevor/session";
-import { useMemo } from "react";
-import { CommandModal, type FooterHint } from "@/components/command-modal";
+import { type RowChooserAdapter, RowChooserModal } from "@/components/command-modal";
 import { buildResumeRows, type ResumeContext } from "./resume-rows";
 
-const RESUME_HINTS: readonly FooterHint[] = [
-  { keys: "↑↓", label: "navigate" },
-  { keys: "↵", label: "resume" },
-  { keys: "esc", label: "close" },
-];
+/** The resume chooser's chrome + row projection (D-090); the structure lives in RowChooserModal. */
+const RESUME_CHOOSER: RowChooserAdapter<readonly SessionSummary[], ResumeContext> = {
+  title: "Resume session",
+  placeholder: "Search sessions…",
+  emptyLabel: "No sessions found",
+  footerHints: [
+    { keys: "↑↓", label: "navigate" },
+    { keys: "↵", label: "resume" },
+    { keys: "esc", label: "close" },
+  ],
+  buildRows: buildResumeRows,
+};
 
 export interface ResumeModalProps {
   readonly open: boolean;
@@ -22,10 +28,10 @@ export interface ResumeModalProps {
 }
 
 /**
- * The resume chooser (D-090): the shared `CommandModal` fed by the resume-row adapter over
- * the session inventory. Presentational - App owns fetching (`useInventory`) and the actual
- * session switch (`onResume`). Selecting an enabled row resumes and closes; a disabled row
- * (the current session, or any row while the current session is busy) never fires.
+ * The resume chooser (D-090): binds the resume adapter + session inventory to the shared
+ * `RowChooserModal`. Presentational - App owns fetching (`useInventory`) and the actual session
+ * switch (`onResume`). Selecting an enabled row resumes and closes; a disabled row (the current
+ * session, or any row while the current session is busy) never fires.
  */
 export function ResumeModal({
   open,
@@ -36,22 +42,16 @@ export function ResumeModal({
   context,
   onResume,
 }: ResumeModalProps) {
-  const rows = useMemo(() => buildResumeRows(sessions, context), [sessions, context]);
   return (
-    <CommandModal
+    <RowChooserModal
+      adapter={RESUME_CHOOSER}
       open={open}
       onOpenChange={onOpenChange}
-      title="Resume session"
-      placeholder="Search sessions…"
-      rows={rows}
+      data={sessions}
+      context={context}
       loading={loading}
-      error={error ?? undefined}
-      emptyLabel="No sessions found"
-      footerHints={RESUME_HINTS}
-      onSelect={(id) => {
-        onResume(id);
-        onOpenChange(false);
-      }}
+      error={error}
+      onSelect={onResume}
     />
   );
 }

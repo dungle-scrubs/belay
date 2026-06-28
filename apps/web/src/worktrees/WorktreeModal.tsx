@@ -1,13 +1,19 @@
 import type { WorktreeSummary } from "@trevor/session";
-import { useMemo } from "react";
-import { CommandModal, type FooterHint } from "@/components/command-modal";
+import { type RowChooserAdapter, RowChooserModal } from "@/components/command-modal";
 import { buildWorktreeRows, type WorktreeRowsContext } from "./worktree-rows";
 
-const WORKTREE_HINTS: readonly FooterHint[] = [
-  { keys: "↑↓", label: "navigate" },
-  { keys: "↵", label: "switch" },
-  { keys: "esc", label: "close" },
-];
+/** The worktree switcher's chrome + row projection (D-091); the structure lives in RowChooserModal. */
+const WORKTREE_CHOOSER: RowChooserAdapter<readonly WorktreeSummary[], WorktreeRowsContext> = {
+  title: "Switch worktree",
+  placeholder: "Search worktrees…",
+  emptyLabel: "No worktrees",
+  footerHints: [
+    { keys: "↑↓", label: "navigate" },
+    { keys: "↵", label: "switch" },
+    { keys: "esc", label: "close" },
+  ],
+  buildRows: buildWorktreeRows,
+};
 
 export interface WorktreeModalProps {
   readonly open: boolean;
@@ -21,11 +27,10 @@ export interface WorktreeModalProps {
 }
 
 /**
- * The managed-worktree switcher (D-091): the shared `CommandModal` fed by the worktree-row
- * adapter over the host-announced worktrees, grouped by base repo with the baseline checkout
- * first. Presentational - App owns the host-announced data and the switch action. Selecting an
- * enabled row switches and closes; the current worktree, a missing (repair) row, and - while the
- * workspace is busy - every other row are disabled and never fire.
+ * The managed-worktree switcher (D-091): binds the worktree adapter + host-announced worktrees
+ * (grouped by base repo, baseline first) to the shared `RowChooserModal`. Presentational - App owns
+ * the data and the switch action. Selecting an enabled row switches and closes; the current worktree,
+ * a missing (repair) row, and - while the workspace is busy - every other row are disabled.
  */
 export function WorktreeModal({
   open,
@@ -36,22 +41,16 @@ export function WorktreeModal({
   context,
   onSwitch,
 }: WorktreeModalProps) {
-  const rows = useMemo(() => buildWorktreeRows(worktrees, context), [worktrees, context]);
   return (
-    <CommandModal
+    <RowChooserModal
+      adapter={WORKTREE_CHOOSER}
       open={open}
       onOpenChange={onOpenChange}
-      title="Switch worktree"
-      placeholder="Search worktrees…"
-      rows={rows}
+      data={worktrees}
+      context={context}
       loading={loading}
-      error={error ?? undefined}
-      emptyLabel="No worktrees"
-      footerHints={WORKTREE_HINTS}
-      onSelect={(id) => {
-        onSwitch(id);
-        onOpenChange(false);
-      }}
+      error={error}
+      onSelect={onSwitch}
     />
   );
 }
