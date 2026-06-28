@@ -4,7 +4,7 @@ import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { AgentDefinition } from "../agents";
 import type { Provider, ProviderEvent } from "../providers";
-import { ProviderUnavailable } from "../providers/errors";
+import { ProviderUnavailable } from "../providers";
 import {
   type BackgroundDelegator,
   buildDelegateCapability,

@@ -3,7 +3,7 @@ import { events, type SessionEvent, type TrevorEventInput } from "@trevor/sessio
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderError, ProviderEvent } from "../../providers";
-import { ProviderUnavailable } from "../../providers/errors";
+import { ProviderUnavailable } from "../../providers";
 import { type RecallDeps, runRecall, type SiblingRead } from "./engine";
 
 /**

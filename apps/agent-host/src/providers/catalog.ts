@@ -13,7 +13,7 @@ import { AnthropicProvider } from "./anthropic";
 import { CodexProvider } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { OpenAICompatProvider } from "./openai-compat";
-import { PiKeyProvider } from "./pi-key";
+import { PI_KEY_PROVIDERS, PiKeyProvider } from "./pi-key";
 import type { Provider } from "./types";
 
 /**
@@ -63,21 +63,18 @@ const SOURCES: readonly SourceDef[] = [
     piProvider: "anthropic",
     oauthName: "anthropic",
   },
-  {
-    sourceId: "deepseek",
-    type: "api-key",
-    label: "DeepSeek",
-    piProvider: "deepseek",
-    authName: "deepseek",
-  },
-  { sourceId: "zai", type: "api-key", label: "Z.ai", piProvider: "zai", authName: "zai" },
-  {
-    sourceId: "minimax",
-    type: "api-key",
-    label: "MiniMax",
-    piProvider: "minimax",
-    authName: "minimax",
-  },
+  // The static-key cloud sources (DeepSeek, Z.ai, MiniMax) are derived from the shared pi-key
+  // registry: for these, the source id == the pi-ai provider id == the auth.json entry, so one
+  // registry row owns all three. Adding a pi-key provider updates the registry, not this list.
+  ...PI_KEY_PROVIDERS.map(
+    (def): SourceDef => ({
+      sourceId: def.piProvider,
+      type: "api-key",
+      label: def.sourceLabel,
+      piProvider: def.piProvider,
+      authName: def.piProvider,
+    }),
+  ),
   // A cloud gateway/proxy: one key fronts hundreds of upstream models (256+ in pi-ai's registry, more
   // live). Its catalog is the large one the chooser virtualizes.
   {

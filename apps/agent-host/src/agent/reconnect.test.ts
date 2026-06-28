@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import { Cause, Duration, Effect, Exit, Fiber, Option, Stream, TestClock } from "effect";
 import { afterEach, beforeEach, describe } from "vitest";
 import type { ChatMessage, Provider, ProviderError, ProviderEvent } from "../providers";
-import { ProviderAuthError, ProviderUnavailable } from "../providers/errors";
+import { ProviderAuthError, ProviderUnavailable } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { type AgentEvent, runAgent } from "./loop";
 

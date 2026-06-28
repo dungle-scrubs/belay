@@ -1,8 +1,12 @@
 import { codexProvider } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
-import { deepseekProvider, glmProvider, minimaxProvider } from "./pi-key";
+import { PI_KEY_PROVIDERS, piKeyProvider } from "./pi-key";
 import type { Provider } from "./types";
 
+// The provider error classes are part of the package's public surface: callers discriminate
+// failures by these tags. Re-exporting them here keeps `errors.ts` internal so its taxonomy can
+// be refactored without touching callsites.
+export { ModelLoadError, ProviderAuthError, ProviderUnavailable } from "./errors";
 export type {
   ChatImage,
   ChatMessage,
@@ -48,9 +52,9 @@ export function buildProviders(): ProviderRegistry {
       label: "Qwen 27B 4-bit (local)",
       maxContext: 65536,
     }),
-    deepseek: deepseekProvider("DeepSeek V4 Pro"),
-    glm: glmProvider("GLM-5.2 (Z.ai)"),
-    minimax: minimaxProvider("MiniMax M2.7"),
+    // The static-key cloud providers (DeepSeek, Z.ai/GLM, MiniMax) come from one registry
+    // (pi-key.ts), so adding one is a single row there - not a line here plus a factory body.
+    ...Object.fromEntries(PI_KEY_PROVIDERS.map((def) => [def.key, piKeyProvider(def)])),
   };
 }
 

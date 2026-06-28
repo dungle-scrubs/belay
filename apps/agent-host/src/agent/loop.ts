@@ -14,7 +14,7 @@ import type {
   ToolCall,
   ToolDef,
 } from "../providers";
-import { ProviderUnavailable } from "../providers/errors";
+import { ProviderUnavailable } from "../providers";
 import { redactSecrets } from "../providers/failure-taxonomy";
 import { recordObservation } from "../providers/observation-store";
 import { classifyProviderProtocolAnomaly } from "../providers/protocol-anomaly";

@@ -89,40 +89,70 @@ export class PiKeyProvider extends PiAiProviderBase {
   }
 }
 
-// Per-provider roster factories: each owns its pi-ai provider/auth ids and its model-env default
-// (DEEPSEEK_MODEL / GLM_MODEL / MINIMAX_MODEL), so registration in buildProviders is one line and
-// the browser-facing key (deepseek/glm/minimax) and curated label are the only things index.ts sets.
-// The pi-ai provider id (deepseek/zai/minimax) and the auth.json key name match.
+/**
+ * One row per static-key cloud provider reached through pi-ai. Each owns the browser-facing key,
+ * its pi-ai provider id (which doubles as the `~/.pi/auth.json` entry name), its model-env override,
+ * its default model, and the labels both consumers need. This is the single source of provider
+ * config: `buildProviders` (index.ts) spreads it into the roster, and the catalog (catalog.ts)
+ * derives its api-key SOURCE rows from it - so adding a pi-key provider is one row here, not three
+ * near-identical factory bodies plus duplicate source/anomaly entries.
+ *
+ * For these providers the pi-ai provider id, the auth.json key name, and the catalog source id all
+ * coincide (deepseek/zai/minimax); the browser KEY differs only for Z.ai (key "glm", pi/auth "zai").
+ */
+export interface PiKeyProviderDef {
+  /** Browser-facing registry key + provider id (user.message.provider). */
+  readonly key: string;
+  /** pi-ai provider id whose registry the model lives in; also the auth.json entry + catalog source id. */
+  readonly piProvider: string;
+  /** Env var that overrides the default model. */
+  readonly modelEnvVar: string;
+  /** Model id used when the env var is unset. */
+  readonly defaultModel: string;
+  /** Curated display label for the host roster (buildProviders). */
+  readonly rosterLabel: string;
+  /** Display label for the D-065 catalog source. */
+  readonly sourceLabel: string;
+}
 
-/** DeepSeek over a static key. */
-export function deepseekProvider(label: string): PiKeyProvider {
-  return new PiKeyProvider({
-    id: "deepseek",
+export const PI_KEY_PROVIDERS: readonly PiKeyProviderDef[] = [
+  {
+    key: "deepseek",
     piProvider: "deepseek",
-    authName: "deepseek",
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-pro",
-    label,
-  });
-}
-
-/** Z.ai / GLM over a static key (browser key "glm", pi-ai/auth name "zai"). */
-export function glmProvider(label: string): PiKeyProvider {
-  return new PiKeyProvider({
-    id: "glm",
+    modelEnvVar: "DEEPSEEK_MODEL",
+    defaultModel: "deepseek-v4-pro",
+    rosterLabel: "DeepSeek V4 Pro",
+    sourceLabel: "DeepSeek",
+  },
+  {
+    key: "glm",
     piProvider: "zai",
-    authName: "zai",
-    model: process.env.GLM_MODEL ?? "glm-5.2",
-    label,
-  });
-}
-
-/** MiniMax over a static key. */
-export function minimaxProvider(label: string): PiKeyProvider {
-  return new PiKeyProvider({
-    id: "minimax",
+    modelEnvVar: "GLM_MODEL",
+    defaultModel: "glm-5.2",
+    rosterLabel: "GLM-5.2 (Z.ai)",
+    sourceLabel: "Z.ai",
+  },
+  {
+    key: "minimax",
     piProvider: "minimax",
-    authName: "minimax",
-    model: process.env.MINIMAX_MODEL ?? "MiniMax-M2.7",
-    label,
+    modelEnvVar: "MINIMAX_MODEL",
+    defaultModel: "MiniMax-M2.7",
+    rosterLabel: "MiniMax M2.7",
+    sourceLabel: "MiniMax",
+  },
+];
+
+/**
+ * Builds the {@link PiKeyProvider} for one registry row, resolving its model from the env override
+ * or the default. This is the single parameterized factory the three former named factories collapsed
+ * into; the roster label comes from the row.
+ */
+export function piKeyProvider(def: PiKeyProviderDef): PiKeyProvider {
+  return new PiKeyProvider({
+    id: def.key,
+    piProvider: def.piProvider,
+    authName: def.piProvider,
+    model: process.env[def.modelEnvVar] ?? def.defaultModel,
+    label: def.rosterLabel,
   });
 }
