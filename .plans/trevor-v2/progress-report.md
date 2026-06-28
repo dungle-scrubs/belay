@@ -6,9 +6,10 @@
 
 > **Scope.** This report tracks open or partial/gated work only. When an item or section is fully
 > completed, move its detailed checklist to the done archive and leave only a summary/reference here.
-> Current focus: Next-Up: doctor health surface (D-073). Recently progressed: D-092 image attachment
-> UX (M1-M6 done; manual EZE repros open) and D-060 internet
-> connectivity (M1-M5 done bar explicit-UI-refresh wiring, structured probe logs, and the manual repro).
+> Current focus: Next-Up: image attachment UX (D-092) - the first open item. All implementable code
+> work across the decomposed sections is complete; the only remaining open boxes are OWNER-RUN
+> verification (real-condition manual EZE repros + subjective Storybook/visual reviews), distributed
+> across D-092/D-060/D-093/D-076/D-073. See each section's M7 + the prompts the owner runs.
 > Decomposed open sections: D-092 image attachment UX, D-060 internet connectivity
 > awareness, D-093 session navigation sidebar, D-094 session lifecycle controls, and D-065 provider
 > auth/catalog + full model chooser, D-076-D-079 provider-outage auto-reconnect recovery, and D-073 doctor
