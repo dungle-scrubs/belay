@@ -1,8 +1,4 @@
-import {
-  type CommandFamilyDescriptor,
-  type CommandParseResult,
-  commandPresentation,
-} from "@/commands/command-family";
+import type { CommandPresentation } from "@/commands/command-family";
 import { cn } from "@/lib/utils";
 import { LoopBuilder } from "./loop-builder";
 import { LoopKeywords } from "./loop-keywords";
@@ -12,16 +8,10 @@ import { LoopKeywords } from "./loop-keywords";
  * the live builder output, then the horizontal keyword strip beneath it. No
  * header, no buttons - Enter in the composer creates the loop.
  *
- * Presentational: the caller parses on every keystroke and passes the result.
+ * Presentational: the caller passes the loop presentation view-model.
  */
-export function LoopHelper(props: {
-  descriptor: CommandFamilyDescriptor;
-  parse: CommandParseResult;
-  className?: string;
-}) {
-  const { descriptor, parse, className } = props;
-  // The single presentation view-model both panels render from (chips + rows + errors + ready).
-  const view = commandPresentation(parse, descriptor);
+export function LoopHelper(props: { view: CommandPresentation; className?: string }) {
+  const { view, className } = props;
 
   return (
     <div

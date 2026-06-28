@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { CommandSpec } from "@trevor/session";
 import { useState } from "react";
 import { LOOP_FAMILY, type LoopInventoryRow } from "@/commands/loop";
-import { parseLoopCommand } from "@/commands/loop-parser";
+import { loopPresentation, parseLoopCommand } from "@/commands/loop-parser";
 import { CommandMenu } from "../command-menu";
 import { CommandInput } from "./command-input";
 import { LoopHelper } from "./loop-helper";
@@ -22,10 +22,7 @@ type Story = StoryObj;
 export const Ready: Story = {
   render: () => (
     <div className="mx-auto w-[30rem] max-w-full">
-      <LoopHelper
-        descriptor={LOOP_FAMILY}
-        parse={parseLoopCommand('/loop every 5m until "tests pass" do "run the suite"')}
-      />
+      <LoopHelper view={loopPresentation('/loop every 5m until "tests pass" do "run the suite"')} />
     </div>
   ),
 };
@@ -34,7 +31,7 @@ export const Ready: Story = {
 export const Incomplete: Story = {
   render: () => (
     <div className="mx-auto w-[30rem] max-w-full">
-      <LoopHelper descriptor={LOOP_FAMILY} parse={parseLoopCommand("/loop ")} />
+      <LoopHelper view={loopPresentation("/loop ")} />
     </div>
   ),
 };
@@ -119,8 +116,7 @@ function ComposerHarness() {
           ) : showHelper && parse ? (
             <LoopHelper
               className="absolute inset-x-0 bottom-full z-20 mb-2"
-              descriptor={LOOP_FAMILY}
-              parse={parse}
+              view={loopPresentation(draft)}
             />
           ) : menuOpen ? (
             <CommandMenu

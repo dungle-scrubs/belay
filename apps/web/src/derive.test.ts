@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import { HOST_ROLE, type HostPresence, type SessionEvent } from "@trevor/session";
 import { test } from "vitest";
 import {
-  activeRunId,
   commandsFrom,
   defaultProviderFrom,
   fmtCtx,
   fmtTokens,
   hostStatus,
-  isOverflowError,
   isSessionArchived,
   latestSessionSwitch,
   parseBangShell,
@@ -55,33 +53,6 @@ const online = (instanceId: string, extra: Record<string, unknown> = {}) =>
     ...extra,
   });
 
-test("activeRunId returns the latest unfinished run, else null", () => {
-  assert.equal(activeRunId([]), null);
-  const started = (runId: string) =>
-    evt("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
-  const done = (runId: string) => evt("assistant.completed", { runId, text: "ok" });
-  assert.equal(activeRunId([started("r1")]), "r1");
-  assert.equal(activeRunId([started("r1"), done("r1")]), null);
-  assert.equal(activeRunId([started("r1"), started("r2"), done("r1")]), "r2");
-});
-
-test("a dead orphan run (started, never completed, then a later run finished) is NOT active", () => {
-  const started = (runId: string) =>
-    evt("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
-  const done = (runId: string) => evt("assistant.completed", { runId, text: "ok" });
-  // r1 started but its host crashed before completing; r2 then ran and finished. Nothing is active.
-  // The old bug returned "r1" here, latching `busy` forever and freezing the send queue.
-  assert.equal(activeRunId([started("r1"), started("r2"), done("r2")]), null);
-});
-
-test("a /clear resets active-run detection: a pre-clear orphan does not count", () => {
-  const started = (runId: string) =>
-    evt("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
-  const clear = () => evt("user.command", { command: "/clear", args: "" });
-  assert.equal(activeRunId([started("r1"), clear()]), null, "pre-clear orphan cleared");
-  assert.equal(activeRunId([started("r1"), clear(), started("r2")]), "r2", "post-clear run counts");
-});
-
 test("fmtTokens and fmtCtx render compact counts", () => {
   assert.equal(fmtTokens(6100), "6.1k");
   assert.equal(fmtTokens(812), "812");
@@ -91,13 +62,6 @@ test("fmtTokens and fmtCtx render compact counts", () => {
   assert.equal(fmtCtx(1_500_000), "1.5M");
   assert.equal(fmtCtx(512), "512");
   assert.equal(fmtCtx(0), "?");
-});
-
-test("isOverflowError matches context/token-limit failures only", () => {
-  assert.equal(isOverflowError("context length exceeded"), true);
-  assert.equal(isOverflowError("This model's maximum context is 8192 tokens"), true);
-  assert.equal(isOverflowError("token limit reached"), true);
-  assert.equal(isOverflowError("ECONNREFUSED: network down"), false);
 });
 
 test("toolSummary picks the salient arg per tool and truncates", () => {

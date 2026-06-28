@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { DoctorSnapshot } from "@trevor/session";
 import { useState } from "react";
-import type { DoctorSnapshot } from "@/commands/doctor";
 import {
   healthySnapshot,
   loadingSnapshot,

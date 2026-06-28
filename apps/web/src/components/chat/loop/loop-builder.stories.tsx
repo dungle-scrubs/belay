@@ -1,11 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { commandPresentation } from "@/commands/command-family";
-import { LOOP_FAMILY } from "@/commands/loop";
-import { parseLoopCommand } from "@/commands/loop-parser";
+import { loopPresentation } from "@/commands/loop-parser";
 import { LoopBuilder } from "./loop-builder";
 
 /** The builder renders the presentation view-model; build it from a typed line. */
-const view = (input: string) => commandPresentation(parseLoopCommand(input), LOOP_FAMILY);
+const view = (input: string) => loopPresentation(input);
 
 const meta = {
   title: "Chat/Loop/Builder",

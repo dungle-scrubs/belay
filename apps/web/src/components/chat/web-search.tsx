@@ -1,5 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
-import { ToolCall, WorkingIndicator } from "./message";
+import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
 /** One normalized search result, mirroring the web-search library's `Source`. */
@@ -61,34 +61,6 @@ export function WebSearchResults({
   border = false,
   className,
 }: WebSearchResultsProps) {
-  if (error) {
-    return (
-      <ToolCall
-        name="web_search"
-        args={query}
-        status="error"
-        defaultOpen={defaultOpen}
-        className={className}
-      >
-        <span className="text-sm text-smui-red">{error}</span>
-      </ToolCall>
-    );
-  }
-
-  if (status === "running" && (!results || results.length === 0)) {
-    return (
-      <ToolCall
-        name="web_search"
-        args={query}
-        status="running"
-        defaultOpen={defaultOpen}
-        className={className}
-      >
-        <WorkingIndicator label="searching" />
-      </ToolCall>
-    );
-  }
-
   const items = results ?? [];
   const meta = [
     provider,
@@ -129,24 +101,27 @@ export function WebSearchResults({
     );
 
   return (
-    <ToolCall
+    <StatusAwareToolRenderer
       name="web_search"
       args={query}
       status={status}
+      error={error}
+      running={status === "running" && items.length === 0}
+      runningLabel="searching"
       defaultOpen={defaultOpen}
       className={className}
       border={border}
       sectionTitle={<span className="text-muted-foreground">{meta}</span>}
-    >
-      {/* Boxed, the meta rides the section header (sectionTitle); flat, it sits inline above the list. */}
-      {border ? (
-        <div className="p-2.5">{list}</div>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          <span className="text-label tracking-wider text-muted-foreground/70">{meta}</span>
-          {list}
-        </div>
-      )}
-    </ToolCall>
+      renderBody={() =>
+        border ? (
+          <div className="p-2.5">{list}</div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            <span className="text-label tracking-wider text-muted-foreground/70">{meta}</span>
+            {list}
+          </div>
+        )
+      }
+    />
   );
 }

@@ -1,6 +1,6 @@
+import type { DoctorFinding, DoctorNextAction } from "@trevor/session";
 import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import type { DoctorFinding, DoctorNextAction } from "@/commands/doctor";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { DOCTOR_STATUS_META } from "./doctor-status";

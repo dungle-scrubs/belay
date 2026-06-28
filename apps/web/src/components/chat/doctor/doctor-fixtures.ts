@@ -14,7 +14,7 @@ import {
   type DoctorHostContext,
   type DoctorSnapshot,
   type DoctorSnapshotState,
-} from "@/commands/doctor";
+} from "@trevor/session";
 
 export const HOST: DoctorHostContext = {
   workspace: "~/dev/trevorV2/apps/agent-host",

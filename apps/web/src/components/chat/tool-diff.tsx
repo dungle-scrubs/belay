@@ -1,6 +1,6 @@
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
 import { DiffStat, generateToolDiff } from "./diff-utils";
-import { ToolCall } from "./message";
+import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
 interface ToolDiffProps {
@@ -43,7 +43,7 @@ export function ToolDiff({
   const { patch, added, removed } = generateToolDiff(path, oldText, newText, 3);
   const diff = <DiffViewer patch={patch} variant="ghost" showHeader={false} />;
   return (
-    <ToolCall
+    <StatusAwareToolRenderer
       name={tool}
       args={path}
       status={status}
@@ -52,8 +52,7 @@ export function ToolDiff({
       onOpenPath={onOpenPath}
       border={border}
       sectionMeta={<DiffStat added={added} removed={removed} />}
-    >
-      {diff}
-    </ToolCall>
+      renderBody={() => diff}
+    />
   );
 }

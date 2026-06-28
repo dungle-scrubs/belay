@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
 import { countChanges, DiffStat, generateToolDiff } from "./diff-utils";
-import { OpenPathLink, ToolCall } from "./message";
+import { OpenPathLink } from "./message";
+import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import { ToolSection } from "./tool-section";
 import type { ToolStatus } from "./tool-status";
 
@@ -118,14 +119,13 @@ export function MultiEditDiff({
   );
 
   return (
-    <ToolCall
+    <StatusAwareToolRenderer
       name="multi_edit"
       args={summary}
       status={status}
       defaultOpen={defaultOpen}
       className={className}
-    >
-      {body}
-    </ToolCall>
+      renderBody={() => body}
+    />
   );
 }

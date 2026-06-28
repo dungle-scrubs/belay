@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
 import type { ModelRef, QuickPickerGroup } from "@trevor/session";
 import { test } from "vitest";
-import { PanelControls } from "./panel-controls";
+import { ControlsPanel, type ControlsPanelConfig } from "./panel-controls";
 
 /**
  * D-065 M3: the panel's model row is the split control (open-chooser left region + quick-picker
@@ -19,24 +19,40 @@ const quickGroups: QuickPickerGroup[] = [
   },
 ];
 
-function renderControls(over: Partial<Parameters<typeof PanelControls>[0]> = {}) {
-  return render(
-    <PanelControls
-      activeLabel="DeepSeek V4 Pro"
-      quickGroups={quickGroups}
-      sourceLabels={{ deepseek: "DeepSeek V4 Pro" }}
-      modelLabels={{ "deepseek-v4": "DeepSeek V4 Pro" }}
-      activeModel={{ sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" }}
-      onOpenChooser={noop}
-      onSelectModel={noop}
-      reasoningLevels={["off", "high", "xhigh"]}
-      reasoning="high"
-      onReasoningChange={noop}
-      showThinking
-      onShowThinkingChange={noop}
-      {...over}
-    />,
-  );
+type ConfigOverride = {
+  readonly model?: Partial<ControlsPanelConfig["model"]>;
+  readonly reasoning?: Partial<ControlsPanelConfig["reasoning"]>;
+  readonly thinking?: Partial<ControlsPanelConfig["thinking"]>;
+};
+
+function config(over: ConfigOverride = {}): ControlsPanelConfig {
+  return {
+    model: {
+      activeLabel: "DeepSeek V4 Pro",
+      quickGroups,
+      sourceLabels: { deepseek: "DeepSeek V4 Pro" },
+      modelLabels: { "deepseek-v4": "DeepSeek V4 Pro" },
+      activeModel: { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" },
+      onOpenChooser: noop,
+      onSelectModel: noop,
+      ...over.model,
+    },
+    reasoning: {
+      levels: ["off", "high", "xhigh"],
+      selected: "high",
+      onChange: noop,
+      ...over.reasoning,
+    },
+    thinking: {
+      show: true,
+      onShowChange: noop,
+      ...over.thinking,
+    },
+  };
+}
+
+function renderControls(over: ConfigOverride = {}) {
+  return render(<ControlsPanel config={config(over)} />);
 }
 
 test("renders the split model control with the active label and the reasoning/thinking controls", () => {
@@ -49,14 +65,16 @@ test("renders the split model control with the active label and the reasoning/th
 
 test("the larger left region opens the full chooser", () => {
   let opened = 0;
-  const { getByLabelText } = renderControls({ onOpenChooser: () => (opened += 1) });
+  const { getByLabelText } = renderControls({ model: { onOpenChooser: () => (opened += 1) } });
   fireEvent.click(getByLabelText("Open model chooser"));
   assert.equal(opened, 1);
 });
 
 test("a quick-pick fires onSelectModel with the chosen ModelRef", () => {
   const picked: ModelRef[] = [];
-  const { getByLabelText } = renderControls({ onSelectModel: (ref) => picked.push(ref) });
+  const { getByLabelText } = renderControls({
+    model: { onSelectModel: (ref) => picked.push(ref) },
+  });
   // Open the quick-picker popover, then pick the one recent model.
   fireEvent.click(getByLabelText("Recent models"));
   fireEvent.click(getByLabelText("Select DeepSeek V4 Pro"));

@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  activeTurnRunId,
   constrainReasoning,
   DEFAULT_SESSION_ID,
   type ModelRef,
   modelRefFromProvider,
-  type SessionActivity,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { ArrowLeft, GitBranch, History } from "lucide-react";
@@ -26,7 +26,6 @@ import { ControlsPanel } from "@/components/panel/panel-controls";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
-  activeRunId,
   activeTurnStartedAt,
   catalogFrom,
   commandsFrom,
@@ -41,15 +40,15 @@ import {
   sourcesFrom,
   tasksFrom,
   toolSummary,
-  worktreesFrom,
 } from "./derive";
 import { escapeAction } from "./esc-action";
 import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
+import { useModalState } from "./hooks/use-modal-state";
 import { usePromptHistory } from "./hooks/use-prompt-history";
+import { useScrollFollow } from "./hooks/use-scroll-follow";
 import { useSendQueue } from "./hooks/use-send-queue";
-import { useInventory } from "./resume";
-import { atBottomOf } from "./scroll";
+import { useSlashMenu } from "./hooks/use-slash-menu";
 import {
   archiveSession,
   deleteSession,
@@ -180,6 +179,7 @@ export function App() {
   // Runs of 2+ consecutive read-only tool rows were one concurrent batch (D-050); group them so
   // they render as a single compact block instead of stacked cards.
   const toolBatches = useMemo(() => readOnlyToolBatches(transcript), [transcript]);
+  const scroll = useScrollFollow(transcript.length);
   // Maps one batched read-only tool message to a ConcurrentTools row: status from done + an
   // `error:` result, args via the shared summary, and a clickable path for path-bearing tools.
   const toConcurrentTool = (tool: ToolMessageData): ConcurrentTool => {
@@ -215,52 +215,6 @@ export function App() {
     const label = (fromWorkspace && fromWorkspace !== "~" ? fromWorkspace : null) ?? fromSession;
     document.title = label ? `${label} · Trevor` : "Trevor";
   }, [host.workspace, target]);
-  // The explicit-resume chooser (D-090): a UI affordance / `/resume`, never an implicit resume.
-  // The inventory is fetched only while the modal is open; the current session's base repo
-  // orders + groups its sessions first.
-  const [resumeOpen, setResumeOpen] = useState(false);
-  // The managed-worktree switcher (D-091): a UI affordance / `/worktree` opens it; the host
-  // announces the worktrees on host.online, and switching routes the host-owned switch action.
-  const [worktreeOpen, setWorktreeOpen] = useState(false);
-  // The left-side session sidebar (D-093) is toggleable; starts collapsed (the upper-left dashboard
-  // icon opens it) and the choice persists across reloads.
-  const [sidebarOpen, setSidebarOpen] = useLocalStorageState<boolean>("trevor.sidebar", {
-    defaultValue: false,
-  });
-  // The session inventory powers the resume chooser, decorates worktree rows (activity/host), AND
-  // backs the session sidebar (D-093), so fetch it while any of those surfaces is open.
-  const inventory = useInventory(resumeOpen || worktreeOpen || sidebarOpen);
-  const resolvedProject = useMemo(() => {
-    const base = (host.workspace ?? host.cwd)?.split("/").filter(Boolean).pop();
-    if (base && base !== "~") {
-      return base;
-    }
-    // Right after a switch the new session replays before its host.online lands, so the live host
-    // carries no workspace for a couple of frames. Fall back to the viewed session's project from the
-    // (stable) inventory so the sidebar/resume lists never briefly flash the full cross-project set.
-    return inventory.sessions.find((s) => s.sessionId === target)?.project ?? null;
-  }, [host.workspace, host.cwd, inventory.sessions, target]);
-  // Sticky last-known project - the one-time fix for the "lists flash ALL sessions" class of glitch.
-  // A switch, `/clear` minting a brand-new session (not in the inventory yet), `/cd`, or a reload all
-  // leave the host workspace momentarily unannounced, so `resolvedProject` briefly goes null. Retaining
-  // the last value keeps the session lists (sidebar AND /resume, which both read currentProject) scoped
-  // through the gap instead of showing every project. Assigned during render (idempotent, safe); only
-  // ever null before any project is known at all (first load).
-  const lastKnownProjectRef = useRef<string | null>(null);
-  if (resolvedProject != null) {
-    lastKnownProjectRef.current = resolvedProject;
-  }
-  const currentProject = resolvedProject ?? lastKnownProjectRef.current;
-  const worktrees = useMemo(() => worktreesFrom(events), [events]);
-  // Cross-reference per-worktree-session activity from the inventory, so a worktree row can show
-  // "agents running" / "needs you" / host presence.
-  const worktreeActivity = useMemo(() => {
-    const map = new Map<string, { host: "live" | "stale" | "none"; activity: SessionActivity }>();
-    for (const s of inventory.sessions) {
-      map.set(s.sessionId, { host: s.host, activity: s.activity });
-    }
-    return map;
-  }, [inventory.sessions]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
   // The host-owned model sources + catalog (D-065): the real provider/runtime/subscription list with
   // auth state and each configured source's live model catalog. Empty until the host's first catalog
@@ -282,7 +236,11 @@ export function App() {
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
   const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
-  const active = useMemo(() => activeRunId(events), [events]);
+  const active = useMemo(() => activeTurnRunId(events), [events]);
+  const busy = active !== null || awaitingResponse;
+  // Modal, drawer, inventory, and project scoping state are one App-owned view boundary shared by
+  // /resume, /worktree, the left session sidebar, and the right details panel.
+  const modal = useModalState({ events, host, target, sessionId, busy });
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
   const archived = useMemo(() => isSessionArchived(events), [events]);
@@ -313,11 +271,6 @@ export function App() {
     () => panelModel(transcript, events, { replayed }),
     [transcript, events, replayed],
   );
-  // The right-side panel is toggleable; remember the choice across reloads.
-  const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("trevor.panel", {
-    defaultValue: true,
-  });
-
   // Immediate host commands the host announced, plus the set of names used to tell a
   // command from an ordinary prompt at submit time.
   const commands = useMemo(() => commandsFrom(events), [events]);
@@ -326,24 +279,7 @@ export function App() {
     return [...BUILT_IN_COMMANDS.filter((c) => !announced.has(c.name)), ...commands];
   }, [commands]);
   const commandNames = useMemo(() => new Set(commandSpecs.map((c) => c.name)), [commandSpecs]);
-  // Slash menu: open while the draft is a bare "/token" (no space yet) with matches,
-  // unless Esc dismissed it for exactly this text. menuIndex is the highlighted row. (inputRef is
-  // the composer textarea ref, owned by useComposer.)
-  const [menuIndex, setMenuIndex] = useState(0);
-  const [menuDismissedFor, setMenuDismissedFor] = useState<string | null>(null);
-  const slashQuery = draft.startsWith("/") && !draft.includes(" ") ? draft : null;
-  const menuMatches = useMemo(
-    () => (slashQuery ? commandSpecs.filter((c) => c.name.startsWith(slashQuery)) : []),
-    [slashQuery, commandSpecs],
-  );
-  const menuOpen = menuMatches.length > 0 && slashQuery !== null && draft !== menuDismissedFor;
-  const menuIdx = Math.min(menuIndex, menuMatches.length - 1);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset highlight when the filter changes.
-  useEffect(() => setMenuIndex(0), [slashQuery]);
-  const acceptCommand = (name: string) => {
-    setDraft(`${name} `);
-    inputRef.current?.focus();
-  };
+  const slashMenu = useSlashMenu({ draft, commandSpecs, inputRef, setDraft });
   // Focus the composer on load, once the session resolves and the input is enabled.
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
@@ -388,23 +324,11 @@ export function App() {
   // cleanly paired. ESC-steer prepends, so an interruption preempts what's waiting.
   // The reducer wiring + the in-flight/echo latch + the release/drain effects live in
   // useSendQueue; App.tsx calls submit/steer and renders the queue.
-  const busy = active !== null || awaitingResponse;
   const { pending, queue, submit, steer } = useSendQueue({ busy, publish, resetKey: sessionId });
   const visibleQueue = pending ? [pending, ...queue] : queue;
 
-  // The sidebar's live-activity overlay (D-093 M3): the browser only owns the VIEWED session's live
-  // state, so it overrides just that row - "running" while a turn is in flight - layered over the
-  // durable inventory activity the other rows project from their logs. Keeps the current session's
-  // run state immediate even before its assistant.started lands in the inventory read model.
-  const sidebarLiveActivity = useMemo(() => {
-    const map = new Map<string, SessionActivity>();
-    if (sessionId && busy) {
-      map.set(sessionId, "running");
-    }
-    return map;
-  }, [sessionId, busy]);
-
-  const activeProvider = provider ?? hostDefault ?? "qwen";
+  const firstAnnouncedProvider = Object.keys(hostModels)[0];
+  const activeProvider = provider ?? hostDefault ?? firstAnnouncedProvider ?? "default";
   // Before any host has announced (empty hostModels), there's no roster to show: fall back
   // to a neutral descriptor keyed by the active provider, so the picker renders one inert
   // entry and no reasoning control until host.online arrives and supplies the real roster.
@@ -503,7 +427,7 @@ export function App() {
       history.record(draft); // recall the bang command as typed (D-084)
       setDraft("");
       void shell(crypto.randomUUID(), bang.command);
-      setAtBottom(true); // re-pin: follow the shell block + its output down to the bottom
+      scroll.pinToBottom(); // re-pin: follow the shell block + its output down to the bottom
       return;
     }
     const text = draft.trim();
@@ -513,7 +437,7 @@ export function App() {
     if (text === "/resume" || text.startsWith("/resume ")) {
       history.resetNavigation();
       setDraft("");
-      setResumeOpen(true);
+      modal.setResumeOpen(true);
       return;
     }
     // `/worktree` is a browser-side UI command (D-091): it opens the worktree switcher; the actual
@@ -521,7 +445,7 @@ export function App() {
     if (text === "/worktree" || text.startsWith("/worktree ")) {
       history.resetNavigation();
       setDraft("");
-      setWorktreeOpen(true);
+      modal.setWorktreeOpen(true);
       return;
     }
     // A slash command (text only) routes to the immediate host lane. Otherwise a prompt
@@ -533,7 +457,7 @@ export function App() {
       history.resetNavigation();
       setDraft("");
       void command(cmd.command, cmd.args);
-      setAtBottom(true); // re-pin: follow the command + its result down to the bottom
+      scroll.pinToBottom(); // re-pin: follow the command + its result down to the bottom
       return;
     }
     if (!text && imageRefs.length === 0 && attachments.length === 0) {
@@ -556,7 +480,7 @@ export function App() {
     });
     // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
     // new item (the prompt when its event round-trips, then the streaming answer) and holds there.
-    setAtBottom(true);
+    scroll.pinToBottom();
   };
 
   // Slash-menu key handling on the composer, active only while the menu is open:
@@ -574,59 +498,36 @@ export function App() {
   };
 
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    const selected = menuOpen ? menuMatches[menuIdx] : undefined;
-    if (!selected) {
-      const el = event.currentTarget;
-      // Menu closed: in a textarea Enter inserts a newline, so submit explicitly. Enter
-      // sends; Shift+Enter keeps the newline (for multi-line prompts and quoted blocks).
-      if (event.key === "Enter" && !event.shiftKey) {
+    if (slashMenu.onMenuKeyDown(event)) {
+      return;
+    }
+
+    const el = event.currentTarget;
+    // Menu closed: in a textarea Enter inserts a newline, so submit explicitly. Enter
+    // sends; Shift+Enter keeps the newline (for multi-line prompts and quoted blocks).
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      el.form?.requestSubmit();
+      return;
+    }
+    // Prompt history recall (D-084). ArrowUp recalls the previous prompt from the first line (or an
+    // empty composer); ArrowDown steps forward while navigating, from the last line. Off the first/
+    // last line, multi-line editing keeps normal caret movement (no preventDefault).
+    const caret = el.selectionStart ?? 0;
+    if (event.key === "ArrowUp" && caretOnFirstLine(el.value, caret)) {
+      const recalled = history.recallPrev(draft);
+      if (recalled !== null) {
         event.preventDefault();
-        el.form?.requestSubmit();
-        return;
-      }
-      // Prompt history recall (D-084). ArrowUp recalls the previous prompt from the first line (or an
-      // empty composer); ArrowDown steps forward while navigating, from the last line. Off the first/
-      // last line, multi-line editing keeps normal caret movement (no preventDefault).
-      const caret = el.selectionStart ?? 0;
-      if (event.key === "ArrowUp" && caretOnFirstLine(el.value, caret)) {
-        const recalled = history.recallPrev(draft);
-        if (recalled !== null) {
-          event.preventDefault();
-          recallInto(el, recalled);
-        }
-        return;
-      }
-      if (event.key === "ArrowDown" && history.navigating && caretOnLastLine(el.value, caret)) {
-        const recalled = history.recallNext();
-        if (recalled !== null) {
-          event.preventDefault();
-          recallInto(el, recalled);
-        }
-        return;
+        recallInto(el, recalled);
       }
       return;
     }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setMenuIndex((i) => (i + 1) % menuMatches.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setMenuIndex((i) => (i - 1 + menuMatches.length) % menuMatches.length);
-    } else if (event.key === "Tab") {
-      event.preventDefault();
-      acceptCommand(selected.name);
-    } else if (event.key === "Enter" && !event.shiftKey) {
-      // Complete the highlighted command, or submit when it is already fully typed.
-      event.preventDefault();
-      if (selected.name !== draft) {
-        acceptCommand(selected.name);
-      } else {
-        event.currentTarget.form?.requestSubmit();
+    if (event.key === "ArrowDown" && history.navigating && caretOnLastLine(el.value, caret)) {
+      const recalled = history.recallNext();
+      if (recalled !== null) {
+        event.preventDefault();
+        recallInto(el, recalled);
       }
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      setMenuDismissedFor(draft);
     }
   };
 
@@ -663,7 +564,7 @@ export function App() {
   // from a ref so it never goes stale and works regardless of which element has focus.
   // A modal/picker/takeover (model chooser, resume, worktree switcher) owns Escape while open -
   // it closes itself, and the turn on the transcript behind it must NOT be cancelled.
-  const modalOpen = chooserOpen || resumeOpen || worktreeOpen;
+  const modalOpen = chooserOpen || modal.resumeOpen || modal.worktreeOpen;
   const escRef = useRef({
     active,
     awaiting: awaitingResponse,
@@ -710,62 +611,6 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  // The transcript well is a normal top-down column (D-086): an empty or short session sits at the
-  // TOP padding and appends downward, instead of bottom-aligning above the composer. "At the live
-  // edge" is therefore the distance from the BOTTOM (scrollHeight - clientHeight - scrollTop within
-  // tolerance), not scrollTop 0 - see scroll.ts. We follow the bottom only while already pinned, so
-  // streaming output never yanks the viewport when the user has scrolled up; a jump-to-bottom chevron
-  // shows when away from the edge and scrolls back down.
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  const [atBottom, setAtBottom] = useState(true);
-  const [bottomRequestId, setBottomRequestId] = useState(0);
-  const atBottomRef = useRef(atBottom);
-  atBottomRef.current = atBottom;
-  const userScrollIntentUntilRef = useRef(0);
-  const onUserScrollIntent = () => {
-    userScrollIntentUntilRef.current = performance.now() + 700;
-    const el = transcriptRef.current;
-    if (el && !atBottomOf(el)) {
-      setAtBottom(false);
-    }
-  };
-  const onTranscriptScroll = () => {
-    const el = transcriptRef.current;
-    if (!el) {
-      return;
-    }
-    if (atBottomOf(el)) {
-      setAtBottom(true);
-      return;
-    }
-    const userIsScrolling = performance.now() <= userScrollIntentUntilRef.current;
-    if (userIsScrolling || !atBottomRef.current) {
-      setAtBottom(false);
-    }
-  };
-  const scrollToBottom = () => {
-    setAtBottom(true);
-    userScrollIntentUntilRef.current = 0;
-    setBottomRequestId((id) => id + 1);
-  };
-
-  // Unseen-content glow for the jump-to-bottom chevron: while the user is scrolled up, transcript
-  // content that appended below the fold (a new turn, a streamed reply) glows the chevron so it reads
-  // as "new below". Reaching the bottom marks everything seen and clears it - two states, plain
-  // (away from the edge) and glowing (away + unseen). Counts coalesced messages, so a new turn or a
-  // freshly-started assistant row trips it; submitting re-pins to the bottom, so your own prompt never
-  // glows. Seeds from the current length so the very first paint never glows.
-  const [hasUnseen, setHasUnseen] = useState(false);
-  const seenCountRef = useRef(transcript.length);
-  useEffect(() => {
-    if (atBottom) {
-      seenCountRef.current = transcript.length;
-      setHasUnseen(false);
-    } else if (transcript.length > seenCountRef.current) {
-      setHasUnseen(true);
-    }
-  }, [atBottom, transcript.length]);
 
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
@@ -844,7 +689,7 @@ export function App() {
     <>
       <button
         type="button"
-        onClick={() => setResumeOpen(true)}
+        onClick={() => modal.setResumeOpen(true)}
         title="Resume a session (/resume)"
         aria-label="Resume a session"
         className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
@@ -852,10 +697,10 @@ export function App() {
         <History className="size-3" />
         resume
       </button>
-      {worktrees.length > 0 ? (
+      {modal.worktrees.length > 0 ? (
         <button
           type="button"
-          onClick={() => setWorktreeOpen(true)}
+          onClick={() => modal.setWorktreeOpen(true)}
           title="Switch worktree (/worktree)"
           aria-label="Switch worktree"
           className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
@@ -893,11 +738,11 @@ export function App() {
       compose={{
         onSubmit,
         onInputKeyDown,
-        menuOpen,
-        menuMatches,
-        menuIndex: menuIdx,
-        slashQuery,
-        acceptCommand,
+        menuOpen: slashMenu.menuOpen,
+        menuMatches: slashMenu.menuMatches,
+        menuIndex: slashMenu.menuIndex,
+        slashQuery: slashMenu.slashQuery,
+        acceptCommand: slashMenu.acceptCommand,
         disabled: !sessionId,
         placeholder: `message ${activeLabel}… (/ for commands, ! for shell)`,
       }}
@@ -915,22 +760,14 @@ export function App() {
         turnStartedAt,
         queue: visibleQueue,
       }}
-      scroll={{
-        transcriptRef,
-        atBottom,
-        hasUnseen,
-        bottomRequestId,
-        onScroll: onTranscriptScroll,
-        onUserScrollIntent,
-        scrollToBottom,
-      }}
+      scroll={scroll}
       tasks={tasks}
       panel={{
         // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
         // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
-        open: Boolean(panelOpen),
-        onOpen: () => setPanelOpen(true),
-        onClose: () => setPanelOpen(false),
+        open: modal.panelOpen,
+        onOpen: () => modal.setPanelOpen(true),
+        onClose: () => modal.setPanelOpen(false),
         title: target,
         subtitle: `${status}${replayed ? " · replayed" : ""} · ${events.length} events`,
         statusNode,
@@ -942,24 +779,29 @@ export function App() {
         ready: replayed,
       }}
       choosers={{
-        resumeOpen,
-        setResumeOpen,
-        worktreeOpen,
-        setWorktreeOpen,
-        inventory,
-        resumeContext: { currentSessionId: sessionId, currentProject, busy, nowMs: now },
+        resumeOpen: modal.resumeOpen,
+        setResumeOpen: modal.setResumeOpen,
+        worktreeOpen: modal.worktreeOpen,
+        setWorktreeOpen: modal.setWorktreeOpen,
+        inventory: modal.inventory,
+        resumeContext: {
+          currentSessionId: sessionId,
+          currentProject: modal.currentProject,
+          busy,
+          nowMs: now,
+        },
         onResume: navigateToSession,
-        worktrees,
-        worktreeContext: { activityBySession: worktreeActivity, busy },
+        worktrees: modal.worktrees,
+        worktreeContext: { activityBySession: modal.worktreeActivity, busy },
         onSwitchWorktree: (id) => void command("/worktree-switch", id),
       }}
       sidebar={{
-        open: sidebarOpen,
-        onOpen: () => setSidebarOpen(true),
-        onClose: () => setSidebarOpen(false),
-        sessions: inventory.sessions,
+        open: modal.sidebarOpen,
+        onOpen: () => modal.setSidebarOpen(true),
+        onClose: () => modal.setSidebarOpen(false),
+        sessions: modal.inventory.sessions,
         currentSessionId: target,
-        currentProject,
+        currentProject: modal.currentProject,
         // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
         // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
         // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
@@ -968,7 +810,7 @@ export function App() {
         onRename: (id, title) => void renameSession(id, title),
         onArchive: (id) => void archiveSession(id),
         onDelete: (id) => void deleteSession(id),
-        liveActivity: sidebarLiveActivity,
+        liveActivity: modal.sidebarLiveActivity,
         nowMs: now,
       }}
       sessionName={sessionName}

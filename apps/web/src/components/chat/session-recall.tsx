@@ -1,6 +1,6 @@
 import { type RecallResult, relativeTime } from "@trevor/session";
 import { cn } from "@/lib/utils";
-import { ToolCall, WorkingIndicator } from "./message";
+import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
 /**
@@ -50,33 +50,25 @@ export function SessionRecallResults({
   defaultOpen = true,
   className,
 }: SessionRecallResultsProps) {
-  // Still streaming / no decodable result yet: a working indicator (unless an error already landed).
-  if (status === "running" && !result) {
-    return (
-      <ToolCall
-        name="session_recall"
-        args={query}
-        status="running"
-        defaultOpen={defaultOpen}
-        className={className}
-      >
-        <WorkingIndicator label="recalling" />
-      </ToolCall>
-    );
-  }
+  const error =
+    status === "running" && !result
+      ? null
+      : !result || result.status === "error"
+        ? `Recall failed: ${result?.diagnostics.find((d) => d.detail)?.detail ?? "recall failed"}`
+        : null;
 
-  if (!result || result.status === "error") {
-    const detail = result?.diagnostics.find((d) => d.detail)?.detail ?? "recall failed";
+  if (error || !result) {
     return (
-      <ToolCall
+      <StatusAwareToolRenderer
         name="session_recall"
         args={query}
-        status="error"
+        status={status}
+        error={error}
+        running={status === "running" && !result}
+        runningLabel="recalling"
         defaultOpen={defaultOpen}
         className={className}
-      >
-        <span className="text-sm text-smui-red">Recall failed: {detail}</span>
-      </ToolCall>
+      />
     );
   }
 
@@ -92,67 +84,68 @@ export function SessionRecallResults({
   const resolvedStatus: ToolStatus = result.status === "invalid_filters" ? "error" : status;
 
   return (
-    <ToolCall
+    <StatusAwareToolRenderer
       name="session_recall"
       args={query}
       status={resolvedStatus}
       defaultOpen={defaultOpen}
       className={className}
       sectionTitle={<span className="text-muted-foreground">{activityLine(result)}</span>}
-    >
-      <section className="flex flex-col gap-2.5" aria-label="session recall result">
-        <span className="text-label tracking-wider text-muted-foreground/70">
-          {activityLine(result)}
-        </span>
-
-        {note ? (
-          <span
-            className={cn(
-              "text-sm italic",
-              result.status === "invalid_filters" ? "text-smui-red" : "text-muted-foreground",
-            )}
-          >
-            {note}
+      renderBody={() => (
+        <section className="flex flex-col gap-2.5" aria-label="session recall result">
+          <span className="text-label tracking-wider text-muted-foreground/70">
+            {activityLine(result)}
           </span>
-        ) : null}
 
-        {result.findings.length > 0 ? (
-          <section className="flex flex-col gap-1.5" aria-label="recall findings">
-            {result.findings.map((finding) => (
-              <p key={finding.summary.slice(0, 40)} className="text-sm text-foreground">
-                {finding.summary}
-              </p>
-            ))}
-          </section>
-        ) : null}
+          {note ? (
+            <span
+              className={cn(
+                "text-sm italic",
+                result.status === "invalid_filters" ? "text-smui-red" : "text-muted-foreground",
+              )}
+            >
+              {note}
+            </span>
+          ) : null}
 
-        {result.sources.length > 0 ? (
-          <ol className="flex flex-col gap-2" aria-label="recall sources">
-            {result.sources.map((source, i) => (
-              <li key={source.id} className="flex flex-col gap-0.5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="inline-flex items-baseline gap-1.5 truncate text-sm font-medium text-foreground">
-                    <span className="shrink-0 text-label tracking-wider text-smui-frost-3/80">
-                      S{i + 1}
+          {result.findings.length > 0 ? (
+            <section className="flex flex-col gap-1.5" aria-label="recall findings">
+              {result.findings.map((finding) => (
+                <p key={finding.summary.slice(0, 40)} className="text-sm text-foreground">
+                  {finding.summary}
+                </p>
+              ))}
+            </section>
+          ) : null}
+
+          {result.sources.length > 0 ? (
+            <ol className="flex flex-col gap-2" aria-label="recall sources">
+              {result.sources.map((source, i) => (
+                <li key={source.id} className="flex flex-col gap-0.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="inline-flex items-baseline gap-1.5 truncate text-sm font-medium text-foreground">
+                      <span className="shrink-0 text-label tracking-wider text-smui-frost-3/80">
+                        S{i + 1}
+                      </span>
+                      <span className="truncate">{source.sessionLabel}</span>
                     </span>
-                    <span className="truncate">{source.sessionLabel}</span>
-                  </span>
-                  <span className="shrink-0 text-label tracking-wider text-muted-foreground/70">
-                    {KIND_LABEL[source.kind]} · {relativeTime(source.timestamp, nowMs)}
-                  </span>
-                </div>
-                <p className="line-clamp-2 text-xs text-muted-foreground">{source.excerpt}</p>
-              </li>
-            ))}
-          </ol>
-        ) : null}
+                    <span className="shrink-0 text-label tracking-wider text-muted-foreground/70">
+                      {KIND_LABEL[source.kind]} · {relativeTime(source.timestamp, nowMs)}
+                    </span>
+                  </div>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">{source.excerpt}</p>
+                </li>
+              ))}
+            </ol>
+          ) : null}
 
-        {result.diagnostics.length > 0 && result.status === "partial" ? (
-          <span className="text-xs italic text-smui-yellow/90">
-            Partial search: {result.diagnostics.map((d) => d.detail).join("; ")}
-          </span>
-        ) : null}
-      </section>
-    </ToolCall>
+          {result.diagnostics.length > 0 && result.status === "partial" ? (
+            <span className="text-xs italic text-smui-yellow/90">
+              Partial search: {result.diagnostics.map((d) => d.detail).join("; ")}
+            </span>
+          ) : null}
+        </section>
+      )}
+    />
   );
 }

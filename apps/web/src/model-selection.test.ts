@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
-import type { ProviderModel } from "@trevor/session";
+import { EMPTY_PREFERENCES, type ProviderModel, selectModel } from "@trevor/session";
 import { test } from "vitest";
-import {
-  catalogFromRoster,
-  legacyActiveRef,
-  reasoningSurfaceOf,
-  rosterLabels,
-  sourcesFromRoster,
-} from "./model-selection";
+import { buildModelSelection, legacyToCatalog } from "./model-selection";
 
 /**
  * D-065 M3: the migration projection from the legacy provider roster (host.online `models`) into the
@@ -32,54 +26,118 @@ const roster: Record<string, ProviderModel> = {
   },
 };
 
-test("sourcesFromRoster makes one ready source per provider, typed by run location", () => {
-  const sources = sourcesFromRoster(roster);
-  assert.deepEqual(
-    sources.map((s) => ({ id: s.sourceId, type: s.type, status: s.status, count: s.modelCount })),
-    [
-      { id: "qwen", type: "local", status: "ready", count: 1 },
-      { id: "deepseek", type: "api-key", status: "ready", count: 1 },
+test("legacyToCatalog bridges roster labels and legacy operations onto host catalog data", () => {
+  const hostSources = [
+    {
+      sourceId: "zai",
+      type: "api-key" as const,
+      label: "Z.ai",
+      status: "ready" as const,
+      modelCount: 1,
+      auth: "authenticated" as const,
+      freshness: { refreshedAt: null, stale: false },
+      actions: [],
+    },
+  ];
+  const hostCatalog = {
+    zai: [
+      {
+        sourceId: "zai",
+        modelId: "glm-5.2",
+        displayName: "GLM-5.2",
+        kind: "cloud" as const,
+        capabilities: ["reasoning"],
+        contextLength: 200000,
+        costTier: null,
+        aliases: [],
+        freshness: { refreshedAt: null, stale: false },
+        reasoningLevels: ["off", "high"],
+        defaultReasoning: "high",
+      },
     ],
-  );
-});
+  };
 
-test("catalogFromRoster projects one catalog entry per provider via the bridge", () => {
-  const catalog = catalogFromRoster(roster);
-  assert.deepEqual(Object.keys(catalog), ["qwen", "deepseek"]);
-  const [entry] = catalog.deepseek ?? [];
-  assert.equal(entry?.modelId, "deepseek-v4");
-  assert.equal(entry?.displayName, "DeepSeek V4 Pro");
-  assert.equal(entry?.kind, "cloud");
+  const bridge = legacyToCatalog(roster, hostSources, hostCatalog);
+
   assert.deepEqual(
-    entry?.capabilities,
-    ["reasoning"],
-    "multiple reasoning levels -> reasoning cap",
+    bridge.sources.map((s) => s.sourceId),
+    ["zai"],
+    "host sources are not replaced with fake roster-projected sources",
   );
-});
-
-test("reasoningSurfaceOf returns the model's levels + default, empty for an unknown source", () => {
-  assert.deepEqual(reasoningSurfaceOf(roster, { sourceId: "deepseek" }), {
+  assert.equal(bridge.catalogBySource.zai?.[0]?.modelId, "glm-5.2");
+  assert.equal(bridge.sourceLabels.qwen, "Qwen3 Coder");
+  assert.equal(bridge.sourceLabels.zai, "Z.ai");
+  assert.equal(bridge.modelLabels["deepseek-v4"], "DeepSeek V4 Pro");
+  assert.equal(bridge.modelLabels["glm-5.2"], "GLM-5.2");
+  assert.deepEqual(bridge.reasoningSurface({ sourceId: "deepseek" }), {
     levels: ["off", "high", "xhigh"],
     default: "high",
   });
-  assert.deepEqual(reasoningSurfaceOf(roster, { sourceId: "ghost" }), {
+  assert.deepEqual(bridge.reasoningSurface({ sourceId: "ghost" }), {
     levels: [],
     default: "off",
   });
-});
-
-test("rosterLabels maps source ids and model ids to their display labels", () => {
-  const { sourceLabels, modelLabels } = rosterLabels(roster);
-  assert.equal(sourceLabels.qwen, "Qwen3 Coder");
-  assert.equal(modelLabels["deepseek-v4"], "DeepSeek V4 Pro");
-});
-
-test("legacyActiveRef projects the current provider+reasoning selection, null before the roster", () => {
-  assert.deepEqual(legacyActiveRef(roster, "deepseek", "xhigh"), {
+  assert.deepEqual(bridge.legacyActiveRef("deepseek", "xhigh"), {
     sourceId: "deepseek",
     modelId: "deepseek-v4",
     reasoning: "xhigh",
   });
-  // Before host.online (empty roster) there is no model id to resolve, so callers fall back.
-  assert.equal(legacyActiveRef({}, "deepseek", "high"), null);
+  assert.equal(legacyToCatalog({}, [], {}).legacyActiveRef("deepseek", "high"), null);
+});
+
+test("buildModelSelection derives the chooser read model from preferences plus host catalog", () => {
+  const preferences = selectModel(
+    EMPTY_PREFERENCES,
+    { sourceId: "zai", modelId: "glm-5.2", reasoning: "high" },
+    { levels: ["off", "high"], default: "high" },
+  );
+  const hostSources = [
+    {
+      sourceId: "zai",
+      type: "api-key" as const,
+      label: "Z.ai",
+      status: "ready" as const,
+      modelCount: 1,
+      auth: "authenticated" as const,
+      freshness: { refreshedAt: null, stale: false },
+      actions: [],
+    },
+  ];
+  const hostCatalog = {
+    zai: [
+      {
+        sourceId: "zai",
+        modelId: "glm-5.2",
+        displayName: "GLM-5.2",
+        kind: "cloud" as const,
+        capabilities: ["reasoning"],
+        contextLength: 200000,
+        costTier: null,
+        aliases: [],
+        freshness: { refreshedAt: null, stale: false },
+        reasoningLevels: ["off", "high"],
+        defaultReasoning: "high",
+      },
+    ],
+  };
+
+  const selection = buildModelSelection({
+    preferences,
+    roster,
+    hostSources,
+    hostCatalog,
+    legacyProvider: "qwen",
+    legacyReasoning: "low",
+  });
+
+  assert.equal(selection.active?.sourceId, "zai");
+  assert.equal(selection.activeLabel, "GLM-5.2");
+  assert.deepEqual(
+    selection.sources.map((s) => s.sourceId),
+    ["zai"],
+  );
+  assert.equal(selection.sourceLabels.qwen, "Qwen3 Coder");
+  assert.equal(selection.sourceLabels.zai, "Z.ai");
+  assert.equal(selection.quickGroups[0]?.sourceId, "zai");
+  assert.equal(selection.recentKeys.has("zai/glm-5.2"), true);
 });

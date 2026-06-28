@@ -1,5 +1,5 @@
 import type { SessionActivity, WorktreeSummary } from "@trevor/session";
-import type { CommandRow, RowTone } from "@/components/command-modal";
+import type { CommandRow, RowChooserAdapter, RowTone } from "@/components/command-modal";
 
 /** Per-session activity decoration, cross-referenced from the resume inventory when available. */
 export interface WorktreeActivity {
@@ -13,6 +13,20 @@ export interface WorktreeRowsContext {
   /** Whether the current workspace has a turn in flight (switching is blocked while busy). */
   readonly busy: boolean;
 }
+
+/** The worktree switcher's fixed chrome + row projection. */
+export const WORKTREE_CHOOSER: RowChooserAdapter<readonly WorktreeSummary[], WorktreeRowsContext> =
+  {
+    title: "Switch worktree",
+    placeholder: "Search worktrees…",
+    emptyLabel: "No worktrees",
+    footerHints: [
+      { keys: "↑↓", label: "navigate" },
+      { keys: "↵", label: "switch" },
+      { keys: "esc", label: "close" },
+    ],
+    buildRows: buildWorktreeRows,
+  };
 
 /** A compact `dirty ↑a ↓b` / `conflict` delta string for a worktree's git state. */
 function deltaText(s: WorktreeSummary): string {

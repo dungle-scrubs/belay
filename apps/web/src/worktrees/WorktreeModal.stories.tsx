@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { WorktreeSummary } from "@trevor/session";
-import { WorktreeModal } from "./WorktreeModal";
-import type { WorktreeActivity } from "./worktree-rows";
+import { RowChooserModal } from "@/components/command-modal";
+import { WORKTREE_CHOOSER, type WorktreeActivity, type WorktreeRowsContext } from "./worktree-rows";
 
 /**
  * The managed-worktree switcher over the shared command modal (D-091), driven by host-summary
@@ -67,9 +67,28 @@ const activity = new Map<string, WorktreeActivity>([
   ["s-d", { host: "live", activity: "idle" }], // needs you
 ]);
 
+function WorktreeChooserStory(props: {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onSwitch: (id: string) => void;
+  readonly worktrees: readonly WorktreeSummary[];
+  readonly context: WorktreeRowsContext;
+}) {
+  return (
+    <RowChooserModal
+      adapter={WORKTREE_CHOOSER}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      data={props.worktrees}
+      context={props.context}
+      onSelect={props.onSwitch}
+    />
+  );
+}
+
 const meta = {
   title: "Worktrees/WorktreeModal",
-  component: WorktreeModal,
+  component: WorktreeChooserStory,
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
@@ -85,7 +104,7 @@ const meta = {
     worktrees,
     context: { activityBySession: activity, busy: false },
   },
-} satisfies Meta<typeof WorktreeModal>;
+} satisfies Meta<typeof WorktreeChooserStory>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -112,9 +112,57 @@ export function CommandModal({
                 {!showList ? <CommandEmpty>{emptyLabel}</CommandEmpty> : null}
                 {groups.map((group) => (
                   <CommandGroup key={group.heading ?? "_"} heading={group.heading ?? undefined}>
-                    {group.rows.map((row) => (
-                      <CommandModalRow key={row.id} row={row} onSelect={onSelect} />
-                    ))}
+                    {group.rows.map((row) => {
+                      const disabled = row.disabledReason != null;
+                      return (
+                        <CommandItem
+                          key={row.id}
+                          value={row.id}
+                          keywords={row.keywords as string[] | undefined}
+                          disabled={disabled}
+                          onSelect={() => {
+                            if (!disabled) {
+                              onSelect(row.id);
+                            }
+                          }}
+                          title={disabled ? row.disabledReason : undefined}
+                          className="items-start gap-3"
+                        >
+                          <span className="mt-0.5 flex w-3 shrink-0 justify-center">
+                            {row.marker ??
+                              (row.current ? (
+                                <span
+                                  role="img"
+                                  aria-label="current"
+                                  className="size-1.5 rounded-full bg-smui-frost-3"
+                                />
+                              ) : null)}
+                          </span>
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate text-foreground">{row.label}</span>
+                            {row.metadata ? (
+                              <span className="truncate text-xs text-muted-foreground">
+                                {row.metadata}
+                              </span>
+                            ) : null}
+                          </span>
+                          {disabled ? (
+                            <span className="shrink-0 text-xs text-muted-foreground italic">
+                              {row.disabledReason}
+                            </span>
+                          ) : row.status ? (
+                            <span
+                              className={cn(
+                                "shrink-0 text-xs tabular-nums",
+                                toneClass(row.statusTone),
+                              )}
+                            >
+                              {row.status}
+                            </span>
+                          ) : null}
+                        </CommandItem>
+                      );
+                    })}
                   </CommandGroup>
                 ))}
               </>
@@ -131,54 +179,5 @@ export function CommandModal({
         </Command>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** One rendered row: marker, label + metadata, right-aligned status / disabled reason. */
-function CommandModalRow({
-  row,
-  onSelect,
-}: {
-  readonly row: CommandRow;
-  readonly onSelect: (id: string) => void;
-}) {
-  const disabled = row.disabledReason != null;
-  return (
-    <CommandItem
-      value={row.id}
-      keywords={row.keywords as string[] | undefined}
-      disabled={disabled}
-      onSelect={() => {
-        if (!disabled) {
-          onSelect(row.id);
-        }
-      }}
-      title={disabled ? row.disabledReason : undefined}
-      className="items-start gap-3"
-    >
-      <span className="mt-0.5 flex w-3 shrink-0 justify-center">
-        {row.marker ??
-          (row.current ? (
-            <span
-              role="img"
-              aria-label="current"
-              className="size-1.5 rounded-full bg-smui-frost-3"
-            />
-          ) : null)}
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-foreground">{row.label}</span>
-        {row.metadata ? (
-          <span className="truncate text-xs text-muted-foreground">{row.metadata}</span>
-        ) : null}
-      </span>
-      {disabled ? (
-        <span className="shrink-0 text-xs text-muted-foreground italic">{row.disabledReason}</span>
-      ) : row.status ? (
-        <span className={cn("shrink-0 text-xs tabular-nums", toneClass(row.statusTone))}>
-          {row.status}
-        </span>
-      ) : null}
-    </CommandItem>
   );
 }

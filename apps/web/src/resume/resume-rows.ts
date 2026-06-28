@@ -1,5 +1,5 @@
 import { relativeTime, type SessionSummary } from "@trevor/session";
-import type { CommandRow, RowTone } from "@/components/command-modal";
+import type { CommandRow, RowChooserAdapter, RowTone } from "@/components/command-modal";
 
 /** The current project / session context the resume rows are projected against. */
 export interface ResumeContext {
@@ -12,6 +12,19 @@ export interface ResumeContext {
   /** Wall clock for relative-time labels. */
   readonly nowMs: number;
 }
+
+/** The resume chooser's fixed chrome + row projection. */
+export const RESUME_CHOOSER: RowChooserAdapter<readonly SessionSummary[], ResumeContext> = {
+  title: "Resume session",
+  placeholder: "Search sessions…",
+  emptyLabel: "No sessions found",
+  footerHints: [
+    { keys: "↑↓", label: "navigate" },
+    { keys: "↵", label: "resume" },
+    { keys: "esc", label: "close" },
+  ],
+  buildRows: buildResumeRows,
+};
 
 /** The right-aligned status text + tone for one session, from host presence + activity. */
 function statusFor(s: SessionSummary): { status: string; tone: RowTone } {

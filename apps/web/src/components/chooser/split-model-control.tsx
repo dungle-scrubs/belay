@@ -87,7 +87,7 @@ export function SplitModelControl({
   );
 }
 
-export interface QuickPickerContentProps {
+interface QuickPickerContentProps {
   readonly groups: readonly QuickPickerGroup[];
   readonly sourceLabels?: Readonly<Record<string, string>>;
   readonly modelLabels?: Readonly<Record<string, string>>;
@@ -97,10 +97,9 @@ export interface QuickPickerContentProps {
 
 /**
  * The quick-picker popover body: the recently-used models, grouped by source and categorized with a
- * header per source. Small and bounded (the recent list is capped), never the full catalog. Exported
- * so its contents are unit-tested directly without driving the radix popover open.
+ * header per source. Small and bounded (the recent list is capped), never the full catalog.
  */
-export function QuickPickerContent({
+function QuickPickerContent({
   groups,
   sourceLabels,
   modelLabels,

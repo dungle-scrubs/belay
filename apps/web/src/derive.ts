@@ -1,4 +1,5 @@
 import {
+  activeTurnRunId,
   type CatalogEntry,
   type CommandSpec,
   type DecodedEvent,
@@ -38,37 +39,6 @@ function latest<T>(
  * typed shape via `decodeTrevorEvent`, so none of them hand-guard raw payloads.
  */
 
-/**
- * The run currently in flight, or null. The host runs ONE turn at a time, so only the MOST
- * RECENT run can still be active: it's in flight iff the last `assistant.started` has no matching
- * `assistant.completed`. An older started-without-completion (a turn whose host crashed or was
- * interrupted before it could emit a completion) is a dead ORPHAN - it must not count, or `busy`
- * would latch forever and the local send queue would never drain (queued prompts stuck dimmed).
- * A `/clear` resets the detection too, mirroring the transcript: no pre-clear run is active after it.
- * Drives whether ESC cancels and which runId to target.
- */
-export function activeRunId(events: readonly SessionEvent[]): string | null {
-  const completed = new Set<string>();
-  let lastStarted: string | null = null;
-
-  for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
-    if (!decoded) {
-      continue;
-    }
-    if (decoded.type === "user.command" && decoded.command === "/clear") {
-      lastStarted = null;
-      completed.clear();
-    } else if (decoded.type === "assistant.started") {
-      lastStarted = decoded.runId;
-    } else if (decoded.type === "assistant.completed") {
-      completed.add(decoded.runId);
-    }
-  }
-
-  return lastStarted && !completed.has(lastStarted) ? lastStarted : null;
-}
-
 /** Compact token count: 6100 -> "6.1k", 812 -> "812". */
 export function fmtTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
@@ -86,13 +56,6 @@ export function fmtCtx(n: number): string {
   }
 
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
-}
-
-/** Whether a host error string looks like a context-overflow / token-limit failure. */
-export function isOverflowError(error: string): boolean {
-  return /context|token limit|too long|too many tokens|maximum.*(context|tokens)|reduce the (length|size)/i.test(
-    error,
-  );
 }
 
 /** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
@@ -383,7 +346,7 @@ export function parseCommand(
  * indicator only while busy, so a stale trailing user.message from an idle conversation is unused.
  */
 export function activeTurnStartedAt(events: readonly SessionEvent[]): number | null {
-  const runId = activeRunId(events);
+  const runId = activeTurnRunId(events);
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
     if (!event) {

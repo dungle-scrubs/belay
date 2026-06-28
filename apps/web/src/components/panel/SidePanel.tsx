@@ -13,7 +13,7 @@ const fmtTok = (n: number): string =>
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;
 
-export interface SidePanelProps {
+export interface SidePanelHeaderProps {
   /** Session name, shown as the panel title. */
   readonly title: string;
   /** Secondary line under the title (status, time, …). */
@@ -24,6 +24,13 @@ export interface SidePanelProps {
   readonly workspace?: string;
   /** Structured git status for the workspace, rendered as the branch/status line under cwd. */
   readonly git?: GitStatus | null;
+  /** Count of other managed worktrees; drives the `+N worktrees` link under the branch. */
+  readonly worktreeCount?: number;
+  /** Opens the worktree switcher from the workspace block (same as `/worktree`). */
+  readonly onOpenWorktrees?: () => void;
+}
+
+export interface SidePanelBreakdownProps {
   /** Tokens consumed by the latest call (its input), for the context meter. */
   readonly ctxUsed?: number;
   /** Context-window size for the latest call (the maximum), for the context meter. */
@@ -35,6 +42,16 @@ export interface SidePanelProps {
   readonly contextBreakdown?: UsageBreakdown;
   /** Total tokens across all requests in the current context window. */
   readonly contextTokens?: number;
+  /**
+   * Whether the session has finished its initial replay. Transitions stay off until
+   * this is true so a refresh - where data streams in event by event - settles into
+   * place without animating; only live changes after load glide. Defaults to true so
+   * static usages (e.g. stories) animate normally.
+   */
+  readonly ready?: boolean;
+}
+
+export interface SidePanelProps {
   /** Model / reasoning controls, injected by the host so the panel stays presentational. */
   readonly controls?: ReactNode;
   /** Session affordances (resume / worktree / session id) pinned inline at the panel's bottom. */
@@ -47,6 +64,7 @@ export interface SidePanelProps {
    */
   readonly ready?: boolean;
   readonly onClose?: () => void;
+  readonly children?: ReactNode;
 }
 
 /**
@@ -54,31 +72,7 @@ export interface SidePanelProps {
  * "data in this call" token treemap, and (at the bottom) the model controls.
  * Presentational - the live app feeds it derived state and the controls slot.
  */
-export function SidePanel({
-  title,
-  subtitle,
-  statusNode,
-  workspace,
-  git,
-  ctxUsed,
-  ctxMax,
-  totalTokens,
-  breakdown,
-  contextBreakdown,
-  contextTokens,
-  controls,
-  footer,
-  ready = true,
-  onClose,
-}: SidePanelProps) {
-  const [tab, setTab] = useState<"request" | "context">("request");
-  const activeTotal = tab === "request" ? totalTokens : contextTokens;
-
-  // The ctx meter snaps to its value on first appearance and through the initial
-  // replay; only live updates once the session is ready glide.
-  const showMeter = ctxUsed != null && ctxMax != null && ctxMax > 0;
-  const meterArmed = useArmedAfterMount(ready && showMeter);
-
+export function SidePanel({ controls, footer, onClose, children }: SidePanelProps) {
   return (
     <SideDrawer
       side="right"
@@ -97,70 +91,7 @@ export function SidePanel({
       ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <div className="min-w-0">
-          <h2 className="truncate font-semibold text-foreground">{title}</h2>
-          {subtitle ? (
-            <p className="truncate text-label tracking-wider text-muted-foreground">{subtitle}</p>
-          ) : null}
-        </div>
-
-        {statusNode ? <div className="text-label tracking-wider">{statusNode}</div> : null}
-
-        {workspace ? <WorkspaceIdentity cwd={workspace} git={git} /> : null}
-
-        {showMeter ? (
-          <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
-            <span className="shrink-0 text-muted-foreground">ctx</span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-              <div
-                className={`h-full rounded-full bg-primary${
-                  meterArmed ? " transition-[width] duration-300 ease-out" : ""
-                }`}
-                style={{ width: `${Math.min(100, pct(ctxUsed, ctxMax))}%` }}
-              />
-            </div>
-            <span className="shrink-0 tabular-nums text-muted-foreground">
-              <span className="text-foreground">{pct(ctxUsed, ctxMax)}%</span> of {fmtCtx(ctxMax)}
-            </span>
-          </div>
-        ) : null}
-
-        <section>
-          <Tabs value={tab} onValueChange={(v) => setTab(v as "request" | "context")}>
-            <div className="flex items-center justify-between gap-2">
-              <TabsList>
-                <TabsTrigger value="request" title="This turn">
-                  turn
-                </TabsTrigger>
-                <TabsTrigger value="context" title="All turns in the current session">
-                  session
-                </TabsTrigger>
-              </TabsList>
-              {activeTotal != null ? (
-                <span className="text-label tracking-wider text-muted-foreground">
-                  {fmtTok(activeTotal)} tok
-                </span>
-              ) : null}
-            </div>
-
-            <TabsContent value="request">
-              <BreakdownView
-                breakdown={breakdown}
-                totalTokens={totalTokens}
-                emptyLabel="No turn data yet"
-                ready={ready}
-              />
-            </TabsContent>
-            <TabsContent value="context">
-              <BreakdownView
-                breakdown={contextBreakdown}
-                totalTokens={contextTokens}
-                emptyLabel="No session data yet"
-                ready={ready}
-              />
-            </TabsContent>
-          </Tabs>
-        </section>
+        {children}
 
         {controls || footer ? (
           <div className="mt-auto flex flex-col gap-2 border-t border-border pt-3">
@@ -172,6 +103,114 @@ export function SidePanel({
         ) : null}
       </div>
     </SideDrawer>
+  );
+}
+
+export function SidePanelHeader({
+  title,
+  subtitle,
+  statusNode,
+  workspace,
+  git,
+  worktreeCount,
+  onOpenWorktrees,
+}: SidePanelHeaderProps) {
+  return (
+    <>
+      <div className="min-w-0">
+        <h2 className="truncate font-semibold text-foreground">{title}</h2>
+        {subtitle ? (
+          <p className="truncate text-label tracking-wider text-muted-foreground">{subtitle}</p>
+        ) : null}
+      </div>
+
+      {statusNode ? <div className="text-label tracking-wider">{statusNode}</div> : null}
+
+      {workspace ? (
+        <WorkspaceIdentity
+          cwd={workspace}
+          git={git}
+          worktreeCount={worktreeCount}
+          onOpenWorktrees={onOpenWorktrees}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export function SidePanelBreakdown({
+  ctxUsed,
+  ctxMax,
+  totalTokens,
+  breakdown,
+  contextBreakdown,
+  contextTokens,
+  ready = true,
+}: SidePanelBreakdownProps) {
+  const [tab, setTab] = useState<"request" | "context">("request");
+  const activeTotal = tab === "request" ? totalTokens : contextTokens;
+
+  // The ctx meter snaps to its value on first appearance and through the initial
+  // replay; only live updates once the session is ready glide.
+  const showMeter = ctxUsed != null && ctxMax != null && ctxMax > 0;
+  const meterArmed = useArmedAfterMount(ready && showMeter);
+
+  return (
+    <>
+      {showMeter ? (
+        <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
+          <span className="shrink-0 text-muted-foreground">ctx</span>
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+            <div
+              className={`h-full rounded-full bg-primary${
+                meterArmed ? " transition-[width] duration-300 ease-out" : ""
+              }`}
+              style={{ width: `${Math.min(100, pct(ctxUsed, ctxMax))}%` }}
+            />
+          </div>
+          <span className="shrink-0 tabular-nums text-muted-foreground">
+            <span className="text-foreground">{pct(ctxUsed, ctxMax)}%</span> of {fmtCtx(ctxMax)}
+          </span>
+        </div>
+      ) : null}
+
+      <section>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "request" | "context")}>
+          <div className="flex items-center justify-between gap-2">
+            <TabsList>
+              <TabsTrigger value="request" title="This turn">
+                turn
+              </TabsTrigger>
+              <TabsTrigger value="context" title="All turns in the current session">
+                session
+              </TabsTrigger>
+            </TabsList>
+            {activeTotal != null ? (
+              <span className="text-label tracking-wider text-muted-foreground">
+                {fmtTok(activeTotal)} tok
+              </span>
+            ) : null}
+          </div>
+
+          <TabsContent value="request">
+            <BreakdownView
+              breakdown={breakdown}
+              totalTokens={totalTokens}
+              emptyLabel="No turn data yet"
+              ready={ready}
+            />
+          </TabsContent>
+          <TabsContent value="context">
+            <BreakdownView
+              breakdown={contextBreakdown}
+              totalTokens={contextTokens}
+              emptyLabel="No session data yet"
+              ready={ready}
+            />
+          </TabsContent>
+        </Tabs>
+      </section>
+    </>
   );
 }
 

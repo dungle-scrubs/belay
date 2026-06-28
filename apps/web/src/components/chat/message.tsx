@@ -151,6 +151,74 @@ export function OpenPathLink({ children, onOpen }: { children: ReactNode; onOpen
   );
 }
 
+interface ToolCallRowProps {
+  readonly name: string;
+  readonly args?: ReactNode;
+  readonly status: ToolStatus;
+  readonly collapsible: boolean;
+  readonly onOpenPath?: () => void;
+}
+
+export function ToolCallRow({ name, args, status, collapsible, onOpenPath }: ToolCallRowProps) {
+  const argsNode = onOpenPath ? (
+    <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
+  ) : (
+    (args ?? "")
+  );
+  const rowContent = (
+    <>
+      {collapsible ? (
+        <ChevronRight className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+      ) : (
+        <span className="size-3 shrink-0" aria-hidden />
+      )}
+      <Wrench className={cn("size-3.5 shrink-0", toolStatusColor(status, true))} />
+      <code className="text-ui text-foreground">
+        {name}
+        <span className="text-muted-foreground">({argsNode})</span>
+      </code>
+    </>
+  );
+
+  if (!collapsible) {
+    return (
+      <div className="flex items-center gap-2 text-ui text-muted-foreground">{rowContent}</div>
+    );
+  }
+
+  return (
+    <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 text-ui text-muted-foreground">
+      {rowContent}
+    </CollapsibleTrigger>
+  );
+}
+
+interface ToolCallShellProps {
+  readonly children: ReactNode;
+  readonly border?: boolean;
+  readonly sectionTitle?: ReactNode;
+  readonly sectionMeta?: ReactNode;
+}
+
+export function ToolCallShell({
+  children,
+  border = false,
+  sectionTitle,
+  sectionMeta,
+}: ToolCallShellProps) {
+  return (
+    <div className="border-l border-border pl-3 text-sm text-muted-foreground">
+      {border ? (
+        <ToolSection title={sectionTitle} meta={sectionMeta}>
+          {children}
+        </ToolSection>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
 export function ToolCall({
   name,
   args,
@@ -183,48 +251,33 @@ export function ToolCall({
   sectionTitle?: ReactNode;
   sectionMeta?: ReactNode;
 }) {
-  const argsNode = onOpenPath ? (
-    <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
-  ) : (
-    (args ?? "")
-  );
-  const header = (
-    <>
-      <Wrench className={cn("size-3.5 shrink-0", toolStatusColor(status, true))} />
-      <code className="text-ui text-foreground">
-        {name}
-        <span className="text-muted-foreground">({argsNode})</span>
-      </code>
-    </>
-  );
-
   if (!children) {
     return (
       <div className={cn("flex flex-col gap-1", className)}>
-        <div className="flex items-center gap-2 text-ui text-muted-foreground">
-          <span className="size-3 shrink-0" aria-hidden />
-          {header}
-        </div>
+        <ToolCallRow
+          name={name}
+          args={args}
+          status={status}
+          collapsible={false}
+          onOpenPath={onOpenPath}
+        />
       </div>
     );
   }
 
   return (
     <Collapsible defaultOpen={defaultOpen} className={cn("flex flex-col gap-1", className)}>
-      <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 text-ui text-muted-foreground">
-        <ChevronRight className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-        {header}
-      </CollapsibleTrigger>
+      <ToolCallRow
+        name={name}
+        args={args}
+        status={status}
+        collapsible={true}
+        onOpenPath={onOpenPath}
+      />
       <CollapsibleContent>
-        <div className="border-l border-border pl-3 text-sm text-muted-foreground">
-          {border ? (
-            <ToolSection title={sectionTitle} meta={sectionMeta}>
-              {children}
-            </ToolSection>
-          ) : (
-            children
-          )}
-        </div>
+        <ToolCallShell border={border} sectionTitle={sectionTitle} sectionMeta={sectionMeta}>
+          {children}
+        </ToolCallShell>
       </CollapsibleContent>
     </Collapsible>
   );

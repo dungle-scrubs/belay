@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { WorktreeSummary } from "@trevor/session";
 import { test, vi } from "vitest";
-import { WorktreeModal } from "./WorktreeModal";
-import type { WorktreeRowsContext } from "./worktree-rows";
+import { RowChooserModal } from "@/components/command-modal";
+import { WORKTREE_CHOOSER, type WorktreeRowsContext } from "./worktree-rows";
 
 const wt = (over: Partial<WorktreeSummary>): WorktreeSummary => ({
   id: "wt",
@@ -29,18 +29,27 @@ const worktrees: WorktreeSummary[] = [
   wt({ id: "gone", branch: "chore/gone", missing: true }),
 ];
 
-function renderModal(over: Partial<React.ComponentProps<typeof WorktreeModal>> = {}) {
+function renderModal(
+  over: Partial<{
+    readonly worktrees: readonly WorktreeSummary[];
+    readonly context: WorktreeRowsContext;
+    readonly loading: boolean;
+    readonly error: string | null;
+  }> = {},
+) {
   const onSwitch = vi.fn();
   const onOpenChange = vi.fn();
   const context: WorktreeRowsContext = { busy: false };
   render(
-    <WorktreeModal
+    <RowChooserModal
+      adapter={WORKTREE_CHOOSER}
       open
       onOpenChange={onOpenChange}
-      worktrees={worktrees}
-      context={context}
-      onSwitch={onSwitch}
-      {...over}
+      data={over.worktrees ?? worktrees}
+      context={over.context ?? context}
+      loading={over.loading}
+      error={over.error}
+      onSelect={onSwitch}
     />,
   );
   return { onSwitch, onOpenChange };

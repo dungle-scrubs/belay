@@ -23,14 +23,15 @@ import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
-import { SidePanel } from "@/components/panel/SidePanel";
+import { RowChooserModal } from "@/components/command-modal";
+import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/SidePanel";
 import { SessionSidebar } from "@/components/panel/session-sidebar";
 import { DrawerToggle } from "@/components/panel/side-drawer";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 import type { SessionStream } from "@/session/use-session";
 import type { HostStatus } from "../../derive";
-import { type InventoryState, type ResumeContext, ResumeModal } from "../../resume";
+import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
 import { TasksPanel } from "../../TasksPanel";
 import type {
@@ -40,7 +41,7 @@ import type {
   toTranscript,
 } from "../../transcript";
 import { buildTranscriptRows } from "../../transcript-rows";
-import { WorktreeModal } from "../../worktrees";
+import { WORKTREE_CHOOSER } from "../../worktrees";
 import type { WorktreeRowsContext } from "../../worktrees/worktree-rows";
 
 type Transcript = ReturnType<typeof toTranscript>;
@@ -401,35 +402,43 @@ export function PanelHost(props: {
 
       {panel.open ? (
         <SidePanel
-          title={panel.title}
-          subtitle={panel.subtitle}
-          statusNode={panel.statusNode}
-          workspace={panel.workspace}
-          git={panel.git}
-          {...panel.model}
           ready={panel.ready}
           controls={panel.controls}
           footer={panel.footer}
           onClose={panel.onClose}
-        />
+        >
+          <SidePanelHeader
+            title={panel.title}
+            subtitle={panel.subtitle}
+            statusNode={panel.statusNode}
+            workspace={panel.workspace}
+            git={panel.git}
+            // Other managed worktrees for this project = switch targets beyond the current checkout.
+            worktreeCount={choosers.worktrees.filter((w) => !w.current).length}
+            onOpenWorktrees={() => choosers.setWorktreeOpen(true)}
+          />
+          <SidePanelBreakdown {...panel.model} ready={panel.ready} />
+        </SidePanel>
       ) : null}
 
-      <ResumeModal
+      <RowChooserModal
+        adapter={RESUME_CHOOSER}
         open={choosers.resumeOpen}
         onOpenChange={choosers.setResumeOpen}
-        sessions={choosers.inventory.sessions}
+        data={choosers.inventory.sessions}
         loading={choosers.inventory.loading}
         error={choosers.inventory.error}
         context={choosers.resumeContext}
-        onResume={choosers.onResume}
+        onSelect={choosers.onResume}
       />
 
-      <WorktreeModal
+      <RowChooserModal
+        adapter={WORKTREE_CHOOSER}
         open={choosers.worktreeOpen}
         onOpenChange={choosers.setWorktreeOpen}
-        worktrees={choosers.worktrees}
+        data={choosers.worktrees}
         context={choosers.worktreeContext}
-        onSwitch={choosers.onSwitchWorktree}
+        onSelect={choosers.onSwitchWorktree}
       />
     </div>
   );

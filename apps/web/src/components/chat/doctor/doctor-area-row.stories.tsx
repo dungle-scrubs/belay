@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { DoctorArea } from "@/commands/doctor";
+import type { DoctorArea } from "@trevor/session";
 import { DoctorAreaRow } from "./doctor-area-row";
 import {
   coreOk,

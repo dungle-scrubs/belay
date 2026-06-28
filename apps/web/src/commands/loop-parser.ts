@@ -14,6 +14,7 @@ import type {
   CommandParseResult,
   CommandToken,
 } from "./command-family";
+import { commandPresentation } from "./command-family";
 import {
   LOOP_COMMAND_NAMES,
   LOOP_FAMILY,
@@ -128,6 +129,11 @@ export function parseLoopCommand(input: string): CommandParseResult {
   }
 
   return createResult(raw, command);
+}
+
+/** Parse and project a `/loop` line into the UI-ready presentation view-model in one call. */
+export function loopPresentation(input: string) {
+  return commandPresentation(parseLoopCommand(input), LOOP_FAMILY);
 }
 
 /** Build the parse result for a control/list command (no builder rows). */

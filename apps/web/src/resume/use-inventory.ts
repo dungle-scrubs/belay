@@ -1,11 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
 import type { SessionSummary } from "@trevor/session";
-import { fetchInventory } from "./inventory-client";
 
 export interface InventoryState {
   readonly sessions: readonly SessionSummary[];
   readonly loading: boolean;
   readonly error: string | null;
+}
+
+// The inventory rides the same backend as the session transport: same-origin in local dev, or the
+// configured Richter URL. A failed endpoint surfaces as an error in the chooser/sidebar.
+const INVENTORY_BASE = import.meta.env.VITE_RICHTER_URL ?? window.location.origin;
+
+async function fetchInventory(signal?: AbortSignal): Promise<SessionSummary[]> {
+  const res = await fetch(`${INVENTORY_BASE}/sessions`, { signal });
+  if (!res.ok) {
+    throw new Error(`inventory request failed (${res.status})`);
+  }
+  const body = (await res.json()) as { sessions?: unknown };
+  return Array.isArray(body.sessions) ? (body.sessions as SessionSummary[]) : [];
 }
 
 /**

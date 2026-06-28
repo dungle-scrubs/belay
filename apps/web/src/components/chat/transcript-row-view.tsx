@@ -1,3 +1,4 @@
+import { isContextOverflowText } from "@trevor/session";
 import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { CompactingBar } from "@/components/chat/compacting-bar";
@@ -14,7 +15,7 @@ import {
 import { MessageAttachments } from "@/components/chat/message-attachments";
 import { ToolRenderer } from "@/components/chat/tool-message";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { fmtCtx, fmtTokens, isOverflowError } from "../../derive";
+import { fmtCtx, fmtTokens } from "../../derive";
 import type { ToolMessage as ToolMessageData } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
@@ -194,7 +195,9 @@ export function TranscriptRowView({
     message.kind === "assistant" && message.error ? (
       <Alert variant="destructive">
         <CircleX className="h-3.5 w-3.5" />
-        <AlertTitle>{isOverflowError(message.error) ? "context overflow" : "error"}</AlertTitle>
+        <AlertTitle>
+          {isContextOverflowText(message.error) ? "context overflow" : "error"}
+        </AlertTitle>
         <AlertDescription>{message.error}</AlertDescription>
       </Alert>
     ) : null;

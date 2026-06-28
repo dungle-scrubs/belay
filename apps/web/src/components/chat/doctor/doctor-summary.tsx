@@ -1,10 +1,10 @@
-import { Braces, Copy, ListFilter, RefreshCw } from "lucide-react";
 import {
   DOCTOR_STATUS_HEADLINE,
   type DoctorSnapshotState,
   type DoctorStatus,
   type DoctorSummary,
-} from "@/commands/doctor";
+} from "@trevor/session";
+import { Braces, Copy, ListFilter, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";

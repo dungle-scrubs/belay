@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ToolCall } from "./message";
+import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
 // Default number of output lines to show before hiding the rest behind a "+N more"
@@ -44,7 +44,7 @@ export function ToolOutput({
 }: ToolOutputProps) {
   if (!output) {
     return (
-      <ToolCall
+      <StatusAwareToolRenderer
         name={name}
         args={args}
         status={status}
@@ -56,16 +56,15 @@ export function ToolOutput({
 
   const body = <OutputBody output={output} previewLines={previewLines} />;
   return (
-    <ToolCall
+    <StatusAwareToolRenderer
       name={name}
       args={args}
       status={status}
       defaultOpen={defaultOpen}
       className={className}
       border={border}
-    >
-      {border ? <div className="p-2.5">{body}</div> : body}
-    </ToolCall>
+      renderBody={() => (border ? <div className="p-2.5">{body}</div> : body)}
+    />
   );
 }
 

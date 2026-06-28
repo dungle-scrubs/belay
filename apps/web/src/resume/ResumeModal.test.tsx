@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { SessionSummary } from "@trevor/session";
 import { test, vi } from "vitest";
-import { ResumeModal } from "./ResumeModal";
-import type { ResumeContext } from "./resume-rows";
+import { RowChooserModal } from "@/components/command-modal";
+import { RESUME_CHOOSER, type ResumeContext } from "./resume-rows";
 
 const NOW = Date.parse("2026-06-26T12:00:00.000Z");
 
@@ -32,7 +32,14 @@ const sessions: SessionSummary[] = [
   summary({ sessionId: "op", title: "opchain audit", project: "opchain", host: "stale" }),
 ];
 
-function renderModal(over: Partial<React.ComponentProps<typeof ResumeModal>> = {}) {
+function renderModal(
+  over: Partial<{
+    readonly sessions: readonly SessionSummary[];
+    readonly context: ResumeContext;
+    readonly loading: boolean;
+    readonly error: string | null;
+  }> = {},
+) {
   const onResume = vi.fn();
   const onOpenChange = vi.fn();
   const context: ResumeContext = {
@@ -42,13 +49,15 @@ function renderModal(over: Partial<React.ComponentProps<typeof ResumeModal>> = {
     nowMs: NOW,
   };
   render(
-    <ResumeModal
+    <RowChooserModal
+      adapter={RESUME_CHOOSER}
       open
       onOpenChange={onOpenChange}
-      sessions={sessions}
-      context={context}
-      onResume={onResume}
-      {...over}
+      data={over.sessions ?? sessions}
+      context={over.context ?? context}
+      loading={over.loading}
+      error={over.error}
+      onSelect={onResume}
     />,
   );
   return { onResume, onOpenChange };

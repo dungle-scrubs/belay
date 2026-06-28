@@ -1,6 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { GitStatus, UsageBreakdown } from "@trevor/session";
-import { SidePanel } from "./SidePanel";
+import type { ReactNode } from "react";
+import {
+  SidePanel,
+  SidePanelBreakdown,
+  type SidePanelBreakdownProps,
+  SidePanelHeader,
+  type SidePanelHeaderProps,
+} from "./SidePanel";
 
 const cleanMain: GitStatus = {
   branch: "main",
@@ -107,9 +114,39 @@ const meta = {
 } satisfies Meta<typeof SidePanel>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type SidePanelStoryArgs = SidePanelHeaderProps &
+  SidePanelBreakdownProps & {
+    readonly controls?: ReactNode;
+    readonly footer?: ReactNode;
+  };
+type Story = StoryObj<SidePanelStoryArgs>;
+
+function renderSidePanel({
+  title,
+  subtitle,
+  statusNode,
+  workspace,
+  git,
+  controls,
+  footer,
+  ...breakdown
+}: SidePanelStoryArgs) {
+  return (
+    <SidePanel controls={controls} footer={footer} ready={breakdown.ready}>
+      <SidePanelHeader
+        title={title}
+        subtitle={subtitle}
+        statusNode={statusNode}
+        workspace={workspace}
+        git={git}
+      />
+      <SidePanelBreakdown {...breakdown} />
+    </SidePanel>
+  );
+}
 
 export const Default: Story = {
+  render: renderSidePanel,
   args: {
     title: "auth-flow",
     subtitle: "session · trevor-local",
@@ -127,6 +164,7 @@ export const Default: Story = {
 };
 
 export const NoImagesHeavyThinking: Story = {
+  render: renderSidePanel,
   args: {
     title: "refactor-loop",
     subtitle: "session · trevor-local",
@@ -153,6 +191,7 @@ export const NoImagesHeavyThinking: Story = {
 };
 
 export const Empty: Story = {
+  render: renderSidePanel,
   args: {
     title: "trevor-local",
     subtitle: "no call yet",

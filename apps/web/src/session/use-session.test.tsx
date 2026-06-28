@@ -8,7 +8,7 @@ import type {
   SessionTransport,
 } from "@trevor/session";
 import { afterEach, test, vi } from "vitest";
-import { useSessionWithTransport } from "./use-session";
+import { createSessionActions, useSessionWithTransport } from "./use-session";
 
 const event = (seq: number, type: string): SessionEvent => ({
   sessionId: "s",
@@ -85,4 +85,60 @@ test("reconnects after a closed stream and catches up from the last seen seq", a
   );
 
   unmount();
+});
+
+test("createSessionActions maps user intents to Trevor events", async () => {
+  const built: PublishInput[] = [];
+  const actions = createSessionActions(async (event) => {
+    built.push({ producerId: "web", ...event });
+  });
+
+  await actions.publish(
+    "hello",
+    "qwen",
+    "high",
+    [{ kind: "image", hash: "h", mimeType: "image/png", size: 1 }],
+    {
+      sourceId: "qwen",
+      modelId: "coder",
+      reasoning: "high",
+    },
+  );
+  await actions.cancel("r1");
+  await actions.command("/doctor", "refresh");
+  await actions.shell("shell-1", "pwd");
+  await actions.openInEditor("/tmp/a.ts", 3, 4);
+  await actions.refreshInternet();
+  await actions.refreshCatalog();
+  await actions.signInSource("openai");
+  await actions.cancelSignIn();
+  await actions.submitSignInCode("abc123");
+  await actions.unarchive();
+
+  assert.deepEqual(
+    built.map((event) => event.type),
+    [
+      "user.message",
+      "user.cancel",
+      "user.command",
+      "user.shell",
+      "editor.open",
+      "user.command",
+      "user.command",
+      "user.command",
+      "user.command",
+      "user.command",
+      "session.archived",
+    ],
+  );
+  assert.deepEqual(built[0]?.payload, {
+    text: "hello",
+    provider: "qwen",
+    reasoning: "high",
+    model: { sourceId: "qwen", modelId: "coder", reasoning: "high" },
+    artifacts: [{ kind: "image", hash: "h", mimeType: "image/png", size: 1 }],
+  });
+  assert.deepEqual(built[5]?.payload, { command: "/internet-refresh", args: "" });
+  assert.deepEqual(built[7]?.payload, { command: "/source-signin", args: "openai" });
+  assert.deepEqual(built[10]?.payload, { archived: false });
 });

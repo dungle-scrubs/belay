@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { commandPresentation } from "./command-family";
 import { LOOP_FAMILY } from "./loop";
-import { parseLoopCommand } from "./loop-parser";
+import { loopPresentation, parseLoopCommand } from "./loop-parser";
 
 /**
  * The command presentation view-model (D-017): the builder + keyword strip render from this, so the
@@ -39,4 +39,12 @@ test("errors are only the error-severity diagnostics; ready mirrors the parse", 
   const good = commandPresentation(parseLoopCommand('/loop max 3 do "go"'), LOOP_FAMILY);
   assert.deepEqual(good.errors, []);
   assert.equal(good.ready, true);
+});
+
+test("loopPresentation owns the parse plus descriptor presentation path", () => {
+  const input = '/loop every 5m until "tests pass" do "run the suite"';
+  assert.deepEqual(
+    loopPresentation(input),
+    commandPresentation(parseLoopCommand(input), LOOP_FAMILY),
+  );
 });

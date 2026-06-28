@@ -1,6 +1,6 @@
+import type { DoctorStatus } from "@trevor/session";
 import { CircleCheck, CircleDashed, CircleX, TriangleAlert } from "lucide-react";
 import type { ComponentType } from "react";
-import type { DoctorStatus } from "@/commands/doctor";
 import { cn } from "@/lib/utils";
 
 /**

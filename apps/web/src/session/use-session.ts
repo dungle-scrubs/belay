@@ -14,7 +14,7 @@ import {
   streamTransport,
   type TrevorEventInput,
 } from "@trevor/session";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export type { ConnectionStatus, HostPresence };
 
@@ -301,6 +301,35 @@ export interface SessionActions {
   readonly unarchive: () => Promise<void>;
 }
 
+type PublishVia = (built: TrevorEventInput) => Promise<void>;
+
+export function createSessionActions(publishVia: PublishVia): SessionActions {
+  const command = (command: string, args: string) =>
+    publishVia(sessionEvents.userCommand({ command, args }));
+
+  return {
+    publish: (
+      text: string,
+      provider: string,
+      reasoning?: string,
+      artifacts?: readonly ArtifactRef[],
+      model?: ModelRef,
+    ) => publishVia(sessionEvents.userMessage({ text, provider, reasoning, model, artifacts })),
+    cancel: (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
+    command,
+    shell: (requestId: string, command: string) =>
+      publishVia(sessionEvents.userShell({ requestId, command })),
+    openInEditor: (path: string, line?: number, column?: number) =>
+      publishVia(sessionEvents.editorOpen({ path, line, column })),
+    refreshInternet: () => command("/internet-refresh", ""),
+    refreshCatalog: () => command("/catalog-refresh", ""),
+    signInSource: (sourceId: string) => command("/source-signin", sourceId),
+    cancelSignIn: () => command("/source-signin-cancel", ""),
+    submitSignInCode: (code: string) => command("/source-signin-code", code),
+    unarchive: () => publishVia(sessionEvents.sessionArchived({ archived: false })),
+  };
+}
+
 /**
  * The user intents a session accepts: a prompt, a hard-steer cancel, a slash command, and an
  * editor-open side-channel. The write side of the session boundary, separate from the read stream so a
@@ -320,80 +349,5 @@ export function useSessionActions(sessionId: string | null): SessionActions {
     [sessionId],
   );
 
-  const publish = useCallback(
-    (
-      text: string,
-      provider: string,
-      reasoning?: string,
-      artifacts?: readonly ArtifactRef[],
-      model?: ModelRef,
-    ) => publishVia(sessionEvents.userMessage({ text, provider, reasoning, model, artifacts })),
-    [publishVia],
-  );
-
-  // Hard steering: ask the host to abort the active run. runId may be empty when the browser fires ESC
-  // before assistant.started lands (cancel "whatever runs").
-  const cancel = useCallback(
-    (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
-    [publishVia],
-  );
-
-  // Immediate command lane: route a slash command to the host instead of the model.
-  const command = useCallback(
-    (command: string, args: string) => publishVia(sessionEvents.userCommand({ command, args })),
-    [publishVia],
-  );
-
-  // Prompt shell lane: a leading `!` publishes a user.shell the leader runs through its protected
-  // shell path. Bypasses the send queue + model entirely - it is never a turn.
-  const shell = useCallback(
-    (requestId: string, command: string) =>
-      publishVia(sessionEvents.userShell({ requestId, command })),
-    [publishVia],
-  );
-
-  // Side-channel: ask the host to open a local file in the editor. Not a chat message or command - it
-  // never renders in the transcript.
-  const openInEditor = useCallback(
-    (path: string, line?: number, column?: number) =>
-      publishVia(sessionEvents.editorOpen({ path, line, column })),
-    [publishVia],
-  );
-
-  // Explicit internet refresh (D-060 M2): the advisory's refresh button asks the host to probe public
-  // reachability now. A programmatic command (no transcript echo, no command.result); the fresh
-  // `checking` + settled snapshot ride the host.internet events the host already publishes.
-  const refreshInternet = useCallback(() => command("/internet-refresh", ""), [command]);
-  const refreshCatalog = useCallback(() => command("/catalog-refresh", ""), [command]);
-  const signInSource = useCallback(
-    (sourceId: string) => command("/source-signin", sourceId),
-    [command],
-  );
-  const cancelSignIn = useCallback(() => command("/source-signin-cancel", ""), [command]);
-  const submitSignInCode = useCallback(
-    (code: string) => command("/source-signin-code", code),
-    [command],
-  );
-
-  // Unarchive this session (D-094): publish the durable `session.archived: false` flag so the main UI
-  // gate clears and normal use resumes. The latest session.archived event wins, so this is the inverse
-  // of an archive without deleting anything.
-  const unarchive = useCallback(
-    () => publishVia(sessionEvents.sessionArchived({ archived: false })),
-    [publishVia],
-  );
-
-  return {
-    publish,
-    cancel,
-    command,
-    shell,
-    openInEditor,
-    refreshInternet,
-    refreshCatalog,
-    signInSource,
-    cancelSignIn,
-    submitSignInCode,
-    unarchive,
-  };
+  return useMemo(() => createSessionActions(publishVia), [publishVia]);
 }

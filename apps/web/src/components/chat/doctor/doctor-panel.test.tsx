@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
+import type { DoctorFinding, DoctorSnapshot } from "@trevor/session";
 import { afterEach, beforeEach, test } from "vitest";
-import type { DoctorFinding, DoctorSnapshot } from "@/commands/doctor";
 import { DoctorPanel } from "./doctor-panel";
 
 /**

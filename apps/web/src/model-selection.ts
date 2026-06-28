@@ -1,9 +1,12 @@
 import {
   type CatalogEntry,
-  catalogEntryFromProviderModel,
+  type ModelPreferences,
   type ModelRef,
   modelRefFromProvider,
+  modelRefKey,
   type ProviderModel,
+  type QuickPickerGroup,
+  quickPickerModels,
   type ReasoningSurface,
   type SourceSummary,
 } from "@trevor/session";
@@ -19,76 +22,106 @@ import {
 
 type Roster = Readonly<Record<string, ProviderModel>>;
 
-/**
- * One {@link SourceSummary} per announced provider: a configured, ready, single-model source. The
- * source TYPE is approximated from the model's run location (local vs cloud) during migration - a
- * cloud provider reads as a direct API-key source, since the legacy roster carries no OAuth/gateway
- * distinction; the host supplies the real type once it owns the source read model.
- */
-export function sourcesFromRoster(roster: Roster): SourceSummary[] {
-  return Object.entries(roster).map(
-    ([sourceId, pm]): SourceSummary => ({
-      sourceId,
-      type: pm.kind === "local" ? "local" : "api-key",
-      label: pm.label,
-      status: "ready",
-      modelCount: 1,
-      auth: "authenticated",
-      freshness: { refreshedAt: null, stale: false },
-      actions: [],
-    }),
-  );
+export interface ModelSelectionProjectionInput {
+  readonly preferences: ModelPreferences;
+  readonly roster: Roster;
+  readonly hostSources: readonly SourceSummary[];
+  readonly hostCatalog: Readonly<Record<string, readonly CatalogEntry[]>>;
+  readonly legacyProvider: string;
+  readonly legacyReasoning: string | null;
 }
 
-/** The per-source catalog entries projected from the roster (one entry per provider, via the bridge). */
-export function catalogFromRoster(roster: Roster): Record<string, CatalogEntry[]> {
-  const out: Record<string, CatalogEntry[]> = {};
-  for (const [sourceId, pm] of Object.entries(roster)) {
-    out[sourceId] = [catalogEntryFromProviderModel(sourceId, pm)];
-  }
-  return out;
+export interface ModelSelectionProjection {
+  readonly preferences: ModelPreferences;
+  readonly active: ModelRef | null;
+  readonly activeLabel: string;
+  readonly quickGroups: QuickPickerGroup[];
+  readonly sources: readonly SourceSummary[];
+  readonly catalogBySource: Readonly<Record<string, readonly CatalogEntry[]>>;
+  readonly sourceLabels: Readonly<Record<string, string>>;
+  readonly modelLabels: Readonly<Record<string, string>>;
+  readonly recentKeys: ReadonlySet<string>;
+  readonly pinnedKeys: ReadonlySet<string>;
+  readonly reasoningSurface: (ref: Pick<ModelRef, "sourceId">) => ReasoningSurface;
 }
 
-/**
- * A model's reasoning surface (its supported levels + default) from the roster, so a selection's
- * reasoning can be constrained to what the chosen model actually supports. An unknown source (not in
- * the roster yet, before host.online) has no reasoning surface.
- */
-export function reasoningSurfaceOf(
+export interface LegacyCatalogBridge {
+  readonly sources: readonly SourceSummary[];
+  readonly catalogBySource: Readonly<Record<string, readonly CatalogEntry[]>>;
+  readonly sourceLabels: Readonly<Record<string, string>>;
+  readonly modelLabels: Readonly<Record<string, string>>;
+  readonly legacyActiveRef: (provider: string, reasoning: string | null) => ModelRef | null;
+  readonly reasoningSurface: (ref: Pick<ModelRef, "sourceId">) => ReasoningSurface;
+}
+
+export function buildModelSelection({
+  preferences,
+  roster,
+  hostSources,
+  hostCatalog,
+  legacyProvider,
+  legacyReasoning,
+}: ModelSelectionProjectionInput): ModelSelectionProjection {
+  const catalog = legacyToCatalog(roster, hostSources, hostCatalog);
+
+  const legacyRef = catalog.legacyActiveRef(legacyProvider, legacyReasoning);
+  const active = preferences.active ?? legacyRef;
+  const activeLabel = active
+    ? (catalog.modelLabels[active.modelId] ??
+      catalog.sourceLabels[active.sourceId] ??
+      active.modelId)
+    : legacyProvider;
+
+  return {
+    preferences,
+    active,
+    activeLabel,
+    quickGroups: quickPickerModels(preferences),
+    sources: catalog.sources,
+    catalogBySource: catalog.catalogBySource,
+    sourceLabels: catalog.sourceLabels,
+    modelLabels: catalog.modelLabels,
+    recentKeys: new Set(preferences.recent.map(modelRefKey)),
+    pinnedKeys: new Set(preferences.pinned.map(modelRefKey)),
+    reasoningSurface: catalog.reasoningSurface,
+  };
+}
+
+export function legacyToCatalog(
   roster: Roster,
-  ref: Pick<ModelRef, "sourceId">,
-): ReasoningSurface {
-  const pm = roster[ref.sourceId];
-  return pm
-    ? { levels: pm.reasoningLevels, default: pm.defaultReasoning }
-    : { levels: [], default: "off" };
-}
-
-/** Source-id -> label and model-id -> label maps for the quick-picker / chooser rows. */
-export function rosterLabels(roster: Roster): {
-  readonly sourceLabels: Record<string, string>;
-  readonly modelLabels: Record<string, string>;
-} {
+  hostSources: readonly SourceSummary[],
+  hostCatalog: Readonly<Record<string, readonly CatalogEntry[]>>,
+): LegacyCatalogBridge {
   const sourceLabels: Record<string, string> = {};
   const modelLabels: Record<string, string> = {};
   for (const [sourceId, pm] of Object.entries(roster)) {
     sourceLabels[sourceId] = pm.label;
     modelLabels[pm.model] = pm.label;
   }
-  return { sourceLabels, modelLabels };
-}
 
-/**
- * The legacy-derived active reference: the current provider+reasoning selection projected to a stable
- * {@link ModelRef}. Used as the active model until the user makes an explicit chooser/quick-pick
- * selection (which persists into ModelPreferences). Null when the roster has no entry for the provider
- * yet (before host.online arrives), so callers fall back to a neutral label.
- */
-export function legacyActiveRef(
-  roster: Roster,
-  provider: string,
-  reasoning: string | null,
-): ModelRef | null {
-  const pm = roster[provider];
-  return pm ? modelRefFromProvider(provider, pm.model, reasoning) : null;
+  for (const s of hostSources) {
+    sourceLabels[s.sourceId] = s.label;
+  }
+  for (const entries of Object.values(hostCatalog)) {
+    for (const e of entries) {
+      modelLabels[e.modelId] = e.displayName;
+    }
+  }
+
+  return {
+    sources: hostSources,
+    catalogBySource: hostCatalog,
+    sourceLabels,
+    modelLabels,
+    legacyActiveRef(provider, reasoning) {
+      const pm = roster[provider];
+      return pm ? modelRefFromProvider(provider, pm.model, reasoning) : null;
+    },
+    reasoningSurface(ref) {
+      const pm = roster[ref.sourceId];
+      return pm
+        ? { levels: pm.reasoningLevels, default: pm.defaultReasoning }
+        : { levels: [], default: "off" };
+    },
+  };
 }

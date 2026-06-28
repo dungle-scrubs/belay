@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { GitStatus, SessionSummary } from "@trevor/session";
-import { ResumeModal } from "./ResumeModal";
+import { RowChooserModal } from "@/components/command-modal";
+import { RESUME_CHOOSER, type ResumeContext } from "./resume-rows";
 
 /**
  * The resume chooser over the shared command modal (D-090), scoped to the current working
@@ -91,9 +92,32 @@ const sessions: SessionSummary[] = [
   }),
 ];
 
+function ResumeChooserStory(props: {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onResume: (sessionId: string) => void;
+  readonly sessions: readonly SessionSummary[];
+  readonly context: ResumeContext;
+  readonly loading?: boolean;
+  readonly error?: string | null;
+}) {
+  return (
+    <RowChooserModal
+      adapter={RESUME_CHOOSER}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      data={props.sessions}
+      context={props.context}
+      loading={props.loading}
+      error={props.error}
+      onSelect={props.onResume}
+    />
+  );
+}
+
 const meta = {
   title: "Resume/ResumeModal",
-  component: ResumeModal,
+  component: ResumeChooserStory,
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
@@ -109,7 +133,7 @@ const meta = {
     sessions,
     context: { currentSessionId: "cur", currentProject: "trevorV2", busy: false, nowMs: NOW },
   },
-} satisfies Meta<typeof ResumeModal>;
+} satisfies Meta<typeof ResumeChooserStory>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

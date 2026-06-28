@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { SessionSummary } from "@trevor/session";
-import { type ResumeContext, ResumeModal } from "../../resume";
+import { RowChooserModal } from "@/components/command-modal";
+import { RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import { SessionSidebar } from "./session-sidebar";
 
 /**
@@ -282,7 +283,14 @@ export const WithResumeModal: Story = {
             className="h-full"
           />
         </Frame>
-        <ResumeModal open onOpenChange={noop} sessions={MANY} context={context} onResume={noop} />
+        <RowChooserModal
+          adapter={RESUME_CHOOSER}
+          open
+          onOpenChange={noop}
+          data={MANY}
+          context={context}
+          onSelect={noop}
+        />
       </div>
     );
   },

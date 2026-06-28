@@ -6,10 +6,7 @@ import {
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import {
   Reasoning,
-  ReasoningContent,
-  ReasoningRoot,
-  ReasoningText,
-  ReasoningTrigger,
+  ReasoningGroup as DefaultReasoningGroup,
 } from "@/components/assistant-ui/reasoning";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import {
@@ -351,12 +348,9 @@ const AssistantMessage: FC = () => {
                 }
                 const running = part.status.type === "running";
                 return (
-                  <ReasoningRoot streaming={running}>
-                    <ReasoningTrigger active={running} />
-                    <ReasoningContent aria-busy={running}>
-                      <ReasoningText>{children}</ReasoningText>
-                    </ReasoningContent>
-                  </ReasoningRoot>
+                  <DefaultReasoningGroup streaming={running}>
+                    {children}
+                  </DefaultReasoningGroup>
                 );
               }
               case "text":

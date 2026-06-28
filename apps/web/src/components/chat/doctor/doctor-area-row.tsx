@@ -1,3 +1,4 @@
+import type { DoctorArea, DoctorAreaId, DoctorFinding, DoctorStatus } from "@trevor/session";
 import {
   Activity,
   ArrowUpCircle,
@@ -14,7 +15,6 @@ import {
   Wrench,
 } from "lucide-react";
 import { type ComponentType, useState } from "react";
-import type { DoctorArea, DoctorAreaId, DoctorFinding, DoctorStatus } from "@/commands/doctor";
 import { cn } from "@/lib/utils";
 import { DoctorFindingRow, DoctorNextActionLine } from "./doctor-finding";
 import { DOCTOR_STATUS_META, StatusBadge } from "./doctor-status";

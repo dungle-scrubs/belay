@@ -1,5 +1,3 @@
-import { CircleCheck } from "lucide-react";
-import { useState } from "react";
 import {
   type DoctorFinding,
   type DoctorSnapshot,
@@ -7,7 +5,9 @@ import {
   isIssue,
   overallStatus,
   summarizeSnapshot,
-} from "@/commands/doctor";
+} from "@trevor/session";
+import { CircleCheck } from "lucide-react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { DoctorAreaRow } from "./doctor-area-row";
 import { DoctorSummaryStrip } from "./doctor-summary";
