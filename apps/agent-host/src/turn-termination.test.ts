@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { type CompletionOutcome, terminationReason } from "./turn-termination";
+import { type CompletionOutcome, terminationReason } from "./session-lifecycle";
 
 /** A clean answered completion; each test overrides only the flag under test. */
 const answered: CompletionOutcome = {

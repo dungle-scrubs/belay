@@ -402,3 +402,40 @@ export function ruleToReportSource(rule: TrevorRuleSource): ContextRuleSource {
     path: rule.path,
   };
 }
+
+/**
+ * Facade for Trevor rules at one cwd: collection, scoped-file matching, and the two transformations
+ * registry needs (prompt scopes and report provenance). ContextRegistry owns instances of this class
+ * instead of stitching collect/filter/map steps itself.
+ */
+export class RuleCollector {
+  readonly diagnostics: readonly ContextSourceDiagnostic[];
+  readonly rules: readonly TrevorRuleSource[];
+
+  constructor(private readonly cwd: string) {
+    const report = collectTrevorRuleSources(cwd);
+    this.diagnostics = report.diagnostics;
+    this.rules = report.rules;
+  }
+
+  alwaysRules(): readonly TrevorRuleSource[] {
+    return this.rules.filter((rule) => rule.metadata.inclusion === "always");
+  }
+
+  scopedRulesForFile(absFile: string): readonly TrevorRuleSource[] {
+    return this.rules.filter(
+      (rule) => rule.metadata.inclusion === "scoped" && ruleMatchesFile(rule, absFile, this.cwd),
+    );
+  }
+
+  contextScope(
+    rule: TrevorRuleSource,
+    scope: Extract<ContextScope["scope"], "trevor-rule" | "below-cwd-rule">,
+  ): ContextScope {
+    return ruleToContextScope(rule, scope);
+  }
+
+  reportSource(rule: TrevorRuleSource): ContextRuleSource {
+    return ruleToReportSource(rule);
+  }
+}

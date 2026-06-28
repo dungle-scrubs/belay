@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { collectWorkspace } from "./search";
-import { defineTool } from "./shared";
+import { simpleTool } from "./shared";
 
 export const MAX_GLOB = 500;
 
@@ -28,15 +28,14 @@ export function shapeGlob(matches: readonly string[], truncated: boolean): strin
 }
 
 /** Lists workspace files matching a glob pattern. */
-export const globTool = defineTool({
+export const globTool = simpleTool({
   name: "glob",
   description: "List workspace files matching a glob pattern, e.g. 'src/**/*.ts'.",
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args, ops) =>
-    ops.attempt(async () => {
-      const { items, truncated } = await collectWorkspace(args.pattern, MAX_GLOB, (entry) => entry);
-      return shapeGlob(items, truncated);
-    }),
+  execute: async (args) => {
+    const { items, truncated } = await collectWorkspace(args.pattern, MAX_GLOB, (entry) => entry);
+    return shapeGlob(items, truncated);
+  },
 });

@@ -1,6 +1,6 @@
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { type SkillEntry, skillRegistry } from "../skills";
-import { defineTool } from "./shared";
+import { simpleTool } from "./shared";
 
 /**
  * `skills_list` (D-075 M3): a searchable, read-only view over the skill registry METADATA - ids,
@@ -69,7 +69,7 @@ export function formatSkillsList(
   return [header, ...lines].join("\n");
 }
 
-export const skillsListTool = defineTool({
+export const skillsListTool = simpleTool({
   name: "skills_list",
   description:
     "List or search the available skills by id, name, description, or triggers. Returns compact " +
@@ -78,6 +78,5 @@ export const skillsListTool = defineTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args) =>
-    Effect.sync(() => formatSkillsList(skillRegistry(), args.query, args.limit ?? DEFAULT_LIMIT)),
+  execute: (args) => formatSkillsList(skillRegistry(), args.query, args.limit ?? DEFAULT_LIMIT),
 });

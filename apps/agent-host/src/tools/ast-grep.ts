@@ -1,9 +1,8 @@
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { confine, WORKSPACE_ROOT } from "../paths";
 import { astGrepPath } from "./ast-grep-bin";
-import { ToolExecutionError } from "./errors";
 import { runSearchProcess } from "./search-process";
-import { defineTool } from "./shared";
+import { simpleTool, toolExecution, toolInput } from "./shared";
 
 const DEFAULT_MAX_MATCHES = 100;
 const MAX_MATCHES_CAP = 500;
@@ -74,7 +73,7 @@ function formatMatch(m: AstGrepMatch): string | null {
  * interactive flags). Parses the `--json=stream` output into compact `file:line:col  snippet` rows.
  * An invalid pattern/language is a typed input error; a spawn/timeout failure a typed execution error.
  */
-export const astGrepTool = defineTool({
+export const astGrepTool = simpleTool({
   name: "ast_grep",
   description:
     "Structural (AST-based) code search with ast-grep. Matches code by SYNTAX, not text: a pattern " +
@@ -85,49 +84,42 @@ export const astGrepTool = defineTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args, ops) =>
-    Effect.gen(function* () {
-      const bin = astGrepPath();
-      if (!bin) {
-        return yield* Effect.fail(
-          new ToolExecutionError({ tool: "ast_grep", detail: "ast-grep binary is not available" }),
-        );
+  execute: async (args) => {
+    const bin = astGrepPath();
+    if (!bin) {
+      return toolExecution("ast-grep binary is not available");
+    }
+    // confine() throws on a path escape; simpleTool routes that through the tool execution envelope.
+    const argv = buildArgs(args);
+    const result = await runSearchProcess(bin, argv, { cwd: WORKSPACE_ROOT });
+    if (result.timedOut) {
+      return toolExecution("search timed out");
+    }
+    // ast-grep exit codes: 0 = matches, 1 = no matches, >=2 = error (bad pattern/lang, spawn).
+    if (result.code !== 0 && result.code !== 1) {
+      const detail = (result.stderr.split("\n").find((l) => l.trim()) ?? "").trim();
+      // A bad pattern / unknown language is a value failure -> typed input error.
+      if (/pattern|language|parse|unknown|invalid|not supported/i.test(detail)) {
+        return toolInput(detail || "invalid ast-grep pattern or language");
       }
-      // confine() throws on a path escape; route that through the tool's input-error envelope.
-      const argv = yield* ops.attemptSync(() => buildArgs(args));
-      const result = yield* ops.attempt(() => runSearchProcess(bin, argv, { cwd: WORKSPACE_ROOT }));
-      if (result.timedOut) {
-        return yield* Effect.fail(
-          new ToolExecutionError({ tool: "ast_grep", detail: "search timed out" }),
-        );
+      return toolExecution(detail || "ast-grep failed");
+    }
+    const rows: string[] = [];
+    for (const line of result.stdout.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const row = formatMatch(JSON.parse(line) as AstGrepMatch);
+        if (row) rows.push(row);
+      } catch {
+        // skip a non-JSON line (defensive; --json=stream emits one object per line)
       }
-      // ast-grep exit codes: 0 = matches, 1 = no matches, >=2 = error (bad pattern/lang, spawn).
-      if (result.code !== 0 && result.code !== 1) {
-        const detail = (result.stderr.split("\n").find((l) => l.trim()) ?? "").trim();
-        // A bad pattern / unknown language is a value failure -> typed input error.
-        if (/pattern|language|parse|unknown|invalid|not supported/i.test(detail)) {
-          return yield* ops.reject(detail || "invalid ast-grep pattern or language");
-        }
-        return yield* Effect.fail(
-          new ToolExecutionError({ tool: "ast_grep", detail: detail || "ast-grep failed" }),
-        );
-      }
-      const rows: string[] = [];
-      for (const line of result.stdout.split("\n")) {
-        if (!line.trim()) continue;
-        try {
-          const row = formatMatch(JSON.parse(line) as AstGrepMatch);
-          if (row) rows.push(row);
-        } catch {
-          // skip a non-JSON line (defensive; --json=stream emits one object per line)
-        }
-      }
-      if (rows.length === 0) {
-        return "(no matches)";
-      }
-      const max = Math.min(args.maxMatches ?? DEFAULT_MAX_MATCHES, MAX_MATCHES_CAP);
-      return rows.length > max
-        ? `${rows.slice(0, max).join("\n")}\n…[capped at ${max} matches]`
-        : rows.join("\n");
-    }),
+    }
+    if (rows.length === 0) {
+      return "(no matches)";
+    }
+    const max = Math.min(args.maxMatches ?? DEFAULT_MAX_MATCHES, MAX_MATCHES_CAP);
+    return rows.length > max
+      ? `${rows.slice(0, max).join("\n")}\n…[capped at ${max} matches]`
+      : rows.join("\n");
+  },
 });

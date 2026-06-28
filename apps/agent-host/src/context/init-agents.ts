@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { AGENTS_FILE } from "./agents-md";
-import { collectTrevorRuleSources } from "./rules";
+import { RuleCollector } from "./rules";
 
 const IGNORE_DIRS = new Set([
   ".git",
@@ -115,7 +115,7 @@ export function collectInitEvidence(cwd: string): InitEvidence {
   );
   const existingAgents = files.filter((path) => basename(path) === AGENTS_FILE);
   const claudeFiles = files.filter((path) => basename(path) === "CLAUDE.md");
-  const rules = collectTrevorRuleSources(root).rules.map((rule) => rule.path);
+  const rules = new RuleCollector(root).rules.map((rule) => rule.path);
   return {
     claudeFiles: relativeList(root, claudeFiles),
     docs: relativeList(root, docs).slice(0, 12),

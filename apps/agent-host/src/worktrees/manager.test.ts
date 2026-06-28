@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { projectSessionId } from "@trevor/session";
 import { test } from "vitest";
 import type { GitRunner } from "../git-status";
 import { WorktreeManager, type WorktreeManagerDeps } from "./manager";
@@ -30,6 +31,11 @@ function gitFactory(
     // Defaults: a clean repo on `main` with an upstream, no conflict, main worktree.
     const table: Record<string, { status: number; stdout: string }> = {
       "rev-parse --is-inside-work-tree": { status: 0, stdout: "true\n" },
+      "rev-parse --path-format=absolute --git-common-dir": {
+        status: 0,
+        stdout: "/dev/trevorV2/.git\n",
+      },
+      "rev-parse --show-toplevel": { status: 0, stdout: "/dev/trevorV2\n" },
       "branch --show-current": { status: 0, stdout: "main\n" },
       "status --porcelain": { status: 0, stdout: "" },
       "rev-list --left-right --count @{upstream}...HEAD": { status: 0, stdout: "0\t0\n" },
@@ -67,6 +73,7 @@ function manager(
     home: HOME,
     gitRunnerFor,
     abbrev: (p) => p.replace("/dev", "~"),
+    realpath: (p) => p,
     now: () => "2026-06-26T00:00:00.000Z",
     genId,
     ...over,
@@ -84,18 +91,15 @@ const ctx = {
 test("create records a worktree at the grouped path and binds it to a session", () => {
   const fs = fakeFs();
   const mgr = manager(fs, gitFactory());
-  const result = mgr.create({
-    baseRepo: ctx.baseRepo,
-    baseRepoName: ctx.baseRepoName,
-    basePath: ctx.basePath,
+  const result = mgr.createFromCwd({
+    cwd: ctx.basePath,
     branch: "feat/x",
     baseRef: "main",
-    sessionId: "wt-session",
   });
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.record.branch, "feat/x");
-  assert.equal(result.record.sessionId, "wt-session");
+  assert.equal(result.record.sessionId, projectSessionId(`${ctx.baseRepo}#feat/x`));
   assert.equal(result.record.baseCommit, "cafef00d");
   assert.ok(result.record.worktreePath.includes("/.worktrees/"));
   // Persisted to the registry.
@@ -141,7 +145,7 @@ test("summaries lists a baseline row first, then managed worktrees with git stat
   if (!created.ok) return;
   fs.files.set(created.record.worktreePath, ""); // the worktree dir exists on disk
 
-  const rows = mgr.summaries(ctx);
+  const rows = mgr.summaries(ctx.basePath);
   assert.equal(rows[0]?.baseline, true);
   assert.equal(rows[0]?.current, true); // currentPath === basePath
   assert.equal(rows[0]?.path, "~/trevorV2");
@@ -163,17 +167,17 @@ test("a worktree whose directory is gone shows as missing and is not git-read", 
   });
   assert.ok(created.ok);
   // Do NOT create the directory on disk → missing.
-  const row = mgr.summaries(ctx).find((r) => !r.baseline);
+  const row = mgr.summaries(ctx.basePath).find((r) => !r.baseline);
   assert.equal(row?.missing, true);
 });
 
 test("resolveSwitch returns the baseline target, a worktree target, and blocks a missing path", () => {
   const fs = fakeFs();
   const mgr = manager(fs, gitFactory());
-  assert.deepEqual(mgr.resolveSwitch("baseline", ctx), {
+  assert.deepEqual(mgr.resolveSwitch("baseline", ctx.basePath), {
     ok: true,
     path: "/dev/trevorV2",
-    sessionId: "trevorV2-base",
+    sessionId: projectSessionId(ctx.baseRepo),
   });
 
   const created = mgr.create({
@@ -188,19 +192,19 @@ test("resolveSwitch returns the baseline target, a worktree target, and blocks a
   if (!created.ok) return;
 
   // Missing path → blocked/repair (never a silent baseline fallback).
-  const blocked = mgr.resolveSwitch(created.record.id, ctx);
+  const blocked = mgr.resolveSwitch(created.record.id, ctx.basePath);
   assert.equal(blocked.ok, false);
 
   // Present path → its own cwd + session.
   fs.files.set(created.record.worktreePath, "");
-  const ok = mgr.resolveSwitch(created.record.id, ctx);
+  const ok = mgr.resolveSwitch(created.record.id, ctx.basePath);
   assert.deepEqual(ok, {
     ok: true,
     path: created.record.worktreePath,
     sessionId: "wt-session",
   });
 
-  assert.equal(mgr.resolveSwitch("nope", ctx).ok, false);
+  assert.equal(mgr.resolveSwitch("nope", ctx.basePath).ok, false);
 });
 
 test("reconcile drops records whose directory disappeared and prunes git", () => {

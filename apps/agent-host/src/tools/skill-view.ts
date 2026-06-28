@@ -1,6 +1,6 @@
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { expandSkill, type SkillEntry, skillRegistry } from "../skills";
-import { defineTool } from "./shared";
+import { simpleTool, toolInput } from "./shared";
 
 /**
  * `skill_view` (D-075 M4): loads exactly ONE selected skill's full instruction body by id (level-2
@@ -65,7 +65,7 @@ export function resolveSkillView(
   };
 }
 
-export const skillViewTool = defineTool({
+export const skillViewTool = simpleTool({
   name: "skill_view",
   description:
     "Load ONE skill's full instructions by id, then follow them. Call this only for the specific " +
@@ -73,17 +73,15 @@ export const skillViewTool = defineTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args, ops) => {
+  execute: async (args) => {
     const res = resolveSkillView(skillRegistry(), args.skill_id);
     if (res.kind === "not-found") {
-      return ops.reject(res.message);
+      return toolInput(res.message);
     }
     if (res.kind === "disabled" || res.kind === "malformed") {
-      return Effect.succeed(res.message);
+      return res.message;
     }
     // A SkillEntry is a superset of Skill; expandSkill catches its own read errors (never rejects).
-    return Effect.promise(() => expandSkill(res.entry)).pipe(
-      Effect.map((body) => res.header + body),
-    );
+    return res.header + (await expandSkill(res.entry));
   },
 });

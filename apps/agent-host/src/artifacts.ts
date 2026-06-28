@@ -24,13 +24,11 @@ const MODEL_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "ima
 const isModelImage = (a: ArtifactRef): boolean =>
   a.kind === "image" && MODEL_IMAGE_MIMES.has(a.mimeType.toLowerCase());
 
-// Blobs are immutable (content-addressed), so cache the base64 by hash: a long turn
-// history that re-sends the same image on every step never refetches or re-encodes it.
-// Bounded (FIFO) so a long-lived host doesn't accumulate every image it has ever seen.
 const CACHE_MAX = 32;
-const cache = new Map<string, ChatImage>();
-/** Hashes whose bytes don't decode as an image - skipped so they can't blank a vision turn. */
-const undecodable = new Set<string>();
+
+export type HistoryImageResolver = (
+  history: readonly ChatMessage[],
+) => Promise<readonly ChatMessage[]>;
 
 /**
  * Verifies bytes actually decode as an image (via `sips`). A corrupt image is the worst
@@ -56,35 +54,68 @@ async function decodes(bytes: Uint8Array): Promise<boolean> {
   }
 }
 
-async function resolveImage(ref: ArtifactRef): Promise<ChatImage | null> {
-  if (undecodable.has(ref.hash)) {
-    return null;
-  }
-  const hit = cache.get(ref.hash);
-  if (hit) {
-    return hit;
-  }
-  try {
-    const bytes = await fetchBlobBytes(BLOB_STORE_URL, ref.hash);
-    if (!(await decodes(bytes))) {
-      undecodable.add(ref.hash);
+export function createHistoryImageResolver({
+  blobStoreUrl = BLOB_STORE_URL,
+  cacheMax = CACHE_MAX,
+}: {
+  readonly blobStoreUrl?: string;
+  readonly cacheMax?: number;
+} = {}): HistoryImageResolver {
+  // Blobs are immutable (content-addressed), so cache the base64 by hash: a long turn
+  // history that re-sends the same image on every step never refetches or re-encodes it.
+  // Bounded (FIFO) so a long-lived host doesn't accumulate every image it has ever seen.
+  const cache = new Map<string, ChatImage>();
+  /** Hashes whose bytes don't decode as an image - skipped so they can't blank a vision turn. */
+  const undecodable = new Set<string>();
+
+  const resolveImage = async (ref: ArtifactRef): Promise<ChatImage | null> => {
+    if (undecodable.has(ref.hash)) {
       return null;
     }
-    const image: ChatImage = {
-      hash: ref.hash,
-      mimeType: ref.mimeType,
-      data: Buffer.from(bytes).toString("base64"),
-    };
-    cache.set(ref.hash, image);
-    if (cache.size > CACHE_MAX) {
-      cache.delete(cache.keys().next().value as string);
+    const hit = cache.get(ref.hash);
+    if (hit) {
+      return hit;
     }
-    return image;
-  } catch {
-    // Store unreachable or blob gone: skip the image rather than fail the turn - the model
-    // still gets the text and the non-image artifact note.
-    return null;
-  }
+    try {
+      const bytes = await fetchBlobBytes(blobStoreUrl, ref.hash);
+      if (!(await decodes(bytes))) {
+        undecodable.add(ref.hash);
+        return null;
+      }
+      const image: ChatImage = {
+        hash: ref.hash,
+        mimeType: ref.mimeType,
+        data: Buffer.from(bytes).toString("base64"),
+      };
+      cache.set(ref.hash, image);
+      if (cache.size > cacheMax) {
+        cache.delete(cache.keys().next().value as string);
+      }
+      return image;
+    } catch {
+      // Store unreachable or blob gone: skip the image rather than fail the turn - the model
+      // still gets the text and the non-image artifact note.
+      return null;
+    }
+  };
+
+  return async (history) => {
+    const hasImages = history.some((m) => m.role === "user" && m.artifacts?.some(isModelImage));
+    if (!hasImages) {
+      return history;
+    }
+    return Promise.all(
+      history.map(async (message) => {
+        const imageRefs = message.artifacts?.filter(isModelImage) ?? [];
+        if (message.role !== "user" || imageRefs.length === 0) {
+          return message;
+        }
+        const resolved = await Promise.all(imageRefs.map(resolveImage));
+        const images = resolved.filter((img): img is ChatImage => img !== null);
+        return images.length ? { ...message, images } : message;
+      }),
+    );
+  };
 }
 
 /**
@@ -92,22 +123,4 @@ async function resolveImage(ref: ArtifactRef): Promise<ChatImage | null> {
  * the history unchanged when nothing references an image, so the common no-attachment turn
  * pays nothing. Call only for providers that accept images.
  */
-export async function resolveHistoryImages(
-  history: readonly ChatMessage[],
-): Promise<readonly ChatMessage[]> {
-  const hasImages = history.some((m) => m.role === "user" && m.artifacts?.some(isModelImage));
-  if (!hasImages) {
-    return history;
-  }
-  return Promise.all(
-    history.map(async (message) => {
-      const imageRefs = message.artifacts?.filter(isModelImage) ?? [];
-      if (message.role !== "user" || imageRefs.length === 0) {
-        return message;
-      }
-      const resolved = await Promise.all(imageRefs.map(resolveImage));
-      const images = resolved.filter((img): img is ChatImage => img !== null);
-      return images.length ? { ...message, images } : message;
-    }),
-  );
-}
+export const resolveHistoryImages = createHistoryImageResolver();

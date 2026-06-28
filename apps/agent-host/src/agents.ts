@@ -1,7 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { parse as parseYaml } from "yaml";
+import { parseFrontmatter, sortedVisibleEntries, strList, trimStr } from "./manifest-discovery";
 import { discoverSkills } from "./skills";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
 
@@ -91,36 +91,9 @@ const BUILT_INS: readonly AgentDefinition[] = [
   },
 ];
 
-const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
-
-const trimStr = (value: unknown): string | undefined =>
-  typeof value === "string" ? value.trim() : undefined;
-
-/** A string-array field from frontmatter (`tools`, `skills`), or undefined if absent/ill-typed. An
- *  explicit empty array stays `[]` (distinct from absent) so `skills: []` means "no skills", not all. */
-function strList(value: unknown): readonly string[] | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  return value.filter((v): v is string => typeof v === "string").map((v) => v.trim());
-}
-
 /** Builds a user AgentDefinition from an AGENT.md, or null if its frontmatter disables/breaks it. */
 function toAgent(id: string, text: string): AgentDefinition | null {
-  const match = text.match(FRONTMATTER);
-  let data: Record<string, unknown> = {};
-  let body = text;
-  if (match) {
-    try {
-      const parsed = parseYaml(match[1] ?? "");
-      if (parsed && typeof parsed === "object") {
-        data = parsed as Record<string, unknown>;
-      }
-    } catch {
-      data = {};
-    }
-    body = text.slice(match[0].length);
-  }
+  const { data, body } = parseFrontmatter(text);
   if (data.disabled === true) {
     return null;
   }
@@ -148,16 +121,7 @@ export function discoverAgents(): readonly AgentDefinition[] {
     return cache;
   }
   const byId = new Map<string, AgentDefinition>(BUILT_INS.map((a) => [a.id, a]));
-  let entries: string[] = [];
-  try {
-    entries = readdirSync(AGENTS_DIR);
-  } catch {
-    entries = [];
-  }
-  for (const entry of entries.sort()) {
-    if (entry.startsWith(".")) {
-      continue;
-    }
+  for (const entry of sortedVisibleEntries(AGENTS_DIR)) {
     try {
       const agent = toAgent(entry, readFileSync(join(AGENTS_DIR, entry, "AGENT.md"), "utf8"));
       if (agent) {

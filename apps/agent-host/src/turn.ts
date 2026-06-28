@@ -2,7 +2,8 @@ import { events, type TurnStop } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
 import { type AgentEvent, type DelegateCapability, runAgent } from "./agent/loop";
 import { recordTurnStopMetric } from "./agent/turn-stop-metrics";
-import { resolveHistoryImages } from "./artifacts";
+import type { HistoryImageResolver } from "./artifacts";
+import { DeltaBuffer } from "./delta-buffer";
 import { log } from "./log";
 import { type ChatMessage, type Provider, ProviderUnavailable, type Usage } from "./providers";
 import { providerFailures } from "./providers/provider-failure-log";
@@ -10,55 +11,8 @@ import { buildSystemPrompt } from "./providers/system-prompt";
 import { Emit } from "./services";
 import { TOOL_DEFS } from "./tools";
 import { MAX_OUTPUT } from "./tools/shared";
+import { prepareTurn } from "./turn-preflight";
 import { BreakdownAccumulator, logUsageBreakdown } from "./usage/breakdown";
-
-/** Stream deltas are coalesced until this many chars accumulate, then flushed. */
-const DELTA_FLUSH_CHARS = 40;
-
-/**
- * Minimum context window (tokens) required to run Trevor: the model needs room for the
- * ~5k system-prompt+tools floor plus headroom, or it returns empty with no signal, so
- * the turn fails loud with an actionable message instead. Override with TREVOR_MIN_CONTEXT.
- *
- * For the shipped product the CONFIGURED (loaded) window is what matters - a model
- * loaded below this should error. Right now the guard checks the model's NATIVE
- * capability (caps.contextLength) instead, purely as a testing affordance: it lets us
- * load a 256k-capable model at 4-6k to exercise overflow recovery without tripping the
- * guard. TODO (when overflow handling lands): switch the check to the served/loaded
- * window so a sub-16k configured window errors. Providers reporting 0 (unknown) are not
- * checked.
- */
-const MIN_CONTEXT_TOKENS = Number(process.env.TREVOR_MIN_CONTEXT) || 16_384;
-
-/**
- * Buffers streamed text on one channel (assistant.delta or assistant.thinking),
- * flushing once it crosses DELTA_FLUSH_CHARS or when explicitly flushed at a boundary
- * (tool call, overflow, turn end). add/flush are Effects; the pending buffer is read at
- * run time via Effect.suspend, so a flush always emits the latest accumulated text.
- */
-class DeltaBuffer {
-  private pending = "";
-
-  constructor(private readonly publish: (text: string) => Effect.Effect<void>) {}
-
-  add(text: string): Effect.Effect<void> {
-    return Effect.suspend(() => {
-      this.pending += text;
-      return this.pending.length >= DELTA_FLUSH_CHARS ? this.flush() : Effect.void;
-    });
-  }
-
-  flush(): Effect.Effect<void> {
-    return Effect.suspend(() => {
-      if (!this.pending) {
-        return Effect.void;
-      }
-      const text = this.pending;
-      this.pending = "";
-      return this.publish(text);
-    });
-  }
-}
 
 /**
  * Runs the agent loop for one turn as an Effect and publishes its lifecycle through the
@@ -79,47 +33,34 @@ export function publishTurn(
     readonly toolNames?: ReadonlySet<string>;
     /** The delegation capability for a PARENT turn (D-048); absent on a child turn (depth-1). */
     readonly delegate?: DelegateCapability;
+    readonly resolveImages?: HistoryImageResolver;
   },
 ): Effect.Effect<void, never, Emit> {
-  const { runId, reasoning, toolNames, delegate } = options;
+  const { runId, reasoning, toolNames, delegate, resolveImages } = options;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
 
-    const { warm } = yield* provider.readiness();
-
-    // Inline image attachments before the model step, but only when the model actually accepts
-    // images - detected first-class via capabilities(), never hardcoded per provider (D-028).
-    const caps = yield* provider.capabilities();
-
-    // Pre-flight capability guard: a model whose NATIVE context is below the minimum
-    // can't fit the ~5k system-prompt+tools floor with room to work, so it would return
-    // empty with no signal. Fail loud with an actionable message instead. Checks the
-    // model's capability, not its loaded window - a model loaded small for overflow
-    // testing still passes (its native ceiling is large).
-    if (caps.contextLength > 0 && caps.contextLength < MIN_CONTEXT_TOKENS) {
+    const preflight = yield* prepareTurn(provider, turnHistory, { resolveImages });
+    if (preflight.type === "blocked") {
       yield* emit.publish(
-        events.assistantStarted({ runId, warm, model: provider.model, provider: provider.id }),
+        events.assistantStarted({
+          runId,
+          warm: preflight.warm,
+          model: provider.model,
+          provider: provider.id,
+        }),
       );
       yield* emit.publish(
         events.assistantCompleted({
           runId,
           text: "",
-          error: `Model ${provider.model} supports only ${caps.contextLength} tokens of context, below the ${MIN_CONTEXT_TOKENS} (16k) minimum required to run Trevor. Pick a model with at least 16k of context.`,
+          error: preflight.error,
         }),
       );
       return;
     }
-
-    // The prompt view is already model-safe: buildHistory (history-projection.ts) owns
-    // the conversation-shaping invariants - blank assistant turns dropped, user/assistant
-    // alternation enforced, no leading non-user turn - so a poisoned history can't push the
-    // model into an empty stop (the cascade behind silent dead-ends). Only image inlining
-    // (vision models only, D-028) is applied here.
-    const history = caps.images
-      ? yield* Effect.promise(() => resolveHistoryImages(turnHistory))
-      : turnHistory;
-    const useTools = caps.tools;
+    const { warm, history, useTools } = preflight;
 
     // Token-source breakdown ("where does the context go?"). Fixed overhead = the
     // system prompt + the tool schemas the provider re-sends every step; the rest

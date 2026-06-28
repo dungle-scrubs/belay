@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
-import { projectSessionId } from "@trevor/session";
-import { type GitRunner, nodeGitRunner } from "../git-status";
+import { dirname } from "node:path";
+import { nodeGitRunner } from "../git-status";
 import { TREVOR_STATE_HOME } from "../paths";
-import { mainWorktreeRoot } from "./git";
-import { type WorktreeContext, WorktreeManager } from "./manager";
+import { WorktreeManager } from "./manager";
 import type { WorktreeFs } from "./registry";
 
 /** The real node-backed filesystem for the worktree registry (mirrors the launcher's seam). */
@@ -40,6 +38,7 @@ export function nodeWorktreeManager(abbrev: (path: string) => string): WorktreeM
     home: TREVOR_STATE_HOME,
     gitRunnerFor: (cwd) => nodeGitRunner(cwd),
     abbrev,
+    realpath: realpathSafe,
     now: () => new Date().toISOString(),
     genId: () => randomUUID().slice(0, 8),
   });
@@ -51,30 +50,4 @@ function realpathSafe(path: string): string {
   } catch {
     return path;
   }
-}
-
-/**
- * Resolves the worktree context for a cwd: the canonical base-repo identity (realpath'd MAIN
- * worktree root, stable across spelling/symlinks/nested paths), its baseline session, and the
- * current path (for marking the active row). Null when cwd is not a git repository.
- */
-export function worktreeContextFor(cwd: string): WorktreeContext | null {
-  const run: GitRunner = nodeGitRunner(cwd);
-  const mainRoot = mainWorktreeRoot(run);
-  if (!mainRoot) {
-    return null;
-  }
-  const baseRepo = realpathSafe(mainRoot);
-  return {
-    baseRepo,
-    baseRepoName: basename(baseRepo),
-    basePath: mainRoot,
-    baselineSessionId: projectSessionId(baseRepo),
-    currentPath: cwd,
-  };
-}
-
-/** A stable durable session id for a (base repo, branch) managed worktree. */
-export function worktreeSessionId(baseRepo: string, branch: string): string {
-  return projectSessionId(`${baseRepo}#${branch}`);
 }

@@ -1,14 +1,10 @@
-import type { CommandSpec, InternetSnapshot } from "@trevor/session";
-import { Effect } from "effect";
+import type { CommandSpec, InternetSnapshot, SourceSummary } from "@trevor/session";
 import { buildInitProposal } from "./context/init-agents";
-import { buildLiveDoctorSnapshot } from "./doctor/build";
-import { parseDoctorCommand } from "./doctor/command";
-import { fmtFields } from "./log";
+import { buildDoctorCommandResult } from "./doctor/build";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
 import { buildSkillCommand } from "./skills";
-import { TOOL_DEFS } from "./tools";
-import { renderShell, runShell } from "./tools/run-shell";
+import { runCommand } from "./tools/run-shell";
 
 /**
  * Immediate host commands (slash commands): the host runs these directly and
@@ -43,6 +39,8 @@ export interface CommandContext {
   readonly branch?: string;
   /** Election internals (lease.debugInfo), for /doctor. */
   readonly lease?: Record<string, unknown>;
+  /** Redacted provider catalog source summaries, for /doctor. */
+  readonly catalog?: readonly SourceSummary[];
   /** Forces one cross-turn compaction fold now and resolves with a human-readable result line
    *  (D-040), for /compact. Absent when the host cannot compact (e.g. not the live leader). */
   readonly compact?: () => Promise<string>;
@@ -75,73 +73,34 @@ export interface CommandRegistry {
   run(name: string, args: string, ctx: CommandContext): Promise<{ text: string; ok: boolean }>;
 }
 
-/** One provider's reachability/warmth line for /doctor, defensively probed. */
-async function providerStatus(key: string, provider: ProviderRegistry[string]): Promise<string> {
-  let status: string;
-  try {
-    const { ready, warm } = await Effect.runPromise(provider.readiness());
-    status = ready ? (warm ? "warm" : "cold") : "unreachable";
-  } catch {
-    status = "unreachable";
-  }
-  // Adapters that expose inspectable state (e.g. LM Studio's served context / last load
-  // error) get an indented detail line; cloud providers with nothing to add stay terse.
-  const info = provider.debugInfo?.();
-  const detail = info ? `\n      ${fmtFields(info)}` : "";
-  return `  ${key} - ${provider.label} (${provider.model}) - ${status}${detail}`;
-}
+const noContext = (): void => undefined;
 
-/** The legacy plaintext /doctor dump (`/doctor text`), kept for terminals / no-dashboard clients. */
-async function doctorText(input: DoctorInput): Promise<string> {
-  const lines: string[] = [`workspace: ${input.workspace}`];
-  if (input.cwd !== input.workspace) {
-    lines.push(`cwd: ${input.cwd}`);
-  }
-  lines.push(`host: ${input.instanceId} (${input.role})`);
-  if (input.host) {
-    lines.push(`turn: ${fmtFields(input.host)}`);
-  }
-  if (input.lease) {
-    lines.push(`lease: ${fmtFields(input.lease)}`);
-  }
-  lines.push("", "providers:");
-  const statuses = await Promise.all(
-    Object.entries(input.providers).map(([key, provider]) => providerStatus(key, provider)),
-  );
-  lines.push(...statuses, "", `tools: ${TOOL_DEFS.map((t) => t.name).join(", ")}`);
-  return lines.join("\n");
-}
-
-export function buildCommandRegistry(): CommandRegistry {
-  const commands: Command<unknown>[] = [];
-  /** Registers a command, preserving its narrow input type at the declaration site. */
-  const add = <I>(command: Command<I>): void => {
-    commands.push(command as Command<unknown>);
-  };
-  /** The shared selector for commands that read no runtime context. */
-  const none = (): void => undefined;
-
-  add({
+function buildHelpCommand(commands: readonly Command<unknown>[]): Command {
+  return {
     spec: { name: "/help", summary: "List available host commands" },
-    select: none,
+    select: noContext,
     run: () => commands.map((c) => `${c.spec.usage ?? c.spec.name} - ${c.spec.summary}`).join("\n"),
-  });
+  };
+}
 
-  add<Pick<CommandContext, "cwd">>({
+function buildInitCommand(): Command<Pick<CommandContext, "cwd">> {
+  return {
     spec: {
       name: "/init",
       summary: "Draft or refresh AGENTS.md from repository evidence",
     },
     select: ({ cwd }) => ({ cwd }),
     run: (_args, input) => buildInitProposal(input.cwd).preview,
-  });
+  };
+}
 
-  add<DoctorInput>({
+function buildDoctorCommand(): Command<DoctorInput> {
+  return {
     spec: {
       name: "/doctor",
       summary: "Host health dashboard (providers, internet, tools, workspace)",
     },
-    select: ({ providers, cwd, workspace, instanceId, role, host, internet, branch, lease }) => ({
+    select: ({
       providers,
       cwd,
       workspace,
@@ -151,71 +110,127 @@ export function buildCommandRegistry(): CommandRegistry {
       internet,
       branch,
       lease,
+      catalog,
+    }) => ({
+      providers,
+      cwd,
+      workspace,
+      instanceId,
+      role,
+      host,
+      internet,
+      branch,
+      lease,
+      catalog,
     }),
-    run: async (args, input) => {
-      // Parse the variant (D-073 M1): `/doctor text` keeps the legacy plaintext dump (terminals /
-      // no-dashboard clients); summary/full/json all emit the structured doctor.current snapshot the
-      // web renders (it honours the view + copy hints client-side); refresh forces a fresh probe.
-      const command = parseDoctorCommand(args);
-      if (command.view === "text") {
-        return doctorText(input);
-      }
-      // The structured path goes through the SAME reusable accessor the `doctor` model tool calls
-      // (D-073 M6), so the command and the tool can never report a different health picture.
-      return JSON.stringify(await buildLiveDoctorSnapshot(input));
-    },
-  });
+    run: (args, input) => buildDoctorCommandResult(args, input),
+  };
+}
 
-  add({
+function buildShellCommand(): Command {
+  return {
     spec: {
       name: "/shell",
       summary: "Run a shell command on the host",
       usage: "/shell <command>",
     },
-    select: none,
+    select: noContext,
     run: async (args) => {
       const command = args.trim();
       if (!command) {
         return "usage: /shell <command>";
       }
-      // Shared runShell carries the safety classifier, timeout, and output cap; render its
-      // result inline (byte-identical to the old refusal/failure/output strings).
-      return renderShell(await runShell(command));
+      return (await runCommand(command)).output;
     },
-  });
+  };
+}
 
-  add({
-    spec: { name: "/clear", summary: "Start a fresh session" },
-    select: none,
-    // The actual switch is owned by main.ts because it has the session transport and process
-    // lifecycle. This fallback only protects direct registry calls.
-    run: () => "Clear is handled by the live host.",
-  });
+function buildHostOwnedCommand(spec: CommandSpec, message: string): Command {
+  return {
+    spec,
+    select: noContext,
+    run: () => message,
+  };
+}
 
-  add({
-    spec: {
-      name: "/cd",
-      summary: "Switch directories in a fresh session",
-      usage: "/cd <directory>",
-    },
-    select: none,
-    // The actual switch is owned by main.ts because it has filesystem, session transport, and
-    // process lifecycle access. This fallback only protects direct registry calls.
-    run: () => "Directory switching is handled by the live host.",
-  });
-
-  add<CompactInput>({
+function buildCompactCommand(): Command<CompactInput> {
+  return {
     spec: { name: "/compact", summary: "Fold older turns into a summary to free context" },
     select: ({ compact }) => ({ compact }),
-    // The fold itself (plan + summarize + emit context.compacted) runs in the host, since it
-    // needs the live event log + provider; this command just triggers it and reports the result.
     run: async (_args, { compact }) => {
       if (!compact) {
         return "Compaction is unavailable (only the live leader can compact).";
       }
       return compact();
     },
-  });
+  };
+}
+
+function buildJobsCommand(): Command {
+  return {
+    spec: { name: "/jobs", summary: "List background processes" },
+    select: noContext,
+    run: () => {
+      const jobs = supervisor.list();
+      if (!jobs.length) {
+        return "No background processes.";
+      }
+      return jobs
+        .map((j) => {
+          const exit = j.exitCode != null ? ` (exit ${j.exitCode})` : "";
+          return `${j.id}  ${j.status}${exit}  ${Math.round(j.ageMs / 1000)}s  ${j.command}`;
+        })
+        .join("\n");
+    },
+  };
+}
+
+function buildJobsStopCommand(): Command {
+  return {
+    spec: {
+      name: "/jobs-stop",
+      summary: "Stop a background process",
+      usage: "/jobs-stop <id>",
+    },
+    select: noContext,
+    run: (args) => {
+      const id = args.trim();
+      if (!id) {
+        return "usage: /jobs-stop <id>";
+      }
+      const result = supervisor.kill(id);
+      return `${result.id} -> ${result.status}`;
+    },
+  };
+}
+
+export function buildCommandRegistry(): CommandRegistry {
+  const commands: Command<unknown>[] = [];
+  /** Registers a command, preserving its narrow input type at the declaration site. */
+  const add = <I>(command: Command<I>): void => {
+    commands.push(command as Command<unknown>);
+  };
+  add(buildHelpCommand(commands));
+  add(buildInitCommand());
+  add(buildDoctorCommand());
+  add(buildShellCommand());
+  add(
+    buildHostOwnedCommand(
+      { name: "/clear", summary: "Start a fresh session" },
+      "Clear is handled by the live host.",
+    ),
+  );
+  add(
+    buildHostOwnedCommand(
+      {
+        name: "/cd",
+        summary: "Switch directories in a fresh session",
+        usage: "/cd <directory>",
+      },
+      "Directory switching is handled by the live host.",
+    ),
+  );
+  add(buildCompactCommand());
 
   for (const spec of [
     {
@@ -231,50 +246,13 @@ export function buildCommandRegistry(): CommandRegistry {
       summary: "Retry the last user prompt",
     },
   ] as const) {
-    add({
-      spec,
-      select: none,
-      run: () => `${spec.name} is handled by the live host.`,
-    });
+    add(buildHostOwnedCommand(spec, `${spec.name} is handled by the live host.`));
   }
 
   // /skills is owned by skills.ts (it knows skill discovery); registered here as one line.
   add(buildSkillCommand());
-
-  add({
-    spec: { name: "/jobs", summary: "List background processes" },
-    select: none,
-    run: () => {
-      const jobs = supervisor.list();
-      if (!jobs.length) {
-        return "No background processes.";
-      }
-      return jobs
-        .map((j) => {
-          const exit = j.exitCode != null ? ` (exit ${j.exitCode})` : "";
-          return `${j.id}  ${j.status}${exit}  ${Math.round(j.ageMs / 1000)}s  ${j.command}`;
-        })
-        .join("\n");
-    },
-  });
-
-  add({
-    spec: {
-      name: "/jobs-stop",
-      summary: "Stop a background process",
-      usage: "/jobs-stop <id>",
-    },
-    select: none,
-    run: (args) => {
-      const id = args.trim();
-      if (!id) {
-        return "usage: /jobs-stop <id>";
-      }
-      // kill throws ProcessError on an unknown id; the registry's run() try/catch renders it.
-      const result = supervisor.kill(id);
-      return `${result.id} -> ${result.status}`;
-    },
-  });
+  add(buildJobsCommand());
+  add(buildJobsStopCommand());
 
   const byName = new Map(commands.map((c) => [c.spec.name, c]));
 

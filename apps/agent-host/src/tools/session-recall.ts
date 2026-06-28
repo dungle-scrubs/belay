@@ -1,8 +1,8 @@
 import { RECALL_KINDS, type RecallKind } from "@trevor/session";
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { recallEngine } from "../agent/recall/engine";
 import type { RecallFilters } from "../agent/recall/types";
-import { defineTool } from "./shared";
+import { simpleTool } from "./shared";
 
 /**
  * The `session_recall` model-facing tool (D-044 M4). It searches the current PROJECT's durable
@@ -63,7 +63,7 @@ function filtersOf(args: RecallArgs): RecallFilters {
   };
 }
 
-export const sessionRecallTool = defineTool({
+export const sessionRecallTool = simpleTool({
   name: "session_recall",
   description:
     "Recall older conversation memory for THIS project that is no longer in the active prompt - " +
@@ -74,13 +74,12 @@ export const sessionRecallTool = defineTool({
     "turns they came from.",
   params: Params,
   readOnly: true,
-  execute: (args) =>
-    Effect.promise(async () => {
-      const result = await recallEngine.recall({
-        query: args.query,
-        filters: filtersOf(args),
-        searchCaps: args.max_results != null ? { maxAnchors: args.max_results } : undefined,
-      });
-      return JSON.stringify(result);
-    }),
+  execute: async (args) => {
+    const result = await recallEngine.recall({
+      query: args.query,
+      filters: filtersOf(args),
+      searchCaps: args.max_results != null ? { maxAnchors: args.max_results } : undefined,
+    });
+    return JSON.stringify(result);
+  },
 });

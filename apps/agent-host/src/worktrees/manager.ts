@@ -1,10 +1,13 @@
+import { basename } from "node:path";
 import type { WorktreeSummary } from "@trevor/session";
+import { projectSessionId } from "@trevor/session";
 import type { GitRunner } from "../git-status";
 import {
   addWorktree,
   diffStat,
   type GitResult,
   headCommit,
+  mainWorktreeRoot,
   mergeBranch,
   pruneWorktrees,
   removeWorktree,
@@ -33,6 +36,8 @@ export interface WorktreeManagerDeps {
   readonly gitRunnerFor: (cwd: string) => GitRunner;
   /** Display abbreviation for a path (e.g. `~/dev/...`); identity paths stay absolute. */
   readonly abbrev: (path: string) => string;
+  /** Canonicalizes a path for stable base-repo identity; node uses realpath, tests can use identity. */
+  readonly realpath: (path: string) => string;
   readonly now: () => string;
   readonly genId: () => string;
 }
@@ -64,12 +69,35 @@ export class WorktreeManager {
   constructor(private readonly deps: WorktreeManagerDeps) {}
 
   /**
+   * Resolves the worktree context for a cwd: the canonical base-repo identity, baseline session, and
+   * current path. Null when cwd is not inside a git repository.
+   */
+  contextFor(cwd: string): WorktreeContext | null {
+    const mainRoot = mainWorktreeRoot(this.deps.gitRunnerFor(cwd));
+    if (!mainRoot) {
+      return null;
+    }
+    const baseRepo = this.deps.realpath(mainRoot);
+    return {
+      baseRepo,
+      baseRepoName: basename(baseRepo),
+      basePath: mainRoot,
+      baselineSessionId: projectSessionId(baseRepo),
+      currentPath: cwd,
+    };
+  }
+
+  /**
    * The switcher read model: the baseline checkout row first, then each active worktree for the
    * base repo. Git state (dirty/ahead/behind/conflict) is read per row from its own directory; a
    * worktree whose directory is gone is flagged `missing` (and not git-read), so a stale entry
    * shows as a repair row rather than throwing.
    */
-  summaries(ctx: WorktreeContext): WorktreeSummary[] {
+  summaries(cwd: string): WorktreeSummary[] {
+    const ctx = this.contextFor(cwd);
+    if (!ctx) {
+      return [];
+    }
     const baseState = worktreeGitState(this.deps.gitRunnerFor(ctx.basePath));
     const baseline: WorktreeSummary = {
       id: BASELINE_ID,
@@ -173,11 +201,38 @@ export class WorktreeManager {
   }
 
   /**
+   * Creates a managed worktree from the caller's cwd. The manager resolves the base repo and durable
+   * worktree session id internally, so command handlers do not need to understand WorktreeContext.
+   */
+  createFromCwd(input: {
+    readonly cwd: string;
+    readonly branch: string;
+    readonly baseRef: string;
+  }): CreateResult {
+    const ctx = this.contextFor(input.cwd);
+    if (!ctx) {
+      return { ok: false, error: "Not a git repository." };
+    }
+    return this.create({
+      baseRepo: ctx.baseRepo,
+      baseRepoName: ctx.baseRepoName,
+      basePath: ctx.basePath,
+      branch: input.branch,
+      baseRef: input.baseRef,
+      sessionId: projectSessionId(`${ctx.baseRepo}#${input.branch}`),
+    });
+  }
+
+  /**
    * Resolves a row id to the cwd + session a switch should target. The baseline row returns the
    * base checkout; a managed id returns its path/session, or a blocked/repair error when its
    * directory is gone (never a silent fallback to the baseline).
    */
-  resolveSwitch(id: string, ctx: WorktreeContext): SwitchTarget {
+  resolveSwitch(id: string, cwd: string): SwitchTarget {
+    const ctx = this.contextFor(cwd);
+    if (!ctx) {
+      return { ok: false, error: "Not a git repository." };
+    }
     if (id === BASELINE_ID) {
       return { ok: true, path: ctx.basePath, sessionId: ctx.baselineSessionId };
     }
@@ -199,7 +254,11 @@ export class WorktreeManager {
    * (ahead-of-upstream) worktree is refused with a typed error - the confirmation gate that keeps a
    * destructive cleanup from silently discarding work. `force` skips the gate.
    */
-  remove(id: string, basePath: string, force: boolean): GitResult {
+  remove(id: string, cwd: string, force: boolean): GitResult {
+    const ctx = this.contextFor(cwd);
+    if (!ctx) {
+      return { ok: false, error: "Not a git repository." };
+    }
     const record = loadWorktrees(this.deps.fs, this.deps.home)[id];
     if (!record) {
       return { ok: false, error: `unknown worktree: ${id}` };
@@ -213,7 +272,11 @@ export class WorktreeManager {
         };
       }
     }
-    const removed = removeWorktree(this.deps.gitRunnerFor(basePath), record.worktreePath, force);
+    const removed = removeWorktree(
+      this.deps.gitRunnerFor(ctx.basePath),
+      record.worktreePath,
+      force,
+    );
     if (!removed.ok) {
       return removed;
     }
@@ -226,7 +289,11 @@ export class WorktreeManager {
    * dropped and its git admin entry pruned, so a worktree deleted out-of-band doesn't linger. Returns
    * the ids that were reconciled away.
    */
-  reconcile(basePath: string): string[] {
+  reconcile(cwd: string): string[] {
+    const ctx = this.contextFor(cwd);
+    if (!ctx) {
+      return [];
+    }
     const reconciled: string[] = [];
     for (const record of Object.values(loadWorktrees(this.deps.fs, this.deps.home))) {
       if (record.status === "active" && !this.deps.fs.exists(record.worktreePath)) {
@@ -235,26 +302,34 @@ export class WorktreeManager {
       }
     }
     if (reconciled.length > 0) {
-      pruneWorktrees(this.deps.gitRunnerFor(basePath));
+      pruneWorktrees(this.deps.gitRunnerFor(ctx.basePath));
     }
     return reconciled;
   }
 
   /** Merges a worktree's branch back into the base checkout's current branch (M5). */
-  mergeBack(id: string, basePath: string): GitResult {
+  mergeBack(id: string, cwd: string): GitResult {
+    const ctx = this.contextFor(cwd);
+    if (!ctx) {
+      return { ok: false, error: "Not a git repository." };
+    }
     const record = loadWorktrees(this.deps.fs, this.deps.home)[id];
     if (!record) {
       return { ok: false, error: `unknown worktree: ${id}` };
     }
-    return mergeBranch(this.deps.gitRunnerFor(basePath), record.branch);
+    return mergeBranch(this.deps.gitRunnerFor(ctx.basePath), record.branch);
   }
 
   /** A diff stat of a worktree's branch against the base ref (the inspect-before-merge view, M5). */
-  diff(id: string, basePath: string, baseRef: string): string {
+  diff(id: string, cwd: string, baseRef: string): string {
+    const ctx = this.contextFor(cwd);
+    if (!ctx) {
+      return "";
+    }
     const record = loadWorktrees(this.deps.fs, this.deps.home)[id];
     if (!record) {
       return "";
     }
-    return diffStat(this.deps.gitRunnerFor(basePath), baseRef, record.branch);
+    return diffStat(this.deps.gitRunnerFor(ctx.basePath), baseRef, record.branch);
   }
 }

@@ -1,15 +1,15 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
-import { parse as parseYaml } from "yaml";
 import type { Command } from "./commands";
+import { parseFrontmatter, sortedVisibleEntries, trimStr } from "./manifest-discovery";
 import { WORKSPACE_ROOT } from "./paths";
 // Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildSkillTool`/
 // `discoverSkills` at top level, so importing the barrel here would be a fatal initialization cycle
 // (the barrel re-exports these same names for external consumers).
 import { ToolInputError } from "./tools/errors";
-import { renderShell, runShell } from "./tools/run-shell";
+import { runCommand } from "./tools/run-shell";
 import { cap } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
@@ -28,7 +28,7 @@ import type { Tool } from "./tools/types";
  * skill's full body on demand (level 2). Bodies are never loaded until asked for.
  *
  * Shell interpolation (H-175) is opt-in: when enabled, expanding a body runs the
- * two command forms and substitutes their stdout, through the same runShell floor
+ * two command forms and substitutes their stdout, through the same runCommand floor
  * the bash tool uses. Off by default because it executes commands at load time.
  */
 
@@ -78,37 +78,6 @@ export interface Skill {
   readonly rootKind: SkillRootKind;
 }
 
-const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
-
-/** Splits a SKILL.md into parsed frontmatter data and the remaining body. */
-function parseFrontmatter(text: string): {
-  data: Record<string, unknown>;
-  body: string;
-} {
-  const match = text.match(FRONTMATTER);
-
-  if (!match) {
-    return { data: {}, body: text };
-  }
-
-  let data: Record<string, unknown> = {};
-
-  try {
-    const parsed = parseYaml(match[1] ?? "");
-
-    if (parsed && typeof parsed === "object") {
-      data = parsed as Record<string, unknown>;
-    }
-  } catch {
-    data = {};
-  }
-
-  return { data, body: text.slice(match[0].length) };
-}
-
-const trimStr = (value: unknown): string | undefined =>
-  typeof value === "string" ? value.trim() : undefined;
-
 /** Builds a Skill from a SKILL.md, or null if its frontmatter disables it. */
 function toSkill(id: string, path: string, text: string, rootKind: SkillRootKind): Skill | null {
   const { data } = parseFrontmatter(text);
@@ -141,16 +110,10 @@ function toSkill(id: string, path: string, text: string, rootKind: SkillRootKind
 export function discoverSkillsIn(roots: readonly SkillRoot[]): Skill[] {
   const byId = new Map<string, Skill>();
   for (const root of roots) {
-    let entries: string[];
-    try {
-      entries = readdirSync(root.dir);
-    } catch {
-      continue; // missing / unreadable root: nothing from here
-    }
-    for (const entry of entries.sort()) {
+    for (const entry of sortedVisibleEntries(root.dir)) {
       // A higher-precedence root already selected this id (entry === id), so skip without reading.
       // A DISABLED file in a higher root never reached `byId`, so its id stays open for a lower root.
-      if (entry.startsWith(".") || byId.has(entry)) {
+      if (byId.has(entry)) {
         continue;
       }
       const path = join(root.dir, entry, "SKILL.md");
@@ -236,16 +199,7 @@ export function buildSkillRegistry(roots: readonly SkillRoot[]): SkillEntry[] {
   const selected = new Set<string>();
 
   for (const root of roots) {
-    let names: string[];
-    try {
-      names = readdirSync(root.dir);
-    } catch {
-      continue;
-    }
-    for (const entry of names.sort()) {
-      if (entry.startsWith(".")) {
-        continue;
-      }
+    for (const entry of sortedVisibleEntries(root.dir)) {
       const path = join(root.dir, entry, "SKILL.md");
       let text: string;
       try {
@@ -330,7 +284,7 @@ export function buildSkillCommand(): Command {
  * Runs the two skill shell-interpolation forms and substitutes stdout in place:
  *   - a fenced block opening with ```! (a multi-line script), and
  *   - a single line that is just `!command` (excluding markdown images `![`).
- * Every command goes through runShell, so the safety floor, timeout, and cap apply.
+ * Every command goes through runCommand, so the safety floor, timeout, and cap apply.
  */
 async function interpolateShell(body: string): Promise<string> {
   const lines = body.split("\n");
@@ -355,13 +309,13 @@ async function interpolateShell(body: string): Promise<string> {
         script.push(inner);
       }
 
-      out.push(renderShell(await runShell(script.join("\n"))));
+      out.push((await runCommand(script.join("\n"))).output);
 
       continue; // i sits on the closing fence (or end); the loop step moves past it.
     }
 
     if (trimmed.length > 1 && trimmed.startsWith("!") && trimmed[1] !== "[") {
-      out.push(renderShell(await runShell(trimmed.slice(1).trim())));
+      out.push((await runCommand(trimmed.slice(1).trim())).output);
       continue;
     }
 

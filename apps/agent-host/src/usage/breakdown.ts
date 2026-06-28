@@ -1,7 +1,6 @@
 import { BREAKDOWN_CATEGORIES, type BreakdownPool, type UsageBreakdown } from "@trevor/session";
 import { log } from "../log";
 import type { ChatMessage, Usage } from "../providers";
-import { estimateTokens as estTokens } from "./tokens";
 
 /**
  * Per-turn token-source breakdown - "where does the context go?" Sizes are
@@ -28,6 +27,16 @@ import { estimateTokens as estTokens } from "./tokens";
 
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;
+
+/**
+ * The single char -> token heuristic for host-side estimates. Real token counts come from reported
+ * provider usage; this is the deliberately rough proxy used only where no measurement exists:
+ * usage breakdown display, compaction summaries, and recall distillation budgets.
+ */
+export const CHARS_PER_TOKEN = 4;
+
+/** Estimates tokens from a character count via the shared ~4 chars/token heuristic. */
+export const estimateTokens = (chars: number): number => Math.round(chars / CHARS_PER_TOKEN);
 
 /** The accumulator's internal mutable shape (the wire `UsageBreakdown` is readonly). */
 interface InputCats {
@@ -154,7 +163,7 @@ const topTools = (byTool: Readonly<Record<string, number>>, n = 3): string => {
   if (entries.length === 0) return "none";
   return entries
     .slice(0, n)
-    .map(([name, chars]) => `${name}:${estTokens(chars)}`)
+    .map(([name, chars]) => `${name}:${estimateTokens(chars)}`)
     .join(",");
 };
 
@@ -195,7 +204,7 @@ export function logUsageBreakdown(
     ctxWindow: usage?.contextWindow,
     ctxPct: usage ? pct(usage.input, usage.contextWindow) : undefined,
     outActual: usage?.output,
-    inEstTokens: estTokens(inText),
+    inEstTokens: estimateTokens(inText),
     inToolResults: pct(b.input.toolResults, inText),
     inSysTools: pct(b.input.systemAndTools, inText),
     inUserText: pct(b.input.userText, inText),
@@ -203,7 +212,7 @@ export function logUsageBreakdown(
     inToolArgs: pct(b.input.toolCallArgs, inText),
     images: b.input.imageCount,
     imagesB64Kb: Math.round(b.input.imagesBase64 / 1024),
-    outEstTokens: estTokens(outTotal),
+    outEstTokens: estimateTokens(outTotal),
     outThinking: pct(b.output.thinking, outTotal),
     outAnswer: pct(b.output.answer, outTotal),
     outArgs: pct(b.output.toolCallArgs, outTotal),

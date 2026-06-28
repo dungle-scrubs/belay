@@ -6,7 +6,6 @@ import {
   events,
   freshSessionId,
   type GitStatus,
-  type InternetSnapshot,
   type ModelRef,
   PRODUCER_IDS,
   RUNTIME_KIND,
@@ -14,12 +13,10 @@ import {
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
-  UNKNOWN_INTERNET,
-  type Usage,
-  type UsageBreakdown,
 } from "@trevor/session";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
-import { COMPACT_WHEN, overBudget, runCompaction } from "./agent/compactor";
+import { CompactionController } from "./agent/compaction-controller";
+import { runCompaction } from "./agent/compactor";
 import {
   type BackgroundChildInfo,
   type BackgroundDelegator,
@@ -30,16 +27,20 @@ import {
 import { buildHistory } from "./agent/history-projection";
 import { recallEngine } from "./agent/recall/engine";
 import { createSiblingReader } from "./agent/recall/reader";
+import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
 import { buildCommandRegistry } from "./commands";
-import { probeLogLine } from "./connectivity/log";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
 import { controlPromptModel } from "./control-model";
 import { debugCommandSpecs, isStopConfirmed } from "./debug-commands";
-import { buildLiveDoctorSnapshot, type DoctorFacts } from "./doctor/build";
+import {
+  buildLiveDoctorSnapshot,
+  collectDoctorProbeResults,
+  type DoctorRuntimeFacts,
+} from "./doctor/build";
 import { registerDoctorSnapshotSource } from "./doctor/source";
 import { nodeGitRunner, readGitStatus } from "./git-status";
 import { Lease } from "./lease";
@@ -51,22 +52,20 @@ import {
   buildProviders,
   type ChatMessage,
   DEFAULT_PROVIDER,
-  type Provider,
   type ProviderError,
   pickProvider,
 } from "./providers";
 import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./providers/catalog";
-import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/source-auth";
+import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
 import { Emit } from "./services";
 import { type StopOutcome, stopSession } from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
 import { openInEditor } from "./tools/open-editor";
-import { runShell, shellOutcome } from "./tools/run-shell";
+import { runCommand as runShellCommandResult } from "./tools/run-shell";
 import { publishTurn } from "./turn";
-import { terminationReason } from "./turn-termination";
 import { resolveCdTarget } from "./workspace-switch";
-import { nodeWorktreeManager, worktreeContextFor, worktreeSessionId } from "./worktrees";
+import { nodeWorktreeManager } from "./worktrees";
 
 /**
  * Trevor host: a session participant that runs an agent loop (model <-> tools) for
@@ -173,7 +172,7 @@ function startSourceSignIn(sourceId: string): void {
     }
   });
 }
-// Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_HOME. abbrevPath is
+// Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_STATE_HOME. abbrevPath is
 // a hoisted declaration, so referencing it here is fine.
 const worktrees = nodeWorktreeManager(abbrevPath);
 
@@ -208,10 +207,8 @@ function emit(event: TrevorEventInput): Promise<void> {
   return transport.publishEvent(SESSION_ID, { ...event, producerId: PRODUCER_ID });
 }
 
-/** Run ids that already have a terminal assistant.completed published. A cancel emits the
- *  completion IMMEDIATELY (so clients free instantly) and the turn fiber's onExit also tries to -
- *  this dedupes so a run closes exactly once. (Grows with run count; bounded by the session.) */
-const completedRuns = new Set<string>();
+const turnMachine = new TurnMachine();
+const compactionController = new CompactionController();
 
 /** The live Emit service: the turn program's events go to the Richter log via emit(). A second
  *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
@@ -222,10 +219,9 @@ const EmitLive = Layer.succeed(Emit, {
       if (event.type === "assistant.completed") {
         const runId = typeof event.payload.runId === "string" ? event.payload.runId : "";
         if (runId) {
-          if (completedRuns.has(runId)) {
+          if (!turnMachine.markCompleted(runId)) {
             return Promise.resolve();
           }
-          completedRuns.add(runId);
         }
       }
       return emit(event);
@@ -240,23 +236,20 @@ const INTERNET_CACHE_MS = 30_000;
  * publishes `host.internet` on each transition - but only the LIVE LEADER publishes, so multiple
  * hosts on one session never flicker the advisory. Advisory only: it drives no routing.
  */
-let lastInternet: InternetSnapshot = UNKNOWN_INTERNET;
 const internet = new InternetMonitor(
   () => probeInternet(defaultProbeTargets(), nodeProbeIo),
   INTERNET_CACHE_MS,
   Date.now,
   (snapshot) => {
-    // Structured, redacted probe log (D-060 M4): a status change or settled failure, never the
-    // configured endpoints. Logged on EVERY host (not just the leader) - each host's own view of
-    // public reachability is worth a line; only the leader publishes the advisory event.
-    const line = probeLogLine(lastInternet, snapshot);
-    if (line) {
-      (line.level === "warn" ? warn : log)("internet", line.message, line.fields);
-    }
-    lastInternet = snapshot;
     if (live && lease.isLeader()) {
       emit(events.hostInternet({ snapshot })).catch(() => {});
     }
+  },
+  (line) => {
+    // Structured, redacted probe log (D-060 M4): a status change or settled failure, never the
+    // configured endpoints. Logged on EVERY host (not just the leader) - each host's own view of
+    // public reachability is worth a line; only the leader publishes the advisory event.
+    (line.level === "warn" ? warn : log)("internet", line.message, line.fields);
   },
 );
 
@@ -271,7 +264,7 @@ function hostState(): Record<string, unknown> {
     lastAnswerSeq: turns.lastAnswerSeq,
     // Why the most recent turn ended (Phase 2 M4): answered | step_limit | overflow | noReply |
     // cancelled | interrupted | error. Omitted until the first turn completes.
-    ...(lastTermination ? { lastTurn: lastTermination } : {}),
+    ...(turnMachine.lastTermination ? { lastTurn: turnMachine.lastTermination } : {}),
     compacting: turns.compacting,
     // Subagents (D-045..D-048): the discovered roster + the depth policy. Delegation is depth-1 (a
     // child is given no delegation capability); inline blocks, background fans out read-only (≤cap).
@@ -286,9 +279,9 @@ function hostState(): Record<string, unknown> {
             .join(", ")}`,
         }
       : {}),
-    ...(lastFold
+    ...(compactionController.lastFold
       ? {
-          lastFold: `seq≤${lastFold.throughSeq} ~${commas(lastFold.tokensBefore)}→${commas(lastFold.tokensAfter)}tok`,
+          lastFold: `seq≤${compactionController.lastFold.throughSeq} ~${commas(compactionController.lastFold.tokensBefore)}→${commas(compactionController.lastFold.tokensAfter)}tok`,
         }
       : {}),
     // Ingested AGENTS.md context (D-080): how many files, from which scopes, bytes used vs dropped,
@@ -435,7 +428,7 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     (decoded.model ? buildSourceProvider(decoded.model.sourceId, decoded.model.modelId) : null) ??
     pickProvider(providers, turnModel.sourceId);
   // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
-  lastProvider = provider;
+  compactionController.noteProvider(provider);
   // A cloud turn may want fresh connectivity for the advisory (D-060): refresh if stale, never block
   // the turn on it (fire-and-forget; the result rides a later host.internet).
   if (provider.kind === "cloud") {
@@ -510,10 +503,6 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
 // between-turn compaction gate (the within-turn airbag is overflow recovery). `floorReached` stops
 // retrying a fold that could not shrink further until a fresh turn moves the needle; `lastProvider`
 // is the model the fold summarizes with (the last turn's provider, per D-043).
-let lastInput = 0;
-let lastWindow = 0;
-let compactionFloorReached = false;
-let lastProvider: Provider | undefined;
 /** The in-flight MANUAL `/compact` fold, so ESC can interrupt it (the user asked, so they can take
  *  it back). Only the manual fold is tracked - automatic folds are not interruptible (the blocking
  *  one is load-bearing for the next turn). Null when no manual fold is running. */
@@ -521,30 +510,6 @@ let manualCompactFiber: Fiber.RuntimeFiber<TrevorEventInput | null, ProviderErro
 /** True between a `/compact` command and its `command.result`. If a host dies mid-fold the command
  *  is left with no result (a dangling `/compact` that looks broken); the next leader gives it one. */
 let compactPending = false;
-/** The most recent fold, for /doctor (null until the first compaction). */
-let lastFold: { throughSeq: number; tokensBefore: number; tokensAfter: number } | null = null;
-
-/** Run ids whose assistant.started has no assistant.completed yet - the turns in flight. Tracked
- *  from the replayed + live log so a leader can REAP the ones a previous leader left dangling when
- *  it crashed or hot-reloaded mid-turn (see reapOrphans, fired on becoming leader). Without that,
- *  every client reads the dangling run as still-active forever and the send queue freezes (prompts
- *  stuck "queued"). A live leader's user.cancel (ESC) also closes a dangling run directly, so ESC
- *  unsticks an orphan even though no fiber backs it; reapOrphans is the automatic counterpart. */
-const inFlightRuns = new Set<string>();
-
-/** The latest usage/breakdown seen per in-flight run (from assistant.progress). A cancel/reap closes
- *  a run with NO usage of its own, but the turn still consumed what it consumed - so the terminal
- *  completion carries this last-known usage instead of dropping it (keeps the ctx meter + token
- *  accounting honest across a cancel). Cleared when the run's completion lands. */
-const lastUsageByRun = new Map<string, { usage?: Usage; breakdown?: UsageBreakdown }>();
-
-/** Why the most recent turn ended, for /doctor (Phase 2 M4 / D-051..D-053): answered | step_limit |
- *  overflow | noReply | cancelled | interrupted | error. Derived from the terminal assistant.completed
- *  flags (+ whether the run hit terminal context overflow). Null until the first turn completes. */
-let lastTermination: string | null = null;
-/** Runs that emitted a terminal assistant.overflow (recovery exhausted). A turn that then ends with no
- *  real answer reports "overflow" rather than a bare "noReply". Cleared when the run's completion lands. */
-const overflowedRuns = new Set<string>();
 const autoContinuedRuns = new Set<string>();
 
 /** Background subagents currently running across the session (Phase 5 / D-048), keyed by child run id.
@@ -567,7 +532,7 @@ function lastUserPrompt(): Extract<
 }
 
 function controlProvider(): string {
-  return lastProvider?.id ?? DEFAULT_PROVIDER;
+  return compactionController.provider(providers[DEFAULT_PROVIDER])?.id ?? DEFAULT_PROVIDER;
 }
 
 /** The catalog model the in-flight turn was started with, so a host-issued control prompt resumes on
@@ -652,20 +617,10 @@ function shouldAutoContinue(
  * closed it (restart/crash mid-turn), rendered as a muted "host restarted" note rather than an ESC.
  */
 function closeRun(runId: string, kind: "cancelled" | "interrupted"): void {
-  if (completedRuns.has(runId)) {
-    return;
+  const event = turnMachine.close(runId, kind);
+  if (event) {
+    emit(event).catch(() => {});
   }
-  completedRuns.add(runId);
-  const last = lastUsageByRun.get(runId);
-  emit(
-    events.assistantCompleted({
-      runId,
-      text: "",
-      ...(kind === "cancelled" ? { cancelled: true } : { interrupted: true }),
-      ...(last?.usage ? { usage: last.usage } : {}),
-      ...(last?.breakdown ? { breakdown: last.breakdown } : {}),
-    }),
-  ).catch(() => {});
 }
 
 /**
@@ -676,17 +631,13 @@ function closeRun(runId: string, kind: "cancelled" | "interrupted"): void {
  * emitted completion echoes back and the set is cleared.
  */
 function reapOrphans(): void {
-  if (inFlightRuns.size === 0) {
+  if (!turnMachine.hasInFlight) {
     return;
   }
-  for (const runId of [...inFlightRuns]) {
-    if (completedRuns.has(runId)) {
-      continue; // already closed (e.g. the user cancelled it)
-    }
+  for (const runId of turnMachine.reap()) {
     log("host", "reaping orphaned run", { run: runId.slice(0, 8) });
     closeRun(runId, "interrupted");
   }
-  inFlightRuns.clear();
 }
 
 /** Emit at most one progress tick per this many summary tokens, so a streaming fold publishes a
@@ -714,12 +665,7 @@ function compactionProgress(foldId: string): (tokens: number, budget: number) =>
  *  and not already at the fold floor. Live + leader gated so replay/standbys never gate (a fold that
  *  cannot change the budget there would loop the scheduler). */
 function needsCompaction(): boolean {
-  return (
-    live &&
-    lease.isLeader() &&
-    !compactionFloorReached &&
-    overBudget(lastInput, lastWindow, COMPACT_WHEN)
-  );
+  return compactionController.needed(live && lease.isLeader());
 }
 
 /**
@@ -729,7 +675,7 @@ function needsCompaction(): boolean {
  * the gate never loops. Not live/leader (or no provider) just releases the gate.
  */
 function startCompaction(): void {
-  const provider = lastProvider ?? providers[DEFAULT_PROVIDER];
+  const provider = compactionController.provider(providers[DEFAULT_PROVIDER]);
   if (!live || !lease.isLeader() || !provider) {
     scheduler.finishCompaction();
     return;
@@ -739,9 +685,9 @@ function startCompaction(): void {
     runCompaction(
       provider,
       historyEvents.slice(),
-      lastWindow,
+      compactionController.lastWindow,
       PRODUCER_ID,
-      lastInput,
+      compactionController.lastInput,
       foldId,
       compactionProgress(foldId),
     ).pipe(
@@ -750,14 +696,14 @@ function startCompaction(): void {
           ? // Its echo (the context.compacted case in handleEvent) admits it + releases the gate.
             Effect.promise(() => emit(event))
           : Effect.sync(() => {
-              compactionFloorReached = true; // nothing left to fold - stop until the next turn
+              compactionController.markFloorReached();
               scheduler.finishCompaction();
             }),
       ),
       Effect.catchAllCause((cause) =>
         Effect.sync(() => {
           warn("host", "compaction failed", { cause: Cause.pretty(cause) });
-          compactionFloorReached = true;
+          compactionController.markFloorReached();
           scheduler.finishCompaction();
         }),
       ),
@@ -782,7 +728,7 @@ function onBecomeLeader(): void {
     .refresh()
     .then(announceOnline)
     .catch(() => {});
-  if (inFlightRuns.size > 0) {
+  if (turnMachine.hasInFlight) {
     // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
     // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
     // the pending prompt - it was already attempted and interrupted, so the host idles clean instead
@@ -849,12 +795,8 @@ function currentGit(): { git: GitStatus | undefined; branch: string | undefined 
  */
 /** The managed worktrees for the host's current base repo (empty when cwd is not a git repo). */
 function currentWorktrees(): ReturnType<typeof worktrees.summaries> {
-  const ctx = worktreeContextFor(process.cwd());
-  if (!ctx) {
-    return [];
-  }
   try {
-    return worktrees.summaries(ctx);
+    return worktrees.summaries(process.cwd());
   } catch {
     return [];
   }
@@ -924,7 +866,7 @@ async function forceCompact(): Promise<string> {
   if (manualCompactFiber) {
     return "A compaction is already running.";
   }
-  const provider = lastProvider ?? providers[DEFAULT_PROVIDER];
+  const provider = compactionController.provider(providers[DEFAULT_PROVIDER]);
   if (!provider) {
     return "No provider available to summarize.";
   }
@@ -935,9 +877,9 @@ async function forceCompact(): Promise<string> {
     runCompaction(
       provider,
       historyEvents.slice(),
-      lastWindow,
+      compactionController.lastWindow,
       PRODUCER_ID,
-      lastInput,
+      compactionController.lastInput,
       foldId,
       compactionProgress(foldId),
       true, // force: fold regardless of the current context %
@@ -962,13 +904,13 @@ async function forceCompact(): Promise<string> {
 }
 
 /**
- * Runs a prompt-shell-lane command (a leading `!`) through the shared protected `runShell` path and
+ * Runs a prompt-shell-lane command (a leading `!`) through the shared protected `runCommand` path and
  * publishes one `shell.result` (paired by requestId). Like an immediate command this bypasses the
  * model and the turn queue and runs even while a turn streams - but unlike a command its output never
  * enters the model context (D-082). A refusal (safety floor) or non-zero/timeout maps to `ok: false`.
  */
 async function runShellCommand(requestId: string, command: string): Promise<void> {
-  const { output, ok } = shellOutcome(await runShell(command));
+  const { output, ok } = await runShellCommandResult(command);
   await emit(events.shellResult({ requestId, command, output, ok }));
   // A shell command can change repository state (checkout, commit, stage); re-announce
   // so the sidebar git line reflects it without polling. Latching + idempotent.
@@ -1061,7 +1003,7 @@ function workspaceSwitchBlocker(): string | null {
   if (turns.compacting || manualCompactFiber) {
     return "compaction is running";
   }
-  if (inFlightRuns.size > 0) {
+  if (turnMachine.hasInFlight) {
     return "a prior run is still being reconciled";
   }
   if (backgroundChildren.size > 0) {
@@ -1169,14 +1111,7 @@ async function worktreeSwitch(id: string): Promise<void> {
     );
     return;
   }
-  const ctx = worktreeContextFor(process.cwd());
-  if (!ctx) {
-    await emit(
-      events.commandResult({ command: "/worktree", text: "Not a git repository.", ok: false }),
-    );
-    return;
-  }
-  const target = worktrees.resolveSwitch(id, ctx);
+  const target = worktrees.resolveSwitch(id, process.cwd());
   if (!target.ok) {
     await emit(events.commandResult({ command: "/worktree", text: target.error, ok: false }));
     return;
@@ -1237,21 +1172,10 @@ async function worktreeNew(branch: string): Promise<void> {
     );
     return;
   }
-  const ctx = worktreeContextFor(process.cwd());
-  if (!ctx) {
-    await emit(
-      events.commandResult({ command: "/worktree-new", text: "Not a git repository.", ok: false }),
-    );
-    return;
-  }
-  const sessionId = worktreeSessionId(ctx.baseRepo, name);
-  const result = worktrees.create({
-    baseRepo: ctx.baseRepo,
-    baseRepoName: ctx.baseRepoName,
-    basePath: ctx.basePath,
+  const result = worktrees.createFromCwd({
+    cwd: process.cwd(),
     branch: name,
     baseRef: "HEAD",
-    sessionId,
   });
   if (!result.ok) {
     await emit(events.commandResult({ command: "/worktree-new", text: result.error, ok: false }));
@@ -1267,7 +1191,7 @@ async function worktreeNew(branch: string): Promise<void> {
     );
     await switchToWorkspace({
       cwd: result.record.worktreePath,
-      sessionId,
+      sessionId: result.record.sessionId,
       workspace: result.record.worktreePath,
       reason: "worktree",
     });
@@ -1296,18 +1220,7 @@ async function worktreeMerge(id: string): Promise<void> {
     );
     return;
   }
-  const ctx = worktreeContextFor(process.cwd());
-  if (!ctx) {
-    await emit(
-      events.commandResult({
-        command: "/worktree-merge",
-        text: "Not a git repository.",
-        ok: false,
-      }),
-    );
-    return;
-  }
-  const result = worktrees.mergeBack(id.trim(), ctx.basePath);
+  const result = worktrees.mergeBack(id.trim(), process.cwd());
   await emit(
     events.commandResult({
       command: "/worktree-merge",
@@ -1334,18 +1247,7 @@ async function worktreeDelete(args: string): Promise<void> {
     );
     return;
   }
-  const ctx = worktreeContextFor(process.cwd());
-  if (!ctx) {
-    await emit(
-      events.commandResult({
-        command: "/worktree-delete",
-        text: "Not a git repository.",
-        ok: false,
-      }),
-    );
-    return;
-  }
-  const result = worktrees.remove(id, ctx.basePath, force);
+  const result = worktrees.remove(id, process.cwd(), force);
   await emit(
     events.commandResult({
       command: "/worktree-delete",
@@ -1430,7 +1332,7 @@ async function restartHost(): Promise<void> {
 function performGracefulStop(): StopOutcome {
   return stopSession({
     abortActive: () => {
-      for (const runId of [...inFlightRuns]) {
+      for (const runId of turnMachine.inFlightIds()) {
         closeRun(runId, "cancelled");
       }
       scheduler.cancel("");
@@ -1530,11 +1432,7 @@ async function stopCurrentSession(args: string): Promise<void> {
 
 /** Reconciles the registry against the filesystem, dropping worktrees whose path is gone (M5). */
 async function worktreeReconcile(): Promise<void> {
-  const ctx = worktreeContextFor(process.cwd());
-  if (!ctx) {
-    return;
-  }
-  const gone = worktrees.reconcile(ctx.basePath);
+  const gone = worktrees.reconcile(process.cwd());
   await emit(
     events.commandResult({
       command: "/worktree-reconcile",
@@ -1553,9 +1451,8 @@ async function worktreeReconcile(): Promise<void> {
  * `/doctor` command (via CommandContext) and the model-facing `doctor` tool (via the registered
  * snapshot source below) draw from the exact same state.
  */
-function doctorFacts(): DoctorFacts {
+function doctorFacts(): DoctorRuntimeFacts {
   return {
-    providers,
     cwd: abbrevPath(process.cwd()),
     workspace: abbrevPath(WORKSPACE_ROOT),
     instanceId: INSTANCE_ID.slice(0, 8),
@@ -1569,7 +1466,12 @@ function doctorFacts(): DoctorFacts {
 
 // The `doctor` tool (D-073 M6) has no CommandContext, so the host registers the snapshot accessor it
 // reads: the SAME builder + facts the /doctor command uses, so command and tool never disagree.
-registerDoctorSnapshotSource(() => buildLiveDoctorSnapshot(doctorFacts()));
+registerDoctorSnapshotSource(async () =>
+  buildLiveDoctorSnapshot({
+    runtime: doctorFacts(),
+    probes: await collectDoctorProbeResults(providers),
+  }),
+);
 
 /**
  * Runs an immediate host command and publishes its result. Unlike a user.message
@@ -1579,6 +1481,7 @@ registerDoctorSnapshotSource(() => buildLiveDoctorSnapshot(doctorFacts()));
 async function runCommand(name: string, args: string): Promise<void> {
   const { text, ok } = await commands.run(name, args, {
     ...doctorFacts(),
+    providers,
     lease: lease.debugInfo(Date.now()),
     compact: forceCompact,
   });
@@ -1614,7 +1517,7 @@ function handleEvent(message: SessionEvent): void {
   } else if (decoded.type === "assistant.started") {
     // Track the run as in flight (a started with no completion) so a later leader can reap it if a
     // crash/reload leaves it dangling. Cleared on its completion below.
-    inFlightRuns.add(decoded.runId);
+    turnMachine.start(decoded.runId);
     // Note the attempt so catch-up never re-runs this prompt after a restart (replayed too).
     scheduler.noteTurn(message);
   } else if (decoded.type === "assistant.progress") {
@@ -1622,17 +1525,13 @@ function handleEvent(message: SessionEvent): void {
     // before-size stay current even when the turn is CANCELLED (a cancel carries no usage of its
     // own). Also stash the per-run usage so the cancel/reap completion can carry it.
     if (decoded.usage) {
-      lastInput = decoded.usage.input;
-      lastWindow = decoded.usage.contextWindow;
-      lastUsageByRun.set(decoded.runId, { usage: decoded.usage, breakdown: decoded.breakdown });
+      compactionController.noteUsage(decoded.usage.input, decoded.usage.contextWindow);
+      turnMachine.progress(decoded.runId, decoded.usage, decoded.breakdown);
     }
   } else if (decoded.type === "assistant.completed") {
-    inFlightRuns.delete(decoded.runId); // the run finished (normally, cancelled, or reaped)
-    lastUsageByRun.delete(decoded.runId);
     // Record WHY this turn ended (Phase 2 M4) before the overflow flag is reaped, so /doctor can
     // report the reason for the most recent turn.
-    lastTermination = terminationReason(decoded, overflowedRuns.has(decoded.runId));
-    overflowedRuns.delete(decoded.runId);
+    const lastTermination = turnMachine.complete(decoded);
     // Invariant: history stays strictly paired - an assistant reply lands only on top
     // of the user turn it answers. A different role on top means the pairing the loop
     // depends on has drifted (e.g. a missed/duplicated turn). Checked against the
@@ -1648,10 +1547,10 @@ function handleEvent(message: SessionEvent): void {
     // Capture this turn's prompt size + window for the compaction gate, and clear the fold floor
     // (a fresh turn moved the needle, so a fold worth trying may exist again).
     if (decoded.usage) {
-      lastInput = decoded.usage.input;
-      lastWindow = decoded.usage.contextWindow;
+      compactionController.noteTurnCompleted(decoded.usage);
+    } else {
+      compactionController.noteTurnCompleted();
     }
-    compactionFloorReached = false;
     // The turn finished: free the slot + note the answered seq, drain whatever queued while it ran
     // (blocking-before: a queued prompt folds first if over budget), then fold proactively in the
     // idle slot when nothing is queued (D-041) - that ordering is owned by processCompletion. The
@@ -1669,17 +1568,16 @@ function handleEvent(message: SessionEvent): void {
     // shrinks to pins + summary + recent, drop the budget estimate to its post-fold size, and
     // release the compaction gate so any turn deferred behind it can now start.
     admit(message);
-    lastInput = decoded.tokensAfter;
-    lastFold = {
+    compactionController.noteCompacted({
       throughSeq: decoded.throughSeq,
       tokensBefore: decoded.tokensBefore,
       tokensAfter: decoded.tokensAfter,
-    };
+    });
     scheduler.finishCompaction();
   } else if (decoded.type === "assistant.overflow") {
     // Recovery was exhausted for this run (D-034). Note it so the turn's termination reason reads
     // "overflow" if it then ends with no real answer (Phase 2 M4).
-    overflowedRuns.add(decoded.runId);
+    turnMachine.overflow(decoded.runId);
   } else if (decoded.type === "tool.started" || decoded.type === "tool.completed") {
     // Record the turn's tool activity so buildHistory carries the calls + results into the next
     // turn's prompt (the model keeps what it read until compaction folds it). Not re-projected per
@@ -1702,7 +1600,7 @@ function handleEvent(message: SessionEvent): void {
     if (manualCompactFiber) {
       Effect.runFork(Fiber.interrupt(manualCompactFiber));
     }
-    const targets = decoded.runId ? [decoded.runId] : [...inFlightRuns];
+    const targets = decoded.runId ? [decoded.runId] : turnMachine.inFlightIds();
     for (const runId of targets) {
       closeRun(runId, "cancelled");
     }
@@ -1741,7 +1639,7 @@ function handleEvent(message: SessionEvent): void {
         return;
       }
       if (command === "/continue") {
-        continueAfterStop(args.trim() || lastTermination || "manual continue")
+        continueAfterStop(args.trim() || turnMachine.lastTermination || "manual continue")
           .then(() =>
             emit(
               events.commandResult({
@@ -1942,7 +1840,7 @@ function configureRecall(): void {
       label: currentLabel(),
       project: projectName(WORKSPACE_ROOT),
       events: historyEvents.slice(),
-      foldThroughSeq: lastFold?.throughSeq ?? null,
+      foldThroughSeq: compactionController.lastFold?.throughSeq ?? null,
     }),
     siblings: createSiblingReader({
       transport,
@@ -1959,7 +1857,7 @@ function configureRecall(): void {
       currentWorkspace: abbrevPath(WORKSPACE_ROOT),
       currentProject: projectName(WORKSPACE_ROOT),
     }),
-    provider: () => lastProvider ?? providers[DEFAULT_PROVIDER] ?? null,
+    provider: () => compactionController.provider(providers[DEFAULT_PROVIDER]) ?? null,
   });
 }
 

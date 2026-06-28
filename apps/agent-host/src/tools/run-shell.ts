@@ -5,28 +5,21 @@ import { cap } from "./shared";
 
 const execAsync = promisify(exec);
 
-/**
- * The outcome of running a shell command under the shared floor. `ok` carries the
- * command's (capped) output; `refused` carries the safety-floor reason; `failed`
- * carries the (capped) failure text (message + any stdout/stderr). Each caller renders
- * at its own boundary: the bash tool maps `refused`/`failed` into a typed ToolError,
- * while `/shell` and skill interpolation render the text inline (see `renderShell`).
- */
-export type ShellResult =
-  | { readonly kind: "ok"; readonly output: string }
-  | { readonly kind: "refused"; readonly reason: string }
-  | { readonly kind: "failed"; readonly output: string };
+export interface CommandResult {
+  readonly output: string;
+  readonly ok: boolean;
+}
 
 /**
  * Runs a shell command in the host's working directory under the always-prevented
  * safety floor, a timeout, and an output cap. Shared by the bash tool, the /shell
  * command, and skill shell-interpolation so all three honor the same guardrails.
- * Never rejects - failures are returned as a `failed` result.
+ * Never rejects - refusals, non-zero exits, and timeouts return `ok: false`.
  */
-export async function runShell(command: string): Promise<ShellResult> {
+export async function runCommand(command: string): Promise<CommandResult> {
   const blocked = classifyAlwaysPreventedBashCommand(command, { workspaceRoot: process.cwd() });
   if (blocked) {
-    return { kind: "refused", reason: blocked };
+    return { output: `refused: ${blocked}`, ok: false };
   }
   try {
     const { stdout, stderr } = await execAsync(command, {
@@ -37,41 +30,14 @@ export async function runShell(command: string): Promise<ShellResult> {
       .map((part) => part.trim())
       .filter(Boolean)
       .join("\n");
-    return { kind: "ok", output: cap(output || "(no output)") };
+    return { output: cap(output || "(no output)"), ok: true };
   } catch (error) {
     const fail = error as { message?: string; stdout?: string; stderr?: string };
     return {
-      kind: "failed",
       output: cap(
         `error: ${fail.message ?? "command failed"}\n${fail.stdout ?? ""}\n${fail.stderr ?? ""}`.trim(),
       ),
+      ok: false,
     };
   }
-}
-
-/**
- * Renders a ShellResult to the single inline string the /shell command and skill
- * interpolation substitute - byte-identical to the strings runShell used to return
- * directly: `refused: <reason>` for a refusal, the (capped) failure text for a
- * failure, and the (capped) output for success.
- */
-export function renderShell(result: ShellResult): string {
-  switch (result.kind) {
-    case "refused":
-      return `refused: ${result.reason}`;
-    case "failed":
-      return result.output;
-    case "ok":
-      return result.output;
-  }
-}
-
-/**
- * Maps a ShellResult to the `{ output, ok }` shape the prompt shell lane (D-082) publishes on a
- * `shell.result`: the rendered text, and `ok: true` only for a clean success (a refusal or a
- * non-zero / timed-out command reports `ok: false`). The single place that mapping lives, so the
- * host's shell-lane handler and its tests can't drift on what counts as a failure.
- */
-export function shellOutcome(result: ShellResult): { output: string; ok: boolean } {
-  return { output: renderShell(result), ok: result.kind === "ok" };
 }

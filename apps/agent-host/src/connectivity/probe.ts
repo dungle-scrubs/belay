@@ -4,6 +4,7 @@ import {
   isSnapshotStale,
   UNKNOWN_INTERNET,
 } from "@trevor/session";
+import type { Fields } from "../log";
 
 /**
  * The host-owned internet probe (D-060 M1): a small DNS + HTTPS reachability check against
@@ -27,6 +28,41 @@ export interface ProbeIo {
    *  transport failure (offline, reset, timeout). */
   readonly httpsReachable: (url: string) => Promise<boolean>;
   readonly now: () => string;
+}
+
+/** A structured probe log line: a level + message + flat redacted fields for the host log sink. */
+export interface ProbeLogLine {
+  readonly level: "info" | "warn";
+  readonly message: string;
+  readonly fields: Fields;
+}
+
+export function probeLogLine(prev: InternetSnapshot, next: InternetSnapshot): ProbeLogLine | null {
+  if (next.checking) {
+    return null;
+  }
+  const changed = prev.status !== next.status;
+  const failed = next.status === "offline" && next.error != null;
+  if (!changed && !failed) {
+    return null;
+  }
+
+  const fields: Fields = {
+    status: next.status,
+    targetClass: next.targetClass,
+    checkedAt: next.checkedAt,
+  };
+  if (changed) {
+    fields.previous = prev.status;
+  }
+  if (next.error != null) {
+    fields.error = next.error;
+  }
+  return {
+    level: next.status === "offline" ? "warn" : "info",
+    message: changed ? "internet status changed" : "internet probe failed",
+    fields,
+  };
 }
 
 /**
@@ -91,6 +127,7 @@ export class InternetMonitor {
     private readonly cacheMs: number,
     private readonly nowMs: () => number,
     private readonly onChange: (snapshot: InternetSnapshot) => void = () => {},
+    private readonly onLogLine: (line: ProbeLogLine) => void = () => {},
   ) {}
 
   current(): InternetSnapshot {
@@ -131,7 +168,12 @@ export class InternetMonitor {
   }
 
   private set(snapshot: InternetSnapshot): void {
+    const previous = this.snapshot;
     this.snapshot = snapshot;
+    const line = probeLogLine(previous, snapshot);
+    if (line) {
+      this.onLogLine(line);
+    }
     this.onChange(snapshot);
   }
 }

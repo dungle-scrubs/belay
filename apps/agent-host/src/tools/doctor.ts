@@ -1,7 +1,7 @@
-import { formatDoctorReport } from "@trevor/session";
 import { Schema } from "effect";
+import { formatDoctorSnapshot } from "../doctor/build";
 import { currentDoctorSnapshot } from "../doctor/source";
-import { defineTool } from "./shared";
+import { simpleTool } from "./shared";
 
 /**
  * The `doctor` model-facing tool (D-073 M6): runs Trevor's OWN host self-diagnostic and returns the
@@ -24,7 +24,7 @@ const Params = Schema.Struct({}).annotations({
   jsonSchema: { type: "object", properties: {}, additionalProperties: false },
 });
 
-export const doctorTool = defineTool({
+export const doctorTool = simpleTool({
   name: "doctor",
   description:
     "Run Trevor's own /doctor host self-diagnostic and return a health report covering providers / " +
@@ -35,6 +35,5 @@ export const doctorTool = defineTool({
     "tasks; it does not read the user's code (use read/grep/glob for that).",
   params: Params,
   readOnly: true,
-  execute: (_args, ops) =>
-    ops.attempt(async () => formatDoctorReport(await currentDoctorSnapshot())),
+  execute: async () => formatDoctorSnapshot(await currentDoctorSnapshot()),
 });

@@ -8,8 +8,7 @@ import {
   type WebSearchResponse,
   webSearch,
 } from "web-search";
-import { ToolExecutionError } from "./errors";
-import { defineTool } from "./shared";
+import { simpleTool } from "./shared";
 
 // web-search resolves credentials from process.env (BRAVE_API_KEY, then
 // SERPER_API_KEY) and fetches over the global fetch, so both service layers are
@@ -55,7 +54,7 @@ function renderResponse(
 }
 
 /** Searches the web via Brave (Serper fallback) and returns normalized results. */
-export const webSearchTool = defineTool({
+export const webSearchTool = simpleTool({
   name: "web_search",
   description:
     "Search the web via Brave, falling back to Serper. Use for current events, " +
@@ -65,14 +64,14 @@ export const webSearchTool = defineTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args) => {
+  execute: async (args) => {
     const { query, count, freshness } = args;
-    return webSearch({ query, count, freshness }).pipe(
-      Effect.provide(PROVIDED),
-      Effect.map((response) => renderResponse(query.trim(), freshness, response)),
-      Effect.mapError(
-        (error) => new ToolExecutionError({ tool: "web_search", detail: formatError(error) }),
+    const response = await Effect.runPromise(
+      webSearch({ query, count, freshness }).pipe(
+        Effect.provide(PROVIDED),
+        Effect.mapError((error) => new Error(formatError(error))),
       ),
     );
+    return renderResponse(query.trim(), freshness, response);
   },
 });

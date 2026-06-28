@@ -1,9 +1,8 @@
 import { rgPath } from "@vscode/ripgrep";
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { WORKSPACE_ROOT } from "../paths";
-import { ToolExecutionError } from "./errors";
 import { runSearchProcess } from "./search-process";
-import { defineTool } from "./shared";
+import { simpleTool, toolExecution, toolInput } from "./shared";
 
 const DEFAULT_MAX_MATCHES = 100;
 const MAX_MATCHES_CAP = 1000;
@@ -61,7 +60,7 @@ const firstLine = (text: string): string => text.split("\n").find((l) => l.trim(
  * `path:line:text` shape. An invalid regex is a typed input error; a spawn/timeout failure is a typed
  * execution error.
  */
-export const grepTool = defineTool({
+export const grepTool = simpleTool({
   name: "grep",
   description:
     "Search workspace file contents with ripgrep (respects .gitignore). Options: 'glob' to restrict " +
@@ -70,42 +69,32 @@ export const grepTool = defineTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args, ops) =>
-    Effect.gen(function* () {
-      const result = yield* ops.attempt(() =>
-        runSearchProcess(rgPath, buildArgs(args), { cwd: WORKSPACE_ROOT }),
-      );
-      if (result.timedOut) {
-        return yield* Effect.fail(
-          new ToolExecutionError({ tool: "grep", detail: "search timed out" }),
-        );
+  execute: async (args) => {
+    const result = await runSearchProcess(rgPath, buildArgs(args), { cwd: WORKSPACE_ROOT });
+    if (result.timedOut) {
+      return toolExecution("search timed out");
+    }
+    // ripgrep exit codes: 0 = matches, 1 = no matches, 2 = error.
+    if (result.code === 1) {
+      return "(no matches)";
+    }
+    if (result.code === 0) {
+      // Searching `.` makes ripgrep prefix every path with `./`; strip it so the shape is the
+      // workspace-relative `path:line:text` grep always returned.
+      const lines = result.stdout
+        .split("\n")
+        .filter((l) => l.length > 0)
+        .map((l) => l.replace(/^\.\//, ""));
+      const max = Math.min(args.maxMatches ?? DEFAULT_MAX_MATCHES, MAX_MATCHES_CAP);
+      if (lines.length > max) {
+        return `${lines.slice(0, max).join("\n")}\n…[capped at ${max} matches]`;
       }
-      // ripgrep exit codes: 0 = matches, 1 = no matches, 2 = error.
-      if (result.code === 1) {
-        return "(no matches)";
-      }
-      if (result.code === 0) {
-        // Searching `.` makes ripgrep prefix every path with `./`; strip it so the shape is the
-        // workspace-relative `path:line:text` grep always returned.
-        const lines = result.stdout
-          .split("\n")
-          .filter((l) => l.length > 0)
-          .map((l) => l.replace(/^\.\//, ""));
-        const max = Math.min(args.maxMatches ?? DEFAULT_MAX_MATCHES, MAX_MATCHES_CAP);
-        if (lines.length > max) {
-          return `${lines.slice(0, max).join("\n")}\n…[capped at ${max} matches]`;
-        }
-        return lines.join("\n");
-      }
-      // A regex that won't parse is a value (domain) failure, surfaced as a typed input error.
-      if (/regex parse error|error parsing|unrecognized/i.test(result.stderr)) {
-        return yield* ops.reject(`invalid regular expression: ${firstLine(result.stderr)}`);
-      }
-      return yield* Effect.fail(
-        new ToolExecutionError({
-          tool: "grep",
-          detail: firstLine(result.stderr) || "search failed",
-        }),
-      );
-    }),
+      return lines.join("\n");
+    }
+    // A regex that won't parse is a value (domain) failure, surfaced as a typed input error.
+    if (/regex parse error|error parsing|unrecognized/i.test(result.stderr)) {
+      return toolInput(`invalid regular expression: ${firstLine(result.stderr)}`);
+    }
+    return toolExecution(firstLine(result.stderr) || "search failed");
+  },
 });

@@ -82,7 +82,7 @@ const TOOLS: readonly Tool<any>[] = discoveredSkills.length
  * `{ type: "object", properties, required }` object the provider casts to a typebox schema
  * (providers/pi-ai.ts `toPiAiTools`).
  */
-export function toParametersJsonSchema(
+function toParametersJsonSchema(
   // biome-ignore lint/suspicious/noExplicitAny: matches the Tool.params Encoded erasure.
   schema: Schema.Schema<unknown, any>,
 ): Record<string, unknown> {
