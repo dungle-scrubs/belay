@@ -5,6 +5,9 @@ import { Effect, Schema } from "effect";
 import { parse as parseYaml } from "yaml";
 import type { Command } from "./commands";
 import { WORKSPACE_ROOT } from "./paths";
+// Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildSkillTool`/
+// `discoverSkills` at top level, so importing the barrel here would be a fatal initialization cycle
+// (the barrel re-exports these same names for external consumers).
 import { ToolInputError } from "./tools/errors";
 import { renderShell, runShell } from "./tools/run-shell";
 import { cap } from "./tools/shared";

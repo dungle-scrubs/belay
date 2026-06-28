@@ -21,6 +21,14 @@ import type { Tool } from "./types";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
 
+export type { ToolError } from "./errors";
+// The tool error classes and the `Tool`/`ToolError` contract are the package's public surface:
+// tool-defining modules (processes/skills/tasks) and the executor discriminate failures by these
+// tags and implement this interface. Re-exporting them here keeps `errors.ts`/`types.ts` internal
+// and gives every consumer one import path (mirrors providers/index.ts).
+export { ProcessError, ToolExecutionError, ToolInputError } from "./errors";
+export type { Tool } from "./types";
+
 // The TOOLS array is heterogeneous (each tool decodes to its own params type), so it holds
 // `Tool<any>`; each per-tool definition stays strongly typed at its own declaration.
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous tool params; each tool stays typed.

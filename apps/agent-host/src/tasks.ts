@@ -1,6 +1,9 @@
 import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { Effect, Schema } from "effect";
 import { msg } from "./messages";
+// Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildTaskTools()` at top
+// level, so importing the barrel here would be a fatal initialization cycle (the barrel re-exports
+// these same names for external consumers).
 import { ToolExecutionError } from "./tools/errors";
 import type { Tool } from "./tools/types";
 

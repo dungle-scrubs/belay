@@ -3,6 +3,10 @@ import { Effect, Schema } from "effect";
 import { invariant } from "./log";
 import { msg } from "./messages";
 import { classifyAlwaysPreventedBashCommand } from "./tools/bash-safety";
+// These import the leaf error/type modules directly, NOT the `./tools` barrel: the barrel
+// aggregates this module (its TOOLS array calls `supervisor.buildTool()` at top level), so importing
+// it here would be a fatal initialization cycle. The barrel re-exports the same names for external
+// consumers; contributors that the barrel pulls in stay on the leaves.
 import { ProcessError, ToolExecutionError, ToolInputError } from "./tools/errors";
 import { cap } from "./tools/shared";
 import type { Tool } from "./tools/types";
