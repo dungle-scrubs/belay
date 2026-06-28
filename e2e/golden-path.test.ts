@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
+import { type RunningServer, startServer } from "@trevor/server-kit";
 import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
-import {
-  type RunningServer,
-  startSessionStore,
-  subscribe,
-  testTransport,
-  waitFor,
-} from "@trevor/test-kit";
+import { createSessionStore } from "@trevor/session-store/server";
+import { subscribe, testTransport, waitFor } from "@trevor/test-kit";
 import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -22,7 +18,7 @@ import { afterAll, beforeAll, test } from "vitest";
 let store: RunningServer;
 
 beforeAll(async () => {
-  store = await startSessionStore();
+  store = await startServer(createSessionStore(":memory:"), { port: 0 });
 });
 
 afterAll(async () => {

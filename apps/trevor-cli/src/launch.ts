@@ -10,9 +10,7 @@ import {
 } from "./host-registry";
 import { resolveProjectRoot, resolveSession } from "./project";
 import {
-  classifyServices,
-  conflictingServices,
-  missingServices,
+  classifyService,
   RESERVED_PORTS,
   SERVICE_NAMES,
   type ServiceName,
@@ -100,17 +98,21 @@ export async function launch(
   // 1. Shared services: probe the reserved ports, start the missing ones (never one set per project),
   //    surface conflicts, and wait for the store before touching the host.
   platform.reporter.step("checking shared services…");
-  const probes = {} as Record<ServiceName, ServiceProbe>;
-  for (const name of SERVICE_NAMES) {
-    probes[name] = await platform.probeService(name, RESERVED_PORTS[name]);
-  }
-  const services = classifyServices(probes);
-  const conflicts = conflictingServices(services);
+  const services: ServiceReport[] = [];
+  const conflicts: ServiceReport[] = [];
   const startedServices: ServiceName[] = [];
-  for (const report of missingServices(services)) {
-    platform.reporter.step(`starting ${report.name}…`);
-    await platform.startService(report.name);
-    startedServices.push(report.name);
+  for (const name of SERVICE_NAMES) {
+    const port = RESERVED_PORTS[name];
+    const status = classifyService(await platform.probeService(name, port));
+    const report: ServiceReport = { name, port, status };
+    services.push(report);
+    if (status === "conflict") {
+      conflicts.push(report);
+    } else if (status === "down") {
+      platform.reporter.step(`starting ${name}…`);
+      await platform.startService(name);
+      startedServices.push(name);
+    }
   }
   platform.reporter.step("waiting for session store…");
   await platform.waitForStore();

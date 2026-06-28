@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { type RunningServer, startBlobStore } from "@trevor/test-kit";
+import { rmSync } from "node:fs";
+import { createBlobServer } from "@trevor/blob-store/server";
+import { type RunningServer, startServer } from "@trevor/server-kit";
+import { tempDir } from "@trevor/test-kit";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
@@ -9,13 +12,16 @@ import { afterAll, beforeAll, test } from "vitest";
  */
 
 let blob: RunningServer;
+let blobRoot: string;
 
 beforeAll(async () => {
-  blob = await startBlobStore();
+  blobRoot = tempDir("trevor-blob-");
+  blob = await startServer(createBlobServer(blobRoot, 25 * 1024 * 1024), { port: 0 });
 });
 
 afterAll(async () => {
   await blob.close();
+  rmSync(blobRoot, { recursive: true, force: true });
 });
 
 async function put(body: string, contentType: string) {

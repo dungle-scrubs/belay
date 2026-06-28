@@ -59,20 +59,3 @@ export interface ServiceReport {
   readonly port: number;
   readonly status: ServiceStatus;
 }
-
-/** Classifies every reserved service from its probe. */
-export function classifyServices(probes: Record<ServiceName, ServiceProbe>): ServiceReport[] {
-  return SERVICE_NAMES.map((name) => ({
-    name,
-    port: RESERVED_PORTS[name],
-    status: classifyService(probes[name]),
-  }));
-}
-
-/** The services that must be started (nothing listening). */
-export const missingServices = (reports: readonly ServiceReport[]): ServiceReport[] =>
-  reports.filter((r) => r.status === "down");
-
-/** The reserved ports a foreign process is squatting (a conflict the launcher reports, never starts over). */
-export const conflictingServices = (reports: readonly ServiceReport[]): ServiceReport[] =>
-  reports.filter((r) => r.status === "conflict");

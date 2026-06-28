@@ -7,7 +7,10 @@
   },
   "dependencies": {
     "@trevor/agent-host": "workspace:*",
+    "@trevor/blob-store": "workspace:*",
+    "@trevor/server-kit": "workspace:*",
     "@trevor/session": "workspace:*",
+    "@trevor/session-store": "workspace:*",
     "@trevor/test-kit": "workspace:*",
     "effect": "^3.21.4"
   },

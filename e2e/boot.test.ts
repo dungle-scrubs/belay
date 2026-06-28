@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import {
-  type RunningServer,
-  startBlobStore,
-  startSessionStore,
-  testTransport,
-} from "@trevor/test-kit";
+import { rmSync } from "node:fs";
+import { createBlobServer } from "@trevor/blob-store/server";
+import { type RunningServer, startServer } from "@trevor/server-kit";
+import { createSessionStore } from "@trevor/session-store/server";
+import { tempDir, testTransport } from "@trevor/test-kit";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
@@ -15,15 +14,18 @@ import { afterAll, beforeAll, test } from "vitest";
 
 let store: RunningServer;
 let blob: RunningServer;
+let blobRoot: string;
 
 beforeAll(async () => {
-  store = await startSessionStore();
-  blob = await startBlobStore();
+  store = await startServer(createSessionStore(":memory:"), { port: 0 });
+  blobRoot = tempDir("trevor-blob-");
+  blob = await startServer(createBlobServer(blobRoot, 25 * 1024 * 1024), { port: 0 });
 });
 
 afterAll(async () => {
   await store.close();
   await blob.close();
+  rmSync(blobRoot, { recursive: true, force: true });
 });
 
 test("session-store binds a port and ensureSession round-trips", async () => {

@@ -253,9 +253,18 @@ importers:
       '@trevor/agent-host':
         specifier: workspace:*
         version: link:../apps/agent-host
+      '@trevor/blob-store':
+        specifier: workspace:*
+        version: link:../apps/blob-store
+      '@trevor/server-kit':
+        specifier: workspace:*
+        version: link:../packages/server-kit
       '@trevor/session':
         specifier: workspace:*
         version: link:../packages/session
+      '@trevor/session-store':
+        specifier: workspace:*
+        version: link:../apps/session-store
       '@trevor/test-kit':
         specifier: workspace:*
         version: link:../packages/test-kit
@@ -294,19 +303,19 @@ importers:
 
   packages/test-kit:
     dependencies:
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../session
+    devDependencies:
       '@trevor/blob-store':
         specifier: workspace:*
         version: link:../../apps/blob-store
       '@trevor/server-kit':
         specifier: workspace:*
         version: link:../server-kit
-      '@trevor/session':
-        specifier: workspace:*
-        version: link:../session
       '@trevor/session-store':
         specifier: workspace:*
         version: link:../../apps/session-store
-    devDependencies:
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0
