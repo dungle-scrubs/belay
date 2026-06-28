@@ -22,9 +22,8 @@ import type { ToolStatus } from "@/components/chat/message";
 import { parseToolArgs } from "@/components/chat/tool-message";
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { PanelHost } from "@/components/panel/PanelHost";
-import { PanelControls } from "@/components/panel/panel-controls";
+import { ControlsPanel } from "@/components/panel/panel-controls";
 import { useModelSelection } from "@/hooks/use-model-selection";
-import { reasoningSurfaceOf } from "@/model-selection";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeRunId,
@@ -44,6 +43,7 @@ import {
   toolSummary,
   worktreesFrom,
 } from "./derive";
+import { escapeAction } from "./esc-action";
 import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
 import { usePromptHistory } from "./hooks/use-prompt-history";
@@ -449,7 +449,7 @@ export function App() {
   const onSelectModel = (ref: ModelRef) => {
     selection.select(ref);
     setProvider(ref.sourceId);
-    const clamped = constrainReasoning(reasoningSurfaceOf(hostModels, ref), ref.reasoning);
+    const clamped = constrainReasoning(selection.reasoningSurface(ref), ref.reasoning);
     if (clamped != null) {
       setReasoningMap({ ...(reasoningMap ?? {}), [ref.sourceId]: clamped });
     }
@@ -661,11 +661,15 @@ export function App() {
   // ESC mirrors the cancel button when a run is active/pending; with nothing to
   // cancel it just clears the composer. One window listener reads the latest state
   // from a ref so it never goes stale and works regardless of which element has focus.
+  // A modal/picker/takeover (model chooser, resume, worktree switcher) owns Escape while open -
+  // it closes itself, and the turn on the transcript behind it must NOT be cancelled.
+  const modalOpen = chooserOpen || resumeOpen || worktreeOpen;
   const escRef = useRef({
     active,
     awaiting: awaitingResponse,
     compacting,
     draft,
+    modalOpen,
     setDraft,
     onCancel,
     resetHistory: history.resetNavigation,
@@ -675,6 +679,7 @@ export function App() {
     awaiting: awaitingResponse,
     compacting,
     draft,
+    modalOpen,
     setDraft,
     onCancel,
     resetHistory: history.resetNavigation,
@@ -685,12 +690,18 @@ export function App() {
         return;
       }
       const s = escRef.current;
-      const runId = s.active ?? (s.awaiting ? "" : null);
+      const action = escapeAction({
+        active: s.active,
+        awaiting: s.awaiting,
+        compacting: s.compacting,
+        draft: s.draft,
+        modalOpen: s.modalOpen,
+      });
       // A turn to cancel, OR a manual fold to abort - either routes through onCancel.
-      if (runId !== null || s.compacting) {
+      if (action === "cancel") {
         event.preventDefault();
         s.onCancel();
-      } else if (s.draft) {
+      } else if (action === "clear-draft") {
         event.preventDefault();
         s.setDraft("");
         s.resetHistory(); // clearing the composer ends any in-progress history navigation
@@ -758,19 +769,27 @@ export function App() {
 
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
-    <PanelControls
-      activeLabel={activeLabel}
-      quickGroups={selection.quickGroups}
-      sourceLabels={selection.sourceLabels}
-      modelLabels={selection.modelLabels}
-      activeModel={sendModel}
-      onOpenChooser={() => setChooserOpen((open) => !open)}
-      onSelectModel={onSelectModel}
-      reasoningLevels={activeReasoningLevels}
-      reasoning={activeReasoning}
-      onReasoningChange={setReasoning}
-      showThinking={showThinkingOn}
-      onShowThinkingChange={setShowThinking}
+    <ControlsPanel
+      config={{
+        model: {
+          activeLabel,
+          quickGroups: selection.quickGroups,
+          sourceLabels: selection.sourceLabels,
+          modelLabels: selection.modelLabels,
+          activeModel: sendModel,
+          onOpenChooser: () => setChooserOpen((open) => !open),
+          onSelectModel,
+        },
+        reasoning: {
+          levels: activeReasoningLevels,
+          selected: activeReasoning,
+          onChange: setReasoning,
+        },
+        thinking: {
+          show: showThinkingOn,
+          onShowChange: setShowThinking,
+        },
+      }}
     />
   );
 
