@@ -10,12 +10,12 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/blob-store": "workspace:*",
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/session": "workspace:*",
-    "@trevor/session-store": "workspace:*"
+    "@trevor/session": "workspace:*"
   },
   "devDependencies": {
+    "@trevor/blob-store": "workspace:*",
+    "@trevor/server-kit": "workspace:*",
+    "@trevor/session-store": "workspace:*",
     "@types/node": "^26.0.0",
     "typescript": "^6.0.3"
   }

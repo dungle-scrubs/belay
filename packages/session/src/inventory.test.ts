@@ -3,6 +3,8 @@ import { test } from "vitest";
 import type { SessionEvent } from "./event";
 import {
   activeSessions,
+  activeTurnRunId,
+  activityFromLog,
   archivedSessions,
   type InventoryRow,
   relativeTime,
@@ -144,6 +146,33 @@ test("activity is running for an unfinished run, settled once completed, idle wh
     "settled",
     "a finished run reads as settled, distinct from a never-ran idle session",
   );
+});
+
+test("activeTurnRunId returns the latest unfinished run, else null", () => {
+  const started = (runId: string) =>
+    ev("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
+  const done = (runId: string) => ev("assistant.completed", { runId, text: "ok" });
+  assert.equal(activeTurnRunId([]), null);
+  assert.equal(activeTurnRunId([started("r1")]), "r1");
+  assert.equal(activeTurnRunId([started("r1"), done("r1")]), null);
+  assert.equal(activeTurnRunId([started("r1"), started("r2"), done("r1")]), "r2");
+});
+
+test("activeTurnRunId ignores a dead orphan when a later run finished", () => {
+  const started = (runId: string) =>
+    ev("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
+  const done = (runId: string) => ev("assistant.completed", { runId, text: "ok" });
+  assert.equal(activeTurnRunId([started("r1"), started("r2"), done("r2")]), null);
+});
+
+test("activeTurnRunId and activityFromLog reset on /clear", () => {
+  const started = (runId: string) =>
+    ev("assistant.started", { runId, warm: true, model: "m", provider: "qwen" });
+  const done = (runId: string) => ev("assistant.completed", { runId, text: "ok" });
+  const clear = () => ev("user.command", { command: "/clear", args: "" });
+  assert.equal(activeTurnRunId([started("r1"), clear()]), null);
+  assert.equal(activeTurnRunId([started("r1"), clear(), started("r2")]), "r2");
+  assert.equal(activityFromLog([started("r1"), done("r1"), clear()]), "idle");
 });
 
 test("a /clear resets activity to idle: a pre-clear orphan run and prior work do not count", () => {
