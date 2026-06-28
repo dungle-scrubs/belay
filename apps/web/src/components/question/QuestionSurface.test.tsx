@@ -180,6 +180,28 @@ test("Cmd/Ctrl+Enter submits when the draft is ready", () => {
   assert.equal(lastAccept(onAnswer).action, "accept");
 });
 
+test("plain Enter submits when ready and focus is on a choice", () => {
+  const { onAnswer } = renderSurface(fx.singleChoice); // recommended pre-selected → ready
+  fireEvent.keyDown(screen.getByRole("radio", { name: /PostgreSQL/ }), { key: "Enter" });
+  assert.equal(onAnswer.mock.calls.length, 1);
+  assert.equal(lastAccept(onAnswer).action, "accept");
+});
+
+test("plain Enter inside a textarea is a newline, not a submit (Cmd+Enter still submits)", () => {
+  const { onAnswer } = renderSurface(fx.singleChoice); // ready
+  fireEvent.keyDown(screen.getByRole("radio", { name: /PostgreSQL/ }), { key: "n" });
+  const note = screen.getByLabelText(/notes/i);
+  fireEvent.keyDown(note, { key: "Enter" });
+  assert.equal(onAnswer.mock.calls.length, 0); // newline in the note, not a submit
+  fireEvent.keyDown(note, { key: "Enter", metaKey: true });
+  assert.equal(onAnswer.mock.calls.length, 1); // the explicit escape hatch still submits
+});
+
+test("auto-focuses the selected choice on mount so arrow keys work immediately", () => {
+  renderSurface(fx.singleChoice);
+  assert.equal(document.activeElement, screen.getByRole("radio", { name: /PostgreSQL/ }));
+});
+
 test("expired: every control is disabled and nothing can be submitted", () => {
   const { onAnswer } = renderSurface(fx.singleChoice, { expired: true });
   assert.ok(screen.getByText(/this question expired/i));

@@ -370,7 +370,13 @@ export function PanelHost(props: {
           ) : question.pending ? (
             // A pending ask_user question takes over the composer until answered (M5). The draft stays
             // in tab-scoped state, so it is restored when the question resolves and the input returns.
-            <QuestionSurface contract={question.pending.contract} onAnswer={question.onAnswer} />
+            // Keyed by questionId so a new question gets a fresh draft and re-runs the mount focus
+            // instead of inheriting the prior question's selections.
+            <QuestionSurface
+              key={question.pending.questionId}
+              contract={question.pending.contract}
+              onAnswer={question.onAnswer}
+            />
           ) : (
             <>
               {/* Slash menu: overlays above the composer (absolute, so it never pushes the

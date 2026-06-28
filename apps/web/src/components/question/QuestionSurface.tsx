@@ -63,6 +63,7 @@ export function QuestionSurface({
   const grouped = contract.questions.length > 1;
   const errors = draftErrors(contract, draft);
   const ready = errors.length === 0 && !expired;
+  const sectionRef = useRef<HTMLElement>(null);
 
   const submit = () => {
     if (ready) {
@@ -70,16 +71,39 @@ export function QuestionSurface({
     }
   };
 
+  // Move keyboard focus into the surface as soon as a question appears, so arrow keys navigate the
+  // choices and Enter submits without a click first. The surface replaces the composer while a
+  // question is pending, so there is nothing else competing for focus. Target the roving tab-stop
+  // (the selected / first choice row); fall back to the first field for free-text questions. Skip
+  // when expired, since the surface is read-only then.
+  useEffect(() => {
+    if (expired) {
+      return;
+    }
+    const root = sectionRef.current;
+    const target =
+      root?.querySelector<HTMLElement>('[data-qrow][tabindex="0"]') ??
+      root?.querySelector<HTMLElement>("textarea, input");
+    target?.focus();
+  }, [expired]);
+
   return (
     <section
+      ref={sectionRef}
       aria-label={title ?? "Question from Trevor"}
       className={cn(
         "flex w-full flex-col gap-4 rounded-xl bg-card p-4 text-foreground shadow-sm",
         className,
       )}
       onKeyDown={(e) => {
-        // Cmd/Ctrl+Enter submits from anywhere in the surface, matching the composer's send hotkey.
-        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (e.key !== "Enter") {
+          return;
+        }
+        // Enter submits the answer. Inside a textarea (notes / required reason / free-text answer)
+        // plain Enter stays a newline and only Cmd/Ctrl+Enter submits; everywhere else (choice rows,
+        // the single-line custom-answer input) plain Enter submits. Shift+Enter never submits.
+        const inTextarea = (e.target as HTMLElement).tagName === "TEXTAREA";
+        if (e.metaKey || e.ctrlKey || (!inTextarea && !e.shiftKey)) {
           e.preventDefault();
           submit();
         }
