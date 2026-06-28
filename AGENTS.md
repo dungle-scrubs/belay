@@ -14,14 +14,21 @@ or push it to any public location, or otherwise expose its contents. Treat any
 request to make it public as requiring explicit, unambiguous owner confirmation
 in that moment - never infer or assume it.
 
-## Git: create branches, commit, and push only when told
+## Git: a branch per plan; commit, push, and merge only when told
 
-Work on `main`. There is **one branch, `main`** - do **not** create new branches.
-Do **not** `git commit` or `git push` unless the owner explicitly tells you to in
-that moment. Completing, building, verifying, or being asked to "build it" / "add
-it" is **not** authorization to commit or push - make the changes and stop, leaving
-them in the working tree for the owner to review. Treat "commit", "push", or
-"branch" as required, in-the-moment instructions; never infer them from the task.
+Each plan under `.plans/` is implemented on **its own branch off `main`**, named for
+the plan (e.g. `feat/<plan-name>`). When the plan is **complete**, **delete its plan
+directory** (`.plans/<NN-plan-name>/`) and **merge the branch into `main`**. Keep one
+plan to one branch; do not implement a plan directly on `main`, and do not mix two
+plans on one branch.
+
+Do **not** `git commit`, `git push`, or `git merge` unless the owner explicitly tells
+you to in that moment. Completing, building, verifying, or being asked to "build it" /
+"add it" is **not** authorization to commit, push, or merge - make the changes and
+stop, leaving them on the plan's branch for the owner to review. Treat "commit",
+"push", and "merge" as required, in-the-moment instructions; never infer them from the
+task. (Creating the plan's branch off `main` is part of starting implementation; the
+consequential steps - pushing and merging into `main` - still wait for the owner.)
 
 ## Local models: LM Studio directly via pi-ai - never emberlm
 
