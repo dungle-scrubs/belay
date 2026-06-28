@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, within } from "@testing-library/react";
-import type { CatalogEntry, ModelRef, SourceSummary } from "@trevor/session";
+import { type CatalogEntry, type ModelRef, modelRefKey, type SourceSummary } from "@trevor/session";
 import { test } from "vitest";
 import { ModelChooser } from "./model-chooser";
 
@@ -208,6 +208,69 @@ test("loading shows a skeleton; empty shows a configure-a-source message", () =>
   assert.ok(
     (empty.container.textContent ?? "").includes("has not reported any model sources"),
     "the empty state explains the host has not reported sources",
+  );
+});
+
+test("the pin star toggles a model and the Pinned filter narrows to pinned models", () => {
+  const pins: ModelRef[] = [];
+  const pinnedKeys = new Set([modelRefKey({ sourceId: "lmstudio", modelId: "qwen3-30b" })]);
+  const { getByLabelText, getByRole, queryByText } = render(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      onSelectModel={noop}
+      pinnedKeys={pinnedKeys}
+      recentKeys={new Set()}
+      onTogglePin={(ref) => pins.push(ref)}
+    />,
+  );
+  fireEvent.click(getByLabelText("Open LM Studio"));
+  // Qwen3 30B is pinned -> its star is the "Unpin" affordance; clicking it emits the stable ref.
+  fireEvent.click(getByLabelText("Unpin Qwen3 30B"));
+  assert.deepEqual(pins, [{ sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null }]);
+  // An unpinned model offers the "Pin" affordance.
+  assert.ok(getByLabelText("Pin Llama 3.3"), "an unpinned model shows a Pin star");
+  // The Pinned chip narrows to only the pinned model.
+  fireEvent.click(getByRole("button", { name: "pinned" }));
+  assert.ok(getByLabelText("Unpin Qwen3 30B"), "the pinned model stays under the Pinned filter");
+  assert.equal(queryByText("Llama 3.3"), null, "unpinned models drop out under the Pinned filter");
+});
+
+test("the Recent filter narrows to recently-used models", () => {
+  const recentKeys = new Set([modelRefKey({ sourceId: "lmstudio", modelId: "llama-3.3" })]);
+  const { getByLabelText, getByRole, getByText, queryByText } = render(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      onSelectModel={noop}
+      recentKeys={recentKeys}
+    />,
+  );
+  fireEvent.click(getByLabelText("Open LM Studio"));
+  fireEvent.click(getByRole("button", { name: "recent" }));
+  assert.ok(getByText("Llama 3.3"), "the recently-used model stays");
+  assert.equal(queryByText("Qwen3 30B"), null, "models not in the recent set drop out");
+});
+
+test("without preference data, no pin stars or recent/pinned chips appear", () => {
+  const { getByLabelText, queryByRole } = render(
+    <ModelChooser sources={SOURCES} catalogBySource={CATALOG} onSelectModel={noop} />,
+  );
+  fireEvent.click(getByLabelText("Open LM Studio"));
+  assert.equal(
+    queryByRole("button", { name: "recent" }),
+    null,
+    "no Recent chip without recent data",
+  );
+  assert.equal(
+    queryByRole("button", { name: "pinned" }),
+    null,
+    "no Pinned chip without a pin handler",
+  );
+  assert.equal(
+    queryByRole("button", { name: "Pin Qwen3 30B" }),
+    null,
+    "no pin star without a pin handler",
   );
 });
 

@@ -768,6 +768,9 @@ export function App() {
         sources={selection.sources}
         catalogBySource={selection.catalogBySource}
         activeModel={sendModel}
+        recentKeys={selection.recentKeys}
+        pinnedKeys={selection.pinnedKeys}
+        onTogglePin={selection.togglePin}
         onSelectModel={onSelectModel}
         onSourceAction={(_id, action) => {
           // Today the only host-owned source action wired is refreshing the catalog (re-query live

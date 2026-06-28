@@ -4,11 +4,15 @@ import {
   EMPTY_PREFERENCES,
   type ModelPreferences,
   type ModelRef,
+  modelRefKey,
   type ProviderModel,
+  pinModel,
   type QuickPickerGroup,
   quickPickerModels,
   type SourceSummary,
+  sameModel,
   selectModel,
+  unpinModel,
 } from "@trevor/session";
 import { useLocalStorageState } from "ahooks";
 import { useCallback, useMemo } from "react";
@@ -41,6 +45,12 @@ export interface ModelSelection {
   readonly modelLabels: Readonly<Record<string, string>>;
   /** Select a model: clamps its reasoning to the model's surface, records active + recent, persists. */
   readonly select: (ref: ModelRef) => void;
+  /** The `modelRefKey`s of the recently-used models, for the chooser's "Recent" preference filter. */
+  readonly recentKeys: ReadonlySet<string>;
+  /** The `modelRefKey`s of the pinned models, for the chooser's "Pinned" filter + the row pin state. */
+  readonly pinnedKeys: ReadonlySet<string>;
+  /** Pin or unpin a model (idempotent), persisting the change. */
+  readonly togglePin: (ref: ModelRef) => void;
 }
 
 export function useModelSelection({
@@ -113,6 +123,24 @@ export function useModelSelection({
     [roster, setRawPrefs],
   );
 
+  const recentKeys = useMemo(
+    () => new Set(preferences.recent.map(modelRefKey)),
+    [preferences.recent],
+  );
+  const pinnedKeys = useMemo(
+    () => new Set(preferences.pinned.map(modelRefKey)),
+    [preferences.pinned],
+  );
+  const togglePin = useCallback(
+    (ref: ModelRef) => {
+      setRawPrefs((prev) => {
+        const p = decodeModelPreferences(prev);
+        return p.pinned.some((r) => sameModel(r, ref)) ? unpinModel(p, ref) : pinModel(p, ref);
+      });
+    },
+    [setRawPrefs],
+  );
+
   return {
     preferences,
     active,
@@ -123,5 +151,8 @@ export function useModelSelection({
     sourceLabels,
     modelLabels,
     select,
+    recentKeys,
+    pinnedKeys,
+    togglePin,
   };
 }

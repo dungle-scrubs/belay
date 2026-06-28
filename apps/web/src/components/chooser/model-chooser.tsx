@@ -3,6 +3,7 @@ import {
   type CatalogEntry,
   filterCatalog,
   type ModelRef,
+  modelRefKey,
   projectSourceState,
   type SourceAction,
   type SourceSummary,
@@ -18,6 +19,7 @@ import {
   Network,
   Search,
   Sparkles,
+  Star,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -88,12 +90,32 @@ export interface ModelChooserProps {
   readonly onSubmitCode?: (code: string) => void;
   /** Open directly on a source's detail view (deep link / Storybook); defaults to the overview. */
   readonly initialSourceId?: string;
+  /** `modelRefKey`s of recently-used models (D-065 M4 "Recent" preference filter); omit to hide it. */
+  readonly recentKeys?: ReadonlySet<string>;
+  /** `modelRefKey`s of pinned models (D-065 M4 "Pinned" filter + row pin state); omit to hide pinning. */
+  readonly pinnedKeys?: ReadonlySet<string>;
+  /** Pin/unpin a model from its row star; omit to hide the pin affordance entirely. */
+  readonly onTogglePin?: (ref: ModelRef) => void;
   readonly className?: string;
 }
 
-/** The capability filter chips the detail view exposes (the M2 subset; M4 adds the full filter set). */
+/** The capability filter chips the detail view exposes (entry-derivable: from the CatalogEntry alone). */
 const CAPABILITY_FILTERS = ["tools", "vision", "reasoning"] as const;
 type CapabilityFilter = (typeof CAPABILITY_FILTERS)[number];
+
+/** The preference-driven filter chips (D-065 M4): membership in the user's recent/pinned sets, not an
+ *  entry capability. Shown only when the chooser is given the corresponding preference data. */
+const PREFERENCE_FILTERS = ["recent", "pinned"] as const;
+type PreferenceFilter = (typeof PREFERENCE_FILTERS)[number];
+type ChooserFilter = CapabilityFilter | PreferenceFilter;
+
+const NO_FILTERS: Record<ChooserFilter, boolean> = {
+  tools: false,
+  vision: false,
+  reasoning: false,
+  recent: false,
+  pinned: false,
+};
 
 export function ModelChooser({
   sources,
@@ -105,15 +127,14 @@ export function ModelChooser({
   deviceCode,
   onSubmitCode,
   initialSourceId,
+  recentKeys,
+  pinnedKeys,
+  onTogglePin,
   className,
 }: ModelChooserProps) {
   const [openSourceId, setOpenSourceId] = useState<string | null>(initialSourceId ?? null);
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Record<CapabilityFilter, boolean>>({
-    tools: false,
-    vision: false,
-    reasoning: false,
-  });
+  const [filters, setFilters] = useState<Record<ChooserFilter, boolean>>(NO_FILTERS);
 
   const openSource = openSourceId
     ? (sources.find((s) => s.sourceId === openSourceId) ?? null)
@@ -131,10 +152,13 @@ export function ModelChooser({
           search={search}
           filters={filters}
           activeModel={activeModel}
+          recentKeys={recentKeys}
+          pinnedKeys={pinnedKeys}
+          onTogglePin={onTogglePin}
           onBack={() => {
             setOpenSourceId(null);
             setSearch("");
-            setFilters({ tools: false, vision: false, reasoning: false });
+            setFilters(NO_FILTERS);
           }}
           onSearch={setSearch}
           onToggleFilter={(f) => setFilters((prev) => ({ ...prev, [f]: !prev[f] }))}
@@ -275,6 +299,9 @@ function SourceDetail({
   search,
   filters,
   activeModel,
+  recentKeys,
+  pinnedKeys,
+  onTogglePin,
   onBack,
   onSearch,
   onToggleFilter,
@@ -286,11 +313,14 @@ function SourceDetail({
   source: SourceSummary;
   entries: readonly CatalogEntry[];
   search: string;
-  filters: Record<CapabilityFilter, boolean>;
+  filters: Record<ChooserFilter, boolean>;
   activeModel?: ModelRef | null;
+  recentKeys?: ReadonlySet<string>;
+  pinnedKeys?: ReadonlySet<string>;
+  onTogglePin?: (ref: ModelRef) => void;
   onBack: () => void;
   onSearch: (text: string) => void;
-  onToggleFilter: (f: CapabilityFilter) => void;
+  onToggleFilter: (f: ChooserFilter) => void;
   onSelectModel: (ref: ModelRef) => void;
   onSourceAction?: (sourceId: string, action: SourceAction) => void;
   deviceCode?: DeviceCodeFlow | null;
@@ -299,21 +329,35 @@ function SourceDetail({
   const state = projectSourceState(source);
   const action = primaryAction(source);
   const showAuth = needsAuthPanel(source, deviceCode);
+  // Preference chips appear only when the chooser was given that data (recent set / a pin handler).
+  const prefChips: PreferenceFilter[] = [
+    ...(recentKeys ? (["recent"] as const) : []),
+    ...(onTogglePin ? (["pinned"] as const) : []),
+  ];
 
   // The FULL filtered set (no page cap), so a large gateway catalog (OpenRouter, 256+) is browsable;
-  // ModelList virtualizes it when it is large.
-  const matched = useMemo(
-    () =>
-      filterCatalog(entries, {
-        text: search,
-        filters: {
-          tools: filters.tools || undefined,
-          vision: filters.vision || undefined,
-          reasoning: filters.reasoning || undefined,
-        },
-      }),
-    [entries, search, filters],
-  );
+  // ModelList virtualizes it when it is large. Capability + text filters run first (entry-derivable),
+  // then the preference filters (membership in the recent/pinned sets) are layered on.
+  const matched = useMemo(() => {
+    const base = filterCatalog(entries, {
+      text: search,
+      filters: {
+        tools: filters.tools || undefined,
+        vision: filters.vision || undefined,
+        reasoning: filters.reasoning || undefined,
+      },
+    });
+    return base.filter((e) => {
+      const key = modelRefKey(e);
+      if (filters.recent && !(recentKeys?.has(key) ?? false)) {
+        return false;
+      }
+      if (filters.pinned && !(pinnedKeys?.has(key) ?? false)) {
+        return false;
+      }
+      return true;
+    });
+  }, [entries, search, filters, recentKeys, pinnedKeys]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -347,7 +391,7 @@ function SourceDetail({
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {CAPABILITY_FILTERS.map((f) => (
+          {[...CAPABILITY_FILTERS, ...prefChips].map((f) => (
             <button
               key={f}
               type="button"
@@ -385,7 +429,13 @@ function SourceDetail({
             : "No models match your search and filters."}
         </p>
       ) : (
-        <ModelList entries={matched} activeModel={activeModel} onSelectModel={onSelectModel} />
+        <ModelList
+          entries={matched}
+          activeModel={activeModel}
+          pinnedKeys={pinnedKeys}
+          onTogglePin={onTogglePin}
+          onSelectModel={onSelectModel}
+        />
       )}
     </div>
   );
@@ -402,10 +452,14 @@ const VIRTUALIZE_OVER = 80;
 function ModelList({
   entries,
   activeModel,
+  pinnedKeys,
+  onTogglePin,
   onSelectModel,
 }: {
   entries: readonly CatalogEntry[];
   activeModel?: ModelRef | null;
+  pinnedKeys?: ReadonlySet<string>;
+  onTogglePin?: (ref: ModelRef) => void;
   onSelectModel: (ref: ModelRef) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -421,8 +475,14 @@ function ModelList({
     <ModelRow
       entry={entry}
       selected={activeModel != null && sameModel(activeModel, entry)}
+      pinned={pinnedKeys?.has(modelRefKey(entry)) ?? false}
       onSelect={() =>
         onSelectModel({ sourceId: entry.sourceId, modelId: entry.modelId, reasoning: null })
+      }
+      onTogglePin={
+        onTogglePin
+          ? () => onTogglePin({ sourceId: entry.sourceId, modelId: entry.modelId, reasoning: null })
+          : undefined
       }
     />
   );
@@ -473,49 +533,75 @@ function contextLabel(tokens: number): string {
   return String(tokens);
 }
 
-/** One catalog model row: name, capability tags, context length, cost tier, and a selected check. */
+/** One catalog model row: name, capability tags, context length, cost tier, a selected check, and a
+ *  pin star (when pinning is enabled). The select target and the pin toggle are SIBLING buttons (never
+ *  nested), so the row stays valid + accessible; the pin star reveals on hover and stays lit when set. */
 function ModelRow({
   entry,
   selected,
+  pinned,
   onSelect,
+  onTogglePin,
 }: {
   entry: CatalogEntry;
   selected: boolean;
+  pinned: boolean;
   onSelect: () => void;
+  onTogglePin?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      aria-label={`Select ${entry.displayName}`}
+    <div
       className={cn(
-        "flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
-        selected ? "bg-primary/10 text-foreground" : "hover:bg-card",
+        "group flex w-full items-center rounded-md transition-colors",
+        selected ? "bg-primary/10" : "hover:bg-card",
       )}
     >
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{entry.displayName}</span>
-          {entry.freshness.stale ? (
-            <span className="shrink-0 text-label tracking-wider text-amber-600 dark:text-amber-400">
-              stale
-            </span>
-          ) : null}
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        aria-label={`Select ${entry.displayName}`}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left"
+      >
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium">{entry.displayName}</span>
+            {entry.freshness.stale ? (
+              <span className="shrink-0 text-label tracking-wider text-amber-600 dark:text-amber-400">
+                stale
+              </span>
+            ) : null}
+          </span>
+          <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            {entry.capabilities.map((cap) => (
+              <Badge key={cap} variant="secondary" className="px-1.5 py-0 text-[10px] capitalize">
+                {cap}
+              </Badge>
+            ))}
+            {entry.contextLength != null ? (
+              <span>{contextLabel(entry.contextLength)} ctx</span>
+            ) : null}
+            {entry.costTier != null ? <span>· {entry.costTier}</span> : null}
+          </span>
         </span>
-        <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-          {entry.capabilities.map((cap) => (
-            <Badge key={cap} variant="secondary" className="px-1.5 py-0 text-[10px] capitalize">
-              {cap}
-            </Badge>
-          ))}
-          {entry.contextLength != null ? (
-            <span>{contextLabel(entry.contextLength)} ctx</span>
-          ) : null}
-          {entry.costTier != null ? <span>· {entry.costTier}</span> : null}
-        </span>
-      </span>
-      {selected ? <Check className="size-4 shrink-0 text-primary" /> : null}
-    </button>
+        {selected ? <Check className="size-4 shrink-0 text-primary" /> : null}
+      </button>
+      {onTogglePin ? (
+        <button
+          type="button"
+          onClick={onTogglePin}
+          aria-pressed={pinned}
+          aria-label={pinned ? `Unpin ${entry.displayName}` : `Pin ${entry.displayName}`}
+          className={cn(
+            "mr-1 shrink-0 cursor-pointer rounded p-1.5 transition-opacity",
+            pinned
+              ? "text-amber-500"
+              : "text-muted-foreground/50 opacity-0 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100",
+          )}
+        >
+          <Star className={cn("size-4", pinned && "fill-current")} />
+        </button>
+      ) : null}
+    </div>
   );
 }
