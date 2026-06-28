@@ -193,7 +193,11 @@ const REPORT_STATUS_TAG: Record<DoctorStatus, string> = {
   not_checked: "----",
 };
 
-const REPORT_HEADLINE: Record<DoctorStatus, string> = {
+/**
+ * The headline for an overall doctor status - the single source for both the copyable text report
+ * (formatDoctorReport below) and the web summary strip, so the two can never drift apart.
+ */
+export const DOCTOR_STATUS_HEADLINE: Record<DoctorStatus, string> = {
   ok: "Healthy",
   warn: "Degraded",
   error: "Problems found",
@@ -211,7 +215,7 @@ export function formatDoctorReport(snapshot: DoctorSnapshot): string {
   const status = overallStatus(snapshot);
   const summary = summarizeSnapshot(snapshot);
   const lines: string[] = [];
-  lines.push(`Trevor /doctor - ${REPORT_HEADLINE[status]}`);
+  lines.push(`Trevor /doctor - ${DOCTOR_STATUS_HEADLINE[status]}`);
   const freshness = snapshot.checkedAt ? `${snapshot.checkedAt} · ` : "";
   lines.push(
     `${freshness}${summary.total} areas · ${summary.error} error, ${summary.warn} warning, ${summary.ok} ok, ${summary.notChecked} not checked`,

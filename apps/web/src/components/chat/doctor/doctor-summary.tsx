@@ -1,17 +1,14 @@
 import { Braces, Copy, ListFilter, RefreshCw } from "lucide-react";
-import type { DoctorSnapshotState, DoctorStatus, DoctorSummary } from "@/commands/doctor";
+import {
+  DOCTOR_STATUS_HEADLINE,
+  type DoctorSnapshotState,
+  type DoctorStatus,
+  type DoctorSummary,
+} from "@/commands/doctor";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { DOCTOR_STATUS_META, StatusDot, StatusIcon } from "./doctor-status";
-
-/** Headline for the overall snapshot status. */
-const OVERALL_HEADLINE: Record<DoctorStatus, string> = {
-  ok: "Healthy",
-  warn: "Degraded",
-  error: "Problems found",
-  not_checked: "Not checked",
-};
 
 /** A label per count bucket, most-severe first. `error`/`warning` take a plural
  *  for any count but 1; `ok` / `not checked` don't inflect. */
@@ -87,7 +84,7 @@ export function DoctorSummaryStrip({
         <span className="inline-flex items-center gap-1.5">
           <StatusIcon status={status} className="size-4" />
           <span className={cn("text-ui font-medium", headlineTint)}>
-            {OVERALL_HEADLINE[status]}
+            {DOCTOR_STATUS_HEADLINE[status]}
           </span>
         </span>
 

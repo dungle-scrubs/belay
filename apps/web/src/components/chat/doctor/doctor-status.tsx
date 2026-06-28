@@ -11,8 +11,17 @@ import { cn } from "@/lib/utils";
 export interface DoctorStatusMeta {
   readonly label: string;
   readonly icon: ComponentType<{ className?: string }>;
-  /** Foreground tint for the icon/text. */
+  /** Full per-status foreground tint (ok reads green) - for the status glyph and key-fact values. */
   readonly text: string;
+  /**
+   * Severity-only emphasis tint: warn/error stand out, ok and not-checked stay muted. Used where a
+   * row's DOMAIN element (the area icon, a finding's message) carries severity but should not light up
+   * green when healthy - only call out a problem.
+   */
+  readonly severityText: string;
+  /** Left-spine border class: colored for a problem (warn/error), transparent (but width-preserving)
+   *  otherwise, so problem rows are scannable down the panel without boxing every area. */
+  readonly spine: string;
   /** Solid fill for the status dot. */
   readonly dot: string;
   /** Tinted chip (low-alpha fill + matching text) for the status badge. */
@@ -24,6 +33,8 @@ export const DOCTOR_STATUS_META: Record<DoctorStatus, DoctorStatusMeta> = {
     label: "ok",
     icon: CircleCheck,
     text: "text-smui-green",
+    severityText: "text-muted-foreground",
+    spine: "border-l-2 border-l-transparent",
     dot: "bg-smui-green",
     chip: "bg-smui-green/12 text-smui-green",
   },
@@ -31,6 +42,8 @@ export const DOCTOR_STATUS_META: Record<DoctorStatus, DoctorStatusMeta> = {
     label: "warning",
     icon: TriangleAlert,
     text: "text-smui-yellow",
+    severityText: "text-smui-yellow",
+    spine: "border-l-2 border-l-smui-yellow",
     dot: "bg-smui-yellow",
     chip: "bg-smui-yellow/15 text-smui-yellow",
   },
@@ -38,6 +51,8 @@ export const DOCTOR_STATUS_META: Record<DoctorStatus, DoctorStatusMeta> = {
     label: "error",
     icon: CircleX,
     text: "text-smui-red",
+    severityText: "text-smui-red",
+    spine: "border-l-2 border-l-smui-red",
     dot: "bg-smui-red",
     chip: "bg-smui-red/15 text-smui-red",
   },
@@ -45,6 +60,8 @@ export const DOCTOR_STATUS_META: Record<DoctorStatus, DoctorStatusMeta> = {
     label: "not checked",
     icon: CircleDashed,
     text: "text-muted-foreground",
+    severityText: "text-muted-foreground",
+    spine: "border-l-2 border-l-transparent",
     dot: "bg-muted-foreground/60",
     chip: "bg-muted text-muted-foreground",
   },

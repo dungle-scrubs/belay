@@ -17,7 +17,7 @@ import { type ComponentType, useState } from "react";
 import type { DoctorArea, DoctorAreaId, DoctorFinding, DoctorStatus } from "@/commands/doctor";
 import { cn } from "@/lib/utils";
 import { DoctorFindingRow, DoctorNextActionLine } from "./doctor-finding";
-import { StatusBadge } from "./doctor-status";
+import { DOCTOR_STATUS_META, StatusBadge } from "./doctor-status";
 
 /** Each area's glyph - names the domain; severity is carried by the status icon,
  *  the badge, and the left spine. */
@@ -36,46 +36,10 @@ const AREA_ICON: Record<DoctorAreaId, ComponentType<{ className?: string }>> = {
   updates: ArrowUpCircle,
 };
 
-/** A left spine in the status color makes a problem row scannable down the panel
- *  without boxing every area; ok / not-checked rows stay flush. */
-function spine(status: DoctorStatus): string {
-  switch (status) {
-    case "error":
-      return "border-l-2 border-l-smui-red";
-    case "warn":
-      return "border-l-2 border-l-smui-yellow";
-    default:
-      return "border-l-2 border-l-transparent";
-  }
-}
-
-/** The single leading icon carries both domain (its glyph) and severity (its
- *  tint): warn/error stand out, ok/not-checked stay muted. Status is repeated
- *  only on the right badge - not as a third left icon. */
-function iconTint(status: DoctorStatus): string {
-  switch (status) {
-    case "error":
-      return "text-smui-red";
-    case "warn":
-      return "text-smui-yellow";
-    default:
-      return "text-muted-foreground";
-  }
-}
-
+/** A key fact's value tint: the full per-status color when it carries a status (ok reads green),
+ *  else plain foreground. The per-status colors live in DOCTOR_STATUS_META. */
 function factTint(status: DoctorStatus | undefined): string {
-  switch (status) {
-    case "ok":
-      return "text-smui-green";
-    case "warn":
-      return "text-smui-yellow";
-    case "error":
-      return "text-smui-red";
-    case "not_checked":
-      return "text-muted-foreground";
-    default:
-      return "text-foreground";
-  }
+  return status ? DOCTOR_STATUS_META[status].text : "text-foreground";
 }
 
 /**
@@ -109,7 +73,12 @@ export function DoctorAreaRow({
 
   const header = (
     <>
-      <Icon className={cn("size-4 shrink-0 translate-y-0.5", iconTint(area.status))} />
+      <Icon
+        className={cn(
+          "size-4 shrink-0 translate-y-0.5",
+          DOCTOR_STATUS_META[area.status].severityText,
+        )}
+      />
       <h3 className="shrink-0 text-ui font-medium text-foreground">{area.label}</h3>
       <span className="min-w-0 flex-1 break-words text-ui text-muted-foreground">
         {area.verdict}
@@ -131,7 +100,7 @@ export function DoctorAreaRow({
   const showNextAction = findingsVisible && area.nextAction != null;
 
   return (
-    <div className={cn("flex flex-col", spine(area.status))}>
+    <div className={cn("flex flex-col", DOCTOR_STATUS_META[area.status].spine)}>
       {/* The whole header row is the hover/click target (full width), not an inset inner box. */}
       {canExpand ? (
         <button

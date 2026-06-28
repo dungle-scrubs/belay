@@ -5,6 +5,7 @@
  */
 export {
   DOCTOR_AREA_ORDER,
+  DOCTOR_STATUS_HEADLINE,
   DOCTOR_STATUS_RANK,
   type DoctorArea,
   type DoctorAreaId,

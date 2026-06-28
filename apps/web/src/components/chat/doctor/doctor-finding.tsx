@@ -1,21 +1,9 @@
 import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import type { DoctorFinding, DoctorNextAction, DoctorStatus } from "@/commands/doctor";
+import type { DoctorFinding, DoctorNextAction } from "@/commands/doctor";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-
-/** A finding's message carries its own severity by tint (no leading status dot - that pattern was
- *  too tall): a warning or error message stands out; an ok / not-checked one stays muted. */
-function messageTint(status: DoctorStatus): string {
-  switch (status) {
-    case "warn":
-      return "text-smui-yellow";
-    case "error":
-      return "text-smui-red";
-    default:
-      return "text-muted-foreground";
-  }
-}
+import { DOCTOR_STATUS_META } from "./doctor-status";
 
 /** The next-action affordance: a label, plus the exact command/path monospace
  *  when one is known. A button when the caller wires `onAction`, otherwise a
@@ -78,7 +66,9 @@ export function DoctorFindingRow({
       <p className="break-words">
         <span className="font-medium text-foreground">{finding.title}</span>
         {finding.message ? (
-          <span className={cn("ml-2", messageTint(finding.status))}>{finding.message}</span>
+          <span className={cn("ml-2", DOCTOR_STATUS_META[finding.status].severityText)}>
+            {finding.message}
+          </span>
         ) : null}
       </p>
 
