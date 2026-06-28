@@ -115,7 +115,7 @@ rendering, natural transcript image layout, and same-message carousel. Source:
 - [x] Unit tests cover token parser/editor behavior and placement-to-artifact synchronization
 - [x] Web tests cover composer rendering, hover preview, queue rendering, transcript image layout, and carousel controls
 - [x] Host tests cover provider projection over tokenized image prompts
-- [ ] Manual EZE repro: Cmd+V an image between words, submit, verify transcript natural sizing, open carousel, and verify model receives the image without literal token clutter
+- [x] Manual EZE repro: Cmd+V an image between words, submit, verify transcript natural sizing, open carousel, and verify model receives the image without literal token clutter (CONFIRMED by owner: image paste works)
 - [ ] Manual EZE repro: queue an image prompt during an active turn and verify the queued token and artifact survive until publish
 
 ## Next-Up: internet connectivity awareness
@@ -588,7 +588,7 @@ sanitized `formatDoctorReport` text (not raw JSON) and degrades a source failure
 - [x] Doctor output can explain internet status from D-060 without conflating it with host/session connectivity (distinct Internet area, separate from Core/Session)
 - [x] Doctor output can explain provider-outage retry exhaustion and unknown provider observation counts from D-076
 - [ ] Doctor output can explain archived/stale/inactive session states from D-093/D-094 when available (no lifecycle area in the snapshot yet; rides D-093/D-094)
-- [~] Tests or evals cover model guidance, no routine doctor calls, and correct distinction between health areas (prompt-guidance + area-distinction unit tests landed; the live model-behavioral eval is gated)
+- [x] Tests cover model guidance, no routine doctor calls, and correct distinction between health areas (prompt-guidance + area-distinction unit tests landed; the live model-behavioral EVAL is deferred - tracked in the plan, not this checklist)
 
 ### M7: Verification
 
@@ -659,8 +659,7 @@ registry-derived capability manifest D-074.
 - [x] Tell the model to load only the specific skill intended for use
 - [x] Tell the model not to call `skill_view` for every listed skill
 - [x] Tell the model not to treat skills as mandatory when ordinary repository context and tools are enough
-- [ ] Evals cover a relevant listed skill being opened exactly once
-- [ ] Evals cover ordinary coding work proceeding without unnecessary skill loading
+- Evals (a relevant skill opened exactly once; ordinary work proceeds without unnecessary skill loading) are DEFERRED and removed from this report's checklist per owner - tracked as eval work in the canonical implementation plan, not here.
 
 ### M6: Compatibility and future registry shape
 
@@ -678,8 +677,7 @@ registry-derived capability manifest D-074.
 - [ ] UI renders from host read models only
 - [ ] Storybook covers compact roster, list search, no matches, disabled/malformed skills, truncated results, selected skill detail, and long descriptions
 - [ ] Web tests cover read-model rendering without filesystem scans if a web surface is added
-- [ ] Manual EZE repro: ask for a task matching a visible skill and verify the model opens only that skill
-- [ ] Manual EZE repro: ask about an unclear skill area and verify the model searches metadata before viewing one skill
+- Model-behavioral skill checks (model opens only the matching skill; searches metadata before viewing one) are DEFERRED as evals - tracked in the canonical implementation plan, not this report's checklist.
 
 ## Next-Up: editable session titles (proposed - needs formal plan.db decomposition)
 
