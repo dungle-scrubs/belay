@@ -17,7 +17,7 @@ import {
  * The READ side is the contract itself (`ProviderQuestionContract` from @trevor/session) - already
  * render-ready, so the surface renders it directly. This module owns the rest, kept out of the
  * component so it is testable without a DOM (M2.5 "split view-model transforms from presentation"):
- *   - `emptyDraft` seeds a draft from a contract;
+ *   - `initialDraft` seeds the draft the surface opens with (recommended single-choice pre-selected);
  *   - the reducers (`toggleChoice`, `setCustomText`, `setNotes`, `setReason`, `toggleDefer`) update it
  *     immutably with the single/multi-select and custom-vs-choice rules baked in;
  *   - `buildAnswer` folds the draft into a `ProviderQuestionAccept`, and `draftErrors` validates that
@@ -63,7 +63,13 @@ const EMPTY_QUESTION: QuestionDraft = {
 export const contractFromRaw = (raw: RawAskUserInput): ProviderQuestionContract =>
   normalizeAskUserInput(raw);
 
-/** Seed an empty draft - one blank `QuestionDraft` per question in the contract. */
+/**
+ * Seed a fully BLANK draft - one empty `QuestionDraft` per question, nothing pre-selected. Production
+ * always opens via `initialDraft` (which pre-selects the recommended single-choice option); this is a
+ * test-only seed so the reducer/validation specs start from a known-empty state.
+ *
+ * @internal test helper - not used by the live surface.
+ */
 export function emptyDraft(contract: ProviderQuestionContract): GroupDraft {
   const byId: Record<string, QuestionDraft> = {};
   for (const q of contract.questions) {

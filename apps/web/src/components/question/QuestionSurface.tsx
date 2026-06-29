@@ -6,7 +6,7 @@ import type {
 } from "@trevor/session";
 import { Check } from "lucide-react";
 import type * as React from "react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,12 +14,10 @@ import { cn } from "@/lib/utils";
 import {
   advance,
   buildAnswer,
-  firstInvalidIndex,
+  draftErrors,
   type GroupDraft,
   goToTab,
   initialDraft,
-  isComplete,
-  questionErrors,
   selectCustom,
   setCustomText,
   setNotes,
@@ -80,8 +78,11 @@ export function QuestionSurface({
   // A multi-question ask renders the SEQUENCED TAB interface (02.18); a single question keeps exactly
   // today's single-pane layout. Both render the identical reused QuestionCard. <!-- D-001 -->
   const grouped = contract.questions.length > 1;
-  const ready = isComplete(contract, draft) && !expired;
-  const sectionRef = useRef<HTMLElement>(null);
+  // The whole-contract validation issues, computed ONCE per draft: `ready`, per-tab validity, and the
+  // first-incomplete jump all derive from this by filtering on `questionId`, so `buildAnswer` +
+  // `validateAnswer` run a single time instead of once per check and once per tab. <!-- D-010 -->
+  const issues = useMemo(() => draftErrors(contract, draft), [contract, draft]);
+  const ready = issues.length === 0 && !expired;
   // The active question's panel; focus is scoped to it (never the tab strip) so the keyboard flow stays
   // in the panel and Radix's trigger roving never fights our Left/Right tab nav. <!-- D-009 D-012 -->
   const panelRef = useRef<HTMLDivElement>(null);
@@ -91,9 +92,11 @@ export function QuestionSurface({
   const activeQuestion = contract.questions[activeIndex];
   const isFinalTab = activeIndex >= lastIndex;
   const currentTabValid = activeQuestion
-    ? questionErrors(contract, draft, activeQuestion.id).length === 0
+    ? !issues.some((i) => i.questionId === activeQuestion.id)
     : true;
-  const firstInvalid = firstInvalidIndex(contract, draft);
+  const firstInvalid = contract.questions.findIndex((q) =>
+    issues.some((i) => i.questionId === q.id),
+  );
 
   const submit = () => {
     if (ready) {
@@ -195,7 +198,6 @@ export function QuestionSurface({
 
   return (
     <section
-      ref={sectionRef}
       aria-label={title ?? "Question from Trevor"}
       className={cn(
         "flex w-full flex-col gap-4 rounded-xl bg-card p-4 text-foreground shadow-sm",
@@ -229,15 +231,15 @@ export function QuestionSurface({
           onValueChange={(v) => setDraft((d) => goToTab(d, Number(v)))}
           activationMode="manual"
         >
-          <TabsList className="flex w-full">
+          <TabsList>
             {contract.questions.map((q, i) => {
-              const valid = questionErrors(contract, draft, q.id).length === 0;
+              const valid = !issues.some((issue) => issue.questionId === q.id);
               return (
                 <TabsTrigger
                   key={q.id}
                   value={String(i)}
                   disabled={expired === true}
-                  className="min-w-0"
+                  className="max-w-[20rem] flex-none"
                 >
                   {/* Header, or a never-blank "Question N" fallback (D-014); truncates at 320px (D-015). */}
                   <span className="min-w-0 truncate">{q.header || `Question ${i + 1}`}</span>
@@ -350,7 +352,9 @@ function QuestionCard({
   // focus to the choice group so arrow keys resume scrolling choices.
   const collapseNote = () => {
     setShowNotes(false);
-    cardRef.current?.querySelector<HTMLElement>('[data-qrow][tabindex="0"]')?.focus();
+    if (cardRef.current) {
+      focusQuestionTarget(cardRef.current);
+    }
   };
 
   return (
