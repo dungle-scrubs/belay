@@ -73,7 +73,7 @@ import { generateHandoffPrompt, hasGenerableContext } from "./handoff-generate";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { msg } from "./messages";
-import { abbrevHome, WORKSPACE_ROOT } from "./paths";
+import { abbrevHome, TREVOR_STATE_HOME, WORKSPACE_ROOT } from "./paths";
 import { supervisor } from "./processes";
 import {
   buildProviders,
@@ -86,6 +86,8 @@ import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./provid
 import { parseOverflowWindow } from "./providers/error-classifier";
 import { recordLearnedWindow } from "./providers/model-metadata-overrides";
 import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
+import { startSerialRun } from "./serial-run/entry";
+import { nodeSerialRunStartDeps } from "./serial-run/node";
 import { Emit } from "./services";
 import {
   MAX_RESTART_RESUMES,
@@ -1412,6 +1414,49 @@ async function runHandoff(args: string): Promise<void> {
 }
 
 /**
+ * `/serial-implement <plans>` (plan 02): parse an ordered plan queue, record a durable, re-openable
+ * serial run, and hand off to a dedicated session that implements the plans strictly one managed
+ * worktree at a time (merge + delete each green tree; halt on the first red/conflict). The launching
+ * session is freed by the handoff; the create/implement/merge/delete lifecycle runs in the spawned run.
+ */
+async function runSerialImplement(args: string): Promise<void> {
+  if (await blockedFromWorkspaceSwitch("/serial-implement", "start a serial run")) {
+    return;
+  }
+  try {
+    const result = await startSerialRun(
+      args,
+      nodeSerialRunStartDeps({
+        workspace: WORKSPACE_ROOT,
+        stateHome: TREVOR_STATE_HOME,
+        newRunId: () => crypto.randomUUID(),
+        now: () => new Date().toISOString(),
+        handoff: (prompt) =>
+          runDirectHandoff(prompt, handoffDeps()).then((r) => ({
+            ok: r.ok,
+            ...(r.targetSessionId ? { targetSessionId: r.targetSessionId } : {}),
+          })),
+      }),
+    );
+    await emit(
+      events.commandResult({ command: "/serial-implement", text: result.text, ok: result.ok }),
+    );
+    if (result.ok) {
+      log("host", "serial run started", { runId: result.runId, to: result.targetSessionId });
+    }
+  } catch (error) {
+    warn("host", "serial-implement failed", { error: msg(error) });
+    await emit(
+      events.commandResult({
+        command: "/serial-implement",
+        text: `Failed to start serial run: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  }
+}
+
+/**
  * Generated handoff (02.10): emit the source lifecycle (`handoff.requested` generate -> `generating`),
  * draft the target prompt with the source's last-turn provider (the same provider compaction folds
  * with), then emit `handoff.generated` for the browser to surface for approval. No command result is
@@ -2219,6 +2264,12 @@ function handleEvent(message: SessionEvent): void {
       }
       if (command === "/handoff") {
         runHandoff(args).catch((error) => warn("host", "handoff failed", { error: msg(error) }));
+        return;
+      }
+      if (command === "/serial-implement") {
+        runSerialImplement(args).catch((error) =>
+          warn("host", "serial-implement failed", { error: msg(error) }),
+        );
         return;
       }
       if (command === "/clip") {

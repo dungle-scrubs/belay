@@ -303,6 +303,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description: "Managed git worktrees and their registry.json.",
   },
   {
+    name: "serial-runs",
+    category: "state",
+    relativePath: "serial-runs.json",
+    description: "Durable serial-worktree-implement run journals (plan 02).",
+  },
+  {
     name: "docs-corpus",
     category: "state",
     relativePath: "docs",
