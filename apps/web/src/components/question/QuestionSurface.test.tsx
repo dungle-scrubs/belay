@@ -271,6 +271,24 @@ test("expired: every control is disabled and nothing can be submitted", () => {
 
 // --- 02.18: the sequenced tab interface (multi-question only) ---
 
+test("preview pane figures carry min-w-0 so a long preview line scrolls instead of overflowing", () => {
+  // Regression guard: without min-w-0 the figure grew to the preview's content width and pushed the
+  // <pre> past the surface boundary; min-w-0 lets it shrink to its grid column so overflow-x-auto scrolls.
+  const { container } = render(<QuestionSurface contract={fx.withPreviews} onAnswer={vi.fn()} />);
+  const figures = [...container.querySelectorAll("figure")];
+  assert.ok(figures.length > 0, "the preview pane renders figures");
+  assert.ok(
+    figures.every((f) => f.className.includes("min-w-0")),
+    "every preview figure can shrink below its content width",
+  );
+  // The preview text itself stays in a horizontally-scrollable <pre>, never a wrapping/overflowing block.
+  const pre = figures[0]?.querySelector("pre");
+  assert.ok(
+    pre?.className.includes("overflow-x-auto"),
+    "the preview scrolls horizontally in place",
+  );
+});
+
 test("single-question keeps the single-pane layout: no tab strip, 'Submit answer' (D-001)", () => {
   renderSurface(fx.singleChoice);
   assert.equal(screen.queryByRole("tablist"), null, "no tabs for a single question");

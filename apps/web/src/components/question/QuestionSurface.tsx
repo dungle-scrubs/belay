@@ -689,7 +689,10 @@ function PreviewPane({
         <figure
           key={c.id}
           aria-hidden={c.id !== activeId}
-          className="m-0 flex flex-col gap-1 [grid-area:1/1]"
+          // `min-w-0` lets the figure shrink to its grid column instead of growing to the preview's
+          // content width - without it a long preview line pushes the `<pre>` past the surface edge
+          // instead of letting its own `overflow-x-auto` scroll (the boundary-overflow bug).
+          className="m-0 flex min-w-0 flex-col gap-1 [grid-area:1/1]"
           style={{ visibility: c.id === activeId ? "visible" : "hidden" }}
         >
           {c.preview ? <ChoicePreview preview={c.preview} className="mt-0" /> : null}
