@@ -192,6 +192,22 @@ export interface GitStatus {
 }
 
 /**
+ * The single owner of the "branch, else `detached <sha>`" ref-label rule. Returns the branch
+ * name, the `detached <sha>` label when HEAD is detached, or null when there's no ref to show
+ * (a fresh repo with no commit yet). Used by the host (`host.online` branch, /doctor) and the
+ * web sidebar so the label can't drift between surfaces.
+ */
+export function gitRefLabel(status: GitStatus): string | null {
+  if (status.branch) {
+    return status.branch;
+  }
+  if (status.detached) {
+    return `detached ${status.detached}`;
+  }
+  return null;
+}
+
+/**
  * A Trevor-managed worktree as the host announces it (D-091), so the browser's worktree switcher
  * renders without reading local state. `baseRepo` is the canonical repo identity (grouping key);
  * `baseRepoName` its display name. `baseline` marks the base-repo checkout row (not a managed

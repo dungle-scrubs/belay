@@ -2,6 +2,19 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { cors, json } from "./http";
 
 /**
+ * The health endpoint every store serves, and the exact body it returns. Exported as a contract so a
+ * launcher/prober (trevor-cli) checks the same path + shape this service publishes, instead of
+ * re-spelling the string literal and `{ ok: true }` guard on its own.
+ */
+export const HEALTH_PATH = "/health";
+export const HEALTH_BODY = { ok: true } as const;
+
+/** True when a parsed `/health` response body identifies a Trevor service (`{ ok: true }`). */
+export function isHealthBody(body: unknown): boolean {
+  return typeof body === "object" && body !== null && (body as { ok?: unknown }).ok === true;
+}
+
+/**
  * The request lifecycle every Trevor store repeats, owned in one place. `createService` builds a
  * `node:http` Server that, for each request: applies permissive CORS, answers the OPTIONS preflight
  * (204), serves `GET /health -> {ok:true}`, dispatches to the first matching route, and 404s when
@@ -60,8 +73,8 @@ export function createService(opts: ServiceOptions): Server {
       res.end();
       return;
     }
-    if (path === "/health") {
-      json(res, 200, { ok: true });
+    if (path === HEALTH_PATH) {
+      json(res, 200, HEALTH_BODY);
       return;
     }
 

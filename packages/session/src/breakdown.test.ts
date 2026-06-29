@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { addBreakdown, BREAKDOWN_GROUPS, rollupBreakdown, type UsageBreakdown } from "./breakdown";
+import {
+  addBreakdown,
+  BREAKDOWN_GROUPS,
+  estimateTokens,
+  inputBreakdownChars,
+  inputEstimateTokens,
+  rollupBreakdown,
+  type UsageBreakdown,
+} from "./breakdown";
 
 /**
  * The breakdown schema is the single source of truth for "where did the call's tokens go" (D-013).
@@ -77,4 +85,15 @@ test("the rollup of a summed breakdown equals summing the rollups (addBreakdown 
     const single = rollupBreakdown(sample).find((r) => r.key === row.key)?.value ?? 0;
     assert.equal(row.value, single * 2, `${row.key} doubles under addBreakdown`);
   }
+});
+
+test("inputBreakdownChars sums input categories and excludes images/byTool", () => {
+  // 5000 + 500 + 200 + 100 + 3000 = 8800; imagesBase64 (9999) and byTool must NOT count -
+  // image cost is not proportional to base64 length, so they never join the text estimate.
+  assert.equal(inputBreakdownChars(sample), 8_800);
+});
+
+test("inputEstimateTokens applies the shared heuristic to the image-excluded char total", () => {
+  assert.equal(inputEstimateTokens(sample), estimateTokens(8_800));
+  assert.equal(inputEstimateTokens(sample), 2_200);
 });

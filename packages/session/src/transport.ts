@@ -1,5 +1,6 @@
 import type { HostPresence } from "./envelope";
 import type { SessionEvent } from "./event";
+import type { SessionSummary } from "./inventory";
 
 /**
  * The session transport seam: the contract a participant uses to join a session,
@@ -60,4 +61,11 @@ export interface SessionTransport {
   readonly ensureSession: (sessionId: string) => Promise<string>;
   readonly publishEvent: (sessionId: string, input: PublishInput) => Promise<void>;
   readonly connectSession: (options: ConnectSessionOptions) => SessionConnection;
+  /**
+   * The session inventory read model (`GET /sessions`): every durable session's summary. Owned by
+   * the transport beside its sibling `/sessions` routes so the resume chooser, sidebar, cli, and
+   * recall reader stop each hand-rolling the fetch + `{ sessions }` envelope guard. Throws on a
+   * non-OK response; an optional `AbortSignal` cancels the in-flight request (the web polls it).
+   */
+  readonly fetchInventory: (signal?: AbortSignal) => Promise<readonly SessionSummary[]>;
 }

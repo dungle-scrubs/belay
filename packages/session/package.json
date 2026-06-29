@@ -5,6 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./ports": "./src/ports.ts",
+    "./blob-contract": "./src/blob-contract.ts",
+    "./session-routes": "./src/session-routes.ts",
     "./node-paths": "./src/node-paths.ts",
     "./async": "./src/async.ts",
     "./conformance": "./test/transport-conformance.ts"

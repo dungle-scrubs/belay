@@ -171,53 +171,17 @@ export function deriveAnswerShape(q: {
   return "free_text";
 }
 
-function normalizePreview(
-  preview: string | QuestionChoicePreview | undefined,
-): QuestionChoicePreview | undefined {
-  if (preview == null) {
-    return undefined;
-  }
-  if (typeof preview === "string") {
-    return preview.length > 0 ? { text: preview } : undefined;
-  }
-  return preview;
-}
-
-function normalizeChoice(raw: RawQuestionChoice, index: number): ProviderQuestionChoice {
-  return {
-    id: raw.id && raw.id.length > 0 ? raw.id : `choice_${index + 1}`,
-    label: raw.label ?? "",
-    ...(raw.description ? { description: raw.description } : {}),
-    ...(normalizePreview(raw.preview) ? { preview: normalizePreview(raw.preview) } : {}),
-    ...(raw.recommended ? { recommended: true } : {}),
-    ...(raw.impact ? { impact: raw.impact } : {}),
-    ...(raw.risk ? { risk: raw.risk } : {}),
-    ...(raw.badges?.length ? { badges: raw.badges } : {}),
-    ...(raw.content ? { content: raw.content } : {}),
-  };
-}
-
-function normalizeQuestion(raw: RawQuestion, index: number): ProviderQuestionItem {
-  const choices = (raw.choices ?? []).map(normalizeChoice);
-  return {
-    id: raw.id && raw.id.length > 0 ? raw.id : `question_${index + 1}`,
-    question: raw.question ?? "",
-    answerShape: deriveAnswerShape(raw),
-    ...(raw.header ? { header: raw.header } : {}),
-    ...(raw.kind ? { kind: raw.kind } : {}),
-    multiSelect: raw.multiSelect === true,
-    requiresReason: raw.requiresReason === true,
-    allowDefer: raw.allowDefer === true,
-    choices,
-  };
-}
-
 /**
  * Coerce the model's raw `ask_user` input into the canonical contract: fill missing ids, derive each
  * answer shape, structure string previews, and default the boolean flags. The grouped `questions[]`
  * form is used when present and non-empty; otherwise the legacy `question` + `choices` form becomes a
  * one-question group. Always returns a contract (possibly empty); structural validity is a separate
  * `validateContract` concern, so the host can report precise issues and the UI can still render.
+ *
+ * The per-field coercion (id fallbacks, preview shaping, flag defaults, answer-shape derivation) IS
+ * the permissive wire decoder ({@link decodeQuestion}); a typed `RawQuestion` is just a well-formed
+ * `unknown`, so this entry only selects the grouped-vs-legacy source and funnels it through the one
+ * core - the host normalize path and the wire decode can't disagree on defaults.
  */
 export function normalizeAskUserInput(raw: RawAskUserInput): ProviderQuestionContract {
   const source: readonly RawQuestion[] =
@@ -234,7 +198,7 @@ export function normalizeAskUserInput(raw: RawAskUserInput): ProviderQuestionCon
             },
           ]
         : [];
-  return { schemaVersion: 1, questions: source.map(normalizeQuestion) };
+  return { schemaVersion: 1, questions: source.map((q, index) => decodeQuestion(q, index)) };
 }
 
 // --- validation ---

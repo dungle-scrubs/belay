@@ -168,3 +168,37 @@ export function rollupBreakdown(b: UsageBreakdown): BreakdownRow[] {
   };
   return BREAKDOWN_GROUPS.map((group) => ({ ...group, value: valueByKey[group.key] ?? 0 }));
 }
+
+/**
+ * The single char -> token heuristic shared by host estimates and web display. Real token counts
+ * come from reported provider usage; this deliberately rough ~4 chars/token proxy is used only
+ * where no measurement exists: usage-breakdown display, compaction summaries, recall budgets, and
+ * the reclaimed-token label. Lives here beside the category schema so host and web cannot drift.
+ */
+export const CHARS_PER_TOKEN = 4;
+
+/** Estimates tokens from a character count via the shared ~4 chars/token heuristic. */
+export const estimateTokens = (chars: number): number => Math.round(chars / CHARS_PER_TOKEN);
+
+/**
+ * Total input-pool chars across the descriptor categories. Images (`imagesBase64`) and `byTool`
+ * are NOT categories and are excluded: a vision model's token cost is not proportional to base64
+ * length, so folding image bytes into the text estimate would badly distort it. This is exactly
+ * the rule the host accumulator's `poolTotal("input")` applies, so the one chars total has one home.
+ */
+export function inputBreakdownChars(breakdown: UsageBreakdown): number {
+  const counts = breakdown.input as unknown as Record<string, number>;
+  return BREAKDOWN_CATEGORIES.reduce(
+    (total, c) => (c.pool === "input" ? total + (counts[c.key] ?? 0) : total),
+    0,
+  );
+}
+
+/**
+ * Estimated input tokens for a wire breakdown - the input-pool char total (images excluded) run
+ * through the shared heuristic. The one answer to "how many input tokens did this turn use" for
+ * both host display and the web transcript meta line.
+ */
+export function inputEstimateTokens(breakdown: UsageBreakdown): number {
+  return estimateTokens(inputBreakdownChars(breakdown));
+}

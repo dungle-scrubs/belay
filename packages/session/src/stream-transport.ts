@@ -1,6 +1,8 @@
 import { Either } from "effect";
 import { decodeStreamEnvelope } from "./envelope";
 import { encodeStreamParams } from "./identity";
+import type { SessionSummary } from "./inventory";
+import { eventsPath, SESSIONS_PATH, streamPath } from "./session-routes";
 import type {
   ConnectSessionOptions,
   PublishInput,
@@ -40,7 +42,7 @@ function streamUrl(
   identity: SessionIdentity,
   afterSeq: number,
 ): string {
-  const url = new URL(`/sessions/${sessionId}/stream`, serviceUrl);
+  const url = new URL(streamPath(sessionId), serviceUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.search = encodeStreamParams(identity, afterSeq).toString();
   return url.toString();
@@ -92,7 +94,7 @@ async function publishStream(
   sessionId: string,
   input: PublishInput,
 ): Promise<void> {
-  const response = await fetch(`${serviceUrl}/sessions/${sessionId}/events`, {
+  const response = await fetch(`${serviceUrl}${eventsPath(sessionId)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -104,7 +106,7 @@ async function publishStream(
 
 /** Ensures a session with the given id exists (idempotent); returns its id. */
 async function ensureStreamSession(serviceUrl: string, sessionId: string): Promise<string> {
-  const response = await fetch(`${serviceUrl}/sessions`, {
+  const response = await fetch(`${serviceUrl}${SESSIONS_PATH}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ sessionId }),
@@ -118,6 +120,20 @@ async function ensureStreamSession(serviceUrl: string, sessionId: string): Promi
   return body?.session?.sessionId ?? sessionId;
 }
 
+/** Reads the inventory read model (`GET /sessions`) and unwraps the `{ sessions }` envelope. The one
+ *  owner of the inventory fetch + envelope guard the cli, web, and recall reader all needed. */
+async function fetchStreamInventory(
+  serviceUrl: string,
+  signal?: AbortSignal,
+): Promise<readonly SessionSummary[]> {
+  const response = await fetch(`${serviceUrl}${SESSIONS_PATH}`, signal ? { signal } : undefined);
+  if (!response.ok) {
+    throw new Error(`inventory failed: HTTP ${response.status}`);
+  }
+  const body = (await response.json().catch(() => null)) as { sessions?: unknown } | null;
+  return Array.isArray(body?.sessions) ? (body.sessions as SessionSummary[]) : [];
+}
+
 /**
  * Builds a `SessionTransport` bound to one service URL (a local store or Richter).
  * The host and web depend on the `SessionTransport` contract; this is the concrete
@@ -128,5 +144,6 @@ export function streamTransport(serviceUrl: string): SessionTransport {
     ensureSession: (sessionId) => ensureStreamSession(serviceUrl, sessionId),
     publishEvent: (sessionId, input) => publishStream(serviceUrl, sessionId, input),
     connectSession: (options) => connectStream(serviceUrl, options),
+    fetchInventory: (signal) => fetchStreamInventory(serviceUrl, signal),
   };
 }

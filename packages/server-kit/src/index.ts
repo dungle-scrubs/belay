@@ -16,4 +16,12 @@
 
 export { cors, json, readBody, readJson } from "./http";
 export { type RunningServer, type StartServerOptions, startServer } from "./server";
-export { createService, type Route, type ServiceOptions, type ServiceRequest } from "./service";
+export {
+  createService,
+  HEALTH_BODY,
+  HEALTH_PATH,
+  isHealthBody,
+  type Route,
+  type ServiceOptions,
+  type ServiceRequest,
+} from "./service";
