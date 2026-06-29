@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync } from "node
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempDir } from "@trevor/test-kit";
+import { tempDir, waitFor } from "@trevor/test-kit";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 
 /**
@@ -158,17 +158,14 @@ function exited(child: ChildProcess): Promise<void> {
   });
 }
 
-/** Polls until a pid is gone from this process's point of view (the same check the lock makes). */
-async function waitForPidGone(pid: number): Promise<void> {
-  for (let i = 0; i < 100; i += 1) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return; // ESRCH: the process is gone
-    }
-    await new Promise((r) => setTimeout(r, 20));
+/** True once a pid is gone from this process's point of view (the same check the lock makes). */
+function pidGone(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true; // ESRCH: the process is gone
   }
-  throw new Error(`pid ${pid} still alive after waiting`);
 }
 
 /** The lock record guarding a specific worktree (matched by its realpath), or null when none. The
@@ -229,7 +226,7 @@ test("a crashed holder's lock is reclaimed as stale by the next session (real de
   // pid is truly gone, so the next actor's liveness probe sees a dead owner.
   killGroup(alpha.child, "SIGKILL");
   await exited(alpha.child);
-  await waitForPidGone(alpha.out.pid);
+  await waitFor(() => pidGone(alpha.out.pid), { label: `pid ${alpha.out.pid} gone` });
   expect(lockFor(wt)?.sessionId).toBe("alpha-aaaa"); // the lock survives the crash
 
   const beta = await runOnce("acquire-once", wt, "beta-bbbb", "host-beta");

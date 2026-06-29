@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { shortHash } from "@trevor/session";
+import { idSlug, shortHash } from "@trevor/session";
 import { storagePathByName } from "@trevor/session/node-paths";
 import { Data } from "effect";
 
@@ -144,13 +144,23 @@ function processAlive(pid: number): boolean {
   }
 }
 
-/** The real node-backed capabilities, with optional overrides for wiring/tests. */
+/** The real node-backed capabilities, with optional overrides for wiring/tests. The realpath probe is
+ *  memoized: a workspace directory's realpath is invariant for the host's lifetime, so the per-heartbeat
+ *  refresh never re-walks the path. Only successful resolutions are cached, so a path that does not yet
+ *  exist resolves correctly once it appears. */
 export function nodeCwdLockCaps(over: Partial<CwdLockCaps> = {}): CwdLockCaps {
+  const realpathCache = new Map<string, string>();
   return {
     fs: nodeCwdLockFs,
     realpath: (path) => {
+      const cached = realpathCache.get(path);
+      if (cached !== undefined) {
+        return cached;
+      }
       try {
-        return realpathSync(path);
+        const resolved = realpathSync(path);
+        realpathCache.set(path, resolved);
+        return resolved;
       } catch {
         return resolve(path);
       }
@@ -165,11 +175,6 @@ function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
-/** The realpath identity a lock is keyed on - the resource, independent of how the path was reached. */
-function cwdIdentity(cwd: string, caps: CwdLockCaps): string {
-  return caps.realpath(cwd);
-}
-
 function lockDir(caps: CwdLockCaps): string {
   return caps.dir ?? storagePathByName(CWD_LOCKS_STORAGE_NAME);
 }
@@ -182,12 +187,7 @@ function lockFileName(identity: string): string {
       .split(/[/\\]+/)
       .filter(Boolean)
       .pop() ?? "cwd";
-  const slug =
-    base
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "cwd";
-  return `${slug}-${shortHash(identity)}.lock`;
+  return `${idSlug(base, "cwd")}-${shortHash(identity)}.lock`;
 }
 
 function lockFilePath(identity: string, caps: CwdLockCaps): string {
@@ -227,22 +227,32 @@ function heartbeatAgeMs(file: CwdLockFile, nowMs: number): number {
   return Math.max(0, nowMs - Date.parse(file.heartbeatAt));
 }
 
-function ownerInfo(file: CwdLockFile, nowMs: number, caps: CwdLockCaps): CwdLockOwnerInfo {
-  return {
-    ...file,
-    heartbeatAgeMs: heartbeatAgeMs(file, nowMs),
-    alive: caps.processAlive(file.pid),
-  };
+/** Resolves a cwd to its realpath identity, lock-file path, and current (validated) lock record - the
+ *  shared preamble every acquire/refresh/release/inspect entry point starts from. */
+function locateLock(
+  cwd: string,
+  caps: CwdLockCaps,
+): { identity: string; path: string; file: CwdLockFile | null } {
+  const identity = caps.realpath(cwd);
+  const path = lockFilePath(identity, caps);
+  return { identity, path, file: readLockFile(caps, path) };
 }
 
-/** Stale when the owner pid is dead, OR its pid still appears alive but its heartbeat is older than the
- *  staleness window (pid reuse / a wedged or abandoned owner). Pid-liveness is the primary gate so a
- *  live, actively-heartbeating owner is never reclaimed. */
-function isStale(file: CwdLockFile, nowMs: number, caps: CwdLockCaps): boolean {
-  if (!caps.processAlive(file.pid)) {
-    return true;
-  }
-  return heartbeatAgeMs(file, nowMs) > (caps.staleAfterMs ?? CWD_LOCK_STALE_MS);
+/**
+ * Owner facts + staleness from a SINGLE liveness probe (one `process.kill(pid, 0)` per read, not two).
+ * Stale when the owner pid is dead, OR its pid still appears alive but its heartbeat is older than the
+ * staleness window (pid reuse / a wedged or abandoned owner). Pid-liveness is the primary gate so a
+ * live, actively-heartbeating owner is never reclaimed.
+ */
+function classifyLock(
+  file: CwdLockFile,
+  nowMs: number,
+  caps: CwdLockCaps,
+): { owner: CwdLockOwnerInfo; stale: boolean } {
+  const alive = caps.processAlive(file.pid);
+  const ageMs = heartbeatAgeMs(file, nowMs);
+  const stale = !alive || ageMs > (caps.staleAfterMs ?? CWD_LOCK_STALE_MS);
+  return { owner: { ...file, heartbeatAgeMs: ageMs, alive }, stale };
 }
 
 /** Same logical owner = same SESSION: a different host/pid of the same session (leader<->standby
@@ -265,10 +275,8 @@ function isSameProcess(file: CwdLockFile, owner: CwdLockOwner): boolean {
  * re-acquire.
  */
 export function acquireCwdLock(cwd: string, owner: CwdLockOwner, caps: CwdLockCaps): CwdLockResult {
-  const identity = cwdIdentity(cwd, caps);
-  const path = lockFilePath(identity, caps);
+  const { identity, path, file: existing } = locateLock(cwd, caps);
   const nowMs = caps.now();
-  const existing = readLockFile(caps, path);
   const write = (acquiredAt: string): CwdLockFile => {
     const file: CwdLockFile = {
       cwd: identity,
@@ -288,14 +296,11 @@ export function acquireCwdLock(cwd: string, owner: CwdLockOwner, caps: CwdLockCa
     const acquiredAt = isSameProcess(existing, owner) ? existing.acquiredAt : iso(nowMs);
     return { status: "reacquired", file: write(acquiredAt) };
   }
-  if (isStale(existing, nowMs, caps)) {
-    return {
-      status: "tookOverStale",
-      file: write(iso(nowMs)),
-      previous: ownerInfo(existing, nowMs, caps),
-    };
+  const { owner: heldBy, stale } = classifyLock(existing, nowMs, caps);
+  if (stale) {
+    return { status: "tookOverStale", file: write(iso(nowMs)), previous: heldBy };
   }
-  return { status: "conflict", heldBy: ownerInfo(existing, nowMs, caps) };
+  return { status: "conflict", heldBy };
 }
 
 /** Why a heartbeat refresh did not happen: the lock vanished, or another owner now holds it. */
@@ -311,9 +316,7 @@ export function refreshCwdLock(
   owner: CwdLockOwner,
   caps: CwdLockCaps,
 ): { readonly refreshed: boolean; readonly reason?: CwdLockRefreshMiss } {
-  const identity = cwdIdentity(cwd, caps);
-  const path = lockFilePath(identity, caps);
-  const existing = readLockFile(caps, path);
+  const { path, file: existing } = locateLock(cwd, caps);
   if (!existing) {
     return { refreshed: false, reason: "missing" };
   }
@@ -333,9 +336,7 @@ export function releaseCwdLock(
   owner: CwdLockOwner,
   caps: CwdLockCaps,
 ): { readonly released: boolean } {
-  const identity = cwdIdentity(cwd, caps);
-  const path = lockFilePath(identity, caps);
-  const existing = readLockFile(caps, path);
+  const { path, file: existing } = locateLock(cwd, caps);
   if (existing && isSameProcess(existing, owner)) {
     caps.fs.remove(path);
     return { released: true };
@@ -345,20 +346,12 @@ export function releaseCwdLock(
 
 /** Reads the current lock state for a cwd without mutating it - the diagnostic surface /doctor renders. */
 export function inspectCwdLock(cwd: string, caps: CwdLockCaps): CwdLockInspection {
-  const identity = cwdIdentity(cwd, caps);
-  const path = lockFilePath(identity, caps);
-  const file = readLockFile(caps, path);
+  const { identity, path, file } = locateLock(cwd, caps);
   if (!file) {
     return { cwd: identity, path, file: null, owner: null, stale: false };
   }
-  const nowMs = caps.now();
-  return {
-    cwd: identity,
-    path,
-    file,
-    owner: ownerInfo(file, nowMs, caps),
-    stale: isStale(file, nowMs, caps),
-  };
+  const { owner, stale } = classifyLock(file, caps.now(), caps);
+  return { cwd: identity, path, file, owner, stale };
 }
 
 /** A one-line description of a lock owner for conflict messages and diagnostics. */
@@ -368,12 +361,17 @@ export function describeCwdLockOwner(info: CwdLockOwnerInfo): string {
   return `host ${info.hostId.slice(0, 8)} (session ${info.sessionId}, pid ${info.pid}, ${liveness}, held since ${info.acquiredAt}, last heartbeat ${ageSeconds}s ago)`;
 }
 
+/** The non-destructive recovery recommendation, shared by the conflict message and the /doctor
+ *  finding's next action so the operator guidance has one wording. */
+export const CWD_LOCK_FORCE_CLEAR_HINT =
+  "only force-clear the lock file when you are certain no host is using the directory";
+
 /** The operator-facing conflict explanation + the non-destructive recommended next action. */
 export function cwdLockConflictMessage(cwd: string, heldBy: CwdLockOwnerInfo): string {
   return [
     `cwd ${cwd} is already owned by ${describeCwdLockOwner(heldBy)}.`,
     "Refusing to take mutating workspace ownership of the same directory from a second session.",
-    "If that host is gone the lock is reclaimed automatically once it goes stale; inspect with /doctor, and only force-clear it by deleting the lock file when you are certain no host is using the directory.",
+    `If that host is gone the lock is reclaimed automatically once it goes stale; inspect with /doctor, and ${CWD_LOCK_FORCE_CLEAR_HINT}.`,
   ].join(" ");
 }
 
@@ -402,14 +400,20 @@ export type CwdLockState =
   /** A leftover lock from a dead / abandoned owner; reclaimed on the next acquire. */
   | "stale";
 
-/** The redaction-safe cwd-lock projection /doctor surfaces (session id + short host + pid + age - no
- *  secrets). `owner` is a one-line description when a lock exists; absent when unlocked. */
+/** Whether a cwd-lock state warrants a /doctor warning finding (a contended or stale lock) rather than
+ *  just a fact row (held / unlocked). One owner of the warn rule so the fact and finding never drift. */
+export function isCwdLockWarn(state: CwdLockState | undefined): boolean {
+  return state === "contended" || state === "stale";
+}
+
+/** The redaction-safe cwd-lock projection /doctor surfaces (session id + short host + pid - no secrets;
+ *  the heartbeat age is already embedded in `owner`). `owner` is a one-line description when a lock
+ *  exists; absent when unlocked. */
 export interface CwdLockDoctorFact {
   readonly state: CwdLockState;
   /** The lock-file path (caller may abbreviate the home prefix for display). */
   readonly path: string;
   readonly owner?: string;
-  readonly heartbeatAgeMs?: number;
 }
 
 /**
@@ -426,11 +430,7 @@ export function cwdLockDoctorFact(
   if (!view.owner) {
     return { state: "unlocked", path: view.path };
   }
-  const base = {
-    path: view.path,
-    owner: describeCwdLockOwner(view.owner),
-    heartbeatAgeMs: view.owner.heartbeatAgeMs,
-  };
+  const base = { path: view.path, owner: describeCwdLockOwner(view.owner) };
   if (view.owner.sessionId === ownSessionId) {
     return { state: "held", ...base };
   }
@@ -465,7 +465,9 @@ export function cwdSwitchConflict(
   caps: CwdLockCaps,
 ): CwdLockConflict | null {
   const view = inspectCwdLock(targetCwd, caps);
-  if (view.owner && !view.stale && view.owner.alive && view.owner.sessionId !== targetSessionId) {
+  // `!view.stale` already implies the owner is live (a dead owner is stale), so it is the only liveness
+  // gate needed here.
+  if (view.owner && !view.stale && view.owner.sessionId !== targetSessionId) {
     return new CwdLockConflict({ cwd: view.cwd, heldBy: view.owner });
   }
   return null;

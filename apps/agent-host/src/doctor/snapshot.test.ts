@@ -788,7 +788,6 @@ test("a contended cwd lock raises a warn finding with a non-destructive next act
           state: "contended",
           path: "~/.local/state/trevorV2/cwd-locks/x.lock",
           owner: "host deadbeef (session other-9999, pid 4242, alive, ...)",
-          heartbeatAgeMs: 1200,
         },
       },
     }),

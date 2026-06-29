@@ -401,7 +401,7 @@ describe("doctor fact (state relative to this host's session)", () => {
     acquireCwdLock("/repo", owner({ sessionId: "beta-2222", pid: 200 }), h.caps);
     const fact = cwdLockDoctorFact("/repo", "alpha-1111", h.caps);
     expect(fact.state).toBe("contended");
-    expect(fact.heartbeatAgeMs).toBe(0);
+    expect(fact.owner).toContain("session beta-2222");
   });
 
   test("a dead-owner lock from another session reads as stale", () => {

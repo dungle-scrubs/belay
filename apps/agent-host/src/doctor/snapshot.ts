@@ -10,7 +10,12 @@ import {
   rollupStatus,
 } from "@trevor/session";
 import type { RootCategoryId } from "@trevor/session/node-paths";
-import { type CwdLockDoctorFact, cwdLockSummary } from "../cwd-lock";
+import {
+  CWD_LOCK_FORCE_CLEAR_HINT,
+  type CwdLockDoctorFact,
+  cwdLockSummary,
+  isCwdLockWarn,
+} from "../cwd-lock";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
 
 /**
@@ -545,7 +550,7 @@ function storageArea(input: DoctorProbeInput): DoctorArea {
 /** A cwd-lock finding for the Workspace area, only when the lock is contended or stale (both advisory
  *  warnings - a held or unlocked directory needs no finding, just the fact row). */
 function cwdLockFinding(lock: CwdLockDoctorFact | undefined): DoctorFinding[] {
-  if (!lock || (lock.state !== "contended" && lock.state !== "stale")) {
+  if (!lock || !isCwdLockWarn(lock.state)) {
     return [];
   }
   return [
@@ -559,8 +564,7 @@ function cwdLockFinding(lock: CwdLockDoctorFact | undefined): DoctorFinding[] {
           : "a leftover lock from a dead/abandoned owner (reclaimed on next acquire)",
       ...(lock.owner ? { source: lock.owner } : {}),
       nextAction: {
-        label:
-          "Inspect the owning host; only force-clear the lock file if you are certain no host is using this directory",
+        label: `Inspect the owning host; ${CWD_LOCK_FORCE_CLEAR_HINT}`,
         ...(lock.path ? { command: lock.path } : {}),
       },
     },
@@ -576,7 +580,7 @@ function workspaceArea(input: DoctorProbeInput): DoctorArea {
     message: input.workspace.branch ? `on ${input.workspace.branch}` : "not a git repository",
     source: input.workspace.workspace,
   };
-  const lockWarn = lock?.state === "contended" || lock?.state === "stale";
+  const lockWarn = isCwdLockWarn(lock?.state);
   const facts: DoctorArea["facts"] = [
     { label: "cwd", value: input.workspace.cwd },
     ...(input.workspace.cwd !== input.workspace.workspace

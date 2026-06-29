@@ -56,7 +56,10 @@ export function shortHash(text: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function idSlug(text: string, fallback: string): string {
+/** Lowercases `text` to a URL/filename-safe slug (alphanumerics, single dashes, trimmed), or
+ *  `fallback` when nothing survives. Shared by the project/session id derivations and the cwd-lock
+ *  filename so the slugging rule has one owner. */
+export function idSlug(text: string, fallback: string): string {
   return (
     text
       .toLowerCase()
