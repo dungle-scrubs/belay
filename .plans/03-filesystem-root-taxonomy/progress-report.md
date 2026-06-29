@@ -2,8 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 41
-- Completed: 23 (4 shipped pre-plan D-009; 10 in M1; 9 in M2)
+- Current cutoff blockers: 31
+- Completed: 33 (4 shipped pre-plan D-009; 10 in M1; 9 in M2; 10 in M3)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -48,16 +48,16 @@ Blockers
 
 #### M3: Safe migration planning
 
-- [ ] RED: Add unit tests for migration planning with no legacy data, legacy DB only, legacy blobs only, both present, explicit overrides, and already-migrated state.
-- [ ] GREEN: Design forward-migration target paths for legacy `~/.trevor` session-store DB and blob-store bytes under the STATE home (`${TREVOR_STATE_HOME}/sessions.db`, `${TREVOR_STATE_HOME}/blobs`).
-- [ ] GREEN: Preserve `SESSION_STORE_DB` and `BLOB_STORE_DIR` as absolute override escapes that bypass default migration.
-- [ ] GREEN: Create an idempotent migration plan object with actions, source paths, target paths, backup paths, skipped reasons, and rollback notes.
-- [ ] RED: Add tests for partial copy failure and target conflict behavior.
-- [ ] GREEN: Require backup or no-op proof before moving user data.
-- [ ] REFACTOR: Keep migration planning pure and make the mutating executor small.
-- [ ] Migration cannot silently overwrite existing service data.
-- [ ] Explicit service path overrides keep working.
-- [ ] The old `~/.trevor` data remains readable until migration is complete and verified.
+- [x] RED: Add unit tests for migration planning with no legacy data, legacy DB only, legacy blobs only, both present, explicit overrides, and already-migrated state.
+- [x] GREEN: Design forward-migration target paths for legacy `~/.trevor` session-store DB and blob-store bytes under the STATE home (`${TREVOR_STATE_HOME}/sessions.db`, `${TREVOR_STATE_HOME}/blobs`).
+- [x] GREEN: Preserve `SESSION_STORE_DB` and `BLOB_STORE_DIR` as absolute override escapes that bypass default migration. (`skip-overridden`)
+- [x] GREEN: Create an idempotent migration plan object with actions, source paths, target paths, backup paths, skipped reasons, and rollback notes. (copy-not-move leaves the legacy source as the backup; `rollbackNotes` documents it)
+- [x] RED: Add tests for partial copy failure and target conflict behavior.
+- [x] GREEN: Require backup or no-op proof before moving user data. (executor copies, never moves; re-checks the target before writing)
+- [x] REFACTOR: Keep migration planning pure and make the mutating executor small. (pure `planLegacyMigration` + small `executeLegacyMigration` over an injected `MigrationFs`)
+- [x] Migration cannot silently overwrite existing service data.
+- [x] Explicit service path overrides keep working.
+- [x] The old `~/.trevor` data remains readable until migration is complete and verified.
 
 ### Phase 4: Service Default Cutover
 

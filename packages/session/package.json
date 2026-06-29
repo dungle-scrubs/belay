@@ -8,6 +8,7 @@
     "./blob-contract": "./src/blob-contract.ts",
     "./session-routes": "./src/session-routes.ts",
     "./node-paths": "./src/node-paths.ts",
+    "./legacy-migration": "./src/legacy-migration.ts",
     "./async": "./src/async.ts",
     "./conformance": "./test/transport-conformance.ts"
   },
