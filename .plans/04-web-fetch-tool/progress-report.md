@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M1 - Tool Contract and Read-Only Registration
-- Current cutoff blockers: 86
+- Current focus: M5 - Jina Reader Fallback
+- Current cutoff blockers: 50
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 0
+- Completed current work: 36 (M1-M4 + Gates 1->2, 2->3)
 
 ## Current Cutoff Blockers
 
@@ -14,59 +14,59 @@
 
 #### M1: Tool Contract and Read-Only Registration
 
-- [ ] RED: Add tool schema tests for URL, mode, caps, and optional output preferences.
-- [ ] GREEN: Define `web_fetch` params with explicit URL and bounded mode/cap fields.
-- [ ] RED: Add result-envelope tests for metadata, content, backend, attempts, truncation, and errors.
-- [ ] GREEN: Define the structured JSON result envelope.
-- [ ] RED: Add registry tests proving `web_fetch` is read-only.
-- [ ] GREEN: Register `web_fetch` with `readOnly: true` and shared read-only tool metadata.
-- [ ] REFACTOR: Keep tool schema flat and provider-compatible.
+- [x] RED: Add tool schema tests for URL, mode, caps, and optional output preferences.
+- [x] GREEN: Define `web_fetch` params with explicit URL and bounded mode/cap fields.
+- [x] RED: Add result-envelope tests for metadata, content, backend, attempts, truncation, and errors.
+- [x] GREEN: Define the structured JSON result envelope.
+- [x] RED: Add registry tests proving `web_fetch` is read-only.
+- [x] GREEN: Register `web_fetch` with `readOnly: true` and shared read-only tool metadata.
+- [x] REFACTOR: Keep tool schema flat and provider-compatible.
 
 #### M2: URL Safety Guard
 
-- [ ] RED: Add URL guard tests for unsupported schemes, malformed URLs, userinfo, loopback, private ranges, link-local, IPv6 local, and cloud metadata targets.
-- [ ] GREEN: Implement URL normalization and preflight rejection.
-- [ ] RED: Add redirect-chain tests for safe redirect, private redirect, scheme downgrade where disallowed, and redirect loop.
-- [ ] GREEN: Validate every redirect hop before following or sending the target URL to a backend.
-- [ ] RED: Add tests for hostnames resolving to private or link-local addresses where the runtime can check DNS.
-- [ ] GREEN: Add DNS/IP safety checks where feasible with graceful unknown handling.
-- [ ] REFACTOR: Make URL guard reusable by Jina, Firecrawl, and future docs fetching.
+- [x] RED: Add URL guard tests for unsupported schemes, malformed URLs, userinfo, loopback, private ranges, link-local, IPv6 local, and cloud metadata targets.
+- [x] GREEN: Implement URL normalization and preflight rejection.
+- [x] RED: Add redirect-chain tests for safe redirect, private redirect, scheme downgrade where disallowed, and redirect loop.
+- [x] GREEN: Validate every redirect hop before following or sending the target URL to a backend.
+- [x] RED: Add tests for hostnames resolving to private or link-local addresses where the runtime can check DNS.
+- [x] GREEN: Add DNS/IP safety checks where feasible with graceful unknown handling.
+- [x] REFACTOR: Make URL guard reusable by Jina, Firecrawl, and future docs fetching.
 
 ### Gate 1 -> 2
 
-- [ ] `web_fetch` has a stable schema and result envelope.
-- [ ] `web_fetch` is registered read-only.
-- [ ] Unsafe direct URLs and unsafe redirects are blocked before any backend runs.
-- [ ] URL guard is reusable by every backend path.
+- [x] `web_fetch` has a stable schema and result envelope.
+- [x] `web_fetch` is registered read-only.
+- [x] Unsafe direct URLs and unsafe redirects are blocked before any backend runs.
+- [x] URL guard is reusable by every backend path.
 
 ### Phase 2: Static Fetch and Extraction
 
 #### M3: Static HTTP Fetch
 
-- [ ] RED: Add static fetch tests for HTML, plain text, JSON, redirects, 404, 5xx, timeout, and oversized response.
-- [ ] GREEN: Implement static fetch with short timeout, byte cap, redirect cap, and response metadata.
-- [ ] RED: Add content-type handling tests for HTML, text/plain, application/json, and unknown content type.
-- [ ] GREEN: Return bounded text for text/plain and JSON with truncation metadata.
-- [ ] RED: Add tests proving auth headers/cookies are not sent.
-- [ ] GREEN: Ensure no browser/user cookies or authenticated sessions are used.
-- [ ] REFACTOR: Keep static fetch IO injectable for deterministic tests.
+- [x] RED: Add static fetch tests for HTML, plain text, JSON, redirects, 404, 5xx, timeout, and oversized response.
+- [x] GREEN: Implement static fetch with short timeout, byte cap, redirect cap, and response metadata.
+- [x] RED: Add content-type handling tests for HTML, text/plain, application/json, and unknown content type.
+- [x] GREEN: Return bounded text for text/plain and JSON with truncation metadata.
+- [x] RED: Add tests proving auth headers/cookies are not sent.
+- [x] GREEN: Ensure no browser/user cookies or authenticated sessions are used.
+- [x] REFACTOR: Keep static fetch IO injectable for deterministic tests.
 
 #### M4: HTML Extraction and Thinness Detection
 
-- [ ] RED: Add extraction tests for title, main article content, boilerplate removal, links, code blocks, and malformed HTML.
-- [ ] GREEN: Convert static HTML into readable bounded markdown/text.
-- [ ] RED: Add thin-page detection tests for JS shell, empty body, blocker page, and low-content extraction.
-- [ ] GREEN: Classify static results as usable, thin, blocked, or failed.
-- [ ] RED: Add truncation tests for long pages.
-- [ ] GREEN: Apply text-length caps with visible truncation metadata.
-- [ ] REFACTOR: Keep extraction deterministic and independent of rendered backends.
+- [x] RED: Add extraction tests for title, main article content, boilerplate removal, links, code blocks, and malformed HTML.
+- [x] GREEN: Convert static HTML into readable bounded markdown/text.
+- [x] RED: Add thin-page detection tests for JS shell, empty body, blocker page, and low-content extraction.
+- [x] GREEN: Classify static results as usable, thin, blocked, or failed.
+- [x] RED: Add truncation tests for long pages.
+- [x] GREEN: Apply text-length caps with visible truncation metadata.
+- [x] REFACTOR: Keep extraction deterministic and independent of rendered backends.
 
 ### Gate 2 -> 3
 
-- [ ] Static mode works without Jina or Firecrawl.
-- [ ] Auto mode returns usable static content without spending external rendering calls.
-- [ ] Thin/blocked pages are classified for fallback.
-- [ ] Metadata includes final URL, status, content type, byte/text counts, backend, and truncation.
+- [x] Static mode works without Jina or Firecrawl.
+- [x] Auto mode returns usable static content without spending external rendering calls.
+- [x] Thin/blocked pages are classified for fallback.
+- [x] Metadata includes final URL, status, content type, byte/text counts, backend, and truncation.
 
 ### Phase 3: Jina and Firecrawl Fallbacks
 

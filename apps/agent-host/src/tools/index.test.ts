@@ -18,6 +18,7 @@ import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
 import type { Tool } from "./types";
+import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
 
@@ -34,6 +35,7 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     globTool,
     grepTool,
     webSearchTool,
+    webFetchTool,
     sessionRecallTool,
     astGrepTool,
     doctorTool,
@@ -75,6 +77,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     globTool,
     grepTool,
     webSearchTool,
+    webFetchTool,
     sessionRecallTool,
     skillsListTool,
     skillViewTool,

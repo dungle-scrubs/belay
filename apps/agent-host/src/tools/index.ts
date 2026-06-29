@@ -20,6 +20,7 @@ import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
 import type { Tool } from "./types";
+import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
 
@@ -44,6 +45,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   globTool,
   grepTool,
   webSearchTool,
+  webFetchTool,
   sessionRecallTool,
   skillsListTool,
   skillViewTool,

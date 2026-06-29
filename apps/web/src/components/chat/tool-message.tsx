@@ -211,6 +211,8 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   glob: renderGeneric,
   grep: renderOutput,
   web_search: renderWebSearch,
+  // web_fetch renders as a plain row until plan 04 M7 wires a source-content renderer for its envelope.
+  web_fetch: renderGeneric,
   session_recall: renderRecall,
   ast_grep: renderGeneric,
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it
