@@ -259,6 +259,16 @@
   color: hsl(193 44% 67%);
 }
 
+/* Trevor-owned persisted transcript highlight (CSS Custom Highlight API). Painted from a
+   logical range so a selection stays visible after the browser collapses the native
+   selection on a transcript re-render or remounts a virtualized row. Color matches
+   ::selection so the native and persisted highlights are indistinguishable. See
+   apps/web/src/components/assistant-ui/transcript-selection.ts. */
+::highlight(trevor-transcript-selection) {
+  background: hsl(193 44% 67% / 0.2);
+  color: hsl(193 44% 67%);
+}
+
 /* Skeleton shimmer for loading placeholders. */
 @keyframes shimmer {
   0% {

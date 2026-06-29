@@ -106,12 +106,19 @@ export function TranscriptRowView({
 
   const message = row.message;
   if (message.kind === "tool") {
-    return <ToolRenderer message={message} className="pl-3.5" onOpenPath={onOpenPath} />;
+    // data-message-id makes the tool block a selectable transcript segment, so a cross-item
+    // selection can start or end inside tool output (02.11). The wrapper carries no styling;
+    // ToolRenderer keeps owning its own indent/layout.
+    return (
+      <div data-message-id={message.id}>
+        <ToolRenderer message={message} className="pl-3.5" onOpenPath={onOpenPath} />
+      </div>
+    );
   }
 
   if (message.kind === "result") {
     return (
-      <div className="pl-3.5">
+      <div data-message-id={message.id} className="pl-3.5">
         {message.command === "/doctor" ? (
           <DoctorResult
             command={message.command}
@@ -136,12 +143,14 @@ export function TranscriptRowView({
 
   if (message.kind === "shell") {
     return (
-      <ShellBlock
-        command={message.command}
-        output={message.output}
-        done={message.done}
-        ok={message.ok}
-      />
+      <div data-message-id={message.id}>
+        <ShellBlock
+          command={message.command}
+          output={message.output}
+          done={message.done}
+          ok={message.ok}
+        />
+      </div>
     );
   }
 

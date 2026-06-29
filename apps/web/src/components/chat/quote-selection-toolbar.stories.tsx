@@ -1,24 +1,30 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { buildQuotedComposerText } from "@/components/assistant-ui/quote";
 import type { Anchor } from "@/components/assistant-ui/quote-selection-placement";
 import {
   QuoteSelectionToolbar,
   SelectionToolbar,
 } from "@/components/assistant-ui/quote-selection-toolbar";
+import {
+  clearTranscriptHighlight,
+  paintTranscriptHighlight,
+} from "@/components/assistant-ui/transcript-selection";
 
 /**
  * The selection toolbar: highlight text inside a message (any element carrying
  * `data-message-id`) and a floating Copy / Quote / Tangent bar appears at the end of the
- * selection. Copy and Quote act on a snapshot taken the moment the selection completes, so
- * they keep working after the browser collapses the highlight (which it does on every
- * transcript re-render). The bar also clamps inside the viewport so it is never clipped at
- * an edge.
+ * selection. The selection may span several transcript items - a shift-extended cross-item
+ * range is captured, not rejected. Copy and Quote act on a snapshot taken the moment the
+ * selection completes, so they keep working after the browser collapses the highlight (which
+ * it does on every transcript re-render). The bar also clamps inside the viewport so it is
+ * never clipped at an edge.
  *
- * `SelectToQuote` is the live, interactive surface (drag across the text). The remaining
- * stories drive the presentational `SelectionToolbar` directly at fixed anchors so the
- * edge-clamp, stale-selection, and clipboard-failure states are reviewable without a real
- * drag.
+ * `SelectToQuote` is the live, interactive surface (drag across the text). `PersistedHighlight`
+ * shows the Trevor-owned highlight (CSS Custom Highlight API) rendered across two items with
+ * NO live native selection - the state the plan keeps visible. The remaining stories drive the
+ * presentational `SelectionToolbar` directly at fixed anchors so the edge-clamp,
+ * stale-selection, and clipboard-failure states are reviewable without a real drag.
  */
 const meta: Meta<typeof QuoteSelectionToolbar> = {
   title: "Chat/QuoteSelectionToolbar",
@@ -46,8 +52,8 @@ export const SelectToQuote: Story = {
           sentence and click Quote.
         </div>
         <div data-message-id="msg-2" className="flex flex-col gap-3 pl-3.5 text-sm">
-          A second message. Selecting text that spans two messages does NOT offer the toolbar - a
-          quote is scoped to a single message.
+          A second message. Shift-extend a selection from the message above into this one: the
+          cross-item range is captured and the toolbar acts on the whole span.
         </div>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           composer (quoted text lands here)
@@ -59,6 +65,45 @@ export const SelectToQuote: Story = {
             placeholder="Quote a selection above…"
           />
         </label>
+      </div>
+    );
+  },
+};
+
+/**
+ * The persisted cross-item highlight with NO live native selection. On mount it paints the
+ * Trevor-owned highlight (`::highlight(trevor-transcript-selection)`) across a range that
+ * starts mid-first-item and ends mid-second-item, then leaves it - exactly the state after the
+ * browser collapses the native selection on a transcript re-render. The highlight should stay
+ * visible (matching the native selection color) without any text being natively selected.
+ * Requires the CSS Custom Highlight API (any current Chromium/Safari/Firefox).
+ */
+export const PersistedHighlight: Story = {
+  render: () => {
+    useEffect(() => {
+      paintTranscriptHighlight({
+        start: { segmentId: "persist-1", offset: 23 },
+        end: { segmentId: "persist-2", offset: 28 },
+      });
+      return () => clearTranscriptHighlight();
+    }, []);
+    return (
+      <div className="flex max-w-2xl flex-col gap-4 text-sm">
+        <p className="text-xs text-muted-foreground">
+          No text is natively selected, yet the highlight below persists across both items - this is
+          the collapsed-native-selection state the plan keeps visible.
+        </p>
+        <div
+          data-message-id="persist-1"
+          className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
+        >
+          Blobs are content-addressed by sha256, so identical content is stored exactly once and a
+          stored blob is immutable.
+        </div>
+        <div data-message-id="persist-2" className="flex flex-col gap-3 pl-3.5">
+          The session log is the source of truth; everything else is a projection rebuilt from it on
+          demand.
+        </div>
       </div>
     );
   },

@@ -9,6 +9,13 @@ import {
   clampToolbarPosition,
   type ToolbarSize,
 } from "./quote-selection-placement";
+import {
+  captureTranscriptRange,
+  clearTranscriptHighlight,
+  paintTranscriptHighlight,
+  supportsHighlightApi,
+  type TranscriptRange,
+} from "./transcript-selection";
 
 export { buildQuotedComposerText } from "./quote";
 
@@ -26,38 +33,15 @@ const DEFAULT_TOOLBAR_SIZE: ToolbarSize = { width: 224, height: 34 };
  * `window.getSelection()`. <!-- D-001 -->
  */
 type SelectionSnapshot = {
-  /** The trimmed selected text, frozen at capture time. */
+  /** The trimmed selected text, frozen at capture time (may span several transcript items). */
   text: string;
-  /** The single message (`data-message-id`) the selection lived in. */
-  messageId: string;
+  /** Logical (segment id + offset) range that drives the persisted highlight across re-renders
+   *  and row remount. Null when the browser lacks the CSS Custom Highlight API. <!-- D-002 --> */
+  range: TranscriptRange | null;
   /** Viewport point to anchor the toolbar above (pointer release or focus end). */
   anchor: Anchor;
   /** Capture time (ms epoch); resets transient UI state (e.g. a copy error) per selection. */
   capturedAt: number;
-};
-
-/**
- * Walks up to the nearest message element. Returns its id only when both ends
- * of the selection live in the same message, so the toolbar is offered for
- * conversation text and not arbitrary page chrome or cross-message drags.
- */
-const selectionMessageId = (selection: Selection): string | null => {
-  const find = (node: Node | null): string | null => {
-    let el = node instanceof HTMLElement ? node : (node?.parentElement ?? null);
-    while (el) {
-      const id = el.getAttribute("data-message-id");
-      if (id) return id;
-      el = el.parentElement;
-    }
-    return null;
-  };
-
-  const { anchorNode, focusNode } = selection;
-  if (!anchorNode || !focusNode) return null;
-
-  const anchorId = find(anchorNode);
-  if (!anchorId || anchorId !== find(focusNode)) return null;
-  return anchorId;
 };
 
 /**
@@ -73,9 +57,11 @@ const focusEndAnchor = (selection: Selection): Anchor | null => {
 
 /**
  * Snapshots the current selection, or returns null when there is nothing to act on:
- * an empty/collapsed selection, whitespace-only text, or a selection that spans
- * messages (or none). `point` is the pointer release for mouse selections, null for
- * keyboard/scroll where we fall back to the focus-end rect.
+ * an empty/collapsed selection, whitespace-only text, or a selection that touches no
+ * transcript segment (the composer or page chrome). The selection MAY span several
+ * transcript items - cross-item ranges are captured, not rejected. `point` is the
+ * pointer release for mouse selections, null for keyboard/scroll where we fall back to
+ * the focus-end rect. <!-- D-004 -->
  */
 const captureSelection = (point: Anchor | null): SelectionSnapshot | null => {
   const selection = window.getSelection();
@@ -84,13 +70,54 @@ const captureSelection = (point: Anchor | null): SelectionSnapshot | null => {
   const text = selection.toString().trim();
   if (!text) return null;
 
-  const messageId = selectionMessageId(selection);
-  if (!messageId) return null;
+  const range = captureTranscriptRange(selection);
+  if (!range) return null;
 
   const anchor = point ?? focusEndAnchor(selection);
   if (!anchor) return null;
 
-  return { text, messageId, anchor, capturedAt: Date.now() };
+  return { text, range, anchor, capturedAt: Date.now() };
+};
+
+/**
+ * Keeps the Trevor-owned highlight painted from the logical `range` for as long as the
+ * snapshot lives. Two signals drive a repaint: `selectionchange` (so the highlight takes
+ * over the instant the native selection collapses on a re-render) and a MutationObserver on
+ * the virtual list (so the highlight re-resolves when a virtualized row remounts with fresh
+ * DOM nodes). While a live native selection still exists we defer to native `::selection` -
+ * identical color, no double paint - and only render the persisted highlight after it
+ * collapses. No-ops where the CSS Custom Highlight API is absent (jsdom, old browsers).
+ * <!-- D-002 -->
+ */
+const usePersistedHighlight = (range: TranscriptRange | null): void => {
+  useEffect(() => {
+    if (!range || !supportsHighlightApi()) return;
+
+    const root =
+      document.querySelector<HTMLElement>("[data-transcript-virtual-list]") ?? document.body;
+    let frame = 0;
+    const repaint = () => {
+      frame = 0;
+      const selection = window.getSelection();
+      const nativeLive =
+        !!selection && !selection.isCollapsed && selection.toString().trim().length > 0;
+      paintTranscriptHighlight(nativeLive ? null : range);
+    };
+    const schedule = () => {
+      if (frame === 0) frame = requestAnimationFrame(repaint);
+    };
+
+    repaint();
+    const observer = new MutationObserver(schedule);
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    document.addEventListener("selectionchange", schedule);
+    return () => {
+      if (frame !== 0) cancelAnimationFrame(frame);
+      observer.disconnect();
+      document.removeEventListener("selectionchange", schedule);
+      clearTranscriptHighlight();
+    };
+  }, [range]);
 };
 
 /**
@@ -109,8 +136,9 @@ const captureSelection = (point: Anchor | null): SelectionSnapshot | null => {
  * a markdown blockquote via buildQuotedComposerText); "Tangent" is a disabled
  * placeholder for now.
  *
- * Composer-agnostic: render it once anywhere in the app; it only needs message
- * elements to carry `data-message-id` so a selection can be scoped to one message.
+ * Composer-agnostic: render it once anywhere in the app; it only needs transcript items
+ * to carry `data-message-id` so a selection (single- or cross-item) can be scoped to
+ * conversation text and re-resolved after the native selection collapses.
  */
 export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> = ({ onQuote }) => {
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null);
@@ -120,6 +148,10 @@ export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> 
 
   // Each fresh selection clears any leftover copy-error styling from the last one.
   useEffect(() => setCopyFailed(false), [capturedAt]);
+
+  // Paint the persisted highlight from the snapshot's logical range so the selection stays
+  // visible after the native selection collapses or the source rows remount. <!-- D-002 -->
+  usePersistedHighlight(snapshot?.range ?? null);
 
   useEffect(() => {
     // A rAF lets the browser finish applying the selection (notably for double-click)

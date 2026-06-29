@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { render, screen } from "@testing-library/react";
 import { test } from "vitest";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
-import type { AssistantMessage } from "../../transcript";
+import type { AssistantMessage, Message } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
 const noop = () => {};
@@ -93,4 +93,42 @@ test("renders legacy stepLimit events without calling them answered", () => {
   renderRow(assistant({ text: "best effort", stepLimit: 32 }));
   assert.ok(screen.getByText("legacy step budget reached after 32 steps"));
   assert.equal(screen.queryByText(/answered after/i), null);
+});
+
+// 02.11 (M4): every selectable transcript row carries data-message-id so a cross-item selection
+// can start or end inside it and be re-resolved by the persisted-highlight model. Message and
+// question rows already had it; these guard the tool/result/shell rows the plan also lists.
+const messageRow = (message: Message): TranscriptRow =>
+  ({ kind: "message", id: `message:${message.id}`, compactAbove: false, message }) as TranscriptRow;
+
+test("a command-result row is a selectable transcript segment", () => {
+  const { container } = renderRow(
+    messageRow({ kind: "result", id: "res1", command: "/help", text: "command output", ok: true }),
+  );
+  assert.match(
+    container.querySelector('[data-message-id="res1"]')?.textContent ?? "",
+    /command output/,
+  );
+});
+
+test("a tool row is a selectable transcript segment", () => {
+  const { container } = renderRow(
+    messageRow({ kind: "tool", id: "tool1", name: "read_file", args: "{}", done: true }),
+  );
+  assert.ok(container.querySelector('[data-message-id="tool1"]'));
+});
+
+test("a shell row is a selectable transcript segment", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "shell",
+      id: "shell1",
+      requestId: "rq1",
+      command: "ls -la",
+      done: true,
+      output: "total 0",
+      ok: true,
+    }),
+  );
+  assert.ok(container.querySelector('[data-message-id="shell1"]'));
 });

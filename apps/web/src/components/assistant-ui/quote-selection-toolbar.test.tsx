@@ -169,7 +169,8 @@ test("a whitespace-only selection does not open the toolbar", async () => {
   assert.equal(screen.queryByText("Copy"), null);
 });
 
-test("a selection spanning two messages does not open the toolbar", async () => {
+/** Render two adjacent messages, select across both, and release the mouse to summon the toolbar. */
+async function openCrossItemToolbar(combined: string) {
   const onQuote = vi.fn();
   const { container } = render(
     <div>
@@ -187,8 +188,10 @@ test("a selection spanning two messages does not open the toolbar", async () => 
   vi.spyOn(window, "getSelection").mockReturnValue({
     isCollapsed: false,
     anchorNode: m1,
+    anchorOffset: 0,
     focusNode: m2,
-    toString: () => "first message second message",
+    focusOffset: 0,
+    toString: () => combined,
     getRangeAt: () => ({ getClientRects: () => [{ right: 50, top: 20 }] }),
     removeAllRanges: vi.fn(),
   } as unknown as Selection);
@@ -196,8 +199,39 @@ test("a selection spanning two messages does not open the toolbar", async () => 
   await act(async () => {
     fireEvent.mouseUp(document.body, { clientX: 50, clientY: 20 });
     await flushRaf();
+    await flushRaf();
   });
-  assert.equal(screen.queryByText("Copy"), null);
+  return { onQuote };
+}
+
+test("a selection spanning two transcript items opens the toolbar (cross-item)", async () => {
+  await openCrossItemToolbar("first message\nsecond message");
+  // The single-message-only rule is gone: a shift-extended range across items is captured,
+  // not rejected, so the toolbar is offered for it.
+  assert.ok(screen.getByText("Copy"));
+  assert.ok(screen.getByText("Quote"));
+});
+
+test("Copy writes the full cross-item text after the native selection collapses", async () => {
+  const writeText = vi.fn();
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  await openCrossItemToolbar("first message\nsecond message");
+
+  collapseSelection();
+  await act(async () => {
+    document.dispatchEvent(new Event("selectionchange"));
+    await flushRaf();
+  });
+
+  fireEvent.click(screen.getByText("Copy"));
+  assert.equal(writeText.mock.calls[0]?.[0], "first message\nsecond message");
+});
+
+test("Quote hands the full cross-item text to the composer", async () => {
+  const { onQuote } = await openCrossItemToolbar("first message\nsecond message");
+
+  fireEvent.click(screen.getByText("Quote"));
+  assert.equal(onQuote.mock.calls[0]?.[0], "first message\nsecond message");
 });
 
 test("a plain click outside the toolbar dismisses it", async () => {
@@ -209,6 +243,79 @@ test("a plain click outside the toolbar dismisses it", async () => {
     await flushRaf();
   });
   assert.equal(screen.queryByText("Copy"), null);
+});
+
+test("typing in the composer does not erase the persisted selection (M2)", async () => {
+  await openToolbar("keep me through typing");
+
+  // The composer collapses the transcript selection and the user starts typing; a keystroke
+  // that produces no new transcript selection must leave the stored snapshot - and toolbar -
+  // untouched (only Escape or a replacement selection dismisses).
+  collapseSelection();
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "a" }));
+    await flushRaf();
+  });
+  assert.ok(screen.getByText("Copy")); // persisted through incidental typing
+});
+
+test("a wheel/trackpad scroll does not erase the persisted selection (M2)", async () => {
+  await openToolbar("keep me through scroll");
+
+  collapseSelection();
+  await act(async () => {
+    fireEvent.scroll(document);
+    fireEvent.wheel(document.body, { deltaY: 120 });
+    await flushRaf();
+  });
+  assert.ok(screen.getByText("Copy"));
+});
+
+test("Escape clears the persisted selection (M7)", async () => {
+  await openToolbar("escape clears me");
+
+  collapseSelection();
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape" }));
+    await flushRaf();
+  });
+  assert.equal(screen.queryByText("Copy"), null);
+});
+
+test("starting a new selection replaces the previous one (M7)", async () => {
+  const { container } = render(
+    <div>
+      <div data-message-id="m1">
+        <span>original selection</span>
+      </div>
+      <div data-message-id="m2">
+        <span>replacement selection</span>
+      </div>
+      <QuoteSelectionToolbar onQuote={vi.fn()} />
+    </div>,
+  );
+  const writeText = vi.fn();
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+
+  const m1 = container.querySelector('[data-message-id="m1"]') as Node;
+  selectText("original selection", m1);
+  await act(async () => {
+    fireEvent.mouseUp(m1 as Element, { clientX: 30, clientY: 30 });
+    await flushRaf();
+    await flushRaf();
+  });
+
+  // A fresh drag in another item replaces the snapshot atomically.
+  const m2 = container.querySelector('[data-message-id="m2"]') as Node;
+  selectText("replacement selection", m2);
+  await act(async () => {
+    fireEvent.mouseUp(m2 as Element, { clientX: 60, clientY: 60 });
+    await flushRaf();
+    await flushRaf();
+  });
+
+  fireEvent.click(screen.getByText("Copy"));
+  assert.equal(writeText.mock.calls.at(-1)?.[0], "replacement selection");
 });
 
 test("Copy and Quote are real, enabled buttons (keyboard activatable)", async () => {
