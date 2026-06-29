@@ -1,14 +1,14 @@
 # DeepSeek Provider Reliability and Diagnostics - Progress Report
 
-> Current focus: Phase 3 - Malformed provider protocol text
+> Current focus: Phase 3 - Web anomaly rendering (M7)
 > Source plan: [implementation.md](./implementation.md)
 
 ## Summary
 
 - Total features: 45
-- Completed: 26
-- Remaining: 19
-- Current cutoff blockers: 19
+- Completed: 31
+- Remaining: 14
+- Current cutoff blockers: 14
 - Accepted/deferred follow-up: 3
 - Superseded/obsolete checklist debt: 0
 
@@ -66,11 +66,11 @@
 
 #### M6: Protocol-leak detector and host nudge
 
-- [ ] Add detector tests for DSML-like tool-call markup
-- [ ] Add detector negative tests for ordinary XML, HTML, and code snippets
-- [ ] Detect malformed provider protocol text after a model step with no typed tool calls
-- [ ] Nudge once when tools are enabled and no unsafe boundary has crossed
-- [ ] Keep the detector provider-aware without adding provider-specific checks to React
+- [x] Add detector tests for DSML-like tool-call markup
+- [x] Add detector negative tests for ordinary XML, HTML, and code snippets
+- [x] Detect malformed provider protocol text after a model step with no typed tool calls
+- [x] Nudge once when tools are enabled and no unsafe boundary has crossed
+- [x] Keep the detector provider-aware without adding provider-specific checks to React
 
 #### M7: Web anomaly rendering
 
