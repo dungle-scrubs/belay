@@ -13,6 +13,7 @@ import {
   WorkingIndicator,
 } from "@/components/chat/message";
 import { MessageAttachments } from "@/components/chat/message-attachments";
+import { QuestionTranscriptItem } from "@/components/chat/question-item";
 import { ToneAlert } from "@/components/chat/tone-alert";
 import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
 import { toolMessageStatus } from "@/components/chat/tool-status";
@@ -71,6 +72,9 @@ export interface TranscriptRowViewProps {
   readonly showThinking: boolean;
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
+  /** Render resolved-question rows as a single compact line (D-003). Off by default; a future compact
+   *  transcript mode flips it on. */
+  readonly questionsOneLine?: boolean;
 }
 
 export function TranscriptRowView({
@@ -78,6 +82,7 @@ export function TranscriptRowView({
   showThinking,
   onOpenPath,
   onDoctorRefresh,
+  questionsOneLine = false,
 }: TranscriptRowViewProps) {
   if (row.kind === "tool_batch") {
     return (
@@ -117,6 +122,14 @@ export function TranscriptRowView({
         ) : (
           <CommandResult command={message.command} text={message.text} ok={message.ok} />
         )}
+      </div>
+    );
+  }
+
+  if (message.kind === "question") {
+    return (
+      <div data-message-id={message.id} className="pl-3.5">
+        <QuestionTranscriptItem message={message} oneLine={questionsOneLine} />
       </div>
     );
   }

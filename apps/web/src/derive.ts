@@ -9,6 +9,7 @@ import {
   HOST_ROLE,
   type HostPresence,
   type ProviderModel,
+  type ProviderQuestionAnswer,
   type ProviderQuestionContract,
   type SessionEvent,
   type SourceSignInState,
@@ -364,6 +365,71 @@ export function pendingQuestionFrom(events: readonly SessionEvent[]): PendingQue
     }
   }
   return pending;
+}
+
+/** How a provider question terminated (the `provider.question.resolved` outcome). */
+export type QuestionOutcome = "answered" | "declined" | "cancelled" | "expired";
+
+/** The slim, render-ready view of a resolved ask_user interaction (D-002/D-004). */
+export interface ResolvedQuestionView {
+  readonly outcome: QuestionOutcome;
+  /** One row per asked question: its id (a stable React key), prompt, and the user's answer
+   *  (answer "" when not answered). */
+  readonly items: readonly {
+    readonly id: string;
+    readonly question: string;
+    readonly answer: string;
+  }[];
+  /** A one-line summary for compact rendering: the accept's combined summary, else the host's
+   *  resolved summary, else a plain outcome label. */
+  readonly summary: string;
+}
+
+const OUTCOME_LABEL: Record<QuestionOutcome, string> = {
+  answered: "Answered",
+  declined: "Declined",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
+
+/** Narrow the permissively-decoded resolved outcome to a known one; an unrecognized (forward-compat
+ *  or corrupt) value reads as "cancelled" so it is never mistaken for a successful answer. */
+function coerceOutcome(outcome: string): QuestionOutcome {
+  return outcome === "answered" ||
+    outcome === "declined" ||
+    outcome === "cancelled" ||
+    outcome === "expired"
+    ? outcome
+    : "cancelled";
+}
+
+/**
+ * Pairs a resolved ask_user question's three durable events into a render view-model (D-004): the
+ * requested `contract` supplies the question text, the `answer` supplies what the user picked (paired
+ * by question id), and the resolved `outcome`/`summary` supply the terminal state. Tolerates a missing
+ * contract or answer (older/compacted logs) by falling back to the resolved summary - it never throws
+ * and never drops the item. Pure and React-free so it unit-tests on its own.
+ */
+export function summarizeProviderQuestion(input: {
+  readonly contract?: ProviderQuestionContract;
+  readonly answer?: ProviderQuestionAnswer;
+  readonly outcome: string;
+  readonly summary: string;
+}): ResolvedQuestionView {
+  const { contract, answer, summary } = input;
+  const outcome = coerceOutcome(input.outcome);
+  const answerById =
+    answer?.action === "accept"
+      ? new Map(answer.questions.map((a) => [a.id, a.answer] as const))
+      : new Map<string, string>();
+  const items = (contract?.questions ?? []).map((q) => ({
+    id: q.id,
+    question: q.question,
+    answer: answerById.get(q.id) ?? "",
+  }));
+  const accepted = answer?.action === "accept" ? answer.answer.trim() : "";
+  const headline = accepted || summary.trim() || OUTCOME_LABEL[outcome];
+  return { outcome, items, summary: headline };
 }
 
 /** The immediate-command inventory the host last announced (empty until one is online). */

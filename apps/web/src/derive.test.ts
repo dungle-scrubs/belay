@@ -20,6 +20,7 @@ import {
   parseCommand,
   pendingQuestionFrom,
   providerModelsFrom,
+  summarizeProviderQuestion,
   tasksFrom,
   toolSummary,
 } from "./derive";
@@ -297,6 +298,71 @@ const inFlight = () => [
   evt("user.message", { text: "hi" }, AT),
   evt("assistant.started", { runId: "r1" }, AT),
 ];
+
+// --- summarizeProviderQuestion (02.7): pair request + answer + resolved into a slim view ---
+
+const freeText = (id: string, question: string): ProviderQuestionContract["questions"][number] => ({
+  id,
+  question,
+  answerShape: "free_text",
+  multiSelect: false,
+  requiresReason: false,
+  allowDefer: false,
+  choices: [],
+});
+
+test("summarizeProviderQuestion pairs each question with its answer by id", () => {
+  const view = summarizeProviderQuestion({
+    contract: {
+      schemaVersion: 1,
+      questions: [freeText("db", "Database?"), freeText("orm", "ORM?")],
+    },
+    answer: {
+      action: "accept",
+      answer: "Postgres + Drizzle",
+      questions: [
+        { id: "orm", answer: "Drizzle" },
+        { id: "db", answer: "Postgres" },
+      ],
+    },
+    outcome: "answered",
+    summary: "Answered",
+  });
+  assert.equal(view.outcome, "answered");
+  assert.deepEqual(view.items, [
+    { id: "db", question: "Database?", answer: "Postgres" },
+    { id: "orm", question: "ORM?", answer: "Drizzle" },
+  ]);
+  assert.equal(view.summary, "Postgres + Drizzle", "the accept's combined summary is the headline");
+});
+
+test("summarizeProviderQuestion falls back to the resolved summary when the answer is missing", () => {
+  const view = summarizeProviderQuestion({
+    contract: { schemaVersion: 1, questions: [freeText("x", "Which?")] },
+    answer: undefined,
+    outcome: "expired",
+    summary: "Expired before an answer",
+  });
+  assert.deepEqual(view.items, [{ id: "x", question: "Which?", answer: "" }]);
+  assert.equal(view.summary, "Expired before an answer");
+});
+
+test("summarizeProviderQuestion falls back to an outcome label when contract and summary are absent", () => {
+  const view = summarizeProviderQuestion({ outcome: "cancelled", summary: "" });
+  assert.deepEqual(view.items, []);
+  assert.equal(view.summary, "Cancelled");
+});
+
+test("summarizeProviderQuestion leaves answers blank for a decline (no per-question content)", () => {
+  const view = summarizeProviderQuestion({
+    contract: { schemaVersion: 1, questions: [freeText("x", "Proceed?")] },
+    answer: { action: "decline" },
+    outcome: "declined",
+    summary: "Declined",
+  });
+  assert.deepEqual(view.items, [{ id: "x", question: "Proceed?", answer: "" }]);
+  assert.equal(view.summary, "Declined");
+});
 
 test("detectOrphanedTurn recovers an in-flight turn when no leader can finish it", () => {
   const now = Date.parse(AT) + 20_000;

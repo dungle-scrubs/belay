@@ -3,12 +3,15 @@ import {
   addBreakdown,
   decodeTrevorEvent,
   inputEstimateTokens,
+  type ProviderQuestionAnswer,
+  type ProviderQuestionContract,
   READ_ONLY_TOOL_NAMES,
   type SessionEvent,
   type TurnStop,
   type Usage,
   type UsageBreakdown,
 } from "@trevor/session";
+import { type QuestionOutcome, summarizeProviderQuestion } from "./derive";
 
 export type { ArtifactRef, Usage, UsageBreakdown };
 
@@ -120,6 +123,20 @@ export type ShellMessage = {
   output?: string;
   ok?: boolean;
 };
+// A resolved `ask_user` interaction (D-001): the slim transcript record of what Trevor asked and how
+// the user answered, folded from `provider.question.requested` + `.answer` + `.resolved` (paired by
+// questionId). The raw `ask_user` tool row stays hidden; this is a purpose-built message, created on
+// the resolved event and updated in place if a duplicate/late resolved arrives. `items` carries one
+// question/answer pair per asked question; `summary` is the one-line compact form.
+export type QuestionMessage = {
+  kind: "question";
+  id: string;
+  questionId: string;
+  runId: string;
+  outcome: QuestionOutcome;
+  items: readonly { readonly id: string; readonly question: string; readonly answer: string }[];
+  summary: string;
+};
 export type Message =
   | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
   | AssistantMessage
@@ -129,7 +146,8 @@ export type Message =
   | ReconnectingMessage
   | CompactingMessage
   | DelegationMessage
-  | ShellMessage;
+  | ShellMessage
+  | QuestionMessage;
 
 /**
  * Finds the concurrent read-only batches in a transcript: each run of 2+ consecutive read-only tool
@@ -257,6 +275,13 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
   // never two rows). A `shell.result` with no prior request (the request was compacted out of the
   // tail, or arrived first) still renders from its own command.
   const shellByRequest = new Map<string, ShellMessage>();
+  // Resolved ask_user interactions (D-001): the request's contract and the user's answer are stashed
+  // by questionId until the `provider.question.resolved` event folds them into one `question` message.
+  // The raw ask_user tool row stays suppressed (see tool.started); this is the only thing the
+  // interaction leaves in the transcript, and a duplicate/late resolved updates it in place.
+  const questionContractById = new Map<string, ProviderQuestionContract>();
+  const questionAnswerById = new Map<string, ProviderQuestionAnswer>();
+  const questionMsgById = new Map<string, QuestionMessage>();
   // Reaps every open fold bar from the transcript. A fold runs on the host's one-turn gate, so a
   // bar is only ever live at the tail; once a turn or command follows it without a matching
   // `context.compacted`, that fold was interrupted (host reset mid-fold) and its bar is an orphan -
@@ -621,6 +646,43 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           segment.breakdown = progress.breakdown;
         }
         progressByRun.delete(decoded.runId);
+        break;
+      }
+      case "provider.question.requested":
+        // Stash the question contract; the live pending UI is owned by QuestionSurface
+        // (pendingQuestionFrom). No transcript row until it resolves (M4).
+        questionContractById.set(decoded.questionId, decoded.contract);
+        break;
+      case "provider.question.answer":
+        questionAnswerById.set(decoded.questionId, decoded.answer);
+        break;
+      case "provider.question.resolved": {
+        // Terminal: fold request + answer + outcome into one slim question message. A duplicate or
+        // late resolved updates the existing row in place rather than appending a second one.
+        const view = summarizeProviderQuestion({
+          contract: questionContractById.get(decoded.questionId),
+          answer: questionAnswerById.get(decoded.questionId),
+          outcome: decoded.outcome,
+          summary: decoded.summary,
+        });
+        const existing = questionMsgById.get(decoded.questionId);
+        if (existing) {
+          existing.outcome = view.outcome;
+          existing.items = view.items;
+          existing.summary = view.summary;
+        } else {
+          const message: QuestionMessage = {
+            kind: "question",
+            id: event.eventId,
+            questionId: decoded.questionId,
+            runId: decoded.runId,
+            outcome: view.outcome,
+            items: view.items,
+            summary: view.summary,
+          };
+          questionMsgById.set(decoded.questionId, message);
+          messages.push(message);
+        }
         break;
       }
       default:

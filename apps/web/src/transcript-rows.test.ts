@@ -51,6 +51,24 @@ describe("buildTranscriptRows", () => {
     assert.deepEqual(result.map(transcriptRowKey), ["message:u1", "message:a1"]);
   });
 
+  test("a resolved-question message is a real transcript row with a stable key (02.7)", () => {
+    const question: Message = {
+      kind: "question",
+      id: "q-evt",
+      questionId: "q1",
+      runId: "r1",
+      outcome: "answered",
+      items: [{ id: "q1a", question: "Which?", answer: "This" }],
+      summary: "This",
+    };
+    const result = rows([user("u1"), question, assistant("a1")]);
+    assert.deepEqual(
+      result.map((row) => row.kind),
+      ["message", "message", "message"],
+    );
+    assert.deepEqual(result.map(transcriptRowKey), ["message:u1", "message:q-evt", "message:a1"]);
+  });
+
   test("collapses consecutive read-only tools into one batch row and omits continuations", () => {
     const result = rows([user("u1"), tool("t1"), tool("t2"), tool("t3"), assistant("a1")]);
 

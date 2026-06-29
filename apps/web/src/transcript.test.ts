@@ -751,41 +751,187 @@ test("/clear failure result remains visible after the transcript reset", () => {
   assert.match(result.text, /spawn failed/);
 });
 
-test("ask_user tool calls and provider.question.* events stay out of the transcript (M5)", () => {
-  const contract = { schemaVersion: 1 as const, questions: [] };
+// --- resolved ask_user folds into a slim "question" transcript item (02.7) ---
+
+const qItem = (id: string, question: string) => ({
+  id,
+  question,
+  answerShape: "free_text" as const,
+  multiSelect: false,
+  requiresReason: false,
+  allowDefer: false,
+  choices: [],
+});
+const qContract = (...questions: ReturnType<typeof qItem>[]) => ({
+  schemaVersion: 1 as const,
+  questions,
+});
+const askUserLifecycle = (
+  questionId: string,
+  contract: ReturnType<typeof qContract>,
+  answer: Parameters<typeof events.providerQuestionAnswer>[0]["answer"],
+  outcome: "answered" | "declined" | "cancelled" | "expired",
+  summary: string,
+  base = 1,
+) => [
+  ev(base, events.toolStarted({ runId: "r", callId: "c", name: "ask_user", arguments: "{}" })),
+  ev(
+    base + 1,
+    events.providerQuestionRequested({
+      questionId,
+      runId: "r",
+      toolCallId: "c",
+      toolName: "ask_user",
+      adapter: "ask_user",
+      contract,
+    }),
+  ),
+  ev(base + 2, events.providerQuestionAnswer({ questionId, answer })),
+  ev(
+    base + 3,
+    events.providerQuestionResolved({
+      questionId,
+      runId: "r",
+      toolCallId: "c",
+      outcome,
+      summary,
+    }),
+  ),
+  ev(
+    base + 4,
+    events.toolCompleted({ runId: "r", callId: "c", name: "ask_user", result: outcome }),
+  ),
+];
+
+test("a resolved ask_user folds into ONE slim question item; the raw tool row stays hidden (02.7)", () => {
   const log = [
     ev(1, events.userMessage({ text: "ask me something", provider: "qwen" })),
-    ev(2, events.toolStarted({ runId: "r", callId: "c", name: "ask_user", arguments: "{}" })),
+    ...askUserLifecycle(
+      "a",
+      qContract(qItem("db", "Which database?")),
+      {
+        action: "accept",
+        answer: "Postgres",
+        questions: [{ id: "db", answer: "Postgres" }],
+      },
+      "answered",
+      "Answered: Postgres",
+      2,
+    ),
+  ];
+  const transcript = toTranscript(log);
+  // The user message and exactly one semantic question item survive; no raw ask_user tool row.
+  assert.deepEqual(
+    transcript.map((m) => m.kind),
+    ["user", "question"],
+  );
+  const q = transcript.find((m) => m.kind === "question");
+  assert.ok(q && q.kind === "question");
+  assert.equal(q.outcome, "answered");
+  assert.deepEqual(q.items, [{ id: "db", question: "Which database?", answer: "Postgres" }]);
+});
+
+test("declined / cancelled / expired ask_user outcomes each render a question item (02.7)", () => {
+  for (const outcome of ["declined", "cancelled", "expired"] as const) {
+    const answer =
+      outcome === "expired"
+        ? ({ action: "accept", answer: "", questions: [] } as const)
+        : ({ action: outcome === "declined" ? "decline" : "cancel" } as const);
+    const log = askUserLifecycle("a", qContract(qItem("x", "Proceed?")), answer, outcome, outcome);
+    const q = toTranscript(log).find((m) => m.kind === "question");
+    assert.ok(q && q.kind === "question", outcome);
+    assert.equal(q.outcome, outcome);
+  }
+});
+
+test("a grouped ask_user pairs every question with its answer in order (02.7)", () => {
+  const log = askUserLifecycle(
+    "g",
+    qContract(qItem("db", "Database?"), qItem("orm", "ORM?")),
+    {
+      action: "accept",
+      answer: "Postgres, Drizzle",
+      questions: [
+        { id: "db", answer: "Postgres" },
+        { id: "orm", answer: "Drizzle" },
+      ],
+    },
+    "answered",
+    "Answered",
+  );
+  const q = toTranscript(log).find((m) => m.kind === "question");
+  assert.ok(q && q.kind === "question");
+  assert.deepEqual(q.items, [
+    { id: "db", question: "Database?", answer: "Postgres" },
+    { id: "orm", question: "ORM?", answer: "Drizzle" },
+  ]);
+});
+
+test("a pending (unresolved) ask_user creates NO transcript item (02.7)", () => {
+  const log = [
+    ev(1, events.toolStarted({ runId: "r", callId: "c", name: "ask_user", arguments: "{}" })),
     ev(
-      3,
+      2,
       events.providerQuestionRequested({
         questionId: "a",
         runId: "r",
         toolCallId: "c",
         toolName: "ask_user",
         adapter: "ask_user",
-        contract,
+        contract: qContract(qItem("x", "Which?")),
       }),
     ),
-    ev(4, events.providerQuestionAnswer({ questionId: "a", answer: { action: "decline" } })),
+  ];
+  assert.deepEqual(
+    toTranscript(log).map((m) => m.kind),
+    [],
+  );
+});
+
+test("a duplicate provider.question.resolved updates in place, never a second row (02.7)", () => {
+  const log = [
+    ...askUserLifecycle(
+      "a",
+      qContract(qItem("x", "Which?")),
+      { action: "accept", answer: "A", questions: [{ id: "x", answer: "A" }] },
+      "answered",
+      "Answered",
+    ),
+    // A late/duplicate resolved (replay or reorder) with a different terminal state.
     ev(
-      5,
+      10,
+      events.providerQuestionResolved({
+        questionId: "a",
+        runId: "r",
+        toolCallId: "c",
+        outcome: "expired",
+        summary: "Expired",
+      }),
+    ),
+  ];
+  const questions = toTranscript(log).filter((m) => m.kind === "question");
+  assert.equal(questions.length, 1, "exactly one question row");
+  assert.equal(questions[0]?.kind === "question" && questions[0].outcome, "expired");
+});
+
+test("a resolved ask_user with no recorded contract falls back to the resolved summary (02.7)", () => {
+  const log = [
+    ev(1, events.providerQuestionAnswer({ questionId: "a", answer: { action: "decline" } })),
+    ev(
+      2,
       events.providerQuestionResolved({
         questionId: "a",
         runId: "r",
         toolCallId: "c",
         outcome: "declined",
-        summary: "Declined",
+        summary: "User declined the question",
       }),
     ),
-    ev(6, events.toolCompleted({ runId: "r", callId: "c", name: "ask_user", result: "declined" })),
   ];
-  const transcript = toTranscript(log);
-  // Only the user message survives - the ask_user tool block and the question control events are hidden.
-  assert.deepEqual(
-    transcript.map((m) => m.kind),
-    ["user"],
-  );
+  const q = toTranscript(log).find((m) => m.kind === "question");
+  assert.ok(q && q.kind === "question");
+  assert.deepEqual(q.items, []);
+  assert.equal(q.summary, "User declined the question");
 });
 
 test("a non-ask_user tool call still renders (the suppression is name-scoped)", () => {
