@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  loadModelOverridesFile,
   MODEL_METADATA_OVERRIDES,
+  parseModelOverrides,
   recordLearnedWindow,
   resolveContextWindow,
 } from "./model-metadata-overrides";
 
 /**
  * 02.16 D-003: correctable per-model context-window metadata. The catalog reads each model's window from
- * pi-ai's bundled registry, which can be stale; a confirmed override WINS over it. These pin the
- * resolution rule (override > bundled > null) with an injected overrides map so the production map stays
- * intentionally empty until a stale value is confirmed.
+ * pi-ai's bundled registry, which can be stale; a confirmed override WINS over it. Corrections are
+ * user-owned in `~/.trevorV2/models.json`; the built-in map is the empty baseline the file layers over.
+ * These pin the resolution rule (override > learned > bundled > null) with injected maps + a fake file
+ * read, so the resolution is exercised without touching real config or disk.
  */
 
 test("the bundled value is used when there is no override (unchanged behavior)", () => {
@@ -33,17 +36,67 @@ test("the window is null when neither an override nor a bundled value is known",
 });
 
 /**
- * 03.2 M2: MiniMax-M3's bundled window (512000) overstates the real 262144 (session
- * trevor-20260629-033048z-eb100ca0 overflowed at ~412k against the real ceiling), so the production
- * map now carries the confirmed correction and the resolver returns it everywhere the window is read.
+ * Corrections are user-owned: parsed from `~/.trevorV2/models.json` (parseModelOverrides) and read by
+ * loadModelOverridesFile. The motivating case - MiniMax-M3 - is corrected to the model card's 1M in
+ * that file, not in code, so the built-in map stays empty.
  */
 
-test("MiniMax-M3 resolves to its real 262144 window, not the stale bundled 512000", () => {
-  assert.equal(resolveContextWindow("MiniMax-M3", 512000), 262144);
+test("the built-in override map is empty - corrections live in models.json, not code", () => {
+  assert.deepEqual(MODEL_METADATA_OVERRIDES, {});
 });
 
-test("the production override map carries the confirmed MiniMax-M3 correction", () => {
-  assert.equal(MODEL_METADATA_OVERRIDES["MiniMax-M3"]?.contextWindow, 262144);
+test("parseModelOverrides keeps well-formed { contextWindow } entries", () => {
+  assert.equal(
+    parseModelOverrides({ "MiniMax-M3": { contextWindow: 1_000_000 } })["MiniMax-M3"]
+      ?.contextWindow,
+    1_000_000,
+  );
+});
+
+test("parseModelOverrides skips malformed entries but keeps the well-formed rest", () => {
+  const parsed = parseModelOverrides({
+    "MiniMax-M3": { contextWindow: 1_000_000 },
+    "bad-shape": 512000,
+    "bad-window-type": { contextWindow: "lots" },
+    "non-positive": { contextWindow: 0 },
+    infinite: { contextWindow: Number.POSITIVE_INFINITY },
+  });
+  assert.deepEqual(parsed, { "MiniMax-M3": { contextWindow: 1_000_000 } });
+});
+
+test("parseModelOverrides tolerates non-object input", () => {
+  assert.deepEqual(parseModelOverrides(null), {});
+  assert.deepEqual(parseModelOverrides("nope"), {});
+});
+
+test("loadModelOverridesFile reads + parses a present file", () => {
+  const overrides = loadModelOverridesFile("/x/models.json", () =>
+    JSON.stringify({ "MiniMax-M3": { contextWindow: 1_000_000 } }),
+  );
+  assert.equal(overrides["MiniMax-M3"]?.contextWindow, 1_000_000);
+});
+
+test("loadModelOverridesFile returns {} when the file is missing", () => {
+  assert.deepEqual(
+    loadModelOverridesFile("/x/models.json", () => {
+      throw new Error("ENOENT");
+    }),
+    {},
+  );
+});
+
+test("loadModelOverridesFile returns {} on a present-but-malformed file (does not throw)", () => {
+  assert.deepEqual(
+    loadModelOverridesFile("/x/models.json", () => "{ not valid json"),
+    {},
+  );
+});
+
+test("a models.json correction wins over pi-ai's bundled window through resolveContextWindow", () => {
+  const overrides = loadModelOverridesFile("/x/models.json", () =>
+    JSON.stringify({ "MiniMax-M3": { contextWindow: 1_000_000 } }),
+  );
+  assert.equal(resolveContextWindow("MiniMax-M3", 512000, overrides), 1_000_000);
 });
 
 /**

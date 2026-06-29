@@ -36,6 +36,13 @@ export {
 export const USER_AGENTS_MD = join(TREVOR_HOME, "AGENTS.md");
 
 /**
+ * The user-global model-metadata override file: hand-edited JSON that corrects per-model metadata
+ * pi-ai's bundled registry gets wrong (e.g. a stale `contextWindow`). Lives in the config home beside
+ * `AGENTS.md`, the same way pi-ai keeps `~/.pi/auth.json`. Optional - absent means "no corrections".
+ */
+export const USER_MODELS_JSON = join(TREVOR_HOME, "models.json");
+
+/**
  * The directory the workspace-confined tools operate inside. Point the agent at a
  * target repo with TREVOR_WORKSPACE; defaults to the host's working directory.
  * Confinement is a path-escape guard (no `../` or absolute path may leave the

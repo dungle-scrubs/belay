@@ -11,7 +11,7 @@ import type {
 import { anthropicProvider } from "./anthropic";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
-import { resolveContextWindow } from "./model-metadata-overrides";
+import { reloadModelOverrides, resolveContextWindow } from "./model-metadata-overrides";
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
 import { lookupPiModel } from "./pi-model";
@@ -334,6 +334,9 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
  * the static registry or an empty list, never a hang.
  */
 export async function loadCatalog(): Promise<CatalogSnapshot> {
+  // Re-read the user's models.json alongside the provider keys, so editing a window correction and
+  // running /catalog-refresh takes effect without a host restart (the resolver is memoized otherwise).
+  reloadModelOverrides();
   const auth = await readAuthJson();
   // Resolve each source's auth state ONCE (configured + static key) and reuse it for the fetch filter,
   // the per-source key, and the snapshot - instead of re-parsing the same auth entry at each step.

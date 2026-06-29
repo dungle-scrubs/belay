@@ -1,30 +1,102 @@
 /**
  * Correctable per-model metadata overrides (02.16 D-003). Provider `/models` endpoints return only
  * `{id, name}`, so the catalog looks up per-model metadata (context window, reasoning, vision) from
- * pi-ai's BUNDLED static registry. That registry can carry a STALE value - the motivating case was a
- * MiniMax model whose bundled `contextWindow` (512000) no longer matched reality, so the picker
- * faithfully rendered a wrong window. There is no live source for context windows, so the fix is a
- * correctable override that WINS over the bundled value, not a "pull it from the API".
+ * pi-ai's BUNDLED static registry. That registry can carry a STALE value - the motivating case was
+ * MiniMax-M3, whose bundled `contextWindow` (512000) understates the model card's real 1M, so the
+ * picker rendered a wrong window and the context-pressure gate fired far too early. There is no live
+ * source for context windows, so the fix is a correctable override that WINS over the bundled value,
+ * not a "pull it from the API".
  *
- * Keep this map MINIMAL: add only a confirmed correction, and prefer a pi-ai bump when one fixes the
- * value upstream (the override stays as the durable correctness layer regardless). It is the single
- * place a wrong window is corrected, beside the catalog source-of-truth rather than scattered across
- * consumers. Empty by default in this build - the installed `@mariozechner/pi-ai` carries no known
- * stale window worth overriding here; an entry is added the moment one is confirmed.
+ * Corrections are USER-OWNED: they live in a hand-edited `<TREVOR_HOME>/models.json` (see
+ * {@link USER_MODELS_JSON}), the same way pi-ai keeps `~/.pi/auth.json`, so a wrong window is fixed by
+ * editing config rather than shipping a code change. The file is read once per host (and on
+ * `/catalog-refresh` via {@link reloadModelOverrides}); absent or malformed, it contributes nothing.
+ * {@link MODEL_METADATA_OVERRIDES} below is the empty BUILT-IN baseline the config layers over - kept
+ * for a code-level correction we'd ship ahead of any user edit; the user file always wins.
  */
+
+import { readFileSync } from "node:fs";
+import { warn } from "../log";
+import { USER_MODELS_JSON } from "../paths";
 
 export interface ModelMetadataOverride {
   /** The corrected context window (tokens) when pi-ai's bundled value is stale. */
   readonly contextWindow?: number;
 }
 
-/** Confirmed corrections keyed by `modelId` (the live `/models` id). */
-export const MODEL_METADATA_OVERRIDES: Readonly<Record<string, ModelMetadataOverride>> = {
-  // MiniMax-M3's bundled window (512000) overstates the real 262144: session
-  // trevor-20260629-033048z-eb100ca0 grew a ~412k-token prompt that the bundled value declared safe,
-  // so the fold never fired and the turn overflowed against the real ceiling (03.2 D-004).
-  "MiniMax-M3": { contextWindow: 262_144 },
-};
+/**
+ * Built-in baseline corrections keyed by `modelId` (the live `/models` id). Intentionally EMPTY:
+ * corrections are user-owned in `<TREVOR_HOME>/models.json`. An entry is added here only for a
+ * correction we want shipped in code ahead of any user file; the user file overrides it regardless.
+ */
+export const MODEL_METADATA_OVERRIDES: Readonly<Record<string, ModelMetadataOverride>> = {};
+
+/**
+ * Parses a raw `models.json` value into a clean overrides map, keeping only well-formed entries
+ * (`{ contextWindow: <positive finite number> }`) and silently skipping anything else, so one bad
+ * entry never discards the rest. Pure - no I/O.
+ */
+export function parseModelOverrides(raw: unknown): Record<string, ModelMetadataOverride> {
+  const out: Record<string, ModelMetadataOverride> = {};
+  if (typeof raw !== "object" || raw === null) {
+    return out;
+  }
+  for (const [modelId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) {
+      continue;
+    }
+    const contextWindow = (value as { contextWindow?: unknown }).contextWindow;
+    if (typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0) {
+      out[modelId] = { contextWindow };
+    }
+  }
+  return out;
+}
+
+/**
+ * Reads + parses the user's `models.json`. The file is OPTIONAL: a missing/unreadable file yields no
+ * overrides silently, while a present-but-malformed file warns once and is ignored rather than crashing
+ * the host on a typo. `path`/`read` are injectable so the load is unit-tested without touching disk.
+ */
+export function loadModelOverridesFile(
+  path: string = USER_MODELS_JSON,
+  read: (p: string) => string = (p) => readFileSync(p, "utf8"),
+): Record<string, ModelMetadataOverride> {
+  let text: string;
+  try {
+    text = read(path);
+  } catch {
+    return {}; // no file (the common case) - no corrections
+  }
+  try {
+    return parseModelOverrides(JSON.parse(text));
+  } catch (error) {
+    warn("catalog", "models.json present but not valid JSON; ignoring", {
+      path,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
+}
+
+/**
+ * The effective overrides: the built-in baseline with the user's `models.json` layered ON TOP (the
+ * user file wins). Memoized so the file is read once per host; {@link reloadModelOverrides} clears it
+ * for `/catalog-refresh`, matching how provider keys are re-read.
+ */
+let activeOverridesCache: Readonly<Record<string, ModelMetadataOverride>> | undefined;
+
+export function activeModelOverrides(): Readonly<Record<string, ModelMetadataOverride>> {
+  if (activeOverridesCache === undefined) {
+    activeOverridesCache = { ...MODEL_METADATA_OVERRIDES, ...loadModelOverridesFile() };
+  }
+  return activeOverridesCache;
+}
+
+/** Drops the memoized overrides so the next read re-loads `models.json` (host startup / `/catalog-refresh`). */
+export function reloadModelOverrides(): void {
+  activeOverridesCache = undefined;
+}
 
 /**
  * Windows LEARNED from a provider's own overflow error (03.2 M3), keyed by `modelId`. A stale bundled
@@ -36,15 +108,16 @@ export const MODEL_METADATA_OVERRIDES: Readonly<Record<string, ModelMetadataOver
 const learnedWindows = new Map<string, number>();
 
 /**
- * The effective context window for a model, by precedence: a confirmed static override wins, else a
- * learned window (clamped to never exceed the bundled value), else the bundled value; absent all three
- * it is null (unknown - the picker shows no window). Pure - `overrides` and `learned` are injectable so
- * the resolution is unit-tested without touching the production map or store.
+ * The effective context window for a model, by precedence: a confirmed override wins (the user's
+ * `models.json` over the built-in baseline), else a learned window (clamped to never exceed the bundled
+ * value), else the bundled value; absent all three it is null (unknown - the picker shows no window).
+ * Pure given its inputs - `overrides` and `learned` are injectable so the resolution is unit-tested
+ * without touching the config file or store; the default `overrides` is the memoized config-aware map.
  */
 export function resolveContextWindow(
   modelId: string,
   bundledContextWindow: number | undefined,
-  overrides: Readonly<Record<string, ModelMetadataOverride>> = MODEL_METADATA_OVERRIDES,
+  overrides: Readonly<Record<string, ModelMetadataOverride>> = activeModelOverrides(),
   learned: ReadonlyMap<string, number> = learnedWindows,
 ): number | null {
   const override = overrides[modelId]?.contextWindow;
