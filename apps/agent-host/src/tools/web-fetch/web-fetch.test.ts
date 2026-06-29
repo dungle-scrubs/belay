@@ -99,7 +99,13 @@ test("a usable static page builds a complete envelope and does not request fallb
 test("auto mode flags needsFallback for a thin page; static mode does not", async () => {
   const thinHtml = `<html><body><div id="root"></div>${"<script>var a=1;</script>".repeat(20)}</body></html>`;
 
-  const auto = await run({ url: "https://example.com/p" }, htmlResponse(thinHtml));
+  // The fallback backends also come up empty here, so auto mode exhausts the ladder and still flags
+  // needsFallback - the static attempt stays the reported result.
+  const autoFetch = multiplexedFetch({
+    static: { text: thinHtml, contentType: "text/html" },
+    jina: { text: "" },
+  });
+  const auto = await runLadder({ url: "https://example.com/p" }, ladderDeps(autoFetch.fetch));
   assert.equal(auto.needsFallback, true);
   const autoAttempts = auto.attempts as { status: string }[];
   assert.equal(autoAttempts[0]?.status, "thin");
@@ -109,10 +115,15 @@ test("auto mode flags needsFallback for a thin page; static mode does not", asyn
 });
 
 test("a blocked challenge page is classified blocked and flagged for fallback in auto mode", async () => {
-  const blocked = await run(
-    { url: "https://example.com/p" },
-    htmlResponse("<html><body>Checking your browser. Please enable JavaScript.</body></html>"),
-  );
+  const { fetch } = multiplexedFetch({
+    static: {
+      text: "<html><body>Checking your browser. Please enable JavaScript.</body></html>",
+      contentType: "text/html",
+    },
+    jina: { text: "" },
+  });
+
+  const blocked = await runLadder({ url: "https://example.com/p" }, ladderDeps(fetch));
 
   const attempts = blocked.attempts as { status: string }[];
   assert.equal(attempts[0]?.status, "blocked");
@@ -161,4 +172,215 @@ test("the live tool renders an unsafe URL as a typed input error through simpleT
   assert.ok(error instanceof ToolInputError);
   assert.equal(error.tool, "web_fetch");
   assert.ok(error.detail.includes("scheme"), `scheme rejection surfaced: ${error.detail}`);
+});
+
+/**
+ * Ladder coverage (M5/M6): a routing fetch serves the static origin, the Jina reader, and the
+ * Firecrawl scrape endpoint independently, so each test asserts which backends were spent. The
+ * invariant is static -> Jina -> Firecrawl, each only when the prior is unusable, with every attempt
+ * recorded in `attempts[]`.
+ */
+
+const USABLE_HTML = `<html><head><title>Doc</title></head><body><article><p>${"Real content. ".repeat(40)}</p></article></body></html>`;
+const THIN_HTML = `<html><body><div id="root"></div>${"<script>var a=1;</script>".repeat(20)}</body></html>`;
+
+interface RouteSpec {
+  readonly status?: number;
+  readonly text?: string;
+  readonly json?: unknown;
+  readonly contentType?: string;
+}
+
+function multiplexedFetch(routes: {
+  static?: RouteSpec;
+  jina?: RouteSpec;
+  firecrawl?: RouteSpec;
+}): { fetch: typeof globalThis.fetch; hits: { static: number; jina: number; firecrawl: number } } {
+  const hits = { static: 0, jina: 0, firecrawl: 0 };
+
+  const fetch = (async (url: string) => {
+    if (url.startsWith("https://r.jina.ai/")) {
+      hits.jina += 1;
+      return responseFor(routes.jina ?? { status: 200, text: "" }, url);
+    }
+
+    if (url.startsWith("https://api.firecrawl.dev/")) {
+      hits.firecrawl += 1;
+      return responseFor(routes.firecrawl ?? { status: 200, json: {} }, url);
+    }
+
+    hits.static += 1;
+    return responseFor(routes.static ?? { status: 200, text: "", contentType: "text/html" }, url);
+  }) as unknown as typeof globalThis.fetch;
+
+  return { fetch, hits };
+}
+
+function responseFor(spec: RouteSpec, url: string): unknown {
+  const bytes = new TextEncoder().encode(spec.text ?? "");
+  const headers = new Map<string, string>();
+
+  if (spec.contentType) {
+    headers.set("content-type", spec.contentType);
+  }
+
+  return {
+    status: spec.status ?? 200,
+    url,
+    headers: { get: (name: string) => headers.get(name.toLowerCase()) ?? null },
+    arrayBuffer: async () => {
+      const copy = new Uint8Array(bytes.byteLength);
+      copy.set(bytes);
+      return copy.buffer;
+    },
+    json: async () => spec.json,
+  };
+}
+
+function ladderDeps(
+  fetch: typeof globalThis.fetch,
+  keys: { jinaApiKey?: string; firecrawlApiKey?: string } = {},
+): WebFetchDeps {
+  return {
+    fetch,
+    resolveHost: async () => ["93.184.216.34"],
+    now: () => "2026-06-29T00:00:00.000Z",
+    ...keys,
+  };
+}
+
+async function runLadder(args: WebFetchArgs, deps: WebFetchDeps): Promise<Record<string, unknown>> {
+  return JSON.parse(await runWebFetch(args, deps));
+}
+
+test("auto mode does NOT call Jina or Firecrawl when static is usable", async () => {
+  const { fetch, hits } = multiplexedFetch({
+    static: { text: USABLE_HTML, contentType: "text/html" },
+  });
+
+  const parsed = await runLadder({ url: "https://example.com/p" }, ladderDeps(fetch));
+
+  assert.equal(parsed.backend, "static");
+  assert.equal(parsed.needsFallback, false);
+  assert.equal(hits.static, 1);
+  assert.equal(hits.jina, 0, "Jina is not spent on a usable static page");
+  assert.equal(hits.firecrawl, 0, "Firecrawl is not spent on a usable static page");
+  assert.deepEqual(parsed.attempts, [{ backend: "static", status: "usable" }]);
+});
+
+test("static mode never calls Jina or Firecrawl even when static is unusable", async () => {
+  const { fetch, hits } = multiplexedFetch({
+    static: { text: THIN_HTML, contentType: "text/html" },
+    jina: { text: `# Recovered\n\n${"Jina body. ".repeat(40)}` },
+  });
+
+  const parsed = await runLadder(
+    { url: "https://example.com/p", mode: "static" },
+    ladderDeps(fetch, { jinaApiKey: "k", firecrawlApiKey: "fc" }),
+  );
+
+  assert.equal(parsed.backend, "static");
+  assert.equal(parsed.needsFallback, false, "static mode is the final word");
+  assert.equal(hits.jina, 0);
+  assert.equal(hits.firecrawl, 0);
+});
+
+test("auto mode falls back to Jina after an unusable static page and adopts a usable Jina result", async () => {
+  const { fetch, hits } = multiplexedFetch({
+    static: { text: THIN_HTML, contentType: "text/html" },
+    jina: { text: `# Recovered\n\n${"Jina body. ".repeat(40)}` },
+  });
+
+  const parsed = await runLadder({ url: "https://example.com/p" }, ladderDeps(fetch));
+
+  assert.equal(parsed.backend, "jina");
+  assert.equal(parsed.needsFallback, false);
+  assert.equal(hits.static, 1);
+  assert.equal(hits.jina, 1);
+  assert.equal(hits.firecrawl, 0, "Firecrawl is not reached once Jina recovers the page");
+  assert.ok(String(parsed.content).includes("Jina body."));
+
+  const attempts = parsed.attempts as { backend: string; status: string }[];
+  assert.equal(attempts[0]?.backend, "static");
+  assert.equal(attempts[1]?.backend, "jina");
+  assert.equal(attempts[1]?.status, "usable");
+});
+
+test("auto mode reaches Firecrawl only when both static AND Jina are unusable", async () => {
+  const { fetch, hits } = multiplexedFetch({
+    static: { text: THIN_HTML, contentType: "text/html" },
+    jina: { text: "" },
+    firecrawl: { json: { data: { markdown: `# FC\n\n${"Firecrawl body. ".repeat(40)}` } } },
+  });
+
+  const parsed = await runLadder(
+    { url: "https://example.com/p" },
+    ladderDeps(fetch, { firecrawlApiKey: "fc" }),
+  );
+
+  assert.equal(parsed.backend, "firecrawl");
+  assert.equal(parsed.needsFallback, false);
+  assert.equal(hits.static, 1);
+  assert.equal(hits.jina, 1);
+  assert.equal(hits.firecrawl, 1);
+  assert.ok(String(parsed.content).includes("Firecrawl body."));
+
+  const attempts = parsed.attempts as { backend: string }[];
+  assert.deepEqual(
+    attempts.map((a) => a.backend),
+    ["static", "jina", "firecrawl"],
+  );
+});
+
+test("Firecrawl is recorded as unavailable (no request) when the key is missing", async () => {
+  const { fetch, hits } = multiplexedFetch({
+    static: { text: THIN_HTML, contentType: "text/html" },
+    jina: { text: "" },
+  });
+
+  const parsed = await runLadder({ url: "https://example.com/p" }, ladderDeps(fetch));
+
+  assert.equal(hits.firecrawl, 0, "no Firecrawl request without a key");
+  assert.equal(parsed.needsFallback, true, "no backend produced usable content");
+
+  const attempts = parsed.attempts as { backend: string; status: string; detail?: string }[];
+  const firecrawl = attempts.find((a) => a.backend === "firecrawl");
+  assert.ok(firecrawl, "the Firecrawl skip is still recorded as an attempt");
+  assert.equal(firecrawl?.status, "failed");
+  assert.ok(/unavailable|not configured/i.test(firecrawl?.detail ?? ""));
+});
+
+test("rendered mode goes straight to Firecrawl and skips Jina", async () => {
+  const { fetch, hits } = multiplexedFetch({
+    static: { text: USABLE_HTML, contentType: "text/html" },
+    firecrawl: { json: { data: { markdown: `# FC\n\n${"Rendered body. ".repeat(40)}` } } },
+  });
+
+  const parsed = await runLadder(
+    { url: "https://example.com/p", mode: "rendered" },
+    ladderDeps(fetch, { firecrawlApiKey: "fc" }),
+  );
+
+  assert.equal(parsed.backend, "firecrawl");
+  assert.equal(hits.jina, 0, "rendered mode does not use Jina");
+  assert.equal(hits.firecrawl, 1);
+  assert.ok(String(parsed.content).includes("Rendered body."));
+});
+
+test("rendered mode degrades gracefully when Firecrawl is unavailable", async () => {
+  const { fetch, hits } = multiplexedFetch({
+    static: { text: USABLE_HTML, contentType: "text/html" },
+  });
+
+  const parsed = await runLadder(
+    { url: "https://example.com/p", mode: "rendered" },
+    ladderDeps(fetch),
+  );
+
+  assert.equal(hits.firecrawl, 0, "no request without a key");
+  assert.equal(parsed.needsFallback, true);
+
+  const attempts = parsed.attempts as { backend: string; status: string }[];
+  const firecrawl = attempts.find((a) => a.backend === "firecrawl");
+  assert.equal(firecrawl?.status, "failed", "unavailable Firecrawl is a typed failed attempt");
 });

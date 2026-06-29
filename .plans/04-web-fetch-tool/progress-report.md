@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M5 - Jina Reader Fallback
-- Current cutoff blockers: 50
+- Current focus: M7 - Prompt Guidance and Web Rendering
+- Current cutoff blockers: 32
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 36 (M1-M4 + Gates 1->2, 2->3)
+- Completed current work: 54 (M1-M6 + Gates 1->2, 2->3, 3->4)
 
 ## Current Cutoff Blockers
 
@@ -72,30 +72,30 @@
 
 #### M5: Jina Reader Fallback
 
-- [ ] RED: Add tests proving Jina is attempted only after static extraction is unusable in auto mode.
-- [ ] GREEN: Implement direct Jina Reader request against the target URL after URL safety validation.
-- [ ] RED: Add tests for Jina success, empty output, blocker output, rate limit, timeout, and error.
-- [ ] GREEN: Normalize Jina results and errors into the result envelope.
-- [ ] RED: Add cap/provenance tests for Jina output.
-- [ ] GREEN: Apply byte/time/text caps and record Jina provenance.
-- [ ] REFACTOR: Keep optional Jina API key support isolated if introduced.
+- [x] RED: Add tests proving Jina is attempted only after static extraction is unusable in auto mode.
+- [x] GREEN: Implement direct Jina Reader request against the target URL after URL safety validation.
+- [x] RED: Add tests for Jina success, empty output, blocker output, rate limit, timeout, and error.
+- [x] GREEN: Normalize Jina results and errors into the result envelope.
+- [x] RED: Add cap/provenance tests for Jina output.
+- [x] GREEN: Apply byte/time/text caps and record Jina provenance.
+- [x] REFACTOR: Keep optional Jina API key support isolated if introduced.
 
 #### M6: Firecrawl Final Fallback
 
-- [ ] RED: Add tests proving Firecrawl is not called when static or Jina content is usable.
-- [ ] GREEN: Gate Firecrawl behind `FIRECRAWL_API_KEY` and final-fallback conditions.
-- [ ] RED: Add tests for missing key, SDK unavailable, rate limit, provider error, timeout, and success.
-- [ ] GREEN: Return structured unavailable/error results when Firecrawl cannot run.
-- [ ] RED: Add tests proving only markdown/main-content request shape is used.
-- [ ] GREEN: Exclude search, crawl, map, extract/JSON, screenshots, actions, profiles, cookies, custom headers, enhanced proxy, and broad crawling.
-- [ ] REFACTOR: Keep Firecrawl dependency optional and isolated.
+- [x] RED: Add tests proving Firecrawl is not called when static or Jina content is usable.
+- [x] GREEN: Gate Firecrawl behind `FIRECRAWL_API_KEY` and final-fallback conditions.
+- [x] RED: Add tests for missing key, SDK unavailable, rate limit, provider error, timeout, and success.
+- [x] GREEN: Return structured unavailable/error results when Firecrawl cannot run.
+- [x] RED: Add tests proving only markdown/main-content request shape is used.
+- [x] GREEN: Exclude search, crawl, map, extract/JSON, screenshots, actions, profiles, cookies, custom headers, enhanced proxy, and broad crawling.
+- [x] REFACTOR: Keep Firecrawl dependency optional and isolated.
 
 ### Gate 3 -> 4
 
-- [ ] Auto ladder is static, then Jina, then Firecrawl.
-- [ ] Firecrawl is not accidentally spent on ordinary pages.
-- [ ] Missing or failing external backends return typed results.
-- [ ] Backend attempts and provenance are visible in the result envelope.
+- [x] Auto ladder is static, then Jina, then Firecrawl.
+- [x] Firecrawl is not accidentally spent on ordinary pages.
+- [x] Missing or failing external backends return typed results.
+- [x] Backend attempts and provenance are visible in the result envelope.
 
 ### Phase 4: Tool UX, Doctor, and Guidance
 

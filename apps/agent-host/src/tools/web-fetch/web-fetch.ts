@@ -2,19 +2,22 @@
  * The web_fetch tool entry: a read-only, host-owned reader for ONE explicit public URL. It guards
  * the URL (SSRF), fetches it statically (following+guarding redirects), extracts bounded
  * markdown/text, classifies the result, and serializes the envelope the model reads and the web
- * renders. In "auto" mode an unusable static result (thin/blocked/failed) sets `needsFallback` so a
- * later external backend (Jina, then Firecrawl - a separate phase) can recover it; "static" mode
- * never falls back. The backend dispatch (`fetchVia`) is the seam those backends slot into.
+ * renders. In "auto" mode an unusable static result (thin/blocked/failed) falls through the ladder -
+ * Jina, then Firecrawl - each only when the prior backend is unusable; "static" mode never falls
+ * back and "rendered" mode goes straight to Firecrawl. The backend dispatch (`fetchVia`) is the seam
+ * those backends slot into, and every attempt (including skips/failures) lands in `attempts[]`.
  */
 
 import { lookup } from "node:dns/promises";
 import { Schema } from "effect";
 import { simpleTool, toolInput } from "../shared";
-import type { FetchAttempt, WebFetchResult } from "./envelope";
+import type { FetchAttempt, FetchBackend, WebFetchResult } from "./envelope";
 import { serializeResult } from "./envelope";
 import { boundContent, classifyStatic, extractHtml } from "./extract";
+import { firecrawlFetch } from "./firecrawl-fetch";
+import { jinaFetch } from "./jina-fetch";
 import { type FetchLike, StaticFetchError, staticFetch } from "./static-fetch";
-import { assertSafeUrl, UnsafeUrlError } from "./url-guard";
+import { assertSafeUrl, type ResolveHost, UnsafeUrlError } from "./url-guard";
 
 const MODES = ["auto", "static", "rendered"] as const;
 
@@ -28,6 +31,8 @@ const DEFAULT_MAX_CHARS = 12_000;
 
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 12_000;
+const JINA_TIMEOUT_MS = 20_000;
+const FIRECRAWL_TIMEOUT_MS = 30_000;
 const DNS_TIMEOUT_MS = 4_000;
 
 const Params = Schema.Struct({
@@ -66,6 +71,12 @@ export interface WebFetchDeps {
   readonly fetch: typeof globalThis.fetch;
   readonly resolveHost: (host: string) => Promise<readonly string[]>;
   readonly now: () => string;
+  /** Optional `JINA_API_KEY` - Jina Reader also works keyless, so an absent key only drops the
+   *  Authorization header, never the backend. Injected so tests stay deterministic. */
+  readonly jinaApiKey?: string;
+  /** `FIRECRAWL_API_KEY` - Firecrawl is gated entirely behind this; absent means the backend is
+   *  unavailable and yields a typed `failed` attempt rather than a request. */
+  readonly firecrawlApiKey?: string;
 }
 
 function clamp(
@@ -104,10 +115,27 @@ async function resolveHostLiterals(host: string): Promise<readonly string[]> {
   }
 }
 
+/** One backend's contribution to the ladder: its classification, the bounded content it produced
+ *  (absent on a failure), a sanitized failure detail, and the envelope fields a winning backend
+ *  carries. */
+interface BackendOutcome {
+  readonly backend: FetchBackend;
+  readonly status: FetchAttempt["status"];
+  readonly detail?: string;
+  readonly finalUrl?: string;
+  readonly title?: string;
+  readonly contentType?: string;
+  readonly httpStatus?: number;
+  readonly byteCount?: number;
+  readonly content?: { readonly content: string; readonly truncated: boolean };
+}
+
 /**
- * Runs the static backend and produces an envelope. In "auto" mode an unusable result sets
- * `needsFallback`; "static" mode leaves it false (it is the final word). The dispatch shape leaves a
- * clear place for M5/M6 to add Jina/Firecrawl backends behind the same `fetchVia` switch.
+ * Runs the backend ladder and produces an envelope. The order is static -> Jina -> Firecrawl, each
+ * attempted only when the prior backend is unusable: Jina runs only in "auto" mode after an unusable
+ * static result, and Firecrawl runs only when its key is set and either (auto, after BOTH static and
+ * Jina are unusable) or mode is "rendered". "static" mode stops after static and never falls back.
+ * Every attempt - including a backend that failed - lands in `attempts[]` with a sanitized detail.
  */
 async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetchResult> {
   const mode = args.mode ?? "auto";
@@ -116,11 +144,78 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
 
   const attempts: FetchAttempt[] = [];
   const fetchedAt = deps.now();
+  const resolveHost = await syncResolverFor(args.url, deps.resolveHost);
 
+  const staticOutcome = await runStatic(args.url, maxBytes, maxChars, deps);
+
+  attempts.push(toAttempt(staticOutcome));
+
+  // The reported backend defaults to static (its content is the best available even when thin), but
+  // "rendered" mode owes the caller the rendered backend's result, so a usable Firecrawl below
+  // overrides static and an unavailable Firecrawl still surfaces as the reported backend.
+  let winner = staticOutcome;
+
+  if (mode === "auto" && staticOutcome.status !== "usable") {
+    const jinaOutcome = await runJina(args.url, maxChars, deps, resolveHost);
+
+    attempts.push(toAttempt(jinaOutcome));
+
+    if (jinaOutcome.status === "usable") {
+      winner = jinaOutcome;
+    }
+  }
+
+  if (shouldRunFirecrawl(mode, winner)) {
+    const firecrawlOutcome = await runFirecrawlBackend(args.url, maxChars, deps, resolveHost);
+
+    attempts.push(toAttempt(firecrawlOutcome));
+
+    if (firecrawlOutcome.status === "usable" || mode === "rendered") {
+      winner = firecrawlOutcome;
+    }
+  }
+
+  const needsFallback = mode !== "static" && winner.status !== "usable";
+  const bounded = winner.content ?? { content: "", truncated: false };
+
+  return {
+    url: args.url,
+    finalUrl: winner.finalUrl ?? args.url,
+    ...(winner.title !== undefined ? { title: winner.title } : {}),
+    ...(winner.contentType !== undefined ? { contentType: winner.contentType } : {}),
+    ...(winner.httpStatus !== undefined ? { status: winner.httpStatus } : {}),
+    fetchedAt,
+    byteCount: winner.byteCount ?? 0,
+    textLength: bounded.content.length,
+    truncated: bounded.truncated,
+    backend: winner.backend,
+    attempts,
+    needsFallback,
+    content: bounded.content,
+  };
+}
+
+/** Decides whether the gated Firecrawl backend runs: explicit "rendered" mode always, or "auto" once
+ *  every earlier backend (static, Jina) is still unusable. "static" mode never reaches Firecrawl. */
+function shouldRunFirecrawl(mode: WebFetchArgs["mode"], winner: BackendOutcome): boolean {
+  if (mode === "rendered") {
+    return true;
+  }
+
+  return mode === "auto" && winner.status !== "usable";
+}
+
+/** Runs the static backend, capturing its body+classification (or a failure) as a `BackendOutcome`. */
+async function runStatic(
+  url: string,
+  maxBytes: number,
+  maxChars: number,
+  deps: WebFetchDeps,
+): Promise<BackendOutcome> {
   let result: Awaited<ReturnType<typeof staticFetch>>;
 
   try {
-    result = await staticFetch(args.url, {
+    result = await staticFetch(url, {
       fetch: deps.fetch as FetchLike,
       resolveHost: deps.resolveHost,
       maxBytes,
@@ -130,21 +225,7 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
   } catch (error) {
     const detail = error instanceof StaticFetchError ? error.reason : "static fetch failed";
 
-    attempts.push({ backend: "static", status: "failed", detail });
-
-    return {
-      url: args.url,
-      finalUrl: args.url,
-      fetchedAt,
-      byteCount: 0,
-      textLength: 0,
-      truncated: false,
-      backend: "static",
-      attempts,
-      // A failed static fetch is recoverable by a later rendered backend in auto mode.
-      needsFallback: mode !== "static",
-      content: "",
-    };
+    return { backend: "static", status: "failed", finalUrl: url, detail };
   }
 
   const isHtml = (result.contentType ?? "").toLowerCase().includes("html");
@@ -157,36 +238,100 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
 
   const bounded = boundContent(extracted.content, maxChars);
 
-  attempts.push({
+  return {
     backend: "static",
     status,
-    ...(status === "usable" ? {} : { detail: `static result is ${status}` }),
-  });
-
-  const needsFallback = mode !== "static" && status !== "usable";
-
-  return {
-    url: args.url,
     finalUrl: result.finalUrl,
-    ...(extracted.title !== undefined ? { title: extracted.title } : {}),
-    ...(result.contentType !== undefined ? { contentType: result.contentType } : {}),
-    status: result.status,
-    fetchedAt,
+    title: extracted.title,
+    contentType: result.contentType,
+    httpStatus: result.status,
     byteCount: result.byteCount,
-    textLength: bounded.content.length,
-    truncated: bounded.truncated || result.bodyTruncated,
-    backend: "static",
-    attempts,
-    needsFallback,
-    content: bounded.content,
+    content: { content: bounded.content, truncated: bounded.truncated || result.bodyTruncated },
   };
 }
 
-/** Live dependencies: the global fetch, a timeout-bounded node DNS resolver, and the wall clock. */
+/** Runs the Jina backend and maps its outcome onto a `BackendOutcome`. */
+async function runJina(
+  url: string,
+  maxChars: number,
+  deps: WebFetchDeps,
+  resolveHost: ResolveHost | undefined,
+): Promise<BackendOutcome> {
+  const maxBytes = clamp(undefined, MAX_BYTES_FLOOR, MAX_BYTES_CEILING, DEFAULT_MAX_BYTES);
+  const outcome = await jinaFetch(url, {
+    fetch: deps.fetch,
+    resolveHost,
+    apiKey: deps.jinaApiKey,
+    maxBytes,
+    maxChars,
+    timeoutMs: JINA_TIMEOUT_MS,
+  });
+
+  if ("detail" in outcome) {
+    return { backend: "jina", status: outcome.status, detail: outcome.detail };
+  }
+
+  return {
+    backend: "jina",
+    status: outcome.status,
+    finalUrl: outcome.finalUrl,
+    httpStatus: outcome.httpStatus,
+    byteCount: outcome.byteCount,
+    content: outcome.content,
+  };
+}
+
+/** Runs the Firecrawl backend and maps its outcome onto a `BackendOutcome`. */
+async function runFirecrawlBackend(
+  url: string,
+  maxChars: number,
+  deps: WebFetchDeps,
+  resolveHost: ResolveHost | undefined,
+): Promise<BackendOutcome> {
+  const outcome = await firecrawlFetch(url, {
+    fetch: deps.fetch,
+    resolveHost,
+    apiKey: deps.firecrawlApiKey,
+    maxChars,
+    timeoutMs: FIRECRAWL_TIMEOUT_MS,
+  });
+
+  if ("detail" in outcome) {
+    return { backend: "firecrawl", status: outcome.status, detail: outcome.detail };
+  }
+
+  return {
+    backend: "firecrawl",
+    status: outcome.status,
+    finalUrl: outcome.finalUrl,
+    byteCount: outcome.byteCount,
+    content: outcome.content,
+  };
+}
+
+/** Maps a backend outcome to the sanitized attempt log entry. A usable result omits the detail; an
+ *  unusable one carries either the backend's own sanitized detail or a generic "result is X". */
+function toAttempt(outcome: BackendOutcome): FetchAttempt {
+  if (outcome.status === "usable") {
+    return { backend: outcome.backend, status: outcome.status };
+  }
+
+  return {
+    backend: outcome.backend,
+    status: outcome.status,
+    detail: outcome.detail ?? `${outcome.backend} result is ${outcome.status}`,
+  };
+}
+
+/** Live dependencies: the global fetch, a timeout-bounded node DNS resolver, the wall clock, and the
+ *  fallback backend keys read from the environment (like web_search reads its provider keys). Jina's
+ *  key is optional; Firecrawl is gated entirely behind its key. */
 const liveDeps: WebFetchDeps = {
   fetch: globalThis.fetch,
   resolveHost: resolveHostLiterals,
   now: () => new Date().toISOString(),
+  jinaApiKey: process.env.JINA_API_KEY?.trim() || undefined,
+  firecrawlApiKey: process.env.FIRECRAWL_API_KEY?.trim() || undefined,
 };
 
 /** Runs the full web_fetch path against injected deps; the exported tool binds the live deps. */
@@ -195,7 +340,7 @@ export async function runWebFetch(args: WebFetchArgs, deps: WebFetchDeps): Promi
   // into the literals the SYNC guard checks; the static backend re-guards each redirect hop the same
   // way. A bad input is a typed input error (the model reads it), not a crashed turn.
   try {
-    const sync = await entryResolver(args.url, deps.resolveHost);
+    const sync = await syncResolverFor(args.url, deps.resolveHost);
 
     assertSafeUrl(args.url, sync);
   } catch (error) {
@@ -211,11 +356,12 @@ export async function runWebFetch(args: WebFetchArgs, deps: WebFetchDeps): Promi
   return serializeResult(result);
 }
 
-/** Pre-resolves the entry URL's host (async) into the sync resolver the guard consumes. */
-async function entryResolver(
+/** Pre-resolves the URL's host (async) into the sync resolver the guard and the fallback backends
+ *  consume, so each backend re-guards the same target against the literals resolved once here. */
+async function syncResolverFor(
   raw: string,
   resolveHost: WebFetchDeps["resolveHost"],
-): Promise<((host: string) => readonly string[]) | undefined> {
+): Promise<ResolveHost | undefined> {
   let host: string;
 
   try {
