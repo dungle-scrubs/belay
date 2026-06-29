@@ -19,7 +19,7 @@ import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
 import { toolMessageStatus } from "@/components/chat/tool-status";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { fmtCtx, fmtTokens, toolSummary } from "../../derive";
-import type { ToolMessage as ToolMessageData } from "../../transcript";
+import { LEGACY_RECONNECT_ATTEMPTS, type ToolMessage as ToolMessageData } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
 /**
@@ -171,7 +171,8 @@ export function TranscriptRowView({
     return (
       <div className="pl-3.5">
         <ToneAlert tone="blue" icon={RotateCw} title="connection dropped">
-          {message.detail} · reconnecting (attempt {message.attempt}/3)
+          {message.detail} · reconnecting (attempt {message.attempt}/
+          {message.maxAttempts ?? LEGACY_RECONNECT_ATTEMPTS})
         </ToneAlert>
       </div>
     );

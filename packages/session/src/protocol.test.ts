@@ -89,10 +89,31 @@ test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () 
   const decoded = decodeTrevorEvent(
     stored(events.assistantReconnecting({ runId: "r", attempt: 2, detail: "websocket closed" })),
   );
+  // No maxAttempts passed (a pre-02.15-style event): it stays absent so old logs decode unchanged.
   assert.deepEqual(decoded, {
     type: "assistant.reconnecting",
     runId: "r",
     attempt: 2,
+    detail: "websocket closed",
+  });
+});
+
+test("assistant.reconnecting round-trips the threaded maxAttempts budget (02.15)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.assistantReconnecting({
+        runId: "r",
+        attempt: 2,
+        maxAttempts: 10,
+        detail: "websocket closed",
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "assistant.reconnecting",
+    runId: "r",
+    attempt: 2,
+    maxAttempts: 10,
     detail: "websocket closed",
   });
 });

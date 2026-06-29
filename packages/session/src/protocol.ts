@@ -346,6 +346,9 @@ export const events = {
   assistantReconnecting: (p: {
     runId: string;
     attempt: number;
+    /** Total attempt budget (initial + retries), so the UI shows a true `attempt/maxAttempts`.
+     *  Optional for backward-compatible replay of logs written before it was threaded. */
+    maxAttempts?: number;
     detail: string;
     diagnostic?: ProviderDiagnostic;
   }): TrevorEventInput => ({
@@ -353,6 +356,7 @@ export const events = {
     payload: {
       runId: p.runId,
       attempt: p.attempt,
+      ...(p.maxAttempts != null ? { maxAttempts: p.maxAttempts } : {}),
       detail: p.detail,
       ...(p.diagnostic ? { diagnostic: p.diagnostic } : {}),
     },

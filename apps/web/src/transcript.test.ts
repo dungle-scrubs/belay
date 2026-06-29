@@ -451,12 +451,34 @@ test("D-079: an assistant.reconnecting event renders an inline reconnecting mark
   );
   assert.ok(marker, "a reconnecting marker is rendered");
   assert.equal(marker.attempt, 2);
+  assert.equal(marker.maxAttempts, undefined, "no threaded budget on this pre-02.15-style event");
   assert.match(marker.detail, /websocket/);
   // The post-reconnect answer still renders as its own assistant segment below the marker.
   assert.ok(
     messages.some((m) => m.kind === "assistant" && m.text.includes("recovered answer")),
     "the reconnected answer streams after the marker",
   );
+});
+
+test("02.15: a reconnecting marker carries the threaded maxAttempts denominator", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.assistantReconnecting({
+        runId: "r1",
+        attempt: 2,
+        maxAttempts: 10,
+        detail: "websocket closed",
+      }),
+    ),
+  ];
+  const marker = toTranscript(log).find(
+    (m): m is Extract<Message, { kind: "reconnecting" }> => m.kind === "reconnecting",
+  );
+  assert.equal(marker?.attempt, 2);
+  assert.equal(marker?.maxAttempts, 10, "the row renders attempt 2/10, not a hardcoded /3");
 });
 
 test("a host-reaped orphan is marked interrupted, not cancelled (host restart is not a user ESC)", () => {

@@ -81,8 +81,13 @@ export type ReconnectingMessage = {
   kind: "reconnecting";
   id: string;
   attempt: number;
+  /** Total attempt budget for the denominator; absent on pre-02.15 logs (falls back below). */
+  maxAttempts?: number;
   detail: string;
 };
+/** Denominator for a reconnecting marker whose log predates the threaded `maxAttempts` (02.15). Those
+ *  logs were written under a 3-attempt budget, so a replayed `attempt/3` stays accurate. */
+export const LEGACY_RECONNECT_ATTEMPTS = 3;
 // A cross-turn compaction fold IN PROGRESS (D-040), rendered inline as a TRANSIENT progress bar:
 // older turns are being folded into a rolling summary, which streams. `tokens`/`budget` fill the
 // bar honestly (real tokens streamed ÷ the ~1k budget, never a predicted %). It appears while the
@@ -476,6 +481,7 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           kind: "reconnecting",
           id: event.eventId,
           attempt: decoded.attempt,
+          ...(decoded.maxAttempts != null ? { maxAttempts: decoded.maxAttempts } : {}),
           detail: decoded.detail,
         });
         break;

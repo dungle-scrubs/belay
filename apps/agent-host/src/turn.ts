@@ -192,6 +192,7 @@ export function publishTurn(
             events.assistantReconnecting({
               runId,
               attempt: event.attempt,
+              maxAttempts: event.maxAttempts,
               detail: event.detail,
               ...(event.diagnostic ? { diagnostic: event.diagnostic } : {}),
             }),

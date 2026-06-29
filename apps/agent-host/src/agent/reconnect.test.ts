@@ -12,10 +12,11 @@ import { type AgentEvent, runAgent } from "./loop";
 
 /**
  * Provider-outage auto-reconnect (D-076…D-079). A transient stream drop BEFORE any token is
- * retried with bounded backoff (3 attempts, ~300ms·900ms), emitting a `reconnecting` marker between
- * attempts; a drop AFTER output, a non-retryable error, or an exhausted budget is terminal; an
- * interrupt during a backoff cancels cleanly. Driven with TestClock so the backoff waits are
- * virtual (no real sleeps); a flaky fake provider fails N times then succeeds.
+ * retried with bounded backoff (10 attempts, a ramping curve capped at 15s for ~75s cumulative,
+ * 02.15), emitting a `reconnecting` marker between attempts; a drop AFTER output, a non-retryable
+ * error, or an exhausted budget is terminal; an interrupt during a backoff cancels cleanly. Driven
+ * with TestClock so the backoff waits are virtual (no real sleeps); a flaky fake provider fails N
+ * times then succeeds.
  */
 
 const ANSWER: ProviderEvent[] = [
@@ -114,8 +115,10 @@ function drive(provider: Provider) {
     const fiber = yield* Stream.runForEach(runAgent(provider, HISTORY, "off", "r1"), (e) =>
       Effect.sync(() => void events.push(e)),
     ).pipe(Effect.exit, Effect.fork);
-    // Let the fiber reach its first backoff, then advance past every (cascading) backoff.
-    yield* TestClock.adjust(Duration.seconds(10));
+    // Let the fiber reach its first backoff, then advance past every (cascading) backoff. The window
+    // covers the full 10-attempt budget's ~75s cumulative backoff + jitter (02.15), so an all-failing
+    // run reaches its terminal failure within the virtual clock.
+    yield* TestClock.adjust(Duration.seconds(120));
     const exit = yield* Fiber.join(fiber);
     return { events, exit };
   });
@@ -139,6 +142,12 @@ it.effect("a transient drop before the first token recovers transparently", () =
       reconnects(events).map((e) => e.attempt),
       [2, 3],
       "two reconnect markers, numbered with the upcoming attempt",
+    );
+    // Each marker carries the full attempt budget so the UI shows a true denominator (02.15).
+    assert.equal(
+      reconnects(events)[0]?.maxAttempts,
+      10,
+      "the marker carries the 10-attempt budget",
     );
     assert.equal(answerText(events), "DONE", "the answer streamed once reconnected");
   }),
@@ -280,13 +289,18 @@ describe("M5: an unknown terminal failure is recorded as a redacted observation"
 
 it.effect("the reconnect budget is bounded: all-failing goes terminal after the last attempt", () =>
   Effect.gen(function* () {
-    // Always fails: attempt 1 -> reconnect(2), attempt 2 -> reconnect(3), attempt 3 -> terminal.
+    // Always fails: attempts 1..10 each reconnect to the next, then attempt 10 goes terminal (02.15).
     const { events, exit } = yield* drive(flakyProvider({ failBefore: 99, error: retryable }));
     assert.ok(Exit.isFailure(exit), "the budget is spent and the turn goes terminal");
     assert.deepEqual(
       reconnects(events).map((e) => e.attempt),
-      [2, 3],
-      "exactly two retries (three total attempts), then terminal",
+      [2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "nine retries (ten total attempts), numbered through the budget, then terminal",
+    );
+    // The denominator is the full budget on every marker, including the last before terminal.
+    assert.ok(
+      reconnects(events).every((e) => e.maxAttempts === 10),
+      "every marker carries the 10-attempt budget",
     );
   }),
 );

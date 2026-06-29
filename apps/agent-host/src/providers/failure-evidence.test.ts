@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { extractFailureEvidence } from "./failure-evidence";
-import { classifyProviderFailure } from "./failure-taxonomy";
+import { causeChainDetail, extractFailureEvidence } from "./failure-evidence";
+import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
 
 /**
  * D-076 M2: the provider boundary preserves retry-after, HTTP status, SDK code/type, the provider
@@ -224,5 +224,81 @@ describe("evidence shape fields and redaction safety", () => {
     expect(evidence.status).toBeUndefined();
     expect(evidence.code).toBeUndefined();
     expect(evidence.shapeFields).toBeUndefined();
+  });
+});
+
+describe("02.15: nested-cause code recovery (APIConnectionError shape)", () => {
+  it("recovers a syscall code from one `.cause` level down when the top has none", () => {
+    const cause = {
+      message: "Connection error.",
+      cause: { code: "ECONNRESET", message: "read ECONNRESET" },
+    };
+    expect(extractFailureEvidence(cause).code).toBe("ECONNRESET");
+  });
+
+  it("descends two `.cause` levels (cause.cause.code)", () => {
+    const cause = { message: "Connection error.", cause: { cause: { code: "ECONNRESET" } } };
+    expect(extractFailureEvidence(cause).code).toBe("ECONNRESET");
+  });
+
+  it("recovers a numeric errno when no string code is present", () => {
+    const cause = { message: "Connection error.", cause: { errno: -54 } };
+    expect(extractFailureEvidence(cause).code).toBe("-54");
+  });
+
+  it("classification stays transient_transport/retryable, now with the structured code", () => {
+    const cause = {
+      message: "Connection error.",
+      cause: { code: "ECONNRESET", message: "read ECONNRESET" },
+    };
+    const { evidence, failure } = evidenceClass(cause);
+    expect(failure.class).toBe("transient_transport");
+    expect(failure.retryable).toBe(true);
+    expect(evidence.code).toBe("ECONNRESET"); // was undefined before the cause-chain descent
+  });
+
+  it("does not infinite-loop on a cyclic `.cause` chain", () => {
+    const a: Record<string, unknown> = { message: "a" };
+    const b: Record<string, unknown> = { message: "b", cause: a };
+    a.cause = b; // cycle
+    expect(() => extractFailureEvidence(a)).not.toThrow();
+    expect(extractFailureEvidence(a).code).toBeUndefined();
+  });
+});
+
+describe("02.15: causeChainDetail enrichment + redaction", () => {
+  it("appends the nested syscall code so the banner shows the specific reason", () => {
+    const cause = {
+      message: "Connection error.",
+      cause: { code: "ECONNRESET", message: "read ECONNRESET" },
+    };
+    expect(causeChainDetail("Connection error.", cause)).toBe("Connection error. (ECONNRESET)");
+  });
+
+  it("does not double-append when the code is already in the message", () => {
+    const cause = { code: "ECONNREFUSED", message: "connect ECONNREFUSED 127.0.0.1:1234" };
+    expect(causeChainDetail("connect ECONNREFUSED 127.0.0.1:1234", cause)).toBe(
+      "connect ECONNREFUSED 127.0.0.1:1234",
+    );
+  });
+
+  it("degrades cleanly: no cause, string cause, and plain message all return the top message", () => {
+    expect(causeChainDetail("boom", { message: "boom" })).toBe("boom");
+    expect(causeChainDetail("boom", "boom")).toBe("boom");
+    expect(causeChainDetail("boom", undefined)).toBe("boom");
+  });
+
+  it("a secret-bearing detail is still redacted after enrichment (caller routes through redactSecrets)", () => {
+    const cause = {
+      message: "stream failed: Authorization: Bearer sk-secret123456789",
+      cause: { code: "ECONNRESET" },
+    };
+    const enriched = causeChainDetail(
+      "stream failed: Authorization: Bearer sk-secret123456789",
+      cause,
+    );
+    const redacted = redactSecrets(enriched);
+    expect(redacted).toContain("ECONNRESET"); // the specific reason survives
+    expect(redacted).not.toContain("sk-secret123456789"); // the secret does not
   });
 });

@@ -373,6 +373,7 @@ export type DecodedEvent =
       readonly type: "assistant.reconnecting";
       readonly runId: string;
       readonly attempt: number;
+      readonly maxAttempts?: number;
       readonly detail: string;
       readonly diagnostic?: ProviderDiagnostic;
     }
@@ -595,6 +596,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         type: "assistant.reconnecting",
         runId,
         attempt: num(p.attempt),
+        // Optional: absent on logs written before the budget was threaded; the row falls back then.
+        ...(typeof p.maxAttempts === "number" ? { maxAttempts: p.maxAttempts } : {}),
         detail: str(p.detail),
         ...(coerceProviderDiagnostic(p.diagnostic)
           ? { diagnostic: coerceProviderDiagnostic(p.diagnostic) }

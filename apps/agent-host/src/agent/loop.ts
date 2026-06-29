@@ -142,7 +142,12 @@ export const DEFAULT_TURN_LOOP_CONFIG: TurnLoopConfig = {
   maxRecovery: 2,
   streamStallMs: DEFAULT_STREAM_STALL_MS,
   toolStallMs: DEFAULT_TOOL_STALL_MS,
-  reconnectBackoffsMs: [300, 900],
+  // 9 backoffs -> 10 total attempts (the initial + 9 retries). The curve ramps then caps at 15s, for
+  // ~75s cumulative across all retries - deliberately under the 90s per-attempt stream-stall watchdog,
+  // so the watchdog still bounds any single hung attempt while a genuinely flaky upstream gets a wide
+  // budget to recover. Retries fire only before any token streams (safeToRetry), so the wider budget
+  // never duplicates partial output. <!-- D-001 D-002 -->
+  reconnectBackoffsMs: [500, 1000, 2000, 4000, 8000, 15000, 15000, 15000, 15000],
 };
 
 function turnLoopConfig(overrides?: Partial<TurnLoopConfig>): TurnLoopConfig {
@@ -241,9 +246,10 @@ export function withToolStallTimeout(
 
 /**
  * Bounded auto-reconnect for a transient provider outage (D-076…D-079): backoff (ms) BEFORE each
- * retry. Two entries = three total attempts (the initial plus two retries). A small jitter is added
- * so simultaneous turns don't reconnect in lockstep. The budget is per-step and independent of
- * the step and overflow-recovery budgets, so reconnection can never spin.
+ * retry. Nine entries = ten total attempts (the initial plus nine retries), ramping then capped at 15s
+ * for ~75s cumulative - under the 90s stream-stall watchdog that bounds each single attempt. A small
+ * jitter is added so simultaneous turns don't reconnect in lockstep. The budget is per-step and
+ * independent of the step and overflow-recovery budgets, so reconnection can never spin.
  */
 /**
  * Heuristic: did the model END a turn by ANNOUNCING an imminent action without calling a tool?
@@ -316,6 +322,8 @@ export type AgentEvent =
   | {
       readonly type: "reconnecting";
       readonly attempt: number;
+      /** Total attempt budget (initial + retries), so the UI shows a true `attempt/maxAttempts`. */
+      readonly maxAttempts: number;
       readonly detail: string;
       readonly diagnostic?: ProviderDiagnostic;
     }
@@ -659,6 +667,7 @@ export function runAgent(
                 Stream.succeed<AgentEvent>({
                   type: "reconnecting",
                   attempt: next,
+                  maxAttempts: config.reconnectBackoffsMs.length + 1,
                   detail: error.detail,
                   diagnostic,
                 }),

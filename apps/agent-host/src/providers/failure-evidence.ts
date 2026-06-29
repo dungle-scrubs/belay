@@ -48,17 +48,52 @@ function httpStatusOf(cause: unknown): number | undefined {
 }
 
 /**
- * Best-effort SDK error code/type off a thrown error (`code`, `error.code`, `error.type`), preserved
- * so the classifier can use a structured signal (e.g. `insufficient_quota`) over message matching.
+ * Best-effort SDK error code/type off a thrown error (`code`, `error.code`, `error.type`, or a syscall
+ * `errno`), preserved so the classifier can use a structured signal (e.g. `insufficient_quota`) over
+ * message matching. Descends the `.cause` chain (bounded, with a cycle guard) when the top level has
+ * none: many SDK transport errors carry a generic top-level message ("Connection error.") while the
+ * real syscall code (`ECONNRESET`) lives one or two `.cause` levels down (the APIConnectionError shape).
+ * <!-- 02.15 D-004 -->
  */
 function errorCodeOf(cause: unknown): string | undefined {
-  if (typeof cause !== "object" || cause === null) {
-    return undefined;
+  const seen = new Set<unknown>();
+  let current: unknown = cause;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (current === null || typeof current !== "object" || seen.has(current)) {
+      break;
+    }
+    seen.add(current);
+    const c = current as Record<string, unknown>;
+    const error = c.error as Record<string, unknown> | undefined;
+    const raw = c.code ?? error?.code ?? error?.type;
+    if (typeof raw === "string" && raw) {
+      return raw;
+    }
+    if (typeof c.errno === "string" && c.errno) {
+      return c.errno;
+    }
+    if (typeof c.errno === "number" && Number.isFinite(c.errno)) {
+      return String(c.errno);
+    }
+    current = c.cause;
   }
-  const c = cause as Record<string, unknown>;
-  const error = c.error as Record<string, unknown> | undefined;
-  const raw = c.code ?? error?.code ?? error?.type;
-  return typeof raw === "string" && raw ? raw : undefined;
+  return undefined;
+}
+
+/**
+ * Enriches a displayed failure detail with the specific reason recovered from the nested `.cause` chain
+ * (02.15). The top-level message of many transport errors is generic ("Connection error."); the real
+ * reason (a syscall code like `ECONNRESET`) lives one or two `.cause` levels down. This appends that
+ * code in parentheses when it adds information the top-level message does not already carry, so the
+ * banner reads `Connection error. (ECONNRESET)` instead of only `Connection error.` The caller still
+ * routes the result through `redactSecrets` (a nested cause can carry secrets). Pure. <!-- D-004 -->
+ */
+export function causeChainDetail(topMessage: string, cause: unknown): string {
+  const code = errorCodeOf(cause);
+  if (code && !topMessage.toLowerCase().includes(code.toLowerCase())) {
+    return `${topMessage} (${code})`;
+  }
+  return topMessage;
 }
 
 /**

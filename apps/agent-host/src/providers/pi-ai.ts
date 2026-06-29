@@ -17,7 +17,7 @@ import {
   promptTooBig,
 } from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
-import { extractFailureEvidence } from "./failure-evidence";
+import { causeChainDetail, extractFailureEvidence } from "./failure-evidence";
 import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
 import { reasoningStreamFields } from "./reasoning-policy";
 import { buildSystemPrompt, promptOverheadChars } from "./system-prompt";
@@ -309,7 +309,10 @@ async function* piAiEvents<TApi extends Api>(
       if (isAuthFailure(detail)) {
         throw new ProviderAuthError({ provider: options.provider, detail });
       }
-      throw new Error(detail);
+      // Preserve the structured error object as the thrown cause (02.15) so the boundary's evidence
+      // extraction + cause-chain detail can mine a nested code/`.cause` it carries (e.g. a syscall
+      // ECONNRESET); the existing classification reads message + code either way.
+      throw new Error(detail, { cause: event.error });
     }
   }
 }
@@ -367,7 +370,10 @@ export function streamPiAiModel<TApi extends Api>(
           if (cause instanceof ProviderAuthError) {
             return cause;
           }
-          const detail = redactSecrets(msg(cause));
+          // Enrich the generic top-level message ("Connection error.") with the specific syscall code
+          // recovered from the nested `.cause` chain (02.15), then redact - a nested cause can carry
+          // secrets, so the enriched detail goes through `redactSecrets` exactly like the bare message.
+          const detail = redactSecrets(causeChainDetail(msg(cause), cause));
           // Normalize the raw cause into sanitized structured evidence once (D-076 M2): HTTP status,
           // SDK code, retry-after, request id, gateway-vs-upstream origin, and the top-level field
           // NAMES - never a raw value. The classifier reads the strong signals; the rest is preserved.
