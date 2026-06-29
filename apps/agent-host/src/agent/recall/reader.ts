@@ -134,34 +134,43 @@ export function createSiblingReader(opts: SiblingReaderOptions): () => Promise<S
       });
     }
 
+    // Read the chosen siblings CONCURRENTLY - each has its own 4s timeout, so serializing them would
+    // stack the timeouts (up to 12 independent reads in a row). Assemble sessions + diagnostics from
+    // the settled results in the ORIGINAL (recency-sorted) order so the recall ordering is stable.
+    const reads = await Promise.allSettled(
+      chosen.map((summary) => readSessionLog(opts, summary.sessionId)),
+    );
     const sessions: SiblingSession[] = [];
-    for (const summary of chosen) {
-      try {
-        const eventsRead = await readSessionLog(opts, summary.sessionId);
-        if (eventsRead.length === 0) {
-          diagnostics.push({
-            sessionId: summary.sessionId,
-            kind: "empty",
-            detail: "session has no events",
-          });
-          continue;
-        }
-        sessions.push({ session: refOf(summary), events: eventsRead });
-        if (summary.host === "stale") {
-          diagnostics.push({
-            sessionId: summary.sessionId,
-            kind: "stale",
-            detail: "host announced but not live; read from the durable log",
-          });
-        }
-      } catch (error) {
+    chosen.forEach((summary, i) => {
+      const read = reads[i];
+      if (read === undefined) {
+        return;
+      }
+      if (read.status === "rejected") {
         diagnostics.push({
           sessionId: summary.sessionId,
           kind: "unreadable",
-          detail: error instanceof Error ? error.message : String(error),
+          detail: read.reason instanceof Error ? read.reason.message : String(read.reason),
+        });
+        return;
+      }
+      if (read.value.length === 0) {
+        diagnostics.push({
+          sessionId: summary.sessionId,
+          kind: "empty",
+          detail: "session has no events",
+        });
+        return;
+      }
+      sessions.push({ session: refOf(summary), events: read.value });
+      if (summary.host === "stale") {
+        diagnostics.push({
+          sessionId: summary.sessionId,
+          kind: "stale",
+          detail: "host announced but not live; read from the durable log",
         });
       }
-    }
+    });
 
     return { sessions, diagnostics };
   };

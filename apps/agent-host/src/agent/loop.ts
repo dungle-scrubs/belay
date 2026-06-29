@@ -460,6 +460,12 @@ export function runAgent(
       emergencyMaxSteps: config.emergencyMaxSteps,
     });
 
+  // The active CHECKPOINT threshold composes the accumulated grant onto the live adaptive budget,
+  // capped at the emergency ceiling (02.17 D-005). Closes over the live `grantedSteps`, so a call
+  // BEFORE a checkpoint grant and one AFTER it (the next-threshold recompute) read the same formula.
+  const thresholdFor = (budget: TurnBudget): number =>
+    Math.min(budget.emergencyMaxSteps, budget.effectiveMaxSteps + grantedSteps);
+
   // Derives the adaptive budget from the live facts and runs the termination gate against the SAME
   // facts in one call. The budget+gate pairing and the 7-field gate observation live here, so the
   // step backstop and the protocol-anomaly gate are each a one-liner that can't read a different set
@@ -467,12 +473,11 @@ export function runAgent(
   const assessTurn = (
     steps: number,
     providerDiagnostic?: ProviderProtocolDiagnostic,
-  ): { stop: TurnStop | null; checkpoint: boolean; budget: TurnBudget } => {
+  ): { stop: TurnStop | null; checkpoint: boolean; budget: TurnBudget; threshold: number } => {
     const budget = currentBudget();
-    // The active CHECKPOINT threshold composes the accumulated grant onto the live adaptive budget,
-    // capped at the emergency ceiling (02.17 D-005). The progress guard (D-003) measures the prompt's
-    // growth since the last checkpoint; the gate auto-continues below the ceiling when it advanced.
-    const threshold = Math.min(budget.emergencyMaxSteps, budget.effectiveMaxSteps + grantedSteps);
+    // The progress guard (D-003) measures the prompt's growth since the last checkpoint; the gate
+    // auto-continues below the ceiling when it advanced.
+    const threshold = thresholdFor(budget);
     const contextAdvanced =
       lastInputTokens - checkpointInputTokens >= CHECKPOINT_MIN_ADVANCE_TOKENS;
     const { stop, checkpoint } = TurnTerminationGate.assess({
@@ -488,7 +493,7 @@ export function runAgent(
       contextAdvanced,
       ...(providerDiagnostic ? { providerDiagnostic } : {}),
     });
-    return { stop, checkpoint, budget };
+    return { stop, checkpoint, budget, threshold };
   };
 
   // One overflow adjustment: mutate the conversation/reasoning in place and return a
@@ -601,11 +606,7 @@ export function runAgent(
       // governor - the prior step's prompt crossing the configured fraction of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are
       // clear (no prior usage), so the first round always runs.
-      const { stop, checkpoint, budget } = assessTurn(n);
-      const activeThreshold = Math.min(
-        budget.emergencyMaxSteps,
-        budget.effectiveMaxSteps + grantedSteps,
-      );
+      const { stop, checkpoint, budget, threshold: activeThreshold } = assessTurn(n);
       // Structured budget factors behind the verbose `agent` scope (D-026): a postmortem can tell a
       // healthy large-context budget exhaustion from an unknown-telemetry fallback via tier/telemetry,
       // and an auto-continued checkpoint from a ceiling/guard pause via grant + threshold + advance.
@@ -644,10 +645,8 @@ export function runAgent(
         grantedSteps += budget.factors.baseBudget;
         checkpointInputTokens = lastInputTokens;
         const pressure = budget.factors.pressure;
-        const nextThreshold = Math.min(
-          budget.emergencyMaxSteps,
-          budget.effectiveMaxSteps + grantedSteps,
-        );
+        // Recomputed AFTER the grant above, so it reflects the raised threshold the next checkpoint sees.
+        const nextThreshold = thresholdFor(budget);
         return Stream.concat(
           Stream.succeed<AgentEvent>({
             type: "checkpoint",
@@ -680,14 +679,14 @@ export function runAgent(
         let textChars = 0;
         let thinkingChars = 0;
         let toolCallsStarted = 0;
-        const toolResults = 0;
         const partials = (): ProviderPartialCounts => ({
           textChars,
           thinkingChars,
           toolCalls: toolCallsStarted,
-          toolResults,
+          // This model stream is the pre-tool-execution step: it carries tool CALLS, never results.
+          toolResults: 0,
         });
-        const safeToRetry = () => textChars === 0 && toolCallsStarted === 0 && toolResults === 0;
+        const safeToRetry = () => textChars === 0 && toolCallsStarted === 0;
         const outputStarted = () => textChars > 0;
         const mapped = modelStream(tools, currentReasoning).pipe(
           Stream.filterMap((event) => {

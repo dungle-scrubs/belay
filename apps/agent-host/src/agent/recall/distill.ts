@@ -1,7 +1,6 @@
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import type { ChatMessage, Provider, ProviderError } from "../../providers";
-import { estimateTokens } from "../../usage/breakdown";
-import { cheapestReasoning } from "../reasoning-levels";
+import { distillToBudget } from "../tool-less-summary";
 import type { RecallNeighborhood, RecallRecord } from "./types";
 
 /**
@@ -65,12 +64,6 @@ export function buildDistillPrompt(input: DistillInput): ChatMessage[] {
   ];
 }
 
-/** Caps the distilled answer to the hard char backstop (keeps the head); fires only on overrun. */
-function capFindings(text: string): string {
-  const trimmed = text.trim();
-  return trimmed.length > FINDINGS_CHAR_CAP ? trimmed.slice(0, FINDINGS_CHAR_CAP) : trimmed;
-}
-
 /** Extracts the distinct `[Sn]` source indexes an answer cited, in first-seen order. */
 export function parseCitations(text: string): number[] {
   const seen = new Set<number>();
@@ -94,18 +87,8 @@ export function distillRecall(
   provider: Provider,
   input: DistillInput,
 ): Effect.Effect<DistillOutput, ProviderError> {
-  return provider
-    .stream(buildDistillPrompt(input), [], cheapestReasoning(provider.reasoningLevels))
-    .pipe(
-      Stream.mapAccum("", (acc, event) => {
-        const next = event.type === "text" ? acc + event.text : acc;
-        return [next, next];
-      }),
-      Stream.takeUntil((acc) => estimateTokens(acc.length) >= FINDINGS_TOKEN_BUDGET),
-      Stream.runFold("", (_, acc) => acc),
-      Effect.map((raw) => {
-        const text = capFindings(raw);
-        return { text, citedSources: parseCitations(text) };
-      }),
-    );
+  return distillToBudget(provider, buildDistillPrompt(input), {
+    tokenBudget: FINDINGS_TOKEN_BUDGET,
+    charCap: FINDINGS_CHAR_CAP,
+  }).pipe(Effect.map((text) => ({ text, citedSources: parseCitations(text) })));
 }

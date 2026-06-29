@@ -1,9 +1,9 @@
 import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@trevor/session";
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import type { ChatMessage, Provider, ProviderError } from "../providers";
-import { CHARS_PER_TOKEN, estimateTokens } from "../usage/breakdown";
+import { CHARS_PER_TOKEN } from "../usage/breakdown";
 import { CompactionPlanner, type FoldPlan, SUMMARY_TOKEN_BUDGET } from "./compaction-planner";
-import { cheapestReasoning } from "./reasoning-levels";
+import { distillToBudget } from "./tool-less-summary";
 
 export { COMPACT_TO, COMPACT_WHEN, SUMMARY_TOKEN_BUDGET } from "./compaction-planner";
 
@@ -140,12 +140,6 @@ export function buildSummaryPrompt(input: CompactionInput): ChatMessage[] {
   return [{ role: "user", content: sections.join("\n\n") }];
 }
 
-/** Caps the summary to the hard char backstop (keeps the head); fires only if the model overran. */
-function capSummary(summary: string): string {
-  const trimmed = summary.trim();
-  return trimmed.length > SUMMARY_CHAR_CAP ? trimmed.slice(0, SUMMARY_CHAR_CAP) : trimmed;
-}
-
 /**
  * Produces the next rolling summary: one tool-less model step over the summarization prompt, with
  * reasoning forced to the cheapest level (summarizing is mechanical, not a thinking task). Caps the
@@ -164,29 +158,9 @@ export function summarize(
   input: CompactionInput,
   onProgress?: (tokens: number, budget: number) => void,
 ): Effect.Effect<string, ProviderError> {
-  const fold = provider
-    .stream(buildSummaryPrompt(input), [], cheapestReasoning(provider.reasoningLevels))
-    .pipe(
-      // Thread the streamed text into a running summary - one accumulator emitted per event (no seed),
-      // so progress is reported once per streamed chunk.
-      Stream.mapAccum("", (acc, event) => {
-        const next = event.type === "text" ? acc + event.text : acc;
-        return [next, next];
-      }),
-      Stream.tap((acc) =>
-        Effect.sync(() => onProgress?.(estimateTokens(acc.length), SUMMARY_TOKEN_BUDGET)),
-      ),
-      // Stop the moment the summary reaches its token budget. Letting a slow local model overrun the
-      // budget pins the progress bar at 100% for many extra seconds of wasted generation; stopping
-      // here interrupts the request (the provider aborts on interrupt) so it halts at the budget.
-      Stream.takeUntil((acc) => estimateTokens(acc.length) >= SUMMARY_TOKEN_BUDGET),
-      // Keep the last accumulator emitted (the full summary, or the budget-capped prefix).
-      Stream.runFold("", (_, acc) => acc),
-      Effect.map(capSummary),
-    );
-  // Fire an immediate 0-token tick BEFORE the stream starts, so the progress bar appears the instant
-  // summarization begins. The model can spend many seconds INGESTING a large fold prompt before its
-  // first output token, and the streamed ticks only begin then - without this the bar is invisible
-  // (no feedback) for the whole ingestion, which reads as a hung /compact.
-  return Effect.sync(() => onProgress?.(0, SUMMARY_TOKEN_BUDGET)).pipe(Effect.zipRight(fold));
+  return distillToBudget(provider, buildSummaryPrompt(input), {
+    tokenBudget: SUMMARY_TOKEN_BUDGET,
+    charCap: SUMMARY_CHAR_CAP,
+    ...(onProgress ? { onProgress } : {}),
+  });
 }

@@ -64,11 +64,14 @@ export class TurnMachine {
     this.overflowedRuns.add(runId);
   }
 
-  close(runId: string, kind: CloseRunKind): TrevorEventInput | null {
-    if (!this.markCompleted(runId)) {
-      return null;
-    }
+  /**
+   * The terminal `assistant.completed` for a run closed WITHOUT a completion of its own, reading and
+   * dropping its last-known usage so the consumed tokens ride out and the per-run record is freed.
+   * `cancelled` (ESC) and `interrupted` (host reap) differ only in the flag the UI renders.
+   */
+  private terminalCompletion(runId: string, kind: CloseRunKind): TrevorEventInput {
     const last = this.lastUsageByRun.get(runId);
+    this.lastUsageByRun.delete(runId);
     return events.assistantCompleted({
       runId,
       text: "",
@@ -76,6 +79,13 @@ export class TurnMachine {
       ...(last?.usage ? { usage: last.usage } : {}),
       ...(last?.breakdown ? { breakdown: last.breakdown } : {}),
     }) satisfies CompletedEvent;
+  }
+
+  close(runId: string, kind: CloseRunKind): TrevorEventInput | null {
+    if (!this.markCompleted(runId)) {
+      return null;
+    }
+    return this.terminalCompletion(runId, kind);
   }
 
   /**
@@ -94,17 +104,7 @@ export class TurnMachine {
       }
       this.inFlightRuns.delete(runId);
       this.completedRuns.add(runId);
-      const last = this.lastUsageByRun.get(runId);
-      this.lastUsageByRun.delete(runId);
-      out.push(
-        events.assistantCompleted({
-          runId,
-          text: "",
-          interrupted: true,
-          ...(last?.usage ? { usage: last.usage } : {}),
-          ...(last?.breakdown ? { breakdown: last.breakdown } : {}),
-        }),
-      );
+      out.push(this.terminalCompletion(runId, "interrupted"));
     }
     return out;
   }
