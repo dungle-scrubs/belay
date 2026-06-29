@@ -301,10 +301,21 @@ export function App() {
       inputRef.current?.focus();
     }
   }, [sessionId]);
-  // Refocus the composer whenever the tab/window regains focus.
+  // Whether a pending ask_user question owns the surface right now. The window-focus handler below
+  // runs from a mount-only effect, so it reads this ref to yield focus to the question instead of the
+  // composer while a question is up (the composer is unmounted then anyway; this makes the policy
+  // explicit and the QuestionSurface restores its own focus). <!-- D-002 -->
+  const pendingQuestionRef = useRef(false);
+  pendingQuestionRef.current = pendingQuestion !== null;
+  // Refocus the composer whenever the tab/window regains focus - unless a pending question owns focus.
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
-    const focusInput = () => inputRef.current?.focus();
+    const focusInput = () => {
+      if (pendingQuestionRef.current) {
+        return;
+      }
+      inputRef.current?.focus();
+    };
     window.addEventListener("focus", focusInput);
     return () => window.removeEventListener("focus", focusInput);
   }, []);

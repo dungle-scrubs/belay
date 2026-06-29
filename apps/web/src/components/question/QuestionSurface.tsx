@@ -36,6 +36,18 @@ import {
  * (questions, choices, previews) is rendered as inert text - previews are `<pre>`, never HTML.
  */
 
+/**
+ * Moves keyboard focus to the surface's active target: the selected / first roving choice row
+ * (`[data-qrow][tabindex="0"]`), falling back to the first field for a free-text question. The one
+ * target both mount-focus and focus-on-return use, so arrow-key readiness is identical either way.
+ */
+function focusQuestionTarget(root: HTMLElement): void {
+  const target =
+    root.querySelector<HTMLElement>('[data-qrow][tabindex="0"]') ??
+    root.querySelector<HTMLElement>("textarea, input");
+  target?.focus();
+}
+
 // Filled (borderless) field: a surface fill instead of a box outline, so the surface stays
 // border-light. The focus ring is the only outline, and only while focused.
 const FIELD_CLASS =
@@ -73,18 +85,43 @@ export function QuestionSurface({
 
   // Move keyboard focus into the surface as soon as a question appears, so arrow keys navigate the
   // choices and Enter submits without a click first. The surface replaces the composer while a
-  // question is pending, so there is nothing else competing for focus. Target the roving tab-stop
-  // (the selected / first choice row); fall back to the first field for free-text questions. Skip
-  // when expired, since the surface is read-only then.
+  // question is pending, so there is nothing else competing for focus. Skip when expired, since the
+  // surface is read-only then.
   useEffect(() => {
     if (expired) {
       return;
     }
-    const root = sectionRef.current;
-    const target =
-      root?.querySelector<HTMLElement>('[data-qrow][tabindex="0"]') ??
-      root?.querySelector<HTMLElement>("textarea, input");
-    target?.focus();
+    if (sectionRef.current) {
+      focusQuestionTarget(sectionRef.current);
+    }
+  }, [expired]);
+
+  // Restore keyboard focus when the tab/window regains focus or becomes visible again, so ArrowUp/
+  // ArrowDown work immediately on return without a click (D-001). Returning to the tab can leave focus
+  // on document.body (the composer that App would refocus is unmounted while a question is up), so the
+  // surface restores its own. Conservative: never steal focus from a field the user is typing in
+  // INSIDE the surface (notes, required reason, free-text, custom answer) - only restore when focus
+  // has landed outside the surface. Inert while expired (read-only). <!-- D-004 -->
+  useEffect(() => {
+    if (expired) {
+      return;
+    }
+    const restore = () => {
+      const root = sectionRef.current;
+      if (!root || document.hidden) {
+        return;
+      }
+      if (root.contains(document.activeElement)) {
+        return;
+      }
+      focusQuestionTarget(root);
+    };
+    window.addEventListener("focus", restore);
+    document.addEventListener("visibilitychange", restore);
+    return () => {
+      window.removeEventListener("focus", restore);
+      document.removeEventListener("visibilitychange", restore);
+    };
   }, [expired]);
 
   return (

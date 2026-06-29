@@ -76,6 +76,58 @@ test("single-choice: arrow keys move the selection (ARIA radio pattern)", () => 
   assert.equal(screen.getByRole("radio", { name: /SQLite/ }).getAttribute("aria-checked"), "true");
 });
 
+// --- focus restoration on window/tab return (02.9) ---
+
+const windowFocus = () => fireEvent(window, new Event("focus"));
+
+test("restores focus to the active choice row when the window regains focus (D-001)", () => {
+  renderSurface(fx.singleChoice);
+  // Mount focuses the selected (recommended) row; simulate a tab switch dropping focus to the body.
+  (document.activeElement as HTMLElement | null)?.blur();
+  assert.notEqual(document.activeElement, screen.getByRole("radio", { name: /PostgreSQL/ }));
+
+  windowFocus();
+  assert.equal(
+    document.activeElement,
+    screen.getByRole("radio", { name: /PostgreSQL/ }),
+    "focus returns to the selected roving row, so arrow keys work without a click",
+  );
+});
+
+test("ArrowDown changes the selection immediately after focus return", () => {
+  renderSurface(fx.singleChoice);
+  (document.activeElement as HTMLElement | null)?.blur();
+  windowFocus();
+  fireEvent.keyDown(document.activeElement as HTMLElement, { key: "ArrowDown" });
+  assert.equal(screen.getByRole("radio", { name: /SQLite/ }).getAttribute("aria-checked"), "true");
+});
+
+test("free-text question: focus return lands on the textarea fallback", () => {
+  renderSurface(fx.freeText);
+  (document.activeElement as HTMLElement | null)?.blur();
+  windowFocus();
+  assert.equal((document.activeElement as HTMLElement | null)?.tagName, "TEXTAREA");
+});
+
+test("focus return does not steal focus from an in-surface field being typed in (D-004)", () => {
+  renderSurface(fx.singleChoice);
+  // The user is typing in the custom-answer input inside the surface.
+  const custom = screen.getByLabelText(/custom answer for/i) as HTMLElement;
+  custom.focus();
+  assert.equal(document.activeElement, custom);
+
+  windowFocus();
+  assert.equal(document.activeElement, custom, "an active in-surface field keeps focus");
+});
+
+test("an expired question does not grab focus on window return (read-only)", () => {
+  renderSurface(fx.singleChoice, { expired: true });
+  (document.activeElement as HTMLElement | null)?.blur();
+  const body = document.body;
+  windowFocus();
+  assert.equal(document.activeElement, body, "expired surface is read-only - it never pulls focus");
+});
+
 test("single-choice: arrowing past the last choice lands on the custom-answer row", () => {
   const { onAnswer } = renderSurface(fx.singleChoice);
   // PostgreSQL(0) -> SQLite(1) -> MySQL(2) -> custom row. Arrow down from the last choice.
