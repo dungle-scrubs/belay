@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M1: Fingerprints And State
-- Current cutoff blockers: 39 unchecked
+> Current focus: M4: Warn-First Integration
+- Current cutoff blockers: 20 unchecked (19 done)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -11,34 +11,34 @@
 
 ### M1: Fingerprints And State
 
-- [ ] RED: Add unit tests for stable canonical argument hashing with sorted JSON keys and non-object fallback behavior.
-- [ ] GREEN: Implement argument canonicalization and sha256 fingerprint helpers.
-- [ ] RED: Add unit tests proving only fingerprints and counters are stored, not raw args or raw results.
-- [ ] GREEN: Implement the per-turn state shape keyed by tool name plus args fingerprint.
-- [ ] REFACTOR: Keep helper names explicit: `argsFingerprint`, `resultFingerprint`, and `failureFingerprint`, never "cache".
+- [x] RED: Add unit tests for stable canonical argument hashing with sorted JSON keys and non-object fallback behavior.
+- [x] GREEN: Implement argument canonicalization and sha256 fingerprint helpers.
+- [x] RED: Add unit tests proving only fingerprints and counters are stored, not raw args or raw results.
+- [x] GREEN: Implement the per-turn state shape keyed by tool name plus args fingerprint.
+- [x] REFACTOR: Keep helper names explicit: `argsFingerprint`, `resultFingerprint`, and `failureFingerprint`, never "cache".
 
 ### M2: Failure Tracking
 
-- [ ] RED: Add tests for repeated exact failure warnings after the configured threshold.
-- [ ] GREEN: Classify V2 tool failures from the local `error: ...` result convention and track exact failure fingerprints.
-- [ ] RED: Add tests proving a same-args success clears previous exact-failure state.
-- [ ] GREEN: Clear failure state on success and keep same-tool broader failure pressure advisory only.
-- [ ] REFACTOR: Keep failure classification local to the tool boundary instead of scanning transcript prose.
+- [x] RED: Add tests for repeated exact failure warnings after the configured threshold.
+- [x] GREEN: Classify V2 tool failures from the local `error: ...` result convention and track exact failure fingerprints.
+- [x] RED: Add tests proving a same-args success clears previous exact-failure state.
+- [x] GREEN: Clear failure state on success and keep same-tool broader failure pressure advisory only.
+- [x] REFACTOR: Keep failure classification local to the tool boundary instead of scanning transcript prose.
 
 ### M3: Read-Only No-Progress Tracking
 
-- [ ] RED: Add tests for read-only same-args same-result warning after repeated identical result fingerprints.
-- [ ] GREEN: Track result fingerprints only for read-only tools.
-- [ ] RED: Add tests proving same args with different results does not count as no progress.
-- [ ] GREEN: Reset same-result counts when a result fingerprint changes.
-- [ ] RED: Add tests proving `process`, `bash`, write/edit tools, task tools, and unmarked dynamic tools are excluded from same-result detection.
-- [ ] GREEN: Use registry-derived read-only metadata as the purity source of truth.
+- [x] RED: Add tests for read-only same-args same-result warning after repeated identical result fingerprints.
+- [x] GREEN: Track result fingerprints only for read-only tools.
+- [x] RED: Add tests proving same args with different results does not count as no progress.
+- [x] GREEN: Reset same-result counts when a result fingerprint changes.
+- [x] RED: Add tests proving `process`, `bash`, write/edit tools, task tools, and unmarked dynamic tools are excluded from same-result detection.
+- [x] GREEN: Use registry-derived read-only metadata as the purity source of truth.
 
 ### Gate 1 to 2
 
-- [ ] Pure controller unit tests pass.
-- [ ] No raw arguments or raw outputs are stored in controller state.
-- [ ] Dynamic/mutating tools are excluded from no-progress comparisons.
+- [x] Pure controller unit tests pass.
+- [x] No raw arguments or raw outputs are stored in controller state.
+- [x] Dynamic/mutating tools are excluded from no-progress comparisons.
 
 ### M4: Warn-First Integration
 
