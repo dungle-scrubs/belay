@@ -58,19 +58,22 @@ Before adding any file-backed feature, reuse the existing storage roots. Do not
 invent a new dot-directory, cache root, or home-relative path unless the plan
 explicitly adds a new root.
 
-- **User settings and durable Trevor state** live under `TREVOR_HOME`, defaulting
-  to `~/.trevorV2`. This includes user-global `AGENTS.md`, project/session
-  mappings, host ownership records, locks, managed worktrees, launcher logs,
-  the session-store SQLite database, blob-store bytes, and product state that
-  must survive restarts. The single code owner for the env override and default
-  directory name is the node-only `@trevor/session/node-paths` subpath; Node
-  packages should import `TREVOR_HOME` or `resolveTrevorHome` from there instead
-  of spelling `~/.trevorV2` themselves.
-- **Debug metrics, traces, and generated diagnostic artifacts** live under
-  `${XDG_STATE_HOME:-~/.local/state}/trevorV2`. This is for append-only JSONL,
-  performance snapshots, provider/turn diagnostics that are not user settings,
-  and other stateful debug output. Keep writes best-effort and never let debug
-  metric failures affect a user turn.
+- **User settings and editable config** live under `TREVOR_HOME`, defaulting to
+  `~/.trevorV2`. This is hand-editable, portable configuration only - the
+  user-global `AGENTS.md` and `config.jsonc` - not runtime state. The single code
+  owner for the env override and default directory name is the node-only
+  `@trevor/session/node-paths` subpath; Node packages should import `TREVOR_HOME`
+  or `resolveTrevorHome` from there instead of spelling `~/.trevorV2` themselves.
+- **All machine-local runtime state** lives under `TREVOR_STATE_HOME`, defaulting
+  to `${XDG_STATE_HOME:-~/.local/state}/trevorV2`. This is everything the app owns
+  at runtime: the session-store SQLite database, blob-store bytes, managed
+  worktrees, the host/lock/project registries (`hosts.json`, `locks/`,
+  `projects.json`), launcher logs, provider observations, and best-effort debug
+  metrics/traces/diagnostics (append-only JSONL, performance snapshots). It is
+  kept out of the config dir so a config backup or sync never drags the session
+  history along. Import `TREVOR_STATE_HOME` or `resolveTrevorStateHome` from
+  `@trevor/session/node-paths`. Keep debug-metric writes best-effort and never let
+  a diagnostics failure affect a user turn.
 - **Legacy shared service data** may still exist under `~/.trevor` from older
   V2 runs or V1-era local tooling. Do not add new features or active V2 writes
   there; only touch it when maintaining or migrating old data.

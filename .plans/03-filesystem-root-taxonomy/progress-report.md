@@ -2,7 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 65
+- Current cutoff blockers: 51
+- Completed: 14 (4 shipped pre-plan D-009; 10 in M1)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -16,16 +17,16 @@ Blockers
 
 #### M1: Root categories and helpers
 
-- [ ] RED: Add unit tests for a root-policy helper that resolves all approved root categories.
-- [ ] GREEN: Extend or add host root helpers for durable home, debug state, legacy service data, temp, browser-ephemeral label metadata, and external integration roots.
-- [ ] GREEN: Keep CLI coupling minimal by mirroring only the documented `TREVOR_HOME` contract where needed.
-- [ ] REFACTOR: Name categories by ownership and lifecycle, not by incidental path strings.
-- [ ] RED: Add tests proving env overrides affect only the intended root.
-- [ ] GREEN: Keep `TREVOR_HOME` and `TREVOR_STATE_HOME` resolved and normalized before use.
-- [ ] REFACTOR: Document root ownership in the relevant path modules.
-- [ ] Root categories are represented by one tested read model.
-- [ ] Host consumers do not re-spell home-relative defaults.
-- [ ] CLI coupling remains intentional and documented.
+- [x] RED: Add unit tests for a root-policy helper that resolves all approved root categories.
+- [x] GREEN: Extend or add host root helpers for durable home, debug state, legacy service data, temp, browser-ephemeral label metadata, and external integration roots.
+- [x] GREEN: Keep CLI coupling minimal by mirroring only the documented `TREVOR_HOME` contract where needed. (CLI imports TREVOR_HOME/TREVOR_STATE_HOME from @trevor/session/node-paths; no host-package coupling)
+- [x] REFACTOR: Name categories by ownership and lifecycle, not by incidental path strings. (RootCategory has `ownership` + `lifecycle`)
+- [x] RED: Add tests proving env overrides affect only the intended root.
+- [x] GREEN: Keep `TREVOR_HOME` and `TREVOR_STATE_HOME` resolved and normalized before use. (resolvers call `resolve()`)
+- [x] REFACTOR: Document root ownership in the relevant path modules. (node-paths.ts owns; host paths.ts documents it as the consumer entry)
+- [x] Root categories are represented by one tested read model. (`resolveRootPolicy`)
+- [x] Host consumers do not re-spell home-relative defaults.
+- [x] CLI coupling remains intentional and documented.
 
 ### Phase 2: Existing Storage Inventory
 
@@ -47,7 +48,7 @@ Blockers
 #### M3: Safe migration planning
 
 - [ ] RED: Add unit tests for migration planning with no legacy data, legacy DB only, legacy blobs only, both present, explicit overrides, and already-migrated state.
-- [ ] GREEN: Design target paths for session-store DB and blob-store bytes under the approved durable/service root layout.
+- [ ] GREEN: Design forward-migration target paths for legacy `~/.trevor` session-store DB and blob-store bytes under the STATE home (`${TREVOR_STATE_HOME}/sessions.db`, `${TREVOR_STATE_HOME}/blobs`).
 - [ ] GREEN: Preserve `SESSION_STORE_DB` and `BLOB_STORE_DIR` as absolute override escapes that bypass default migration.
 - [ ] GREEN: Create an idempotent migration plan object with actions, source paths, target paths, backup paths, skipped reasons, and rollback notes.
 - [ ] RED: Add tests for partial copy failure and target conflict behavior.
@@ -61,16 +62,18 @@ Blockers
 
 #### M4: Compatible default change
 
-- [ ] RED: Add integration tests for session-store and blob-store default root selection.
-- [ ] GREEN: Update service entrypoints to resolve defaults through the root policy after the migration planner exists.
-- [ ] GREEN: On startup, detect legacy data and either use compatibility mode or run the explicit migration path, depending on the chosen product behavior.
-- [ ] GREEN: Log sanitized root paths and migration status.
+The service-default cutover to the STATE home already shipped before this plan (D-009): the store configs default to `${TREVOR_STATE_HOME}/...`, `SESSION_STORE_DB`/`BLOB_STORE_DIR` still win, and no `homedir() + ".trevor"` defaults remain. Remaining current-cutoff work is regression coverage and routing the resolved defaults through the Phase-1 root policy plus the Phase-3 legacy detector.
+
+- [ ] RED: Add integration tests for session-store and blob-store default root selection (resolved through the root policy).
+- [ ] GREEN: Route service-entrypoint default resolution through the Phase-1 root policy.
+- [ ] GREEN: On startup, detect legacy `~/.trevor` data (via the Phase-3 detector) and log a sanitized migration-available status; do NOT change defaults.
+- [ ] GREEN: Log sanitized root paths and legacy/migration status.
 - [ ] RED: Add tests that old env overrides still win over defaults.
-- [ ] GREEN: Keep old data untouched when overrides point elsewhere.
-- [ ] REFACTOR: Remove duplicated `homedir() + ".trevor"` defaults after compatibility is covered.
-- [ ] New installs use the approved root layout.
-- [ ] Existing installs keep their sessions and blobs.
-- [ ] Override-based installs are not migrated unexpectedly.
+- [x] GREEN: Keep old data untouched when overrides point elsewhere. (shipped pre-plan, D-009)
+- [x] REFACTOR: Remove duplicated `homedir() + ".trevor"` defaults after compatibility is covered. (shipped pre-plan, D-009)
+- [x] New installs use the approved root layout. (shipped pre-plan, D-009)
+- [ ] Existing installs keep their sessions and blobs. (covered by the Phase-3 legacy detector)
+- [x] Override-based installs are not migrated unexpectedly. (shipped pre-plan, D-009 - no migration runs)
 
 ### Phase 5: Doctor and UI Diagnostics
 

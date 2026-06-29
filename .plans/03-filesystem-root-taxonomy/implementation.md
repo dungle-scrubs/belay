@@ -8,23 +8,25 @@ None.
 
 Trevor needs one explicit filesystem-root policy that every file-backed feature follows. <!-- D-001 --> The policy is:
 
-- `TREVOR_HOME`, defaulting to `~/.trevorV2`, owns user settings and durable Trevor product state.
-- `TREVOR_STATE_HOME`, defaulting to `${XDG_STATE_HOME:-~/.local/state}/trevorV2`, owns best-effort debug metrics, traces, and generated diagnostic artifacts.
-- Legacy `~/.trevor` owns only the existing session-store SQLite database and blob-store bytes until a deliberate migration moves those service defaults. <!-- D-003 -->
+- `TREVOR_HOME`, defaulting to `~/.trevorV2`, owns user settings and editable config (user-global `AGENTS.md`, `.env.op`, `auth.json`, `config.jsonc`).
+- `TREVOR_STATE_HOME`, defaulting to `${XDG_STATE_HOME:-~/.local/state}/trevorV2`, owns ALL machine-local runtime state the app owns: the session-store SQLite database, blob-store bytes, managed worktrees, host/lock/project registries, launcher logs, provider observations, and best-effort debug metrics/traces/diagnostics. <!-- D-009 -->
+- Legacy `~/.trevor` holds only old data from pre-XDG-split runs; the service-default cutover to the STATE home already shipped, so Trevor detects legacy data but never defaults new writes there. <!-- D-009 -->
 - OS temp owns scratch work.
 - Browser storage owns browser-only ephemeral UI state.
 - External roots such as `~/.pi` and `~/.agents` remain externally owned. <!-- D-007 -->
 
-This plan extracts the old D-069 filesystem-root taxonomy from `.plans/trevor-v2/implementation.md` and updates it to match the current repository policy in `AGENTS.md` and the current host/CLI path modules.
+This plan extracts the old D-069 filesystem-root taxonomy from `.plans/trevor-v2/implementation.md` and reconciles it with the shipped host/CLI path modules. Where `AGENTS.md`'s taxonomy text disagreed with the shipped code (it described the STATE home as debug-only and durable service data as `TREVOR_HOME`/legacy `~/.trevor`), this plan corrects `AGENTS.md` to match the implemented XDG split. <!-- D-009 -->
 
 ## 2. Current State
 
-- `apps/agent-host/src/paths.ts` defines `TREVOR_HOME` and `TREVOR_STATE_HOME`.
-- `apps/trevor-cli/src/project.ts` mirrors the one-line `TREVOR_HOME` contract instead of importing the host package. <!-- D-002 -->
-- `apps/session-store/src/main.ts` still defaults `SESSION_STORE_DB` to `~/.trevor/sessions.db`.
-- `apps/blob-store/src/main.ts` still defaults `BLOB_STORE_DIR` to `~/.trevor/blobs`.
-- `apps/agent-host/src/commands.ts` and the doctor UI already surface storage-root style diagnostics, but the root categories and migration-debt story are not yet centralized.
-- `apps/agent-host/src/providers/observation-store.ts` writes provider observations under `TREVOR_HOME`; future cleanup can decide whether each observation artifact is durable product state or best-effort diagnostics.
+- `packages/session/src/node-paths.ts` is the single owner of the env overrides and default directory names: `resolveTrevorHome`/`TREVOR_HOME` and `resolveTrevorStateHome`/`TREVOR_STATE_HOME`.
+- `apps/agent-host/src/paths.ts` re-exports `TREVOR_HOME`/`TREVOR_STATE_HOME` from `@trevor/session/node-paths` and adds workspace confinement + `abbrevHome`.
+- `apps/trevor-cli/src/project.ts` imports `TREVOR_HOME`/`TREVOR_STATE_HOME` from `@trevor/session/node-paths` directly - no hand-rolled mirror. <!-- D-002 -->
+- `apps/session-store/src/config.ts` already defaults `SESSION_STORE_DB` to `${TREVOR_STATE_HOME}/sessions.db`; `apps/blob-store/src/config.ts` already defaults `BLOB_STORE_DIR` to `${TREVOR_STATE_HOME}/blobs`. The `~/.trevor` defaults were already retired - the Phase 4 cutover is shipped. <!-- D-009 -->
+- `apps/agent-host/src/doctor/{build,snapshot}.ts` already surface a single STATE-home writability check (`storage.home`), but the categorized Storage/Roots section (config, state, legacy, temp, external) does not exist yet.
+- No automated legacy `~/.trevor` detection or migration exists.
+- `apps/agent-host/src/providers/observation-store.ts` writes provider observations under the STATE home.
+- There is no central root-policy read model enumerating all categories, no storage inventory, and no drift guardrails yet.
 
 ## 3. Non-Goals
 
@@ -38,10 +40,10 @@ This plan extracts the old D-069 filesystem-root taxonomy from `.plans/trevor-v2
 
 | Area | Decision |
 |---|---|
-| Root taxonomy | Use the explicit current taxonomy from `AGENTS.md`: durable product state in `TREVOR_HOME`, debug diagnostics in `TREVOR_STATE_HOME`, legacy service data in `~/.trevor`, temp in OS temp, browser ephemeral state in browser storage, external roots left externally owned. <!-- D-001 --> |
-| Root source of truth | Host code imports root helpers from `apps/agent-host/src/paths.ts`; CLI mirrors only the minimal `TREVOR_HOME` contract to avoid host-package coupling. <!-- D-002 --> |
-| Legacy service data | `~/.trevor/sessions.db` and `~/.trevor/blobs` are migration debt, not a pattern for new state. <!-- D-003 --> |
-| Migration safety | Migration must be explicit, idempotent, backup-aware, rollback-aware, and compatible with `SESSION_STORE_DB` and `BLOB_STORE_DIR`. <!-- D-004 --> |
+| Root taxonomy | The shipped XDG split: `TREVOR_HOME` = config/user settings; `TREVOR_STATE_HOME` = ALL machine-local runtime state (sessions.db, blobs, worktrees, registries, logs, observations, diagnostics); legacy `~/.trevor` = old data only; temp in OS temp; browser ephemeral state in browser storage; external roots left externally owned. <!-- D-009 --> |
+| Root source of truth | `@trevor/session/node-paths` owns the env overrides and default names; the host re-exports them via `apps/agent-host/src/paths.ts`; the CLI imports the `TREVOR_HOME`/`TREVOR_STATE_HOME` contract from `@trevor/session/node-paths` directly. <!-- D-002 --> |
+| Legacy service data | The `~/.trevor` service-default cutover already shipped (configs default to the STATE home). `~/.trevor` data may still exist on old installs; Trevor only detects it and never defaults new writes there. <!-- D-009 --> |
+| Migration safety | If an optional legacy detector copies `~/.trevor` data forward, it must be explicit, idempotent, backup-aware, rollback-aware, and must not override `SESSION_STORE_DB`/`BLOB_STORE_DIR`. <!-- D-004 --> |
 | Doctor visibility | `/doctor` reports resolved config, state, debug-state, legacy-service, temp, and external roots with status and sanitized paths. <!-- D-005 --> |
 | Future feature rule | New file-backed features consume approved root helpers or explicitly amend this plan before adding a new root. <!-- D-006 --> |
 | External roots | Trevor may read `~/.pi` and `~/.agents` for integrations, but does not own or migrate them. <!-- D-007 --> |
@@ -85,9 +87,9 @@ This plan extracts the old D-069 filesystem-root taxonomy from `.plans/trevor-v2
 - [ ] The inventory distinguishes durable product state, debug diagnostics, legacy service data, scratch, browser state, and external roots.
 - [ ] New root drift is caught by tests or reviewable checks.
 
-### Phase 3: Legacy Service Migration Plan
+### Phase 3: Legacy `~/.trevor` Detection and Migration Planning
 
-**Goal:** Move session-store/blob-store defaults only through a deliberate compatibility path.
+**Goal:** Detect leftover `~/.trevor` service data on old installs and plan an optional, safe forward-migration. The default cutover to the STATE home already shipped (see Phase 4); this phase does NOT change defaults. <!-- D-009 -->
 
 1. RED: Add unit tests for migration planning with no legacy data, legacy DB only, legacy blobs only, both present, explicit overrides, and already-migrated state.
 2. GREEN: Design target paths for session-store DB and blob-store bytes under the approved durable/service root layout.
@@ -103,9 +105,9 @@ This plan extracts the old D-069 filesystem-root taxonomy from `.plans/trevor-v2
 - [ ] Explicit service path overrides keep working.
 - [ ] The old `~/.trevor` data remains readable until migration is complete and verified.
 
-### Phase 4: Service Default Cutover
+### Phase 4: Service Default Cutover (ALREADY SHIPPED)
 
-**Goal:** Change defaults without losing compatibility.
+**Goal:** Change defaults without losing compatibility. **Status: done before this plan** - `apps/session-store/src/config.ts` and `apps/blob-store/src/config.ts` already default to `${TREVOR_STATE_HOME}/sessions.db` and `${TREVOR_STATE_HOME}/blobs`, `SESSION_STORE_DB`/`BLOB_STORE_DIR` still win, and the old `homedir() + ".trevor"` defaults are gone. Remaining plan work is regression coverage proving overrides win and defaults resolve through the root policy, plus wiring the Phase 3 legacy detector into startup logging. <!-- D-009 -->
 
 1. RED: Add integration tests for session-store and blob-store default root selection.
 2. GREEN: Update service entrypoints to resolve defaults through the root policy after the migration planner exists.

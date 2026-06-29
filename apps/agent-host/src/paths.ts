@@ -1,8 +1,25 @@
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { TREVOR_HOME, TREVOR_STATE_HOME } from "@trevor/session/node-paths";
+import {
+  type RootCategory,
+  type RootCategoryId,
+  resolveRootPolicy,
+  rootCategory,
+  TREVOR_HOME,
+  TREVOR_STATE_HOME,
+} from "@trevor/session/node-paths";
 
-export { TREVOR_HOME, TREVOR_STATE_HOME };
+// `@trevor/session/node-paths` OWNS root resolution (the env overrides, the default directory names,
+// and the D-009 root taxonomy). This module is the host's single CONSUMER entry point: it re-exports
+// those helpers so host code reads roots from one place rather than re-deriving home-relative paths.
+export {
+  type RootCategory,
+  type RootCategoryId,
+  resolveRootPolicy,
+  rootCategory,
+  TREVOR_HOME,
+  TREVOR_STATE_HOME,
+};
 
 /**
  * The host's path/workspace owner: it owns BOTH the user-global base directories AND the workspace
