@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M3 - Task Ordering Helper
-- Current cutoff blockers: 50
+- Current focus: M5 - Protocol Freshness Metadata
+- Current cutoff blockers: 30
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 11
+- Completed current work: 31
 
 ## Current Cutoff Blockers
 
@@ -36,32 +36,32 @@
 
 #### M3: Task Ordering Helper
 
-- [ ] RED: Add tests for task display ordering: `in_progress`, then `pending`, then `completed`, `failed`, and `cancelled`.
-- [ ] GREEN: Implement a pure ordering helper for display tasks.
-- [ ] RED: Add stability tests proving tasks with the same status keep their original relative order.
-- [ ] GREEN: Preserve stable ordering within each status group.
-- [ ] REFACTOR: Keep ordering logic out of JSX so host, UI, or story fixtures can reuse it if useful.
+- [x] RED: Add tests for task display ordering: `in_progress`, then `pending`, then `completed`, `failed`, and `cancelled`.
+- [x] GREEN: Implement a pure ordering helper for display tasks.
+- [x] RED: Add stability tests proving tasks with the same status keep their original relative order.
+- [x] GREEN: Preserve stable ordering within each status group.
+- [x] REFACTOR: Keep ordering logic out of JSX so host, UI, or story fixtures can reuse it if useful.
 
 #### M4: Five-Row Limit, Burst Grouping, and Overflow
 
-- [ ] RED: Add `TasksPanel` tests for exactly five tasks, six tasks, and more than six tasks.
-- [ ] GREEN: Render at most five task rows.
-- [ ] GREEN: Render an overflow row as `...N more` when hidden tasks exist.
-- [ ] RED: Add a test proving active and pending tasks are prioritized into the visible five before done/error states.
-- [ ] GREEN: Apply ordering before truncation.
-- [ ] RED: Add burst tests for 10-15 model-created tasks, including many pending tasks and mixed terminal states.
-- [ ] GREEN: Add a pure display-model helper that may emit `task` rows and `group` rows; group lower-priority pending or terminal tasks into broad rows like `8 upcoming tasks` or `5 completed / 2 failed`.
-- [ ] GREEN: Keep active `in_progress` tasks individual whenever possible, then group overflow active work only when the active bucket itself would consume the whole panel.
-- [ ] REFACTOR: Keep grouping display-only and deterministic; no model call, no semantic rewrite of task records, and no change to `TaskRegistry.renderForPrompt()`.
-- [ ] REFACTOR: Keep the header count based on the full task list, not only visible rows.
+- [x] RED: Add `TasksPanel` tests for exactly five tasks, six tasks, and more than six tasks.
+- [x] GREEN: Render at most five task rows.
+- [x] GREEN: Render an overflow row as `...N more` when hidden tasks exist.
+- [x] RED: Add a test proving active and pending tasks are prioritized into the visible five before done/error states.
+- [x] GREEN: Apply ordering before truncation.
+- [x] RED: Add burst tests for 10-15 model-created tasks, including many pending tasks and mixed terminal states.
+- [x] GREEN: Add a pure display-model helper that may emit `task` rows and `group` rows; group lower-priority pending or terminal tasks into broad rows like `8 upcoming tasks` or `5 completed / 2 failed`.
+- [x] GREEN: Keep active `in_progress` tasks individual whenever possible, then group overflow active work only when the active bucket itself would consume the whole panel.
+- [x] REFACTOR: Keep grouping display-only and deterministic; no model call, no semantic rewrite of task records, and no change to `TaskRegistry.renderForPrompt()`.
+- [x] REFACTOR: Keep the header count based on the full task list, not only visible rows.
 
 ### Gate 2 -> 3
 
-- [ ] Task panel renders no more than five task rows.
-- [ ] Bursts of 10-15 fine-grained tasks coalesce into broader display groups when useful.
-- [ ] Overflow row appears only when tasks are hidden.
-- [ ] Active and upcoming tasks are visible before terminal states.
-- [ ] Prompt checklist still includes all tasks.
+- [x] Task panel renders no more than five task rows.
+- [x] Bursts of 10-15 fine-grained tasks coalesce into broader display groups when useful.
+- [x] Overflow row appears only when tasks are hidden.
+- [x] Active and upcoming tasks are visible before terminal states.
+- [x] Prompt checklist still includes all tasks.
 
 ### Phase 3: Snapshot Freshness
 

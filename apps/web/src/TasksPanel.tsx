@@ -1,5 +1,6 @@
 import type { TaskSnapshot } from "@trevor/session";
 import { cn } from "@/lib/utils";
+import { buildTaskDisplay, type GroupTone, type TaskDisplayRow } from "@/tasks-display";
 
 // Task glyphs, matching V1 (tui/src/app/tasks.rs): a FILLED square is the active/running task, an
 // EMPTY square is pending, a check marks a done task, a cross marks a failure/cancel. No half-circle.
@@ -28,48 +29,96 @@ function rowStyle(status: string): { glyph: string; text: string } {
   }
 }
 
+// A grouped row borrows a representative status so its glyph reads in the same visual language as the
+// rows it stands in for; the label itself stays muted (it is a count summary, not a task).
+const GROUP_GLYPH_STATUS: Record<GroupTone, string> = {
+  active: "in_progress",
+  pending: "pending",
+  terminal: "completed",
+};
+
+/** The leading file-tree branch: the first row carries `└`, the rest align beneath it. */
+function Branch({ first }: { first: boolean }) {
+  return (
+    <span className="select-none whitespace-pre text-muted-foreground/40">{first ? "└" : " "}</span>
+  );
+}
+
+function TaskRow({ task, first }: { task: TaskSnapshot; first: boolean }) {
+  const style = rowStyle(task.status);
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <Branch first={first} />
+      <span className={cn("select-none", style.glyph)}>{TASK_GLYPH[task.status] ?? "□"}</span>
+      <span className={style.text}>
+        {task.activeForm}
+        {task.blockedBy.length > 0 ? (
+          <span className="text-label text-muted-foreground/60">
+            {" "}
+            (blocked by {task.blockedBy.join(", ")})
+          </span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+function GroupRow({
+  row,
+  first,
+}: {
+  row: Extract<TaskDisplayRow, { kind: "group" }>;
+  first: boolean;
+}) {
+  const glyphStatus = GROUP_GLYPH_STATUS[row.tone];
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <Branch first={first} />
+      <span className={cn("select-none", rowStyle(glyphStatus).glyph)}>
+        {TASK_GLYPH[glyphStatus] ?? "□"}
+      </span>
+      <span className="text-muted-foreground">{row.label}</span>
+    </div>
+  );
+}
+
 /**
  * The agent's live checklist, in the header. Renders nothing when the list is empty - so it
  * disappears on its own when the host auto-clears a finished checklist (the snapshot then comes back
- * empty). Not collapsible: the tasks nest directly under the header via a single `└` file-tree branch
- * on the first row (the rest align beneath it), and the per-task glyph + styling reads at a glance
- * (filled = active + bold, empty = pending, check = done + strikethrough, cross = failed).
+ * empty). Presentational only: `buildTaskDisplay` does the ordering, the five-row cap, the burst
+ * grouping, and the overflow count (plan 09); the header count always reflects the FULL list, never
+ * the visible rows. The tasks nest directly under the header via a single `└` file-tree branch on
+ * the first row, and the per-task glyph + styling reads at a glance (filled = active + bold, empty =
+ * pending, check = done + strikethrough, cross = failed).
  */
 export function TasksPanel({ tasks }: { tasks: readonly TaskSnapshot[] }) {
   if (tasks.length === 0) {
     return null;
   }
+
   const done = tasks.filter((t) => t.status === "completed").length;
+  const { rows, hiddenCount } = buildTaskDisplay(tasks);
+
   return (
     <div className="flex flex-col gap-1 py-1 font-mono text-sm">
       <div className="text-label tracking-wider uppercase text-muted-foreground">
         tasks {done}/{tasks.length}
       </div>
       <div className="flex flex-col gap-0.5">
-        {tasks.map((task, index) => {
-          const style = rowStyle(task.status);
-          return (
-            <div key={task.id} className="flex items-baseline gap-1.5">
-              {/* A single nested-file branch: the first task carries the `└`, the rest align under it,
-                so the whole list reads as nested below the TASKS header. */}
-              <span className="select-none whitespace-pre text-muted-foreground/40">
-                {index === 0 ? "└" : " "}
-              </span>
-              <span className={cn("select-none", style.glyph)}>
-                {TASK_GLYPH[task.status] ?? "□"}
-              </span>
-              <span className={style.text}>
-                {task.activeForm}
-                {task.blockedBy.length > 0 ? (
-                  <span className="text-label text-muted-foreground/60">
-                    {" "}
-                    (blocked by {task.blockedBy.join(", ")})
-                  </span>
-                ) : null}
-              </span>
-            </div>
-          );
-        })}
+        {rows.map((row, index) =>
+          row.kind === "task" ? (
+            <TaskRow key={row.task.id} task={row.task} first={index === 0} />
+          ) : (
+            <GroupRow key={row.id} row={row} first={index === 0} />
+          ),
+        )}
+        {hiddenCount > 0 ? (
+          <div className="flex items-baseline gap-1.5">
+            <Branch first={rows.length === 0} />
+            <span className="select-none whitespace-pre"> </span>
+            <span className="text-muted-foreground/60">...{hiddenCount} more</span>
+          </div>
+        ) : null}
       </div>
     </div>
   );

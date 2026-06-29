@@ -29,8 +29,6 @@ const task = (
   };
 };
 
-// M2 characterization: today the panel renders every task in snapshot order with no cap. This pins
-// the gap M4 replaces (the cap, ordering, grouping, and overflow row).
 test("renders a task's activeForm and a full-list done/total header", () => {
   render(
     <TasksPanel tasks={[task("completed", "first done"), task("in_progress", "doing second")]} />,
@@ -44,4 +42,67 @@ test("renders a task's activeForm and a full-list done/total header", () => {
 test("renders nothing for an empty checklist", () => {
   const { container } = render(<TasksPanel tasks={[]} />);
   assert.equal(container.firstChild, null);
+});
+
+// --- M4: cap, ordering, grouping, overflow ---
+
+test("caps the visible rows at five and shows a `...N more` overflow line", () => {
+  const tasks = [
+    task("in_progress", "row-1"),
+    task("pending", "pending-a"),
+    task("pending", "pending-b"),
+    task("completed", "done-a"),
+    task("completed", "done-b"),
+    task("completed", "done-c"),
+  ];
+
+  render(<TasksPanel tasks={tasks} />);
+
+  // Six tasks, five visible task rows, the lowest-priority one hidden -> "...1 more".
+  assert.ok(screen.getByText("...1 more"));
+  assert.ok(screen.getByText("row-1"));
+  assert.equal(screen.queryByText("done-c"), null);
+  // The header counts the FULL list, not the visible rows.
+  assert.ok(screen.getByText("tasks 3/6"));
+});
+
+test("a 10-15 task burst coalesces lower-priority work into grouped rows", () => {
+  const tasks = [
+    task("in_progress", "wiring the API"),
+    ...Array.from({ length: 8 }, (_, i) => task("pending", `pending-${i}`)),
+    ...Array.from({ length: 5 }, (_, i) => task("completed", `done-${i}`)),
+    task("failed", "failed-1"),
+    task("failed", "failed-2"),
+  ];
+
+  render(<TasksPanel tasks={tasks} />);
+
+  assert.ok(screen.getByText("wiring the API"));
+  assert.ok(screen.getByText("8 upcoming tasks"));
+  assert.ok(screen.getByText("5 completed / 2 failed"));
+  // No individual pending/terminal row leaks through, and the burst needs no overflow line.
+  assert.equal(screen.queryByText("pending-0"), null);
+  assert.equal(screen.queryByText("done-0"), null);
+  assert.equal(screen.queryByText(/more$/), null);
+  // Header still reflects the full list of 16 tasks (5 completed of 16).
+  assert.ok(screen.getByText("tasks 5/16"));
+});
+
+test("active and pending tasks are visible before terminal states", () => {
+  const tasks = [
+    task("completed", "done-a"),
+    task("completed", "done-b"),
+    task("in_progress", "active-a"),
+    task("pending", "pending-a"),
+    task("pending", "pending-b"),
+    task("cancelled", "cancelled-a"),
+  ];
+
+  render(<TasksPanel tasks={tasks} />);
+
+  // The highest-priority five are visible; a terminal task is the hidden remainder.
+  assert.ok(screen.getByText("active-a"));
+  assert.ok(screen.getByText("pending-a"));
+  assert.ok(screen.getByText("pending-b"));
+  assert.ok(screen.getByText("...1 more"));
 });
