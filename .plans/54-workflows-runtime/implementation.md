@@ -6,7 +6,7 @@
   The runtime reuses `runDelegatedChild()` (`apps/agent-host/src/agent/delegate.ts:91`) for
   isolation, tool clamping, structured fold-back, and lifecycle/failure events. 47 must land its
   bounded-child runtime first.
-- [ ] `.plans/48-managed-worktree-hardening` - the cwd-path advisory lock. Required before
+- [ ] `.plans/10.1-managed-worktree-hardening` - the cwd-path advisory lock. Required before
   worktree-isolated, **write-capable** leaves can run in parallel without clobbering each other.
 - [ ] `.plans/50-forkable-sessions-lineage` (supporting) - durable session spawning/lineage that the
   run journal and per-leaf child sessions ride on.

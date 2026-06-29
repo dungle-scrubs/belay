@@ -14,7 +14,7 @@
 - [x] Worktree commands exist: `/worktree-new|switch|merge|delete|reconcile` (`apps/agent-host/src/main.ts`).
 - [x] `planner` skill exists (`~/.agents/skills/planner`) - workers run it in implement mode.
 - [x] HARD DEP identified: `.plans/54-workflows-runtime` (the engine the fleet workflow runs on).
-- [x] HARD DEP identified: `.plans/48-managed-worktree-hardening` (cwd-lock for N concurrent mutating trees).
+- [x] HARD DEP identified: `.plans/10.1-managed-worktree-hardening` (cwd-lock for N concurrent mutating trees).
 - [x] HARD DEP identified: `.plans/47-bounded-child-takeover` (bounded-child behind each leaf; transitive via 54).
 - [x] SUPPORTING identified: `.plans/50-forkable-sessions-lineage` (durable fleet run session).
 

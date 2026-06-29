@@ -4,7 +4,7 @@
 
 - [x] D-045-D-049 define the existing general-purpose, explorer, inline/background read-only, isolated-session, and ephemeral-agent model.
 - [x] `.plans/47-bounded-child-takeover` now owns bounded-child.
-- [x] `.plans/48-managed-worktree-hardening` owns cwd lock hardening needed before mutating background agents.
+- [x] `.plans/10.1-managed-worktree-hardening` owns cwd lock hardening needed before mutating background agents.
 
 ## Scope
 

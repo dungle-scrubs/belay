@@ -15,7 +15,7 @@
   (`packages/session/src/protocol.ts`).
 - [x] Budget inputs exist: `turn-budget.ts` tiers + `Usage` on `assistant.completed`.
 - [x] HARD DEP identified: `.plans/47-bounded-child-takeover` (bounded-child runtime behind every leaf).
-- [x] HARD DEP identified: `.plans/48-managed-worktree-hardening` (cwd-lock for write-capable isolated leaves).
+- [x] HARD DEP identified: `.plans/10.1-managed-worktree-hardening` (cwd-lock for write-capable isolated leaves).
 - [x] SUPPORTING identified: `.plans/50-forkable-sessions-lineage` (durable run/leaf sessions).
 
 ## Current Cutoff Blockers

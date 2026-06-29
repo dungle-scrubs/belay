@@ -5,7 +5,7 @@
 - [ ] `.plans/54-workflows-runtime` - the engine. The fleet **is** a built-in workflow on it
   (`worktree-fleet`), using `54`'s `agent()` leaves, worktree isolation, journaling, budget, and
   background-run lifecycle.
-- [ ] `.plans/48-managed-worktree-hardening` - the `WorktreeManager` + cwd-path advisory lock that make
+- [ ] `.plans/10.1-managed-worktree-hardening` - the `WorktreeManager` + cwd-path advisory lock that make
   parallel, write-capable worker trees safe (transitively required by `54`'s isolated leaves; called
   out here because the fleet is the first real driver of N concurrent mutating trees).
 - [ ] `.plans/47-bounded-child-takeover` - bounded-child runtime behind every leaf (transitive via `54`).

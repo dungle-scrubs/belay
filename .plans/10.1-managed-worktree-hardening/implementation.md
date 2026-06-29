@@ -141,7 +141,7 @@ This plan owns only the extracted D-091 hardening rows. Completed D-091 implemen
 Before resuming implementation or declaring convergence, run:
 
 ```bash
-mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "48-managed-worktree-hardening"
+mise x node@22 -- npx tsx /Users/kevin/dev/dotfiles/agents/.agents/skills/planner/scripts/plan-db.ts check-progress --plan "10.1-managed-worktree-hardening"
 ```
 
 ## Validation Commands
@@ -154,4 +154,4 @@ pnpm test -- --project e2e --run e2e
 
 ## Decisions
 
-Canonical decisions are in `.plans/48-managed-worktree-hardening/plan.db`.
+Canonical decisions are in `.plans/10.1-managed-worktree-hardening/plan.db`.

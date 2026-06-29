@@ -7,7 +7,7 @@
 - [x] D-093 session navigation sidebar is tracked in the live progress report.
 - [x] D-094 session lifecycle controls are tracked in the live progress report.
 - [x] `.plans/26-archive-browser-and-delete` owns archive browser and permanent delete.
-- [x] `.plans/48-managed-worktree-hardening` owns remaining D-091 hardening.
+- [x] `.plans/10.1-managed-worktree-hardening` owns remaining D-091 hardening.
 
 ## Scope
 

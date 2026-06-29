@@ -12,7 +12,7 @@
 
 - [x] D-045-D-049 define the existing subagent model.
 - [x] `.plans/47-bounded-child-takeover` owns bounded-child.
-- [x] `.plans/48-managed-worktree-hardening` owns cwd lock hardening.
+- [x] `.plans/10.1-managed-worktree-hardening` owns cwd lock hardening.
 - [x] M1 Variant Rebaseline resolved: split decided (teams + mutating-bg engine -> `.plans/54`;
   mutating-worktree app -> `.plans/55`; verifier stays here).
 

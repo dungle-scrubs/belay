@@ -15,7 +15,7 @@
 - [x] D-093 session navigation sidebar is tracked live.
 - [x] D-094 session lifecycle controls are tracked live.
 - [x] `.plans/26-archive-browser-and-delete` owns archive browser/permanent delete.
-- [x] `.plans/48-managed-worktree-hardening` owns D-091 hardening.
+- [x] `.plans/10.1-managed-worktree-hardening` owns D-091 hardening.
 
 ## Current Cutoff Blockers
 
