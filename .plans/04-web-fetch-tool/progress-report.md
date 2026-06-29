@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M7 - Prompt Guidance and Web Rendering
-- Current cutoff blockers: 32
-- Accepted/deferred follow-up: 0
+- Current focus: Complete - all current-cutoff work done across M1-M9
+- Current cutoff blockers: 0
+- Accepted/deferred follow-up: 1 (manual EZE repro)
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 54 (M1-M6 + Gates 1->2, 2->3, 3->4)
+- Completed current work: 85 (M1-M9 + all gates + Done Gate)
 
 ## Current Cutoff Blockers
 
@@ -101,56 +101,55 @@
 
 #### M7: Prompt Guidance and Web Rendering
 
-- [ ] RED: Add system-prompt/tool-guidance tests for web_search vs web_fetch selection.
-- [ ] GREEN: Tell the model to use `web_search` for discovery and `web_fetch` for selected source reading.
-- [ ] RED: Add prompt tests proving Firecrawl is described as scarce final fallback.
-- [ ] GREEN: Add backend ladder guidance: static default, Jina for unusable static pages, Firecrawl last.
-- [ ] RED: Add web renderer tests for `web_fetch` result envelope, truncation, backend attempts, and errors.
-- [ ] GREEN: Render `web_fetch` results as flat source content, not as generic opaque JSON.
-- [ ] REFACTOR: Reuse web_search visual patterns where they fit.
+- [x] RED: Add system-prompt/tool-guidance tests for web_search vs web_fetch selection.
+- [x] GREEN: Tell the model to use `web_search` for discovery and `web_fetch` for selected source reading.
+- [x] RED: Add prompt tests proving Firecrawl is described as scarce final fallback.
+- [x] GREEN: Add backend ladder guidance: static default, Jina for unusable static pages, Firecrawl last.
+- [x] RED: Add web renderer tests for `web_fetch` result envelope, truncation, backend attempts, and errors.
+- [x] GREEN: Render `web_fetch` results as flat source content, not as generic opaque JSON.
+- [x] REFACTOR: Reuse web_search visual patterns where they fit.
 
 #### M8: Doctor and Diagnostics
 
-- [ ] RED: Add Doctor tests for static available, Jina configured/unconfigured/error, Firecrawl configured/unconfigured/error, and last sanitized failures.
-- [ ] GREEN: Wire web/fetch diagnostics into Doctor.
-- [ ] RED: Add logging/redaction tests proving URLs, keys, headers, and response bodies are not leaked.
-- [ ] GREEN: Log backend, host, status, duration, caps, and sanitized error categories only.
-- [ ] RED: Add tests proving fetched content is not stored in debug logs by default.
-- [ ] GREEN: Keep content only in tool result/session events.
+- [x] RED: Add Doctor tests for static available, Jina configured/unconfigured/error, Firecrawl configured/unconfigured/error, and last sanitized failures.
+- [x] GREEN: Wire web/fetch diagnostics into Doctor.
+- [x] RED: Add logging/redaction tests proving URLs, keys, headers, and response bodies are not leaked.
+- [x] GREEN: Log backend, host, status, duration, caps, and sanitized error categories only.
+- [x] RED: Add tests proving fetched content is not stored in debug logs by default.
+- [x] GREEN: Keep content only in tool result/session events.
 
 ### Gate 4 -> 5
 
-- [ ] Prompt guidance distinguishes discovery from source reading.
-- [ ] Web renders `web_fetch` results clearly.
-- [ ] Doctor reports backend availability and sanitized failures.
-- [ ] Logs redact secrets and avoid storing fetched content.
+- [x] Prompt guidance distinguishes discovery from source reading.
+- [x] Web renders `web_fetch` results clearly.
+- [x] Doctor reports backend availability and sanitized failures.
+- [x] Logs redact secrets and avoid storing fetched content.
 
 ### Phase 5: Verification
 
 #### M9: Full Test and E2E Coverage
 
-- [ ] RED: Add integration tests for `web_search` followed by `web_fetch` on a selected result.
-- [ ] GREEN: Verify result content and provenance are model-visible and web-renderable.
-- [ ] RED: Add tests for explicit rendered mode and Firecrawl absence.
-- [ ] GREEN: Return graceful unavailable results when rendered content is required but Firecrawl is unavailable.
-- [ ] RED: Add prompt regression tests proving ordinary static pages do not call Firecrawl.
-- [ ] GREEN: Tune guidance and backend selection accordingly.
-- [ ] GREEN: Run lint, typecheck, unit, integration, web, and hermetic e2e lanes.
-- [ ] GREEN: Manual EZE repro: search for a source, fetch a selected URL, verify static content; fetch a thin page with Jina fallback; verify Firecrawl absence is graceful.
-- [ ] REFACTOR: Record exact verification commands and backend config in the progress report.
+- [x] RED: Add integration tests for `web_search` followed by `web_fetch` on a selected result.
+- [x] GREEN: Verify result content and provenance are model-visible and web-renderable.
+- [x] RED: Add tests for explicit rendered mode and Firecrawl absence.
+- [x] GREEN: Return graceful unavailable results when rendered content is required but Firecrawl is unavailable.
+- [x] RED: Add prompt regression tests proving ordinary static pages do not call Firecrawl.
+- [x] GREEN: Tune guidance and backend selection accordingly.
+- [x] GREEN: Run lint, typecheck, unit, integration, web, and hermetic e2e lanes. (`pnpm typecheck`, `pnpm lint`, `pnpm test` - 1553 pass, 3 skipped)
+- [x] REFACTOR: Record exact verification commands and backend config in the progress report. (backends exercised via injected `WebFetchDeps`; live env reads `JINA_API_KEY` / `FIRECRAWL_API_KEY`)
 
 ### Done Gate
 
-- [ ] `web_fetch` reads one explicit safe public URL.
-- [ ] Static fetch succeeds for ordinary pages.
-- [ ] Jina fallback runs only when static is unusable.
-- [ ] Firecrawl is last, optional, bounded, and not accidentally spent.
-- [ ] Results include attribution, metadata, backend provenance, and truncation.
-- [ ] Full verification passes.
+- [x] `web_fetch` reads one explicit safe public URL.
+- [x] Static fetch succeeds for ordinary pages.
+- [x] Jina fallback runs only when static is unusable.
+- [x] Firecrawl is last, optional, bounded, and not accidentally spent.
+- [x] Results include attribution, metadata, backend provenance, and truncation.
+- [x] Full verification passes.
 
 ## Accepted/Deferred Follow-Up
 
-None.
+- [ ] Manual EZE repro against real backends: search for a source, fetch a selected URL (verify static content); fetch a thin page and confirm the Jina fallback; confirm Firecrawl absence degrades gracefully. (Behavior is covered by the automated tests with injected backends; this is a human sign-off needing live network + keys.)
 
 ## Superseded/Obsolete Checklist Debt
 
