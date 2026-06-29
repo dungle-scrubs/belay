@@ -37,6 +37,7 @@ test("active falls back to the legacy provider selection until an explicit pick"
       hostCatalog: {},
       legacyProvider: "deepseek",
       legacyReasoning: "high",
+      sessionId: "s1",
     }),
   );
   assert.deepEqual(result.current.active, {
@@ -56,6 +57,7 @@ test("select records the active + recent and clamps reasoning to the model's sur
       hostCatalog: {},
       legacyProvider: "qwen",
       legacyReasoning: "low",
+      sessionId: "s1",
     }),
   );
   // Pick deepseek carrying an unsupported reasoning - it clamps to deepseek's surface default.
@@ -77,6 +79,7 @@ test("sources/catalog are empty when the host has not reported them (no misleadi
       hostCatalog: {},
       legacyProvider: "qwen",
       legacyReasoning: null,
+      sessionId: "s1",
     }),
   );
   // The roster is NOT projected into fake sources - the chooser shows an explicit empty state instead.
@@ -124,6 +127,7 @@ test("the host-announced sources + catalog are preferred once they arrive (D-065
       hostCatalog,
       legacyProvider: "qwen",
       legacyReasoning: null,
+      sessionId: "s1",
     }),
   );
   // The real host source wins over the roster projection (no "qwen"/"deepseek" projected sources).
@@ -135,4 +139,72 @@ test("the host-announced sources + catalog are preferred once they arrive (D-065
   // Labels come from the host source/catalog (source label vs model display name).
   assert.equal(result.current.sourceLabels.zai, "Z.ai");
   assert.equal(result.current.modelLabels["glm-5.2"], "GLM-5.2");
+});
+
+test("02.16: a model pick in one session is invisible to another (per-session persistence)", () => {
+  // Session A picks deepseek; session B (a different sessionId) must NOT inherit it - the prefs are
+  // keyed by sessionId, so the cross-session live-switch leak is gone.
+  const sessionA = renderHook(() =>
+    useModelSelection({
+      roster,
+      hostSources: [],
+      hostCatalog: {},
+      legacyProvider: "qwen",
+      legacyReasoning: "low",
+      sessionId: "A",
+    }),
+  );
+  act(() =>
+    sessionA.result.current.select({
+      sourceId: "deepseek",
+      modelId: "deepseek-v4",
+      reasoning: "high",
+    }),
+  );
+  assert.equal(sessionA.result.current.active?.sourceId, "deepseek", "session A applied its pick");
+
+  const sessionB = renderHook(() =>
+    useModelSelection({
+      roster,
+      hostSources: [],
+      hostCatalog: {},
+      legacyProvider: "qwen",
+      legacyReasoning: "low",
+      sessionId: "B",
+    }),
+  );
+  // B still falls back to its legacy provider (qwen), unaffected by A's deepseek pick.
+  assert.equal(sessionB.result.current.active?.sourceId, "qwen", "session B is isolated from A");
+});
+
+test("02.16: two views of the SAME session share the persisted pick", () => {
+  const first = renderHook(() =>
+    useModelSelection({
+      roster,
+      hostSources: [],
+      hostCatalog: {},
+      legacyProvider: "qwen",
+      legacyReasoning: "low",
+      sessionId: "shared",
+    }),
+  );
+  act(() =>
+    first.result.current.select({
+      sourceId: "deepseek",
+      modelId: "deepseek-v4",
+      reasoning: "high",
+    }),
+  );
+  // A second hook on the same sessionId reads the same persisted key.
+  const second = renderHook(() =>
+    useModelSelection({
+      roster,
+      hostSources: [],
+      hostCatalog: {},
+      legacyProvider: "qwen",
+      legacyReasoning: "low",
+      sessionId: "shared",
+    }),
+  );
+  assert.equal(second.result.current.active?.sourceId, "deepseek", "same session shares the pick");
 });

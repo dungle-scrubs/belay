@@ -13,7 +13,11 @@ import {
 } from "@trevor/session";
 import { useLocalStorageState } from "ahooks";
 import { useCallback, useMemo } from "react";
-import { buildModelSelection, type ModelSelectionProjection } from "@/model-selection";
+import {
+  buildModelSelection,
+  type ModelSelectionProjection,
+  sessionScopedKey,
+} from "@/model-selection";
 
 /**
  * The model-selection state hook (D-065 M3/M6): owns the persisted {@link ModelPreferences} (active /
@@ -41,6 +45,7 @@ export function useModelSelection({
   hostCatalog,
   legacyProvider,
   legacyReasoning,
+  sessionId,
 }: {
   /** The host-announced provider roster (host.online `models`), the pre-catalog fallback. */
   readonly roster: Readonly<Record<string, ProviderModel>>;
@@ -52,10 +57,14 @@ export function useModelSelection({
   readonly legacyProvider: string;
   /** Today's chosen reasoning level for the active provider (null = provider default). */
   readonly legacyReasoning: string | null;
+  /** The open session id; the persisted preferences are scoped to it so they don't leak across
+   *  sessions (02.16 D-002). Null (pre-resolve) uses a throwaway key. */
+  readonly sessionId: string | null;
 }): ModelSelection {
-  const [rawPrefs, setRawPrefs] = useLocalStorageState<ModelPreferences>(MODEL_PREFS_KEY, {
-    defaultValue: EMPTY_PREFERENCES,
-  });
+  const [rawPrefs, setRawPrefs] = useLocalStorageState<ModelPreferences>(
+    sessionScopedKey(MODEL_PREFS_KEY, sessionId),
+    { defaultValue: EMPTY_PREFERENCES },
+  );
   // Normalize on every read so a partial/garbled stored object loads to a safe value (decode drops
   // unusable refs) rather than trusting the raw JSON ahooks hands back.
   const preferences = useMemo(() => decodeModelPreferences(rawPrefs), [rawPrefs]);

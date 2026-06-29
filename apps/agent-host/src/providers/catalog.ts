@@ -11,6 +11,7 @@ import type {
 import { anthropicProvider } from "./anthropic";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
+import { resolveContextWindow } from "./model-metadata-overrides";
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
 import { AUTH_PATH } from "./provider-auth";
@@ -196,7 +197,8 @@ function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshnes
     displayName: model?.name ?? live.name ?? live.id,
     kind,
     capabilities,
-    contextLength: typeof model?.contextWindow === "number" ? model.contextWindow : null,
+    // A confirmed override wins over pi-ai's bundled (possibly stale) contextWindow (02.16 D-003).
+    contextLength: resolveContextWindow(live.id, model?.contextWindow),
     costTier: null,
     aliases: [],
     freshness,

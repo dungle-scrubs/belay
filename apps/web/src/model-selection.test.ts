@@ -1,7 +1,63 @@
 import assert from "node:assert/strict";
 import { EMPTY_PREFERENCES, type ProviderModel, selectModel } from "@trevor/session";
 import { test } from "vitest";
-import { buildModelSelection, legacyToCatalog } from "./model-selection";
+import {
+  activeModelLabel,
+  buildModelSelection,
+  legacyToCatalog,
+  sessionScopedKey,
+} from "./model-selection";
+
+/**
+ * 02.16: the collapsed model button label resolves from the SELECTED catalog entry (per-model), not the
+ * static per-provider roster label, and model-state keys are scoped per session.
+ */
+
+test("activeModelLabel prefers the selected catalog entry's displayName (the stale-label fix)", () => {
+  // The reported defect: minimax provider with rosterLabel "MiniMax M2.7" but MiniMax-M3 selected.
+  assert.equal(
+    activeModelLabel({
+      entry: { displayName: "MiniMax-M3" },
+      registeredProvider: true,
+      rosterLabel: "MiniMax M2.7",
+      selectionLabel: "MiniMax-M3",
+    }),
+    "MiniMax-M3",
+  );
+});
+
+test("activeModelLabel keeps the roster label for a legacy provider with no catalog entry", () => {
+  assert.equal(
+    activeModelLabel({
+      entry: undefined,
+      registeredProvider: true,
+      rosterLabel: "Qwen3 Coder",
+      selectionLabel: "ignored",
+    }),
+    "Qwen3 Coder",
+  );
+});
+
+test("activeModelLabel falls back to the selection label for an unregistered provider with no entry", () => {
+  assert.equal(
+    activeModelLabel({
+      entry: undefined,
+      registeredProvider: false,
+      rosterLabel: "ignored",
+      selectionLabel: "GLM-5.2",
+    }),
+    "GLM-5.2",
+  );
+});
+
+test("sessionScopedKey isolates sessions and shares within one; null defers to a throwaway key", () => {
+  assert.notEqual(
+    sessionScopedKey("trevor.provider", "A"),
+    sessionScopedKey("trevor.provider", "B"),
+  );
+  assert.equal(sessionScopedKey("trevor.provider", "A"), sessionScopedKey("trevor.provider", "A"));
+  assert.equal(sessionScopedKey("trevor.provider", null), "trevor.provider:pending");
+});
 
 /**
  * D-065 M3: the migration projection from the legacy provider roster (host.online `models`) into the

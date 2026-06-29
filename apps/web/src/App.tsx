@@ -22,7 +22,7 @@ import { PanelHost } from "@/components/panel/PanelHost";
 import { ControlsPanel } from "@/components/panel/panel-controls";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { useModelSelection } from "@/hooks/use-model-selection";
-import { resolveReasoning } from "@/model-selection";
+import { activeModelLabel, resolveReasoning, sessionScopedKey } from "@/model-selection";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeTurnStartedAt,
@@ -130,16 +130,23 @@ export function App() {
   });
   const sessionId = sessionQuery.data ?? null;
 
-  // No default here: an unset provider falls through to the host-announced default
-  // (defaultProviderFrom) below, so the initial selection is host-owned, not hardcoded.
-  const [provider, setProvider] = useLocalStorageState<string>(PROVIDER_KEY, rawString);
+  // Model state (provider / reasoning / show-thinking / preferences) is keyed PER SESSION so changing
+  // the model in one session never live-switches another (02.16 D-002): localStorage is origin-shared
+  // and ahooks syncs it cross-tab, so a global key leaked across every open session. ahooks re-reads on
+  // a key change, so switching sessions loads that session's own state; two tabs on the same session
+  // still share. No default here: an unset provider falls through to the host-announced default.
+  const [provider, setProvider] = useLocalStorageState<string>(
+    sessionScopedKey(PROVIDER_KEY, sessionId),
+    rawString,
+  );
   const [reasoningMap, setReasoningMap] = useLocalStorageState<Record<string, string>>(
-    REASONING_KEY,
+    sessionScopedKey(REASONING_KEY, sessionId),
     { defaultValue: {} },
   );
-  const [showThinking, setShowThinking] = useLocalStorageState<boolean>(SHOW_THINKING_KEY, {
-    defaultValue: true,
-  });
+  const [showThinking, setShowThinking] = useLocalStorageState<boolean>(
+    sessionScopedKey(SHOW_THINKING_KEY, sessionId),
+    { defaultValue: true },
+  );
   // The composer's local state as one boundary: draft, pending attachments + upload state, refs, and
   // the file-intake handlers. App keeps the submit/steer/slash-menu wiring (send queue + commands)
   // and passes the whole `composer` object to PanelHost; it also reads a few fields here for that
@@ -420,6 +427,7 @@ export function App() {
     hostCatalog,
     legacyProvider: activeProvider,
     legacyReasoning: reasoning || null,
+    sessionId,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
@@ -442,13 +450,20 @@ export function App() {
   // through this is what carries the real modelId to the host (not the legacy provider key). The label
   // keeps the legacy roster's curated name for a registered provider, else the catalog display name.
   const sendModel = selection.active ?? activeModelRef;
-  const activeLabel = hostModels[activeProvider] ? modelMeta.label : selection.activeLabel;
   // The active model's reasoning surface (D-065): its catalog entry's levels for a catalog pick, else
   // the legacy roster - so the reasoning control matches the chosen model instead of vanishing, and the
   // turn carries the reasoning the model actually supports. The toggle is keyed by the active source.
   const activeEntry = (selection.catalogBySource[sendModel.sourceId] ?? []).find(
     (e) => e.modelId === sendModel.modelId,
   );
+  // The button label is the SELECTED model's name (the catalog entry's displayName), not the static
+  // per-provider roster label - so picking a non-default model updates the button (02.16 D-001).
+  const activeLabel = activeModelLabel({
+    entry: activeEntry,
+    registeredProvider: Boolean(hostModels[activeProvider]),
+    rosterLabel: modelMeta.label,
+    selectionLabel: selection.activeLabel,
+  });
   const activeReasoningLevels =
     activeEntry && activeEntry.reasoningLevels.length > 0
       ? activeEntry.reasoningLevels
