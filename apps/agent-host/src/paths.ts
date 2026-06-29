@@ -1,6 +1,6 @@
-import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import {
+  abbreviateHome,
   type RootCategory,
   type RootCategoryId,
   resolveRootPolicy,
@@ -57,13 +57,10 @@ export const WORKSPACE_CONFINED_TOOLS = ["edit", "glob", "grep"] as const;
 export const HOST_CWD_TOOLS = ["read", "write", "bash"] as const;
 
 /** Abbreviates the user's home directory to `~` for display (the sanitized path everywhere the host
- *  shows a directory: status announces, `/cd`, `/doctor`, the worktree manager's display closure). */
+ *  shows a directory: status announces, `/cd`, `/doctor`, the worktree manager's display closure).
+ *  Delegates to the shared `abbreviateHome` so host and services sanitize paths identically. */
 export function abbrevHome(absolute: string): string {
-  const home = homedir();
-  if (absolute === home) {
-    return "~";
-  }
-  return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
+  return abbreviateHome(absolute);
 }
 
 /** True when a tool's file access is confined to the workspace root (vs. the host cwd). */

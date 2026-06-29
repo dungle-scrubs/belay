@@ -50,6 +50,14 @@ export function resolveTrevorStateHome(
 
 export const TREVOR_STATE_HOME = resolveTrevorStateHome();
 
+/** Abbreviates the home directory to `~` for display and logging (the sanitized form of a path). */
+export function abbreviateHome(absolute: string, home: string = homedir()): string {
+  if (absolute === home) {
+    return "~";
+  }
+  return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
+}
+
 /**
  * The approved filesystem-root taxonomy (D-009). This module is the ONE owner of where each class of
  * Trevor data lives; consumers (host diagnostics, service defaults, the CLI) read this read model
@@ -330,4 +338,25 @@ export function storagePath(
     return null;
   }
   return entry.relativePath ? join(root.path, entry.relativePath) : root.path;
+}
+
+/**
+ * Resolves a storage location by its inventory name, so a service default is declared once (in the
+ * inventory) and every caller routes through the root policy. Throws on an unknown name or a
+ * non-filesystem entry.
+ */
+export function storagePathByName(
+  name: string,
+  env: TrevorPathEnv = process.env,
+  home: string = homedir(),
+): string {
+  const entry = STORAGE_INVENTORY.find((candidate) => candidate.name === name);
+  if (!entry) {
+    throw new Error(`unknown storage entry: ${name}`);
+  }
+  const path = storagePath(entry, env, home);
+  if (path === null) {
+    throw new Error(`storage entry ${name} has no filesystem path`);
+  }
+  return path;
 }

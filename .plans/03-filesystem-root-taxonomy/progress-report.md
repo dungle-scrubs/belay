@@ -2,8 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 31
-- Completed: 33 (4 shipped pre-plan D-009; 10 in M1; 9 in M2; 10 in M3)
+- Current cutoff blockers: 25
+- Completed: 39 (4 shipped pre-plan D-009; 10 in M1; 9 in M2; 10 in M3; 6 in M4)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -65,15 +65,15 @@ Blockers
 
 The service-default cutover to the STATE home already shipped before this plan (D-009): the store configs default to `${TREVOR_STATE_HOME}/...`, `SESSION_STORE_DB`/`BLOB_STORE_DIR` still win, and no `homedir() + ".trevor"` defaults remain. Remaining current-cutoff work is regression coverage and routing the resolved defaults through the Phase-1 root policy plus the Phase-3 legacy detector.
 
-- [ ] RED: Add integration tests for session-store and blob-store default root selection (resolved through the root policy).
-- [ ] GREEN: Route service-entrypoint default resolution through the Phase-1 root policy.
-- [ ] GREEN: On startup, detect legacy `~/.trevor` data (via the Phase-3 detector) and log a sanitized migration-available status; do NOT change defaults.
-- [ ] GREEN: Log sanitized root paths and legacy/migration status.
-- [ ] RED: Add tests that old env overrides still win over defaults.
+- [x] RED: Add integration tests for session-store and blob-store default root selection (resolved through the root policy). (existing `config.test.ts` in both stores, preserved through the routing refactor)
+- [x] GREEN: Route service-entrypoint default resolution through the Phase-1 root policy. (configs resolve via `storagePathByName`)
+- [x] GREEN: On startup, detect legacy `~/.trevor` data (via the Phase-3 detector) and log a sanitized migration-available status; do NOT change defaults.
+- [x] GREEN: Log sanitized root paths and legacy/migration status. (`abbreviateHome` on the store startup logs)
+- [x] RED: Add tests that old env overrides still win over defaults. (existing `config.test.ts` override cases)
 - [x] GREEN: Keep old data untouched when overrides point elsewhere. (shipped pre-plan, D-009)
 - [x] REFACTOR: Remove duplicated `homedir() + ".trevor"` defaults after compatibility is covered. (shipped pre-plan, D-009)
 - [x] New installs use the approved root layout. (shipped pre-plan, D-009)
-- [ ] Existing installs keep their sessions and blobs. (covered by the Phase-3 legacy detector)
+- [x] Existing installs keep their sessions and blobs. (Phase-3 legacy detector surfaces importable data; copy-not-move keeps ~/.trevor intact)
 - [x] Override-based installs are not migrated unexpectedly. (shipped pre-plan, D-009 - no migration runs)
 
 ### Phase 5: Doctor and UI Diagnostics
