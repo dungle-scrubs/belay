@@ -2,11 +2,13 @@
 
 ## Summary
 
-- Current focus: M1 - Token Format and Threshold Policy
-- Current cutoff blockers: 70
+- Current focus: M2 - Draft Payload Pairing
+- Current cutoff blockers: 63
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 0
+- Completed current work: 7
+- Thresholds (D-003): large paste = 20+ lines OR 1500+ chars (DEFAULT_PASTE_THRESHOLDS, configurable).
+- Token format (D-001): `[Pasted text #N +M lines]`, M = derived display line count (CRLF/CR normalized, lone trailing newline ignored).
 
 ## Current Cutoff Blockers
 
@@ -14,13 +16,13 @@
 
 #### M1: Token Format and Threshold Policy
 
-- [ ] RED: Add shared parser/formatter tests for `[Pasted text #N +M lines]` tokens.
-- [ ] GREEN: Define token text, parser, and stable numbering for pasted-text tokens.
-- [ ] RED: Add threshold tests for small paste, boundary paste, large-by-lines paste, and large-by-characters paste.
-- [ ] GREEN: Add configurable line and character thresholds for tokenizing large plain-text paste.
-- [ ] RED: Add tests for CRLF, trailing newline, blank lines, and Unicode text.
-- [ ] GREEN: Preserve exact payload text while deriving display line counts separately.
-- [ ] REFACTOR: Keep pasted-text token parsing separate from image-token parsing while sharing common token utilities where sensible.
+- [x] RED: Add shared parser/formatter tests for `[Pasted text #N +M lines]` tokens.
+- [x] GREEN: Define token text, parser, and stable numbering for pasted-text tokens.
+- [x] RED: Add threshold tests for small paste, boundary paste, large-by-lines paste, and large-by-characters paste.
+- [x] GREEN: Add configurable line and character thresholds for tokenizing large plain-text paste.
+- [x] RED: Add tests for CRLF, trailing newline, blank lines, and Unicode text.
+- [x] GREEN: Preserve exact payload text while deriving display line counts separately.
+- [x] REFACTOR: Keep pasted-text token parsing separate from image-token parsing while sharing common token utilities where sensible.
 
 #### M2: Draft Payload Pairing
 

@@ -12,6 +12,7 @@ export * from "./image-tokens";
 export * from "./inventory";
 export * from "./model-preferences";
 export * from "./model-source";
+export * from "./paste-tokens";
 export * from "./protocol";
 export * from "./provider-question";
 export * from "./recall";
