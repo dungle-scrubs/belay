@@ -1137,3 +1137,33 @@ test("a terminal protocol-anomaly diagnostic folds onto the assistant segment", 
   assert.equal(message.diagnostic?.phase, "tool-protocol");
   assert.equal(message.text, leak);
 });
+
+test("10-large-paste: a user.message's pasted payloads flow into the transcript user message", () => {
+  const pastes = [{ text: "alpha\nbeta\ngamma" }];
+  const log = [
+    ev(
+      1,
+      events.userMessage({
+        text: "log [Pasted text #1 +3 lines]",
+        provider: "qwen",
+        pastes,
+      }),
+    ),
+  ];
+  const user = toTranscript(log).find((m) => m.kind === "user");
+  assert.ok(user && user.kind === "user");
+  assert.deepEqual(
+    user.pastes,
+    pastes,
+    "the exact payloads ride into the transcript for inspection",
+  );
+
+  const legacyUser = toTranscript([
+    ev(1, events.userMessage({ text: "plain", provider: "qwen" })),
+  ]).find((m) => m.kind === "user");
+  assert.deepEqual(
+    legacyUser?.kind === "user" ? legacyUser.pastes : null,
+    [],
+    "a legacy prompt with no pastes still decodes",
+  );
+});

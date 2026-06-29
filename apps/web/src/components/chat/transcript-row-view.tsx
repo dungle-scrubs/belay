@@ -331,7 +331,14 @@ export function TranscriptRowView({
   }
 
   if (message.kind === "user") {
-    return <UserMessage id={message.id} text={message.text} artifacts={message.artifacts} />;
+    return (
+      <UserMessage
+        id={message.id}
+        text={message.text}
+        artifacts={message.artifacts}
+        pastes={message.pastes}
+      />
+    );
   }
 
   return (

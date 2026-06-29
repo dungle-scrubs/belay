@@ -1,6 +1,6 @@
-import type { ArtifactRef } from "@trevor/session";
+import { type ArtifactRef, type PastePayload, pasteLineCount } from "@trevor/session";
 import { useBoolean, useInterval } from "ahooks";
-import { ChevronRight, Wrench } from "lucide-react";
+import { ChevronRight, Copy, Wrench } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatElapsed } from "@/derive";
@@ -302,19 +302,77 @@ export function ToolCall({
 }
 
 /**
+ * One submitted pasted-text payload as an inspect/copy disclosure: the `[Pasted text #N +M lines]`
+ * token stays inline in the prose (a compact, readable placeholder); this row beneath it lets the
+ * user expand the full payload, see its counts, and copy it. Collapsed by default and capped on
+ * expand, so a very large payload never floods the transcript. <!-- D-007 -->
+ */
+function PastedTextDetail({ index, payload }: { index: number; payload: PastePayload }) {
+  const [open, { toggle }] = useBoolean(false);
+  const lines = pasteLineCount(payload.text);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex cursor-pointer items-center gap-1.5 text-label tracking-wider text-smui-purple hover:text-foreground"
+        >
+          <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
+          Pasted text #{index + 1}
+        </button>
+        <span className="text-label tracking-wider text-muted-foreground">
+          {lines} lines · {payload.text.length} chars
+        </span>
+        <button
+          type="button"
+          aria-label="Copy pasted text"
+          title="Copy pasted text"
+          onClick={() => void navigator.clipboard?.writeText(payload.text)}
+          className="cursor-pointer text-muted-foreground hover:text-foreground"
+        >
+          <Copy className="size-3" />
+        </button>
+      </div>
+      {open ? (
+        <pre className="max-h-[280px] overflow-auto whitespace-pre-wrap break-words border border-border bg-smui-surface-1 px-2 py-1.5 text-xs text-foreground">
+          {payload.text}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
+/** The inspect/copy panel for a submitted prompt's pasted payloads (one disclosure per token). */
+export function PastedTextDetails({ pastes }: { pastes: readonly PastePayload[] }) {
+  return (
+    <div className="flex flex-col gap-1.5 border-border border-t pt-2">
+      {pastes.map((payload, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: immutable, positional pastes (token #N IS index N).
+        <PastedTextDetail key={index} index={index} payload={payload} />
+      ))}
+    </div>
+  );
+}
+
+/**
  * A prompt from the user: a boxed, left-barred block (no header), the single source of truth for the
  * user-message surface in both the live transcript and Storybook. `artifacts` renders the inline
- * image set under the prose; `id` tags the box for the quote-selection range capture (D-001). An
- * empty prompt (image-only) renders just the attachments.
+ * image set under the prose; `pastes` renders the inspect/copy panel for the prompt's pasted-text
+ * tokens (D-007); `id` tags the box for the quote-selection range capture (D-001). An empty prompt
+ * (image-only) renders just the attachments.
  */
 export function UserMessage({
   id,
   text,
   artifacts = [],
+  pastes = [],
 }: {
   id?: string;
   text: string;
   artifacts?: readonly ArtifactRef[];
+  pastes?: readonly PastePayload[];
 }) {
   return (
     <div
@@ -322,6 +380,7 @@ export function UserMessage({
       className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
     >
       {text ? <MarkdownBody text={text} /> : null}
+      {pastes.length ? <PastedTextDetails pastes={pastes} /> : null}
       {artifacts.length ? <MessageAttachments artifacts={artifacts} /> : null}
     </div>
   );

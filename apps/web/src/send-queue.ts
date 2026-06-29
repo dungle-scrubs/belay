@@ -1,4 +1,4 @@
-import type { ArtifactRef, ModelRef } from "@trevor/session";
+import type { ArtifactRef, ModelRef, PastePayload } from "@trevor/session";
 
 /**
  * The browser's local send queue + hard-steer fold - the "when does my prompt go out"
@@ -29,6 +29,9 @@ export type QueuedPrompt = {
    *  a model switch while the prompt waits does not rewrite it. Carried to the host's user.message. */
   readonly model?: ModelRef;
   readonly artifacts?: readonly ArtifactRef[];
+  /** Exact pasted-text payloads paired to the prompt's `[Pasted text #N +M lines]` tokens, in reading
+   *  order. Carried so a queued prompt's hidden payloads survive the wait and ride to the host. */
+  readonly pastes?: readonly PastePayload[];
 };
 
 /**
@@ -88,17 +91,21 @@ export function sendQueueReducer(
 /**
  * Builds the single steering prompt that replaces the queue on a hard steer: folds the
  * queued prompts + draft into one text and the queued + attached artifacts into one list
- * (so a steer keeps the images the user lined up). Returns null when there is nothing to
- * steer - no text and no artifacts - so the queue is simply cleared.
+ * (so a steer keeps the images the user lined up). The queued + draft pasted payloads are
+ * gathered in the SAME reading order as the folded text (queue prompts first, then the
+ * draft), so each surviving `[Pasted text #N]` token still maps to its payload. Returns null
+ * when there is nothing to steer - no text and no artifacts - so the queue is simply cleared.
  */
 export function foldSteer(
   queue: readonly QueuedPrompt[],
   draft: string,
   attachments: readonly ArtifactRef[],
+  draftPastes: readonly PastePayload[],
   meta: SteerMeta,
 ): QueuedPrompt | null {
   const text = combineSteer(queue, draft);
   const artifacts = [...queue.flatMap((q) => q.artifacts ?? []), ...attachments];
+  const pastes = [...queue.flatMap((q) => q.pastes ?? []), ...draftPastes];
   if (!text && artifacts.length === 0) {
     return null;
   }
@@ -109,6 +116,7 @@ export function foldSteer(
     reasoning: meta.reasoning,
     ...(meta.model ? { model: meta.model } : {}),
     ...(artifacts.length ? { artifacts } : {}),
+    ...(pastes.length ? { pastes } : {}),
   };
 }
 
@@ -125,6 +133,7 @@ export function foldQueuedSteer(
 ): QueuedPrompt | null {
   const text = combineQueued(queue);
   const artifacts = queue.flatMap((q) => q.artifacts ?? []);
+  const pastes = queue.flatMap((q) => q.pastes ?? []);
   if (!text && artifacts.length === 0) {
     return null;
   }
@@ -135,5 +144,6 @@ export function foldQueuedSteer(
     reasoning: meta.reasoning,
     ...(meta.model ? { model: meta.model } : {}),
     ...(artifacts.length ? { artifacts } : {}),
+    ...(pastes.length ? { pastes } : {}),
   };
 }

@@ -3,6 +3,7 @@ import {
   type ConnectionStatus,
   type HostPresence,
   type ModelRef,
+  type PastePayload,
   PRODUCER_IDS,
   type ProviderQuestionAnswer,
   type PublishInput,
@@ -281,6 +282,7 @@ export interface SessionActions {
     reasoning?: string,
     artifacts?: readonly ArtifactRef[],
     model?: ModelRef,
+    pastes?: readonly PastePayload[],
   ) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
   readonly command: (command: string, args: string) => Promise<void>;
@@ -325,7 +327,11 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
       reasoning?: string,
       artifacts?: readonly ArtifactRef[],
       model?: ModelRef,
-    ) => publishVia(sessionEvents.userMessage({ text, provider, reasoning, model, artifacts })),
+      pastes?: readonly PastePayload[],
+    ) =>
+      publishVia(
+        sessionEvents.userMessage({ text, provider, reasoning, model, artifacts, pastes }),
+      ),
     cancel: (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
     command,
     shell: (requestId: string, command: string) =>

@@ -160,7 +160,7 @@ export function App() {
   // and passes the whole `composer` object to PanelHost; it also reads a few fields here for that
   // wiring (the submit path clears the draft/attachments, the slash menu refocuses the input, etc.).
   const composer = useComposer();
-  const { draft, setDraft, imageRefs, attachments, setAttachments, inputRef } = composer;
+  const { draft, setDraft, imageRefs, pastes, attachments, setAttachments, inputRef } = composer;
 
   const stream = useSession(sessionId);
   const { events, presence, replayed, replayThroughSeq, status } = stream;
@@ -558,6 +558,9 @@ export function App() {
       reasoning: reasoning || undefined,
       model: sendModelRef,
       artifacts,
+      // The exact pasted payloads ride with the prompt so the host expands each `[Pasted text #N]`
+      // token back to its full content at projection time.
+      pastes: pastes.length ? pastes : undefined,
     });
     // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
     // new item (the prompt when its event round-trips, then the streaming answer) and holds there.
@@ -637,7 +640,7 @@ export function App() {
   // queue is empty on this branch, so this no longer collapses queued prompts - that is onFlushQueuedSteer.
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
-    steer(draft, [...imageRefs, ...attachments], steerMeta());
+    steer(draft, [...imageRefs, ...attachments], pastes, steerMeta());
     setDraft("");
     setAttachments([]);
     if (runId !== null) {

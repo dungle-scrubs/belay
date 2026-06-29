@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { render, screen } from "@testing-library/react";
-import { test } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { test, vi } from "vitest";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import type { AssistantMessage, Message } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
 const noop = () => {};
+
+const userRow = (message: Extract<Message, { kind: "user" }>): TranscriptRow => ({
+  kind: "message",
+  id: `message:${message.id}`,
+  compactAbove: false,
+  message,
+});
 
 const assistant = (over: Partial<AssistantMessage>): TranscriptRow => ({
   kind: "message",
@@ -220,4 +227,50 @@ test("the DeepSeek DSML envelope leak renders as a provider anomaly, escaped", (
   assert.match(container.textContent ?? "", /DSML \| \| tool_calls/);
   assert.equal(container.querySelector("invoke"), null);
   assert.equal(container.querySelector("parameter"), null);
+});
+
+test("10-large-paste: a submitted prompt's pasted tokens render an inspect/copy panel", () => {
+  const payload = "alpha\nbeta\ngamma";
+  const { container } = renderRow(
+    userRow({
+      kind: "user",
+      id: "u1",
+      text: "here is the log [Pasted text #1 +3 lines] - thoughts?",
+      artifacts: [],
+      pastes: [{ text: payload }],
+    }),
+  );
+
+  // The compact token stays inline in the prose (readable, not flooding).
+  assert.match(container.textContent ?? "", /\[Pasted text #1 \+3 lines\]/);
+  // The inspect panel shows the disclosure label + counts.
+  assert.ok(screen.getByText("Pasted text #1"));
+  assert.match(container.textContent ?? "", new RegExp(`3 lines · ${payload.length} chars`));
+
+  // Collapsed by default: the full payload is not shown until expanded.
+  assert.equal(container.querySelector("pre"), null, "the payload preview is collapsed by default");
+  fireEvent.click(screen.getByText("Pasted text #1"));
+  assert.equal(
+    container.querySelector("pre")?.textContent,
+    payload,
+    "expanding reveals the exact payload",
+  );
+});
+
+test("10-large-paste: the transcript copy action writes the exact pasted payload", () => {
+  const writeText = vi.fn();
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  const payload = "secret-looking\npasted blob";
+  renderRow(
+    userRow({
+      kind: "user",
+      id: "u2",
+      text: "[Pasted text #1 +2 lines]",
+      artifacts: [],
+      pastes: [{ text: payload }],
+    }),
+  );
+  fireEvent.click(screen.getByLabelText("Copy pasted text"));
+  assert.equal(writeText.mock.calls[0]?.[0], payload);
+  vi.unstubAllGlobals();
 });

@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M6 - Queue, Draft Persistence, and Transcript Rendering
-- Current cutoff blockers: 24
+- Current focus: M7 - Full Verification
+- Current cutoff blockers: 12
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 46
+- Completed current work: 58
 - Thresholds (D-003): large paste = 20+ lines OR 1500+ chars (DEFAULT_PASTE_THRESHOLDS, configurable).
 - Token format (D-001): `[Pasted text #N +M lines]`, M = derived display line count (CRLF/CR normalized, lone trailing newline ignored).
 
@@ -87,21 +87,21 @@
 
 #### M6: Queue, Draft Persistence, and Transcript Rendering
 
-- [ ] RED: Add queued-prompt tests proving pasted payload metadata survives while waiting.
-- [ ] GREEN: Preserve pasted-text token text and payload metadata in the send queue.
-- [ ] RED: Add hard-steer tests for queued/draft collapse with pasted payloads.
-- [ ] GREEN: Preserve pasted payloads through hard steer and draft reset.
-- [ ] RED: Add transcript tests for submitted pasted-text tokens with inspect/copy affordances.
-- [ ] GREEN: Render transcript paste tokens with expandable/copyable payload detail.
-- [ ] REFACTOR: Keep transcript payload inspection safe for very large text.
+- [x] RED: Add queued-prompt tests proving pasted payload metadata survives while waiting.
+- [x] GREEN: Preserve pasted-text token text and payload metadata in the send queue.
+- [x] RED: Add hard-steer tests for queued/draft collapse with pasted payloads.
+- [x] GREEN: Preserve pasted payloads through hard steer and draft reset.
+- [x] RED: Add transcript tests for submitted pasted-text tokens with inspect/copy affordances.
+- [x] GREEN: Render transcript paste tokens with expandable/copyable payload detail.
+- [x] REFACTOR: Keep transcript payload inspection safe for very large text.
 
 ### Gate 3 -> 4
 
-- [ ] Provider projection receives the exact pasted text at the token position.
-- [ ] Queue and hard steer preserve pasted payloads.
-- [ ] Transcript displays compact tokens with inspect/copy access.
-- [ ] Legacy messages without pasted payload metadata still decode.
-- [ ] Image tokens and pasted-text tokens compose cleanly.
+- [x] Provider projection receives the exact pasted text at the token position.
+- [x] Queue and hard steer preserve pasted payloads.
+- [x] Transcript displays compact tokens with inspect/copy access.
+- [x] Legacy messages without pasted payload metadata still decode.
+- [x] Image tokens and pasted-text tokens compose cleanly.
 
 ### Phase 4: Verification
 

@@ -3,6 +3,7 @@ import {
   addBreakdown,
   decodeTrevorEvent,
   inputEstimateTokens,
+  type PastePayload,
   type ProviderDiagnostic,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
@@ -14,7 +15,7 @@ import {
 } from "@trevor/session";
 import { type QuestionOutcome, summarizeProviderQuestion } from "./derive";
 
-export type { ArtifactRef, Usage, UsageBreakdown };
+export type { ArtifactRef, PastePayload, Usage, UsageBreakdown };
 
 // One assistant *segment*: the run of thinking/text between tool calls. A turn that
 // calls tools produces several, interleaved with tool messages in arrival order.
@@ -158,7 +159,15 @@ export type QuestionMessage = {
   summary: string;
 };
 export type Message =
-  | { kind: "user"; id: string; text: string; artifacts: readonly ArtifactRef[] }
+  | {
+      kind: "user";
+      id: string;
+      text: string;
+      artifacts: readonly ArtifactRef[];
+      /** Exact pasted payloads paired to the prompt's `[Pasted text #N +M lines]` tokens, in reading
+       *  order, for transcript inspect/copy. `[]` on a legacy message with no pastes. */
+      pastes: readonly PastePayload[];
+    }
   | AssistantMessage
   | ToolMessage
   | CommandResultMessage
@@ -357,6 +366,7 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           id: event.eventId,
           text: decoded.text,
           artifacts: decoded.artifacts,
+          pastes: decoded.pastes,
         });
         break;
       case "user.command":

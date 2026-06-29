@@ -8,6 +8,7 @@ const user = (id: string, text = id): Message => ({
   id,
   text,
   artifacts: [],
+  pastes: [],
 });
 
 const assistant = (id: string, text = id): Message => ({

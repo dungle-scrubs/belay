@@ -69,7 +69,7 @@ test("hard steer folds the queued prompts + draft into a single prompt", () => {
 
   act(() => result.current.submit(prompt("1", "first")));
   act(() => result.current.submit(prompt("2", "second")));
-  act(() => result.current.steer("a third thought", [], { id: "s", provider: "qwen" }));
+  act(() => result.current.steer("a third thought", [], [], { id: "s", provider: "qwen" }));
 
   assert.equal(result.current.queue.length, 1);
   const folded = result.current.queue[0]?.text ?? "";

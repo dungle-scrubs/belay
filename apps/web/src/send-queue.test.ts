@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef, PastePayload } from "@trevor/session";
 import { test } from "vitest";
 import {
   combineQueued,
@@ -20,11 +20,17 @@ import {
  *     queued + attached artifacts into one list, replacing the queue
  */
 
-const prompt = (id: string, text: string, artifacts?: readonly ArtifactRef[]): QueuedPrompt => ({
+const prompt = (
+  id: string,
+  text: string,
+  artifacts?: readonly ArtifactRef[],
+  pastes?: readonly PastePayload[],
+): QueuedPrompt => ({
   id,
   text,
   provider: "qwen",
   ...(artifacts ? { artifacts } : {}),
+  ...(pastes ? { pastes } : {}),
 });
 
 const art = (hash: string, size: number): ArtifactRef => ({
@@ -69,7 +75,7 @@ test("steer replaces the whole queue with the single folded prompt, or empties i
 test("foldSteer folds queued prompts + draft + artifacts into one steering prompt", () => {
   const a1 = art("a", 1);
   const a2 = art("b", 2);
-  const steer = foldSteer([prompt("1", "first", [a1])], "draft now", [a2], {
+  const steer = foldSteer([prompt("1", "first", [a1])], "draft now", [a2], [], {
     id: "s",
     provider: "gpt",
     reasoning: "high",
@@ -83,7 +89,7 @@ test("foldSteer folds queued prompts + draft + artifacts into one steering promp
 
 test("foldSteer stamps the steer meta's ModelRef onto the folded prompt (D-065)", () => {
   const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
-  const steer = foldSteer([prompt("1", "first")], "go", [], {
+  const steer = foldSteer([prompt("1", "first")], "go", [], [], {
     id: "s",
     provider: "deepseek",
     reasoning: "high",
@@ -94,15 +100,33 @@ test("foldSteer stamps the steer meta's ModelRef onto the folded prompt (D-065)"
 });
 
 test("foldSteer returns null when there is no text and no artifacts", () => {
-  assert.equal(foldSteer([], "   ", [], { id: "s", provider: "qwen" }), null);
+  assert.equal(foldSteer([], "   ", [], [], { id: "s", provider: "qwen" }), null);
 });
 
 test("foldSteer keeps artifacts even when the folded text is empty", () => {
   const a = art("c", 1);
-  const steer = foldSteer([], "", [a], { id: "s", provider: "qwen" });
+  const steer = foldSteer([], "", [a], [], { id: "s", provider: "qwen" });
   assert.ok(steer);
   assert.equal(steer.text, "");
   assert.deepEqual(steer.artifacts, [a]);
+});
+
+test("foldSteer gathers queued + draft pasted payloads in folded reading order", () => {
+  const qp: PastePayload = { text: "queued\npayload" };
+  const dp: PastePayload = { text: "draft\npayload" };
+  const steer = foldSteer(
+    [prompt("1", "first [Pasted text #1 +2 lines]", undefined, [qp])],
+    "then [Pasted text #1 +2 lines]",
+    [],
+    [dp],
+    { id: "s", provider: "qwen" },
+  );
+  assert.ok(steer);
+  assert.deepEqual(
+    steer.pastes,
+    [qp, dp],
+    "queued payloads precede the draft's, matching the folded token order",
+  );
 });
 
 // --- queue-only fold for the first-Escape steer (D-001/D-003) ---
@@ -156,4 +180,26 @@ test("foldQueuedSteer keeps queued artifacts even when every queued text is empt
   assert.ok(folded);
   assert.equal(folded.text, "");
   assert.deepEqual(folded.artifacts, [a]);
+});
+
+test("foldQueuedSteer gathers queued pasted payloads in queue order, ignoring the draft", () => {
+  const p1: PastePayload = { text: "first\npayload" };
+  const p2: PastePayload = { text: "second\npayload" };
+  const folded = foldQueuedSteer(
+    [
+      prompt("1", "a [Pasted text #1 +2 lines]", undefined, [p1]),
+      prompt("2", "b [Pasted text #1 +2 lines]", undefined, [p2]),
+    ],
+    { id: "s", provider: "qwen" },
+  );
+  assert.ok(folded);
+  assert.deepEqual(folded.pastes, [p1, p2], "queued payloads gather in queue order");
+});
+
+test("a queued prompt round-trips its pasted payloads through the reducer (survives the wait)", () => {
+  const payload: PastePayload = { text: "x".repeat(2000) };
+  const queued = prompt("1", "go [Pasted text #1 +1 lines]", undefined, [payload]);
+  let queue: readonly QueuedPrompt[] = [];
+  queue = sendQueueReducer(queue, { type: "enqueue", prompt: queued });
+  assert.deepEqual(queue[0]?.pastes, [payload], "the payload metadata waits with the prompt");
 });

@@ -1,4 +1,4 @@
-import type { ArtifactRef, ModelRef } from "@trevor/session";
+import type { ArtifactRef, ModelRef, PastePayload } from "@trevor/session";
 import { usePrevious } from "ahooks";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
@@ -32,8 +32,13 @@ export interface UseSendQueue {
   readonly queue: readonly QueuedPrompt[];
   /** Enqueue a fresh prompt to publish when idle (the drain effect handles publishing). */
   readonly submit: (prompt: QueuedPrompt) => void;
-  /** Hard steer: fold the queue + draft + artifacts into one prompt that replaces the queue. */
-  readonly steer: (draft: string, attachments: readonly ArtifactRef[], meta: SteerMeta) => void;
+  /** Hard steer: fold the queue + draft + artifacts + pasted payloads into one prompt. */
+  readonly steer: (
+    draft: string,
+    attachments: readonly ArtifactRef[],
+    pastes: readonly PastePayload[],
+    meta: SteerMeta,
+  ) => void;
   /**
    * First-Escape queued steer (D-001): fold ONLY the queued prompts into one prompt and publish it
    * now, draining the queue. The host queues a user.message that arrives mid-turn and runs it after
@@ -56,6 +61,7 @@ export function useSendQueue({
     reasoning?: string,
     artifacts?: readonly ArtifactRef[],
     model?: ModelRef,
+    pastes?: readonly PastePayload[],
   ) => Promise<void>;
   /** Changes when the browser switches durable sessions; queued prompts must not cross sessions. */
   readonly resetKey?: string | null;
@@ -108,7 +114,14 @@ export function useSendQueue({
     inFlightRef.current = true;
     setPending(next);
     dispatchQueue({ type: "drainHead" });
-    void publish(next.text, next.provider, next.reasoning, next.artifacts, next.model).catch(() => {
+    void publish(
+      next.text,
+      next.provider,
+      next.reasoning,
+      next.artifacts,
+      next.model,
+      next.pastes,
+    ).catch(() => {
       inFlightRef.current = false;
       setPending((current) => (current?.id === next.id ? null : current));
     });
@@ -119,10 +132,15 @@ export function useSendQueue({
   }, []);
 
   const steer = useCallback(
-    (draft: string, attachments: readonly ArtifactRef[], meta: SteerMeta) => {
-      // Fold the queued prompts + draft + every queued/attached artifact into ONE steering
-      // prompt (foldSteer keeps the images the user lined up rather than dropping them).
-      const steered = foldSteer(queue, draft, attachments, meta);
+    (
+      draft: string,
+      attachments: readonly ArtifactRef[],
+      pastes: readonly PastePayload[],
+      meta: SteerMeta,
+    ) => {
+      // Fold the queued prompts + draft + every queued/attached artifact + pasted payload into ONE
+      // steering prompt (foldSteer keeps the images AND the pastes the user lined up).
+      const steered = foldSteer(queue, draft, attachments, pastes, meta);
       dispatchQueue({ type: "steer", prompt: steered });
     },
     [queue],
@@ -146,6 +164,7 @@ export function useSendQueue({
         folded.reasoning,
         folded.artifacts,
         folded.model,
+        folded.pastes,
       ).catch(() => {
         // The publish failed (transient transport error): put the folded prompt back so it is not
         // lost - it drains when the turn ends, and the queue is non-empty again for a retry.

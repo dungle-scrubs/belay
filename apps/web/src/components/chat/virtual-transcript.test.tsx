@@ -17,6 +17,7 @@ function userRow(index: number): TranscriptRow {
       id: `u-${index}`,
       text: `prompt ${index}`,
       artifacts: [],
+      pastes: [],
     },
   };
 }
