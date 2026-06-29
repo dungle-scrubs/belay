@@ -2,8 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 56
-- Completed current work: 41 (Phases 1-4)
+- Current cutoff blockers: 36
+- Completed current work: 61 (Phases 1-6)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -85,32 +85,32 @@ Blockers
 
 #### M5: Staleness policy
 
-- [ ] RED: Add tests for 24-hour staleness, fresh reuse, stale refresh, manual refresh, and stale fallback.
-- [ ] GREEN: Mark pages/corpora stale after 24 hours.
-- [ ] GREEN: Reuse fresh corpora by default.
-- [ ] GREEN: Refresh stale corpora on explicit refresh or refresh-allowed query.
-- [ ] RED: Add network-failure tests where stale content exists.
-- [ ] GREEN: Return stale content only with explicit stale metadata when refresh fails or caller allows stale use.
-- [ ] REFACTOR: Keep refresh policy separate from query ranking.
-- [ ] Fresh cache reuse avoids unnecessary network calls.
-- [ ] Stale data is never presented as fresh.
-- [ ] Manual refresh is supported.
+- [x] RED: Add tests for 24-hour staleness, fresh reuse, stale refresh, manual refresh, and stale fallback.
+- [x] GREEN: Mark pages/corpora stale after 24 hours.
+- [x] GREEN: Reuse fresh corpora by default.
+- [x] GREEN: Refresh stale corpora on explicit refresh or refresh-allowed query.
+- [x] RED: Add network-failure tests where stale content exists.
+- [x] GREEN: Return stale content only with explicit stale metadata when refresh fails or caller allows stale use.
+- [x] REFACTOR: Keep refresh policy separate from query ranking.
+- [x] Fresh cache reuse avoids unnecessary network calls.
+- [x] Stale data is never presented as fresh.
+- [x] Manual refresh is supported.
 
 ### Phase 6: Query Actions
 
 #### M6: Cached docs actions
 
-- [ ] RED: Add action tests for `resolve`, `refresh`, `search`, `read`, `list`, and `status`.
-- [ ] GREEN: Implement `resolve/fetch` returning corpus summary and selected excerpts.
-- [ ] GREEN: Implement `search` over cached pages with ranked excerpts and citations.
-- [ ] GREEN: Implement `read` for a specific cached page with bounded output.
-- [ ] GREEN: Implement `list` and `status` for corpus inventory and freshness/provenance.
-- [ ] RED: Add result-size cap tests.
-- [ ] GREEN: Return truncation and continuation metadata.
-- [ ] REFACTOR: Share citation formatting across actions.
-- [ ] The model can find and cite relevant docs.
-- [ ] Large corpora never dump wholesale into context.
-- [ ] Users can inspect freshness/provenance.
+- [x] RED: Add action tests for `resolve`, `refresh`, `search`, `read`, `list`, and `status`.
+- [x] GREEN: Implement `resolve/fetch` returning corpus summary and selected excerpts.
+- [x] GREEN: Implement `search` over cached pages with ranked excerpts and citations.
+- [x] GREEN: Implement `read` for a specific cached page with bounded output.
+- [x] GREEN: Implement `list` and `status` for corpus inventory and freshness/provenance.
+- [x] RED: Add result-size cap tests.
+- [x] GREEN: Return truncation and continuation metadata.
+- [x] REFACTOR: Share citation formatting across actions.
+- [x] The model can find and cite relevant docs.
+- [x] Large corpora never dump wholesale into context.
+- [x] Users can inspect freshness/provenance.
 
 ### Phase 7: Prompt Guidance and UI Rendering
 
