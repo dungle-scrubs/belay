@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
+import {
+  fakeProvider,
+  ProviderUnavailable,
+  publishTurnVia,
+  transportEmit,
+} from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
 import { subscribe, waitFor } from "@trevor/test-kit";
@@ -154,6 +159,70 @@ test("a high-context pressure stop replays as context_pressure after synthesis",
   assert.equal(decoded.stop?.cause, "context_pressure");
   assert.equal(decoded.stop?.action, "synthesized");
   assert.equal(decoded.text, "synthesized answer");
+
+  viewer.connection.close();
+});
+
+test("a DeepSeek-style thinking-only stream drop reconnects and completes through the store", async () => {
+  const transport = streamTransport(store.url);
+  await transport.ensureSession("thinking-retry");
+
+  const viewer = subscribe(transport, "thinking-retry", "viewer");
+  await waitFor(viewer.isReplayed);
+
+  let calls = 0;
+  await publishTurnVia(
+    transportEmit(transport, "thinking-retry", "host"),
+    fakeProvider({
+      id: "deepseek",
+      stream: () => {
+        calls += 1;
+        if (calls === 1) {
+          // Thinking only, then a retryable transport drop before any token streams: safe to retry.
+          return Stream.concat(
+            Stream.fromIterable([{ type: "thinking" as const, text: "planning the edit" }]),
+            Stream.fail(
+              new ProviderUnavailable({
+                provider: "deepseek",
+                detail: "stream failed",
+                retryable: true,
+                classification: "transient_transport",
+              }),
+            ),
+          );
+        }
+        return Stream.fromIterable([
+          { type: "text" as const, text: "Recovered and done." },
+          {
+            type: "usage" as const,
+            usage: { input: 10, output: 5, contextWindow: 1000, genMs: 1 },
+          },
+        ]);
+      },
+    }),
+    [{ role: "user", content: "make a change" }],
+    { runId: "r-think" },
+  );
+
+  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+    label: "assistant.completed thinking-retry",
+  });
+
+  // A reconnecting marker carrying the safe-to-retry transport diagnostic rode the durable wire.
+  const reconnecting = viewer.events.find((e) => e.type === "assistant.reconnecting");
+  const rDecoded = reconnecting ? decodeTrevorEvent(reconnecting) : null;
+  assert.equal(rDecoded?.type, "assistant.reconnecting");
+  if (rDecoded?.type !== "assistant.reconnecting") return;
+  assert.equal(rDecoded.diagnostic?.safeToRetry, true);
+  assert.equal(rDecoded.diagnostic?.reason, "transport_loss");
+
+  // The retry succeeded: a clean completion with the answer, and NEVER a bare `stream failed` error.
+  const completed = viewer.events.find((e) => e.type === "assistant.completed");
+  const decoded = completed ? decodeTrevorEvent(completed) : null;
+  assert.equal(decoded?.type, "assistant.completed");
+  if (decoded?.type !== "assistant.completed") return;
+  assert.equal(decoded.error, undefined);
+  assert.ok(decoded.text.includes("Recovered and done."), decoded.text);
 
   viewer.connection.close();
 });

@@ -14,4 +14,7 @@ export {
   executeFinalizedHandoff,
   runDirectHandoff,
 } from "../../src/handoff-flow";
+// The typed provider error, so cross-service e2e can drive a retryable transport drop through a real
+// store (the DeepSeek-style thinking-only reconnect path) without reaching into host internals.
+export { ProviderUnavailable } from "../../src/providers/errors";
 export * from "./fake-provider";

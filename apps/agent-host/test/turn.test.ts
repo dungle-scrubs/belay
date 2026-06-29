@@ -235,6 +235,9 @@ test("a terminal provider stream failure publishes structured diagnostic data wi
   const events = await runTurn(provider, history, { runId: "r1" });
   const completed = events.find((e) => e.type === "assistant.completed")?.payload;
 
+  // The first-failure fixture: the terminal error is the enriched, provider-tagged message, NEVER the
+  // bare `stream failed` that lost all phase/retryability context (the original regression).
+  assert.notEqual(completed?.error, "stream failed");
   assert.equal(completed?.error, "deepseek unavailable: stream failed");
   assert.equal((completed?.diagnostic as { phase?: string } | undefined)?.phase, "model-step");
   assert.equal(

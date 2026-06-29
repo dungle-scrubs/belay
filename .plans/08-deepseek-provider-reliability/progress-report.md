@@ -1,14 +1,14 @@
 # DeepSeek Provider Reliability and Diagnostics - Progress Report
 
-> Current focus: Phase 4 - Verification and regression lane (M9)
+> Current focus: complete - all current-cutoff milestones done (M0-M9)
 > Source plan: [implementation.md](./implementation.md)
 
 ## Summary
 
 - Total features: 45
-- Completed: 41
-- Remaining: 4
-- Current cutoff blockers: 4
+- Completed: 45
+- Remaining: 0
+- Current cutoff blockers: 0
 - Accepted/deferred follow-up: 3
 - Superseded/obsolete checklist debt: 0
 
@@ -92,10 +92,10 @@
 
 #### M9: Verification and regression lane
 
-- [ ] Add a hermetic fake-provider e2e or integration test for DeepSeek-style thinking-only retry
-- [ ] Verify the DSML leak fixture renders as a provider anomaly in web tests
-- [ ] Verify the first-failure fixture no longer produces bare `stream failed`
-- [ ] Run lint, typecheck, unit, web, integration, and e2e lanes
+- [x] Add a hermetic fake-provider e2e or integration test for DeepSeek-style thinking-only retry
+- [x] Verify the DSML leak fixture renders as a provider anomaly in web tests
+- [x] Verify the first-failure fixture no longer produces bare `stream failed`
+- [x] Run lint, typecheck, unit, web, integration, and e2e lanes
 
 ## Accepted/Deferred Follow-Up
 

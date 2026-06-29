@@ -189,3 +189,35 @@ test("an ordinary assistant message still renders as markdown (anomaly path unto
   assert.ok(container.querySelector("h1"));
   assert.equal(screen.queryByText("provider protocol anomaly"), null);
 });
+
+test("the DeepSeek DSML envelope leak renders as a provider anomaly, escaped", () => {
+  // The raw DSML-like tool-call envelope from the original DeepSeek incident, leaked as final text.
+  const dsml = [
+    "< | | DSML | | tool_calls>",
+    '< | | DSML | | invoke name="edit">',
+    '< | | DSML | | parameter name="path" string="true">/Users/kevin/dev/app.ts',
+    "</ | | DSML | | tool_calls>",
+  ].join("\n");
+  const { container } = renderRow(
+    assistant({
+      text: dsml,
+      diagnostic: {
+        provider: "deepseek",
+        phase: "tool-protocol",
+        reason: "protocol_anomaly",
+        retryable: true,
+        safeToRetry: false,
+        attempt: 1,
+        detail: "DeepSeek rendered tool-call JSON or tags as assistant text",
+        partials: { textChars: dsml.length, thinkingChars: 0, toolCalls: 0, toolResults: 0 },
+      },
+    }),
+  );
+
+  assert.ok(screen.getByText("provider protocol anomaly"));
+  // The DSML envelope shows as escaped text in a bounded block - the literal markup is present and no
+  // invoke/parameter element was materialized by a parser.
+  assert.match(container.textContent ?? "", /DSML \| \| tool_calls/);
+  assert.equal(container.querySelector("invoke"), null);
+  assert.equal(container.querySelector("parameter"), null);
+});
