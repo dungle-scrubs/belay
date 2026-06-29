@@ -18,7 +18,13 @@ const ws = mkdtempSync(join(tmpdir(), "trevor-grep-"));
 mkdirSync(join(ws, "src"), { recursive: true });
 mkdirSync(join(ws, "ignored"), { recursive: true });
 // ripgrep honors .gitignore only inside a git repo (the real Trevor workspace is one); init one.
-execFileSync("git", ["init", "-q"], { cwd: ws });
+// Strip any inherited GIT_* env (a pre-commit hook exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE)
+// so `git init` creates a real standalone repo in `ws` instead of attaching to the caller's repo -
+// otherwise `ws` stays un-initialized and ripgrep, finding no repo, would not honor .gitignore.
+const gitEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+);
+execFileSync("git", ["init", "-q"], { cwd: ws, env: gitEnv });
 writeFileSync(join(ws, ".gitignore"), "ignored/\n");
 writeFileSync(join(ws, "src", "a.ts"), 'const greeting = "hello";\nconst pattern = "a.b";\n');
 writeFileSync(join(ws, "src", "b.ts"), 'const greeting = "hi";\nconst other = "axb";\n');
