@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 7
-- **Completed current work:** 8
+- **Current cutoff blockers:** 4
+- **Completed current work:** 11
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M2 - MiniMax-M3 static override
+- **Current focus:** M3 - learn the real window from overflow errors
 
 ## Completed Current State / Hard Dependencies
 
@@ -25,9 +25,9 @@
 - [x] REFACTOR: trigger, planner, and guard all read one estimator; no second token notion remains.
 
 ### M2 - MiniMax-M3 static override
-- [ ] RED: `resolveContextWindow("MiniMax-M3", 512000)` returns `262144`.
-- [ ] GREEN: add `MiniMax-M3 -> { contextWindow: 262144 }` to `MODEL_METADATA_OVERRIDES` with a session-citing comment.
-- [ ] REFACTOR: explicit precedence (static override > learned > bundled).
+- [x] RED: `resolveContextWindow("MiniMax-M3", 512000)` returns `262144`.
+- [x] GREEN: add `MiniMax-M3 -> { contextWindow: 262144 }` to `MODEL_METADATA_OVERRIDES` with a session-citing comment.
+- [x] REFACTOR: explicit precedence (static override > learned > bundled). Resolver now also drives the EFFECTIVE per-turn window (pi-ai-base.stream), not only the catalog display, so the override reaches the compaction trigger.
 
 ### M3 - learn the real window from overflow errors
 - [ ] RED: a provider overflow records a learned window `N` that later `resolveContextWindow` calls honor.

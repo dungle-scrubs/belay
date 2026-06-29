@@ -18,22 +18,46 @@ export interface ModelMetadataOverride {
   readonly contextWindow?: number;
 }
 
-/** Confirmed corrections keyed by `modelId` (the live `/models` id). Empty until a stale value is found. */
-export const MODEL_METADATA_OVERRIDES: Readonly<Record<string, ModelMetadataOverride>> = {};
+/** Confirmed corrections keyed by `modelId` (the live `/models` id). */
+export const MODEL_METADATA_OVERRIDES: Readonly<Record<string, ModelMetadataOverride>> = {
+  // MiniMax-M3's bundled window (512000) overstates the real 262144: session
+  // trevor-20260629-033048z-eb100ca0 grew a ~412k-token prompt that the bundled value declared safe,
+  // so the fold never fired and the turn overflowed against the real ceiling (03.2 D-004).
+  "MiniMax-M3": { contextWindow: 262_144 },
+};
 
 /**
- * The context window to render for a model: a confirmed override wins over pi-ai's bundled value;
- * absent both, it is null (unknown, the picker shows no window). Pure - `overrides` is injectable so the
- * resolution is unit-tested without depending on the production map's (intentionally empty) contents.
+ * Windows LEARNED from a provider's own overflow error (03.2 M3), keyed by `modelId`. A stale bundled
+ * window self-heals the first time the provider rejects a prompt for being too big: the real `N` is
+ * captured here and the resolver honors it on later turns. Populated by `recordLearnedWindow`; consulted
+ * by `resolveContextWindow` AFTER a static override (which is the trusted correction) and only ever to
+ * TIGHTEN toward the bundled value, never to widen past it.
+ */
+const learnedWindows = new Map<string, number>();
+
+/**
+ * The effective context window for a model, by precedence: a confirmed static override wins, else a
+ * learned window (clamped to never exceed the bundled value), else the bundled value; absent all three
+ * it is null (unknown - the picker shows no window). Pure - `overrides` and `learned` are injectable so
+ * the resolution is unit-tested without touching the production map or store.
  */
 export function resolveContextWindow(
   modelId: string,
   bundledContextWindow: number | undefined,
   overrides: Readonly<Record<string, ModelMetadataOverride>> = MODEL_METADATA_OVERRIDES,
+  learned: ReadonlyMap<string, number> = learnedWindows,
 ): number | null {
   const override = overrides[modelId]?.contextWindow;
   if (typeof override === "number") {
     return override;
+  }
+  const learnedWindow = learned.get(modelId);
+  if (typeof learnedWindow === "number") {
+    // A learned window only TIGHTENS: a mislabeled/transient signal can never widen a model past its
+    // bundled value (and a static override above already short-circuits it entirely).
+    return typeof bundledContextWindow === "number"
+      ? Math.min(learnedWindow, bundledContextWindow)
+      : learnedWindow;
   }
   return typeof bundledContextWindow === "number" ? bundledContextWindow : null;
 }

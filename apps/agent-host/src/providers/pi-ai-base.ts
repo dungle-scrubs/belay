@@ -7,6 +7,7 @@ import {
 import { Effect, Stream } from "effect";
 import { msg } from "../messages";
 import { ProviderAuthError } from "./errors";
+import { resolveContextWindow } from "./model-metadata-overrides";
 import { streamPiAiModel } from "./pi-ai";
 import type { CredentialResolver } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
@@ -123,7 +124,12 @@ export class PiAiProviderBase extends DescribableProvider {
             messages,
             tools,
             apiKey,
-            contextWindow: model.contextWindow,
+            // The EFFECTIVE window, through the single resolver (03.2 D-004): a confirmed static
+            // override or a learned window corrects a stale bundled value HERE, so the turn - and the
+            // compaction trigger reading its `usage.contextWindow` - budgets against the real ceiling,
+            // not just the catalog display.
+            contextWindow:
+              resolveContextWindow(model.id, model.contextWindow) ?? model.contextWindow,
             // pi-ai clamps an out-of-range level to the nearest supported one.
             reasoning: (reasoning ?? this.defaultReasoning) as ThinkingLevel,
             provider: this.id,

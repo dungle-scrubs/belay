@@ -28,6 +28,16 @@ test("the window is null when neither an override nor a bundled value is known",
   assert.equal(resolveContextWindow("unknown-model", undefined, {}), null);
 });
 
-test("the production override map is empty by default (corrections added only when confirmed)", () => {
-  assert.deepEqual(MODEL_METADATA_OVERRIDES, {});
+/**
+ * 03.2 M2: MiniMax-M3's bundled window (512000) overstates the real 262144 (session
+ * trevor-20260629-033048z-eb100ca0 overflowed at ~412k against the real ceiling), so the production
+ * map now carries the confirmed correction and the resolver returns it everywhere the window is read.
+ */
+
+test("MiniMax-M3 resolves to its real 262144 window, not the stale bundled 512000", () => {
+  assert.equal(resolveContextWindow("MiniMax-M3", 512000), 262144);
+});
+
+test("the production override map carries the confirmed MiniMax-M3 correction", () => {
+  assert.equal(MODEL_METADATA_OVERRIDES["MiniMax-M3"]?.contextWindow, 262144);
 });
