@@ -2,7 +2,7 @@
 
 ## Summary
 
-- Current cutoff blockers: 53
+- Current cutoff blockers: 41
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -20,16 +20,16 @@ Blockers
 
 #### M1: Clipboard writer and tool
 
-- [ ] RED: Add unit tests for a clipboard writer interface with real and test-capture implementations.
-- [ ] GREEN: Implement `clipboard_write(text)` over the host clipboard abstraction.
-- [ ] GREEN: Return bounded metadata such as `{ copied: true, charCount }`.
-- [ ] RED: Add failure tests for unavailable clipboard command/API.
-- [ ] GREEN: Return a structured tool error when the host clipboard write fails.
-- [ ] RED: Add tests proving automated test mode captures text without touching the real clipboard.
-- [ ] REFACTOR: Keep platform selection behind the abstraction, not in command/model code.
-- [ ] Clipboard writes are host-owned and plain text only.
-- [ ] Tests never touch the real system clipboard.
-- [ ] Failure is visible and structured.
+- [x] RED: Add unit tests for a clipboard writer interface with real and test-capture implementations.
+- [x] GREEN: Implement `clipboard_write(text)` over the host clipboard abstraction.
+- [x] GREEN: Return bounded metadata such as `{ copied: true, charCount }`.
+- [x] RED: Add failure tests for unavailable clipboard command/API.
+- [x] GREEN: Return a structured tool error when the host clipboard write fails.
+- [x] RED: Add tests proving automated test mode captures text without touching the real clipboard.
+- [x] REFACTOR: Keep platform selection behind the abstraction, not in command/model code.
+- [x] Clipboard writes are host-owned and plain text only.
+- [x] Tests never touch the real system clipboard.
+- [x] Failure is visible and structured.
 
 ### Phase 2: Bare `/clip`
 
@@ -81,8 +81,8 @@ Blockers
 
 ### Verification Checklist
 
-- [ ] `clipboard_write` writes exact plain text.
-- [ ] Test-capture adapter prevents real clipboard writes in automated tests.
+- [x] `clipboard_write` writes exact plain text.
+- [x] Test-capture adapter prevents real clipboard writes in automated tests.
 - [ ] Bare `/clip` copies last copyable transcript item.
 - [ ] Bare `/clip` starts no model turn.
 - [ ] `/clip <request>` exposes only `clipboard_write`.

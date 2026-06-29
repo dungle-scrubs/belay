@@ -207,6 +207,64 @@ const renderRecall: RenderArm = ({ message, status, className }) => {
   );
 };
 
+interface ParsedClipboard {
+  copied?: boolean;
+  charCount?: number;
+  error?: string;
+}
+
+// clipboard_write emits JSON ({copied:true, charCount}) on success, or an "error: ..." line on
+// failure. Parse defensively: null while running, an error string surfaced as-is, else the count.
+function parseClipboardResult(raw: string | undefined): ParsedClipboard | null {
+  if (!raw) {
+    return null;
+  }
+  if (raw.startsWith("error:")) {
+    return { error: raw.replace(/^error:\s*/u, "") };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.copied === true) {
+      return {
+        copied: true,
+        charCount: typeof parsed.charCount === "number" ? parsed.charCount : undefined,
+      };
+    }
+  } catch {
+    // Truncated or non-JSON; fall through to a generic error display below.
+  }
+  return { error: raw };
+}
+
+// A single-line bounded preview of the copied text for the tool row (collapses whitespace).
+function clipboardPreview(text: string): string {
+  const oneLine = text.replace(/\s+/gu, " ").trim();
+  return oneLine.length > 60 ? `${oneLine.slice(0, 60)}…` : oneLine;
+}
+
+// clipboard_write shows the bounded preview of what was copied plus a "Copied N chars" line (or its
+// error), keeping the external clipboard mutation visible as a normal tool result.
+const renderClipboard: RenderArm = ({ message, status, className }) => {
+  const a = parseToolArgs(message.args);
+  const text = typeof a.text === "string" ? a.text : "";
+  const parsed = parseClipboardResult(message.result);
+  const output = parsed?.error
+    ? parsed.error
+    : parsed?.copied
+      ? `Copied ${parsed.charCount ?? text.length} chars to the clipboard.`
+      : undefined;
+
+  return (
+    <ToolOutput
+      className={className}
+      name="clipboard_write"
+      args={clipboardPreview(text)}
+      output={output}
+      status={status}
+    />
+  );
+};
+
 // bash/grep render their text output (command output, matches) flat.
 const renderOutput: RenderArm = ({ message, status, className }) => (
   <ToolOutput
@@ -256,6 +314,7 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it
   // renders like other text-output tools (the dashboard surface is the /doctor command, not this).
   doctor: renderOutput,
+  clipboard_write: renderClipboard,
   bash: renderOutput,
   write: renderDiff,
   edit: renderDiff,

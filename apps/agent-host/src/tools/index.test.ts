@@ -7,6 +7,7 @@ import { buildTaskTools } from "../tasks";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { bashTool } from "./bash";
+import { clipboardWriteTool } from "./clipboard";
 import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
@@ -86,6 +87,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     skillViewTool,
     astGrepTool,
     doctorTool,
+    clipboardWriteTool,
     supervisor.buildTool(),
     ...buildTaskTools(),
     buildSkillTool([]),

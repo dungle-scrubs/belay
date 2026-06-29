@@ -31,6 +31,8 @@ export const TOOL_DESCRIPTORS = [
   { name: "session_recall", readOnly: true },
   { name: "ast_grep", readOnly: true },
   { name: "doctor", readOnly: true },
+  // clipboard_write mutates external clipboard state (a side effect), so it is a serial barrier.
+  { name: "clipboard_write", readOnly: false },
   { name: "bash", readOnly: false },
   { name: "write", readOnly: false },
   { name: "edit", readOnly: false },

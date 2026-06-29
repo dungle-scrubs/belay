@@ -9,6 +9,7 @@ import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
 import { bashTool } from "./bash";
+import { clipboardWriteTool } from "./clipboard";
 import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
@@ -52,6 +53,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   skillsListTool,
   skillViewTool,
   doctorTool,
+  clipboardWriteTool,
   supervisor.buildTool(),
   ...buildTaskTools(),
   // ast_grep is registered only when its project-managed binary resolves (skipped on a platform
