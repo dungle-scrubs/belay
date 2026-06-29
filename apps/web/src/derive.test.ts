@@ -14,6 +14,7 @@ import {
   fmtCtx,
   fmtTokens,
   hostStatus,
+  isHostlessPendingPrompt,
   isSessionArchived,
   latestSessionSwitch,
   parseBangShell,
@@ -477,5 +478,108 @@ test("detectOrphanedTurn does not fire on an idle session with no in-flight turn
       graceMs: 12_000,
     }),
     null,
+  );
+});
+
+/**
+ * isHostlessPendingPrompt (02.14): the disjoint twin of detectOrphanedTurn. A prompt published with no
+ * host gets no assistant.started, so the orphan guard (which needs an in-flight runId) stays silent and
+ * the busy derivation would spin "Working" forever. This helper recognizes that exact state so the UI
+ * can drop the fake spinner for the no-host affordance. The host's reattach catch-up still runs the
+ * queued prompt - this is presentation only.
+ */
+const hostlessPrompt = () => [evt("user.message", { text: "do the thing" }, AT)];
+
+test("fires for a trailing prompt with no host, where the orphan guard is silent (the gap)", () => {
+  const now = Date.parse(AT) + 20_000;
+  const check = { leaderPresent: false, connected: true, now, graceMs: 12_000 };
+  // The orphan guard cannot help (no started run), yet the prompt is stranded:
+  assert.equal(detectOrphanedTurn(hostlessPrompt(), check), null);
+  assert.equal(isHostlessPendingPrompt(hostlessPrompt(), check), true);
+});
+
+test("fires after a completed prior turn leaves a fresh unanswered prompt with no host", () => {
+  const events = [
+    evt("user.message", { text: "first" }, AT),
+    evt("assistant.started", { runId: "r1" }, AT),
+    evt("assistant.completed", { runId: "r1", text: "done" }, AT),
+    evt("user.message", { text: "second, hostless" }, AT),
+  ];
+  const now = Date.parse(AT) + 20_000;
+  assert.equal(
+    isHostlessPendingPrompt(events, {
+      leaderPresent: false,
+      connected: true,
+      now,
+      graceMs: 12_000,
+    }),
+    true,
+  );
+});
+
+test("stays FALSE while a leader is present (a genuinely slow turn still reads Working)", () => {
+  const now = Date.parse(AT) + 60_000;
+  assert.equal(
+    isHostlessPendingPrompt(hostlessPrompt(), {
+      leaderPresent: true,
+      connected: true,
+      now,
+      graceMs: 12_000,
+    }),
+    false,
+  );
+});
+
+test("stays FALSE before the grace window elapses", () => {
+  const now = Date.parse(AT) + 5_000; // under 12s
+  assert.equal(
+    isHostlessPendingPrompt(hostlessPrompt(), {
+      leaderPresent: false,
+      connected: true,
+      now,
+      graceMs: 12_000,
+    }),
+    false,
+  );
+});
+
+test("stays FALSE while a run is actually in flight (disjoint from detectOrphanedTurn)", () => {
+  const now = Date.parse(AT) + 60_000;
+  // inFlight() has a started-but-uncompleted run -> that's the orphan guard's job, not this.
+  assert.equal(
+    isHostlessPendingPrompt(inFlight(), {
+      leaderPresent: false,
+      connected: true,
+      now,
+      graceMs: 12_000,
+    }),
+    false,
+  );
+});
+
+test("stays FALSE on an answered, idle session (newest turn is a completion)", () => {
+  const events = [...inFlight(), evt("assistant.completed", { runId: "r1", text: "done" }, AT)];
+  const now = Date.parse(AT) + 60_000;
+  assert.equal(
+    isHostlessPendingPrompt(events, {
+      leaderPresent: false,
+      connected: true,
+      now,
+      graceMs: 12_000,
+    }),
+    false,
+  );
+});
+
+test("stays FALSE while the browser is disconnected or replaying", () => {
+  const now = Date.parse(AT) + 60_000;
+  assert.equal(
+    isHostlessPendingPrompt(hostlessPrompt(), {
+      leaderPresent: false,
+      connected: false,
+      now,
+      graceMs: 12_000,
+    }),
+    false,
   );
 });

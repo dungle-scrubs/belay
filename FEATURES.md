@@ -126,6 +126,7 @@ log; pure selectors live in `derive.ts` / `transcript.ts`.
 | Queued-prompts UI, compacting bar, internet/connectivity status, archived notice | `apps/web/src/components/chat/queued-prompts.tsx`, `compacting-bar.tsx`, `internet-status.tsx`, `archived-notice.tsx` | component tests |
 | Global Escape policy (cancel / clear-draft / flush-queued-steer / modal precedence) | `apps/web/src/esc-action.ts`, `App.tsx` | `esc-action.test.ts` |
 | Orphaned-turn recovery (phantom "Working" guard when no leader) | `apps/web/src/derive.ts` (`detectOrphanedTurn`) | `derive.test.ts` |
+| Hostless-pending prompt affordance: a prompt left trailing on a session with no host connected shows the no-host affordance instead of an indefinite "Working" spinner (after the grace); the queued prompt still runs via the host's reattach catch-up | `apps/web/src/derive.ts` (`isHostlessPendingPrompt`), `App.tsx` | `derive.test.ts` |
 | Host status / presence projection | `apps/web/src/derive.ts` (`hostStatus`) | `derive.test.ts` |
 | `/loop` command surface (builder/guide/inventory, Storybook) | `apps/web/src/components/chat/loop/`, `commands/` | component tests/stories |
 

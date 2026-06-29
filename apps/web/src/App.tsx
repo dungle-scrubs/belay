@@ -31,6 +31,7 @@ import {
   defaultProviderFrom,
   detectOrphanedTurn,
   hostStatus,
+  isHostlessPendingPrompt,
   isSessionArchived,
   latestSessionSwitch,
   parseBangShell,
@@ -252,6 +253,21 @@ export function App() {
   const orphanedTurn = useMemo(
     () =>
       detectOrphanedTurn(events, {
+        leaderPresent: host.leaderId !== null,
+        connected: status === "open" && replayed,
+        now,
+        graceMs: ORPHAN_GRACE_MS,
+      }),
+    [events, host.leaderId, status, replayed, now],
+  );
+  // A prompt left trailing on a session with NO host connected gets no `assistant.started`, so the busy
+  // derivation would spin "Working" forever even though nothing is running (02.14). Disjoint from
+  // `orphanedTurn` (which owns started-but-uncompleted runs): this fires only when no run started at all.
+  // When it fires we drop the "Working" row - the no-host status line already tells the user to start a
+  // host (which then runs the queued prompt via catch-up). It is presentation only; it never publishes.
+  const hostlessPending = useMemo(
+    () =>
+      isHostlessPendingPrompt(events, {
         leaderPresent: host.leaderId !== null,
         connected: status === "open" && replayed,
         now,
@@ -818,7 +834,10 @@ export function App() {
         onDoctorRefresh: () => void command("/doctor", "refresh"),
         showThinking: showThinkingOn,
         active,
-        awaitingResponse,
+        // Suppress the "Working" row when the trailing prompt is stranded with no host (02.14); the
+        // no-host status line carries the affordance instead. `busy`/the send queue are unchanged, so a
+        // follow-up prompt still queues behind it and the host's reattach catch-up runs them in order.
+        awaitingResponse: awaitingResponse && !hostlessPending,
         turnStartedAt,
         queue: visibleQueue,
       }}

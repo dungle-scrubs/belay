@@ -635,3 +635,56 @@ export function detectOrphanedTurn(
   const silentMs = check.now - lastAt;
   return silentMs >= check.graceMs ? { runId, silentMs } : null;
 }
+
+/** True when the newest turn-boundary event is a `user.message` - i.e. a prompt is awaiting a reply with
+ *  no later `assistant.started`/`assistant.completed` answering it. */
+function newestTurnIsUnansweredPrompt(events: readonly SessionEvent[]): boolean {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (!event) {
+      continue;
+    }
+    const decoded = decodeTrevorEvent(event);
+    if (!decoded) {
+      continue;
+    }
+    if (decoded.type === "user.message") {
+      return true;
+    }
+    if (decoded.type === "assistant.started" || decoded.type === "assistant.completed") {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a trailing prompt is STRANDED with no host to run it - the disjoint twin of
+ * {@link detectOrphanedTurn}. That recovers a run which STARTED but never completed (a host that
+ * crashed/flapped mid-turn); this fires when NOTHING ever started: the newest turn is an unanswered
+ * `user.message`, no run is in flight (`activeTurnRunId === null`), no leader is connected, the view is
+ * live + replayed, and the log has been silent past the grace.
+ *
+ * A `user.message` published while no host is attached gets no `assistant.started` (nothing is there to
+ * start it), so the busy derivation otherwise spins "Working" forever even though no turn exists. This
+ * is NOT data loss - the host's reattach catch-up (`pendingCatchUp`) answers the queued prompt the
+ * moment a host returns - so the browser presents the existing no-host affordance instead of a fake
+ * spinner. Pure over its inputs and never publishes (there is no runId to reconcile, unlike the orphan
+ * guard). <!-- D-001 D-002 -->
+ */
+export function isHostlessPendingPrompt(
+  events: readonly SessionEvent[],
+  check: OrphanCheck,
+): boolean {
+  if (activeTurnRunId(events) !== null || check.leaderPresent || !check.connected) {
+    return false;
+  }
+  if (!newestTurnIsUnansweredPrompt(events)) {
+    return false;
+  }
+  const lastAt = lastEventAt(events);
+  if (lastAt === null) {
+    return false;
+  }
+  return check.now - lastAt >= check.graceMs;
+}
