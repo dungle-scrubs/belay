@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M1 - Prompt Registry Awareness
-- Current cutoff blockers: 61
+- Current focus: M2 - Existing UI Snapshot Behavior
+- Current cutoff blockers: 56
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 0
+- Completed current work: 5
 
 ## Current Cutoff Blockers
 
@@ -14,11 +14,11 @@
 
 #### M1: Prompt Registry Awareness
 
-- [ ] RED: Add a host test that creates or updates a task before prompt build and expects the rendered system prompt to include the current task snapshot.
-- [ ] GREEN: Use the existing registry and prompt builder behavior to pass the test without changing semantics.
-- [ ] RED: Add a test that UI truncation helpers do not affect `TaskRegistry.renderForPrompt()`.
-- [ ] GREEN: Keep prompt rendering based on the complete registry, not the visible UI list.
-- [ ] REFACTOR: Isolate any task prompt fixture setup so freshness tests can reuse it.
+- [x] RED: Add a host test that creates or updates a task before prompt build and expects the rendered system prompt to include the current task snapshot.
+- [x] GREEN: Use the existing registry and prompt builder behavior to pass the test without changing semantics.
+- [x] RED: Add a test that UI truncation helpers do not affect `TaskRegistry.renderForPrompt()`.
+- [x] GREEN: Keep prompt rendering based on the complete registry, not the visible UI list.
+- [x] REFACTOR: Isolate any task prompt fixture setup so freshness tests can reuse it.
 
 #### M2: Existing UI Snapshot Behavior
 
