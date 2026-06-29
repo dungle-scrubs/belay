@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M2 - Existing UI Snapshot Behavior
-- Current cutoff blockers: 56
+- Current focus: M3 - Task Ordering Helper
+- Current cutoff blockers: 50
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 5
+- Completed current work: 11
 
 ## Current Cutoff Blockers
 
@@ -22,15 +22,15 @@
 
 #### M2: Existing UI Snapshot Behavior
 
-- [ ] RED: Add a `TasksPanel` test documenting the current unbounded render as the behavior to replace.
-- [ ] RED: Add a `tasksFrom` or derive test showing that, today, the latest event array entry wins without freshness metadata.
-- [ ] GREEN: Confirm the tests fail or are marked as characterization gaps before implementing the new behavior.
-- [ ] REFACTOR: Name test fixtures around active, pending, completed, failed, and cancelled states.
+- [x] RED: Add a `TasksPanel` test documenting the current unbounded render as the behavior to replace.
+- [x] RED: Add a `tasksFrom` or derive test showing that, today, the latest event array entry wins without freshness metadata.
+- [x] GREEN: Confirm the tests fail or are marked as characterization gaps before implementing the new behavior.
+- [x] REFACTOR: Name test fixtures around active, pending, completed, failed, and cancelled states.
 
 ### Gate 1 -> 2
 
-- [ ] Prompt context is proven complete at request build time.
-- [ ] Current UI and derive limitations are captured by tests.
+- [x] Prompt context is proven complete at request build time.
+- [x] Current UI and derive limitations are captured by tests.
 
 ### Phase 2: Compact Task Panel
 

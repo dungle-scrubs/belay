@@ -184,6 +184,19 @@ test("tasksFrom returns the latest checklist snapshot", () => {
   assert.deepEqual(tasksFrom([]), []);
 });
 
+// M2 characterization: with no freshness metadata, every tasks.current shares the legacy revision,
+// so the latest one in the event array wins. This documents the tie behavior the M7 freshness change
+// must preserve for legacy logs while still rejecting an out-of-order STALE snapshot.
+test("tasksFrom: among legacy (rev-less) snapshots, the latest array entry wins", () => {
+  const snap = tasksFrom([
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "old", status: "pending" }] }),
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "new", status: "in_progress" }] }),
+  ]);
+  assert.equal(snap.length, 1);
+  assert.equal(snap[0]?.subject, "new");
+  assert.equal(snap[0]?.status, "in_progress");
+});
+
 test("hostStatus (live presence): present with the live leader, others are standbys", () => {
   const events = [online("h1"), evt("host.role", { instanceId: "h1", role: HOST_ROLE.leader })];
   const presence = (...ids: string[]): HostPresence[] =>
