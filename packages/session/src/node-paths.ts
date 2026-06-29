@@ -266,6 +266,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description: "Per-session leader lock files.",
   },
   {
+    name: "cwd-locks",
+    category: "state",
+    relativePath: "cwd-locks",
+    description:
+      "Per-cwd-path advisory lock files: workspace path ownership across sessions (plan 01).",
+  },
+  {
     name: "projects-map",
     category: "state",
     relativePath: "projects.json",

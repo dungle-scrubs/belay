@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 28
-- **Completed current work:** 6
+- **Current cutoff blockers:** 23
+- **Completed current work:** 11
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Contract and Placement
+- **Current focus:** M2 - Lock Acquisition and Diagnostics
 
 ## Completed Current State / Hard Dependencies
 
@@ -21,11 +21,11 @@
 
 ### M1 - Contract and Placement
 
-- [ ] RED: Add tests or a design checklist for normalized cwd identity, owner metadata, stale behavior, and conflict messages.
-- [ ] GREEN: Define where the cwd lock lives under `TREVOR_HOME` and how it differs from existing per-session locks.
-- [ ] RED: Add tests proving non-worktree cwd and managed-worktree cwd use the same path-ownership rules where appropriate.
-- [ ] GREEN: Specify acquisition/release points for host launch, workspace switch, worktree switch, and shutdown.
-- [ ] REFACTOR: Keep lock policy separate from worktree registry persistence.
+- [x] RED: Add tests or a design checklist for normalized cwd identity, owner metadata, stale behavior, and conflict messages. (`apps/agent-host/src/cwd-lock.test.ts` + `artifacts/cwd-lock-design.md`)
+- [x] GREEN: Define where the cwd lock lives under `TREVOR_HOME` and how it differs from existing per-session locks. (state-home `cwd-locks/` inventory entry; not config home - see design doc; differs from per-session `locks/` by being keyed on realpath and held for the leader's lifetime)
+- [x] RED: Add tests proving non-worktree cwd and managed-worktree cwd use the same path-ownership rules where appropriate. (`cwd-lock.test.ts` "a managed-worktree cwd and a non-worktree cwd obey the SAME path-ownership rule")
+- [x] GREEN: Specify acquisition/release points for host launch, workspace switch, worktree switch, and shutdown. (`artifacts/cwd-lock-design.md` acquisition/release table)
+- [x] REFACTOR: Keep lock policy separate from worktree registry persistence. (`cwd-lock.ts` standalone; imports nothing from `worktrees/`)
 
 ### M2 - Lock Acquisition and Diagnostics
 

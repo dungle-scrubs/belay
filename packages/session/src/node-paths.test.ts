@@ -134,6 +134,7 @@ test("the state-home runtime artifacts are all classified", () => {
     "blobs",
     "host-registry",
     "locks",
+    "cwd-locks",
     "projects-map",
     "logs",
     "provider-observations",
