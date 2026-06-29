@@ -45,7 +45,7 @@ import { buildCommandRegistry } from "./commands";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
-import { controlPromptModel } from "./control-model";
+import { buildControlTurns, controlPromptModel, controlPromptProvider } from "./control-model";
 import { debugCommandSpecs, isStopConfirmed } from "./debug-commands";
 import {
   buildLiveDoctorSnapshot,
@@ -558,24 +558,24 @@ function controlProvider(): string {
   return compactionController.providerOrDefault()?.id ?? DEFAULT_PROVIDER;
 }
 
-/** The catalog model the in-flight turn was started with, so a host-issued control prompt resumes on
- *  the user's selected model instead of falling back to the default provider (the bare `provider`
- *  string carried a source id that does not round-trip through `pickProvider`). */
-function lastTurnModel(): ModelRef | undefined {
-  const turns: { readonly model?: ModelRef }[] = [];
-  for (const event of historyEvents) {
-    const decoded = decodeTrevorEvent(event);
-    if (decoded?.type === "user.message") {
-      turns.push(decoded);
-    }
-  }
-  return controlPromptModel(turns);
-}
-
-/** The provider + model a host-issued control prompt resolves to: the compaction provider's id and
- *  the in-flight turn's catalog model. The one resolver the continuation/retry/handoff paths share. */
+/**
+ * The provider + model a host-issued control prompt (auto-continue after a step-cap pause, retry,
+ * compact-then-continue, handoff) resolves to, resolved in three tiers newest-first so a resumed turn
+ * keeps the model it was actually running on:
+ *   1. the most recent turn's explicit catalog ModelRef (round-trips its source/model), else
+ *   2. the most recent REAL user turn's legacy provider string - skipping the host's own control
+ *      prompts so the scan never re-inherits the compaction provider (the 02.13 fix), else
+ *   3. the compaction/default provider - only a session with no real user turn yet.
+ * Without tier 2 a legacy provider-string-only turn (a source id that does not round-trip through
+ * `pickProvider`) silently downgraded to the host's LOCAL default model. The one resolver every
+ * continuation/retry/handoff path shares.
+ */
 function controlModel(): { readonly provider: string; readonly model: ModelRef | undefined } {
-  return { provider: controlProvider(), model: lastTurnModel() };
+  const turns = buildControlTurns(historyEvents, CONTROL_PRODUCER_ID);
+  return {
+    provider: controlPromptProvider(turns) ?? controlProvider(),
+    model: controlPromptModel(turns),
+  };
 }
 
 /**
@@ -679,10 +679,15 @@ function maybeAutoResume(): void {
     decision.cause === "restart"
       ? RESTART_RESUME_REASON
       : (turn.stopSummary ?? turnMachine.lastTermination ?? "turn paused");
+  // Surface the resolved provider/model so a resume DOWNGRADE (a real turn provider that fell through
+  // to the local default) is visible in host logs / debug, not silent. <!-- 02.13 -->
+  const resolved = controlModel();
   log("host", "auto-resuming turn", {
     run: turn.runId.slice(0, 8),
     cause: decision.cause,
     ...(decision.cause === "restart" ? { attempt: decision.attempt } : {}),
+    provider: resolved.provider,
+    model: resolved.model ? `${resolved.model.sourceId}/${resolved.model.modelId}` : undefined,
   });
   continueAfterStop(reason).catch((error) =>
     warn("host", "auto-resume failed", { run: turn.runId.slice(0, 8), error: msg(error) }),
