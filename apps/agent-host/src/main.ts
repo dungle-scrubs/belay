@@ -86,8 +86,13 @@ import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./provid
 import { parseOverflowWindow } from "./providers/error-classifier";
 import { recordLearnedWindow } from "./providers/model-metadata-overrides";
 import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
+import { disposeCurrentPlan, serialNext } from "./serial-run/driver";
 import { startSerialRun } from "./serial-run/entry";
-import { nodeSerialRunStartDeps } from "./serial-run/node";
+import {
+  nodeLoadSerialRun,
+  nodeSerialControllerCaps,
+  nodeSerialRunStartDeps,
+} from "./serial-run/node";
 import { Emit } from "./services";
 import {
   MAX_RESTART_RESUMES,
@@ -1456,6 +1461,86 @@ async function runSerialImplement(args: string): Promise<void> {
   }
 }
 
+/** The host-driven controller caps for a serial run, rooted at the current cwd (resolves the base repo). */
+function serialControllerCaps() {
+  return nodeSerialControllerCaps({
+    manager: worktrees,
+    cwd: process.cwd(),
+    stateHome: TREVOR_STATE_HOME,
+    now: () => new Date().toISOString(),
+  });
+}
+
+/**
+ * `/serial-next <runId>` (plan 02): the host-driven half of the serial loop. Create + enter the next
+ * queued plan's managed worktree and advance the durable journal to `tree-created`, then tell the run's
+ * agent which plan to implement. The agent implements in the tree and calls `/serial-dispose` to merge it.
+ */
+async function runSerialNext(runId: string): Promise<void> {
+  const id = runId.trim();
+  const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
+  if (!run) {
+    await emit(
+      events.commandResult({
+        command: "/serial-next",
+        text: `unknown serial run: ${id}`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const { plan } = await serialNext(run, serialControllerCaps());
+  const text = !plan
+    ? "serial run is complete or halted"
+    : plan.phase === "merged"
+      ? "all plans merged"
+      : `next: implement ${plan.planId} in its worktree, then run /serial-dispose ${id}`;
+  await emit(events.commandResult({ command: "/serial-next", text, ok: true }));
+}
+
+/**
+ * `/serial-dispose <runId> [fail <reason>]` (plan 02): the host-driven disposition. After the agent
+ * implemented the in-progress plan, run the single green gate (clean -> merge -> delete) on a green
+ * report, or halt the run on `fail <reason>` - advancing the durable journal either way.
+ */
+async function runSerialDispose(args: string): Promise<void> {
+  const [id, verb, ...rest] = args.trim().split(/\s+/);
+  if (!id) {
+    await emit(
+      events.commandResult({
+        command: "/serial-dispose",
+        text: "usage: /serial-dispose <runId> [fail <reason>]",
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
+  if (!run) {
+    await emit(
+      events.commandResult({
+        command: "/serial-dispose",
+        text: `unknown serial run: ${id}`,
+        ok: false,
+      }),
+    );
+    return;
+  }
+  const outcome =
+    verb === "fail" ? { green: false, detail: rest.join(" ") || "reported red" } : { green: true };
+  const updated = await disposeCurrentPlan(run, serialControllerCaps(), outcome);
+  const halted = updated.plans.find((p) => p.phase === "halted");
+  const text =
+    updated.status === "halted"
+      ? `⚠ halted on ${halted?.planId}: ${halted?.haltReason} - tree left intact for inspection`
+      : updated.status === "complete"
+        ? "✓ all plans merged"
+        : `✓ merged; run /serial-next ${id} for the next plan`;
+  await emit(
+    events.commandResult({ command: "/serial-dispose", text, ok: updated.status !== "halted" }),
+  );
+}
+
 /**
  * Generated handoff (02.10): emit the source lifecycle (`handoff.requested` generate -> `generating`),
  * draft the target prompt with the source's last-turn provider (the same provider compaction folds
@@ -2269,6 +2354,18 @@ function handleEvent(message: SessionEvent): void {
       if (command === "/serial-implement") {
         runSerialImplement(args).catch((error) =>
           warn("host", "serial-implement failed", { error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/serial-next") {
+        runSerialNext(args).catch((error) =>
+          warn("host", "serial-next failed", { error: msg(error) }),
+        );
+        return;
+      }
+      if (command === "/serial-dispose") {
+        runSerialDispose(args).catch((error) =>
+          warn("host", "serial-dispose failed", { error: msg(error) }),
         );
         return;
       }

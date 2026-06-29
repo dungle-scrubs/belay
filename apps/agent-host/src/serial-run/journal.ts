@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { WorktreeFs } from "../worktrees/registry";
+import { readJson, type WorktreeFs, writeJson } from "../worktrees/registry";
 
 /**
  * The durable serial-run journal (plan 02, M1/M5): a re-openable record of one serial-implement run -
@@ -48,22 +48,6 @@ export interface SerialRun {
 }
 
 const runsPath = (home: string): string => join(home, "serial-runs.json");
-
-function readJson<T>(fs: WorktreeFs, path: string, fallback: T): T {
-  const raw = fs.readFile(path);
-  if (!raw) {
-    return fallback;
-  }
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson(fs: WorktreeFs, path: string, value: unknown): void {
-  fs.writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
-}
 
 /** Derives a run's status from its plans: halted if any plan halted, complete once all merged, else
  *  running. Halt dominates so a stopped run never reads as complete. */

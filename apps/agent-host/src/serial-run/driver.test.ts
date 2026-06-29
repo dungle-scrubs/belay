@@ -2,11 +2,13 @@ import { describe, expect, test } from "vitest";
 import {
   type CleanCheck,
   type CreateEnterOutcome,
+  disposeCurrentPlan,
   driveOnePlan,
   driveSerialRun,
   type GitOutcome,
   type ImplementOutcome,
   type SerialDriverCaps,
+  serialNext,
 } from "./driver";
 import { advancePlan, newSerialRun, type SerialRun } from "./journal";
 
@@ -197,5 +199,61 @@ describe("driveOnePlan - resume from a mid-lifecycle journal", () => {
       "merge:wt-b",
       "remove:wt-b",
     ]);
+  });
+});
+
+describe("host-driven controllers (serialNext / disposeCurrentPlan)", () => {
+  test("serialNext creates the next tree and reports the in-progress plan", async () => {
+    const h = harness();
+    const { run, plan } = await serialNext(newSerialRun("r", ["a", "b"], "t0"), h.caps);
+
+    expect(h.calls).toEqual(["createEnter:a"]); // only creates, never implements/merges
+    expect(plan?.planId).toBe("a");
+    expect(plan?.phase).toBe("tree-created");
+    expect(run.plans[0]).toMatchObject({ worktreeId: "wt-a", sessionId: "s-a" });
+  });
+
+  test("serialNext is a no-op once the current plan's tree already exists", async () => {
+    const h = harness();
+    let run = newSerialRun("r", ["a"], "t0");
+    run = advancePlan(run, "a", { phase: "tree-created", worktreeId: "wt-a" }, "t1");
+    const result = await serialNext(run, h.caps);
+    expect(h.calls).toEqual([]); // does not re-create
+    expect(result.plan?.planId).toBe("a");
+  });
+
+  test("disposeCurrentPlan green-disposes the in-progress plan through the gate", async () => {
+    const h = harness();
+    let run = newSerialRun("r", ["a", "b"], "t0");
+    run = advancePlan(run, "a", { phase: "tree-created", worktreeId: "wt-a" }, "t1");
+
+    run = await disposeCurrentPlan(run, h.caps, { green: true });
+    expect(run.plans[0]?.phase).toBe("merged");
+    expect(h.calls).toEqual(["inspect:wt-a", "merge:wt-a", "remove:wt-a"]); // no implement
+    expect(run.status).toBe("running"); // b still queued
+  });
+
+  test("disposeCurrentPlan halts the in-progress plan on a red report, preserving its tree", async () => {
+    const h = harness();
+    let run = newSerialRun("r", ["a"], "t0");
+    run = advancePlan(run, "a", { phase: "tree-created", worktreeId: "wt-a" }, "t1");
+
+    run = await disposeCurrentPlan(run, h.caps, { green: false, detail: "gate red" });
+    expect(run.status).toBe("halted");
+    expect(run.plans[0]?.haltReason).toMatch(/implementation red: gate red/);
+    expect(h.calls).not.toContain("merge:wt-a");
+  });
+
+  test("a serialNext/implement/dispose loop drives a 2-plan run to complete", async () => {
+    const h = harness();
+    let run = newSerialRun("r", ["a", "b"], "t0");
+    for (let i = 0; i < 2; i += 1) {
+      const next = await serialNext(run, h.caps);
+      run = next.run;
+      // (the agent implements here, off-band)
+      run = await disposeCurrentPlan(run, h.caps, { green: true });
+    }
+    expect(run.status).toBe("complete");
+    expect(run.plans.every((p) => p.phase === "merged")).toBe(true);
   });
 });

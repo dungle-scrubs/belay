@@ -4,7 +4,7 @@ import type { WorktreeManager } from "../worktrees/manager";
 import { nodeWorktreeFs } from "../worktrees/node";
 import type { CreateEnterOutcome, GitOutcome, ImplementOutcome, SerialDriverCaps } from "./driver";
 import type { SerialRunStartDeps } from "./entry";
-import { type SerialRun, saveRun } from "./journal";
+import { loadRun, type SerialRun, saveRun } from "./journal";
 
 /**
  * The node-backed wiring for serial runs (plan 02): real plan listing, real start deps, and the
@@ -69,6 +69,28 @@ export function serialDriverCaps(opts: {
     now: opts.now,
     persist: opts.persist,
   };
+}
+
+/** Builds the caps for the host-driven controllers (`serialNext` / `disposeCurrentPlan`): real worktree
+ *  ops + journal persistence under the state home. `implement` is a no-op - the agent implements in the
+ *  tree between the two host commands, so the controllers never call it. */
+export function nodeSerialControllerCaps(opts: {
+  readonly manager: WorktreeManager;
+  readonly cwd: string;
+  readonly stateHome: string;
+  readonly now: () => string;
+}): SerialDriverCaps {
+  return serialDriverCaps({
+    ops: nodeWorktreeOps(opts.manager, opts.cwd),
+    implement: async () => ({ green: true }),
+    persist: (run) => saveRun(nodeWorktreeFs, opts.stateHome, run),
+    now: opts.now,
+  });
+}
+
+/** Loads a serial run by id from the state-home journal (the `/serial-*` commands' reopen path). */
+export function nodeLoadSerialRun(stateHome: string, runId: string): SerialRun | null {
+  return loadRun(nodeWorktreeFs, stateHome, runId);
 }
 
 /** The plan dirs under `<workspace>/.plans/` that are real plans (carry a `plan.db`), sorted. */

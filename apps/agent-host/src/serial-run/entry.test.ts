@@ -92,6 +92,7 @@ describe("serialRunSeedPrompt", () => {
     expect(prompt).toContain("run-1");
     expect(prompt).toContain("03-a, 04-b");
     expect(prompt).toMatch(/one worktree at a time/i);
-    expect(prompt).toMatch(/merge it back and delete it/i);
+    expect(prompt).toMatch(/\/serial-next run-1/);
+    expect(prompt).toMatch(/\/serial-dispose run-1/);
   });
 });

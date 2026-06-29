@@ -13,13 +13,11 @@ import { advancePlan, nextPlan, type PlanEntry, type SerialRun } from "./journal
  * created only after the prior plan reaches `merged`, because {@link nextPlan} does not advance until then.
  */
 
-/** Create + enter a managed worktree for a plan (acquiring the 01 cwd lock). */
-export interface CreateEnterOutcome {
-  readonly ok: boolean;
-  readonly worktreeId?: string;
-  readonly sessionId?: string;
-  readonly error?: string;
-}
+/** Create + enter a managed worktree for a plan (acquiring the 01 cwd lock). Discriminated so a
+ *  successful create always carries its worktree id (no second presence check at the call site). */
+export type CreateEnterOutcome =
+  | { readonly ok: true; readonly worktreeId: string; readonly sessionId?: string }
+  | { readonly ok: false; readonly error: string };
 
 /** The result of running the implement step in a tree: green = the plan's own gate passed. */
 export interface ImplementOutcome {
@@ -33,11 +31,8 @@ export interface CleanCheck {
   readonly reason?: string;
 }
 
-/** A git op outcome (merge / delete), mirroring the worktree manager's `GitResult`. */
-export interface GitOutcome {
-  readonly ok: boolean;
-  readonly error?: string;
-}
+/** A git op outcome (merge / delete), structurally the worktree manager's `GitResult`. */
+export type GitOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
 /** The effects the serial driver orchestrates; the host wires the real worktree/implement behind them. */
 export interface SerialDriverCaps {
@@ -64,32 +59,79 @@ function liveEntry(run: SerialRun, planId: string): PlanEntry {
   return entry;
 }
 
+interface Stepper {
+  /** Patch the plan's journal entry, persist, and return the new run. */
+  step(patch: Parameters<typeof advancePlan>[2]): SerialRun;
+  /** Terminal stop: mark the plan halted with a reason (tree preserved). */
+  halt(reason: string): SerialRun;
+  /** The latest run after the most recent step. */
+  current(): SerialRun;
+}
+
+/** A journal stepper for one plan: every transition persists, so a crash resumes from the last step. */
+function stepper(run: SerialRun, planId: string, caps: SerialDriverCaps): Stepper {
+  let live = run;
+  const step = (patch: Parameters<typeof advancePlan>[2]): SerialRun => {
+    live = advancePlan(live, planId, patch, caps.now());
+    caps.persist(live);
+    return live;
+  };
+  return {
+    step,
+    halt: (reason) => step({ phase: "halted", haltReason: reason }),
+    current: () => live,
+  };
+}
+
+/**
+ * The single green gate: clean tree -> merge -> delete -> `merged`. Any failure halts and PRESERVES the
+ * tree. The only place a merge + delete is authorized - both the non-interactive {@link driveOnePlan} and
+ * the host-driven {@link disposeCurrentPlan} route through here, so disposition can never diverge.
+ */
+async function runGreenGate(
+  s: Stepper,
+  planId: string,
+  caps: SerialDriverCaps,
+): Promise<SerialRun> {
+  const worktreeId = liveEntry(s.current(), planId).worktreeId;
+  if (!worktreeId) {
+    return s.halt("internal: committed plan has no worktree");
+  }
+  const check = await caps.inspect(worktreeId);
+  if (!check.clean) {
+    return s.halt(`tree not clean: ${check.reason ?? "dirty or conflicted"}`);
+  }
+  const merged = await caps.merge(worktreeId);
+  if (!merged.ok) {
+    return s.halt(`merge conflict: ${merged.error}`);
+  }
+  const removed = await caps.remove(worktreeId);
+  if (!removed.ok) {
+    return s.halt(`delete failed: ${removed.error}`);
+  }
+  return s.step({ phase: "merged" });
+}
+
 /**
  * Drives ONE plan from its current journal phase to a terminal phase (`merged` or `halted`), persisting
  * each transition. Phase-driven so a reopened run resumes correctly: a tree already created skips create,
- * one already implemented skips straight to disposition. The single green gate ({@link CleanCheck} +
- * merge) is the only place a merge + delete is authorized; any failure halts and preserves the tree.
+ * one already implemented skips straight to disposition. The non-interactive path (`implement` is a real
+ * async capability); the host-driven path is {@link serialNext} + {@link disposeCurrentPlan}.
  */
 export async function driveOnePlan(
   run: SerialRun,
   planId: string,
   caps: SerialDriverCaps,
 ): Promise<SerialRun> {
-  let current = run;
-  const step = (patch: Parameters<typeof advancePlan>[2]): SerialRun => {
-    current = advancePlan(current, planId, patch, caps.now());
-    caps.persist(current);
-    return current;
-  };
-  const halt = (reason: string): SerialRun => step({ phase: "halted", haltReason: reason });
+  const s = stepper(run, planId, caps);
 
   // 1. Create + enter the managed worktree (unless a prior run already did).
-  if (liveEntry(current, planId).phase === "queued") {
+  if (liveEntry(s.current(), planId).phase === "queued") {
     const created = await caps.createEnter(planId);
-    if (!created.ok || !created.worktreeId) {
-      return halt(`create/enter failed: ${created.error ?? "unknown error"}`);
+    if (!created.ok) {
+      return s.halt(`create/enter failed: ${created.error}`);
     }
-    step({
+    s.step({
       phase: "tree-created",
       worktreeId: created.worktreeId,
       ...(created.sessionId ? { sessionId: created.sessionId } : {}),
@@ -97,34 +139,67 @@ export async function driveOnePlan(
   }
 
   // 2. Implement in the tree (resumes if we crashed mid-implement).
-  const beforeImpl = liveEntry(current, planId);
+  const beforeImpl = liveEntry(s.current(), planId);
   if (beforeImpl.phase === "tree-created" || beforeImpl.phase === "implementing") {
-    step({ phase: "implementing" });
+    s.step({ phase: "implementing" });
     const impl = await caps.implement(planId, beforeImpl.sessionId ?? "");
     if (!impl.green) {
-      return halt(`implementation red: ${impl.detail ?? "tests failing"}`);
+      return s.halt(`implementation red: ${impl.detail ?? "tests failing"}`);
     }
-    step({ phase: "committed" });
+    s.step({ phase: "committed" });
   }
 
-  // 3. The single green gate: clean tree -> merge -> delete. Anything else halts, tree preserved.
-  const worktreeId = liveEntry(current, planId).worktreeId;
-  if (!worktreeId) {
-    return halt("internal: committed plan has no worktree");
+  // 3. Dispose through the single green gate.
+  return runGreenGate(s, planId, caps);
+}
+
+/**
+ * The host-driven half of the serial loop (the interactive path): create + enter the next QUEUED plan's
+ * managed worktree and advance its journal entry to `tree-created`. Returns the plan now in progress so
+ * the caller can hand the tree to the agent to implement; null when the queue is drained or a create
+ * failed (which halts the run). The agent implements, then the host calls {@link disposeCurrentPlan}.
+ */
+export async function serialNext(
+  run: SerialRun,
+  caps: SerialDriverCaps,
+): Promise<{ readonly run: SerialRun; readonly plan: PlanEntry | null }> {
+  const next = nextPlan(run);
+  if (next?.phase !== "queued") {
+    return { run, plan: next }; // done / halted, or the current plan's tree already exists
   }
-  const check = await caps.inspect(worktreeId);
-  if (!check.clean) {
-    return halt(`tree not clean: ${check.reason ?? "dirty or conflicted"}`);
+  const s = stepper(run, next.planId, caps);
+  const created = await caps.createEnter(next.planId);
+  if (!created.ok) {
+    return { run: s.halt(`create/enter failed: ${created.error}`), plan: null };
   }
-  const merged = await caps.merge(worktreeId);
-  if (!merged.ok) {
-    return halt(`merge conflict: ${merged.error ?? "merge failed"}`);
+  const updated = s.step({
+    phase: "tree-created",
+    worktreeId: created.worktreeId,
+    ...(created.sessionId ? { sessionId: created.sessionId } : {}),
+  });
+  return { run: updated, plan: liveEntry(updated, next.planId) };
+}
+
+/**
+ * Dispose the in-progress plan after the agent implemented it: on green, run the single green gate
+ * (clean -> merge -> delete -> `merged`); on red, halt with the reason, the tree preserved. The
+ * host-driven counterpart to {@link serialNext}; advancing the durable journal in production.
+ */
+export async function disposeCurrentPlan(
+  run: SerialRun,
+  caps: SerialDriverCaps,
+  outcome: ImplementOutcome,
+): Promise<SerialRun> {
+  const current = nextPlan(run);
+  if (!current) {
+    return run; // nothing in progress (queue drained or halted)
   }
-  const removed = await caps.remove(worktreeId);
-  if (!removed.ok) {
-    return halt(`delete failed: ${removed.error ?? "remove failed"}`);
+  const s = stepper(run, current.planId, caps);
+  if (!outcome.green) {
+    return s.halt(`implementation red: ${outcome.detail ?? "tests failing"}`);
   }
-  return step({ phase: "merged" });
+  s.step({ phase: "committed" });
+  return runGreenGate(s, current.planId, caps);
 }
 
 /**

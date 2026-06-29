@@ -10,13 +10,17 @@
 
 > Build note: the deterministic orchestration the plan's boundary assigns to the serial driver - the
 > plan queue (`queue.ts`), the durable resumable run journal (`journal.ts`), the one-tree-at-a-time
-> loop + green-gate disposition + resume (`driver.ts`), the worktree-manager-backed capabilities
-> (`node.ts`), and the handoff entry (`entry.ts`) - is built and unit-tested (37 tests), wired into the
-> host as `/serial-implement`. Per the plan's architecture (D-002), the **implement step itself**
-> (planner implement-mode) is the injected `SerialDriverCaps.implement` seam, fulfilled at runtime by
-> the spawned run session's agent - "the model re-enters only to parse the request and to do the
-> per-plan implementation." The driver invokes that seam and reads its green/red result; it does not
-> embed implementation logic. This is the per-leaf lifecycle unit `46-worktree-fleet` parallelizes.
+> loop + single green-gate disposition + resume (`driver.ts`), the worktree-manager-backed capabilities
+> (`node.ts`), and the handoff entry (`entry.ts`) - is built and unit-tested (42 tests). It is wired
+> into the host with three commands that **advance the durable journal in production**:
+> `/serial-implement` (parse the queue, record the run, hand off to a dedicated session) and, in that
+> run, `/serial-next <runId>` (host creates + enters the next plan's worktree -> `tree-created`) and
+> `/serial-dispose <runId> [fail <reason>]` (host runs the single green gate: clean -> merge -> delete
+> -> `merged`, or halt). The agent implements in the tree **between** those two host calls - the
+> `SerialDriverCaps.implement` seam, fulfilled by the run session's agent per D-002 ("the model
+> re-enters only to parse the request and to do the per-plan implementation"). The disposition is the
+> single authorized merge+delete path, shared by the non-interactive `driveSerialRun` and the
+> host-driven `disposeCurrentPlan` - the per-leaf lifecycle unit `46-worktree-fleet` parallelizes.
 
 ## Completed Current State / Hard Dependencies
 

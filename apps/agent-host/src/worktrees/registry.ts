@@ -68,7 +68,9 @@ export function worktreePathFor(
   return join(repoWorktreesDir(home, baseRepo), `${branchSlug(branch)}-${id}`);
 }
 
-function readJson<T>(fs: WorktreeFs, path: string, fallback: T): T {
+/** Parses JSON from a `WorktreeFs` file, returning `fallback` for missing/malformed content (never
+ *  throws). Shared by the worktree registry and the serial-run journal (the two host JSON registries). */
+export function readJson<T>(fs: WorktreeFs, path: string, fallback: T): T {
   const raw = fs.readFile(path);
   if (!raw) {
     return fallback;
@@ -80,7 +82,8 @@ function readJson<T>(fs: WorktreeFs, path: string, fallback: T): T {
   }
 }
 
-function writeJson(fs: WorktreeFs, path: string, value: unknown): void {
+/** Writes a value as pretty JSON (trailing newline) to a `WorktreeFs` path. */
+export function writeJson(fs: WorktreeFs, path: string, value: unknown): void {
   fs.writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 

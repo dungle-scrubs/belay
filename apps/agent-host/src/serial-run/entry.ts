@@ -37,9 +37,12 @@ export function serialRunSeedPrompt(runId: string, queue: readonly string[]): st
   return [
     `Serial worktree-implement run ${runId}.`,
     `Implement these plans strictly one worktree at a time, in order: ${queue.join(", ")}.`,
-    "For each plan: create + enter its managed worktree, implement it, and when the tree is green and",
-    "clean, merge it back and delete it; on the first red / conflict / dirty tree, STOP and surface it,",
-    "leaving that tree intact. Never create the next plan's tree until the prior one is merged + deleted.",
+    `For each plan, in order: run \`/serial-next ${runId}\` (the host creates + enters the plan's`,
+    "managed worktree and tells you which plan to implement); implement it in that tree until green;",
+    `then run \`/serial-dispose ${runId}\` (the host merges the tree back and deletes it) - or`,
+    `\`/serial-dispose ${runId} fail <reason>\` if it cannot be made green, which halts the run and`,
+    "leaves the tree intact. Repeat until /serial-next reports the run complete. Never start the next",
+    "plan before the prior one is disposed.",
   ].join(" ");
 }
 
