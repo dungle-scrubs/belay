@@ -3,10 +3,10 @@
 ## Summary
 
 - **Current cutoff blockers:** 16
-- **Completed current work:** 11
+- **Completed current work:** 16
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M4 - shared empty-answer recovery for `synthesize()`
+- **Current focus:** complete - all milestones (M1-M4) landed
 
 ## Completed Current State / Hard Dependencies
 
@@ -34,11 +34,11 @@
 - [x] REFACTOR: confirm the step-axis checkpoint path is unreachable when the seed is over the fraction (the M2 over-fraction test synthesizes at step 0 and never reaches a checkpoint).
 
 ### M4 - shared empty-answer recovery for `synthesize()`
-- [ ] RED: blank first synthesis triggers exactly one splice-and-retry; non-blank retry surfaced as the answer.
-- [ ] RED: still-blank retry surfaces `{type:"empty"}`.
-- [ ] RED: empty-retry budget is shared with the normal path (no double-retry in one turn, either direction).
-- [ ] GREEN: extract `loop.ts:787-797` splice-to-current-task + retry-once into a shared helper; call it from `synthesize()` on a blank answer when the budget is unspent, re-pushing the "answer now, no tools" nudge.
-- [ ] REFACTOR: `synthesize()` and the normal path share the same `emptyRetried` flag; remove duplicated splice logic.
+- [x] RED: blank first synthesis triggers exactly one splice-and-retry; non-blank retry surfaced as the answer.
+- [x] RED: still-blank retry surfaces `{type:"empty"}`.
+- [x] RED: empty-retry budget is shared with the normal path (no double-retry in one turn, either direction).
+- [x] GREEN: extract `loop.ts:787-797` splice-to-current-task + retry-once into a shared helper; call it from `synthesize()` on a blank answer when the budget is unspent, re-pushing the "answer now, no tools" nudge.
+- [x] REFACTOR: `synthesize()` and the normal path share the same `emptyRetried` flag; remove duplicated splice logic.
 
 ## Accepted / Deferred Follow-Up
 

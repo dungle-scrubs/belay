@@ -574,39 +574,60 @@ export function runAgent(
       config.streamStallMs,
     );
 
+  // Shared empty-answer recovery (03.1 D-004): the model ended a step with no text - either the
+  // normal path (a stop token only) OR a forced synthesis. An empty answer is usually the accumulated
+  // prior history poisoning the model into an immediate stop, so splice history down to just the
+  // current task - drop everything before this turn's own user message, keeping the work it just did -
+  // and run `retry` ONCE. The single `emptyRetried` budget is shared across both call sites, so a turn
+  // never double-retries; once spent, the blank answer surfaces as `empty`. `retry` is the
+  // path-specific re-run (the normal step, or a fresh tool-less synthesis attempt).
+  const recoverEmptyAnswer = (
+    retry: () => Stream.Stream<AgentEvent, ProviderError>,
+  ): Stream.Stream<AgentEvent, ProviderError> => {
+    if (emptyRetried) {
+      return Stream.succeed<AgentEvent>({ type: "empty" });
+    }
+    emptyRetried = true;
+    conversation.splice(0, Math.max(0, history.length - 1));
+    return retry();
+  };
+
   const synthesize = (n: number, stop: TurnStop): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
-      conversation.push({
-        role: "user",
-        content:
-          "You have reached your tool-call budget for this turn. Do not call any more tools. " +
-          "Answer the original request now, as completely as you can from what you have already gathered.",
-      });
       const synthReasoning = cheapestReasoning(provider.reasoningLevels);
-      let answer = "";
-      const model = modelStream([], synthReasoning).pipe(
-        Stream.filterMap((event) => {
-          // Tools were removed; drop any stray tool_call/overflow and keep text/thinking/usage.
-          if (event.type === "tool_call" || event.type === "overflow") {
-            return Option.none<AgentEvent>();
-          }
-          if (event.type === "text") {
-            answer += event.text;
-          }
-          return Option.some<AgentEvent>(event);
-        }),
-      );
-      const afterSynthesis = Stream.unwrap(
-        Effect.sync(() =>
-          answer.trim() === "" ? Stream.succeed<AgentEvent>({ type: "empty" }) : Stream.empty,
-        ),
-      );
+      // One forced-answer attempt: push the "answer now, no tools" nudge (conversation-only - never
+      // emitted, never persisted) and re-stream with zero tools at the cheapest reasoning. A blank
+      // answer recovers through the shared empty-retry (splice + one more attempt, re-pushing the
+      // nudge); a still-blank answer falls through to the `empty` -> noReply path.
+      const attempt = (): Stream.Stream<AgentEvent, ProviderError> =>
+        Stream.suspend(() => {
+          conversation.push({
+            role: "user",
+            content:
+              "You have reached your tool-call budget for this turn. Do not call any more tools. " +
+              "Answer the original request now, as completely as you can from what you have already gathered.",
+          });
+          let answer = "";
+          const model = modelStream([], synthReasoning).pipe(
+            Stream.filterMap((event) => {
+              // Tools were removed; drop any stray tool_call/overflow and keep text/thinking/usage.
+              if (event.type === "tool_call" || event.type === "overflow") {
+                return Option.none<AgentEvent>();
+              }
+              if (event.type === "text") {
+                answer += event.text;
+              }
+              return Option.some<AgentEvent>(event);
+            }),
+          );
+          const afterAttempt = Stream.unwrap(
+            Effect.sync(() => (answer.trim() === "" ? recoverEmptyAnswer(attempt) : Stream.empty)),
+          );
+          return Stream.concat(model, afterAttempt);
+        });
       return Stream.concat(
         Stream.succeed<AgentEvent>({ type: "stop", stop }),
-        Stream.concat(
-          Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }),
-          Stream.concat(model, afterSynthesis),
-        ),
+        Stream.concat(Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }), attempt()),
       );
     });
 
@@ -794,20 +815,12 @@ export function runAgent(
             return Stream.succeed<AgentEvent>({ type: "overflow", reason: overflowReason });
           }
           if (toolCalls.length === 0) {
-            // The model answered. An answer with no text is a stall (it emitted only a
-            // stop token) - retry the step once, then surface an `empty` event so the
-            // turn never ends silently (which is what poisons the next turn's history).
+            // The model answered. An answer with no text is a stall (it emitted only a stop token) -
+            // recover through the shared empty-retry (splice to the current task + retry the step
+            // once), then surface an `empty` event so the turn never ends silently (which is what
+            // poisons the next turn's history).
             if (assistantText.trim() === "") {
-              if (!emptyRetried) {
-                emptyRetried = true;
-                // An empty answer is usually the accumulated prior history poisoning the
-                // model into an immediate stop. Retry against only the current task -
-                // drop everything before this turn's own user message, keeping the work
-                // it just did - which reliably recovers a real answer.
-                conversation.splice(0, Math.max(0, history.length - 1));
-                return step(n);
-              }
-              return Stream.succeed<AgentEvent>({ type: "empty" });
+              return recoverEmptyAnswer(() => step(n));
             }
             const protocolDiagnostic = classifyProviderProtocolAnomaly({
               providerId: provider.id,

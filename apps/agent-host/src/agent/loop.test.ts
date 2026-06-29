@@ -495,3 +495,141 @@ test("tool stall: a non-positive ceiling disables the guard (identity)", () => {
   const inner = Effect.succeed("x");
   assert.equal(withToolStallTimeout("bash", inner, 0), inner);
 });
+
+/**
+ * A provider for the 03.1 M4 synthesis empty-retry tests. `toolStep` decides a tools-offered step:
+ * "loop" calls a tool (marches toward the context gate), "blank" stalls with no text and no call
+ * (the normal empty path). `synthAnswers` are the successive tools-removed (synthesis) answers - the
+ * last repeats - so a blank first answer can be retried into a real one; `onSynth` fires on each
+ * synthesis step so a test can count retries and prove the shared empty-retry budget.
+ */
+function synthProvider(opts: {
+  input: number;
+  window: number;
+  toolStep: "loop" | "blank";
+  synthAnswers: string[];
+  onSynth?: () => void;
+}): Provider {
+  let toolCalls = 0;
+  let synthCalls = 0;
+  return {
+    id: "fake",
+    label: "Fake",
+    model: "fake-1",
+    reasoningLevels: ["off", "low"],
+    defaultReasoning: "off",
+    kind: "cloud",
+    describe: () => ({
+      label: "Fake",
+      model: "fake-1",
+      reasoningLevels: ["off", "low"],
+      defaultReasoning: "off",
+      kind: "cloud",
+    }),
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: (_messages, tools) => {
+      if (tools.length === 0) {
+        const text = opts.synthAnswers[synthCalls] ?? opts.synthAnswers.at(-1) ?? "";
+        synthCalls += 1;
+        opts.onSynth?.();
+        return Stream.fromIterable<ProviderEvent>([
+          ...(text ? [{ type: "text" as const, text }] : []),
+          { type: "usage", usage: usage(opts.input, opts.window) },
+        ]);
+      }
+      toolCalls += 1;
+      if (opts.toolStep === "blank") {
+        // No text, no tool call: the normal empty-answer path (spends the shared retry budget).
+        return Stream.fromIterable<ProviderEvent>([
+          { type: "usage", usage: usage(opts.input, opts.window) },
+        ]);
+      }
+      return Stream.fromIterable<ProviderEvent>([
+        {
+          type: "tool_call",
+          call: {
+            id: `c${toolCalls}`,
+            name: "noop",
+            arguments: JSON.stringify({ round: toolCalls }),
+          },
+        },
+        { type: "usage", usage: usage(opts.input, opts.window) },
+      ]);
+    },
+  };
+}
+
+test("03.1 M4: a blank forced synthesis retries once and surfaces the non-blank retry as the answer", async () => {
+  let synthCalls = 0;
+  const events = await collect(
+    synthProvider({
+      input: 100,
+      window: 100,
+      toolStep: "loop",
+      synthAnswers: ["", "RECOVERED ANSWER"],
+      onSynth: () => {
+        synthCalls += 1;
+      },
+    }),
+  );
+  assert.equal(synthCalls, 2, "the blank synthesis is retried exactly once");
+  assert.equal(textOf(events), "RECOVERED ANSWER", "the non-blank retry is the final answer");
+  assert.ok(!events.some((e) => e.type === "empty"), "a recovered answer is not an empty turn");
+  assert.equal(
+    events.filter((e) => e.type === "step_limit").length,
+    1,
+    "step_limit is emitted once, not re-emitted on the retry",
+  );
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "context_pressure");
+});
+
+test("03.1 M4: a still-blank synthesis retry surfaces empty after one attempt", async () => {
+  let synthCalls = 0;
+  const events = await collect(
+    synthProvider({
+      input: 100,
+      window: 100,
+      toolStep: "loop",
+      synthAnswers: ["", ""],
+      onSynth: () => {
+        synthCalls += 1;
+      },
+    }),
+  );
+  assert.equal(synthCalls, 2, "exactly one retry, then it gives up");
+  assert.ok(
+    events.some((e) => e.type === "empty"),
+    "a still-blank synthesis surfaces empty",
+  );
+  assert.equal(textOf(events), "", "no answer text was produced");
+});
+
+test("03.1 M4: the empty-retry budget is shared - a normal-path retry leaves synthesize none", async () => {
+  // The model stalls (blank, no tool call) on the tools-offered step, spending the single empty-retry
+  // budget on the normal path; the re-entry then crosses the gate and synthesizes - which, finding the
+  // budget already spent, must NOT retry again (a turn never double-retries). One synthesis call only.
+  let synthCalls = 0;
+  const events = await collect(
+    synthProvider({
+      input: 100,
+      window: 100,
+      toolStep: "blank",
+      synthAnswers: [""],
+      onSynth: () => {
+        synthCalls += 1;
+      },
+    }),
+  );
+  assert.equal(
+    synthCalls,
+    1,
+    "synthesize does not retry once the normal path spent the shared budget",
+  );
+  assert.ok(
+    events.some((e) => e.type === "empty"),
+    "the blank synthesis still surfaces empty",
+  );
+});
