@@ -5,6 +5,7 @@ import {
   isAuthFailure,
   isContextOverflow,
   isRetryable,
+  parseOverflowWindow,
   promptTooBig,
 } from "./error-classifier";
 
@@ -58,6 +59,32 @@ test("promptTooBig formats the one too-big message with the estimate and window"
     promptTooBig(9000, 8192),
     "the prompt (~9000 tokens) is too big for the 8192-token context window",
   );
+});
+
+/**
+ * 03.2 M3: the inverse of `promptTooBig` - read the real context window `N` back out of an overflow
+ * message so a stale bundled window can self-heal from the provider's own rejection. It reads both our
+ * own wording and a provider's native max-context phrasing, and never mistakes the prompt size for the
+ * window.
+ */
+
+test("parseOverflowWindow reads the window from the promptTooBig wording, not the prompt size", () => {
+  assert.equal(parseOverflowWindow(promptTooBig(412369, 262144)), 262144);
+});
+
+test("parseOverflowWindow reads a provider's native max-context phrasing", () => {
+  assert.equal(
+    parseOverflowWindow(
+      "This model's maximum context length is 262144 tokens. However, your messages resulted in 412369 tokens.",
+    ),
+    262144,
+  );
+  assert.equal(parseOverflowWindow("context window of 200,000 tokens exceeded"), 200000);
+});
+
+test("parseOverflowWindow returns null when no window number is present", () => {
+  assert.equal(parseOverflowWindow("invalid api key"), null);
+  assert.equal(parseOverflowWindow("please reduce the length of the messages"), null);
 });
 
 test("classifyResponseOverflow flags a window-filling length stop as mid-response overflow", () => {

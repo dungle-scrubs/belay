@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { MODEL_METADATA_OVERRIDES, resolveContextWindow } from "./model-metadata-overrides";
+import {
+  MODEL_METADATA_OVERRIDES,
+  recordLearnedWindow,
+  resolveContextWindow,
+} from "./model-metadata-overrides";
 
 /**
  * 02.16 D-003: correctable per-model context-window metadata. The catalog reads each model's window from
@@ -40,4 +44,36 @@ test("MiniMax-M3 resolves to its real 262144 window, not the stale bundled 51200
 
 test("the production override map carries the confirmed MiniMax-M3 correction", () => {
   assert.equal(MODEL_METADATA_OVERRIDES["MiniMax-M3"]?.contextWindow, 262144);
+});
+
+/**
+ * 03.2 M3: a window LEARNED from a provider's overflow self-heals a stale bundled value on later
+ * turns. It is consulted after a static override and before the bundled value, and only ever TIGHTENS:
+ * a learned signal can never widen a model past its bundled value or override a static correction.
+ */
+
+test("a learned window tightens later resolutions for its model", () => {
+  const learned = new Map<string, number>();
+  recordLearnedWindow("glm-5.2", 200000, learned);
+  assert.equal(resolveContextWindow("glm-5.2", 256000, {}, learned), 200000);
+});
+
+test("a learned window never widens past the bundled value", () => {
+  const learned = new Map<string, number>();
+  recordLearnedWindow("glm-5.2", 600000, learned);
+  assert.equal(resolveContextWindow("glm-5.2", 256000, {}, learned), 256000);
+});
+
+test("a static override always wins over a learned window", () => {
+  const learned = new Map<string, number>();
+  recordLearnedWindow("MiniMax-M3", 100000, learned);
+  const overrides = { "MiniMax-M3": { contextWindow: 262144 } };
+  assert.equal(resolveContextWindow("MiniMax-M3", 512000, overrides, learned), 262144);
+});
+
+test("a learned window only tightens monotonically; a later wider signal is ignored", () => {
+  const learned = new Map<string, number>();
+  recordLearnedWindow("glm-5.2", 200000, learned);
+  recordLearnedWindow("glm-5.2", 300000, learned);
+  assert.equal(resolveContextWindow("glm-5.2", 512000, {}, learned), 200000);
 });

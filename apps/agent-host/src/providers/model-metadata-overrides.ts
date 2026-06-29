@@ -61,3 +61,26 @@ export function resolveContextWindow(
   }
   return typeof bundledContextWindow === "number" ? bundledContextWindow : null;
 }
+
+/**
+ * Records a window LEARNED from a provider's overflow error (03.2 M3), keyed by `modelId`. Monotonic
+ * and only-tightening: it stores `window` only when it is a positive number STRICTLY below any value
+ * already learned for the model, so a spurious or transient signal can never widen a learned window
+ * (and the resolver clamps it to the bundled value besides). Returns true when the store changed, so a
+ * caller can log the self-heal exactly once per genuine tightening. `store` is injectable for tests.
+ */
+export function recordLearnedWindow(
+  modelId: string,
+  window: number,
+  store: Map<string, number> = learnedWindows,
+): boolean {
+  if (!Number.isFinite(window) || window <= 0) {
+    return false;
+  }
+  const existing = store.get(modelId);
+  if (existing !== undefined && window >= existing) {
+    return false;
+  }
+  store.set(modelId, window);
+  return true;
+}

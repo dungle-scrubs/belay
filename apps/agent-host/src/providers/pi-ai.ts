@@ -14,6 +14,7 @@ import {
   classifyResponseOverflow,
   isAuthFailure,
   isContextOverflow,
+  parseOverflowWindow,
   promptTooBig,
 } from "./error-classifier";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
@@ -298,9 +299,18 @@ async function* piAiEvents<TApi extends Api>(
       // LM Studio's message omits the sizes, so we attach the estimate and the window.
       const detail = event.error.errorMessage ?? "provider stream error";
       if (isContextOverflow(detail)) {
+        // The provider's native rejection can reveal a SMALLER real window than the one we sent (a
+        // stale bundled value); carry that real `N` in the reason so the host's self-heal (03.2 M3)
+        // learns reality, not the number we already had. LM Studio's message omits sizes, so its
+        // window parses to null and the reason keeps the window we sent, exactly as before.
+        const nativeWindow = parseOverflowWindow(detail);
+        const realWindow =
+          nativeWindow !== null && nativeWindow < options.contextWindow
+            ? nativeWindow
+            : options.contextWindow;
         yield {
           type: "overflow",
-          reason: promptTooBig(promptTokensEst, options.contextWindow),
+          reason: promptTooBig(promptTokensEst, realWindow),
         };
         return;
       }

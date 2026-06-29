@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 4
-- **Completed current work:** 11
+- **Current cutoff blockers:** 0
+- **Completed current work:** 15
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M3 - learn the real window from overflow errors
+- **Current focus:** complete - all milestones landed
 
 ## Completed Current State / Hard Dependencies
 
@@ -30,10 +30,10 @@
 - [x] REFACTOR: explicit precedence (static override > learned > bundled). Resolver now also drives the EFFECTIVE per-turn window (pi-ai-base.stream), not only the catalog display, so the override reaches the compaction trigger.
 
 ### M3 - learn the real window from overflow errors
-- [ ] RED: a provider overflow records a learned window `N` that later `resolveContextWindow` calls honor.
-- [ ] RED: a learned window only tightens (never widens past static/bundled); non-overflow errors record nothing.
-- [ ] GREEN: extract `N` from the classified overflow, persist a learned override keyed by model, consult it after static and before bundled.
-- [ ] REFACTOR: dedupe `N`-extraction with the classifier; emit the self-heal log.
+- [x] RED: a provider overflow records a learned window `N` that later `resolveContextWindow` calls honor.
+- [x] RED: a learned window only tightens (never widens past static/bundled); non-overflow errors record nothing.
+- [x] GREEN: extract `N` from the classified overflow, persist a learned override keyed by model, consult it after static and before bundled.
+- [x] REFACTOR: dedupe `N`-extraction with the classifier (`parseOverflowWindow` beside `promptTooBig`; pi-ai preserves the provider's native window); emit the self-heal log.
 
 ### M4 - foreground / session-minimum window in CompactionController
 - [x] RED: delegate turns at `1,000,000` between foreground turns at `262,144` still mark over-budget from the foreground window.

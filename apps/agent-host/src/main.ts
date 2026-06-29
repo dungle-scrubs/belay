@@ -71,6 +71,8 @@ import {
   pickProvider,
 } from "./providers";
 import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./providers/catalog";
+import { parseOverflowWindow } from "./providers/error-classifier";
+import { recordLearnedWindow } from "./providers/model-metadata-overrides";
 import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
 import { Emit } from "./services";
 import {
@@ -1895,6 +1897,22 @@ function handleEvent(message: SessionEvent): void {
     // Recovery was exhausted for this run (D-034). Note it so the turn's termination reason reads
     // "overflow" if it then ends with no real answer (Phase 2 M4).
     turnMachine.overflow(decoded.runId);
+    // Self-heal a stale model window from the provider's OWN overflow (03.2 M3): when the reason
+    // reveals a real window for the foreground model, learn it so the next turn on that model budgets
+    // against reality. Keyed by model; only tightens. Replayed too, so the heal survives a restart.
+    const overflowedModel = compactionController.providerOrDefault()?.model;
+    const learnedWindow = parseOverflowWindow(decoded.reason);
+    if (
+      overflowedModel &&
+      learnedWindow !== null &&
+      recordLearnedWindow(overflowedModel, learnedWindow)
+    ) {
+      log("host", "window self-heal", {
+        model: overflowedModel,
+        learnedWindow,
+        source: "overflow-error",
+      });
+    }
   } else if (decoded.type === "tool.started" || decoded.type === "tool.completed") {
     // Record the turn's tool activity so buildHistory carries the calls + results into the next
     // turn's prompt (the model keeps what it read until compaction folds it). Not re-projected per

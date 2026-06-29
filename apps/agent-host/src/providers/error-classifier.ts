@@ -63,6 +63,36 @@ export function promptTooBig(promptTokensEst: number, contextWindow: number): st
 }
 
 /**
+ * Window-bearing overflow phrasings, most specific first. Each captures the CONTEXT-WINDOW token count
+ * (group 1), never the prompt size: our own `promptTooBig` wording ("N-token context window") and the
+ * common provider native forms ("maximum context length is N", "context window of N"). Beside
+ * `promptTooBig` so the message it writes and the number read back out of it can't drift (03.2 M3 D-004).
+ */
+const OVERFLOW_WINDOW_PATTERNS: readonly RegExp[] = [
+  /(\d[\d,]*)\s*-?\s*token context window/i,
+  /maximum context (?:length|window)\s+(?:is\s+)?(\d[\d,]*)/i,
+  /context (?:window|length)\s+of\s+(\d[\d,]*)/i,
+];
+
+/**
+ * The real context window `N` an overflow message reveals, or null when it carries no window number
+ * (a numberless "reduce the length", an auth error, etc.). The inverse of `promptTooBig`: lets a stale
+ * bundled window self-heal from the provider's own rejection without trusting the size we sent.
+ */
+export function parseOverflowWindow(detail: string): number | null {
+  for (const pattern of OVERFLOW_WINDOW_PATTERNS) {
+    const match = pattern.exec(detail);
+    if (match?.[1]) {
+      const window = Number.parseInt(match[1].replace(/,/g, ""), 10);
+      if (Number.isFinite(window) && window > 0) {
+        return window;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Classifies a COMPLETED model response as overflow or not. Overflow = the response was bounded by
  * the context window: a "length" stop that actually filled the window (so a model whose max-output
  * cap is below its window doesn't false-positive on long answers), or pi-ai's prompt-too-large /
