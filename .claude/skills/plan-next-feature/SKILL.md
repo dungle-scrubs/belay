@@ -3,17 +3,20 @@ name: plan-next-feature
 as_slash_command: true
 argument-hint: [topic]
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write
-description: "Decide what the next Trevor V2 feature should look like BEFORE writing it into a plan. Pick the topic from the argument (e.g. git), or else propose the next open item with the user from the existing numbered plans. Gather and present three comparisons - how V1 (~/dev/trevor) does it, what V2 (this project) already does, and what the existing numbered plans under /Users/kevin/dev/trevorV2/.plans say - then decide collaboratively with the user. Only AFTER the design is fully agreed: run the planner skill's plan-db workflow to create or extend a numbered plan under .plans/<NN>-<name>/ with RED/GREEN/REFACTOR milestones, record the plan in AGENTS.md, and commit plan docs to the main branch only. Triggers: plan the next feature, decide the next feature, what should we build next for Trevor V2, spec a feature, discuss a topic for the plan, next open item, /plan-next-feature."
+description: "Spec a new Trevor V2 plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present three comparisons - how V1 (~/dev/trevor) does it, what V2 (this project) already does, and what the existing numbered plans under /Users/kevin/dev/trevorV2/.plans say - then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
 ---
 
 # Plan the Next Trevor V2 Feature
 
 ## When to Use This Skill
 
-Use when deciding what a Trevor V2 feature should look like before it goes into a plan -
-"let's plan git", "what should we build next", "decide the next open item", "spec <topic>",
-or an explicit `/plan-next-feature <topic>`. This is a DECISION workflow: it gathers evidence,
-drives a joint decision, and only then writes the plan. It does not implement code.
+Use when a new Trevor V2 plan needs to exist - "let's plan git", "what should we build next",
+"spec <topic>", or an explicit `/plan-next-feature <topic>`. The typical trigger is reactive: you
+realize mid-implementation of one plan that you need a separate fix or follow-up, and you want it
+queued to run soon. There is no umbrella plan to extract from - plans are simply created as the
+need arises. This is a DECISION workflow: it gathers evidence, drives a joint decision, and only
+then writes the plan. It does not implement code, and it never disturbs the plan/branch already in
+flight (see "Plan placement, numbering, and git policy").
 
 ## Variables
 
@@ -24,27 +27,51 @@ drives a joint decision, and only then writes the plan. It does not implement co
 
 - **V1** (prior art): `~/dev/trevor` - the previous Trevor. How does it do this today?
 - **V2** (this project): `/Users/kevin/dev/trevorV2` - what does it already do?
-- **Plans**: `/Users/kevin/dev/trevorV2/.plans/` - **numbered plan directories** `<NN>-<name>/`, each a
-  self-contained plan-db (`implementation.md`, `progress-report.md`, `plan.db`, `artifacts/`). There is
-  **no single umbrella plan**: the former `.plans/trevor-v2` is retired. Cross-cutting domain
-  vocabulary lives in `/Users/kevin/dev/trevorV2/CONTEXT.md`; the plan policy/index lives in
+- **Plans**: `/Users/kevin/dev/trevorV2/.plans/` - **numbered plan directories** `<NN[.n]>-<name>/`
+  (integer slots like `03-...`, decimal slots like `03.1-...`), each a self-contained plan-db
+  (`implementation.md`, `progress-report.md`, `plan.db`, `artifacts/`). There is **no single umbrella
+  plan**: the former `.plans/trevor-v2` is retired. Cross-cutting domain vocabulary lives in
+  `/Users/kevin/dev/trevorV2/CONTEXT.md`; the plan *policy* (not a per-plan index) lives in
   `/Users/kevin/dev/trevorV2/AGENTS.md`.
 - **Planner skill**: `~/.agents/skills/planner` - the lifecycle, decision ledger, RED/GREEN/REFACTOR
   milestone shape, progress accounting, directory/numbering rules, and convergence rules this skill
   must reuse.
 
-## Plan placement and git policy
+## Plan placement, numbering, and git policy
 
-- **Plan documents live on `main` only.** Creating a new numbered plan, or editing an existing one, is
-  committed to the **`main` branch** - never authored on or committed to a feature branch. A plan's
-  *implementation* happens later on its own `feat/<NN>-<name>` branch; the plan **documents**
-  themselves stay on `main` as the shared backlog. (See `AGENTS.md` "Git".)
-- **Keep `AGENTS.md` in sync.** Whenever you add a new plan or materially change an existing one,
-  update `AGENTS.md` so it still reflects what plans exist and the canonical-plan policy. Record new
-  shared domain terms in `CONTEXT.md`.
-- **Numbering** (planner directory rules): a new plan gets the next free `<NN>` in **dependency order**
-  - a hard dependency gets a lower number than the plan that needs it; use a decimal insertion like
-  `09.5-<name>` only to slot between already-numbered plans, never renumber existing ones.
+### Numbering - decimal off the current plan (default), or off a dependency (exception)
+
+- **Default: a decimal off the plan currently being implemented.** A new plan takes the next free
+  decimal suffix on the number of the plan in flight, so it runs soon after the current work. If plan
+  `03` is being implemented, the new plan is `03.1`; the next one `03.2`; and so on. Plans are
+  implemented in number order, and these new plans are usually fixes you want done immediately - so
+  slotting them right after the current plan is what gets them prioritized.
+- **Exception: a decimal off a dependency plan.** If the new plan depends on an existing plan, slot it
+  as a decimal after **that dependency** instead of the current plan. If the dependency is plan `40`,
+  the new plan is `40.1` (next free decimal under `40`). A hard dependency always wins over the
+  "after the current plan" default.
+- **Identify the base plan, then take the next free decimal.** The base is normally the in-flight plan -
+  identified by the current `feat/<NN>-<name>` branch, or the `plan-db` plan at `implementing` stage; if
+  it is ambiguous, confirm with the user. Read the existing plan set from **`main`** (`git ls-tree main
+  .plans/`), not the current feature branch's `.plans/`, which can lag `main`. Take the lowest unused
+  `<base>.<n>` (e.g. if `03.1` and `03.2` exist, the new plan is `03.3`).
+- **Never renumber existing plans.** Only ever add a new decimal; integer slots and existing decimals
+  stay put.
+
+### Git - plan docs go on `main`, committed WITHOUT switching branches
+
+- **A new plan must not touch the current plan or the current branch.** Another session may be
+  mid-implementation on that branch. Switching it out from under that session - even briefly with
+  `git checkout main` - changes its branch without its knowledge and can collide with its uncommitted
+  work. So author and commit the plan on `main` through a **throwaway `main` worktree**, never by
+  switching the shared working tree. (Phase 4 step 9 has the exact procedure.) Once the user adopts
+  one-worktree-per-plan for implementation, this is the same isolation principle applied to planning.
+- **Plan implementation happens later** on the plan's own `feat/<NN.n>-<name>` branch off `main`; the
+  plan documents stay on `main` as the shared backlog.
+- **Keep `AGENTS.md`/`CONTEXT.md` in sync only when they actually change.** `AGENTS.md` holds the plan
+  *policy*, not a per-plan index (it does not enumerate plans by name), so a new plan usually needs no
+  `AGENTS.md` edit. Update `AGENTS.md` only when the policy changes, and `CONTEXT.md` when the plan
+  introduces shared domain vocabulary - and include those edits in the same `main` worktree commit.
 
 ## Planner Integration
 
@@ -60,11 +87,17 @@ Before any Phase 4 plan write, load the planner references:
 4. `~/.agents/skills/planner/_shared/create-mode.md` (for a new plan) or `_shared/iterate-mode.md` (to extend one)
 5. `~/.agents/skills/planner/_shared/implementation-template.md`
 
-Run all `plan-db` commands from `/Users/kevin/dev/trevorV2` with:
+Invoke `plan-db` with:
 
 ```bash
 mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts <command>
 ```
+
+`plan-db` resolves `.plans/` from the current directory. Read-only surveys (`list-plans`, `status`)
+may run from `/Users/kevin/dev/trevorV2`, but everything that **writes** plan state in Phase 4
+(`init`, `record-decision`, `add-doc`, `add-pass`, `check-progress`, `check-convergence`) must run
+with the cwd set to the throwaway **`main` worktree** from Phase 4 step 9 - so the plan is authored
+on `main` and the shared checkout is never switched.
 
 Use the **target plan name** (the `<NN>-<name>` you are creating or iterating) for `--plan`, e.g.:
 
@@ -123,10 +156,23 @@ the rest.
 
 ### Phase 4 - Record through planner (only after full agreement)
 
-1. **Load the planner references and plan-db state** listed in Planner Integration. Decide whether this
-   is a **new** numbered plan (planner create mode) or an **edit** to an existing plan (iterate mode).
-2. **Pick the target plan.** For new work, choose the next `<NN>-<name>` per dependency-order numbering
-   and `plan-db init --name "<NN>-<name>"`. For changes, use the existing plan name.
+1. **Load the planner references and plan-db state** listed in Planner Integration, and decide whether
+   this is a **new** numbered plan (planner create mode) or an **edit** to an existing plan (iterate
+   mode). Then **create the throwaway `main` worktree** that every write step below runs inside, so the
+   plan is authored on `main` without switching the shared checkout:
+
+   ```bash
+   WT="$(mktemp -d)/main-wt"
+   git worktree add "$WT" main
+   # run every plan-db write and file edit below with the cwd set to "$WT"
+   ```
+
+   (If the shared checkout is already on `main` - no plan in flight - you may write directly and skip the
+   worktree; there is no branch to switch.)
+2. **Pick the target plan and number** (see "Numbering" above). For new work, pick the base plan -
+   default the in-flight plan, exception a dependency plan - take the next free `<base>.<n>` decimal read
+   from `main` (`git ls-tree main .plans/`), and `plan-db init --name "<NN.n>-<name>"` (run inside `$WT`).
+   For changes to an existing plan, use that plan's name.
 3. **Record decisions in `plan.db` first** when new decisions are needed. Use `plan-db record-decision`
    with `--decided-by human` for user-confirmed choices. Do not edit SQLite directly.
 4. **Write/extend `implementation.md`** to capture the decided design - `## 0. Hard Dependencies`,
@@ -149,22 +195,36 @@ the rest.
    replace RED/GREEN/REFACTOR milestone tasks.
 6. **Update progress accounting**: current focus, summary counts, deferred/superseded buckets, and any moved
    completed detail must satisfy the planner invariants.
-7. **Update `AGENTS.md`.** Record the new plan (or the plan change) in `AGENTS.md` so it stays the index
-   of what plans exist and the canonical-plan policy. If the plan set or a permanent decision changed,
-   adjust the relevant `AGENTS.md` section.
+7. **Touch `AGENTS.md`/`CONTEXT.md` only if they actually change.** `AGENTS.md` carries the plan *policy*,
+   not a per-plan index (it does not list plans by name), so a new plan usually needs no `AGENTS.md` edit -
+   update it only when the policy itself changes. Record genuinely new shared domain vocabulary in
+   `CONTEXT.md`. Make any such edits inside `$WT` so they ride the same `main` commit.
 8. **Run planner checks before replying** (use the target plan name):
 
    ```bash
-   plan-db check-progress --plan "<NN>-<name>"
-   plan-db check-convergence --plan "<NN>-<name>" --streak 3
+   plan-db check-progress --plan "<NN.n>-<name>"
+   plan-db check-convergence --plan "<NN.n>-<name>" --streak 3
    ```
 
    If either check fails, report the update as non-converged and summarize the remaining issue. Do not present
    it as complete.
-9. **Commit policy - `main` only.** Leave the changes uncommitted for the user to review unless they ask
-   you to commit. When they do: plan documents are committed to the **`main` branch ONLY**. Switch to
-   `main`, stage **only** the plan docs (`.plans/<NN>-<name>/`), `AGENTS.md`, and `CONTEXT.md` - never
-   feature-branch source code - then commit. Never author or commit plan docs on a feature branch.
+9. **Commit on `main` via the worktree, then tear it down - never switch branches.** The Phase 3 design
+   agreement is the review gate, so record and commit the plan inside `$WT` (uncommitted work there is
+   lost when the worktree is removed). Stage **only** the plan docs plus any `AGENTS.md`/`CONTEXT.md`
+   edits you actually made - never feature-branch source - then commit (no `Co-Authored-By` trailer) and
+   remove the worktree:
+
+   ```bash
+   cd "$WT"
+   git add .plans/<NN.n>-<name>/        # add AGENTS.md / CONTEXT.md only if you changed them
+   git commit -m "docs(plans): add plan <NN.n> <name>"
+   cd - >/dev/null
+   git worktree remove "$WT"
+   ```
+
+   If the user wants to eyeball the files before the commit, pause after authoring and keep `$WT`. Never
+   `git checkout main` in the shared working tree, and never author or commit plan docs on a feature
+   branch. Afterward, confirm the shared checkout is still on its original branch and unmodified.
 10. Report what changed (files + new decisions + new Phase/milestones + AGENTS.md/CONTEXT.md updates +
     check results).
 
@@ -177,8 +237,14 @@ the rest.
   it becomes plan debt. Never front-run the user's decision by writing the plan early.
 - The planner owns lifecycle integrity. Do not bypass `plan-db`, `check-progress`, or convergence checks when
   writing plan or progress-report files.
-- **Plan docs go on `main` only**, and **`AGENTS.md` must reflect new or changed plans.** Keeping the
-  plan index and policy in `AGENTS.md` accurate is part of recording a plan, not an afterthought.
+- **Plan docs go on `main`, committed through a throwaway `main` worktree - never by switching the
+  shared checkout's branch.** A session may be mid-implementation on the current branch; switching it,
+  even briefly, changes its branch without its knowledge and risks colliding with its uncommitted work.
+  `AGENTS.md` holds plan *policy*, not a per-plan index, so update it only when the policy itself
+  changes; record new shared vocabulary in `CONTEXT.md`.
+- **Number by decimal off the work in flight.** A new plan defaults to the next decimal under the plan
+  currently being implemented (`03` -> `03.1`), or under a dependency plan when one exists (`40` -> `40.1`).
+  Never renumber existing plans.
 - RED/GREEN/REFACTOR milestone tasks are mandatory for new progress-report implementation work. A generic
   product checklist is drift unless each behavior is tied to test-first RED items, matching GREEN
   implementation items, and REFACTOR cleanup.
