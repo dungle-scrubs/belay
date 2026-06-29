@@ -3,10 +3,13 @@ import type { Server } from "node:http";
 import { createService, json, type Route, readJson } from "@trevor/server-kit";
 import {
   decodeStreamParams,
+  EVENTS_PATTERN,
   frames,
   type HostPresence,
   type PublishInput,
   RUNTIME_KIND,
+  SESSIONS_PATH,
+  STREAM_PATTERN,
   summarizeSession,
 } from "@trevor/session";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -30,9 +33,6 @@ import { SessionLog } from "./log";
  * subscribe happen with no append interleaving - a joiner never misses or reorders
  * an event.
  */
-
-const STREAM_PATH = /^\/sessions\/([^/]+)\/stream$/;
-const EVENTS_PATH = /^\/sessions\/([^/]+)\/events$/;
 
 // The runtimeKind the agent-host declares on its stream identity (RUNTIME_KIND.host,
 // owned in @trevor/session). Presence tracks THIS runtime - "is a host connected right
@@ -124,7 +124,7 @@ export function createSessionStore(dbPath: string): Server {
   const routes: Route[] = [
     {
       method: "GET",
-      match: "/sessions",
+      match: SESSIONS_PATH,
       // The session inventory read model (D-090): each session's distilled summary, with live host
       // presence folded in from the in-memory socket map (the durable log can't know a host crashed).
       // Assembly is the pure summarizeSession; the store just supplies the rows + presence.
@@ -139,7 +139,7 @@ export function createSessionStore(dbPath: string): Server {
     },
     {
       method: "POST",
-      match: "/sessions",
+      match: SESSIONS_PATH,
       handler: ({ req, res }) =>
         readJson(req)
           .then((body) => {
@@ -155,7 +155,7 @@ export function createSessionStore(dbPath: string): Server {
     },
     {
       method: "POST",
-      match: EVENTS_PATH,
+      match: EVENTS_PATTERN,
       handler: ({ req, res, params }) => {
         const sessionId = decodeURIComponent(params[0] as string);
         return readJson(req)
@@ -193,7 +193,7 @@ export function createSessionStore(dbPath: string): Server {
   const wss = new WebSocketServer({ server });
   wss.on("connection", (socket, req) => {
     const url = new URL(req.url ?? "/", "http://localhost");
-    const match = STREAM_PATH.exec(url.pathname);
+    const match = STREAM_PATTERN.exec(url.pathname);
     if (!match) {
       socket.close();
       return;

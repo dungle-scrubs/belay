@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import { createService, json, type Route, readBody } from "@trevor/server-kit";
-import { BlobStore, HEX64 } from "./store";
+import { BLOB_PATH_PATTERN, BLOBS_PATH } from "@trevor/session/blob-contract";
+import { BlobStore } from "./store";
 import { heicToJpeg, isHeicMime, looksLikeHeic } from "./transcode";
 
 /**
@@ -17,15 +18,14 @@ import { heicToJpeg, isHeicMime, looksLikeHeic } from "./transcode";
  */
 export function createBlobServer(root: string, maxBytes: number): Server {
   const store = new BlobStore(root);
-  // HEX64 is anchored (`^…$`) for use as a whole-string validator (store.get/head); strip
-  // those anchors before embedding it as a capture group, or the path regex would carry
-  // stray `^`/`$` mid-pattern (`^/blobs/(^…$)$`) and never match - 404ing every GET/HEAD.
-  const blobPath = new RegExp(`^/blobs/(${HEX64.source.replace(/^\^|\$$/g, "")})$`);
+  // The `/blobs/<hash>` matcher (anchors already stripped for mid-pattern embedding) comes from the
+  // shared contract, so the route can't drift from the client's path builder.
+  const blobPath = BLOB_PATH_PATTERN;
 
   const routes: Route[] = [
     {
       method: "POST",
-      match: "/blobs",
+      match: BLOBS_PATH,
       handler: ({ req, res }) => {
         const mimeType = String(req.headers["content-type"] ?? "application/octet-stream");
         return readBody(req, maxBytes)

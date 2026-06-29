@@ -1,3 +1,4 @@
+import { startServer } from "@trevor/server-kit";
 import { RESERVED_PORTS } from "@trevor/session/ports";
 import { blobStoreRoot } from "./config";
 import { createBlobServer } from "./server";
@@ -14,6 +15,9 @@ const PORT = Number(process.env.BLOB_STORE_PORT ?? RESERVED_PORTS.blob);
 const ROOT = blobStoreRoot();
 const MAX_BYTES = Number(process.env.BLOB_STORE_MAX_BYTES ?? 25 * 1024 * 1024);
 
-createBlobServer(ROOT, MAX_BYTES).listen(PORT, () => {
-  console.log(`[blob-store] listening on http://127.0.0.1:${PORT} (root: ${ROOT})`);
+startServer(createBlobServer(ROOT, MAX_BYTES), {
+  port: PORT,
+  onListen: (port) => {
+    console.log(`[blob-store] listening on http://127.0.0.1:${port} (root: ${ROOT})`);
+  },
 });

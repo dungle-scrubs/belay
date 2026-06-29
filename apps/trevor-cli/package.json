@@ -10,6 +10,7 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@trevor/server-kit": "workspace:*",
     "@trevor/session": "workspace:*"
   },
   "devDependencies": {

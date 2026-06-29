@@ -1,4 +1,4 @@
-import { RESERVED_PORTS, type ServiceName } from "@trevor/session/ports";
+import { RESERVED_PORTS, type ServiceName, serviceUrl } from "@trevor/session/ports";
 
 /**
  * Shared-service readiness for the launcher (D-085). The web UI, blob store, and session-store are
@@ -11,7 +11,7 @@ import { RESERVED_PORTS, type ServiceName } from "@trevor/session/ports";
  * with the stores, the host, and the web); the launcher-specific filters/scripts below key off them.
  */
 
-export { RESERVED_PORTS, type ServiceName };
+export { RESERVED_PORTS, type ServiceName, serviceUrl };
 export const SERVICE_NAMES = Object.keys(RESERVED_PORTS) as ServiceName[];
 
 /** The pnpm filter that starts each shared service (used by the real platform's startService). */

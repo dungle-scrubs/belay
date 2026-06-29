@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import { events, type SessionSummary, streamTransport } from "@trevor/session";
+import { errorMessage, events, type SessionSummary, streamTransport } from "@trevor/session";
 import { nodeFs } from "./fs";
 import { loadHosts, removeHost } from "./host-registry";
 import { formatStatus, launch } from "./launch";
@@ -12,56 +12,48 @@ import {
   runList,
   runStop,
 } from "./lifecycle";
-import { nodePlatform } from "./platform";
+import { nodePlatform, processAlive } from "./platform";
 import { resolveProjectRoot, TREVOR_STATE_HOME } from "./project";
-import { RESERVED_PORTS } from "./services";
+import { serviceUrl } from "./services";
 import { createSpinner } from "./spinner";
 
-const STORE_URL = `http://127.0.0.1:${RESERVED_PORTS.store}`;
+const STORE_URL = serviceUrl("store");
+
+// One transport per process: every lifecycle subcommand reads/writes the same local session-store,
+// so the binding is built once here rather than re-rolled per subcommand.
+const transport = streamTransport(STORE_URL);
 
 /** The real HTTP/transport IO for the lifecycle subcommands (talks to the local session-store). */
-function lifecycleIo(): LifecycleIo {
-  const transport = streamTransport(STORE_URL);
-  return {
-    fetchSessions: async () => {
-      const res = await fetch(`${STORE_URL}/sessions`);
-      if (!res.ok) {
-        throw new Error(`session-store unavailable (HTTP ${res.status}) - is Trevor running?`);
-      }
-      const body = (await res.json()) as { sessions?: SessionSummary[] };
-      return body.sessions ?? [];
-    },
-    publishArchived: async (sessionId, archived) => {
-      const event = events.sessionArchived({ archived });
-      await transport.publishEvent(sessionId, {
-        type: event.type,
-        producerId: "trevor-cli",
-        payload: event.payload,
-      });
-    },
-    now: Date.now,
-  };
-}
+const lifecycleIo: LifecycleIo = {
+  fetchSessions: async () => {
+    try {
+      return await transport.fetchInventory();
+    } catch (error) {
+      throw new Error(`session-store unavailable - is Trevor running? (${errorMessage(error)})`);
+    }
+  },
+  publishArchived: async (sessionId, archived) => {
+    const event = events.sessionArchived({ archived });
+    await transport.publishEvent(sessionId, {
+      type: event.type,
+      producerId: "trevor-cli",
+      payload: event.payload,
+    });
+  },
+  now: Date.now,
+};
 
-/** The host-control IO for stop/kill: the launcher's ownership records + real process signalling. */
-function hostControlIo(): HostControlIo {
-  return {
-    lookupHost: (sessionId) => {
-      const record = loadHosts(nodeFs, TREVOR_STATE_HOME)[sessionId];
-      return record ? { pid: record.pid } : null;
-    },
-    processAlive: (pid) => {
-      try {
-        process.kill(pid, 0); // signal 0: liveness probe, sends nothing
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    signal: (pid, sig) => process.kill(pid, sig),
-    removeHost: (sessionId) => removeHost(nodeFs, TREVOR_STATE_HOME, sessionId),
-  };
-}
+/** The host-control IO for stop/kill: the launcher's ownership records + real process signalling
+ *  (the liveness probe is the launcher platform's `processAlive`, shared rather than re-rolled). */
+const hostControlIo: HostControlIo = {
+  lookupHost: (sessionId) => {
+    const record = loadHosts(nodeFs, TREVOR_STATE_HOME)[sessionId];
+    return record ? { pid: record.pid } : null;
+  },
+  processAlive,
+  signal: (pid, sig) => process.kill(pid, sig),
+  removeHost: (sessionId) => removeHost(nodeFs, TREVOR_STATE_HOME, sessionId),
+};
 
 /**
  * Dispatches a `trevor` session-lifecycle subcommand (D-094 M1/M3): `list [--archived]`, `archive
@@ -72,13 +64,13 @@ async function runSubcommand(args: readonly string[]): Promise<string | null> {
   const [cmd, ...rest] = args;
   if (cmd === "list") {
     const project = basename(resolveProjectRoot(process.cwd(), nodeFs));
-    return runList(lifecycleIo(), project, rest.includes("--archived"));
+    return runList(lifecycleIo, project, rest.includes("--archived"));
   }
   if (cmd === "archive" || cmd === "unarchive") {
-    return runArchive(lifecycleIo(), (rest[0] ?? "").trim(), cmd === "archive");
+    return runArchive(lifecycleIo, (rest[0] ?? "").trim(), cmd === "archive");
   }
   if (cmd === "stop" || cmd === "kill") {
-    return runStop(hostControlIo(), (rest[0] ?? "").trim(), cmd === "kill");
+    return runStop(hostControlIo, (rest[0] ?? "").trim(), cmd === "kill");
   }
   return null;
 }
@@ -141,9 +133,9 @@ async function runOpen(sessionId: string): Promise<void> {
   }
   let summaries: readonly SessionSummary[];
   try {
-    summaries = await lifecycleIo().fetchSessions();
+    summaries = await lifecycleIo.fetchSessions();
   } catch (error) {
-    process.stdout.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.stdout.write(`${errorMessage(error)}\n`);
     return;
   }
   const target = resolveOpenTarget(summaries, id, homedir());
@@ -180,6 +172,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`trevor: ${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(`trevor: ${errorMessage(error)}\n`);
   process.exit(1);
 });

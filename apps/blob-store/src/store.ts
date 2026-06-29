@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { HEX64, type PutBlobResult } from "@trevor/session/blob-contract";
 
 /**
  * The content-addressed blob store on disk (D-028). Bytes are named by their
@@ -14,16 +15,13 @@ import { dirname, join } from "node:path";
  * This is the storage core, kept free of HTTP so it is directly testable; the
  * server in `main.ts` is a thin transport over it.
  *
- * This service is a standalone leaf with ZERO workspace deps (no Effect, no
- * framework, no @trevor/session) so it can be deployed and reasoned about in
- * isolation. The client SDK contract it must satisfy lives in
- * packages/session/src/blob.ts (HEX64 + PutBlobResult). HEX64 and the result
- * shape below are intentionally duplicated here to preserve that isolation - they
- * are NOT imported across the boundary and must be kept in sync by hand.
+ * The hash format + wire result are the shared `@trevor/session/blob-contract` leaf (a zero-dep
+ * subpath, the same exception ports.ts gets), so the client and this server no longer keep two
+ * hand-synced copies. `StoredBlob` IS the wire `PutBlobResult`.
  */
 
-/** A blob hash: a lowercase sha256 hex digest (the content address). Mirrors @trevor/session HEX64. */
-export const HEX64 = /^[0-9a-f]{64}$/;
+// Re-exported so server.ts + the store tests keep importing HEX64 from this module.
+export { HEX64 } from "@trevor/session/blob-contract";
 
 /** Per-blob metadata persisted alongside the bytes. */
 export interface BlobMeta {
@@ -31,13 +29,8 @@ export interface BlobMeta {
   readonly mimeType: string;
 }
 
-/** The result of a store: the content hash plus whether the bytes were already present. */
-export interface StoredBlob {
-  readonly hash: string;
-  readonly size: number;
-  readonly mimeType: string;
-  readonly deduped: boolean;
-}
+/** The result of a store: the content hash plus whether the bytes were already present (the wire shape). */
+export type StoredBlob = PutBlobResult;
 
 export class BlobStore {
   constructor(private readonly root: string) {}

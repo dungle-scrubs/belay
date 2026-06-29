@@ -16,6 +16,7 @@ import {
   type ServiceName,
   type ServiceProbe,
   type ServiceReport,
+  serviceUrl,
 } from "./services";
 
 /**
@@ -77,7 +78,7 @@ export interface LaunchOutcome {
 
 /** The web UI URL for a session (the single place the `?session=` handoff URL is built). */
 export function sessionUrl(sessionId: string): string {
-  return `http://127.0.0.1:${RESERVED_PORTS.web}/?session=${sessionId}`;
+  return `${serviceUrl("web")}/?session=${sessionId}`;
 }
 
 export async function launch(

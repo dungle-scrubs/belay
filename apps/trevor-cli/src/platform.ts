@@ -3,17 +3,18 @@ import { existsSync, mkdirSync, openSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { HEALTH_PATH, isHealthBody } from "@trevor/server-kit";
 import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
 import { raceTimeout } from "@trevor/session/async";
 import { nodeFs } from "./fs";
 import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
 import { TREVOR_HOME, TREVOR_STATE_HOME } from "./project";
 import {
-  RESERVED_PORTS,
   SERVICE_FILTERS,
   SERVICE_SCRIPTS,
   type ServiceName,
   type ServiceProbe,
+  serviceUrl,
 } from "./services";
 
 /**
@@ -23,8 +24,8 @@ import {
  * orchestration stays pure and testable and this module is the only place with side effects.
  */
 
-const STORE_URL = `http://127.0.0.1:${RESERVED_PORTS.store}`;
-const WEB_URL = `http://127.0.0.1:${RESERVED_PORTS.web}/`;
+const STORE_URL = serviceUrl("store");
+const WEB_URL = `${serviceUrl("web")}/`;
 const PROBE_TIMEOUT_MS = 800;
 const STORE_READY_TIMEOUT_MS = 15_000;
 // Vite cold-starts can take several seconds (deps optimize), so the web gets a more generous window.
@@ -66,14 +67,14 @@ async function probeService(name: ServiceName, port: number): Promise<ServicePro
     const res = await fetchWithTimeout(`http://127.0.0.1:${port}/`, PROBE_TIMEOUT_MS);
     return { reachable: res !== null, ours: res !== null };
   }
-  const res = await fetchWithTimeout(`http://127.0.0.1:${port}/health`, PROBE_TIMEOUT_MS);
+  const res = await fetchWithTimeout(`http://127.0.0.1:${port}${HEALTH_PATH}`, PROBE_TIMEOUT_MS);
   if (!res) {
     return { reachable: false, ours: false };
   }
-  // A 200 with `{ ok: true }` is our service; any other listener on the reserved port is a conflict.
+  // A 200 with the service's health body is ours; any other listener on the reserved port is a conflict.
   try {
-    const body = (await res.json()) as { ok?: unknown };
-    return { reachable: true, ours: res.ok && body?.ok === true };
+    const body = (await res.json()) as unknown;
+    return { reachable: true, ours: res.ok && isHealthBody(body) };
   } catch {
     return { reachable: true, ours: false };
   }
@@ -126,7 +127,7 @@ async function pollUntil(
 
 /** Polls the store's `/health` until ready or the timeout elapses. */
 function waitForStore(): Promise<boolean> {
-  return pollUntil(`${STORE_URL}/health`, STORE_READY_TIMEOUT_MS, (res) => res.ok);
+  return pollUntil(`${STORE_URL}${HEALTH_PATH}`, STORE_READY_TIMEOUT_MS, (res) => res.ok);
 }
 
 /** Polls the web dev server until it serves a response (any status = the port is live and answering). */
@@ -269,6 +270,21 @@ async function openBrowser(url: string): Promise<void> {
   }
 }
 
+/** Liveness probe for a host pid: signal 0 sends nothing but throws if the process is gone. The
+ *  single owner of the host-process liveness check, shared by the launcher platform and the cli's
+ *  host-control IO. A non-positive pid is never alive. */
+export function processAlive(pid: number): boolean {
+  if (pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0); // signal 0 = liveness probe, never actually kills
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Builds the real launcher platform bound to this process + the local filesystem. The `reporter`
  *  drives the live progress spinner (a no-op by default, so the platform is usable without one). */
 export function nodePlatform(reporter: Reporter = { step: () => {} }): LaunchPlatform {
@@ -281,17 +297,7 @@ export function nodePlatform(reporter: Reporter = { step: () => {} }): LaunchPla
     pid: process.pid,
     reporter,
     now: () => new Date().toISOString(),
-    processAlive: (pid) => {
-      if (pid <= 0) {
-        return false;
-      }
-      try {
-        process.kill(pid, 0); // signal 0 = liveness probe, never actually kills
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    processAlive,
     probeService,
     startService,
     waitForStore,
