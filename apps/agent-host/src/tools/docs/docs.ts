@@ -15,25 +15,36 @@ import { runWebFetch, webFetchLiveDeps } from "../web-fetch/web-fetch";
 import { runWebSearch } from "../web-search";
 import {
   type Corpus,
+  canonicalUrl,
   corpusIdFor,
   DOCS_CORPUS_VERSION,
+  hostOf,
+  type Page,
   type PageDiagnostic,
   staleAfterFrom,
 } from "./corpus";
-import { createCorpusStore, type DocsFs, nodeDocsFs, summarizeCorpus } from "./corpus-store";
+import {
+  type CorpusStore,
+  createCorpusStore,
+  type DocsFs,
+  type LoadResult,
+  nodeDocsFs,
+  summarizeCorpus,
+} from "./corpus-store";
 import { type DiscoveryResult, resolveCandidates } from "./discovery";
 import {
-  corpusResult,
   corruptResult,
   DOCS_ACTIONS,
   type DocsAction,
   type DocsResult,
   errorResult,
-  notImplementedResult,
+  type ResultWindow,
   serializeDocsResult,
   unavailableResult,
 } from "./envelope";
 import { fetchPages } from "./fetch-pages";
+import { DEFAULT_FRESHNESS_HOURS, decideRefresh, isCorpusStale, isStaleAt } from "./freshness";
+import { clampOffset, previewExcerpts, type Ranked, readPage, searchCorpus } from "./query";
 import type { WebFetchReader, WebSearchReader } from "./readers";
 
 const MAX_PAGES_FLOOR = 1;
@@ -44,14 +55,21 @@ const MAX_RESULTS_FLOOR = 1;
 const MAX_RESULTS_CEILING = 50;
 const DEFAULT_MAX_RESULTS = 8;
 
+/** How many lead excerpts a resolve/refresh preview returns (capped, continuable). */
+const DEFAULT_PREVIEW_EXCERPTS = 6;
+
+/** How many corpora a single `list` page returns before continuation. */
+const DOCS_LIST_PAGE = 25;
+
 /** web_fetch strategy docs reads pages with: "auto" lets web_fetch own the static/rendered ladder. */
 const DEFAULT_FETCH_MODE = "auto" as const;
 
 /** Character cap docs asks web_fetch for per page (web_fetch's own default). */
 const DOCS_PAGE_MAX_CHARS = 12_000;
 
-/** How many hours a freshly built corpus stays fresh before Phase 5 considers it stale. */
-const DOCS_FRESHNESS_HOURS = 24;
+/** How many hours a freshly built corpus stays fresh before it is considered stale (the freshness
+ *  policy default; the policy itself lives in `freshness.ts`). */
+const DOCS_FRESHNESS_HOURS = DEFAULT_FRESHNESS_HOURS;
 
 /** The docs-corpus storage inventory name owned by the root policy (`@trevor/session/node-paths`). */
 const DOCS_CORPUS_ENTRY = "docs-corpus";
@@ -97,6 +115,23 @@ const Params = Schema.Struct({
     }),
   ).annotations({
     description: `Cap on search excerpts returned, clamped to [${MAX_RESULTS_FLOOR}, ${MAX_RESULTS_CEILING}] (default ${DEFAULT_MAX_RESULTS})`,
+  }),
+  offset: Schema.optional(
+    Schema.Number.annotations({ jsonSchema: { type: "integer", minimum: 0 } }),
+  ).annotations({
+    description:
+      "Continuation cursor from a prior result's window.nextOffset (search/read/list), to page " +
+      "past a capped result.",
+  }),
+  allowRefresh: Schema.optional(Schema.Boolean).annotations({
+    description:
+      "On resolve, re-fetch even when the cached corpus is still fresh (default false: a fresh " +
+      "corpus is reused without any network call).",
+  }),
+  allowStale: Schema.optional(Schema.Boolean).annotations({
+    description:
+      "Serve cached content without a network refresh; past its freshness window it is returned " +
+      "marked stale rather than re-fetched (default false).",
   }),
 });
 
@@ -151,9 +186,9 @@ function missingDependencies(deps: DocsDeps): readonly string[] {
 }
 
 /**
- * Routes one action to its service seam. `resolve`/`refresh` build a corpus end-to-end (Phases 3-4);
- * the query actions (`search`/`read`/`list`/`status`) land in Phase 6 and report `not-implemented`
- * until then. The dependency gate has already passed by here, so web_fetch and the corpus root exist.
+ * Routes one action to its service seam. `resolve`/`refresh` build or reuse a corpus end-to-end; the
+ * query actions (`search`/`read`/`list`/`status`) read the cached corpora. The dependency gate has
+ * already passed by here, so web_fetch and the corpus root exist.
  */
 async function dispatch(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
   switch (args.action) {
@@ -162,13 +197,13 @@ async function dispatch(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult
     case "refresh":
       return refreshAction(args, deps);
     case "search":
-      return notImplementedResult("search");
+      return searchAction(args, deps);
     case "read":
-      return notImplementedResult("read");
+      return readAction(args, deps);
     case "list":
-      return notImplementedResult("list");
+      return listAction(args, deps);
     case "status":
-      return notImplementedResult("status");
+      return statusAction(args, deps);
   }
 }
 
@@ -314,12 +349,159 @@ async function buildAndStore(
     partial ? " (partial)" : ""
   }`;
 
-  return corpusResult(
-    action,
+  return okCorpusResult(action, corpus, fetched.pages, {
     detail,
-    summarizeCorpus(corpus),
-    buildDiagnostics(discovery, fetched.failed, skipped),
-  );
+    stale: false,
+    diagnostics: buildDiagnostics(discovery, fetched.failed, skipped),
+  });
+}
+
+/** A corpus that loaded cleanly off disk: the manifest, its pages, and any load diagnostics. */
+type LoadedCorpus = Extract<LoadResult, { state: "loaded" }>;
+
+/**
+ * Predicts the corpus id a build of `spec` would target WITHOUT any network, so a fresh corpus can be
+ * reused before discovery runs. This is possible only when an explicit URL is given (the root is the
+ * URL and the subject defaults to its host); a subject-only request needs a web_search to find the
+ * root, so it falls back to a by-subject scan instead.
+ */
+function predictCorpusId(spec: BuildSpec): string | undefined {
+  if (!spec.url) {
+    return undefined;
+  }
+
+  const host = hostOf(spec.url);
+
+  if (host === "") {
+    return undefined;
+  }
+
+  return corpusIdFor({
+    subject: spec.subject ?? host,
+    rootUrl: spec.url,
+    ...(spec.version ? { version: spec.version } : {}),
+  });
+}
+
+/** Finds a cached corpus id by subject (and version, exactly), scanning the on-disk inventory. */
+async function findBySubject(
+  store: CorpusStore,
+  subject: string,
+  version: string | undefined,
+): Promise<string | undefined> {
+  const target = subject.trim().toLowerCase();
+  const wantVersion = (version ?? "").trim().toLowerCase();
+
+  for (const summary of await store.listCorpora()) {
+    if (
+      summary.subject.trim().toLowerCase() === target &&
+      (summary.version ?? "").toLowerCase() === wantVersion
+    ) {
+      return summary.corpusId;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Loads an already-cached corpus matching `spec` without any network: by the predicted id when the
+ * URL makes it derivable, otherwise by a by-subject scan. Reads the filesystem only.
+ */
+async function loadExisting(
+  spec: BuildSpec,
+  deps: ReadyDocsDeps,
+): Promise<LoadedCorpus | undefined> {
+  const store = createCorpusStore(deps.fs, deps.corpusRoot);
+  const predicted = predictCorpusId(spec);
+
+  if (predicted) {
+    const loaded = await store.loadCorpus(predicted);
+
+    if (loaded.state === "loaded") {
+      return loaded;
+    }
+  }
+
+  if (spec.subject) {
+    const found = await findBySubject(store, spec.subject, spec.version);
+
+    if (found) {
+      const loaded = await store.loadCorpus(found);
+
+      if (loaded.state === "loaded") {
+        return loaded;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/** The result-window for a capped excerpt set (resolve/refresh preview or search). */
+function excerptWindow(ranked: Ranked): ResultWindow {
+  return {
+    unit: "excerpts",
+    returned: ranked.excerpts.length,
+    total: ranked.total,
+    truncated: ranked.nextOffset !== undefined,
+    ...(ranked.nextOffset !== undefined ? { nextOffset: ranked.nextOffset } : {}),
+  };
+}
+
+/** A successful corpus result: the summary, a bounded preview of cited excerpts, and the stale flag. */
+function okCorpusResult(
+  action: DocsAction,
+  corpus: Corpus,
+  pages: readonly Page[],
+  opts: {
+    readonly detail: string;
+    readonly stale: boolean;
+    readonly diagnostics?: readonly string[];
+  },
+): DocsResult {
+  const ranked = previewExcerpts(pages, { offset: 0, limit: DEFAULT_PREVIEW_EXCERPTS });
+
+  return {
+    action,
+    outcome: "ok",
+    detail: opts.detail,
+    corpus: summarizeCorpus(corpus),
+    excerpts: ranked.excerpts,
+    window: excerptWindow(ranked),
+    stale: opts.stale,
+    ...(opts.diagnostics && opts.diagnostics.length > 0 ? { diagnostics: opts.diagnostics } : {}),
+  };
+}
+
+/** Returns a cached corpus as-is (no network), tagged with its freshness. */
+function reuseResult(action: DocsAction, loaded: LoadedCorpus, stale: boolean): DocsResult {
+  const detail = `docs ${action}: reused cached corpus ${loaded.corpus.corpusId} (${loaded.corpus.pageCount} page(s))${
+    stale ? ", STALE" : ""
+  }`;
+
+  return okCorpusResult(action, loaded.corpus, loaded.pages, {
+    detail,
+    stale,
+    ...(loaded.diagnostics.length > 0 ? { diagnostics: loaded.diagnostics } : {}),
+  });
+}
+
+/**
+ * Falls back to a stale cached corpus when a refresh could not complete (network failure). The stale
+ * content is returned with an explicit `stale: true` and the refresh-failure reason, so stale content
+ * is never presented as fresh.
+ */
+function staleFallback(action: DocsAction, loaded: LoadedCorpus, failed: DocsResult): DocsResult {
+  return okCorpusResult(action, loaded.corpus, loaded.pages, {
+    detail: `docs ${action}: refresh failed, served STALE cached corpus ${loaded.corpus.corpusId}`,
+    stale: true,
+    diagnostics: [
+      `refresh failed: ${failed.detail}`,
+      ...(failed.diagnostics ?? []),
+      ...loaded.diagnostics,
+    ],
+  });
 }
 
 async function resolveAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
@@ -327,7 +509,32 @@ async function resolveAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsR
     return errorResult("resolve", "docs resolve needs a subject or a url");
   }
 
-  return buildAndStore("resolve", specFrom(args), deps);
+  const spec = specFrom(args);
+  const existing = await loadExisting(spec, deps);
+
+  if (existing) {
+    const stale = isCorpusStale(existing.corpus, deps.now());
+    const decision = decideRefresh({
+      exists: true,
+      stale,
+      allowRefresh: args.allowRefresh === true,
+      allowStale: args.allowStale === true,
+    });
+
+    if (decision === "reuse-fresh") {
+      return reuseResult("resolve", existing, false);
+    }
+
+    if (decision === "reuse-stale") {
+      return reuseResult("resolve", existing, true);
+    }
+
+    const built = await buildAndStore("resolve", spec, deps);
+
+    return built.outcome === "ok" ? built : staleFallback("resolve", existing, built);
+  }
+
+  return buildAndStore("resolve", spec, deps);
 }
 
 async function refreshAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
@@ -347,8 +554,7 @@ async function refreshAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsR
     }
 
     const corpus = loaded.corpus;
-
-    return buildAndStore(
+    const built = await buildAndStore(
       "refresh",
       {
         subject: corpus.subject,
@@ -358,13 +564,273 @@ async function refreshAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsR
       },
       deps,
     );
+
+    return built.outcome === "ok" ? built : staleFallback("refresh", loaded, built);
   }
 
   if (!args.subject?.trim() && !args.url?.trim()) {
     return errorResult("refresh", "docs refresh needs a corpusId, subject, or url");
   }
 
-  return buildAndStore("refresh", specFrom(args), deps);
+  const spec = specFrom(args);
+  const existing = await loadExisting(spec, deps);
+  const built = await buildAndStore("refresh", spec, deps);
+
+  if (built.outcome === "ok") {
+    return built;
+  }
+
+  return existing ? staleFallback("refresh", existing, built) : built;
+}
+
+/** A short reference for an action's error detail when no corpus could be located. */
+function targetRef(args: DocsArgs): string {
+  return args.corpusId ?? args.subject?.trim() ?? args.url?.trim() ?? "(none)";
+}
+
+/**
+ * Locates a cached corpus for a query action: by explicit corpusId, else by the predicted id or a
+ * by-subject scan. Reads the filesystem only - query actions never touch the network.
+ */
+async function locateCorpus(args: DocsArgs, deps: ReadyDocsDeps): Promise<LoadResult> {
+  const store = createCorpusStore(deps.fs, deps.corpusRoot);
+
+  if (args.corpusId) {
+    return store.loadCorpus(args.corpusId);
+  }
+
+  const spec = specFrom(args);
+  const predicted = predictCorpusId(spec);
+
+  if (predicted) {
+    const loaded = await store.loadCorpus(predicted);
+
+    if (loaded.state !== "missing") {
+      return loaded;
+    }
+  }
+
+  if (spec.subject) {
+    const found = await findBySubject(store, spec.subject, spec.version);
+
+    if (found) {
+      return store.loadCorpus(found);
+    }
+  }
+
+  return { state: "missing" };
+}
+
+async function searchAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
+  const query = args.query?.trim();
+
+  if (!query) {
+    return errorResult("search", "docs search needs a query");
+  }
+
+  if (!args.corpusId && !args.subject?.trim() && !args.url?.trim()) {
+    return errorResult(
+      "search",
+      "docs search needs a corpusId, subject, or url to target a corpus",
+    );
+  }
+
+  const loaded = await locateCorpus(args, deps);
+
+  if (loaded.state === "missing") {
+    return errorResult(
+      "search",
+      `docs search: no cached corpus for ${targetRef(args)}; resolve it first`,
+    );
+  }
+
+  if (loaded.state === "corrupt") {
+    return corruptResult(
+      "search",
+      `docs search: corpus ${loaded.corpusId} is corrupt: ${loaded.detail}`,
+    );
+  }
+
+  const limit = clamp(args.maxResults, MAX_RESULTS_FLOOR, MAX_RESULTS_CEILING, DEFAULT_MAX_RESULTS);
+  const offset = clampOffset(args.offset);
+  const ranked = searchCorpus(loaded.pages, query, { offset, limit });
+  const stale = isCorpusStale(loaded.corpus, deps.now());
+
+  return {
+    action: "search",
+    outcome: "ok",
+    detail: `docs search: ${ranked.excerpts.length} excerpt(s) for "${query}" in ${loaded.corpus.corpusId}${
+      stale ? " (stale)" : ""
+    }`,
+    corpus: summarizeCorpus(loaded.corpus),
+    query: { corpusId: loaded.corpus.corpusId, query, excerpts: ranked.excerpts },
+    window: excerptWindow(ranked),
+    stale,
+    ...(loaded.diagnostics.length > 0 ? { diagnostics: loaded.diagnostics } : {}),
+  };
+}
+
+/** Finds a page in a corpus by pageId, or by the canonical URL of either its requested or final URL. */
+function findPage(pages: readonly Page[], args: DocsArgs): Page | undefined {
+  if (args.pageId) {
+    return pages.find((page) => page.pageId === args.pageId);
+  }
+
+  const raw = args.url?.trim();
+
+  if (!raw) {
+    return undefined;
+  }
+
+  const canon = canonicalUrl(raw);
+
+  return pages.find(
+    (page) => canonicalUrl(page.url) === canon || canonicalUrl(page.finalUrl) === canon,
+  );
+}
+
+async function readAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
+  if (!args.corpusId) {
+    return errorResult("read", "docs read needs a corpusId");
+  }
+
+  if (!args.pageId && !args.url?.trim()) {
+    return errorResult("read", "docs read needs a pageId or url");
+  }
+
+  const store = createCorpusStore(deps.fs, deps.corpusRoot);
+  const loaded = await store.loadCorpus(args.corpusId);
+
+  if (loaded.state === "missing") {
+    return errorResult("read", `docs read: corpus ${args.corpusId} not found`);
+  }
+
+  if (loaded.state === "corrupt") {
+    return corruptResult("read", `docs read: corpus ${args.corpusId} is corrupt: ${loaded.detail}`);
+  }
+
+  const page = findPage(loaded.pages, args);
+
+  if (!page) {
+    return errorResult(
+      "read",
+      `docs read: page ${args.pageId ?? args.url} not found in ${args.corpusId}`,
+    );
+  }
+
+  const offset = clampOffset(args.offset);
+  const result = readPage(page, { offset });
+  const stale = isCorpusStale(loaded.corpus, deps.now());
+
+  return {
+    action: "read",
+    outcome: "ok",
+    detail: `docs read: ${page.pageId} (${result.view.content.length} of ${result.total} chars)${
+      stale ? " (stale)" : ""
+    }`,
+    corpus: summarizeCorpus(loaded.corpus),
+    page: result.view,
+    window: {
+      unit: "chars",
+      returned: result.view.content.length,
+      total: result.total,
+      truncated: result.nextOffset !== undefined,
+      ...(result.nextOffset !== undefined ? { nextOffset: result.nextOffset } : {}),
+    },
+    stale,
+  };
+}
+
+async function listAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
+  const store = createCorpusStore(deps.fs, deps.corpusRoot);
+  const summaries = [...(await store.listCorpora())].sort(
+    (a, b) =>
+      (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0) ||
+      (a.corpusId < b.corpusId ? -1 : a.corpusId > b.corpusId ? 1 : 0),
+  );
+
+  const total = summaries.length;
+  const offset = clampOffset(args.offset);
+  const limit = clamp(args.maxResults, MAX_RESULTS_FLOOR, MAX_RESULTS_CEILING, DOCS_LIST_PAGE);
+  const windowed = summaries.slice(offset, offset + limit);
+  const now = deps.now();
+  const corpora = windowed.map((summary) => ({
+    ...summary,
+    stale: isStaleAt(summary.staleAfter, now),
+  }));
+  const next = offset + windowed.length < total ? offset + windowed.length : undefined;
+
+  return {
+    action: "list",
+    outcome: "ok",
+    detail: `docs list: ${windowed.length} of ${total} corpus/corpora`,
+    corpora,
+    window: {
+      unit: "corpora",
+      returned: windowed.length,
+      total,
+      truncated: next !== undefined,
+      ...(next !== undefined ? { nextOffset: next } : {}),
+    },
+  };
+}
+
+/** Status diagnostics: the corpus's own partial/skip/fail notes plus anything the load surfaced. */
+function statusDiagnostics(corpus: Corpus, loadDiagnostics: readonly string[]): readonly string[] {
+  const lines: string[] = [];
+
+  if (corpus.partial) {
+    lines.push("corpus is partial: some pages were skipped or failed");
+  }
+
+  if (corpus.truncated) {
+    lines.push("some pages were truncated to the fetch cap");
+  }
+
+  if (corpus.skipped.length > 0) {
+    lines.push(`${corpus.skipped.length} url(s) skipped during discovery/fetch`);
+  }
+
+  for (const page of corpus.failed) {
+    lines.push(`failed: ${page.url}: ${page.reason}`);
+  }
+
+  return [...lines, ...loadDiagnostics];
+}
+
+async function statusAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
+  if (!args.corpusId && !args.subject?.trim() && !args.url?.trim()) {
+    return errorResult("status", "docs status needs a corpusId, subject, or url");
+  }
+
+  const loaded = await locateCorpus(args, deps);
+
+  if (loaded.state === "missing") {
+    return errorResult("status", `docs status: no cached corpus for ${targetRef(args)}`);
+  }
+
+  if (loaded.state === "corrupt") {
+    return corruptResult(
+      "status",
+      `docs status: corpus ${loaded.corpusId} is corrupt: ${loaded.detail}`,
+    );
+  }
+
+  const corpus = loaded.corpus;
+  const stale = isCorpusStale(corpus, deps.now());
+  const diagnostics = statusDiagnostics(corpus, loaded.diagnostics);
+
+  return {
+    action: "status",
+    outcome: "ok",
+    detail: `docs status: ${corpus.corpusId} - ${corpus.pageCount} page(s), ${
+      stale ? "stale" : "fresh"
+    }${corpus.partial ? ", partial" : ""}`,
+    corpus: summarizeCorpus(corpus),
+    provenance: corpus.provenance,
+    stale,
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
+  };
 }
 
 /** Runs the docs path against injected deps; the exported tool binds the live deps. */

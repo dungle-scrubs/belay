@@ -9,12 +9,26 @@ import { DOCS_ACTIONS } from "./envelope";
  * Tool-entry coverage: the param schema accepts every action and rejects an unknown/absent one, the
  * tool declares read-only, the dependency gate yields a typed `unavailable` outcome (never a thrown
  * turn) when web_fetch or the corpus root is missing, and a ready call routes each query action to a
- * typed `not-implemented` (Phase 6 owns them). resolve/refresh are wired in Phases 3-4 and covered in
- * docs-resolve.test.ts. No real disk or network is touched here.
+ * typed, non-thrown outcome that reads only the filesystem. resolve/refresh build/reuse and are
+ * covered in docs-resolve.test.ts and docs-freshness.test.ts; the query actions are covered in
+ * docs-query.test.ts. No real disk or network is touched here.
  */
 
-/** The actions still awaiting their phase; resolve/refresh are wired in Phases 3-4. */
+/** The cached-corpus query actions; resolve/refresh build/reuse and are covered separately. */
 const QUERY_ACTIONS = DOCS_ACTIONS.filter((action) => action !== "resolve" && action !== "refresh");
+
+/** An empty `DocsFs` the query actions can read without finding any corpus (no network either way). */
+const emptyFs: DocsFs = {
+  mkdir: async () => {},
+  writeFile: async () => assert.fail("a query action must not write"),
+  readFile: async () => {
+    throw new Error("ENOENT");
+  },
+  rename: async () => assert.fail("a query action must not rename"),
+  readdir: async () => [],
+  exists: async () => false,
+  remove: async () => assert.fail("a query action must not remove"),
+};
 
 function decode(input: unknown): Either.Either<DocsArgs, unknown> {
   return Schema.decodeUnknownEither(DocsParams)(input);
@@ -107,10 +121,26 @@ test("both dependencies missing are reported together", async () => {
   assert.deepEqual(parsed.missing, ["web_fetch", "docs corpus root"]);
 });
 
-test("a ready call routes each query action to a typed not-implemented (Phase 6 owns them)", async () => {
+test("a ready call routes each query action to a typed, non-thrown outcome (no corpus cached)", async () => {
+  const deps: DocsDeps = { ...readyDeps, fs: emptyFs };
+
   for (const action of QUERY_ACTIONS) {
-    const parsed = await run({ action }, readyDeps);
+    const parsed = await run(
+      { action, corpusId: "missing-000000000000", query: "x", pageId: "p-1" },
+      deps,
+    );
     assert.equal(parsed.action, action);
-    assert.equal(parsed.outcome, "not-implemented", `action ${action} should be not-implemented`);
+    assert.notEqual(parsed.outcome, "not-implemented", `action ${action} is implemented`);
+    assert.notEqual(parsed.outcome, "unavailable", `action ${action} should not be unavailable`);
   }
+});
+
+test("list with no cached corpora is a typed ok with an empty inventory", async () => {
+  const parsed = await run({ action: "list" }, { ...readyDeps, fs: emptyFs });
+
+  assert.equal(parsed.outcome, "ok");
+  assert.deepEqual(parsed.corpora, []);
+  const window = parsed.window as { total: number; truncated: boolean };
+  assert.equal(window.total, 0);
+  assert.equal(window.truncated, false);
 });

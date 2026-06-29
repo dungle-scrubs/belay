@@ -7,12 +7,27 @@
  * missing) and `not-implemented` (a later phase owns that action), so no docs call throws the turn.
  */
 
-import type { CorpusSummary, Page, QueryResult } from "./corpus";
+import type { CorpusListing, CorpusSummary, PageView, QueryExcerpt, QueryResult } from "./corpus";
 
 function withDiagnostics(diagnostics: readonly string[] | undefined): {
   diagnostics?: readonly string[];
 } {
   return diagnostics && diagnostics.length > 0 ? { diagnostics } : {};
+}
+
+/**
+ * The result-size cap + continuation metadata every query action returns: how much was returned of
+ * the total, whether the cap clipped it, and the `nextOffset` cursor to pass back to continue. The
+ * shared shape is what keeps a large corpus from dumping wholesale into the prompt.
+ */
+export interface ResultWindow {
+  /** What the counts measure: ranked excerpts, page characters, or corpora. */
+  readonly unit: "excerpts" | "chars" | "corpora";
+  readonly returned: number;
+  readonly total: number;
+  /** True when the cap clipped the output and `nextOffset` continues it. */
+  readonly truncated: boolean;
+  readonly nextOffset?: number;
 }
 
 /** The actions the docs tool exposes. */
@@ -41,14 +56,23 @@ export interface DocsResult {
   readonly detail: string;
   /** On `unavailable`: the dependencies that were missing. */
   readonly missing?: readonly string[];
-  /** On resolve/refresh/status: the target corpus. */
+  /** On resolve/refresh/search/status: the target corpus. */
   readonly corpus?: CorpusSummary;
-  /** On list: the known corpora. */
-  readonly corpora?: readonly CorpusSummary[];
+  /** On list: the known corpora with their per-entry freshness. */
+  readonly corpora?: readonly CorpusListing[];
   /** On search: the ranked, cited excerpts. */
   readonly query?: QueryResult;
-  /** On read: the page content. */
-  readonly page?: Page;
+  /** On resolve/refresh: a bounded set of selected cited excerpts (the corpus preview). */
+  readonly excerpts?: readonly QueryExcerpt[];
+  /** On read: the bounded page view. */
+  readonly page?: PageView;
+  /** On status: the corpus's provenance line. */
+  readonly provenance?: string;
+  /** On resolve/refresh/search/read/status: whether the served content is stale (never omitted when
+   *  stale, so stale content is never presented as fresh). */
+  readonly stale?: boolean;
+  /** The result-size cap + continuation metadata for the action's primary payload. */
+  readonly window?: ResultWindow;
   /** Partial/corrupt notes a load surfaced. */
   readonly diagnostics?: readonly string[];
 }
@@ -70,16 +94,6 @@ export function notImplementedResult(action: DocsAction): DocsResult {
     outcome: "not-implemented",
     detail: `docs ${action} is not implemented yet`,
   };
-}
-
-/** A successful action that produced or targeted a corpus (resolve/refresh/status). */
-export function corpusResult(
-  action: DocsAction,
-  detail: string,
-  corpus: CorpusSummary,
-  diagnostics?: readonly string[],
-): DocsResult {
-  return { action, outcome: "ok", detail, corpus, ...withDiagnostics(diagnostics) };
 }
 
 /** A typed failure that is neither a missing dependency nor an unbuilt phase. */
@@ -110,7 +124,11 @@ export function serializeDocsResult(result: DocsResult): string {
     ...(result.corpus !== undefined ? { corpus: result.corpus } : {}),
     ...(result.corpora !== undefined ? { corpora: result.corpora } : {}),
     ...(result.query !== undefined ? { query: result.query } : {}),
+    ...(result.excerpts !== undefined ? { excerpts: result.excerpts } : {}),
     ...(result.page !== undefined ? { page: result.page } : {}),
+    ...(result.provenance !== undefined ? { provenance: result.provenance } : {}),
+    ...(result.stale !== undefined ? { stale: result.stale } : {}),
+    ...(result.window !== undefined ? { window: result.window } : {}),
     ...(result.diagnostics !== undefined ? { diagnostics: result.diagnostics } : {}),
   });
 }

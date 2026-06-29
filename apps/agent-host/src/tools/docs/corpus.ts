@@ -109,18 +109,48 @@ export interface CorpusSummary {
   readonly rootUrl: string;
   readonly version?: string;
   readonly pageCount: number;
+  /** The corpus's total stored content bytes, surfaced so a listing shows page AND byte counts. */
+  readonly byteCount?: number;
   readonly updatedAt: string;
   readonly staleAfter: string;
   readonly partial: boolean;
 }
 
+/** A corpus listing entry: a summary plus its freshness as of the listing instant. */
+export interface CorpusListing extends CorpusSummary {
+  /** Whether the corpus is past its freshness horizon as of the listing's clock. */
+  readonly stale: boolean;
+}
+
 /** One ranked excerpt with its citation, the unit a corpus query returns (Phase 6). */
 export interface QueryExcerpt {
   readonly pageId: string;
+  /** The source URL (the page's post-redirect final URL), the first half of the citation. */
   readonly url: string;
   readonly title?: string;
+  /** A stable in-page locator (a heading anchor `#slug` or a `@charOffset`) completing the citation. */
+  readonly locator: string;
   readonly excerpt: string;
   readonly score: number;
+}
+
+/** A bounded projection of one cached page for the `read` action: a capped content slice plus its
+ *  source/citation fields, so a large page never dumps wholesale into the prompt. */
+export interface PageView {
+  readonly pageId: string;
+  readonly corpusId: string;
+  /** The source URL (the page's post-redirect final URL). */
+  readonly url: string;
+  readonly title?: string;
+  readonly contentType?: string;
+  /** The returned, capped slice of the page's normalized content. */
+  readonly content: string;
+  readonly fetchedAt: string;
+  readonly staleAfter: string;
+  readonly backend: string;
+  readonly provenance: string;
+  /** The citation locator for the returned slice (a heading anchor or a `@charOffset`). */
+  readonly locator: string;
 }
 
 /** The compact, ranked, cited answer a corpus query produces (Phase 6). */
