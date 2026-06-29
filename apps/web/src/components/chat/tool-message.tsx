@@ -2,6 +2,7 @@ import { decodeRecallResult, type ToolName } from "@trevor/session";
 import type { ReactElement } from "react";
 import { toolSummary } from "@/derive";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
+import { DocsResult, parseDocsResult } from "./docs";
 import { ToolCall } from "./message";
 import { MultiEditDiff } from "./multi-edit-diff";
 import { SessionRecallResults } from "./session-recall";
@@ -171,6 +172,27 @@ const renderWebFetch: RenderArm = ({ message, status, className }) => {
   );
 };
 
+// docs renders its result envelope as structured source-backed documentation: a corpus summary,
+// ranked cited excerpts (resolve/refresh preview or search matches), a bounded page read, or the
+// corpus inventory, with visible stale/partial/error states (or the looking-up indicator while
+// running, or its error message).
+const renderDocs: RenderArm = ({ message, status, className }) => {
+  const a = parseToolArgs(message.args);
+  const action = typeof a.action === "string" ? a.action : "docs";
+  const target = [a.subject, a.query, a.url, a.corpusId].find(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+
+  return (
+    <DocsResult
+      className={className}
+      args={target ? `${action} ${target}` : action}
+      parsed={parseDocsResult(message.result)}
+      status={status}
+    />
+  );
+};
+
 // session_recall renders its distilled findings + cited source rows (or the recalling indicator
 // while running, or its error/empty note) from the JSON recall result.
 const renderRecall: RenderArm = ({ message, status, className }) => {
@@ -228,8 +250,7 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   grep: renderOutput,
   web_search: renderWebSearch,
   web_fetch: renderWebFetch,
-  // docs renders generically for now; Phase 7 adds a corpus/result renderer for its JSON envelope.
-  docs: renderGeneric,
+  docs: renderDocs,
   session_recall: renderRecall,
   ast_grep: renderGeneric,
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it
