@@ -2,8 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 51
-- Completed: 14 (4 shipped pre-plan D-009; 10 in M1)
+- Current cutoff blockers: 41
+- Completed: 23 (4 shipped pre-plan D-009; 10 in M1; 9 in M2)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -32,16 +32,17 @@ Blockers
 
 #### M2: Inventory and classification
 
-- [ ] RED: Add a storage-inventory test or snapshot that covers known Trevor-owned paths and legacy paths.
-- [ ] GREEN: Classify `AGENTS.md`, project/session maps, locks, managed worktrees, launcher logs, provider observations, service DBs, blob bytes, performance artifacts, and doctor fixtures.
-- [ ] GREEN: Mark `~/.trevor` service data as legacy service data, not as a new-feature target.
-- [ ] GREEN: Mark `~/.pi` and `~/.agents` as external roots that Trevor can read but not own.
-- [ ] REFACTOR: Replace scattered root labels in diagnostics with shared labels from the inventory.
-- [ ] RED: Add tests that fail if a new home-relative Trevor path is introduced without classification.
-- [ ] GREEN: Add an explicit escape hatch requiring plan/docs update for new roots.
-- [ ] Current path usage has a clear classification.
-- [ ] The inventory distinguishes durable product state, debug diagnostics, legacy service data, scratch, browser state, and external roots.
-- [ ] New root drift is caught by tests or reviewable checks.
+- [x] RED: Add a storage-inventory test or snapshot that covers known Trevor-owned paths and legacy paths.
+- [x] GREEN: Classify `AGENTS.md`, project/session maps, locks, managed worktrees, launcher logs, provider observations, service DBs, blob bytes, performance artifacts, and doctor fixtures. (`STORAGE_INVENTORY`; doctor fixtures are test-only display data)
+- [x] GREEN: Mark `~/.trevor` service data as legacy service data, not as a new-feature target.
+- [x] GREEN: Mark `~/.pi` and `~/.agents` as external roots that Trevor can read but not own.
+- [x] RED: Add tests that fail if a new home-relative Trevor path is introduced without classification. (`node-paths-drift.test.ts`)
+- [x] GREEN: Add an explicit escape hatch requiring plan/docs update for new roots. (the inventory + its doc comment is the single declaration)
+- [x] Current path usage has a clear classification.
+- [x] The inventory distinguishes durable product state, debug diagnostics, legacy service data, scratch, browser state, and external roots.
+- [x] New root drift is caught by tests or reviewable checks.
+
+(The M2 "Replace scattered root labels in diagnostics with shared labels" refactor moved to Phase 5 M5, where the doctor consumes the shared `RootCategory` labels.)
 
 ### Phase 3: Legacy Service Migration Plan
 

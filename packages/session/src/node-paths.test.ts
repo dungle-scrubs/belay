@@ -7,6 +7,8 @@ import {
   resolveTrevorHome,
   resolveTrevorStateHome,
   rootCategory,
+  STORAGE_INVENTORY,
+  storagePath,
   TREVOR_HOME_DIRNAME,
   TREVOR_STATE_DIRNAME,
 } from "./node-paths";
@@ -109,4 +111,59 @@ test("env overrides affect only the intended root", () => {
 
 test("rootCategory throws on an unknown id", () => {
   assert.throws(() => rootCategory("nope" as RootCategoryId, {}, "/Users/kevin"));
+});
+
+test("every storage-inventory entry maps to a known root category", () => {
+  const validIds = new Set(resolveRootPolicy({}, "/Users/kevin").map((category) => category.id));
+  for (const entry of STORAGE_INVENTORY) {
+    assert.ok(validIds.has(entry.category), `${entry.name} -> unknown category ${entry.category}`);
+  }
+});
+
+test("storage-inventory names are unique", () => {
+  const names = STORAGE_INVENTORY.map((entry) => entry.name);
+  assert.equal(new Set(names).size, names.length);
+});
+
+test("the state-home runtime artifacts are all classified", () => {
+  const stateNames = STORAGE_INVENTORY.filter((entry) => entry.category === "state").map(
+    (entry) => entry.name,
+  );
+  for (const expected of [
+    "sessions-db",
+    "blobs",
+    "host-registry",
+    "locks",
+    "projects-map",
+    "logs",
+    "provider-observations",
+    "turn-stop-metrics",
+    "worktrees",
+  ]) {
+    assert.ok(stateNames.includes(expected), `state inventory missing ${expected}`);
+  }
+});
+
+test("storagePath resolves an entry under its category root and follows root overrides", () => {
+  const sessionsDb = STORAGE_INVENTORY.find((entry) => entry.name === "sessions-db");
+  assert.ok(sessionsDb);
+  assert.equal(
+    storagePath(sessionsDb, {}, "/Users/kevin"),
+    "/Users/kevin/.local/state/trevorV2/sessions.db",
+  );
+  assert.equal(
+    storagePath(sessionsDb, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
+    "/tmp/state/sessions.db",
+  );
+});
+
+test("legacy-root resolves to ~/.trevor and external entries stay read-only", () => {
+  const legacy = STORAGE_INVENTORY.find((entry) => entry.name === "legacy-root");
+  assert.ok(legacy);
+  assert.equal(storagePath(legacy, {}, "/Users/kevin"), `/Users/kevin/${LEGACY_TREVOR_DIRNAME}`);
+
+  const piAuth = STORAGE_INVENTORY.find((entry) => entry.name === "pi-auth");
+  assert.ok(piAuth);
+  assert.equal(storagePath(piAuth, {}, "/Users/kevin"), "/Users/kevin/.pi/auth.json");
+  assert.equal(rootCategory(piAuth.category, {}, "/Users/kevin").writable, false);
 });

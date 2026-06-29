@@ -192,3 +192,142 @@ export function rootCategory(
   }
   return found;
 }
+
+/** One classified storage location: a file or directory Trevor reads or writes, tied to a root category. */
+export interface StorageEntry {
+  /** Stable inventory id (kebab-case), independent of the on-disk path. */
+  readonly name: string;
+  /** The root category this location lives under. */
+  readonly category: RootCategoryId;
+  /** Path relative to the category root; "" means the category root directory itself. */
+  readonly relativePath: string;
+  /** What this location holds, for diagnostics and developer guidance. */
+  readonly description: string;
+}
+
+/**
+ * The classified inventory of every Trevor storage location, each tied to a {@link RootCategory}. This
+ * is the escape hatch the taxonomy is enforced through (D-006): a new file-backed feature must add its
+ * location here - and cite this plan - rather than invent an unclassified home-relative path. Tests
+ * assert every entry maps to a known category and that names are unique; the host drift guard fails if
+ * a new `~/.trevorV2` / `~/.trevor` literal appears outside this owner module.
+ */
+export const STORAGE_INVENTORY: readonly StorageEntry[] = [
+  // config (TREVOR_HOME) - hand-editable, portable settings only
+  {
+    name: "user-agents-md",
+    category: "config",
+    relativePath: "AGENTS.md",
+    description: "User-global standing instructions (lowest-precedence eager context).",
+  },
+  {
+    name: "config-jsonc",
+    category: "config",
+    relativePath: "config.jsonc",
+    description: "User configuration file.",
+  },
+  {
+    name: "env-op",
+    category: "config",
+    relativePath: ".env.op",
+    description: "1Password-injected env (web_search keys) read at startup.",
+  },
+  // state (TREVOR_STATE_HOME) - all machine-local runtime state
+  {
+    name: "sessions-db",
+    category: "state",
+    relativePath: "sessions.db",
+    description: "Session-store SQLite log (override with SESSION_STORE_DB).",
+  },
+  {
+    name: "blobs",
+    category: "state",
+    relativePath: "blobs",
+    description: "Content-addressed blob bytes (override with BLOB_STORE_DIR).",
+  },
+  {
+    name: "host-registry",
+    category: "state",
+    relativePath: "hosts.json",
+    description: "Per-session host ownership records.",
+  },
+  {
+    name: "locks",
+    category: "state",
+    relativePath: "locks",
+    description: "Per-session leader lock files.",
+  },
+  {
+    name: "projects-map",
+    category: "state",
+    relativePath: "projects.json",
+    description: "Project-root to session-id mapping.",
+  },
+  {
+    name: "logs",
+    category: "state",
+    relativePath: "logs",
+    description: "Launcher and managed-service log files.",
+  },
+  {
+    name: "provider-observations",
+    category: "state",
+    relativePath: "provider-observations.json",
+    description: "Redacted, deduped provider-failure observations.",
+  },
+  {
+    name: "turn-stop-metrics",
+    category: "state",
+    relativePath: "turn-stops.jsonl",
+    description: "Best-effort append-only turn-stop diagnostics.",
+  },
+  {
+    name: "worktrees",
+    category: "state",
+    relativePath: ".worktrees",
+    description: "Managed git worktrees and their registry.json.",
+  },
+  // legacy (~/.trevor) - detect-only
+  {
+    name: "legacy-root",
+    category: "legacy",
+    relativePath: "",
+    description: "Old ~/.trevor data (sessions.db, blobs) from pre-XDG-split runs.",
+  },
+  // external (read-only)
+  {
+    name: "pi-auth",
+    category: "external-pi",
+    relativePath: "auth.json",
+    description: "pi-ai credential store; Trevor reads it for provider keys.",
+  },
+  {
+    name: "agents",
+    category: "external-agents",
+    relativePath: "agents",
+    description: "Shared agent definitions; Trevor reads them.",
+  },
+  {
+    name: "skills",
+    category: "external-agents",
+    relativePath: "skills",
+    description: "Shared skill definitions; Trevor reads them.",
+  },
+];
+
+/**
+ * Resolves a storage entry to its absolute path, or null when its category is non-filesystem (browser).
+ * The path follows the entry's category root, so an override on that root (e.g. TREVOR_STATE_HOME)
+ * moves every entry under it.
+ */
+export function storagePath(
+  entry: StorageEntry,
+  env: TrevorPathEnv = process.env,
+  home: string = homedir(),
+): string | null {
+  const root = rootCategory(entry.category, env, home);
+  if (root.path === null) {
+    return null;
+  }
+  return entry.relativePath ? join(root.path, entry.relativePath) : root.path;
+}
