@@ -102,6 +102,80 @@ test("one live progress snapshot per model step, each carrying usage + breakdown
   );
 });
 
+/** A provider that calls the same (unknown) tool with identical args for `rounds` steps, then
+ *  answers - so the real turn pipeline runs a repeating, identically-FAILING tool path through the
+ *  default guardrails (plan 07). `noop` is unknown to the executor, which renders the same `error: …`
+ *  result every round, so the exact-failure streak accumulates. */
+function repeatedFailingToolProvider(rounds: number): Provider {
+  let calls = 0;
+  return {
+    id: "fake",
+    label: "Fake",
+    model: "fake-1",
+    reasoningLevels: ["off"],
+    defaultReasoning: "off",
+    kind: "cloud",
+    describe: () => ({
+      label: "Fake",
+      model: "fake-1",
+      reasoningLevels: ["off"],
+      defaultReasoning: "off",
+      kind: "cloud",
+    }),
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: (_messages, tools) => {
+      calls += 1;
+      if (calls > rounds || tools.length === 0) {
+        return Stream.fromIterable<ProviderEvent>([
+          { type: "text", text: "giving up and answering" },
+          { type: "usage", usage: { input: 100, output: 1, contextWindow: 1_000_000, genMs: 1 } },
+        ]);
+      }
+      return Stream.fromIterable<ProviderEvent>([
+        { type: "tool_call", call: { id: `c${calls}`, name: "noop", arguments: "{}" } },
+        { type: "usage", usage: { input: 100, output: 1, contextWindow: 1_000_000, genMs: 1 } },
+      ]);
+    },
+  };
+}
+
+test("plan 07: a repeated identical failure publishes a REDACTED tool.guardrail event", async () => {
+  const events = await runTurn(repeatedFailingToolProvider(4), [{ role: "user", content: "go" }], {
+    runId: "r1",
+  });
+  const guardrails = events.filter((e) => e.type === "tool.guardrail");
+  assert.ok(guardrails.length >= 1, "the third+ identical failure publishes a guardrail event");
+  const payload = guardrails[0]?.payload ?? {};
+  assert.equal(payload.name, "noop");
+  assert.equal(payload.action, "warn");
+  assert.equal(payload.reason, "repeated_failure");
+  assert.equal(payload.runId, "r1", "reuses the turn's runId (no parallel identity, D-008)");
+  assert.equal(typeof payload.callId, "string");
+  assert.ok((payload.count as number) >= 3);
+  assert.match(String(payload.argsFingerprint), /^[0-9a-f]{12}$/);
+  // The redacted surface carries no raw args, no raw output, and no model guidance.
+  const dump = JSON.stringify(payload);
+  assert.doesNotMatch(dump, /unknown tool/i, "the raw failure output never rides the event");
+  assert.equal("arguments" in payload, false, "no raw arguments");
+  assert.equal("result" in payload, false, "no raw output");
+  assert.equal("guidance" in payload, false, "the model guidance rides the tool result, not here");
+});
+
+test("plan 07: the model-facing tool result carries the appended guardrail guidance", async () => {
+  const events = await runTurn(repeatedFailingToolProvider(4), [{ role: "user", content: "go" }], {
+    runId: "r1",
+  });
+  const completions = events
+    .filter((e) => e.type === "tool.completed")
+    .map((e) => String(e.payload.result ?? ""));
+  assert.ok(
+    completions.some((r) => /Guardrail:/.test(r)),
+    "a warned tool result has the guidance appended for the model",
+  );
+});
+
 test("a flat-context turn pauses at the budget via the progress guard (02.17)", async () => {
   // A 1M window at ~8.9% pressure earns the >=1M tier budget (96). Context never grows (constant
   // 89_022 input every step), so at the first checkpoint the progress guard fails and the turn PAUSES

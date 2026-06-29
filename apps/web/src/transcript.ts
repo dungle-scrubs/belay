@@ -104,6 +104,19 @@ export type ReconnectingMessage = {
 /** Denominator for a reconnecting marker whose log predates the threaded `maxAttempts` (02.15). Those
  *  logs were written under a 3-attempt budget, so a replayed `attempt/3` stays accurate. */
 export const LEGACY_RECONNECT_ATTEMPTS = 3;
+// A tool-call guardrail marker (plan 07), rendered inline as a quiet status: the per-turn controller
+// flagged a repeating tool path (a repeated exact failure, or a read-only call returning the same
+// result with no progress). REDACTED by construction - only the tool name, the decision action, the
+// reason code, and the repeat count, never the raw arguments, output, or fingerprints. The model-facing
+// guidance rides the tool result, not this marker.
+export type GuardrailMessage = {
+  kind: "guardrail";
+  id: string;
+  tool: string;
+  action: string;
+  reason: string;
+  count: number;
+};
 // A cross-turn compaction fold IN PROGRESS (D-040), rendered inline as a TRANSIENT progress bar:
 // older turns are being folded into a rolling summary, which streams. `tokens`/`budget` fill the
 // bar honestly (real tokens streamed ÷ the ~1k budget, never a predicted %). It appears while the
@@ -174,6 +187,7 @@ export type Message =
   | RecoveredMessage
   | ContinuedMessage
   | ReconnectingMessage
+  | GuardrailMessage
   | CompactingMessage
   | DelegationMessage
   | ShellMessage
@@ -645,6 +659,22 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           tool.aborted = false;
           tool.result = decoded.result;
         }
+        break;
+      }
+      case "tool.guardrail": {
+        // A redacted guardrail marker for the call that just ran (07): render it inline right after
+        // its tool card. ask_user has no transcript row, so suppress its (never-emitted) marker too.
+        if (decoded.name === "ask_user") {
+          break;
+        }
+        messages.push({
+          kind: "guardrail",
+          id: event.eventId,
+          tool: decoded.name,
+          action: decoded.action,
+          reason: decoded.reason,
+          count: decoded.count,
+        });
         break;
       }
       case "assistant.completed": {

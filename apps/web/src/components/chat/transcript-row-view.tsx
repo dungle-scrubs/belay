@@ -1,5 +1,12 @@
 import { estimateTokens, isContextOverflowText } from "@trevor/session";
-import { CircleX, CornerDownRight, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
+import {
+  CircleX,
+  CornerDownRight,
+  PanelRight,
+  RotateCw,
+  ShieldAlert,
+  TriangleAlert,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
@@ -176,6 +183,21 @@ export function TranscriptRowView({
         <CornerDownRight className="size-3 shrink-0" />
         continued at step {message.steps} · {(message.pressure * 100).toFixed(1)}% context, room
         left
+      </div>
+    );
+  }
+
+  if (message.kind === "guardrail") {
+    // A quiet, REDACTED advisory (plan 07): the loop flagged a repeating tool path. It shows only the
+    // tool, the reason, and the repeat count - never the arguments, output, or fingerprints (D-005).
+    // Deliberately understated muted text, like the checkpoint breadcrumb, not an alarming card.
+    const reason = message.reason === "repeated_failure" ? "repeated failure" : "no progress";
+    const blocked = message.action === "block" || message.action === "halt";
+    return (
+      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+        <ShieldAlert className="size-3 shrink-0" />
+        guardrail · {message.tool} · {reason} ×{message.count}
+        {blocked ? " · blocked" : ""}
       </div>
     );
   }

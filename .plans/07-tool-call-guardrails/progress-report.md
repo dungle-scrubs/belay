@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M5: Redacted Event Surface
-- Current cutoff blockers: 15 unchecked (24 done)
+> Current focus: M6: Optional Hard Stops
+- Current cutoff blockers: 10 unchecked (29 done)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -50,11 +50,11 @@
 
 ### M5: Redacted Event Surface
 
-- [ ] RED: Add host/web protocol tests for a redacted `tool.guardrail` or equivalent progress event.
-- [ ] GREEN: Emit the event with decision action, reason code, count, tool name, and fingerprints only.
-- [ ] RED: Add tests proving raw args and raw output are absent from emitted events.
-- [ ] GREEN: Render the event in the transcript or diagnostics surface without exposing sensitive values.
-- [ ] REFACTOR: Reuse existing turn/run correlation fields instead of inventing a parallel identity scheme.
+- [x] RED: Add host/web protocol tests for a redacted `tool.guardrail` or equivalent progress event.
+- [x] GREEN: Emit the event with decision action, reason code, count, tool name, and fingerprints only.
+- [x] RED: Add tests proving raw args and raw output are absent from emitted events.
+- [x] GREEN: Render the event in the transcript or diagnostics surface without exposing sensitive values.
+- [x] REFACTOR: Reuse existing turn/run correlation fields instead of inventing a parallel identity scheme.
 
 ### M6: Optional Hard Stops
 

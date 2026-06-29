@@ -804,3 +804,36 @@ test("M4: a read-only path that keeps making progress is never warned", async ()
     "changing results are progress: no guidance is ever appended",
   );
 });
+
+const guardrailEvents = (events: readonly AgentEvent[]) =>
+  events.filter((e): e is Extract<AgentEvent, { type: "guardrail" }> => e.type === "guardrail");
+
+test("M5: a warn decision rides out as a redacted guardrail AgentEvent", async () => {
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "a.ts" }), rounds: 4 }),
+    {
+      runTool: () => Effect.succeed("error: read failed - file not found"),
+      guardrails: { failureWarnAt: 3 },
+    },
+  );
+  const flagged = guardrailEvents(events);
+  assert.ok(flagged.length >= 1, "at least one guardrail event fired once the streak warned");
+  const first = flagged[0];
+  assert.equal(first?.call.name, "read");
+  assert.equal(first?.decision.action, "warn");
+  assert.equal(first?.decision.reason, "repeated_failure");
+  assert.equal(first?.decision.count, 3);
+  assert.match(first?.decision.argsFingerprint ?? "", /^[0-9a-f]{12}$/);
+  assert.match(first?.decision.failureFingerprint ?? "", /^[0-9a-f]{12}$/);
+});
+
+test("M5: an allow-only tool path emits no guardrail event", async () => {
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "a.ts" }), rounds: 2 }),
+    {
+      runTool: () => Effect.succeed("error: read failed - file not found"),
+      guardrails: { failureWarnAt: 3 },
+    },
+  );
+  assert.equal(guardrailEvents(events).length, 0, "two failures stay advisory - no event");
+});

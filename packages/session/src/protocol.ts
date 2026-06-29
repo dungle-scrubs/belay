@@ -638,6 +638,38 @@ export const events = {
     type: "tool.completed",
     payload: { runId: p.runId, callId: p.callId, name: p.name, result: p.result },
   }),
+  /**
+   * A redacted tool-call guardrail marker (plan 07, D-005/D-008): the per-turn controller flagged a
+   * repeating tool path (a repeated exact failure, or a read-only call returning the same result with
+   * no progress). It carries ONLY the redacted observability surface - the decision `action`, the
+   * `reason` code, the repeat `count`, the tool `name`, and short args/result/failure fingerprints -
+   * keyed by the same `runId`/`callId` as the tool it annotates. Raw arguments and raw output never
+   * ride this event; the model-facing guidance is appended to the tool result instead, not here.
+   */
+  toolGuardrail: (p: {
+    runId: string;
+    callId: string;
+    name: string;
+    action: string;
+    reason: string;
+    count: number;
+    argsFingerprint: string;
+    resultFingerprint?: string;
+    failureFingerprint?: string;
+  }): TrevorEventInput => ({
+    type: "tool.guardrail",
+    payload: {
+      runId: p.runId,
+      callId: p.callId,
+      name: p.name,
+      action: p.action,
+      reason: p.reason,
+      count: p.count,
+      argsFingerprint: p.argsFingerprint,
+      ...(p.resultFingerprint ? { resultFingerprint: p.resultFingerprint } : {}),
+      ...(p.failureFingerprint ? { failureFingerprint: p.failureFingerprint } : {}),
+    },
+  }),
   hostBeat: (p: { instanceId: string }): TrevorEventInput => ({
     type: "host.beat",
     payload: { instanceId: p.instanceId },

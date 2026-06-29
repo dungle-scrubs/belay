@@ -274,3 +274,37 @@ test("10-large-paste: the transcript copy action writes the exact pasted payload
   assert.equal(writeText.mock.calls[0]?.[0], payload);
   vi.unstubAllGlobals();
 });
+
+test("plan 07: a guardrail marker renders quietly with only the tool, reason, and count", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "guardrail",
+      id: "g1",
+      tool: "read",
+      action: "warn",
+      reason: "no_progress",
+      count: 3,
+    }),
+  );
+  assert.match(container.textContent ?? "", /guardrail/i);
+  assert.match(container.textContent ?? "", /read/);
+  assert.match(container.textContent ?? "", /no progress/i);
+  assert.match(container.textContent ?? "", /×3/);
+  // A quiet advisory, not the alarming alert card.
+  assert.equal(container.querySelector('[role="alert"]'), null);
+});
+
+test("plan 07: a blocked guardrail marker names the block", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "guardrail",
+      id: "g2",
+      tool: "bash",
+      action: "block",
+      reason: "repeated_failure",
+      count: 5,
+    }),
+  );
+  assert.match(container.textContent ?? "", /repeated failure/i);
+  assert.match(container.textContent ?? "", /blocked/i);
+});

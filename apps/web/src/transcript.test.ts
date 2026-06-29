@@ -1167,3 +1167,70 @@ test("10-large-paste: a user.message's pasted payloads flow into the transcript 
     "a legacy prompt with no pastes still decodes",
   );
 });
+
+test("plan 07: a tool.guardrail event reduces to a redacted inline guardrail marker", () => {
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(
+      2,
+      events.toolStarted({ runId: "r1", callId: "c0", name: "read", arguments: '{"path":"a"}' }),
+    ),
+    ev(3, events.toolCompleted({ runId: "r1", callId: "c0", name: "read", result: "same output" })),
+    ev(
+      4,
+      events.toolGuardrail({
+        runId: "r1",
+        callId: "c0",
+        name: "read",
+        action: "warn",
+        reason: "no_progress",
+        count: 3,
+        argsFingerprint: "0a1b2c3d4e5f",
+        resultFingerprint: "deadbeef0011",
+      }),
+    ),
+    ev(5, events.assistantCompleted({ runId: "r1", text: "done" })),
+  ];
+  const marker = toTranscript(log).find((m) => m.kind === "guardrail");
+  assert.ok(marker, "a guardrail marker is produced");
+  assert.deepEqual(marker, {
+    kind: "guardrail",
+    id: marker?.id,
+    tool: "read",
+    action: "warn",
+    reason: "no_progress",
+    count: 3,
+  });
+  // The marker carries none of the redacted fingerprints or any raw value.
+  const dump = JSON.stringify(marker);
+  assert.doesNotMatch(
+    dump,
+    /0a1b2c3d4e5f|deadbeef0011/,
+    "fingerprints are not surfaced in the marker",
+  );
+  assert.doesNotMatch(dump, /same output|"path"/, "no raw output or arguments surface");
+});
+
+test("plan 07: an ask_user guardrail marker is suppressed (no transcript row for ask_user)", () => {
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(
+      2,
+      events.toolGuardrail({
+        runId: "r1",
+        callId: "c0",
+        name: "ask_user",
+        action: "warn",
+        reason: "repeated_failure",
+        count: 3,
+        argsFingerprint: "0a1b2c3d4e5f",
+      }),
+    ),
+    ev(3, events.assistantCompleted({ runId: "r1", text: "done" })),
+  ];
+  assert.equal(
+    toTranscript(log).some((m) => m.kind === "guardrail"),
+    false,
+    "ask_user has no transcript row, so its guardrail marker is suppressed",
+  );
+});

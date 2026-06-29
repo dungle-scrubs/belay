@@ -343,6 +343,14 @@ export type AgentEvent =
   | { readonly type: "tool_start"; readonly call: ToolCall }
   | { readonly type: "tool_end"; readonly call: ToolCall; readonly result: string }
   | {
+      /** A tool-call guardrail flagged a repeating path (07): the redacted decision for the call that
+       *  just ran. `runAgent` emits this only for a non-`allow` decision; turn.ts maps it to the
+       *  redacted `tool.guardrail` event (the model-facing guidance rides the tool result, not here). */
+      readonly type: "guardrail";
+      readonly call: ToolCall;
+      readonly decision: GuardrailDecision;
+    }
+  | {
       readonly type: "recovered";
       readonly action: "trim" | "reduce-thinking";
       readonly detail: string;
@@ -958,16 +966,22 @@ export function runAgent(
             call: ToolCall,
             index: number,
           ): Stream.Stream<AgentEvent, ProviderError> =>
-            Stream.fromEffect(
+            Stream.unwrap(
               runTool(call.name, call.arguments, call.id).pipe(
-                Effect.map((rawResult): AgentEvent => {
+                Effect.map((rawResult): Stream.Stream<AgentEvent, ProviderError> => {
                   // Observe the completed call (07): the controller fingerprints the args + result and
                   // returns a redacted decision. A `warn` appends guidance to the model-facing result;
                   // execution is never suppressed (D-003), so the model still gets the tool output.
                   const decision = guardrails.observe(call.name, call.arguments, rawResult);
                   const result = guardedToolResult(rawResult, decision);
                   slots[index] = result;
-                  return { type: "tool_end", call, result };
+                  const events: AgentEvent[] = [{ type: "tool_end", call, result }];
+                  // A non-allow decision rides out as a redacted guardrail event (turn.ts publishes
+                  // tool.guardrail); the model-facing guidance stays on the tool result above.
+                  if (decision.action !== "allow") {
+                    events.push({ type: "guardrail", call, decision });
+                  }
+                  return Stream.fromIterable(events);
                 }),
               ),
             );

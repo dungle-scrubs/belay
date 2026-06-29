@@ -492,6 +492,20 @@ export type DecodedEvent =
       readonly result: string;
     }
   | {
+      readonly type: "tool.guardrail";
+      readonly runId: string;
+      readonly callId: string;
+      readonly name: string;
+      /** "warn" | "block" | "halt" (an `allow` never rides the wire); kept open for forward-compat. */
+      readonly action: string;
+      /** "repeated_failure" | "no_progress"; kept open for forward-compat reasons. */
+      readonly reason: string;
+      readonly count: number;
+      readonly argsFingerprint: string;
+      readonly resultFingerprint?: string;
+      readonly failureFingerprint?: string;
+    }
+  | {
       readonly type: "host.online";
       readonly branch?: string;
       readonly git?: GitStatus;
@@ -757,6 +771,22 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         name: str(p.name, "tool"),
         result: str(p.result),
       };
+    case "tool.guardrail": {
+      const resultFingerprint = optStr(p.resultFingerprint);
+      const failureFingerprint = optStr(p.failureFingerprint);
+      return {
+        type: "tool.guardrail",
+        runId,
+        callId: str(p.callId, event.eventId),
+        name: str(p.name, "tool"),
+        action: str(p.action, "warn"),
+        reason: str(p.reason, "no_progress"),
+        count: num(p.count),
+        argsFingerprint: str(p.argsFingerprint),
+        ...(resultFingerprint ? { resultFingerprint } : {}),
+        ...(failureFingerprint ? { failureFingerprint } : {}),
+      };
+    }
     case "host.online":
       return {
         type: "host.online",

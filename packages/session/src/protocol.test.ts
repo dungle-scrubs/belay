@@ -280,6 +280,94 @@ test("legacy assistant.completed events decode with no stop object", () => {
   assert.equal(decoded.diagnostic, undefined);
 });
 
+test("tool.guardrail round-trips the redacted decision (plan 07, D-005)", () => {
+  const built = events.toolGuardrail({
+    runId: "r-1",
+    callId: "tc-1",
+    name: "read",
+    action: "warn",
+    reason: "no_progress",
+    count: 3,
+    argsFingerprint: "0a1b2c3d4e5f",
+    resultFingerprint: "deadbeef0011",
+  });
+  const decoded = decodeTrevorEvent(stored(built));
+  assert.deepEqual(decoded, {
+    type: "tool.guardrail",
+    runId: "r-1",
+    callId: "tc-1",
+    name: "read",
+    action: "warn",
+    reason: "no_progress",
+    count: 3,
+    argsFingerprint: "0a1b2c3d4e5f",
+    resultFingerprint: "deadbeef0011",
+  });
+  // A failure marker round-trips its failure fingerprint and omits the result one.
+  const failure = decodeTrevorEvent(
+    stored(
+      events.toolGuardrail({
+        runId: "r-1",
+        callId: "tc-2",
+        name: "bash",
+        action: "warn",
+        reason: "repeated_failure",
+        count: 3,
+        argsFingerprint: "112233445566",
+        failureFingerprint: "778899aabbcc",
+      }),
+    ),
+  );
+  assert.equal(failure?.type === "tool.guardrail" && failure.failureFingerprint, "778899aabbcc");
+  assert.equal(failure?.type === "tool.guardrail" && "resultFingerprint" in failure, false);
+});
+
+test("tool.guardrail carries no raw arguments or raw output (redacted surface, D-005)", () => {
+  // The constructor's typed surface cannot even express raw args/output - the payload is only the
+  // redacted observability fields. Pin that the serialized event leaks neither.
+  const built = events.toolGuardrail({
+    runId: "r-1",
+    callId: "tc-1",
+    name: "read",
+    action: "warn",
+    reason: "no_progress",
+    count: 4,
+    argsFingerprint: "0a1b2c3d4e5f",
+    resultFingerprint: "deadbeef0011",
+  });
+  const keys = Object.keys(built.payload).sort();
+  assert.deepEqual(keys, [
+    "action",
+    "argsFingerprint",
+    "callId",
+    "count",
+    "name",
+    "reason",
+    "resultFingerprint",
+    "runId",
+  ]);
+  assert.equal("arguments" in built.payload, false, "no raw arguments");
+  assert.equal("result" in built.payload, false, "no raw output");
+  assert.equal(
+    "guidance" in built.payload,
+    false,
+    "model guidance rides the tool result, not here",
+  );
+});
+
+test("tool.guardrail decodes a sparse/forward-compat payload with safe defaults", () => {
+  const decoded = decodeTrevorEvent(
+    stored({ type: "tool.guardrail", payload: { name: "glob" } }, { eventId: "ev-g" }),
+  );
+  assert.equal(decoded?.type, "tool.guardrail");
+  if (decoded?.type !== "tool.guardrail") return;
+  assert.equal(decoded.callId, "ev-g", "a missing callId falls back to the event id");
+  assert.equal(decoded.action, "warn", "default action");
+  assert.equal(decoded.reason, "no_progress", "default reason");
+  assert.equal(decoded.count, 0, "non-number count coerces to 0");
+  assert.equal(decoded.argsFingerprint, "");
+});
+
 test("host.online round-trips the announced subagents (D-045)", () => {
   const decoded = decodeTrevorEvent(
     stored(

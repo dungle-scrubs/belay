@@ -266,6 +266,29 @@ export function publishTurn(
           // distinct from a clean answer; flush so the forced answer reads as a new segment.
           yield* flushAll;
           stepLimitSteps = event.steps;
+        } else if (event.type === "guardrail") {
+          // A tool-call guardrail flagged a repeating path (07): publish the REDACTED marker - the
+          // decision action/reason/count, the tool name, and short fingerprints only. The raw args,
+          // raw output, and model-facing guidance never ride this event (D-005); the guidance was
+          // appended to the tool result the model reads.
+          const decision = event.decision;
+          yield* emit.publish(
+            events.toolGuardrail({
+              runId,
+              callId: event.call.id,
+              name: event.call.name,
+              action: decision.action,
+              reason: decision.reason,
+              count: decision.count,
+              argsFingerprint: decision.argsFingerprint,
+              ...(decision.resultFingerprint
+                ? { resultFingerprint: decision.resultFingerprint }
+                : {}),
+              ...(decision.failureFingerprint
+                ? { failureFingerprint: decision.failureFingerprint }
+                : {}),
+            }),
+          );
         } else if (event.type === "checkpoint") {
           // A step-budget checkpoint auto-continued the turn (02.17): the adaptive budget was reached
           // with headroom + progress below the emergency ceiling. Finalize the open segment and surface
