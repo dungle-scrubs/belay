@@ -2,7 +2,7 @@
 
 ## Summary
 
-- Current cutoff blockers: 36
+- Current cutoff blockers: 35
 - Completed current work: 61 (Phases 1-6)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
