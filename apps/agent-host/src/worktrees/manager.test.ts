@@ -12,7 +12,6 @@ function fakeFs(): WorktreeFs & { files: Map<string, string> } {
     readFile: (p) => files.get(p) ?? null,
     writeFile: (p, c) => void files.set(p, c),
     exists: (p) => files.has(p),
-    remove: (p) => void files.delete(p),
   };
 }
 

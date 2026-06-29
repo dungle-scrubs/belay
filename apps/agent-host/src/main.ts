@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { homedir } from "node:os";
 import {
   type ArtifactRef,
   DEFAULT_SESSION_ID,
@@ -61,7 +60,7 @@ import { generateHandoffPrompt, hasGenerableContext } from "./handoff-generate";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { msg } from "./messages";
-import { WORKSPACE_ROOT } from "./paths";
+import { abbrevHome, WORKSPACE_ROOT } from "./paths";
 import { supervisor } from "./processes";
 import {
   buildProviders,
@@ -192,9 +191,9 @@ function startSourceSignIn(sourceId: string): void {
     }
   });
 }
-// Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_STATE_HOME. abbrevPath is
-// a hoisted declaration, so referencing it here is fine.
-const worktrees = nodeWorktreeManager(abbrevPath);
+// Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_STATE_HOME, with the
+// shared home-abbreviation as its display closure.
+const worktrees = nodeWorktreeManager(abbrevHome);
 
 // Debug mode: a runtime flag (booted from `TREVOR_DEBUG`, set by `trevor --debug`, toggled at
 // runtime by `/debug`) that gates a collection of dev-only host commands - hidden from a normal
@@ -419,15 +418,6 @@ const lease = new Lease(
 /** Formats an integer with thousands separators for display (e.g. 104616 -> "104,616"). */
 function commas(n: number): string {
   return Math.round(n).toLocaleString("en-US");
-}
-
-/** Abbreviates the user's home directory to ~ for display. */
-function abbrevPath(absolute: string): string {
-  const home = homedir();
-  if (absolute === home) {
-    return "~";
-  }
-  return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
 }
 
 /**
@@ -709,6 +699,24 @@ function closeRun(runId: string, kind: "cancelled" | "interrupted"): void {
 }
 
 /**
+ * Tears down the active work for a cancel/stop: interrupt a running MANUAL /compact (the user asked,
+ * so they can take it back; automatic folds aren't tracked here and run to completion), close every
+ * targeted run as `cancelled`, and cancel the scheduler. An empty `runId` means "whatever is active" -
+ * every in-flight run - and matches `scheduler.cancel("")`. Shared by the live-leader user.cancel
+ * handler and the graceful-stop path, so /stop + SIGTERM tear down the same things ESC does.
+ */
+function abortRuns(runId: string): void {
+  if (manualCompactFiber) {
+    Effect.runFork(Fiber.interrupt(manualCompactFiber));
+  }
+  const targets = runId ? [runId] : turnMachine.inFlightIds();
+  for (const target of targets) {
+    closeRun(target, "cancelled");
+  }
+  scheduler.cancel(runId);
+}
+
+/**
  * Closes runs left dangling by a previous leader (crashed or hot-reloaded mid-turn): an
  * assistant.started with no completion. Called on TAKING leadership, when this host has no turn of
  * its own running, so every in-flight run is a dead orphan. Closes each as `interrupted`, which
@@ -908,8 +916,8 @@ function announceOnline(): void {
       instanceId: INSTANCE_ID,
       ...(branch ? { branch } : {}),
       ...(git ? { git } : {}),
-      cwd: abbrevPath(process.cwd()),
-      workspace: abbrevPath(WORKSPACE_ROOT),
+      cwd: abbrevHome(process.cwd()),
+      workspace: abbrevHome(WORKSPACE_ROOT),
       // The immediate-command inventory, so the browser knows which slashes route
       // to the host's command lane (and can drive a slash menu). Debug-mode adds /restart
       // (and friends) to this set; toggling /debug re-announces with the set updated.
@@ -1439,7 +1447,7 @@ async function worktreeSwitch(id: string): Promise<void> {
     await emit(
       events.commandResult({
         command: "/worktree",
-        text: `✓ switched to ${abbrevPath(target.path)}`,
+        text: `✓ switched to ${abbrevHome(target.path)}`,
         ok: true,
       }),
     );
@@ -1628,12 +1636,7 @@ async function restartHost(): Promise<void> {
  */
 function performGracefulStop(): StopOutcome {
   return stopSession({
-    abortActive: () => {
-      for (const runId of turnMachine.inFlightIds()) {
-        closeRun(runId, "cancelled");
-      }
-      scheduler.cancel("");
-    },
+    abortActive: () => abortRuns(""),
     clearQueue: () => scheduler.clearPending(),
     killJobs: () => supervisor.killAll(),
     isBusy: () => scheduler.isBusy(),
@@ -1750,8 +1753,8 @@ async function worktreeReconcile(): Promise<void> {
  */
 function doctorFacts(): DoctorRuntimeFacts {
   return {
-    cwd: abbrevPath(process.cwd()),
-    workspace: abbrevPath(WORKSPACE_ROOT),
+    cwd: abbrevHome(process.cwd()),
+    workspace: abbrevHome(WORKSPACE_ROOT),
     instanceId: INSTANCE_ID.slice(0, 8),
     role: lease.isLeader() ? "leader" : "standby",
     host: hostState(),
@@ -1891,17 +1894,7 @@ function handleEvent(message: SessionEvent): void {
     // completions are already in the durable log; re-running this on replay would RE-EMIT a fresh
     // cancelled burst for every in-flight run at that point - which is what made each host restart
     // republish a wall of "cancelled" completions. Replay just lets those logged completions stand.
-    // Interrupt a MANUAL /compact if one is running (the user asked for it, so they can take it
-    // back). Automatic folds aren't tracked here, so they run to completion. The fold's bar vanishes
-    // via the web's user.cancel reap; nothing was emitted, so the context is unchanged.
-    if (manualCompactFiber) {
-      Effect.runFork(Fiber.interrupt(manualCompactFiber));
-    }
-    const targets = decoded.runId ? [decoded.runId] : turnMachine.inFlightIds();
-    for (const runId of targets) {
-      closeRun(runId, "cancelled");
-    }
-    scheduler.cancel(decoded.runId);
+    abortRuns(decoded.runId);
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
     if (decoded.command === "/compact") {
       compactPending = true; // cleared by its command.result; reaped if a restart interrupts it
@@ -2164,7 +2157,7 @@ function currentLabel(): string {
 
 /** Basename of a path (after home-abbreviation), matching the inventory's project projection. */
 function projectName(path: string): string {
-  const trimmed = abbrevPath(path).replace(/\/+$/, "");
+  const trimmed = abbrevHome(path).replace(/\/+$/, "");
   const base = trimmed.split("/").pop();
   return base && base.length > 0 ? base : trimmed;
 }
@@ -2195,7 +2188,7 @@ function configureRecall(): void {
         participantId: `${PRODUCER_ID}:recall`,
       },
       currentSessionId: SESSION_ID,
-      currentWorkspace: abbrevPath(WORKSPACE_ROOT),
+      currentWorkspace: abbrevHome(WORKSPACE_ROOT),
       currentProject: projectName(WORKSPACE_ROOT),
     }),
     provider: () => compactionController.providerOrDefault() ?? null,

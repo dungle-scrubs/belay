@@ -1,4 +1,5 @@
 import type { HandoffMode } from "@trevor/session";
+import { stripMatchingQuotes } from "./args";
 
 /**
  * The `/handoff` argument parser (M1), kept as a pure function separate from the host orchestration in
@@ -23,24 +24,13 @@ export interface ParsedHandoff {
 const DIRECT = /^--direct(?:\s|$)/;
 const GENERATE = /^--generate(?:\s|$)/;
 
-function unquote(text: string): string {
-  if (text.length >= 2) {
-    const first = text[0];
-    const last = text[text.length - 1];
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-      return text.slice(1, -1);
-    }
-  }
-  return text;
-}
-
 export function parseHandoff(args: string): ParsedHandoff {
   const trimmed = args.trim();
   if (DIRECT.test(trimmed)) {
-    return { mode: "direct", prompt: unquote(trimmed.replace(DIRECT, "").trim()) };
+    return { mode: "direct", prompt: stripMatchingQuotes(trimmed.replace(DIRECT, "").trim()) };
   }
   if (GENERATE.test(trimmed)) {
-    return { mode: "generate", prompt: unquote(trimmed.replace(GENERATE, "").trim()) };
+    return { mode: "generate", prompt: stripMatchingQuotes(trimmed.replace(GENERATE, "").trim()) };
   }
-  return { mode: "generate", prompt: unquote(trimmed) };
+  return { mode: "generate", prompt: stripMatchingQuotes(trimmed) };
 }

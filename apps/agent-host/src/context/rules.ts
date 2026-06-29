@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { type ContextRuleSource, type ContextScope, expandContextImports } from "./agents-md";
@@ -310,9 +310,6 @@ export function collectTrevorRuleSources(cwd: string): RulesReport {
   const seenIds = new Map<string, string>();
 
   for (const path of collectMarkdownFiles(root)) {
-    if (!statSync(path).isFile()) {
-      continue;
-    }
     const parsed = parseFrontmatter(path, readFileSync(path, "utf8"));
     const rule = metadataFromRecord(parsed.metadata, path);
     const folder = nearestFolderMetadata(path, root, folderCache);

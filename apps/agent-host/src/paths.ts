@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { TREVOR_HOME, TREVOR_STATE_HOME } from "@trevor/session/node-paths";
 
@@ -37,6 +38,16 @@ export const WORKSPACE_ROOT = resolve(process.env.TREVOR_WORKSPACE ?? process.cw
  */
 export const WORKSPACE_CONFINED_TOOLS = ["edit", "glob", "grep"] as const;
 export const HOST_CWD_TOOLS = ["read", "write", "bash"] as const;
+
+/** Abbreviates the user's home directory to `~` for display (the sanitized path everywhere the host
+ *  shows a directory: status announces, `/cd`, `/doctor`, the worktree manager's display closure). */
+export function abbrevHome(absolute: string): string {
+  const home = homedir();
+  if (absolute === home) {
+    return "~";
+  }
+  return absolute.startsWith(`${home}/`) ? `~${absolute.slice(home.length)}` : absolute;
+}
 
 /** True when a tool's file access is confined to the workspace root (vs. the host cwd). */
 export function isWorkspaceConfined(tool: string): boolean {

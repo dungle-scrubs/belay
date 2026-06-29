@@ -15,7 +15,6 @@ export interface WorktreeFs {
   readFile(path: string): string | null;
   writeFile(path: string, content: string): void;
   exists(path: string): boolean;
-  remove(path: string): void;
 }
 
 /** A worktree's lifecycle state. "active" is live; "archived" is retained but not offered. */

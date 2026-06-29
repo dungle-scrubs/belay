@@ -1,7 +1,7 @@
 import { rgPath } from "@vscode/ripgrep";
 import { Schema } from "effect";
 import { WORKSPACE_ROOT } from "../paths";
-import { runSearchProcess } from "./search-process";
+import { firstLine, runSearchProcess } from "./search-process";
 import { simpleTool, toolExecution, toolInput } from "./shared";
 
 const DEFAULT_MAX_MATCHES = 100;
@@ -50,8 +50,6 @@ function buildArgs(args: typeof Params.Type): string[] {
   argv.push("--regexp", args.pattern, ".");
   return argv;
 }
-
-const firstLine = (text: string): string => text.split("\n").find((l) => l.trim()) ?? "";
 
 /**
  * Searches workspace file contents with ripgrep (the project-managed `@vscode/ripgrep` binary, not a

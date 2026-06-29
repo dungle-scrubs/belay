@@ -20,7 +20,6 @@ function fakeFs(seed: Record<string, string> = {}): WorktreeFs & { files: Map<st
     readFile: (p) => files.get(p) ?? null,
     writeFile: (p, c) => void files.set(p, c),
     exists: (p) => files.has(p),
-    remove: (p) => void files.delete(p),
   };
 }
 

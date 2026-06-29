@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { confine, WORKSPACE_ROOT } from "../paths";
 import { astGrepPath } from "./ast-grep-bin";
-import { runSearchProcess } from "./search-process";
+import { firstLine, runSearchProcess } from "./search-process";
 import { simpleTool, toolExecution, toolInput } from "./shared";
 
 const DEFAULT_MAX_MATCHES = 100;
@@ -97,7 +97,7 @@ export const astGrepTool = simpleTool({
     }
     // ast-grep exit codes: 0 = matches, 1 = no matches, >=2 = error (bad pattern/lang, spawn).
     if (result.code !== 0 && result.code !== 1) {
-      const detail = (result.stderr.split("\n").find((l) => l.trim()) ?? "").trim();
+      const detail = firstLine(result.stderr).trim();
       // A bad pattern / unknown language is a value failure -> typed input error.
       if (/pattern|language|parse|unknown|invalid|not supported/i.test(detail)) {
         return toolInput(detail || "invalid ast-grep pattern or language");

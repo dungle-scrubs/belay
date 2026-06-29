@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -51,18 +50,4 @@ export function astGrepPath(): string | null {
     cached = null;
   }
   return cached;
-}
-
-/** True when the ast-grep binary resolves AND runs - so the tool is only registered when usable. */
-export function astGrepAvailable(): boolean {
-  const bin = astGrepPath();
-  if (!bin) {
-    return false;
-  }
-  try {
-    execFileSync(bin, ["--version"], { stdio: "ignore", timeout: 5_000 });
-    return true;
-  } catch {
-    return false;
-  }
 }

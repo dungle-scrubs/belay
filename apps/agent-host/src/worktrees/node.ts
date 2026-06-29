@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { nodeGitRunner } from "../git-status";
 import { TREVOR_STATE_HOME } from "../paths";
@@ -21,13 +21,6 @@ export const nodeWorktreeFs: WorktreeFs = {
   },
   exists(path) {
     return existsSync(path);
-  },
-  remove(path) {
-    try {
-      rmSync(path, { force: true, recursive: true });
-    } catch {
-      // already gone
-    }
   },
 };
 

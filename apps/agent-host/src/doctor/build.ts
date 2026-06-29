@@ -1,5 +1,4 @@
 import { access, constants } from "node:fs/promises";
-import { homedir } from "node:os";
 import {
   type DoctorSnapshot,
   formatDoctorReport,
@@ -11,6 +10,7 @@ import {
 import { resolveTrevorStateHome } from "@trevor/session/node-paths";
 import { Effect } from "effect";
 import { fmtFields } from "../log";
+import { abbrevHome } from "../paths";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { providerFailures } from "../providers/provider-failure-log";
@@ -174,14 +174,6 @@ async function doctorText(input: DoctorCommandInput): Promise<string> {
   );
   lines.push(...statuses, "", `tools: ${(await toolNames()).join(", ")}`);
   return lines.join("\n");
-}
-
-/** Abbreviates the home dir to `~` for a sanitized /doctor path. */
-function abbrevHome(absolute: string): string {
-  const home = homedir();
-  return absolute === home || absolute.startsWith(`${home}/`)
-    ? `~${absolute.slice(home.length)}`
-    : absolute;
 }
 
 /** Whether a directory is writable (a bounded fs probe for the /doctor Storage area). */

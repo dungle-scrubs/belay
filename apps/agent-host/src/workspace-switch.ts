@@ -2,6 +2,7 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { freshSessionId } from "@trevor/session";
+import { stripMatchingQuotes } from "./args";
 import { msg } from "./messages";
 
 export interface WorkspaceSwitchFs {
@@ -45,15 +46,6 @@ function expandHome(input: string, home: string): string {
     return home;
   }
   return input.startsWith("~/") ? join(home, input.slice(2)) : input;
-}
-
-function stripMatchingQuotes(input: string): string {
-  const first = input[0];
-  const last = input[input.length - 1];
-  if ((first === '"' || first === "'") && first === last) {
-    return input.slice(1, -1);
-  }
-  return input;
 }
 
 export function resolveWorkspaceRoot(cwd: string, fs: WorkspaceSwitchFs): string {

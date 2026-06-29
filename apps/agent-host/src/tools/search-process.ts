@@ -29,6 +29,10 @@ export interface SearchProcessOptions {
   readonly maxBuffer?: number;
 }
 
+/** The first non-blank line of a process's output (typically stderr), or "" - the shared way both
+ *  search tools extract a one-line error summary from a noisy multi-line stderr. */
+export const firstLine = (text: string): string => text.split("\n").find((l) => l.trim()) ?? "";
+
 export async function runSearchProcess(
   bin: string,
   args: readonly string[],
