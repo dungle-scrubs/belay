@@ -295,6 +295,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     relativePath: ".worktrees",
     description: "Managed git worktrees and their registry.json.",
   },
+  {
+    name: "docs-corpus",
+    category: "state",
+    relativePath: "docs",
+    description: "Cached external-documentation corpora (docs tool).",
+  },
   // legacy (~/.trevor) - detect-only
   {
     name: "legacy-root",

@@ -228,6 +228,8 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   grep: renderOutput,
   web_search: renderWebSearch,
   web_fetch: renderWebFetch,
+  // docs renders generically for now; Phase 7 adds a corpus/result renderer for its JSON envelope.
+  docs: renderGeneric,
   session_recall: renderRecall,
   ast_grep: renderGeneric,
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it

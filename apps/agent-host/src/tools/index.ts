@@ -9,6 +9,7 @@ import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
 import { bashTool } from "./bash";
+import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
 import { ToolInputError } from "./errors";
@@ -46,6 +47,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   grepTool,
   webSearchTool,
   webFetchTool,
+  docsTool,
   sessionRecallTool,
   skillsListTool,
   skillViewTool,

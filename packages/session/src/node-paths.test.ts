@@ -157,6 +157,17 @@ test("storagePath resolves an entry under its category root and follows root ove
   );
 });
 
+test("the docs-corpus root is classified under the state home and follows the state override", () => {
+  const docs = STORAGE_INVENTORY.find((entry) => entry.name === "docs-corpus");
+  assert.ok(docs, "docs-corpus is in the storage inventory");
+  assert.equal(docs.category, "state");
+  assert.equal(storagePath(docs, {}, "/Users/kevin"), "/Users/kevin/.local/state/trevorV2/docs");
+  assert.equal(
+    storagePath(docs, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
+    "/tmp/state/docs",
+  );
+});
+
 test("legacy-root resolves to ~/.trevor and external entries stay read-only", () => {
   const legacy = STORAGE_INVENTORY.find((entry) => entry.name === "legacy-root");
   assert.ok(legacy);

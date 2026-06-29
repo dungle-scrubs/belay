@@ -7,6 +7,7 @@ import { buildTaskTools } from "../tasks";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { bashTool } from "./bash";
+import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
 import { globTool } from "./glob";
@@ -36,6 +37,7 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     grepTool,
     webSearchTool,
     webFetchTool,
+    docsTool,
     sessionRecallTool,
     astGrepTool,
     doctorTool,
@@ -78,6 +80,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     grepTool,
     webSearchTool,
     webFetchTool,
+    docsTool,
     sessionRecallTool,
     skillsListTool,
     skillViewTool,

@@ -418,4 +418,6 @@ export const webFetchTool = simpleTool({
 });
 
 export type { WebFetchArgs };
-export { Params as WebFetchParams, resolveHostLiterals };
+// `liveDeps` is exported as the bound, env-reading dependency bundle so a sibling tool (docs) can reuse
+// the real web_fetch reader through `runWebFetch(args, webFetchLiveDeps)` without re-deriving the keys/DNS.
+export { liveDeps as webFetchLiveDeps, Params as WebFetchParams, resolveHostLiterals };
