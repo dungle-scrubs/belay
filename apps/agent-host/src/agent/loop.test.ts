@@ -385,6 +385,35 @@ test("03.1 M2: a turn with no seed opens a tool round before the gate (first-tur
   );
 });
 
+test("03.1 M3: the progress guard measures growth from the seed, not the first measured prompt", async () => {
+  // The turn is seeded BELOW its (flat) measured prompt: 50k seed vs a constant 60k measured, both
+  // far under the gate on a 1M window. Pre-baselining the guard from the seed means the first real
+  // usage event does NOT re-baseline - so the first checkpoint sees +10k of growth (60k - 50k) and
+  // auto-continues exactly once, then pauses when the next window is flat (60k - 60k).
+  const below = await collect(loopingProvider({ input: 60_000, window: 1_000_000 }), {
+    seedUsage: { input: 50_000, contextWindow: 1_000_000 },
+  });
+  assert.equal(
+    below.filter((e) => e.type === "checkpoint").length,
+    1,
+    "seed-to-measured growth counts as progress: one auto-continue, proving no re-baseline at step 0",
+  );
+
+  // Seeded AT its measured prompt (no gap): the guard sees flat context from turn start, so it never
+  // auto-continues - it pauses at the budget like any flat turn. This isolates the contract: progress
+  // is measured from the SEED, so an equal seed yields zero checkpoints.
+  const equal = await collect(loopingProvider({ input: 60_000, window: 1_000_000 }), {
+    seedUsage: { input: 60_000, contextWindow: 1_000_000 },
+  });
+  assert.equal(
+    equal.filter((e) => e.type === "checkpoint").length,
+    0,
+    "an equal seed measures no growth: the flat turn pauses, never auto-continues",
+  );
+  const stop = equal.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "step_backstop");
+});
+
 test("M4: context pressure synthesizes before the adaptive budget is spent", async () => {
   // 85% of a 1M window is past the 80% gate: even with the generous 1M tier budget, context pressure
   // wins on the very next round rather than burning the whole adaptive budget first.

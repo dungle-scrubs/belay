@@ -445,8 +445,13 @@ export function runAgent(
   // `checkpointInputTokens` snapshots context at the last checkpoint so the progress guard can require
   // a non-trivial advance over the window. The emergency ceiling stays the sole step-axis terminator.
   let grantedSteps = 0;
-  let checkpointInputTokens = 0;
-  let checkpointBaselined = false;
+  // Pre-baselined from the seed (03.1 D-003): when the turn carries forward the prior turn's measured
+  // usage, the progress guard's baseline is the turn's STARTING context, so it measures growth from
+  // turn start and the first real usage event does not re-baseline (the `!checkpointBaselined` guard
+  // below is then a no-op). Without a seed both stay 0/false, so the first usage event baselines as
+  // today and the loop is unchanged.
+  let checkpointInputTokens = opts.seedUsage?.input ?? 0;
+  let checkpointBaselined = opts.seedUsage !== undefined;
 
   // The adaptive per-step budget (D-009…D-013): derived fresh from the live facts (served context
   // window, prompt pressure, repeated-tool progress, reasoning level) so a large-context, low-pressure

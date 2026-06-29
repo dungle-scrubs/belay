@@ -3,10 +3,10 @@
 ## Summary
 
 - **Current cutoff blockers:** 16
-- **Completed current work:** 8
+- **Completed current work:** 11
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M3 - pre-baseline the progress guard under seeding
+- **Current focus:** M4 - shared empty-answer recovery for `synthesize()`
 
 ## Completed Current State / Hard Dependencies
 
@@ -29,9 +29,9 @@
 - [x] REFACTOR: update the `loop.ts:424-429` comment block to document the seed source.
 
 ### M3 - pre-baseline the progress guard under seeding
-- [ ] RED: mid-range seed does not make step-0 `contextAdvanced` spuriously true; first real usage event does not re-baseline `checkpointInputTokens`.
-- [ ] GREEN: when seeding, set `checkpointInputTokens = seedUsage.input` and `checkpointBaselined = true`.
-- [ ] REFACTOR: confirm the step-axis checkpoint path is unreachable when the seed is over the fraction.
+- [x] RED: mid-range seed does not make step-0 `contextAdvanced` spuriously true; first real usage event does not re-baseline `checkpointInputTokens`.
+- [x] GREEN: when seeding, set `checkpointInputTokens = seedUsage.input` and `checkpointBaselined = true`.
+- [x] REFACTOR: confirm the step-axis checkpoint path is unreachable when the seed is over the fraction (the M2 over-fraction test synthesizes at step 0 and never reaches a checkpoint).
 
 ### M4 - shared empty-answer recovery for `synthesize()`
 - [ ] RED: blank first synthesis triggers exactly one splice-and-retry; non-blank retry surfaced as the answer.
