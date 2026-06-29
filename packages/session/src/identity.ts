@@ -28,8 +28,9 @@ export type RuntimeKind = (typeof RUNTIME_KIND)[keyof typeof RUNTIME_KIND];
  * The producerId each surface stamps on the events it publishes. The host suppresses
  * its own echo by comparing an event's producerId against its own (PRODUCER_IDS.host),
  * and history projection keys self-vs-other off it - so the namespace lives here once.
+ * The `trevor` CLI stamps `cli` on the lifecycle events it publishes (e.g. session.archived).
  */
-export const PRODUCER_IDS = { host: "trevor-host", web: "trevor-web" } as const;
+export const PRODUCER_IDS = { host: "trevor-host", web: "trevor-web", cli: "trevor-cli" } as const;
 export type ProducerId = (typeof PRODUCER_IDS)[keyof typeof PRODUCER_IDS];
 
 /**

@@ -1,3 +1,4 @@
+import { asRecord } from "./coerce";
 import { decodeModelRef, type ModelRef } from "./model-source";
 
 /**
@@ -154,9 +155,6 @@ export function quickPickerModels(
   }
   return order.map((sourceId) => ({ sourceId, models: bySource.get(sourceId) ?? [] }));
 }
-
-const asRecord = (v: unknown): Record<string, unknown> =>
-  v && typeof v === "object" ? (v as Record<string, unknown>) : {};
 
 // The single ModelRef decode lives in model-source.ts (shared by the protocol's `user.message.model`
 // and these persisted preferences), so a partial/garbled ref loads to null in both places identically.

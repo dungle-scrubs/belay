@@ -820,5 +820,19 @@ export const LIFECYCLE_TYPES = [
   "user.command",
 ] as const satisfies readonly DecodedEvent["type"][];
 
+/**
+ * The non-lifecycle event types the inventory read model projects per session (D-090): the latest
+ * host.online (cwd/workspace/git), the first user.message (title), and the archive/title/delete
+ * markers. Owned here beside the event constructors and typed as `DecodedEvent["type"]`, so each
+ * name can only ever be a real protocol event, never a bare literal that drifts from its constructor.
+ */
+export const INVENTORY_EVENT_TYPES = {
+  hostOnline: "host.online",
+  userMessage: "user.message",
+  sessionArchived: "session.archived",
+  sessionTitle: "session.title",
+  sessionDeleted: "session.deleted",
+} as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;
+
 export type { DecodedEvent } from "./protocol-decode";
 export { decodeTrevorEvent } from "./protocol-decode";

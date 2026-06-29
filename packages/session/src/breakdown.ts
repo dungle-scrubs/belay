@@ -61,8 +61,8 @@ export interface UsageBreakdown {
 }
 
 /** A zero `UsageBreakdown` - the additive identity for `addBreakdown` and the empty
- *  accumulator a category-driven sum folds onto. */
-function emptyBreakdown(): UsageBreakdown {
+ *  accumulator a category-driven sum folds onto (also the seed the wire decoder overlays). */
+export function emptyBreakdown(): UsageBreakdown {
   const input = { imagesBase64: 0, imageCount: 0, byTool: {} as Record<string, number> } as Record<
     string,
     unknown

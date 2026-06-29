@@ -1,5 +1,6 @@
 import { HEX64 } from "./blob";
-import { BREAKDOWN_CATEGORIES, type UsageBreakdown } from "./breakdown";
+import { BREAKDOWN_CATEGORIES, emptyBreakdown, type UsageBreakdown } from "./breakdown";
+import { asAnyNumber, asMaybeString, asString, asStringArray } from "./coerce";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
 import {
@@ -37,12 +38,14 @@ import {
 } from "./provider-question";
 
 // --- consume side: permissive coercion + discriminated decode ---
-
-const str = (value: unknown, fallback = ""): string =>
-  typeof value === "string" ? value : fallback;
-const optStr = (value: unknown): string | undefined =>
-  typeof value === "string" ? value : undefined;
-const num = (value: unknown): number => (typeof value === "number" ? value : 0);
+//
+// The four wire helpers below are aliases for the shared `coerce` leaf, kept under their short local
+// names so the dense decode arms stay readable: `str`/`optStr`/`num` allow empty strings and
+// non-finite numbers (the char-count fields ride them), and `strList` is the string-array filter.
+const str = asString;
+const optStr = asMaybeString;
+const num = asAnyNumber;
+const strList = asStringArray;
 
 function coerceUsage(value: unknown): Usage | undefined {
   if (!value || typeof value !== "object") {
@@ -64,19 +67,17 @@ function coerceBreakdown(value: unknown): UsageBreakdown | undefined {
   const b = value as Record<string, unknown>;
   const inp = (b.input ?? {}) as Record<string, unknown>;
   const out = (b.output ?? {}) as Record<string, unknown>;
-  const byToolRaw = (inp.byTool ?? {}) as Record<string, unknown>;
-  const byTool: Record<string, number> = {};
-  for (const [name, chars] of Object.entries(byToolRaw)) {
+  // Start from the canonical zero shape (every category key seeded once) and overlay the decoded
+  // values, so the pool keys come from breakdown.ts's descriptor walk rather than a second copy.
+  const result = emptyBreakdown();
+  const input = result.input as unknown as Record<string, number>;
+  const output = result.output as unknown as Record<string, number>;
+  const byTool = result.input.byTool as Record<string, number>;
+  for (const [name, chars] of Object.entries((inp.byTool ?? {}) as Record<string, unknown>)) {
     byTool[name] = num(chars);
   }
-  // Text categories are decoded from the shared descriptor (each pool's keys); images
-  // and byTool are the explicit non-category fields.
-  const input: Record<string, unknown> = {
-    imagesBase64: num(inp.imagesBase64),
-    imageCount: num(inp.imageCount),
-    byTool,
-  };
-  const output: Record<string, unknown> = {};
+  input.imagesBase64 = num(inp.imagesBase64);
+  input.imageCount = num(inp.imageCount);
   for (const c of BREAKDOWN_CATEGORIES) {
     if (c.pool === "input") {
       input[c.key] = num(inp[c.key]);
@@ -84,7 +85,7 @@ function coerceBreakdown(value: unknown): UsageBreakdown | undefined {
       output[c.key] = num(out[c.key]);
     }
   }
-  return { input, output } as UsageBreakdown;
+  return result;
 }
 
 function coerceTurnStop(value: unknown): TurnStop | undefined {
@@ -184,10 +185,6 @@ const TASK_STATUSES: readonly TaskStatus[] = [
   "failed",
   "cancelled",
 ];
-
-function strList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
-}
 
 function coerceCommands(value: unknown): CommandSpec[] {
   return coerceArray(value, (c) => {
@@ -608,7 +605,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         threshold: num(p.threshold),
         detail: str(p.detail),
       };
-    case "assistant.reconnecting":
+    case "assistant.reconnecting": {
+      const diagnostic = coerceProviderDiagnostic(p.diagnostic);
       return {
         type: "assistant.reconnecting",
         runId,
@@ -616,10 +614,9 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         // Optional: absent on logs written before the budget was threaded; the row falls back then.
         ...(typeof p.maxAttempts === "number" ? { maxAttempts: p.maxAttempts } : {}),
         detail: str(p.detail),
-        ...(coerceProviderDiagnostic(p.diagnostic)
-          ? { diagnostic: coerceProviderDiagnostic(p.diagnostic) }
-          : {}),
+        ...(diagnostic ? { diagnostic } : {}),
       };
+    }
     case "delegated.to":
       return {
         type: "delegated.to",
@@ -638,7 +635,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         usage: coerceUsage(p.usage),
         breakdown: coerceBreakdown(p.breakdown),
       };
-    case "assistant.completed":
+    case "assistant.completed": {
+      const diagnostic = coerceProviderDiagnostic(p.diagnostic);
       return {
         type: "assistant.completed",
         runId,
@@ -651,10 +649,9 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         noReply: p.noReply === true,
         stepLimit: typeof p.stepLimit === "number" ? p.stepLimit : 0,
         stop: coerceTurnStop(p.stop),
-        ...(coerceProviderDiagnostic(p.diagnostic)
-          ? { diagnostic: coerceProviderDiagnostic(p.diagnostic) }
-          : {}),
+        ...(diagnostic ? { diagnostic } : {}),
       };
+    }
     case "context.compacted":
       return {
         type: "context.compacted",

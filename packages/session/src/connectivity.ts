@@ -10,7 +10,11 @@
  * disabled/misconfigured probe, or an inconclusive result - never "offline by assumption".
  */
 
+import { oneOf } from "./coerce";
+
 export type InternetStatus = "online" | "offline" | "unknown";
+
+const INTERNET_STATUSES: readonly InternetStatus[] = ["online", "offline", "unknown"];
 
 export interface InternetSnapshot {
   readonly status: InternetStatus;
@@ -52,12 +56,8 @@ export function coerceInternetSnapshot(value: unknown): InternetSnapshot {
     return UNKNOWN_INTERNET;
   }
   const v = value as Record<string, unknown>;
-  const status: InternetStatus =
-    v.status === "online" || v.status === "offline" || v.status === "unknown"
-      ? v.status
-      : "unknown";
   return {
-    status,
+    status: oneOf(INTERNET_STATUSES, v.status, "unknown"),
     checking: v.checking === true,
     checkedAt: typeof v.checkedAt === "string" ? v.checkedAt : null,
     error: typeof v.error === "string" ? v.error : null,

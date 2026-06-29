@@ -16,3 +16,8 @@ export function raceTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: num
   const timer = setTimeout(() => controller.abort(), ms);
   return run(controller.signal).finally(() => clearTimeout(timer));
 }
+
+/** Resolves after `ms` - the one-line `setTimeout` promise every poll loop would otherwise re-spell. */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

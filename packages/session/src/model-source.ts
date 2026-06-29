@@ -1,3 +1,4 @@
+import { asNumber, asRecord, asString, asStringArray, oneOf, oneOfOrNull } from "./coerce";
 import type { ProviderModel } from "./protocol";
 
 /**
@@ -107,19 +108,6 @@ const SOURCE_ACTIONS: readonly SourceAction[] = [
   "disable",
 ];
 
-const asString = (v: unknown, fallback = ""): string => (typeof v === "string" ? v : fallback);
-const asRecord = (v: unknown): Record<string, unknown> =>
-  v && typeof v === "object" ? (v as Record<string, unknown>) : {};
-const asStringArray = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-const asFiniteOr = (v: unknown, fallback: number): number =>
-  typeof v === "number" && Number.isFinite(v) ? v : fallback;
-
-/** Returns `v` when it is one of `opts`, else `fallback` - the tolerant enum decode. */
-function oneOf<T extends string>(opts: readonly T[], v: unknown, fallback: T): T {
-  return typeof v === "string" && (opts as readonly string[]).includes(v) ? (v as T) : fallback;
-}
-
 /** Decodes an unknown to a {@link SourceType}, falling back to `"api-key"` for anything unrecognised. */
 export function decodeSourceType(v: unknown): SourceType {
   return oneOf(SOURCE_TYPES, v, "api-key");
@@ -145,7 +133,7 @@ export function decodeSourceSummary(v: unknown): SourceSummary {
     type: decodeSourceType(r.type),
     label: asString(r.label, asString(r.sourceId)),
     status: oneOf(SOURCE_STATUSES, r.status, "unavailable"),
-    modelCount: Math.max(0, Math.floor(asFiniteOr(r.modelCount, 0))),
+    modelCount: Math.max(0, Math.floor(asNumber(r.modelCount, 0))),
     auth: oneOf(AUTH_STATES, r.auth, "none"),
     freshness: decodeFreshness(r.freshness),
     actions,
@@ -170,11 +158,6 @@ export function decodeCatalogEntry(v: unknown): CatalogEntry {
     reasoningLevels: asStringArray(r.reasoningLevels),
     defaultReasoning: typeof r.defaultReasoning === "string" ? r.defaultReasoning : "off",
   };
-}
-
-/** Like {@link oneOf} but yields null (not a fallback member) for an unrecognised value. */
-function oneOfOrNull<T extends string>(opts: readonly T[], v: unknown): T | null {
-  return typeof v === "string" && (opts as readonly string[]).includes(v) ? (v as T) : null;
 }
 
 /** The phases of a host-driven source sign-in flow (D-065 M5). The host emits these as it runs an

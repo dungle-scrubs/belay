@@ -14,6 +14,8 @@
  * EVENTS that move this payload over the wire live in ./protocol.
  */
 
+import { asOptRecord, asOptString, asString } from "./coerce";
+
 /** How a single question is answered: pick exactly one, pick any number, or type free text. */
 export type ProviderQuestionAnswerShape = "single_choice" | "multi_select" | "free_text";
 
@@ -394,51 +396,45 @@ export function validateAnswer(
 // payloads. They never throw: unknown or missing fields become safe defaults and unknown extra metadata is
 // dropped. Used by `decodeTrevorEvent` and the host runtime.
 
-const asStr = (v: unknown): string => (typeof v === "string" ? v : "");
-const asOptStr = (v: unknown): string | undefined =>
-  typeof v === "string" && v.length > 0 ? v : undefined;
-const asRecord = (v: unknown): Record<string, unknown> | undefined =>
-  v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
-
 function decodePreview(value: unknown): QuestionChoicePreview | undefined {
   if (typeof value === "string") {
     return value.length > 0 ? { text: value } : undefined;
   }
-  const o = asRecord(value);
+  const o = asOptRecord(value);
   if (!o) {
     return undefined;
   }
   const preview: QuestionChoicePreview = {
-    ...(asOptStr(o.text) ? { text: asStr(o.text) } : {}),
-    ...(asOptStr(o.viewport) ? { viewport: asStr(o.viewport) } : {}),
-    ...(asOptStr(o.before) ? { before: asStr(o.before) } : {}),
-    ...(asOptStr(o.after) ? { after: asStr(o.after) } : {}),
+    ...(asOptString(o.text) ? { text: asString(o.text) } : {}),
+    ...(asOptString(o.viewport) ? { viewport: asString(o.viewport) } : {}),
+    ...(asOptString(o.before) ? { before: asString(o.before) } : {}),
+    ...(asOptString(o.after) ? { after: asString(o.after) } : {}),
   };
   return Object.keys(preview).length > 0 ? preview : undefined;
 }
 
 function decodeChoice(value: unknown, index: number): ProviderQuestionChoice {
-  const c = asRecord(value) ?? {};
+  const c = asOptRecord(value) ?? {};
   const preview = decodePreview(c.preview);
   const badges = Array.isArray(c.badges)
     ? c.badges.filter((b): b is string => typeof b === "string")
     : undefined;
-  const content = asRecord(c.content);
+  const content = asOptRecord(c.content);
   return {
-    id: asStr(c.id) || `choice_${index + 1}`,
-    label: asStr(c.label),
-    ...(asOptStr(c.description) ? { description: asStr(c.description) } : {}),
+    id: asString(c.id) || `choice_${index + 1}`,
+    label: asString(c.label),
+    ...(asOptString(c.description) ? { description: asString(c.description) } : {}),
     ...(preview ? { preview } : {}),
     ...(c.recommended === true ? { recommended: true } : {}),
-    ...(asOptStr(c.impact) ? { impact: asStr(c.impact) } : {}),
-    ...(asOptStr(c.risk) ? { risk: asStr(c.risk) } : {}),
+    ...(asOptString(c.impact) ? { impact: asString(c.impact) } : {}),
+    ...(asOptString(c.risk) ? { risk: asString(c.risk) } : {}),
     ...(badges && badges.length > 0 ? { badges } : {}),
     ...(content ? { content } : {}),
   };
 }
 
 function decodeQuestion(value: unknown, index: number): ProviderQuestionItem {
-  const q = asRecord(value) ?? {};
+  const q = asOptRecord(value) ?? {};
   const choices = Array.isArray(q.choices) ? q.choices.map(decodeChoice) : [];
   const multiSelect = q.multiSelect === true;
   const shape = q.answerShape;
@@ -447,11 +443,11 @@ function decodeQuestion(value: unknown, index: number): ProviderQuestionItem {
       ? shape
       : deriveAnswerShape({ multiSelect, choices });
   return {
-    id: asStr(q.id) || `question_${index + 1}`,
-    question: asStr(q.question),
+    id: asString(q.id) || `question_${index + 1}`,
+    question: asString(q.question),
     answerShape,
-    ...(asOptStr(q.header) ? { header: asStr(q.header) } : {}),
-    ...(asOptStr(q.kind) ? { kind: asStr(q.kind) } : {}),
+    ...(asOptString(q.header) ? { header: asString(q.header) } : {}),
+    ...(asOptString(q.kind) ? { kind: asString(q.kind) } : {}),
     multiSelect,
     requiresReason: q.requiresReason === true,
     allowDefer: q.allowDefer === true,
@@ -461,7 +457,7 @@ function decodeQuestion(value: unknown, index: number): ProviderQuestionItem {
 
 /** Decode a canonical contract off the wire, tolerating missing/garbled fields (schemaVersion fixed at 1). */
 export function decodeProviderQuestionContract(value: unknown): ProviderQuestionContract {
-  const v = asRecord(value) ?? {};
+  const v = asOptRecord(value) ?? {};
   const questions = Array.isArray(v.questions) ? v.questions.map(decodeQuestion) : [];
   return { schemaVersion: 1, questions };
 }
@@ -472,11 +468,11 @@ function decodeSelected(value: unknown): readonly SelectedChoice[] | undefined {
   }
   const out: SelectedChoice[] = [];
   for (const raw of value) {
-    const s = asRecord(raw);
+    const s = asOptRecord(raw);
     if (s) {
       out.push({
-        ...(asOptStr(s.id) ? { id: asStr(s.id) } : {}),
-        label: asStr(s.label),
+        ...(asOptString(s.id) ? { id: asString(s.id) } : {}),
+        label: asString(s.label),
         ...(s.custom === true ? { custom: true } : {}),
       });
     }
@@ -485,16 +481,16 @@ function decodeSelected(value: unknown): readonly SelectedChoice[] | undefined {
 }
 
 function decodeItemAnswer(value: unknown, index: number): QuestionItemAnswer {
-  const a = asRecord(value) ?? {};
+  const a = asOptRecord(value) ?? {};
   const selected = decodeSelected(a.selected);
-  const content = asRecord(a.content);
+  const content = asOptRecord(a.content);
   return {
-    id: asStr(a.id) || `question_${index + 1}`,
-    answer: asStr(a.answer),
+    id: asString(a.id) || `question_${index + 1}`,
+    answer: asString(a.answer),
     ...(selected ? { selected } : {}),
-    ...(asOptStr(a.text) ? { text: asStr(a.text) } : {}),
-    ...(asOptStr(a.notes) ? { notes: asStr(a.notes) } : {}),
-    ...(asOptStr(a.reason) ? { reason: asStr(a.reason) } : {}),
+    ...(asOptString(a.text) ? { text: asString(a.text) } : {}),
+    ...(asOptString(a.notes) ? { notes: asString(a.notes) } : {}),
+    ...(asOptString(a.reason) ? { reason: asString(a.reason) } : {}),
     ...(a.defer === true ? { defer: true } : {}),
     ...(content ? { content } : {}),
   };
@@ -502,7 +498,7 @@ function decodeItemAnswer(value: unknown, index: number): QuestionItemAnswer {
 
 /** Decode a user answer off the wire. Anything other than an explicit decline/cancel reads as an accept. */
 export function decodeProviderQuestionAnswer(value: unknown): ProviderQuestionAnswer {
-  const v = asRecord(value) ?? {};
+  const v = asOptRecord(value) ?? {};
   if (v.action === "decline") {
     return { action: "decline" };
   }
@@ -510,5 +506,5 @@ export function decodeProviderQuestionAnswer(value: unknown): ProviderQuestionAn
     return { action: "cancel" };
   }
   const questions = Array.isArray(v.questions) ? v.questions.map(decodeItemAnswer) : [];
-  return { action: "accept", answer: asStr(v.answer), questions };
+  return { action: "accept", answer: asString(v.answer), questions };
 }
