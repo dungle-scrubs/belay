@@ -97,6 +97,46 @@ test("buildSystemPrompt describes the static -> Jina -> Firecrawl ladder with Fi
   );
 });
 
+// --- Plan 05 M7: docs (external documentation) vs workspace-truth guidance (D-008) ---
+
+test("buildSystemPrompt tells the model to use docs for current external documentation", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("Use docs for CURRENT EXTERNAL documentation"),
+    "the prompt frames docs as the external-documentation lookup",
+  );
+  assert.ok(
+    prompt.includes("product, API, library, SDK, or service"),
+    "the prompt enumerates the external documentation subjects docs covers",
+  );
+});
+
+test("buildSystemPrompt tells the model NOT to use docs for active workspace source truth", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("Do NOT use docs for the active workspace's own source truth"),
+    "the prompt forbids docs for the workspace's own code truth",
+  );
+  assert.ok(
+    prompt.includes("docs is for external documentation"),
+    "the prompt restates that docs is external-only",
+  );
+});
+
+test("a local-repo question is routed to files/search/tests, not docs (workspace-truth boundary)", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  // The workspace-truth boundary names the local tools as the route for THIS repo's facts...
+  assert.ok(
+    prompt.includes("read, glob, grep, ast_grep, the tests, and the compiler"),
+    "the prompt routes local-repo truth to the local file/search/test/compiler tools",
+  );
+  // ...and explicitly forbids substituting docs for reading the repo under work.
+  assert.ok(
+    prompt.includes("never a substitute for reading the repo you are working in"),
+    "the prompt forbids docs as a stand-in for reading the active repository",
+  );
+});
+
 // --- Phase 7 M2: nested AGENTS.md context injected into the per-turn prompt (D-080) ---
 
 test("buildSystemPrompt injects the AGENTS.md context block when a file exists", () => {
