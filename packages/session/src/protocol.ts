@@ -258,6 +258,21 @@ export interface TaskSnapshot {
   readonly blocks: readonly string[];
 }
 
+/** The revision a `tasks.current` event without freshness metadata decodes to (a legacy/pre-09 log). */
+export const LEGACY_TASK_REVISION = 0;
+
+/**
+ * Whether an incoming `tasks.current` snapshot should REPLACE the one currently held, given both
+ * revisions and that events are processed in log/arrival order. A higher revision always wins; an
+ * equal revision (including the legacy 0 that every pre-freshness event shares) counts as the newer
+ * arrival and also wins, so the latest event still takes effect; a strictly lower revision is stale
+ * and is rejected. The single comparison shared by the host replay/standby load guard and the web
+ * `tasksFrom` derivation, so host and web never disagree about which snapshot is current. <!-- D-004 -->
+ */
+export function taskSnapshotReplaces(incomingRev: number, currentRev: number): boolean {
+  return incomingRev >= currentRev;
+}
+
 /**
  * The per-fold DELTA manifest carried on a `context.compacted` event: what THIS fold
  * folded away, not a cumulative picture. `turnRange` is the seq span it covers; `files`,
@@ -590,10 +605,15 @@ export const events = {
       ...(p.column != null ? { column: p.column } : {}),
     },
   }),
-  /** The whole task checklist after a change - a snapshot the UI renders and the host restores from. */
-  tasksCurrent: (p: { tasks: readonly TaskSnapshot[] }): TrevorEventInput => ({
+  /**
+   * The whole task checklist after a change - a snapshot the UI renders and the host restores from.
+   * `rev` is the registry's monotonic revision at emit time; a stale snapshot (lower rev arriving
+   * later, e.g. on replay) is then rejected rather than clobbering newer state. Omitted for a legacy
+   * caller, which decodes to LEGACY_TASK_REVISION. <!-- D-004 -->
+   */
+  tasksCurrent: (p: { tasks: readonly TaskSnapshot[]; rev?: number }): TrevorEventInput => ({
     type: "tasks.current",
-    payload: { tasks: p.tasks },
+    payload: { tasks: p.tasks, ...(p.rev !== undefined ? { rev: p.rev } : {}) },
   }),
   toolStarted: (p: {
     runId: string;

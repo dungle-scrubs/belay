@@ -457,7 +457,12 @@ export type DecodedEvent =
       readonly line?: number;
       readonly column?: number;
     }
-  | { readonly type: "tasks.current"; readonly tasks: readonly TaskSnapshot[] }
+  | {
+      readonly type: "tasks.current";
+      readonly tasks: readonly TaskSnapshot[];
+      /** Monotonic freshness revision; legacy events without it decode to LEGACY_TASK_REVISION (0). */
+      readonly rev: number;
+    }
   | {
       readonly type: "tool.started";
       readonly runId: string;
@@ -720,7 +725,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         column: typeof p.column === "number" ? p.column : undefined,
       };
     case "tasks.current":
-      return { type: "tasks.current", tasks: coerceTasks(p.tasks) };
+      return { type: "tasks.current", tasks: coerceTasks(p.tasks), rev: num(p.rev) };
     case "tool.started":
       return {
         type: "tool.started",

@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M5 - Protocol Freshness Metadata
-- Current cutoff blockers: 30
+- Current focus: M8 - Stream and UI Coverage
+- Current cutoff blockers: 12
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 31
+- Completed current work: 49
 
 ## Current Cutoff Blockers
 
@@ -67,33 +67,33 @@
 
 #### M5: Protocol Freshness Metadata
 
-- [ ] RED: Add protocol tests for a `tasks.current` sequence or revision field.
-- [ ] GREEN: Extend `TaskRegistry` snapshots or `tasks.current` events with monotonic freshness metadata.
-- [ ] RED: Add backward-compatibility tests for old `tasks.current` events that lack metadata if existing logs require it.
-- [ ] GREEN: Decode legacy snapshots safely, with conservative ordering behavior.
-- [ ] REFACTOR: Keep freshness metadata separate from per-task IDs so clearing and recreating tasks cannot collide.
+- [x] RED: Add protocol tests for a `tasks.current` sequence or revision field.
+- [x] GREEN: Extend `TaskRegistry` snapshots or `tasks.current` events with monotonic freshness metadata.
+- [x] RED: Add backward-compatibility tests for old `tasks.current` events that lack metadata if existing logs require it.
+- [x] GREEN: Decode legacy snapshots safely, with conservative ordering behavior.
+- [x] REFACTOR: Keep freshness metadata separate from per-task IDs so clearing and recreating tasks cannot collide.
 
 #### M6: Host Replay and Standby Guard
 
-- [ ] RED: Add host tests where an older `tasks.current` event arrives after a newer one.
-- [ ] GREEN: Ignore stale snapshots in standby/replay load paths.
-- [ ] RED: Add a test proving live leaders do not clobber their own newer registry state from read-back snapshots.
-- [ ] GREEN: Preserve the existing leader ownership rule while adding freshness checks.
-- [ ] REFACTOR: Centralize freshness comparison so web and host do not disagree.
+- [x] RED: Add host tests where an older `tasks.current` event arrives after a newer one.
+- [x] GREEN: Ignore stale snapshots in standby/replay load paths.
+- [x] RED: Add a test proving live leaders do not clobber their own newer registry state from read-back snapshots.
+- [x] GREEN: Preserve the existing leader ownership rule while adding freshness checks.
+- [x] REFACTOR: Centralize freshness comparison so web and host do not disagree.
 
 #### M7: Web Derivation Freshness
 
-- [ ] RED: Add derive tests where a stale `tasks.current` follows a fresh one in the event list.
-- [ ] GREEN: Update `tasksFrom` to select the freshest valid task snapshot instead of blindly taking the latest array entry.
-- [ ] RED: Add tests for same-revision tie behavior.
-- [ ] GREEN: Preserve deterministic tie handling.
-- [ ] REFACTOR: Keep `TasksPanel` purely presentational; freshness belongs in derivation/state.
+- [x] RED: Add derive tests where a stale `tasks.current` follows a fresh one in the event list.
+- [x] GREEN: Update `tasksFrom` to select the freshest valid task snapshot instead of blindly taking the latest array entry.
+- [x] RED: Add tests for same-revision tie behavior.
+- [x] GREEN: Preserve deterministic tie handling.
+- [x] REFACTOR: Keep `TasksPanel` purely presentational; freshness belongs in derivation/state.
 
 ### Gate 3 -> 4
 
-- [ ] Fresh snapshots win over stale snapshots in host and web tests.
-- [ ] Legacy task events decode safely if supported.
-- [ ] Leader, standby, and replay behavior remains deterministic.
+- [x] Fresh snapshots win over stale snapshots in host and web tests.
+- [x] Legacy task events decode safely if supported.
+- [x] Leader, standby, and replay behavior remains deterministic.
 
 ### Phase 4: End-to-End Verification
 

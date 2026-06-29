@@ -1,4 +1,4 @@
-import type { TaskSnapshot, TaskStatus } from "@trevor/session";
+import { type TaskSnapshot, type TaskStatus, taskSnapshotReplaces } from "@trevor/session";
 import { Effect, Schema } from "effect";
 import { msg } from "./messages";
 // Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildTaskTools()` at top
@@ -70,6 +70,12 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 export class TaskRegistry {
   private readonly tasks = new Map<string, Task>();
   private seq = 0;
+  /**
+   * A monotonic revision bumped on every mutation, rides each tasks.current as its freshness stamp.
+   * Kept SEPARATE from the per-task `seq` id allocator (clearing + recreating tasks resets ids but
+   * must not rewind freshness), so a stale snapshot can never clobber newer state. <!-- D-004 -->
+   */
+  private rev = 0;
   private readonly listeners = new Set<() => void>();
 
   /** Fires after every mutation (the host wires this to emit tasks.current). */
@@ -77,7 +83,13 @@ export class TaskRegistry {
     this.listeners.add(fn);
   }
 
+  /** The current freshness revision, stamped onto each emitted snapshot. */
+  revision(): number {
+    return this.rev;
+  }
+
   private notify(): void {
+    this.rev += 1;
     for (const fn of this.listeners) {
       fn();
     }
@@ -202,6 +214,25 @@ export class TaskRegistry {
       blockedBy: t.blockedBy,
       blocks: t.blocks,
     }));
+  }
+
+  /**
+   * Restores from a snapshot ONLY when it is at least as fresh as the current state (replay / standby
+   * sync), adopting its revision so later mutations stay monotonic. Returns whether it was applied. A
+   * strictly older snapshot - a late delivery or an out-of-order replay - is rejected so it cannot
+   * clobber newer task state; an equal revision (incl. legacy 0) applies, so an ordered replay still
+   * ends on the latest snapshot. Never re-emits. The freshness rule is shared with the web derivation
+   * via `taskSnapshotReplaces`. <!-- D-004 -->
+   */
+  loadIfFresh(snapshot: readonly TaskSnapshot[], rev: number): boolean {
+    if (!taskSnapshotReplaces(rev, this.rev)) {
+      return false;
+    }
+
+    this.load(snapshot);
+    this.rev = rev;
+
+    return true;
   }
 
   /** Restores the registry from a snapshot (replay / standby sync); does NOT re-emit. */

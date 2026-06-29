@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { test } from "vitest";
 import { contextRegistry } from "./context/registry";
 import { SystemPromptBuilder } from "./providers/system-prompt";
@@ -60,4 +61,82 @@ test("the prompt checklist includes every task even past the UI's five-row cap",
     assert.match(prompt, new RegExp(`task_${i}: doing ${i}`));
   }
   assert.equal(prompt.split("\n").length, 10); // the header line plus nine task rows
+});
+
+// --- M5/M6: registry freshness metadata + the standby/replay load guard (D-004) ---
+
+const snap = (id: string, status: TaskStatus): TaskSnapshot => ({
+  id,
+  subject: id,
+  activeForm: id,
+  status,
+  blockedBy: [],
+  blocks: [],
+});
+
+test("the registry revision increases monotonically on every mutation", () => {
+  const registry = new TaskRegistry();
+  assert.equal(registry.revision(), 0);
+
+  const task = registry.create({ subject: "a" });
+  assert.equal(registry.revision(), 1);
+
+  registry.update(task.id, { status: "in_progress" });
+  assert.equal(registry.revision(), 2);
+
+  registry.update(task.id, { status: "deleted" });
+  assert.equal(registry.revision(), 3);
+});
+
+test("loadIfFresh ignores a stale snapshot and keeps the newer state", () => {
+  const registry = new TaskRegistry();
+
+  assert.equal(registry.loadIfFresh([snap("task_1", "in_progress")], 5), true);
+  assert.equal(registry.revision(), 5);
+
+  // An older snapshot (lower revision) arrives late; it must not clobber the rev-5 state.
+  assert.equal(registry.loadIfFresh([snap("task_2", "pending")], 2), false);
+  assert.deepEqual(
+    registry.list().map((t) => t.id),
+    ["task_1"],
+  );
+  assert.equal(registry.revision(), 5);
+});
+
+test("loadIfFresh applies an equal revision so an ordered (legacy) replay ends on the latest", () => {
+  const registry = new TaskRegistry();
+
+  // Legacy snapshots all share revision 0; the latest in replay order still wins.
+  assert.equal(registry.loadIfFresh([snap("task_1", "pending")], 0), true);
+  assert.equal(registry.loadIfFresh([snap("task_2", "in_progress")], 0), true);
+  assert.deepEqual(
+    registry.list().map((t) => t.id),
+    ["task_2"],
+  );
+});
+
+test("a live leader's newer registry state survives a stale read-back of its own snapshot", () => {
+  const registry = new TaskRegistry();
+
+  // The leader mutates its registry directly (rev climbs to 2)...
+  const task = registry.create({ subject: "wire" });
+  registry.update(task.id, { status: "in_progress" });
+  assert.equal(registry.revision(), 2);
+
+  // ...then an older snapshot it emitted earlier (rev 1) is read back; freshness rejects it, so the
+  // in_progress edit is preserved even if the leader-ownership skip were ever bypassed.
+  assert.equal(registry.loadIfFresh([snap("task_1", "pending")], 1), false);
+  assert.equal(registry.list()[0]?.status, "in_progress");
+});
+
+test("loadIfFresh adopts the snapshot revision so later mutations stay monotonic", () => {
+  const registry = new TaskRegistry();
+
+  registry.loadIfFresh([snap("task_1", "pending")], 9);
+  assert.equal(registry.revision(), 9);
+
+  // A standby promoted to leader continues bumping from the adopted revision, never rewinding.
+  const next = registry.create({ subject: "next" });
+  assert.equal(registry.revision(), 10);
+  assert.equal(next.id, "task_2"); // the seq id allocator also advanced past the loaded task_1
 });

@@ -15,6 +15,7 @@ import {
   type SourceSignInState,
   type SourceSummary,
   type TaskSnapshot,
+  taskSnapshotReplaces,
   type WorktreeSummary,
 } from "@trevor/session";
 
@@ -326,9 +327,28 @@ export function defaultProviderFrom(events: readonly SessionEvent[]): string | u
   return latest(events, (d) => (d.type === "host.online" && d.default ? d.default : undefined));
 }
 
-/** The latest task checklist the host published (empty when there are no tasks / cleared). */
+/**
+ * The FRESHEST task checklist the host published (empty when there are no tasks / cleared). Selects by
+ * the snapshot's monotonic revision rather than blindly taking the last array entry, so a stale
+ * `tasks.current` - one with an older revision that arrives or is replayed after a newer one - cannot
+ * overwrite the current checklist. Ties (equal revision, including the legacy 0 every pre-09 event
+ * shares) go to the later arrival, preserving latest-wins for old logs. The comparison is shared with
+ * the host load guard via `taskSnapshotReplaces`, so the two never disagree. <!-- D-004 -->
+ */
 export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
-  return [...(latest(events, (d) => (d.type === "tasks.current" ? d.tasks : undefined)) ?? [])];
+  let bestRev = Number.NEGATIVE_INFINITY;
+  let bestTasks: readonly TaskSnapshot[] | undefined;
+
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+
+    if (decoded?.type === "tasks.current" && taskSnapshotReplaces(decoded.rev, bestRev)) {
+      bestRev = decoded.rev;
+      bestTasks = decoded.tasks;
+    }
+  }
+
+  return bestTasks ? [...bestTasks] : [];
 }
 
 /** A pending ask_user question projected from the log: the contract to render + its lifecycle ids. */

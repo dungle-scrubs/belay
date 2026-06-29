@@ -197,6 +197,40 @@ test("tasksFrom: among legacy (rev-less) snapshots, the latest array entry wins"
   assert.equal(snap[0]?.status, "in_progress");
 });
 
+// M7: a stale snapshot (lower revision) arriving AFTER a fresher one must not overwrite it.
+test("tasksFrom ignores a stale snapshot that follows a fresher one in the event list", () => {
+  const snap = tasksFrom([
+    evt("tasks.current", {
+      tasks: [{ id: "t1", subject: "fresh", status: "in_progress" }],
+      rev: 5,
+    }),
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "stale", status: "pending" }], rev: 2 }),
+  ]);
+  assert.equal(snap.length, 1);
+  assert.equal(snap[0]?.subject, "fresh");
+  assert.equal(snap[0]?.status, "in_progress");
+});
+
+// M7: equal revisions tie to the later arrival (deterministic), matching the legacy latest-wins rule.
+test("tasksFrom: a same-revision tie resolves to the later event", () => {
+  const snap = tasksFrom([
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "first", status: "pending" }], rev: 3 }),
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "second", status: "completed" }], rev: 3 }),
+  ]);
+  assert.equal(snap[0]?.subject, "second");
+  assert.equal(snap[0]?.status, "completed");
+});
+
+// M7: a fresher snapshot anywhere in the log wins even if a lower-rev event is last.
+test("tasksFrom picks the highest revision regardless of array position", () => {
+  const snap = tasksFrom([
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "low", status: "pending" }], rev: 1 }),
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "high", status: "in_progress" }], rev: 9 }),
+    evt("tasks.current", { tasks: [{ id: "t1", subject: "mid", status: "completed" }], rev: 4 }),
+  ]);
+  assert.equal(snap[0]?.subject, "high");
+});
+
 test("hostStatus (live presence): present with the live leader, others are standbys", () => {
   const events = [online("h1"), evt("host.role", { instanceId: "h1", role: HOST_ROLE.leader })];
   const presence = (...ids: string[]): HostPresence[] =>

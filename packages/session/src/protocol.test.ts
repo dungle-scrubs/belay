@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
-import { decodeTrevorEvent, events, LIFECYCLE_TYPES, type TrevorEventInput } from "./protocol";
+import {
+  decodeTrevorEvent,
+  events,
+  LEGACY_TASK_REVISION,
+  LIFECYCLE_TYPES,
+  type TrevorEventInput,
+  taskSnapshotReplaces,
+} from "./protocol";
 import type { ProviderQuestionAnswer, ProviderQuestionContract } from "./provider-question";
 
 /**
@@ -931,4 +938,45 @@ test("handoff.requested decodes a sparse/forward-compat payload with safe defaul
   assert.equal(decoded.sourceSessionId, "s-fallback"); // missing source falls back to the event's session
   assert.equal(decoded.proposed, false);
   assert.equal("prompt" in decoded, false);
+});
+
+// --- Plan 09 M5: tasks.current freshness metadata (D-004) ---
+
+const oneTask = [
+  {
+    id: "task_1",
+    subject: "wire the API",
+    activeForm: "wiring the API",
+    status: "in_progress" as const,
+    blockedBy: [],
+    blocks: [],
+  },
+];
+
+test("tasks.current carries a monotonic revision and round-trips it", () => {
+  const decoded = decodeTrevorEvent(stored(events.tasksCurrent({ tasks: oneTask, rev: 7 })));
+  assert.equal(decoded?.type, "tasks.current");
+  if (decoded?.type !== "tasks.current") return;
+  assert.equal(decoded.rev, 7);
+  assert.equal(decoded.tasks[0]?.id, "task_1");
+});
+
+test("a legacy tasks.current without a revision decodes to LEGACY_TASK_REVISION", () => {
+  // An old log (or a caller that omits rev) carries no freshness field; it must decode conservatively.
+  const legacy = events.tasksCurrent({ tasks: oneTask });
+  assert.equal("rev" in legacy.payload, false);
+
+  const decoded = decodeTrevorEvent(stored(legacy));
+  assert.equal(decoded?.type, "tasks.current");
+  if (decoded?.type !== "tasks.current") return;
+  assert.equal(decoded.rev, LEGACY_TASK_REVISION);
+  assert.equal(LEGACY_TASK_REVISION, 0);
+});
+
+test("taskSnapshotReplaces: higher revision wins, equal replaces (latest), lower is stale", () => {
+  assert.equal(taskSnapshotReplaces(5, 3), true); // newer
+  assert.equal(taskSnapshotReplaces(3, 3), true); // tie -> latest arrival wins
+  assert.equal(taskSnapshotReplaces(2, 5), false); // stale, rejected
+  // Legacy events all share rev 0, so the latest still wins among them.
+  assert.equal(taskSnapshotReplaces(LEGACY_TASK_REVISION, LEGACY_TASK_REVISION), true);
 });

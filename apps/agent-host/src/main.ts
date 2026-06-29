@@ -382,7 +382,9 @@ function checkTurn(rule: boolean, message: string, fields?: Record<string, unkno
 // Every task_create/task_update mutates the shared registry; publish the new
 // checklist so the UI updates and any replay/standby can restore from it.
 taskRegistry.onChange(() => {
-  emit(events.tasksCurrent({ tasks: taskRegistry.snapshot() })).catch(() => {});
+  emit(events.tasksCurrent({ tasks: taskRegistry.snapshot(), rev: taskRegistry.revision() })).catch(
+    () => {},
+  );
 });
 
 /** Lease timings are overridable via env so tests can run fast. */
@@ -2133,9 +2135,12 @@ function handleEvent(message: SessionEvent): void {
     recordEvent(message);
     // Restore the checklist from the log on replay, and keep standbys in sync for
     // failover. The live leader owns the registry (it mutates it directly), so it
-    // ignores the read-back of its own snapshot to avoid clobbering newer edits.
+    // ignores the read-back of its own snapshot to avoid clobbering newer edits. On the
+    // standby/replay path, loadIfFresh additionally rejects a stale (out-of-order or
+    // late) snapshot by its revision, so an old tasks.current can never overwrite newer
+    // task state. <!-- D-004 -->
     if (!live || !lease.isLeader()) {
-      taskRegistry.load(decoded.tasks);
+      taskRegistry.loadIfFresh(decoded.tasks, decoded.rev);
     }
   } else if (live && (decoded.type === "host.beat" || decoded.type === "host.hello")) {
     if (decoded.instanceId) {
