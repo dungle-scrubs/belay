@@ -1,4 +1,4 @@
-import { Plus, Terminal, X } from "lucide-react";
+import { Maximize2, Plus, Terminal, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type SubmitEvent, useEffect } from "react";
 import { ArtifactThumb } from "@/ArtifactThumb";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,8 @@ export interface PromptInputProps {
   readonly onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   readonly disabled: boolean;
   readonly placeholder: string;
+  /** Open the current draft in the full-surface prompt editor (02.12) for a larger writing area. */
+  readonly onExpand?: () => void;
 }
 
 export function PromptInput({
@@ -56,6 +58,7 @@ export function PromptInput({
   onKeyDown,
   disabled,
   placeholder,
+  onExpand,
 }: PromptInputProps) {
   const {
     draft,
@@ -189,6 +192,20 @@ export function PromptInput({
                 <Plus className="size-4.5" />
               </Button>
             )}
+            {/* Expand the draft into the full-surface editor (02.12) for a larger writing area. */}
+            {onExpand ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={onExpand}
+                disabled={disabled}
+                aria-label="Expand prompt editor"
+              >
+                <Maximize2 className="size-4" />
+              </Button>
+            ) : null}
           </div>
         </div>
         {/* Auto-growing textarea: Enter submits, Shift+Enter inserts a newline. */}

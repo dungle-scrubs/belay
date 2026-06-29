@@ -94,6 +94,8 @@ export interface ComposeWiring {
   readonly acceptCommand: (name: string) => void;
   readonly disabled: boolean;
   readonly placeholder: string;
+  /** Open the current draft in the full-surface prompt editor (02.12). */
+  readonly onExpand: () => void;
 }
 
 /**
@@ -384,6 +386,7 @@ export function PanelHost(props: {
                 onKeyDown={compose.onInputKeyDown}
                 disabled={compose.disabled}
                 placeholder={compose.placeholder}
+                onExpand={compose.onExpand}
               />
             </>
           )}

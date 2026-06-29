@@ -20,6 +20,7 @@ import {
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { ControlsPanel } from "@/components/panel/panel-controls";
+import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveReasoning } from "@/model-selection";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
@@ -46,6 +47,7 @@ import { escapeAction } from "./esc-action";
 import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
 import { useModalState } from "./hooks/use-modal-state";
+import { usePromptEditor } from "./hooks/use-prompt-editor";
 import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useScrollFollow } from "./hooks/use-scroll-follow";
 import { useSendQueue } from "./hooks/use-send-queue";
@@ -398,6 +400,9 @@ export function App() {
     legacyReasoning: reasoning || null,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
+  // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
+  // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
+  const editor = usePromptEditor();
   // A pick from the quick picker OR the full chooser: record it (recents + persisted active, reasoning
   // clamped to the model's surface), sync the legacy provider + reasoning so the rest of the UI and the
   // send path follow, and close the chooser.
@@ -605,7 +610,7 @@ export function App() {
   // from a ref so it never goes stale and works regardless of which element has focus.
   // A modal/picker/takeover (model chooser, resume, worktree switcher) owns Escape while open -
   // it closes itself, and the turn on the transcript behind it must NOT be cancelled.
-  const modalOpen = chooserOpen || modal.resumeOpen || modal.worktreeOpen;
+  const modalOpen = chooserOpen || modal.resumeOpen || modal.worktreeOpen || editor.isOpen;
   const escRef = useRef({
     active,
     awaiting: awaitingResponse,
@@ -796,6 +801,7 @@ export function App() {
         acceptCommand: slashMenu.acceptCommand,
         disabled: !sessionId,
         placeholder: `message ${activeLabel}… (/ for commands, ! for shell)`,
+        onExpand: () => editor.open({ text: draft, onConfirm: setDraft }),
       }}
       stream={stream}
       host={host}
@@ -864,7 +870,18 @@ export function App() {
         nowMs: now,
       }}
       sessionName={sessionName}
-      chooser={chooser}
+      chooser={
+        editor.isOpen ? (
+          <PromptSurfaceEditor
+            text={editor.text}
+            title={editor.title}
+            onTextChange={editor.setText}
+            onConfirm={editor.confirm}
+          />
+        ) : (
+          chooser
+        )
+      }
       archived={archived}
       onUnarchive={() => void unarchive()}
       question={{
