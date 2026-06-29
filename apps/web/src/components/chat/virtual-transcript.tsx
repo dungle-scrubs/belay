@@ -10,6 +10,7 @@ import {
 } from "react";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
+import { mayAutoFollow } from "@/scroll";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
 
 export interface VirtualTranscriptProps {
@@ -75,22 +76,32 @@ export function VirtualTranscript({
       transcriptRowKey(
         rows[index] ?? { kind: "working", id: `missing:${index}`, interruptible: true },
       ),
+    // --- non-default virtualizer options, each justified for scroll stability (02.8 audit) ---
+    // overscan: render 10 rows beyond the viewport each way so a normal wheel/trackpad flick lands on
+    // already-measured rows (no estimate-correction nudge as they scroll into view).
     overscan: 10,
+    // anchorTo: while pinned, anchor measurement corrections to the END (the live edge we follow);
+    // while unpinned, anchor to the START of the visible range so a measured-size change keeps the
+    // user's topmost visible row put instead of shifting it.
     anchorTo: pinned ? "end" : "start",
+    // followOnAppend: let tanstack auto-stick to a newly appended row ONLY while pinned; never while
+    // unpinned (an append below the fold must not pull the viewport down).
     followOnAppend: pinned ? "auto" : false,
     initialOffset: () =>
       pinned ? Math.max(0, estimatedTotalSize - (testInitialRect?.height ?? 0)) : 0,
     initialRect: testInitialRect,
     scrollEndThreshold: 40,
+    // useAnimationFrameWithResizeObserver: batch row re-measurement to an animation frame so a row
+    // resizing mid-stream coalesces its corrections instead of thrashing scrollTop per layout tick.
     useAnimationFrameWithResizeObserver: true,
-    // The component owns scrolling: it only follows the live edge when pinned. So when the user has
-    // scrolled up (unpinned), swallow EVERY programmatic scroll - including tanstack's
+    // The component owns scrolling: it only follows the live edge when pinned (mayAutoFollow). So when
+    // the user has scrolled up (unpinned), swallow EVERY programmatic scroll - including tanstack's
     // resize-adjustment, which otherwise yanks the viewport down as a streaming row grows at its
     // bottom (the row is one big virtualized item whose start sits above the viewport, so bottom
     // growth is misread as top-growth). This keeps the intentional scroll position; manual user
     // scrolling is unaffected (that is the browser, not this fn).
     scrollToFn: (offset, opts, instance) => {
-      if (pinned) {
+      if (mayAutoFollow(pinned)) {
         elementScroll(offset, opts, instance);
       }
     },
@@ -109,12 +120,28 @@ export function VirtualTranscript({
     },
     [rows.length, scrollRef, virtualizer],
   );
+
+  // The latest pinned state, read at fire time by every AUTO-follow so a follow that was scheduled a
+  // frame ago becomes a no-op if the user has since scrolled away (unpinned mid-rAF). This is the one
+  // gate that keeps manual upward scrolling from being fought (D-001); the scattered effects below all
+  // route through `followLiveEdge` instead of calling `scrollToLiveEdge` directly. Explicit
+  // jump-to-bottom (`scrollToBottomRequest`) stays on `scrollToLiveEdge` - it re-pins first.
+  const pinnedRef = useRef(pinned);
+  pinnedRef.current = pinned;
+  const followLiveEdge = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      if (mayAutoFollow(pinnedRef.current)) {
+        scrollToLiveEdge(behavior);
+      }
+    },
+    [scrollToLiveEdge],
+  );
   const totalSize = virtualizer.getTotalSize();
 
   useLayoutEffect(() => {
     const last = rows.at(-1)?.id ?? null;
-    if (pinned && last !== lastRowIdRef.current) {
-      scrollToLiveEdge();
+    if (last !== lastRowIdRef.current) {
+      followLiveEdge();
     }
     lastRowIdRef.current = last;
   });
@@ -123,9 +150,9 @@ export function VirtualTranscript({
     if (!pinned) {
       return;
     }
-    const frame = requestAnimationFrame(() => scrollToLiveEdge());
+    const frame = requestAnimationFrame(() => followLiveEdge());
     return () => cancelAnimationFrame(frame);
-  }, [pinned, scrollToLiveEdge]);
+  }, [pinned, followLiveEdge]);
 
   const items = virtualizer.getVirtualItems();
 
@@ -177,10 +204,14 @@ export function VirtualTranscript({
     if (!pinned) {
       return;
     }
-    const frame = requestAnimationFrame(() => scrollToLiveEdge());
+    const frame = requestAnimationFrame(() => followLiveEdge());
     return () => cancelAnimationFrame(frame);
-  }, [pinned, readyToReveal, scrollToLiveEdge]);
+  }, [pinned, readyToReveal, followLiveEdge]);
 
+  // A measured-size growth (totalSize change) while pinned + streaming follows the live edge. The
+  // double rAF lets the virtualizer settle the new measurement before the second snap. Both frames
+  // route through `followLiveEdge`, so if the user scrolls away between this layout effect and the
+  // frames firing, the follow is abandoned rather than yanking them back down.
   useLayoutEffect(() => {
     void totalSize;
     if (!readyToReveal || !pinned) {
@@ -188,8 +219,8 @@ export function VirtualTranscript({
     }
     let secondFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
-      scrollToLiveEdge();
-      secondFrame = requestAnimationFrame(() => scrollToLiveEdge());
+      followLiveEdge();
+      secondFrame = requestAnimationFrame(() => followLiveEdge());
     });
     return () => {
       cancelAnimationFrame(frame);
@@ -197,7 +228,7 @@ export function VirtualTranscript({
         cancelAnimationFrame(secondFrame);
       }
     };
-  }, [pinned, readyToReveal, scrollToLiveEdge, totalSize]);
+  }, [pinned, readyToReveal, followLiveEdge, totalSize]);
 
   return (
     <div

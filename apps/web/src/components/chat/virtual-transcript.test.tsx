@@ -175,6 +175,47 @@ describe("VirtualTranscript", () => {
     );
   });
 
+  test("abandons auto-follow once the user unpins, even as rows keep appending", async () => {
+    const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const scrollCalls = () => vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
+    const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
+    const { container, rerender } = render(<Harness rows={rows} pinned={true} />);
+
+    // Let the initial reveal fully settle (it scrolls to the live edge across several frames) so the
+    // baseline below counts only scrolls that happen AFTER the user unpins.
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector("[data-transcript-virtual-list]")
+          ?.getAttribute("data-transcript-ready"),
+        "true",
+      );
+    });
+    await act(async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await raf();
+      }
+    });
+
+    // The user scrolls up (pinned -> false). From here, appended/streamed rows must never pull the
+    // viewport back down - the follow gate (mayAutoFollow) re-checks pinned at fire time.
+    const callsAtUnpin = scrollCalls();
+    await act(async () => {
+      rerender(<Harness rows={[...rows, userRow(100)]} pinned={false} />);
+      await raf();
+      await raf();
+      rerender(<Harness rows={[...rows, userRow(100), userRow(101)]} pinned={false} />);
+      await raf();
+      await raf();
+    });
+
+    assert.equal(
+      scrollCalls(),
+      callsAtUnpin,
+      "no auto-follow scroll may run after the user unpins",
+    );
+  });
+
   test("does not mount read-only batch continuations as placeholder rows", async () => {
     const rows: TranscriptRow[] = [
       userRow(0),
