@@ -117,6 +117,19 @@ test("buildSkillCommand owns the /skills spec and needs no context", () => {
   assert.equal(typeof out, "string");
 });
 
+test("/clip is announced as a host-owned command with its optional request usage (06 M2)", async () => {
+  const registry = buildCommandRegistry();
+  const spec = registry.specs.find((item) => item.name === "/clip");
+  assert.ok(spec, "/clip is in the announced inventory");
+  assert.equal(spec.usage, "/clip [request]");
+
+  // The spec itself is host-owned (the live host runs the copy / restricted turn); the registry
+  // runner just reports that, never copying or starting a turn here.
+  const { ok, text } = await registry.run("/clip", "", baseCtx);
+  assert.equal(ok, true);
+  assert.match(text, /handled by the live host/i);
+});
+
 test("/handoff is announced in the inventory with its generate/direct usage (02 M1)", () => {
   const registry = buildCommandRegistry();
   const spec = registry.specs.find((item) => item.name === "/handoff");

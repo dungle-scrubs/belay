@@ -2,8 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 41
-- Deferred follow-up: 0
+- Current cutoff blockers: 0
+- Deferred follow-up: 3
 - Superseded checklist debt: 0
 
 ## Hard Dependencies
@@ -35,66 +35,75 @@ Blockers
 
 #### M2: Immediate copy command
 
-- [ ] RED: Add command tests for bare `/clip`.
-- [ ] GREEN: Find the last copyable transcript item in the current session view.
-- [ ] GREEN: Copy that text through the host clipboard abstraction.
-- [ ] GREEN: Emit a visible command/result event with bounded preview and char count.
-- [ ] RED: Add tests for empty history and no copyable item.
-- [ ] GREEN: Return a clear "nothing to copy" result.
-- [ ] RED: Add tests proving bare `/clip` does not start a model turn.
-- [ ] REFACTOR: Share copyable-text extraction with any existing transcript copy behavior if one exists.
-- [ ] Bare `/clip` is immediate and no-model.
-- [ ] Empty/no-copyable history is handled cleanly.
-- [ ] The copied text is exactly the selected transcript text.
+- [x] RED: Add command tests for bare `/clip`.
+- [x] GREEN: Find the last copyable transcript item in the current session view.
+- [x] GREEN: Copy that text through the host clipboard abstraction.
+- [x] GREEN: Emit a visible command/result event with bounded preview and char count.
+- [x] RED: Add tests for empty history and no copyable item.
+- [x] GREEN: Return a clear "nothing to copy" result.
+- [x] RED: Add tests proving bare `/clip` does not start a model turn.
+- [x] REFACTOR: Share copyable-text extraction with any existing transcript copy behavior if one exists.
+- [x] Bare `/clip` is immediate and no-model.
+- [x] Empty/no-copyable history is handled cleanly.
+- [x] The copied text is exactly the selected transcript text.
 
 ### Phase 3: Prompt `/clip <request>`
 
 #### M3: Restricted clipboard-only turn
 
-- [ ] RED: Add prompt-routing tests for `/clip <request>`.
-- [ ] GREEN: Start a restricted model turn with only the clipboard-write surface.
-- [ ] GREEN: Provide relevant conversation context needed to resolve the clipboard request.
-- [ ] GREEN: Require the model to call `clipboard_write` with the exact text to copy.
-- [ ] RED: Add tests proving shell, file mutation, process, MCP, web, docs, and other tools are unavailable.
-- [ ] GREEN: Return structured refusal/error if the restricted turn tries to use anything except `clipboard_write`.
-- [ ] RED: Add prompt tests proving the model does not describe shell clipboard commands or ask for `pbcopy`.
-- [ ] REFACTOR: Keep restricted-turn construction separate from normal model-turn construction.
-- [ ] `/clip <request>` can select, transform, or compose clipboard text from context.
-- [ ] It exposes no general tool surface.
-- [ ] It does not use shell clipboard commands.
+- [x] RED: Add prompt-routing tests for `/clip <request>`.
+- [x] GREEN: Start a restricted model turn with only the clipboard-write surface.
+- [x] GREEN: Provide relevant conversation context needed to resolve the clipboard request.
+- [x] GREEN: Require the model to call `clipboard_write` with the exact text to copy.
+- [x] RED: Add tests proving shell, file mutation, process, MCP, web, docs, and other tools are unavailable.
+- [x] GREEN: Return structured refusal/error if the restricted turn tries to use anything except `clipboard_write`.
+- [x] RED: Add prompt tests proving the model does not describe shell clipboard commands or ask for `pbcopy`.
+- [x] REFACTOR: Keep restricted-turn construction separate from normal model-turn construction.
+- [x] `/clip <request>` can select, transform, or compose clipboard text from context.
+- [x] It exposes no general tool surface.
+- [x] It does not use shell clipboard commands.
 
 ### Phase 4: Visibility and Verification
 
 #### M4: Visible result, no extra product surface
 
-- [ ] RED: Add transcript rendering tests for clipboard command/tool results.
-- [ ] GREEN: Show visible command/tool events with bounded previews and counts.
-- [ ] GREEN: Keep copied content out of persisted special clipboard state.
-- [ ] RED: Add tests proving no `/doctor` area/check/finding is added.
-- [ ] RED: Add tests proving no task-panel state is created or updated.
-- [ ] GREEN: Keep task and doctor surfaces unchanged.
-- [ ] Manual EZE: run `/clip`, verify clipboard contains the last copyable transcript item.
-- [ ] Manual EZE: run `/clip summarize the last answer for Slack`, verify clipboard contains the transformed text and transcript shows a bounded visible result.
-- [ ] Clipboard writes are visible as normal command/tool results.
-- [ ] No `/doctor` or task-panel behavior changes.
-- [ ] Manual EZE verifies the clipboard convenience path.
+- [x] RED: Add transcript rendering tests for clipboard command/tool results.
+- [x] GREEN: Show visible command/tool events with bounded previews and counts.
+- [x] GREEN: Keep copied content out of persisted special clipboard state.
+- [x] RED: Add tests proving no `/doctor` area/check/finding is added.
+- [x] RED: Add tests proving no task-panel state is created or updated.
+- [x] GREEN: Keep task and doctor surfaces unchanged.
+- [ ] DEFERRED Manual EZE: run `/clip`, verify clipboard contains the last copyable transcript item.
+- [ ] DEFERRED Manual EZE: run `/clip summarize the last answer for Slack`, verify clipboard contains the transformed text and transcript shows a bounded visible result.
+- [x] Clipboard writes are visible as normal command/tool results.
+- [x] No `/doctor` or task-panel behavior changes.
+- [ ] DEFERRED Manual EZE verifies the clipboard convenience path.
 
 ### Verification Checklist
 
 - [x] `clipboard_write` writes exact plain text.
 - [x] Test-capture adapter prevents real clipboard writes in automated tests.
-- [ ] Bare `/clip` copies last copyable transcript item.
-- [ ] Bare `/clip` starts no model turn.
-- [ ] `/clip <request>` exposes only `clipboard_write`.
-- [ ] Restricted clipboard turns cannot call shell, files, process, MCP, web, or docs.
-- [ ] Model guidance rejects shell clipboard commands.
-- [ ] No persisted clipboard state is created.
-- [ ] No `/doctor` integration is added.
-- [ ] No task-panel relation is added.
+- [x] Bare `/clip` copies last copyable transcript item.
+- [x] Bare `/clip` starts no model turn.
+- [x] `/clip <request>` exposes only `clipboard_write`.
+- [x] Restricted clipboard turns cannot call shell, files, process, MCP, web, or docs.
+- [x] Model guidance rejects shell clipboard commands.
+- [x] No persisted clipboard state is created.
+- [x] No `/doctor` integration is added.
+- [x] No task-panel relation is added.
 
 ## Accepted/Deferred Follow-Up
 
-None.
+The three Phase 4 Manual EZE steps are DEFERRED: they need a real system clipboard and an
+interactive host run, which the automated suite deliberately never touches (D-009 - tests use the
+in-memory CaptureClipboard). Everything they would verify is covered by automated tests of the same
+seams (clipboard_write writes exact text, bare `/clip` copies the last copyable item, the restricted
+`/clip <request>` turn exposes only clipboard_write, and the visible command/tool result rendering).
+
+- Manual EZE: run `/clip`, verify the real clipboard holds the last copyable transcript item.
+- Manual EZE: run `/clip summarize the last answer for Slack`, verify the real clipboard holds the
+  transformed text and the transcript shows a bounded visible result.
+- Manual EZE verifies the clipboard convenience path end to end against the real clipboard.
 
 ## Superseded/Obsolete Checklist Debt
 

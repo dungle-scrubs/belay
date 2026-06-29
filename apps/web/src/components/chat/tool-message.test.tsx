@@ -111,6 +111,40 @@ test("grep dispatches to the text-output renderer", () => {
   assert.ok((container.textContent ?? "").includes("match-line"), "the matches render");
 });
 
+test("clipboard_write renders a bounded preview and the copied char count (06 M4)", () => {
+  const { container } = render(
+    <ToolRenderer
+      message={toolMsg({
+        name: "clipboard_write",
+        args: JSON.stringify({ text: "Ship the release after smoke is green." }),
+        result: JSON.stringify({ copied: true, charCount: 38 }),
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  const text = container.textContent ?? "";
+  assert.ok(text.includes("clipboard_write"), "the tool name renders");
+  assert.ok(text.includes("Ship the release"), "a bounded preview of the copied text renders");
+  assert.ok(text.includes("Copied 38 chars"), "the copied char count renders");
+});
+
+test("clipboard_write surfaces a write failure as its error result (06 M4)", () => {
+  const { container } = render(
+    <ToolRenderer
+      message={toolMsg({
+        name: "clipboard_write",
+        args: JSON.stringify({ text: "x" }),
+        result: "error: clipboard_write failed - no clipboard command available",
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  assert.ok(
+    (container.textContent ?? "").includes("no clipboard command available"),
+    "the failure detail renders",
+  );
+});
+
 test("a path-arg read tool renders the generic row with a clickable path", () => {
   let opened: string | null = null;
   const { container } = render(

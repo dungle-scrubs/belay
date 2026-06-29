@@ -41,6 +41,7 @@ import {
 import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
+import { CLIPBOARD_TOOL_NAMES, copyLastCopyable, routeClip } from "./clip";
 import { buildCommandRegistry } from "./commands";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
@@ -83,6 +84,7 @@ import {
 } from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
 import { taskRegistry } from "./tasks";
+import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
 import { runCommand as runShellCommandResult } from "./tools/run-shell";
 import { publishTurn } from "./turn";
@@ -112,6 +114,10 @@ import { nodeWorktreeManager } from "./worktrees";
 const SESSION_ID = process.env.SESSION_ID ?? DEFAULT_SESSION_ID;
 const PRODUCER_ID = PRODUCER_IDS.host;
 const CONTROL_PRODUCER_ID = `${PRODUCER_ID}:control`;
+// Host-issued prompts for a restricted `/clip <request>` turn (plan 06): a distinct control
+// producer so `startTurn` narrows the turn's tool surface to clipboard_write only. Answerable
+// (not the bare host id), but tagged so it is never treated as a normal full-surface turn.
+const CLIP_PRODUCER_ID = `${PRODUCER_ID}:clip`;
 // Backend selection (the plugin seam): default to the local session-store; set
 // RICHTER_URL to opt into the Richter durable substrate instead. The host speaks
 // the SessionTransport contract either way.
@@ -487,13 +493,19 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       );
     },
   };
-  const delegate = buildDelegateCapability(delegationCtx, {
-    provider,
-    parentRunId: runId,
-    agents: discoverAgents(),
-    mintRunId: () => crypto.randomUUID(),
-    background,
-  });
+  // A restricted `/clip <request>` turn (plan 06): narrow the surface to clipboard_write only and
+  // withhold delegation entirely, so the model can neither see another tool nor hand work to a
+  // subagent that could. A normal turn gets the full registry + delegation.
+  const restricted = event.producerId === CLIP_PRODUCER_ID;
+  const delegate = restricted
+    ? undefined
+    : buildDelegateCapability(delegationCtx, {
+        provider,
+        parentRunId: runId,
+        agents: discoverAgents(),
+        mintRunId: () => crypto.randomUUID(),
+        background,
+      });
   runningRunId = runId;
   // Carry the prior turn's measured context forward (03.1 D-002): when compaction has floored out and
   // the turn legitimately starts at/above the fraction, this lets the context-pressure gate synthesize
@@ -504,6 +516,7 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       runId,
       reasoning: decoded.reasoning,
       delegate,
+      ...(restricted ? { toolNames: CLIPBOARD_TOOL_NAMES } : {}),
       ...(seedUsage ? { seedUsage } : {}),
     }).pipe(Effect.provide(EmitLive)),
   );
@@ -633,6 +646,35 @@ async function retryLastPrompt(): Promise<{ readonly ok: boolean; readonly text:
     }),
   );
   return { ok: true, text: "Retrying the last user prompt." };
+}
+
+/**
+ * The producer-tagged `user.message` that drives a restricted `/clip <request>` turn (plan 06):
+ * the clip control producer (so `startTurn` narrows the surface to clipboard_write), the resolved
+ * provider + last-turn model, and the framed clip prompt as the turn's user text.
+ */
+function clipPromptEvent(text: string): PublishInput {
+  const resolved = controlModel();
+  return {
+    ...events.userMessage({ text, provider: resolved.provider, model: resolved.model }),
+    producerId: CLIP_PRODUCER_ID,
+  };
+}
+
+/**
+ * The `/clip` command lane (plan 06). Bare `/clip` copies the last copyable transcript item through
+ * the host clipboard abstraction and answers with a visible command.result - NO model turn. `/clip
+ * <request>` publishes a clip-producer prompt that the turn machine runs as a restricted
+ * clipboard-only turn. Only the live leader reaches here.
+ */
+async function runClip(args: string): Promise<void> {
+  const route = routeClip(args);
+  if (route.kind === "copy") {
+    const result = await copyLastCopyable(history, getClipboardWriter());
+    await emit(events.commandResult({ command: "/clip", text: result.text, ok: result.ok }));
+    return;
+  }
+  await transport.publishEvent(SESSION_ID, clipPromptEvent(route.prompt));
 }
 
 async function compressThenContinue(): Promise<{ readonly ok: boolean; readonly text: string }> {
@@ -2084,6 +2126,10 @@ function handleEvent(message: SessionEvent): void {
       }
       if (command === "/handoff") {
         runHandoff(args).catch((error) => warn("host", "handoff failed", { error: msg(error) }));
+        return;
+      }
+      if (command === "/clip") {
+        runClip(args).catch((error) => warn("host", "clip failed", { error: msg(error) }));
         return;
       }
       runCommand(command, args).catch((error) =>

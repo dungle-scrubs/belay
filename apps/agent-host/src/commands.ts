@@ -235,6 +235,16 @@ export function buildCommandRegistry(): CommandRegistry {
   add(
     buildHostOwnedCommand(
       {
+        name: "/clip",
+        summary: "Copy the last reply, or run a clipboard-only request",
+        usage: "/clip [request]",
+      },
+      "Clip is handled by the live host.",
+    ),
+  );
+  add(
+    buildHostOwnedCommand(
+      {
         name: "/handoff",
         summary: "Hand off to a fresh session with a continuation prompt",
         usage: "/handoff [--generate | --direct] <prompt>",
