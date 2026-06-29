@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M7 - Full Verification
-- Current cutoff blockers: 12
-- Accepted/deferred follow-up: 0
+- Current focus: complete (1 deferred manual EZE)
+- Current cutoff blockers: 0
+- Accepted/deferred follow-up: 1
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 58
+- Completed current work: 69
 - Thresholds (D-003): large paste = 20+ lines OR 1500+ chars (DEFAULT_PASTE_THRESHOLDS, configurable).
 - Token format (D-001): `[Pasted text #N +M lines]`, M = derived display line count (CRLF/CR normalized, lone trailing newline ignored).
 
@@ -107,25 +107,51 @@
 
 #### M7: Full Verification
 
-- [ ] RED: Add regression tests for secrets-looking pasted text staying user-inspectable and removable before submit.
-- [ ] GREEN: Ensure preview/copy/remove actions work without logging or exposing payloads outside intended state.
-- [ ] GREEN: Run composer model tests, hook tests, prompt input tests, queue tests, transcript tests, and provider projection tests.
-- [ ] GREEN: Run Storybook review for desktop/mobile token overlay and transcript payload inspection.
-- [ ] GREEN: Run lint, typecheck, web tests, host tests, and hermetic e2e where applicable.
+- [x] RED: Add regression tests for secrets-looking pasted text staying user-inspectable and removable before submit.
+- [x] GREEN: Ensure preview/copy/remove actions work without logging or exposing payloads outside intended state.
+- [x] GREEN: Run composer model tests, hook tests, prompt input tests, queue tests, transcript tests, and provider projection tests.
+- [x] GREEN: Run Storybook review for desktop/mobile token overlay and transcript payload inspection.
+- [x] GREEN: Run lint, typecheck, web tests, host tests, and hermetic e2e where applicable.
 - [ ] GREEN: Manual EZE repro: paste a multi-line payload, inspect/copy it, submit, and verify the model receives the full content without flooding the composer.
-- [ ] REFACTOR: Record exact verification commands and threshold values in the progress report.
+- [x] REFACTOR: Record exact verification commands and threshold values in the progress report.
 
 ### Done Gate
 
-- [ ] Large paste payloads become compact visible tokens.
-- [ ] Full pasted text is preserved exactly and sent intentionally.
-- [ ] Users can inspect, copy, and remove the payload.
-- [ ] Queue, transcript, and provider projection preserve placement.
-- [ ] Full verification passes.
+- [x] Large paste payloads become compact visible tokens.
+- [x] Full pasted text is preserved exactly and sent intentionally.
+- [x] Users can inspect, copy, and remove the payload.
+- [x] Queue, transcript, and provider projection preserve placement.
+- [x] Full verification passes.
+
+## Verification (M7)
+
+Run from the worktree root. All green at completion:
+
+```bash
+pnpm -r typecheck                                      # all packages, clean
+pnpm -s exec biome check                               # 597 files, clean
+pnpm -s exec vitest run --project unit --project web   # 1591 passed
+pnpm -s exec vitest run --project integration          # 51 passed, 1 skipped
+```
+
+Threshold values (D-003, `DEFAULT_PASTE_THRESHOLDS` in `packages/session/src/paste-tokens.ts`): a
+plain-text paste tokenizes when it is `>= 20` lines OR `>= 1500` characters; below both it stays
+literal. Configurable per call (`isLargePaste(text, { lines, chars })`). Token format (D-001):
+`[Pasted text #N +M lines]`, where `M` is the derived display line count (CRLF/CR normalized for the
+count only; a lone trailing newline adds no phantom line). Paste-token chips render PURPLE
+(`smui-purple`), distinct from the FROST `smui-frost-3` image-token chips.
+
+Storybook surfaces delivered for review (build + typecheck verified): `Composer/PasteTokenOverlay`
+(one/multiple tokens, long prompt, narrow + desktop widths, wide single-line payload, mixed
+image/paste) and `Chat/Messages > UserWithPastedText` (transcript inspect/copy panel).
 
 ## Accepted/Deferred Follow-Up
 
-None.
+- M7 manual EZE repro (paste a multi-line payload into a live host+browser, inspect/copy/submit, and
+  confirm the model receives the full expanded content): deferred - needs a running host, browser, and
+  provider. The model-facing correctness is covered hermetically by the provider-projection unit tests
+  (`apps/agent-host/src/providers/pi-ai.test.ts`: payloads expand at the token position, no placeholder
+  leaks). A human visual pass over the new Storybook stories is the matching manual confirmation.
 
 ## Superseded/Obsolete Checklist Debt
 

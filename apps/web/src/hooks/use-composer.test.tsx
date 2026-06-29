@@ -168,3 +168,24 @@ test("a large paste then a raw delete of its token drops the paired payload", ()
   act(() => result.current.setDraft(""));
   assert.equal(result.current.pastes.length, 0, "deleting the token drops its hidden payload");
 });
+
+test("a secret-looking paste never floods the visible draft, stays inspectable, and is removable", () => {
+  const secret = ["AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG", "token: ghp_0123456789abcdef"]
+    .concat(Array.from({ length: 30 }, (_, i) => `export VAR_${i}=value-${i}`))
+    .join("\n");
+  const { result } = renderHook(() => useComposer());
+  act(() => result.current.onPaste(textPasteEvent(secret)));
+
+  // The secret bytes are NOT in the visible draft text - only the compact token is.
+  assert.equal(result.current.draft, `[Pasted text #1 +${secret.split("\n").length} lines]`);
+  assert.ok(!result.current.draft.includes("AWS_SECRET"), "no secret bytes leak into the textarea");
+  // It stays inspectable via the paired payload (exact bytes preserved for the inspection UI).
+  assert.equal(result.current.pastes[0]?.text, secret, "the exact payload is held for inspection");
+  // And it is removable BEFORE submit: deleting the token drops the payload entirely (no orphan).
+  act(() => result.current.setDraft(""));
+  assert.equal(
+    result.current.pastes.length,
+    0,
+    "removing the token leaves no hidden secret behind",
+  );
+});

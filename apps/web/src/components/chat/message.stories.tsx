@@ -93,6 +93,22 @@ export const User: Story = {
   ),
 };
 
+const PASTED_LOG = Array.from(
+  { length: 36 },
+  (_, i) => `2026-06-29T19:${10 + i}:04Z  GET /api/items/${i} 200 ${12 + i}ms`,
+).join("\n");
+
+export const UserWithPastedText: Story = {
+  render: () => (
+    <Frame>
+      <UserMessage
+        text="here is the failing request log [Pasted text #1 +36 lines] - why is the latency climbing?"
+        pastes={[{ text: PASTED_LOG }]}
+      />
+    </Frame>
+  ),
+};
+
 export const Assistant: Story = {
   render: () => (
     <Frame>
