@@ -1,4 +1,5 @@
 import { type ArtifactRef, parseImageTokens, imageTokenText as tokenText } from "@trevor/session";
+import { spaceAfter, spaceBefore } from "./token-spacing";
 
 /**
  * The image-token draft model (D-092): the composer keeps inline `[Image #N]` tokens IN the draft
@@ -45,16 +46,6 @@ function refsIn(slice: string, source: ImageDraft): ArtifactRef[] {
   return parseImageTokens(slice)
     .map((span) => source.refs[span.num - 1])
     .filter((ref): ref is ArtifactRef => ref !== undefined);
-}
-
-/** Whether a left context needs a leading space so an inserted token does not stick to a word. */
-function spaceBefore(left: string): string {
-  return left.length > 0 && !/\s$/.test(left) ? " " : "";
-}
-
-/** Whether a right context needs a trailing space so an inserted token does not stick to a word. */
-function spaceAfter(right: string): string {
-  return right.length > 0 && !/^\s/.test(right) ? " " : "";
 }
 
 /** The char index just after the reading-order `index`-th token in `text` (end of string if absent). */

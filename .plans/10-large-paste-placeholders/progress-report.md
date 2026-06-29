@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M2 - Draft Payload Pairing
-- Current cutoff blockers: 63
+- Current focus: M3 - Paste Interception
+- Current cutoff blockers: 51
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 7
+- Completed current work: 19
 - Thresholds (D-003): large paste = 20+ lines OR 1500+ chars (DEFAULT_PASTE_THRESHOLDS, configurable).
 - Token format (D-001): `[Pasted text #N +M lines]`, M = derived display line count (CRLF/CR normalized, lone trailing newline ignored).
 
@@ -26,21 +26,21 @@
 
 #### M2: Draft Payload Pairing
 
-- [ ] RED: Add composer-model tests for inserting one large paste token at the cursor.
-- [ ] GREEN: Extend the draft model to pair pasted-text tokens with exact payload metadata.
-- [ ] RED: Add tests for insertion at start, middle, end, and selection replacement.
-- [ ] GREEN: Insert pasted-text tokens at the current selection while preserving surrounding text.
-- [ ] RED: Add tests for multiple large paste tokens and mixed image/paste token ordering.
-- [ ] GREEN: Renumber pasted-text tokens in reading order without disturbing image-token numbering.
-- [ ] RED: Add atomic delete tests for Backspace, Delete, and selection deletion.
-- [ ] GREEN: Delete paired payloads whenever their visible token is removed.
+- [x] RED: Add composer-model tests for inserting one large paste token at the cursor.
+- [x] GREEN: Extend the draft model to pair pasted-text tokens with exact payload metadata.
+- [x] RED: Add tests for insertion at start, middle, end, and selection replacement.
+- [x] GREEN: Insert pasted-text tokens at the current selection while preserving surrounding text.
+- [x] RED: Add tests for multiple large paste tokens and mixed image/paste token ordering.
+- [x] GREEN: Renumber pasted-text tokens in reading order without disturbing image-token numbering.
+- [x] RED: Add atomic delete tests for Backspace, Delete, and selection deletion.
+- [x] GREEN: Delete paired payloads whenever their visible token is removed.
 
 ### Gate 1 -> 2
 
-- [ ] Token parsing and formatting are stable.
-- [ ] Threshold behavior is explicit and tested.
-- [ ] Draft state can pair visible tokens with exact paste payloads.
-- [ ] Token deletion cannot leave orphaned hidden payloads.
+- [x] Token parsing and formatting are stable.
+- [x] Threshold behavior is explicit and tested.
+- [x] Draft state can pair visible tokens with exact paste payloads.
+- [x] Token deletion cannot leave orphaned hidden payloads.
 
 ### Phase 2: Composer UX and Inspection
 
