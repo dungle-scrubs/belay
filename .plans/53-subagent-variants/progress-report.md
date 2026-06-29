@@ -2,32 +2,27 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 12
-- **Completed current work:** 3
+- **Current cutoff blockers:** 3
+- **Completed current work:** 4
 - **Accepted/deferred follow-up:** 0
-- **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Variant Rebaseline
+- **Superseded/obsolete checklist debt:** 0 (M3 Teams + M4 Mutating Background Agents relocated to 54/55 - see below)
+- **Current focus:** M2 - Verifier Subagent
 
 ## Completed Current State / Hard Dependencies
 
 - [x] D-045-D-049 define the existing subagent model.
 - [x] `.plans/47-bounded-child-takeover` owns bounded-child.
 - [x] `.plans/48-managed-worktree-hardening` owns cwd lock hardening.
+- [x] M1 Variant Rebaseline resolved: split decided (teams + mutating-bg engine -> `.plans/54`;
+  mutating-worktree app -> `.plans/55`; verifier stays here).
 
 ## Current Cutoff Blockers
 
-- [ ] RED: Define acceptance criteria and out-of-scope boundaries for verifier, teams, and mutating background agents.
-- [ ] GREEN: Decide whether these remain one plan or split after discovery.
-- [ ] REFACTOR: Update this plan with split/dependency decisions.
+### M2 - Verifier Subagent
+
 - [ ] RED: Cover independent adversarial review without reviving inline self-validation.
 - [ ] GREEN: Add verifier agent behavior over existing subagent isolation.
 - [ ] REFACTOR: Keep verifier output explicit and parent-visible.
-- [ ] RED: Cover bounded fan-out, aggregation, cancellation, and progress visibility.
-- [ ] GREEN: Implement multi-agent team orchestration if still approved.
-- [ ] REFACTOR: Avoid multi-user/collaboration semantics.
-- [ ] RED: Cover managed worktree/cwd-lock prerequisites, merge/reconcile requirements, and user approval.
-- [ ] GREEN: Enable mutating background agents only behind completed safety gates.
-- [ ] REFACTOR: Keep read-only background behavior unchanged.
 
 ## Accepted / Deferred Follow-Up
 
@@ -35,4 +30,10 @@ None.
 
 ## Superseded / Obsolete Checklist Debt
 
-None.
+The M1 discovery split teams + mutating background agents out of this plan (see implementation.md
+"Split (resolved in M1)"):
+
+- ~~M3 Teams (bounded fan-out, aggregation, cancellation, progress visibility)~~ -> subsumed by
+  `.plans/54-workflows-runtime`.
+- ~~M4 Mutating Background Agents~~ -> engine-half to `.plans/54-workflows-runtime`, application-half to
+  `.plans/55-worktree-fleet`.

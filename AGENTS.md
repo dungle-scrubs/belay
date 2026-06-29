@@ -16,11 +16,12 @@ in that moment - never infer or assume it.
 
 ## Git: a branch per plan; commit, push, and merge only when told
 
-Each plan under `.plans/` is implemented on **its own branch off `main`**, named for
-the plan (e.g. `feat/<plan-name>`). When the plan is **complete**, **delete its plan
-directory** (`.plans/<NN-plan-name>/`) and **merge the branch into `main`**. Keep one
-plan to one branch; do not implement a plan directly on `main`, and do not mix two
-plans on one branch.
+**Plan documents belong on `main`.** A plan's docs under `.plans/<NN>-<name>/` (and the shared
+vocabulary in `CONTEXT.md`) are the shared backlog and are committed to `main`, not carried on a
+feature branch. A plan's **implementation** (the source changes) is done on **its own branch off
+`main`**, named for the plan (e.g. `feat/<plan-name>`); do not implement a plan directly on `main`,
+and do not mix two plans on one branch. When the plan is **complete**, **delete its plan directory**
+(`.plans/<NN-plan-name>/`) and **merge the branch into `main`**.
 
 Do **not** `git commit`, `git push`, or `git merge` unless the owner explicitly tells
 you to in that moment. Completing, building, verifying, or being asked to "build it" /
@@ -158,33 +159,19 @@ and parameterized conformance suite, and the `e2e/` workspace are stood up, and
 the `scripts/verify-*` regime has been folded into the tiers and removed. Build
 new tests into this structure; do not reintroduce the old regime.
 
-## The plan is canonical
+## Plans are canonical, and numbered
 
-The **single canonical plan** is
-[`.plans/trevor-v2/implementation.md`](./.plans/trevor-v2/implementation.md),
-with decisions recorded in `.plans/trevor-v2/plan.db` (D-001 to D-039). It is the
-one source of truth: architecture, the domain vocabulary, the DROP list, the
-done/remaining re-baseline, the sequenced roadmap, and the kept (unsequenced)
-backlog all live there. When the plan and any other document disagree, **the plan
-wins.**
+Work is organized as **numbered plans** under `.plans/<NN>-<name>/`, each a self-contained plan-db
+(`plan.db` + `implementation.md` + `progress-report.md` + `artifacts/`). There is **no single umbrella
+plan**: the former canonical `.plans/trevor-v2/implementation.md` is **retired** in favor of the
+numbered plans. Its cross-cutting **domain vocabulary** now lives in the repo-root
+[`CONTEXT.md`](./CONTEXT.md); record new shared terms there.
 
-The former `FEATURES.md`, `TABLED.md`, and the separate
-`graceful-overflow-recovery` plan have been **merged into this plan and deleted**
-(2026-06-23, D-031):
+The umbrella's permanent decisions still hold even though the document is gone - in particular the
+**DROP list** (multi-user/collaboration incl. "teams", the routing engine, model-led routing
+classification, inline self-validation, native extension dispatch, ...) is still cut for good. A
+plan's presence under `.plans/` does **not** by itself authorize building it - it is built only when
+explicitly picked up.
 
-- The host feature inventory and its triage (old `FEATURES.md` section 4) is now
-  the plan's **kept backlog** (section 7), pruned to what V2 actually wants, with
-  H-IDs preserved for V1 provenance. A feature's presence in the backlog does
-  **not** authorize building it now - the roadmap (section 6) decides sequencing,
-  and backlog items are built only when explicitly picked up.
-- The cross-cutting **domain vocabulary** (old `FEATURES.md` section 2) is the
-  plan's section 3.
-- The **DROP list** (old `FEATURES.md` section 3 plus the sole `TABLED.md` entry)
-  is the plan's section 4. Model-led routing classification (old T-1) is no longer
-  "tabled" - it is **dropped for good**, with the entire routing engine.
-- Graceful context-overflow recovery is the plan's next sequenced feature
-  (D-034 to D-038).
-
-Before building or proposing anything, consult the plan: section 4 (dropped for
-good?), section 7 (deferred backlog, not authorized now?), then section 6 (is it
-sequenced?). Do not pull backlog or dropped work forward on your own initiative.
+When a plan and any other document disagree, **the plan wins**; when a plan and `CONTEXT.md` disagree
+on a term, fix one so they agree.

@@ -1,4 +1,0 @@
-{"t":"session_opened","segment":1,"artifact":"plan-visual.html","version":1,"hash":"sha256:a81bc7c37887c14b90f9de3b4d3c5611278164b099ff857a41ab8a0f6bcfa8c7","path":"versions/s1/v1.html","seq":1,"at":"2026-06-22T10:40:11.109Z"}
-{"t":"version","version":2,"hash":"sha256:ab8b130a457d2f731a99bbd54be1cc6b0ca64bd33e37e64194e9a8281d4f2468","path":"versions/s1/v2.html","seq":2,"at":"2026-06-22T10:42:13.359Z"}
-{"t":"version","version":3,"hash":"sha256:df30f8a759b43c32a49039aded4f23f0cec101ce4b2710436f8fca99f2d417bc","path":"versions/s1/v3.html","seq":3,"at":"2026-06-22T10:42:32.381Z"}
-{"t":"session_suspended","seq":4,"at":"2026-06-22T11:23:31.557Z"}

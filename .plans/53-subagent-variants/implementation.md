@@ -8,15 +8,22 @@
 
 ## Scope
 
-Extracted from H-165. This plan owns the remaining parked subagent variants only: verifier subagent, teams/multi-agent fan-out, and mutating background agents. It does not reopen shipped general-purpose/explorer/ephemeral definitions, and it does not own bounded-child.
+Extracted from H-165. After the M1 discovery, this plan owns the **verifier subagent only**.
+Teams/multi-agent fan-out and the mutating-background-agent **engine** were split out to
+`.plans/54-workflows-runtime`, and the mutating-worktree **application** (merge/reconcile/approval) to
+`.plans/55-worktree-fleet`. This plan does not reopen shipped general-purpose/explorer/ephemeral
+definitions, and it does not own bounded-child.
 
 ## Phases
 
-### M1 - Variant Rebaseline
+### M1 - Variant Rebaseline (resolved)
 
-- [ ] RED: Define acceptance criteria and out-of-scope boundaries for verifier, teams, and mutating background agents.
-- [ ] GREEN: Decide whether these remain one plan or split after discovery.
-- [ ] REFACTOR: Update this plan with any split/dependency decisions.
+- [x] RED: Acceptance criteria and out-of-scope boundaries defined for verifier, teams, and mutating
+  background agents.
+- [x] GREEN: Decided to **split** - teams + the mutating-background engine move to
+  `.plans/54-workflows-runtime`; the mutating-worktree application moves to `.plans/55-worktree-fleet`;
+  the verifier stays here.
+- [x] REFACTOR: Plan updated - M3 (Teams) and M4 (Mutating Background Agents) removed; see Split below.
 
 ### M2 - Verifier Subagent
 
@@ -24,17 +31,21 @@ Extracted from H-165. This plan owns the remaining parked subagent variants only
 - [ ] GREEN: Add verifier agent behavior over existing subagent isolation.
 - [ ] REFACTOR: Keep verifier output explicit and parent-visible.
 
-### M3 - Teams
+## Split (resolved in M1)
 
-- [ ] RED: Cover bounded fan-out, aggregation, cancellation, and progress visibility.
-- [ ] GREEN: Implement multi-agent team orchestration if still approved.
-- [ ] REFACTOR: Avoid multi-user/collaboration semantics.
+The discovery concluded that "teams" and "mutating background agents" are the same orchestration
+pattern as a general workflows engine, and were split out:
 
-### M4 - Mutating Background Agents
+- **Teams (former M3)** - bounded fan-out, aggregation, cancellation, progress visibility - is
+  **subsumed entirely by `.plans/54-workflows-runtime`** (it *is* the engine). The "teams" noun is
+  retired: it collides with the permanently dropped multi-user "teams" (umbrella §4, D-003). The
+  orchestration nouns are **workflow** (engine) and **fleet** (the `.plans/55` application).
+- **Mutating background agents (former M4)** split in two: the **engine-half** (worktree-isolated,
+  write-capable leaves) is in **`.plans/54`**; the **application-half** (merge/reconcile/approval
+  around N concurrent mutating trees) is in **`.plans/55-worktree-fleet`**.
 
-- [ ] RED: Cover managed worktree/cwd-lock prerequisites, merge/reconcile requirements, and user approval.
-- [ ] GREEN: Enable mutating background agents only behind completed safety gates.
-- [ ] REFACTOR: Keep read-only background behavior unchanged.
+The verifier (M2) stays here: it is distinct from the dropped inline self-validation (umbrella §4,
+D-033) and is reused by `.plans/55` as the per-tree auditor leaf.
 
 ## Decisions
 
