@@ -10,15 +10,15 @@
 
 ## Hard Dependencies
 
-- [ ] `03-filesystem-root-taxonomy` complete before `/style` preference persistence starts
+- [x] `03-filesystem-root-taxonomy` complete before `/style` preference persistence starts (the root taxonomy shipped in `@trevor/session/node-paths` - `resolveTrevorHome` / `STORAGE_INVENTORY`)
 
 ## M1: Command Menu Data Model
 
-- [ ] RED: Add protocol/contract tests for nested command-menu payloads
-- [ ] GREEN: Define shared structured payload and decode/encode helpers
-- [ ] RED: Add invalid/missing field and backward-compatible command-result tests
-- [ ] GREEN: Make command results tolerate nested-menu payloads
-- [ ] REFACTOR: Centralize command-family/menu types
+- [x] RED: Add protocol/contract tests for nested command-menu payloads (`command-menu.test.ts`)
+- [x] GREEN: Define shared structured payload and decode/encode helpers (`packages/session/src/command-menu.ts`: `CommandMenuPayload`/`CommandMenuRow` + `decodeCommandMenu`/`decodeCommandMenuRow` + `isActionable`/`isSubmenu`/`filterMenuRows`/`findMenuRow`)
+- [x] RED: Add invalid/missing field and backward-compatible command-result tests (decode drops bad rows, returns null on missing core fields; wire round-trip with + without menu)
+- [x] GREEN: Make command results tolerate nested-menu payloads (`commandResult` constructor + `command.result` decode carry an optional `menu`; plain results decode unchanged)
+- [x] REFACTOR: Centralize command-family/menu types (one owner `command-menu.ts`, exported from the session index; host + web import it)
 
 ## M2: Generic Web Renderer
 

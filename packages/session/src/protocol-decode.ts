@@ -1,6 +1,7 @@
 import { HEX64 } from "./blob";
 import { BREAKDOWN_CATEGORIES, emptyBreakdown, type UsageBreakdown } from "./breakdown";
 import { asAnyNumber, asMaybeString, asString, asStringArray } from "./coerce";
+import { type CommandMenuPayload, decodeCommandMenu } from "./command-menu";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
 import {
@@ -452,6 +453,8 @@ export type DecodedEvent =
       readonly command: string;
       readonly text: string;
       readonly ok: boolean;
+      /** An optional host-owned nested command menu (plan 03); absent for plain text results. */
+      readonly menu?: CommandMenuPayload;
     }
   | { readonly type: "session.switch"; readonly sessionId: string; readonly reason: string }
   | { readonly type: "session.archived"; readonly archived: boolean }
@@ -711,13 +714,16 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       return { type: "user.cancel", runId };
     case "user.command":
       return { type: "user.command", command: str(p.command), args: str(p.args) };
-    case "command.result":
+    case "command.result": {
+      const menu = decodeCommandMenu(p.menu);
       return {
         type: "command.result",
         command: str(p.command),
         text: str(p.text),
         ok: p.ok === true,
+        ...(menu ? { menu } : {}),
       };
+    }
     case "session.switch":
       return {
         type: "session.switch",

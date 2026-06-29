@@ -1,4 +1,5 @@
 import type { UsageBreakdown } from "./breakdown";
+import type { CommandMenuPayload } from "./command-menu";
 import type { InternetSnapshot } from "./connectivity";
 import type { CatalogEntry, ModelRef, SourceSignInState, SourceSummary } from "./model-source";
 import type { PastePayload } from "./paste-tokens";
@@ -529,10 +530,16 @@ export const events = {
     type: "user.command",
     payload: { command: p.command, args: p.args },
   }),
-  /** Host's immediate result for a user.command (rendered, never fed to the model). */
-  commandResult: (p: { command: string; text: string; ok: boolean }): TrevorEventInput => ({
+  /** Host's immediate result for a user.command (rendered, never fed to the model). An optional nested
+   *  command-menu payload lets a host-owned command family (e.g. `/style`) render structured choices. */
+  commandResult: (p: {
+    command: string;
+    text: string;
+    ok: boolean;
+    menu?: CommandMenuPayload;
+  }): TrevorEventInput => ({
     type: "command.result",
-    payload: { command: p.command, text: p.text, ok: p.ok },
+    payload: { command: p.command, text: p.text, ok: p.ok, ...(p.menu ? { menu: p.menu } : {}) },
   }),
   /**
    * Host-authored session handoff. Used by /clear to move the browser into a newly minted durable
