@@ -5,10 +5,13 @@
 - [ ] `03-filesystem-root-taxonomy` - user config path and shape must be settled before adding the Vim preference.
 - [x] `.plans/trevor-v2` D-083/D-084 prompt composer recovery/history - prompt input/history behavior exists and must not regress.
 - [x] `.plans/trevor-v2` D-092 image attachment UX - composer tokens and the `+` upload button placement exist and must not regress.
+- [x] `02.12-prompt-surface-editor` - the full-surface prompt editor (a takeover textarea for long prompts) exists; it is a SECOND prompt-writing surface the Vim controller + mode indicator must also serve. <!-- D-007 -->`apps/web/src/components/panel/prompt-surface-editor.tsx`, opened via `apps/web/src/hooks/use-prompt-editor.ts`.
 
 ## 1. Architecture
 
 This plan extracts D-097 into a narrow, prompt-input-first Vim mode. It does not add Vim navigation across the whole UI. The first cut gives users who opt in a modal prompt composer with a small, visible mode indicator next to the bottom-row `+` upload button.
+
+Trevor now has **two** prompt-writing textareas, and Vim mode applies to both: the inline composer (`PromptInput`) and the full-surface prompt editor (`02.12-prompt-surface-editor`), a takeover for editing long prompts with room. Because the large editor is exactly where motions matter most, the Vim prompt controller (mode state machine + motions) and the mode indicator are authored as ONE reusable unit that attaches to any prompt textarea, not coupled to `PromptInput`. The first-cut ordering stays composer-first, but the controller is built reusable from the start and the integration milestone wires both surfaces (so the editor never silently lacks Vim mode). <!-- D-007 -->
 
 The mode model is:
 
@@ -32,16 +35,18 @@ Every focused Vim-enabled composer starts in **insert** mode. Escape enters **no
 | Visual only from normal | No insert-to-visual shortcut path in the first cut. |
 | Preference gated | Disabled by default unless enabled in `~/.trevorV2` config. |
 | Storybook first | All visual and interaction states are reviewed before app wiring. |
-| Prompt-only first | No sidebar, command menu, transcript, or global app Vim bindings in this plan. |
+| Prompt surfaces only | Vim mode covers the prompt-writing textareas - the composer AND the full-surface editor (D-007) - but not the sidebar, command menu, transcript, or global app bindings in this plan. |
+| Reusable controller | The mode engine + indicator attach to any prompt textarea, so both surfaces share one implementation. |
 | No composer regression | Slash commands, shell lane, upload, image tokens, history recall, submit, and accessibility keep working. |
 
 ### Boundaries
 
 - **User config:** owns persisted `vim.enabled` or equivalent preference under `TREVOR_HOME`.
 - **Host/config bridge:** reads the preference and exposes it to the web without putting secrets or local paths in browser state.
-- **Prompt Vim controller:** owns mode state, key interpretation, selection changes, cursor movement, and command execution inside the textarea.
+- **Prompt Vim controller:** owns mode state, key interpretation, selection changes, cursor movement, and command execution inside a textarea. Authored reusable (it attaches to a textarea ref), so the composer and the full-surface editor share one engine (D-007).
 - **PromptInput UI:** renders the mode indicator next to the upload `+`/shell glyph area without changing composer height.
-- **Storybook harness:** exercises insert/normal/visual, selection, shell lane, slash menu, image-token, upload, and narrow-width states before app wiring.
+- **Full-surface editor UI (`prompt-surface-editor.tsx`):** hosts the same controller + a mode indicator in its header row, so Vim mode is available while editing long prompts (and the 02.10 generated-handoff edit).
+- **Storybook harness:** exercises insert/normal/visual, selection, shell lane, slash menu, image-token, upload, and narrow-width states before app wiring; includes the full-surface editor surface.
 
 ### Mode Indicator
 
@@ -142,7 +147,7 @@ The indicator is compact, stable-width, and accessible. It must not wrap, resize
 
 **Gate from previous:** motion/controller tests and Storybook states pass.
 
-#### M6: Composer Integration
+#### M6: Prompt-Surface Integration (composer + full-surface editor)
 
 - **Dependencies:** M1-M5
 - **Effort:** M
@@ -151,7 +156,9 @@ The indicator is compact, stable-width, and accessible. It must not wrap, resize
   2. GREEN: Wire enabled preference into `PromptInput` and the composer keydown path.
   3. RED: Add tests for slash menu, prompt shell lane, Enter submit, Shift+Enter newline, Up/Down history recall, and image-token atomic delete under Vim mode.
   4. GREEN: Resolve key precedence so mode handling never swallows existing composer behaviors incorrectly.
-  5. REFACTOR: Keep App-owned slash/submit/history wiring outside the Vim controller.
+  5. RED: Add tests proving the SAME controller drives Vim mode in the full-surface editor (`prompt-surface-editor.tsx`) - mode transitions + motions work in its textarea, the mode indicator shows in its header, and the editor's own Cmd-Enter/Escape confirm-and-close precedence is preserved (Escape in normal-mode does NOT close the editor; Escape in insert-mode enters normal-mode; close is the editor's existing back/Done). <!-- D-007 -->
+  6. GREEN: Attach the controller + indicator in the full-surface editor and resolve the Escape precedence between Vim normal-mode entry and the editor's save-and-close.
+  7. REFACTOR: Keep App-owned slash/submit/history wiring and the editor's confirm contract outside the Vim controller; the controller stays surface-agnostic.
 
 #### M7: Accessibility and Conflict Handling
 
@@ -177,8 +184,8 @@ The indicator is compact, stable-width, and accessible. It must not wrap, resize
 - **Tasks:**
   1. RED: Add Storybook interaction tests for mode transitions and indicator updates.
   2. GREEN: Make Storybook states pass for insert, normal, visual, shell, slash, image tokens, upload, and narrow/mobile widths.
-  3. RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting.
-  4. GREEN: Verify live behavior with preference enabled and disabled.
+  3. RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (open via the composer expand button), confirming Escape enters normal-mode there without closing the editor.
+  4. GREEN: Verify live behavior with preference enabled and disabled, on both prompt surfaces.
   5. REFACTOR: Update user-facing config docs and AGENTS guidance for the Vim preference.
 
 ## 3. Risk Register
@@ -199,7 +206,7 @@ The indicator is compact, stable-width, and accessible. It must not wrap, resize
 
 ## 5. Progress Report Accounting
 
-The progress report is `.plans/24-vim-motions-ui/progress-report.md`. It tracks only the prompt-input Vim motion feature. Broader UI navigation, transcript motions, command-menu Vim control, and global app keybindings are not current-cutoff work.
+The progress report is `.plans/24-vim-motions-ui/progress-report.md`. It tracks the prompt-surface Vim motion feature across both prompt textareas (the composer and the full-surface editor, D-007). Broader UI navigation, transcript motions, command-menu Vim control, and global app keybindings are not current-cutoff work.
 
 Before implementation resumes, run:
 

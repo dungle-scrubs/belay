@@ -4,7 +4,7 @@
 
 ## Summary
 
-- Current cutoff blockers: 41
+- Current cutoff blockers: 43
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -13,6 +13,7 @@
 - [ ] `03-filesystem-root-taxonomy` complete before adding the `~/.trevorV2` Vim preference
 - [x] `.plans/trevor-v2` D-083/D-084 prompt composer recovery/history exists
 - [x] `.plans/trevor-v2` D-092 image attachment UX exists
+- [x] `02.12-prompt-surface-editor` full-surface editor exists - a second prompt textarea Vim mode must serve (D-007)
 
 ## M1: Config Preference Boundary
 
@@ -54,13 +55,15 @@
 - [ ] GREEN: Implement the smallest useful visual-mode subset without breaking native clipboard shortcuts
 - [ ] REFACTOR: Keep destructive edit commands conservative and explicit; defer ambiguous Vim features
 
-## M6: Composer Integration
+## M6: Prompt-Surface Integration (composer + full-surface editor)
 
 - [ ] RED: Add web tests proving Vim mode is inactive when the preference is disabled
 - [ ] GREEN: Wire enabled preference into `PromptInput` and the composer keydown path
 - [ ] RED: Add tests for slash menu, prompt shell lane, Enter submit, Shift+Enter newline, Up/Down history recall, and image-token atomic delete under Vim mode
 - [ ] GREEN: Resolve key precedence so mode handling never swallows existing composer behaviors incorrectly
-- [ ] REFACTOR: Keep App-owned slash/submit/history wiring outside the Vim controller
+- [ ] RED: Add tests proving the SAME controller drives Vim mode in the full-surface editor (mode + motions in its textarea, indicator in its header, and Escape enters normal-mode rather than closing the editor) (D-007)
+- [ ] GREEN: Attach the controller + indicator in the full-surface editor and resolve Escape precedence (Vim normal-mode entry vs the editor's save-and-close)
+- [ ] REFACTOR: Keep App-owned slash/submit/history wiring and the editor's confirm contract outside the surface-agnostic Vim controller
 
 ## M7: Accessibility and Conflict Handling
 
@@ -74,6 +77,6 @@
 
 - [ ] RED: Add Storybook interaction tests for mode transitions and indicator updates
 - [ ] GREEN: Make Storybook states pass for insert, normal, visual, shell, slash, image tokens, upload, and narrow/mobile widths
-- [ ] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting
-- [ ] GREEN: Verify live behavior with preference enabled and disabled
+- [ ] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (Escape enters normal-mode there without closing it)
+- [ ] GREEN: Verify live behavior with preference enabled and disabled, on both prompt surfaces
 - [ ] REFACTOR: Update user-facing config docs and AGENTS guidance for the Vim preference
