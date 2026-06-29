@@ -331,6 +331,60 @@ test("M3: unknown context (no served window) pauses at the conservative fallback
   assert.equal(stop?.type === "stop" && stop.stop.cause, "step_backstop");
 });
 
+const textOf = (events: readonly AgentEvent[]): string =>
+  events
+    .filter((e): e is Extract<AgentEvent, { type: "text" }> => e.type === "text")
+    .map((e) => e.text)
+    .join("");
+
+test("03.1 M2: a turn seeded over the fraction synthesizes at step 0 with no tool round", async () => {
+  // The prior turn left context at 100% of a 100-token window: seeding the gate lets step 0 see it,
+  // so the turn synthesizes immediately instead of opening one mandatory (and doomed) tool round.
+  const events = await collect(loopingProvider({ input: 100, window: 100 }), {
+    seedUsage: { input: 100, contextWindow: 100 },
+  });
+  assert.ok(
+    !events.some((e) => e.type === "tool_start"),
+    "no tool round is opened before the step-0 synthesis",
+  );
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "context_pressure");
+  assert.equal(stop?.type === "stop" && stop.stop.action, "synthesized");
+  const limit = events.find((e) => e.type === "step_limit");
+  assert.equal(limit?.type === "step_limit" && limit.steps, 0, "synthesized at step 0");
+  assert.equal(textOf(events), "FINAL ANSWER", "the seeded backstop produces the final answer");
+});
+
+test("03.1 M2: a turn seeded under the fraction runs the first tool round exactly as today", async () => {
+  // A 0.1% seed is nowhere near the gate, so step 0 opens the first tool round and the turn runs to
+  // the adaptive backstop - identical to the no-seed path (regression guard).
+  const events = await collect(loopingProvider({ input: 100, window: 100_000 }), {
+    seedUsage: { input: 100, contextWindow: 100_000 },
+  });
+  assert.ok(
+    events.some((e) => e.type === "tool_start"),
+    "the first tool round still runs",
+  );
+  const limit = events.find((e) => e.type === "step_limit");
+  assert.equal(limit?.type === "step_limit" && limit.steps, 32, "runs to the backstop, as today");
+});
+
+test("03.1 M2: a turn with no seed opens a tool round before the gate (first-turn parity)", async () => {
+  // No seed (a session's first turn): the trackers default to 0, so the gate is blind at step 0 and
+  // the mandatory first round runs before the gate can fire at step 1 - exactly today's behavior.
+  const events = await collect(loopingProvider({ input: 100, window: 100 }));
+  assert.ok(
+    events.some((e) => e.type === "tool_start"),
+    "the mandatory first tool round runs",
+  );
+  const limit = events.find((e) => e.type === "step_limit");
+  assert.equal(
+    limit?.type === "step_limit" && limit.steps,
+    1,
+    "the gate fires only after step 0's round, never at step 0",
+  );
+});
+
 test("M4: context pressure synthesizes before the adaptive budget is spent", async () => {
   // 85% of a 1M window is past the 80% gate: even with the generous 1M tier budget, context pressure
   // wins on the very next round rather than burning the whole adaptive budget first.

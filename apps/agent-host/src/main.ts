@@ -490,11 +490,16 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     background,
   });
   runningRunId = runId;
+  // Carry the prior turn's measured context forward (03.1 D-002): when compaction has floored out and
+  // the turn legitimately starts at/above the fraction, this lets the context-pressure gate synthesize
+  // at step 0 instead of opening one doomed tool round. Absent on a session's first turn.
+  const seedUsage = compactionController.usageSeed();
   const fiber = Effect.runFork(
     publishTurn(provider, turnHistory, {
       runId,
       reasoning: decoded.reasoning,
       delegate,
+      ...(seedUsage ? { seedUsage } : {}),
     }).pipe(Effect.provide(EmitLive)),
   );
   fiber.addObserver((exit) => {

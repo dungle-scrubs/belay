@@ -47,9 +47,12 @@ export function publishTurn(
     /** Optional turn-loop config overrides (e.g. a small `emergencyMaxSteps` for tests); the loop
      *  fills the rest from `DEFAULT_TURN_LOOP_CONFIG`. Absent in production. */
     readonly loop?: Partial<TurnLoopConfig>;
+    /** Carry-forward of the prior turn's measured usage (03.1 D-002), so the context-pressure gate
+     *  can fire at step 0 when the turn inherits >= the fraction. Absent on a session's first turn. */
+    readonly seedUsage?: { readonly input: number; readonly contextWindow: number };
   },
 ): Effect.Effect<void, never, Emit> {
-  const { runId, reasoning, toolNames, delegate, resolveImages, loop } = options;
+  const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -265,6 +268,7 @@ export function publishTurn(
         toolNames,
         delegate,
         ...(loop ? { loop } : {}),
+        ...(seedUsage ? { seedUsage } : {}),
       }),
       handle,
     ).pipe(

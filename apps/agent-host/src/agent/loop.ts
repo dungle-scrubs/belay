@@ -376,6 +376,11 @@ export interface RunAgentOptions {
   readonly toolNames?: ReadonlySet<string>;
   readonly delegate?: DelegateCapability;
   readonly loop?: Partial<TurnLoopConfig>;
+  /** Carry-forward of the prior turn's measured prompt size + served window (03.1 D-002), from
+   *  `CompactionController.usageSeed()`. Seeds the context-pressure gate so a turn inheriting >= the
+   *  fraction synthesizes at step 0 instead of opening one mandatory tool round. Absent on a session's
+   *  first turn (no prior usage) - the trackers then default to 0 and the loop behaves as today. */
+  readonly seedUsage?: { readonly input: number; readonly contextWindow: number };
 }
 
 export function runAgent(
@@ -424,9 +429,12 @@ export function runAgent(
   // The latest model step's prompt size + window, captured from its usage event (like
   // overflowReason). Drives the context-pressure budget (D-053): when the prompt that fed
   // the last step crosses the configured fraction of the window, the next round forces a
-  // final answer instead of opening more tool calls. Both 0 until the first usage arrives.
-  let lastInputTokens = 0;
-  let lastContextWindow = 0;
+  // final answer instead of opening more tool calls. Seeded from the prior turn's measured usage
+  // (03.1 D-002: `opts.seedUsage`, carried forward from CompactionController) so the gate can fire at
+  // step 0 when the turn inherits >= the fraction; both default to 0 (a session's first turn has no
+  // seed), so the loop behaves exactly as today until the first usage event of this turn arrives.
+  let lastInputTokens = opts.seedUsage?.input ?? 0;
+  let lastContextWindow = opts.seedUsage?.contextWindow ?? 0;
   let repeatedToolName: string | undefined;
   let repeatedToolSignature: string | undefined;
   let repeatedToolRounds = 0;

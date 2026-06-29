@@ -3,10 +3,10 @@
 ## Summary
 
 - **Current cutoff blockers:** 16
-- **Completed current work:** 3
+- **Completed current work:** 8
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M2 - thread `seedUsage` through `publishTurn` -> `runAgent`
+- **Current focus:** M3 - pre-baseline the progress guard under seeding
 
 ## Completed Current State / Hard Dependencies
 
@@ -22,11 +22,11 @@
 - [x] REFACTOR: keep read-only; no fraction logic in the accessor.
 
 ### M2 - thread `seedUsage` through `publishTurn` -> `runAgent`
-- [ ] RED: seeded over-fraction `runAgent` emits `context_pressure` and routes to `synthesize()` at step 0 (no `tool_*` before the stop).
-- [ ] RED: seeded under-fraction `runAgent` runs the first tool round as today (regression guard).
-- [ ] RED: no-seed `runAgent` behaves exactly as today (first-turn parity).
-- [ ] GREEN: add `seedUsage?` to `RunAgentOptions` + `publishTurn` options; seed `lastInputTokens` / `lastContextWindow` (default 0); read `compactionController.usageSeed()` at `main.ts:494`.
-- [ ] REFACTOR: update the `loop.ts:424-429` comment block to document the seed source.
+- [x] RED: seeded over-fraction `runAgent` emits `context_pressure` and routes to `synthesize()` at step 0 (no `tool_*` before the stop).
+- [x] RED: seeded under-fraction `runAgent` runs the first tool round as today (regression guard).
+- [x] RED: no-seed `runAgent` behaves exactly as today (first-turn parity).
+- [x] GREEN: add `seedUsage?` to `RunAgentOptions` + `publishTurn` options; seed `lastInputTokens` / `lastContextWindow` (default 0); read `compactionController.usageSeed()` at `main.ts:494`.
+- [x] REFACTOR: update the `loop.ts:424-429` comment block to document the seed source.
 
 ### M3 - pre-baseline the progress guard under seeding
 - [ ] RED: mid-range seed does not make step-0 `contextAdvanced` spuriously true; first real usage event does not re-baseline `checkpointInputTokens`.
