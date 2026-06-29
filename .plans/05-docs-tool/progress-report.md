@@ -2,9 +2,9 @@
 
 ## Summary
 
-- Current cutoff blockers: 35
-- Completed current work: 61 (Phases 1-6)
-- Deferred follow-up: 0
+- Current cutoff blockers: 0
+- Completed current work: 97 (Phases 1-8)
+- Deferred follow-up: 2 (manual EZE - needs live network + provider keys)
 - Superseded checklist debt: 0
 
 ## Hard Dependencies
@@ -16,7 +16,7 @@ For this extraction pass, both dependencies are assumed finished for sequencing 
 
 ## Current Focus
 
-Blockers
+Complete (deferred manual EZE)
 
 ## Current Cutoff Blockers
 
@@ -116,53 +116,60 @@ Blockers
 
 #### M7: Guidance and rendering
 
-- [ ] RED: Add prompt-guidance tests for when to use `docs`.
-- [ ] GREEN: Tell the model to use `docs` for current external documentation needs.
-- [ ] GREEN: Tell the model not to use `docs` for active workspace source truth.
-- [ ] RED: Add web renderer tests for corpus summaries, excerpts, citations, stale/partial status, and errors.
-- [ ] GREEN: Render docs results as structured source-backed documentation snippets.
-- [ ] RED: Add evals proving local repo questions use files/LSP/search/tests instead of docs.
-- [ ] GREEN: Tune guidance until evals pass.
-- [ ] Model guidance preserves the workspace-truth boundary.
-- [ ] Docs output is readable and citeable in the UI.
-- [ ] Stale/partial/error states are visible.
+- [x] RED: Add prompt-guidance tests for when to use `docs`.
+- [x] GREEN: Tell the model to use `docs` for current external documentation needs.
+- [x] GREEN: Tell the model not to use `docs` for active workspace source truth.
+- [x] RED: Add web renderer tests for corpus summaries, excerpts, citations, stale/partial status, and errors.
+- [x] GREEN: Render docs results as structured source-backed documentation snippets.
+- [x] RED: Add evals proving local repo questions use files/LSP/search/tests instead of docs.
+- [x] GREEN: Tune guidance until evals pass.
+- [x] Model guidance preserves the workspace-truth boundary.
+- [x] Docs output is readable and citeable in the UI.
+- [x] Stale/partial/error states are visible.
 
 ### Phase 8: End-to-End Verification
 
 #### M8: Full workflow validation
 
-- [ ] RED: Add integration tests for search-to-fetch-to-corpus-to-query workflow.
-- [ ] GREEN: Pass with mocked `web_search` and `web_fetch`.
-- [ ] RED: Add hermetic e2e-style tests for stale refresh and network failure fallback.
-- [ ] GREEN: Make diagnostics and stale metadata visible.
-- [ ] RED: Add no-direct-Firecrawl and no-workspace-substitution regression tests.
-- [ ] GREEN: Ensure every validation item from D-009 is covered.
-- [ ] Manual EZE: fetch docs for a public library, answer from cited cached docs, refresh after staleness, and confirm local repo facts still come from local files/search/tests.
-- [ ] Unit, integration, web, and hermetic e2e-style tests pass.
-- [ ] Manual EZE validates the full user-visible workflow.
-- [ ] No dependency or storage policy is bypassed.
+- [x] RED: Add integration tests for search-to-fetch-to-corpus-to-query workflow.
+- [x] GREEN: Pass with mocked `web_search` and `web_fetch`.
+- [x] RED: Add hermetic e2e-style tests for stale refresh and network failure fallback.
+- [x] GREEN: Make diagnostics and stale metadata visible.
+- [x] RED: Add no-direct-Firecrawl and no-workspace-substitution regression tests.
+- [x] GREEN: Ensure every validation item from D-009 is covered.
+- [x] Unit, integration, web, and hermetic e2e-style tests pass.
+- [x] No dependency or storage policy is bypassed.
+
+The plan's live Manual EZE (and its user-visible-workflow acceptance) is a DEFERRED manual EZE - it needs live network and provider keys to fetch real public docs. See Accepted/Deferred Follow-Up.
 
 ### Verification Checklist
 
-- [ ] Corpus keying.
-- [ ] 24-hour staleness.
-- [ ] Fresh cache reuse.
-- [ ] Stale refresh.
-- [ ] Manual refresh.
-- [ ] Bounded docs discovery.
-- [ ] `llms.txt`, sitemap, and index handling.
-- [ ] Partial-corpus metadata.
-- [ ] Source citations.
-- [ ] Search within cached docs.
-- [ ] Cached page reads.
-- [ ] Corpus listing/status.
-- [ ] No direct Firecrawl calls from `docs`.
-- [ ] No workspace-truth substitution.
-- [ ] Graceful behavior when network fetches fail after a stale corpus exists.
+- [x] Corpus keying. (`corpus.test.ts`, `corpus-store.test.ts`)
+- [x] 24-hour staleness. (`freshness.test.ts`, `docs-freshness.test.ts`)
+- [x] Fresh cache reuse. (`docs-freshness.test.ts`)
+- [x] Stale refresh. (`docs-freshness.test.ts`, `docs-e2e.test.ts`)
+- [x] Manual refresh. (`docs-freshness.test.ts`)
+- [x] Bounded docs discovery. (`discovery.test.ts`)
+- [x] `llms.txt`, sitemap, and index handling. (`discovery.test.ts`)
+- [x] Partial-corpus metadata. (`docs-resolve.test.ts`, `corpus-store.test.ts`)
+- [x] Source citations. (`docs-query.test.ts`, `docs-e2e.test.ts`, web `docs.test.tsx`)
+- [x] Search within cached docs. (`docs-query.test.ts`, `docs-e2e.test.ts`)
+- [x] Cached page reads. (`docs-query.test.ts`, web `docs.test.tsx`)
+- [x] Corpus listing/status. (`docs-query.test.ts`, web `docs.test.tsx`)
+- [x] No direct Firecrawl calls from `docs`. (`no-firecrawl.test.ts`, `docs-regression.test.ts`)
+- [x] No workspace-truth substitution. (`docs-regression.test.ts`, `system-prompt.test.ts`)
+- [x] Graceful behavior when network fetches fail after a stale corpus exists. (`docs-freshness.test.ts`, `docs-e2e.test.ts`)
 
 ## Accepted/Deferred Follow-Up
 
-None.
+The Phase 8 Manual EZE is deferred: it requires live network access and provider keys
+(web_search + web_fetch backends) to fetch real public documentation, which the hermetic
+suite cannot exercise. The full workflow is covered hermetically by `docs-e2e.test.ts`
+(search -> fetch -> corpus -> query, stale refresh, network-failure stale fallback) and the
+web renderer by `docs.test.tsx`; the live run remains a manual step.
+
+- [ ] Manual EZE: fetch docs for a public library, answer from cited cached docs, refresh after staleness, and confirm local repo facts still come from local files/search/tests.
+- [ ] Manual EZE validates the full user-visible workflow.
 
 ## Superseded/Obsolete Checklist Debt
 
