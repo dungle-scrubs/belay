@@ -8,6 +8,7 @@ import { SessionRecallResults } from "./session-recall";
 import { ToolDiff } from "./tool-diff";
 import { ToolOutput } from "./tool-output";
 import { type ToolStatus, toolMessageStatus } from "./tool-status";
+import { parseWebFetchResult, WebFetchResult } from "./web-fetch";
 import { type WebSearchResultItem, WebSearchResults } from "./web-search";
 
 // Tool-call arguments arrive as a JSON string; parse defensively (a streaming or
@@ -155,6 +156,21 @@ const renderWebSearch: RenderArm = ({ message, status, className }) => {
   );
 };
 
+// web_fetch renders its envelope as flat source content (title, final URL, the markdown/text body,
+// and a backend/attempts footer), or the working indicator while running, or its error message.
+const renderWebFetch: RenderArm = ({ message, status, className }) => {
+  const a = parseToolArgs(message.args);
+
+  return (
+    <WebFetchResult
+      className={className}
+      url={typeof a.url === "string" ? a.url : ""}
+      parsed={parseWebFetchResult(message.result)}
+      status={status}
+    />
+  );
+};
+
 // session_recall renders its distilled findings + cited source rows (or the recalling indicator
 // while running, or its error/empty note) from the JSON recall result.
 const renderRecall: RenderArm = ({ message, status, className }) => {
@@ -211,8 +227,7 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   glob: renderGeneric,
   grep: renderOutput,
   web_search: renderWebSearch,
-  // web_fetch renders as a plain row until plan 04 M7 wires a source-content renderer for its envelope.
-  web_fetch: renderGeneric,
+  web_fetch: renderWebFetch,
   session_recall: renderRecall,
   ast_grep: renderGeneric,
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it

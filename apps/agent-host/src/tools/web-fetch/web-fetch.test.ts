@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Effect, Either, Schema } from "effect";
-import { test } from "vitest";
+import { afterEach, test } from "vitest";
 import { ToolInputError } from "../errors";
 import type { FetchLikeResponse } from "./static-fetch";
 import {
@@ -10,6 +10,7 @@ import {
   WebFetchParams,
   webFetchTool,
 } from "./web-fetch";
+import { lastWebFetchError, resetWebFetchError } from "./web-fetch-log";
 
 /**
  * Tool-entry coverage: the param schema accepts/normalizes input (M1), the tool declares read-only,
@@ -383,4 +384,112 @@ test("rendered mode degrades gracefully when Firecrawl is unavailable", async ()
   const attempts = parsed.attempts as { backend: string; status: string }[];
   const firecrawl = attempts.find((a) => a.backend === "firecrawl");
   assert.equal(firecrawl?.status, "failed", "unavailable Firecrawl is a typed failed attempt");
+});
+
+/**
+ * Plan 04 M8/M9: end-to-end redaction + provenance through the live tool path. A captured console
+ * proves the per-backend log line carries only the sanitized field set (host, never the URL query;
+ * no key/header/body) and that the fetched CONTENT never reaches a log; the serialized envelope
+ * proves the content + provenance stay model-visible.
+ */
+
+const capturedLogs: string[] = [];
+const originalLog = console.log;
+
+function captureLogs(): void {
+  capturedLogs.length = 0;
+  console.log = (...args: unknown[]) => {
+    capturedLogs.push(args.join(" "));
+  };
+}
+
+afterEach(() => {
+  console.log = originalLog;
+  resetWebFetchError();
+});
+
+test("web_search then web_fetch: the fetched content + provenance are model-visible in the envelope", async () => {
+  // A web_search result the model would select: a single source URL it then reads with web_fetch.
+  const selectedUrl = "https://docs.example.com/guide?ref=search";
+  const { fetch } = multiplexedFetch({
+    static: {
+      text: `<html><head><title>The Guide</title></head><body><article><p>${"Selected source body. ".repeat(40)}</p></article></body></html>`,
+      contentType: "text/html",
+    },
+  });
+
+  const serialized = await runWebFetch({ url: selectedUrl }, ladderDeps(fetch));
+  const parsed = JSON.parse(serialized) as Record<string, unknown>;
+
+  // Content is model-visible...
+  assert.ok(
+    String(parsed.content).includes("Selected source body."),
+    "the fetched content is present",
+  );
+  // ...and so is the provenance the model reads (the resolved URL, the winning backend, the ladder).
+  assert.equal(parsed.url, selectedUrl);
+  assert.equal(parsed.backend, "static");
+  assert.deepEqual(parsed.attempts, [{ backend: "static", status: "usable" }]);
+});
+
+test("the live path logs only redacted fields - no URL query, key, header, or fetched content", async () => {
+  const url = "https://docs.example.com/page?token=sk-SECRET&key=abc123";
+  const body = "PRIVATE PAGE BODY that must never be logged";
+  const { fetch } = multiplexedFetch({
+    static: {
+      text: `<html><head><title>T</title></head><body><article><p>${body} ${"filler. ".repeat(40)}</p></article></body></html>`,
+      contentType: "text/html",
+    },
+  });
+
+  captureLogs();
+  await runWebFetch({ url }, ladderDeps(fetch));
+  const all = capturedLogs.join("\n");
+
+  assert.ok(all.includes("web_fetch:"), "the backend-attempt boundary line is emitted");
+  assert.match(all, /host=docs\.example\.com/);
+  assert.ok(!all.includes("token="), "the URL query is never logged");
+  assert.ok(!all.includes("sk-SECRET"), "no secret from the query leaks");
+  assert.ok(!/Authorization|bearer/i.test(all), "no header is logged");
+  assert.ok(!all.includes(body), "the fetched page content is never logged");
+});
+
+test("rendered mode with Firecrawl absent returns a typed-unavailable result, not a thrown turn", async () => {
+  const { fetch } = multiplexedFetch({
+    static: { text: USABLE_HTML, contentType: "text/html" },
+  });
+
+  // No firecrawlApiKey: the explicit rendered request must not throw - it degrades to a typed
+  // failed Firecrawl attempt and a needsFallback envelope the model reads.
+  const serialized = await runWebFetch(
+    { url: "https://example.com/p", mode: "rendered" },
+    ladderDeps(fetch),
+  );
+  const parsed = JSON.parse(serialized) as Record<string, unknown>;
+
+  assert.equal(parsed.needsFallback, true, "the rendered request degrades rather than throwing");
+  const attempts = parsed.attempts as { backend: string; status: string }[];
+  assert.equal(
+    attempts.find((a) => a.backend === "firecrawl")?.status,
+    "failed",
+    "an absent Firecrawl is a typed failed attempt",
+  );
+});
+
+test("a failing backend records a sanitized last error the doctor reads", async () => {
+  resetWebFetchError();
+  // Static fails to fetch (a thrown StaticFetchError), so the static attempt is a sanitized failure.
+  const failingFetch = (async () => {
+    throw new Error("boom");
+  }) as unknown as typeof globalThis.fetch;
+
+  captureLogs();
+  await runWebFetch({ url: "https://example.com/p", mode: "static" }, ladderDeps(failingFetch));
+
+  const last = lastWebFetchError();
+  assert.ok(last, "a last backend error is recorded");
+  assert.ok(
+    !/sk-|bearer|Authorization|\?/.test(last ?? ""),
+    "the recorded last error is a sanitized category",
+  );
 });

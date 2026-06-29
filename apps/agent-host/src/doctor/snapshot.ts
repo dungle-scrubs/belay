@@ -110,14 +110,24 @@ export interface DoctorProviderFailures {
 }
 
 /**
- * Web / Docs dependency facts (D-073). Booleans + provider NAMES only - never key values - so the
- * area stays redaction-safe: whether a web-search key is configured, which fetch/rendering provider
- * (if any) is set, and the docs-cache presence/staleness.
+ * Web / Docs dependency facts (D-073, plan 04). Booleans + readiness ENUMS only - never key values -
+ * so the area stays redaction-safe: whether a web-search key is configured, the web_fetch backend
+ * ladder's readiness (static always; Jina keyless-available vs keyed; Firecrawl configured-only), an
+ * optional sanitized last-backend error category, and the docs-cache presence/staleness.
  */
 export interface DoctorWebDocs {
   readonly searchConfigured: boolean;
-  /** The configured fetch/rendering provider name (e.g. "Jina"/"Firecrawl"), or null when none. */
-  readonly fetchProvider: string | null;
+  /** The web_fetch backend ladder's readiness, reported per backend (no key values). */
+  readonly fetch: {
+    /** Static fetch needs no configuration, so it is always available. */
+    readonly staticAvailable: boolean;
+    /** Jina works keyless ("available"); "keyed" when JINA_API_KEY adds the Authorization header. */
+    readonly jina: "available" | "keyed";
+    /** Firecrawl is gated entirely behind FIRECRAWL_API_KEY presence. */
+    readonly firecrawl: "configured" | "unconfigured";
+    /** The sanitized category of the last web_fetch backend error, if any has been observed. */
+    readonly lastError?: string;
+  };
   readonly docs: { readonly present: boolean; readonly stale: boolean };
 }
 
@@ -540,10 +550,36 @@ function docsFinding(docs: DoctorWebDocs["docs"]): DoctorFinding {
 }
 
 /**
- * Builds the Web / Docs area (D-073) from {@link DoctorWebDocs} config facts: web-search key presence,
- * the fetch/rendering provider, and docs-cache staleness. Redaction-safe by construction - it reads
- * only booleans + a provider name, never a key value. An unconfigured dependency is `not_checked`
- * (not an error); a stale docs cache warns; any configured dependency lifts the area to ok.
+ * The web_fetch backend-ladder finding (plan 04): static is always available, so the ladder is never
+ * "unconfigured"; the message reports each backend's readiness (Jina available vs keyed, Firecrawl
+ * configured vs unconfigured) and appends the sanitized last-backend error category when one has been
+ * observed. Reads only enums + an error category, never a key value, so the area stays redaction-safe.
+ */
+function webFetchFinding(fetch: DoctorWebDocs["fetch"]): DoctorFinding {
+  const jina = fetch.jina === "keyed" ? "Jina keyed" : "Jina available";
+  const firecrawl =
+    fetch.firecrawl === "configured" ? "Firecrawl configured" : "Firecrawl unconfigured";
+  const ladder = `static, ${jina}, ${firecrawl}`;
+  const message = fetch.lastError
+    ? `Backend ladder ready (${ladder}). Last backend error: ${fetch.lastError}.`
+    : `Backend ladder ready (${ladder}).`;
+  return {
+    id: "web.fetch",
+    status: "ok",
+    title: "Web fetch",
+    message,
+    ...(fetch.firecrawl === "unconfigured"
+      ? { nextAction: { label: "Set FIRECRAWL_API_KEY to enable the rendered fallback" } }
+      : {}),
+  };
+}
+
+/**
+ * Builds the Web / Docs area (D-073, plan 04) from {@link DoctorWebDocs} config facts: web-search key
+ * presence, the web_fetch backend ladder's readiness, and docs-cache staleness. Redaction-safe by
+ * construction - it reads only booleans/enums + a sanitized error category, never a key value. An
+ * unconfigured web-search key is `not_checked` (not an error); the fetch ladder is always ready
+ * (static needs no config); a stale docs cache warns.
  */
 function webDocsArea(input: DoctorProbeInput): DoctorArea {
   const w = input.web;
@@ -562,19 +598,7 @@ function webDocsArea(input: DoctorProbeInput): DoctorArea {
           message: "No web-search provider key is configured.",
           nextAction: { label: "Set BRAVE_API_KEY or SERPER_API_KEY to enable web_search" },
         },
-    w.fetchProvider
-      ? {
-          id: "web.fetch",
-          status: "ok",
-          title: "Web fetch / rendering",
-          message: `${w.fetchProvider} is configured for page fetch/rendering.`,
-        }
-      : {
-          id: "web.fetch",
-          status: "not_checked",
-          title: "Web fetch / rendering",
-          message: "No web fetch/rendering provider (Jina/Firecrawl) is configured.",
-        },
+    webFetchFinding(w.fetch),
     docsFinding(w.docs),
   ];
   const statuses = findings.map((f) => f.status);

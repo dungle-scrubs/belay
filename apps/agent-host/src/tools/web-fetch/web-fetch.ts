@@ -18,6 +18,7 @@ import { firecrawlFetch } from "./firecrawl-fetch";
 import { jinaFetch } from "./jina-fetch";
 import { type FetchLike, StaticFetchError, staticFetch } from "./static-fetch";
 import { assertSafeUrl, type ResolveHost, UnsafeUrlError } from "./url-guard";
+import { errorCategoryFor, hostOf, logWebFetchAttempt } from "./web-fetch-log";
 
 const MODES = ["auto", "static", "rendered"] as const;
 
@@ -71,6 +72,9 @@ export interface WebFetchDeps {
   readonly fetch: typeof globalThis.fetch;
   readonly resolveHost: (host: string) => Promise<readonly string[]>;
   readonly now: () => string;
+  /** A monotonic clock (ms) for per-backend durations in the redacted log; absent in tests that do
+   *  not assert timing, where each attempt then logs a 0ms duration. */
+  readonly monotonicMs?: () => number;
   /** Optional `JINA_API_KEY` - Jina Reader also works keyless, so an absent key only drops the
    *  Authorization header, never the backend. Injected so tests stay deterministic. */
   readonly jinaApiKey?: string;
@@ -145,10 +149,34 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
   const attempts: FetchAttempt[] = [];
   const fetchedAt = deps.now();
   const resolveHost = await syncResolverFor(args.url, deps.resolveHost);
+  // The request host + caps are the same for every backend; only the host (never the path/query) and
+  // the sizes are ever logged, so the secret-bearing parts of the URL never reach a log field.
+  const host = hostOf(args.url);
+  const caps = { maxBytes, maxChars };
 
-  const staticOutcome = await runStatic(args.url, maxBytes, maxChars, deps);
+  // Times one backend run, records its sanitized attempt, and emits the single redacted host-log line
+  // for it (host + caps + status + duration + bytes + error category - never the URL query, a key, or
+  // the fetched content). Returns the outcome so the ladder decides whether to continue.
+  const runBackend = async (run: () => Promise<BackendOutcome>): Promise<BackendOutcome> => {
+    const startedAt = deps.monotonicMs?.() ?? 0;
+    const outcome = await run();
+    const attempt = toAttempt(outcome);
 
-  attempts.push(toAttempt(staticOutcome));
+    attempts.push(attempt);
+    logWebFetchAttempt({
+      backend: outcome.backend,
+      host,
+      status: outcome.status,
+      durationMs: (deps.monotonicMs?.() ?? 0) - startedAt,
+      bytes: outcome.byteCount ?? 0,
+      caps,
+      errorCategory: errorCategoryFor(attempt),
+    });
+
+    return outcome;
+  };
+
+  const staticOutcome = await runBackend(() => runStatic(args.url, maxBytes, maxChars, deps));
 
   // The reported backend defaults to static (its content is the best available even when thin), but
   // "rendered" mode owes the caller the rendered backend's result, so a usable Firecrawl below
@@ -156,9 +184,7 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
   let winner = staticOutcome;
 
   if (mode === "auto" && staticOutcome.status !== "usable") {
-    const jinaOutcome = await runJina(args.url, maxChars, deps, resolveHost);
-
-    attempts.push(toAttempt(jinaOutcome));
+    const jinaOutcome = await runBackend(() => runJina(args.url, maxChars, deps, resolveHost));
 
     if (jinaOutcome.status === "usable") {
       winner = jinaOutcome;
@@ -166,9 +192,9 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
   }
 
   if (shouldRunFirecrawl(mode, winner)) {
-    const firecrawlOutcome = await runFirecrawlBackend(args.url, maxChars, deps, resolveHost);
-
-    attempts.push(toAttempt(firecrawlOutcome));
+    const firecrawlOutcome = await runBackend(() =>
+      runFirecrawlBackend(args.url, maxChars, deps, resolveHost),
+    );
 
     if (firecrawlOutcome.status === "usable" || mode === "rendered") {
       winner = firecrawlOutcome;
@@ -330,6 +356,7 @@ const liveDeps: WebFetchDeps = {
   fetch: globalThis.fetch,
   resolveHost: resolveHostLiterals,
   now: () => new Date().toISOString(),
+  monotonicMs: () => performance.now(),
   jinaApiKey: process.env.JINA_API_KEY?.trim() || undefined,
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY?.trim() || undefined,
 };
