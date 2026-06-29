@@ -2,8 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 77
-- Completed current work: 20 (Phases 1-2)
+- Current cutoff blockers: 56
+- Completed current work: 41 (Phases 1-4)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -54,32 +54,32 @@ Blockers
 
 #### M3: Bounded docs discovery
 
-- [ ] RED: Add discovery tests for direct docs URL, subject query, official docs result, `llms.txt`, `llms-full.txt`, sitemap, and docs index pages.
-- [ ] GREEN: Use `web_search` to discover candidate docs roots when no explicit URL is supplied.
-- [ ] GREEN: Prefer official docs roots and explicit documentation indexes.
-- [ ] RED: Add cap tests for max pages, bytes, depth, same-origin/path scope, and partial-corpus metadata.
-- [ ] GREEN: Enforce bounded discovery caps and visible truncation.
-- [ ] RED: Add robots/site-policy behavior tests where applicable.
-- [ ] GREEN: Respect policy inputs without turning docs into a crawler.
-- [ ] REFACTOR: Separate candidate resolution from page fetching.
-- [ ] Discovery is bounded and explainable.
-- [ ] Partial corpus status is visible.
-- [ ] The tool can resolve docs without over-fetching.
+- [x] RED: Add discovery tests for direct docs URL, subject query, official docs result, `llms.txt`, `llms-full.txt`, sitemap, and docs index pages.
+- [x] GREEN: Use `web_search` to discover candidate docs roots when no explicit URL is supplied.
+- [x] GREEN: Prefer official docs roots and explicit documentation indexes.
+- [x] RED: Add cap tests for max pages, bytes, depth, same-origin/path scope, and partial-corpus metadata.
+- [x] GREEN: Enforce bounded discovery caps and visible truncation.
+- [x] RED: Add robots/site-policy behavior tests where applicable.
+- [x] GREEN: Respect policy inputs without turning docs into a crawler.
+- [x] REFACTOR: Separate candidate resolution from page fetching.
+- [x] Discovery is bounded and explainable.
+- [x] Partial corpus status is visible.
+- [x] The tool can resolve docs without over-fetching.
 
 ### Phase 4: Page Fetch and Normalization
 
 #### M4: Page ingestion via web_fetch
 
-- [ ] RED: Add tests proving `docs` calls `web_fetch` and never calls Firecrawl directly.
-- [ ] GREEN: Fetch pages only through `web_fetch`.
-- [ ] RED: Add normalization tests for markdown, headings, code blocks, navigation clutter, empty/thin pages, and duplicate pages.
-- [ ] GREEN: Normalize page content and store content hashes.
-- [ ] RED: Add provenance tests proving page results preserve final URL and fetch backend information.
-- [ ] GREEN: Carry `web_fetch` provenance into page metadata.
-- [ ] REFACTOR: Deduplicate pages by canonical URL and content hash where safe.
-- [ ] No direct Firecrawl path exists in `docs`.
-- [ ] Normalized pages are citeable.
-- [ ] Fetch failures produce page/corpus diagnostics.
+- [x] RED: Add tests proving `docs` calls `web_fetch` and never calls Firecrawl directly.
+- [x] GREEN: Fetch pages only through `web_fetch`.
+- [x] RED: Add normalization tests for markdown, headings, code blocks, navigation clutter, empty/thin pages, and duplicate pages.
+- [x] GREEN: Normalize page content and store content hashes.
+- [x] RED: Add provenance tests proving page results preserve final URL and fetch backend information.
+- [x] GREEN: Carry `web_fetch` provenance into page metadata.
+- [x] REFACTOR: Deduplicate pages by canonical URL and content hash where safe.
+- [x] No direct Firecrawl path exists in `docs`.
+- [x] Normalized pages are citeable.
+- [x] Fetch failures produce page/corpus diagnostics.
 
 ### Phase 5: Freshness and Refresh
 
