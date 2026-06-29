@@ -122,6 +122,7 @@ export function SourceAuthPanel({
 }: SourceAuthPanelProps) {
   const [code, setCode] = useState("");
   const action = source.actions[0] ?? null;
+  const ActionIcon = action ? SOURCE_ACTION_META[action].icon : null;
   const copy = authCopy(source);
   const Icon =
     source.type === "local" ? TerminalSquare : source.type === "oauth" ? LogIn : KeyRound;
@@ -199,10 +200,7 @@ export function SourceAuthPanel({
             variant={source.type === "local" ? "outline" : "default"}
             onClick={() => onAction(action)}
           >
-            {(() => {
-              const ActionIcon = SOURCE_ACTION_META[action].icon;
-              return <ActionIcon />;
-            })()}
+            {ActionIcon ? <ActionIcon /> : null}
             {SOURCE_ACTION_META[action].label}
           </Button>
           {/* Make the no-secret boundary explicit next to the action. */}

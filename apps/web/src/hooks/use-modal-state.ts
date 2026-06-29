@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import type { HostStatus } from "../derive";
 import { workspaceBasename, worktreesFrom } from "../derive";
 import { useInventory } from "../resume";
+import type { WorktreeActivity } from "../worktrees";
 
 export function useModalState(opts: {
   readonly events: readonly SessionEvent[];
@@ -43,7 +44,7 @@ export function useModalState(opts: {
   const currentProject = resolvedProject ?? lastKnownProjectRef.current;
   const worktrees = useMemo(() => worktreesFrom(opts.events), [opts.events]);
   const worktreeActivity = useMemo(() => {
-    const map = new Map<string, { host: "live" | "stale" | "none"; activity: SessionActivity }>();
+    const map = new Map<string, WorktreeActivity>();
     for (const s of inventory.sessions) {
       map.set(s.sessionId, { host: s.host, activity: s.activity });
     }

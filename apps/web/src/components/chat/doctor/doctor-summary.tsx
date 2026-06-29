@@ -68,7 +68,6 @@ export function DoctorSummaryStrip({
   status: DoctorStatus;
   summary: DoctorSummary;
   state: DoctorSnapshotState;
-  checkedAt?: string;
   issuesOnly: boolean;
   onIssuesOnlyChange: (next: boolean) => void;
   /** Whether the inline JSON view is open, so its toggle reads `aria-pressed`. */

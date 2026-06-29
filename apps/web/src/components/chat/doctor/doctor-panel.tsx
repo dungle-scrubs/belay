@@ -8,6 +8,7 @@ import {
 } from "@trevor/session";
 import { CircleCheck } from "lucide-react";
 import { useState } from "react";
+import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { DoctorAreaRow } from "./doctor-area-row";
 import { DoctorSummaryStrip } from "./doctor-summary";
@@ -53,7 +54,7 @@ export function DoctorPanel({
   // can leak anything the dashboard doesn't already show. Refresh comes from the parent.
   const actions = {
     onRefresh,
-    onCopyReport: () => void navigator.clipboard?.writeText(formatDoctorReport(snapshot)),
+    onCopyReport: () => void copyText(formatDoctorReport(snapshot)),
     onViewJson: () => setJsonOpen((open) => !open),
   };
 
@@ -66,7 +67,6 @@ export function DoctorPanel({
         status={status}
         summary={summary}
         state={snapshot.state}
-        checkedAt={snapshot.checkedAt}
         issuesOnly={issuesOnly}
         onIssuesOnlyChange={setIssuesOnly}
         jsonOpen={jsonOpen}

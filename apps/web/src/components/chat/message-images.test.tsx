@@ -31,7 +31,7 @@ const DOC: ArtifactRef = {
 const src = (h: string) => `mem://${h}`;
 
 test("renders one contained image per image artifact, grouped in one set", () => {
-  const { container } = render(<MessageImages artifacts={[A, B]} srcOf={src} />);
+  const { container } = render(<MessageImages images={[A, B]} others={[]} srcOf={src} />);
   const imgs = container.querySelectorAll("img");
   assert.equal(imgs.length, 2, "an image per image artifact");
   for (const img of imgs) {
@@ -41,20 +41,20 @@ test("renders one contained image per image artifact, grouped in one set", () =>
 });
 
 test("a single image gets the taller cap; a set gets the shorter cap", () => {
-  const single = render(<MessageImages artifacts={[A]} srcOf={src} />);
+  const single = render(<MessageImages images={[A]} others={[]} srcOf={src} />);
   assert.ok(
     single.container.querySelector("img")?.className.includes("max-h-96"),
     "single image cap",
   );
 
-  const set = render(<MessageImages artifacts={[A, B]} srcOf={src} />);
+  const set = render(<MessageImages images={[A, B]} others={[]} srcOf={src} />);
   assert.ok(set.container.querySelector("img")?.className.includes("max-h-48"), "image-set cap");
 });
 
 test("clicking an image opens the carousel at its set index", () => {
   const opened: number[] = [];
   const { container } = render(
-    <MessageImages artifacts={[A, B]} srcOf={src} onOpen={(i) => opened.push(i)} />,
+    <MessageImages images={[A, B]} others={[]} srcOf={src} onOpen={(i) => opened.push(i)} />,
   );
   const buttons = container.querySelectorAll('button[aria-label^="open image"]');
   (buttons[1] as HTMLButtonElement).click();
@@ -62,7 +62,7 @@ test("clicking an image opens the carousel at its set index", () => {
 });
 
 test("a broken image degrades to a file row, not a broken-image icon", () => {
-  const { container } = render(<MessageImages artifacts={[A]} srcOf={src} />);
+  const { container } = render(<MessageImages images={[A]} others={[]} srcOf={src} />);
   const img = container.querySelector("img") as HTMLImageElement;
   fireEvent.error(img);
   assert.equal(container.querySelector("img"), null, "the broken <img> is gone");
@@ -73,7 +73,7 @@ test("a broken image degrades to a file row, not a broken-image icon", () => {
 });
 
 test("a non-image artifact renders as a file row, never an image", () => {
-  const { container } = render(<MessageImages artifacts={[DOC]} srcOf={src} />);
+  const { container } = render(<MessageImages images={[]} others={[DOC]} srcOf={src} />);
   assert.equal(container.querySelector("img"), null, "no <img> for a document");
   assert.ok(
     (container.textContent ?? "").includes("spec.pdf"),

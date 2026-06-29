@@ -21,7 +21,7 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fmtCtx } from "@/derive";
@@ -61,6 +61,40 @@ const SECTION_ICON: Record<SourceType, typeof Cpu> = {
   "api-key": KeyRound,
   gateway: Network,
 };
+
+/**
+ * A pill toggle (the Configured-only header toggle + the capability/preference filter chips). `active`
+ * flips the filled vs outline branch; `className` carries the per-use extras (`shrink-0`, `capitalize`)
+ * so the shared recipe + active/inactive colors live in one place.
+ */
+function FilterChip({
+  active,
+  onClick,
+  className,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "cursor-pointer rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border text-muted-foreground hover:bg-card",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 
 /** The first action a source offers, or null - the chooser renders what the host says, never invents. */
 function primaryAction(source: SourceSummary): SourceAction | null {
@@ -236,19 +270,13 @@ function SourceOverview({
           </p>
         </div>
         {needsSetupCount > 0 ? (
-          <button
-            type="button"
-            aria-pressed={configuredOnly}
+          <FilterChip
+            active={configuredOnly}
             onClick={() => setConfiguredOnly((on) => !on)}
-            className={cn(
-              "shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-              configuredOnly
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border text-muted-foreground hover:bg-card",
-            )}
+            className="shrink-0"
           >
             Configured only
-          </button>
+          </FilterChip>
         ) : null}
       </header>
       {SECTIONS.map(({ type, label }) => {
@@ -423,20 +451,14 @@ function SourceDetail({
         </div>
         <div className="flex flex-wrap gap-1.5">
           {[...CAPABILITY_FILTERS, ...prefChips].map((f) => (
-            <button
+            <FilterChip
               key={f}
-              type="button"
-              aria-pressed={filters[f]}
+              active={filters[f]}
               onClick={() => onToggleFilter(f)}
-              className={cn(
-                "cursor-pointer rounded-full border px-2.5 py-0.5 text-xs capitalize transition-colors",
-                filters[f]
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border text-muted-foreground hover:bg-card",
-              )}
+              className="capitalize"
             >
               {f}
-            </button>
+            </FilterChip>
           ))}
         </div>
       </header>

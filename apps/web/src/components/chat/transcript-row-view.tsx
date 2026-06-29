@@ -10,9 +10,9 @@ import {
   MessageMeta,
   ShellBlock,
   ThinkingMessage,
+  UserMessage,
   WorkingIndicator,
 } from "@/components/chat/message";
-import { MessageAttachments } from "@/components/chat/message-attachments";
 import { QuestionTranscriptItem } from "@/components/chat/question-item";
 import { ToneAlert } from "@/components/chat/tone-alert";
 import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
@@ -310,15 +310,7 @@ export function TranscriptRowView({
   }
 
   if (message.kind === "user") {
-    return (
-      <div
-        data-message-id={message.id}
-        className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
-      >
-        {message.text ? <MarkdownBody text={message.text} /> : null}
-        {message.artifacts.length ? <MessageAttachments artifacts={message.artifacts} /> : null}
-      </div>
-    );
+    return <UserMessage id={message.id} text={message.text} artifacts={message.artifacts} />;
   }
 
   return (

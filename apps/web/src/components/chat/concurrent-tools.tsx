@@ -1,8 +1,7 @@
-import { LoaderIcon, Split, Wrench } from "lucide-react";
+import { LoaderIcon, Split } from "lucide-react";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import { OpenPathLink } from "./message";
-import { type ToolStatus, toolStatusColor } from "./tool-status";
+import { ToolRowBody } from "./message";
+import type { ToolStatus } from "./tool-status";
 
 /**
  * A burst of read-only tools the host runs concurrently (read/glob/grep/web_search).
@@ -29,12 +28,6 @@ export interface ConcurrentTool {
 }
 
 function ConcurrentToolRow({ name, args, status, onOpenPath }: Omit<ConcurrentTool, "id">) {
-  const argsNode = onOpenPath ? (
-    <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
-  ) : (
-    (args ?? "")
-  );
-
   return (
     <div className="flex items-center gap-2 text-ui text-muted-foreground">
       {/* size-3 = ToolCall's chevron/spacer slot, so the wrench stays column-aligned. */}
@@ -43,15 +36,9 @@ function ConcurrentToolRow({ name, args, status, onOpenPath }: Omit<ConcurrentTo
       ) : (
         <span className="size-3 shrink-0" aria-hidden />
       )}
-      {/* No pulse here: the leading spinner already animates the active rows. */}
-      <Wrench className={cn("size-3.5 shrink-0", toolStatusColor(status))} />
-      {/* Settled rows dim to muted so the eye tracks what's still in flight. */}
-      <code
-        className={cn("text-ui", status === "done" ? "text-muted-foreground" : "text-foreground")}
-      >
-        {name}
-        <span className="text-muted-foreground">({argsNode})</span>
-      </code>
+      {/* No pulse here: the leading spinner already animates the active rows. Settled rows dim so
+          the eye tracks what's still in flight. */}
+      <ToolRowBody name={name} args={args} status={status} onOpenPath={onOpenPath} dimWhenDone />
     </div>
   );
 }

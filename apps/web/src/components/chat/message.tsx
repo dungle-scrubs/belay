@@ -1,10 +1,12 @@
-import { useBoolean } from "ahooks";
+import type { ArtifactRef } from "@trevor/session";
+import { useBoolean, useInterval } from "ahooks";
 import { ChevronRight, Wrench } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatElapsed } from "@/derive";
 import { cn } from "@/lib/utils";
 import { MarkdownBody } from "./markdown-body";
+import { MessageAttachments } from "./message-attachments";
 import { ToolSection } from "./tool-section";
 import { type ToolStatus, toolStatusColor } from "./tool-status";
 
@@ -48,13 +50,8 @@ function PulseDots() {
 /** Live elapsed since `startedAt` (ms epoch), re-rendered each second; null when no start time. */
 function useElapsedLabel(startedAt?: number): string | null {
   const [, tick] = useState(0);
-  useEffect(() => {
-    if (startedAt === undefined) {
-      return;
-    }
-    const id = setInterval(() => tick((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, [startedAt]);
+  // An undefined delay pauses the interval, so the ticker only runs while a start time is set.
+  useInterval(() => tick((n) => n + 1), startedAt === undefined ? undefined : 1000);
   return startedAt === undefined ? null : formatElapsed(Date.now() - startedAt, { hours: true });
 }
 
@@ -137,6 +134,50 @@ export function OpenPathLink({ children, onOpen }: { children: ReactNode; onOpen
   );
 }
 
+/**
+ * The wrench + `name(args)` code shared by the transcript tool row and the concurrent-batch row, so
+ * the args-as-open-path-link and the `name(args)` markup live in one place. `pulse` animates the
+ * wrench while running (the transcript row only - a concurrent batch leaves it still since its
+ * leading spinner carries the motion). `dimWhenDone` fades a settled name (the concurrent batch, so
+ * the eye tracks what's still in flight); the transcript keeps every name at full strength.
+ */
+export function ToolRowBody({
+  name,
+  args,
+  status,
+  onOpenPath,
+  pulse = false,
+  dimWhenDone = false,
+}: {
+  name: string;
+  args?: ReactNode;
+  status: ToolStatus;
+  onOpenPath?: () => void;
+  pulse?: boolean;
+  dimWhenDone?: boolean;
+}) {
+  const argsNode = onOpenPath ? (
+    <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
+  ) : (
+    (args ?? "")
+  );
+
+  return (
+    <>
+      <Wrench className={cn("size-3.5 shrink-0", toolStatusColor(status, pulse))} />
+      <code
+        className={cn(
+          "text-ui",
+          dimWhenDone && status === "done" ? "text-muted-foreground" : "text-foreground",
+        )}
+      >
+        {name}
+        <span className="text-muted-foreground">({argsNode})</span>
+      </code>
+    </>
+  );
+}
+
 interface ToolCallRowProps {
   readonly name: string;
   readonly args?: ReactNode;
@@ -146,11 +187,6 @@ interface ToolCallRowProps {
 }
 
 export function ToolCallRow({ name, args, status, collapsible, onOpenPath }: ToolCallRowProps) {
-  const argsNode = onOpenPath ? (
-    <OpenPathLink onOpen={onOpenPath}>{args}</OpenPathLink>
-  ) : (
-    (args ?? "")
-  );
   const rowContent = (
     <>
       {collapsible ? (
@@ -158,11 +194,7 @@ export function ToolCallRow({ name, args, status, collapsible, onOpenPath }: Too
       ) : (
         <span className="size-3 shrink-0" aria-hidden />
       )}
-      <Wrench className={cn("size-3.5 shrink-0", toolStatusColor(status, true))} />
-      <code className="text-ui text-foreground">
-        {name}
-        <span className="text-muted-foreground">({argsNode})</span>
-      </code>
+      <ToolRowBody name={name} args={args} status={status} onOpenPath={onOpenPath} pulse />
     </>
   );
 
@@ -269,11 +301,28 @@ export function ToolCall({
   );
 }
 
-/** A prompt from the user: a boxed, left-barred block (no header). */
-export function UserMessage({ text }: { text: string }) {
+/**
+ * A prompt from the user: a boxed, left-barred block (no header), the single source of truth for the
+ * user-message surface in both the live transcript and Storybook. `artifacts` renders the inline
+ * image set under the prose; `id` tags the box for the quote-selection range capture (D-001). An
+ * empty prompt (image-only) renders just the attachments.
+ */
+export function UserMessage({
+  id,
+  text,
+  artifacts = [],
+}: {
+  id?: string;
+  text: string;
+  artifacts?: readonly ArtifactRef[];
+}) {
   return (
-    <div className="border-l-2 border-primary bg-card px-3 py-2">
-      <MarkdownBody text={text} />
+    <div
+      data-message-id={id}
+      className="flex flex-col gap-2 border-l-2 border-primary bg-card px-3 py-2"
+    >
+      {text ? <MarkdownBody text={text} /> : null}
+      {artifacts.length ? <MessageAttachments artifacts={artifacts} /> : null}
     </div>
   );
 }

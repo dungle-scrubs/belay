@@ -45,7 +45,7 @@ import {
   truncate,
   workspaceBasename,
 } from "./derive";
-import { escapeAction } from "./esc-action";
+import { type EscState, escapeAction } from "./esc-action";
 import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
 import { useModalState } from "./hooks/use-modal-state";
@@ -101,6 +101,14 @@ const rawString = { serializer: (value: string) => value, deserializer: (value: 
 // not leave a phantom "Working" spinner for long. The live clock ticks every 4s, so detection lands
 // within ~4s of crossing this.
 const ORPHAN_GRACE_MS = 12_000;
+
+/** The Escape inputs the window listener reads, plus the handlers it routes to (see escRef below). */
+interface EscRefShape extends EscState {
+  readonly setDraft: (value: string) => void;
+  readonly onCancel: () => void;
+  readonly onFlushQueuedSteer: () => void;
+  readonly resetHistory: () => void;
+}
 
 export function App() {
   const [target, setTarget] = useState(() => targetFromLocation());
@@ -648,18 +656,9 @@ export function App() {
   // A modal/picker/takeover (model chooser, resume, worktree switcher) owns Escape while open -
   // it closes itself, and the turn on the transcript behind it must NOT be cancelled.
   const modalOpen = chooserOpen || modal.resumeOpen || modal.worktreeOpen || editor.isOpen;
-  const escRef = useRef({
-    active,
-    awaiting: awaitingResponse,
-    compacting,
-    draft,
-    modalOpen,
-    queued: queue.length,
-    setDraft,
-    onCancel,
-    onFlushQueuedSteer,
-    resetHistory: history.resetNavigation,
-  });
+  // The latest Escape inputs + handlers, read by the one window listener so it never goes stale. The
+  // ref is reassigned every render (below); the seed only types it, so it never carries stale state.
+  const escRef = useRef<EscRefShape>(null as unknown as EscRefShape);
   escRef.current = {
     active,
     awaiting: awaitingResponse,

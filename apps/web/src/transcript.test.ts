@@ -788,6 +788,40 @@ test("/clear renders nothing - neither the command echo nor its 'cleared' result
   assert.deepEqual(messages, []);
 });
 
+test("/clear is a FULL reset: stale fold/question/tool state never bleeds past it", () => {
+  const messages = toTranscript([
+    // A turn with a still-open compaction fold, a resolved ask_user, and an open tool, then /clear.
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.contextCompacting({ foldId: "f1", tokens: 480, budget: 1_000 })),
+    ...askUserLifecycle(
+      "q1",
+      qContract(qItem("db", "Which database?")),
+      { action: "accept", answer: "Postgres", questions: [{ id: "db", answer: "Postgres" }] },
+      "answered",
+      "Answered: Postgres",
+      3,
+    ),
+    ev(9, events.toolStarted({ runId: "r", callId: "open", name: "read", arguments: "{}" })),
+    ev(10, events.userCommand({ command: "/clear", args: "" })),
+    // A fresh turn after the clear: it must render in isolation, with no resurrected fold bar,
+    // question item, or tool row from before the reset.
+    ev(11, events.userMessage({ text: "fresh start", provider: "qwen" })),
+    ev(12, events.assistantCompleted({ runId: "r2", text: "ok" })),
+  ]);
+
+  // Only the post-clear user message + its assistant response survive; nothing from before leaks.
+  assert.deepEqual(
+    messages.map((m) => m.kind),
+    ["user", "assistant"],
+  );
+  const user = messages.find((m) => m.kind === "user");
+  assert.equal(user?.kind === "user" ? user.text : null, "fresh start");
+  assert.ok(
+    !messages.some((m) => m.kind === "question" || m.kind === "compacting"),
+    "no stale question item or compaction bar carries past the clear",
+  );
+});
+
 test("/clear failure result remains visible after the transcript reset", () => {
   const messages = toTranscript([
     ev(1, events.userMessage({ text: "hi", provider: "qwen" })),

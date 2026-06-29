@@ -1,4 +1,5 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
+import { useKeyPress } from "ahooks";
 import { Archive, GitBranch, Pencil, Trash2 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -295,15 +296,7 @@ function RowContextMenu({
   items: readonly RowMenuItem[];
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useKeyPress("Escape", onClose);
 
   return createPortal(
     <button
@@ -366,15 +359,7 @@ function ConfirmDelete({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onCancel();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  useKeyPress("Escape", onCancel);
 
   return createPortal(
     <button

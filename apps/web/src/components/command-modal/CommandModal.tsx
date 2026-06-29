@@ -88,11 +88,8 @@ export function CommandModal({
           shouldFilter={false}
           className="bg-popover [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-2"
         >
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center border-b border-border px-4 py-3">
             <DialogTitle className="text-sm font-semibold">{title}</DialogTitle>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Kbd>esc</Kbd> close
-            </span>
           </div>
 
           <CommandInput value={query} onValueChange={setQuery} placeholder={placeholder} />

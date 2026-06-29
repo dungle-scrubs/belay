@@ -18,7 +18,7 @@ export interface MessageAttachmentsProps {
 }
 
 export function MessageAttachments({ artifacts, srcOf, className }: MessageAttachmentsProps) {
-  const { images } = partitionArtifacts(artifacts);
+  const { images, others } = partitionArtifacts(artifacts);
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
 
@@ -29,7 +29,13 @@ export function MessageAttachments({ artifacts, srcOf, className }: MessageAttac
 
   return (
     <>
-      <MessageImages artifacts={artifacts} onOpen={openAt} srcOf={srcOf} className={className} />
+      <MessageImages
+        images={images}
+        others={others}
+        onOpen={openAt}
+        srcOf={srcOf}
+        className={className}
+      />
       {images.length > 0 ? (
         <ImageCarousel
           images={images}

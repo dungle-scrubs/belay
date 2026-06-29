@@ -360,16 +360,24 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         // fold's first tick, so /compact can't show a stale bar above its fresh one).
         reapCompacting();
         if (decoded.command === "/clear") {
-          // A clear resets the conversation: drop everything before it (and any in-flight
-          // run state) so the transcript starts fresh from this point.
+          // A clear resets the conversation: drop everything before it (and ALL in-flight run state)
+          // so the transcript starts fresh from this point. The reapCompacting() above already dropped
+          // any open fold bar and cleared compactingByFold; doneFolds is cleared here alongside it so
+          // the one-compacting-bar singleton never reasons over stale folds after the reset.
           messages.length = 0;
           runMeta.clear();
           openByRun.clear();
           lastByRun.clear();
           toolByCall.clear();
+          toolsByRun.clear();
+          terminatedRuns.clear();
           progressByRun.clear();
           doneFolds.clear();
+          delegationByChild.clear();
           shellByRequest.clear();
+          questionContractById.clear();
+          questionAnswerById.clear();
+          questionMsgById.clear();
         }
         // The command itself is NOT listed in the transcript - the user just typed it, so echoing it
         // back is noise. Only its result (command.result, below) is shown: the output they invoked.

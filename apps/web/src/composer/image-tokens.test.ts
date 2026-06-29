@@ -4,7 +4,6 @@ import { test } from "vitest";
 import {
   EMPTY_DRAFT,
   type ImageDraft,
-  insertImage,
   insertImages,
   parseImageTokens,
   removeAdjacentToken,
@@ -46,16 +45,16 @@ test("parseImageTokens finds tokens in reading order with their ranges", () => {
   assert.equal("see [Image #1]".length, spans[0]?.end);
 });
 
-test("insertImage into empty draft adds the token and its ref", () => {
-  const { draft, cursor } = insertImage(EMPTY_DRAFT, 0, 0, A);
+test("insertImages into empty draft adds the token and its ref", () => {
+  const { draft, cursor } = insertImages(EMPTY_DRAFT, 0, 0, [A]);
   assert.equal(draft.text, "[Image #1]");
   assert.deepEqual(draft.refs, [A]);
   assert.equal(cursor, draft.text.length);
 });
 
-test("insertImage between words auto-spaces both sides", () => {
+test("insertImages between words auto-spaces both sides", () => {
   const base = draftOf("ab", []);
-  const { draft } = insertImage(base, 1, 1, A);
+  const { draft } = insertImages(base, 1, 1, [A]);
   assert.equal(
     draft.text,
     "a [Image #1] b",
@@ -63,22 +62,22 @@ test("insertImage between words auto-spaces both sides", () => {
   );
 });
 
-test("insertImage at start only adds a trailing space; at end only a leading space", () => {
-  const start = insertImage(draftOf("hi", []), 0, 0, A);
+test("insertImages at start only adds a trailing space; at end only a leading space", () => {
+  const start = insertImages(draftOf("hi", []), 0, 0, [A]);
   assert.equal(start.draft.text, "[Image #1] hi");
 
-  const end = insertImage(draftOf("hi", []), 2, 2, A);
+  const end = insertImages(draftOf("hi", []), 2, 2, [A]);
   assert.equal(end.draft.text, "hi [Image #1]");
 });
 
-test("insertImage does not add a space when the neighbor is already whitespace", () => {
-  const { draft } = insertImage(draftOf("a  b", []), 2, 2, A);
+test("insertImages does not add a space when the neighbor is already whitespace", () => {
+  const { draft } = insertImages(draftOf("a  b", []), 2, 2, [A]);
   assert.equal(draft.text, "a [Image #1] b");
 });
 
-test("insertImage replaces the selection", () => {
+test("insertImages replaces the selection", () => {
   const base = draftOf("hello world", []);
-  const { draft } = insertImage(base, 0, 5, A); // replace "hello"
+  const { draft } = insertImages(base, 0, 5, [A]); // replace "hello"
   assert.equal(draft.text, "[Image #1] world");
   assert.deepEqual(draft.refs, [A]);
 });
@@ -87,7 +86,7 @@ test("inserting into the middle splices the ref into reading order", () => {
   // "[Image #1] [Image #2]" with refs [A, B]; insert C between them.
   const base = draftOf("[Image #1] [Image #2]", [A, B]);
   const at = "[Image #1] ".length;
-  const { draft } = insertImage(base, at, at, C);
+  const { draft } = insertImages(base, at, at, [C]);
   assert.deepEqual(draft.refs, [A, C, B], "the new ref lands between the existing two");
   assert.deepEqual(
     parseImageTokens(draft.text).map((s) => s.num),

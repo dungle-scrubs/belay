@@ -96,16 +96,6 @@ export function insertImages(
   return { draft: { text, refs: newRefs }, cursor };
 }
 
-/** Inserts a single image token (the common case) - see {@link insertImages}. */
-export function insertImage(
-  draft: ImageDraft,
-  selStart: number,
-  selEnd: number,
-  ref: ArtifactRef,
-): { draft: ImageDraft; cursor: number } {
-  return insertImages(draft, selStart, selEnd, [ref]);
-}
-
 /**
  * Backspace (`dir = -1`) or Delete (`dir = 1`) next to a whole token removes the token AND its ref
  * in one step, collapsing a now-redundant double space. Returns the new draft + cursor, or `null`

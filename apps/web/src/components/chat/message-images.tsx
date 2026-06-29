@@ -2,7 +2,6 @@ import type { ArtifactRef } from "@trevor/session";
 import { FileText } from "lucide-react";
 import { useState } from "react";
 import { artifactSrc } from "@/blob";
-import { partitionArtifacts } from "@/derive";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,8 +13,10 @@ import { cn } from "@/lib/utils";
  */
 
 export interface MessageImagesProps {
-  /** Every artifact on the message; images render inline, non-images fall to a file row. */
-  readonly artifacts: readonly ArtifactRef[];
+  /** The message's image artifacts, rendered inline as a set (already partitioned by the caller). */
+  readonly images: readonly ArtifactRef[];
+  /** The message's non-image artifacts, rendered as quiet file/link rows (already partitioned). */
+  readonly others: readonly ArtifactRef[];
   /** Opens the same-message carousel at the given image-set index (M5). */
   readonly onOpen?: (index: number) => void;
   /** Resolves a hash to an image URL; defaults to the blob-store `artifactSrc`. */
@@ -77,12 +78,12 @@ function ImageTile({
 }
 
 export function MessageImages({
-  artifacts,
+  images,
+  others,
   onOpen,
   srcOf = artifactSrc,
   className,
 }: MessageImagesProps) {
-  const { images, others } = partitionArtifacts(artifacts);
   if (images.length === 0 && others.length === 0) {
     return null;
   }

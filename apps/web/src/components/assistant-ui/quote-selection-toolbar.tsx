@@ -3,6 +3,7 @@
 import { CopyIcon, GitBranchIcon, TextQuoteIcon } from "lucide-react";
 import { type FC, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import {
   type Anchor,
@@ -222,12 +223,7 @@ export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> 
   // failure (permissions/focus, or no clipboard API) it keeps the toolbar open in an
   // error state so the snapshot is still there to retry. <!-- D-001 -->
   const handleCopy = () => {
-    const writeText = navigator.clipboard?.writeText;
-    if (!writeText) return setCopyFailed(true);
-    Promise.resolve(writeText.call(navigator.clipboard, snapshot.text)).then(
-      () => setSnapshot(null),
-      () => setCopyFailed(true),
-    );
+    void copyText(snapshot.text).then((ok) => (ok ? setSnapshot(null) : setCopyFailed(true)));
   };
 
   return (
