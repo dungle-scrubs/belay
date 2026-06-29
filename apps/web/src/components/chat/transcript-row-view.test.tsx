@@ -150,3 +150,42 @@ test("02.17: a checkpoint breadcrumb renders quietly, not as the alarming step_b
   assert.equal(container.querySelector('[role="alert"]'), null);
   assert.doesNotMatch(container.textContent ?? "", /paused|backstop/i);
 });
+
+test("a protocol-anomaly diagnostic renders the leaked markup escaped, not as markdown", () => {
+  const leak = '<tool_call>{"name":"read","arguments":{"path":"AGENTS.md"}}</tool_call>';
+  const { container } = renderRow(
+    assistant({
+      text: leak,
+      stop: {
+        cause: "provider_protocol_anomaly",
+        action: "paused",
+        summary: "Provider protocol anomaly during model-step",
+      },
+      diagnostic: {
+        provider: "deepseek",
+        phase: "tool-protocol",
+        reason: "protocol_anomaly",
+        retryable: true,
+        safeToRetry: false,
+        attempt: 1,
+        detail: "DeepSeek rendered tool-call JSON or tags as assistant text",
+        partials: { textChars: leak.length, thinkingChars: 0, toolCalls: 0, toolResults: 0 },
+      },
+    }),
+  );
+
+  // The anomaly alert and its sanitized explanation render.
+  assert.ok(screen.getByText("provider protocol anomaly"));
+  assert.ok(screen.getByText("DeepSeek rendered tool-call JSON or tags as assistant text"));
+  // The leaked markup shows as ESCAPED text - the literal tag is in the DOM text, and no live
+  // <tool_call> element was created by a markdown/HTML parser.
+  assert.match(container.textContent ?? "", /<tool_call>/);
+  assert.equal(container.querySelector("tool_call"), null);
+});
+
+test("an ordinary assistant message still renders as markdown (anomaly path untouched)", () => {
+  const { container } = renderRow(assistant({ text: "# Heading\n\nplain answer" }));
+  // A real markdown heading element is produced; no anomaly alert appears.
+  assert.ok(container.querySelector("h1"));
+  assert.equal(screen.queryByText("provider protocol anomaly"), null);
+});

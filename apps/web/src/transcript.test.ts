@@ -1095,3 +1095,45 @@ test("handoff (M2): the source session shows the command result, never the promp
   assert.ok(result && result.kind === "result" && result.command === "/handoff" && result.ok);
   assert.ok(!transcript.some((m) => m.kind === "user"));
 });
+
+test("a terminal protocol-anomaly diagnostic folds onto the assistant segment", () => {
+  // The host attaches a typed incident (reason protocol_anomaly) to the completion when the model
+  // leaked raw tool-call markup as text. The fold carries it onto the segment so the row can render
+  // the leak escaped; the leaked markup itself stays in `text`.
+  const leak = '<｜tool▁calls｜>[{"name":"bash"}]<｜/tool▁calls｜>';
+  const log = [
+    ev(
+      1,
+      events.assistantStarted({ runId: "r1", model: "deepseek", provider: "deepseek", warm: true }),
+    ),
+    ev(2, events.assistantDelta({ runId: "r1", text: leak })),
+    ev(
+      3,
+      events.assistantCompleted({
+        runId: "r1",
+        text: leak,
+        stop: {
+          cause: "provider_protocol_anomaly",
+          action: "paused",
+          summary: "Provider protocol anomaly during model-step",
+        },
+        diagnostic: {
+          provider: "deepseek",
+          model: "deepseek-v4",
+          phase: "tool-protocol",
+          reason: "protocol_anomaly",
+          retryable: true,
+          safeToRetry: false,
+          attempt: 1,
+          detail: "DeepSeek rendered tool-call JSON or tags as assistant text",
+          partials: { textChars: leak.length, thinkingChars: 0, toolCalls: 0, toolResults: 0 },
+        },
+      }),
+    ),
+  ];
+  const [message] = toTranscript(log).filter((m) => m.kind === "assistant");
+  assert.ok(message && message.kind === "assistant");
+  assert.equal(message.diagnostic?.reason, "protocol_anomaly");
+  assert.equal(message.diagnostic?.phase, "tool-protocol");
+  assert.equal(message.text, leak);
+});

@@ -3,6 +3,7 @@ import {
   addBreakdown,
   decodeTrevorEvent,
   inputEstimateTokens,
+  type ProviderDiagnostic,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
   READ_ONLY_TOOL_NAMES,
@@ -39,6 +40,9 @@ export type AssistantMessage = {
   /** Steps run when the turn hit its budget (>0 = a forced answer after the step/context cap). */
   stepLimit?: number;
   stop?: TurnStop;
+  /** The structured provider incident on a terminal completion (D-005): present on a malformed-protocol
+   *  anomaly so the row can render the leaked markup escaped instead of as ordinary markdown. */
+  diagnostic?: ProviderDiagnostic;
 };
 export type ToolMessage = {
   kind: "tool";
@@ -670,6 +674,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
         }
         if (decoded.stop) {
           segment.stop = decoded.stop;
+        }
+        if (decoded.diagnostic) {
+          segment.diagnostic = decoded.diagnostic;
         }
         if (!segment.text && !segment.thinking) {
           segment.text = decoded.text;

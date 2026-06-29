@@ -1,14 +1,14 @@
 # DeepSeek Provider Reliability and Diagnostics - Progress Report
 
-> Current focus: Phase 3 - Web anomaly rendering (M7)
+> Current focus: Phase 4 - Provider incident observability (M8)
 > Source plan: [implementation.md](./implementation.md)
 
 ## Summary
 
 - Total features: 45
-- Completed: 31
-- Remaining: 14
-- Current cutoff blockers: 14
+- Completed: 36
+- Remaining: 9
+- Current cutoff blockers: 9
 - Accepted/deferred follow-up: 3
 - Superseded/obsolete checklist debt: 0
 
@@ -74,11 +74,11 @@
 
 #### M7: Web anomaly rendering
 
-- [ ] Add web tests for assistant messages with protocol-anomaly diagnostics
-- [ ] Fold diagnostics into assistant message view models
-- [ ] Render provider anomaly alerts with escaped leaked markup
-- [ ] Keep ordinary assistant markdown rendering unchanged
-- [ ] Share alert copy only where it reduces real duplication
+- [x] Add web tests for assistant messages with protocol-anomaly diagnostics
+- [x] Fold diagnostics into assistant message view models
+- [x] Render provider anomaly alerts with escaped leaked markup
+- [x] Keep ordinary assistant markdown rendering unchanged
+- [x] Share alert copy only where it reduces real duplication
 
 ### Phase 4 - Doctor, logging, and EZE verification
 

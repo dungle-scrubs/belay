@@ -264,8 +264,29 @@ export function TranscriptRowView({
       </ToneAlert>
     ) : null;
 
+  // A malformed-protocol incident (D-005): the model rendered raw tool-call markup as assistant text.
+  // The leaked markup is `message.text`; rendering it through MarkdownBody would interpret the tags, so
+  // the anomaly alert shows it ESCAPED in a bounded block instead. The web stays provider-neutral - it
+  // keys on the typed `reason`, never on any DeepSeek-specific string. This note replaces both the raw
+  // markdown body and the generic stop note for the message, so the leak is explained exactly once.
+  const anomaly =
+    message.kind === "assistant" && message.diagnostic?.reason === "protocol_anomaly"
+      ? message.diagnostic
+      : null;
+  const anomalyNote =
+    anomaly && message.kind === "assistant" ? (
+      <ToneAlert tone="yellow" icon={TriangleAlert} title="provider protocol anomaly">
+        <div>{anomaly.detail}</div>
+        {message.text ? (
+          <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/50 p-2 text-label text-muted-foreground">
+            {message.text.slice(0, 2000)}
+          </pre>
+        ) : null}
+      </ToneAlert>
+    ) : null;
+
   let stepLimitNote: ReactNode = null;
-  if (message.kind === "assistant") {
+  if (message.kind === "assistant" && !anomaly) {
     if (message.stop) {
       stepLimitNote = (
         <ToneAlert
@@ -316,7 +337,7 @@ export function TranscriptRowView({
   return (
     <div data-message-id={message.id} className="flex flex-col gap-3 pl-3.5">
       {thinking ? <ThinkingMessage content={thinking} /> : null}
-      {message.text ? <MarkdownBody text={message.text} /> : null}
+      {anomalyNote ?? (message.text ? <MarkdownBody text={message.text} /> : null)}
       {overflowNote}
       {errorNote}
       {cancelledNote}
