@@ -66,27 +66,8 @@ which supervises but does not communicate, D-023); there is no direct host-web c
 
 ### Branching model and artifacts <!-- D-025 -->
 
-<!-- D-025 --> **Durable sessions are linear.** A Richter session is one append-only timeline every
-participant replays and agrees on. "Branch / go back and try again" is **not** an in-log conversation
-tree - it is a **fork to a new session**: a child seeded from the parent's events up to a chosen point,
-continued linearly. An in-log tree would retroactively invalidate timeline slices that side-effecting
-participants already acted on, and an append-only log cannot undo external side effects; forking keeps
-every session a complete, never-mutated reality, so no participant reconciles or retracts.
-
-- <!-- D-026 --> **Lineage is a Trevor event, not Richter.** The child's genesis carries
-  `session.forkedFrom { parentSessionId, atSeq }`. Richter gains no `parentSessionId` column, no fork
-  endpoint, no lineage fields; the fork tree is derivable from `forkedFrom` events.
-- <!-- D-027 --> **Fork copies the prefix, not references it.** Forking at seq N re-appends the parent
-  events <= N into the child, each tagged `origin { sessionId, eventId, seq }`, then writes a `forkReady`
-  marker (readers ignore the child until they see it). Copy makes the child self-contained; origin tags let
-  smart cross-session participants dedupe.
-- <!-- D-028 --> **Artifacts live in a content-addressed blob store beside Richter.** Events carry
-  `{ kind, mimeType, size, hash }` references, never bytes. Content-addressing dedupes identical bytes once,
-  so forks copy only references and share blobs for free. Tiny artifacts may ride inline.
-- <!-- D-029 --> **Participant fork-awareness is opt-in.** Stateless providers (LM Studio, pi-ai) get the
-  active linear history and need no fork awareness. Stateful participants wanting cross-fork continuity
-  implement an inheritance contract: read `forkedFrom`, walk lineage, inherit ancestor state up to each
-  fork seq, dedupe by origin/id, never retract.
+Forkable sessions and lineage are extracted to `.plans/50-forkable-sessions-lineage`. Blob-backed artifacts
+are already complete; remaining fork/lineage behavior is no longer detailed in this umbrella plan.
 
 ## 3. Domain vocabulary
 
@@ -453,36 +434,10 @@ the substrate session recall (D-044) later rides on.
   the registries, snapshots the definition into the child run for audit/replay, loads only the selected
   schemas/descriptions into the child prompt, and never writes a reusable agent file or global registry entry.
 
-### Then: search-tool upgrade <!-- D-062 -->
+### Extracted: search-tool upgrade <!-- D-062 -->
 
-Sequenced immediately after Phase 4 subagents and before session recall. This is two coupled but separable
-tool-surface fixes: the existing `grep` tool should actually be ripgrep-backed, and H-108 `ast_grep` is
-promoted from unsequenced backlog to the next read-only code-search tool.
-
-- <!-- D-062 --> **`grep` keeps its model-facing name but becomes ripgrep-backed.** The current plan already
-  lists `grep` as `(rg)` in the shipped tool inventory; the implementation must replace the custom Node
-  `fs.promises.glob` + `RegExp` scanner with a real ripgrep backend. Preserve the provider-visible tool name
-  (`grep`) so transcripts, usage accounting, prompts, and web rendering do not churn. Use a project-managed
-  binary resolver such as `@vscode/ripgrep` (or an equivalent checked dependency) rather than assuming a
-  Homebrew/system `rg`. Run it via `execFile`/`spawn` with argv arrays and `cwd: WORKSPACE_ROOT`, not through
-  `bash` or `runShell`. Preserve `readOnly: true`, workspace confinement, output caps, typed failures, and
-  D-050 concurrent-read behavior. Keep the schema explicit and small: `pattern`, optional `glob`, plus bounded
-  options such as `literal`, `ignoreCase`, `hidden`, `noIgnore`, and `maxMatches`; no raw flag passthrough.
-- **Add a read-only `ast_grep` structural-search tool.** It wraps the official ast-grep CLI/package in search
-  mode only (`ast-grep run`), with no rewrite/update/interactive path in this first cut. The tool schema is
-  explicit: `pattern`, optional `lang`, optional `paths`, optional `globs`, optional `strictness`, and optional
-  `maxMatches`. Prefer JSON output (`--json=stream`) parsed into compact, capped match rows containing path,
-  line/column, and snippet. Use the full binary name `ast-grep`, not `sg`, because `sg` conflicts on Linux.
-  The tool declares `readOnly: true` and runs confined to `WORKSPACE_ROOT`.
-- **Shared helper boundary.** Add one bounded child-process helper for read-only external search binaries:
-  argv-only execution, timeout, max output, cap, cwd, no shell expansion, typed nonzero/no-match handling, and
-  interruption cleanup. Both `grep` and `ast_grep` use it; `bash` remains the only free-form shell tool.
-- **Validation when picked up:** host tests for `grep` should cover no-match, ignored directories/gitignore
-  behavior, literal vs regex mode, invalid regex, match caps, workspace confinement, output truncation, and the
-  read-only registry. `ast_grep` tests should cover TS/TSX structural matches, lang inference and explicit
-  `lang`, globs/paths, no-match, invalid pattern/lang handling, match caps, workspace confinement, and
-  read-only registry inclusion. Prompt guidance and tool inventory tests must say when to use text search vs
-  structural search.
+Search-tool upgrade is moved to `.plans/49-search-tool-upgrade`: ripgrep-backed `grep`, read-only
+`ast_grep`, and the shared bounded search-process helper.
 
 ### Shipped: nested AGENTS.md context files - Claude Code lazy model <!-- D-080 -->
 
@@ -995,33 +950,11 @@ does not proactively know whether the host can reach the public internet beyond 
   a local retry, local-selected turns unaffected by offline status, cloud-selected UI warnings while offline,
   `checking`/stale rendering, and UI rendering of the advisory status.
 
-### Later: browser/terminal session manager <!-- D-061 -->
+### Extracted: browser/terminal session-manager residual <!-- D-061 -->
 
-Trevor should support the browser workflow without losing the old terminal ergonomics. D-085 is the first
-concrete slice: `trevor` from a project root opens the browser session and starts/reuses the matching host.
-The remaining D-061 work is the richer session-management layer around that launcher. It is **not shipped yet**
-and does not change the current manual `SESSION_ID` + `TREVOR_WORKSPACE` behavior until D-085 lands.
-
-- <!-- D-061 --> **Cwd-targeted launch is now specified by D-085.** The terminal entrypoint is named `trevor`;
-  it resolves a canonical project root, derives or looks up the session id, ensures shared services, starts or
-  reuses the matching host runtime, and opens the web UI directly to that session. The cwd/workspace must be
-  recorded as session/host metadata, not inferred from whatever directory the monorepo dev script happened to use.
-- **Browser-created sessions.** The web UI gains a create-session flow that accepts a target folder, creates a new
-  durable session for that folder, starts the corresponding host runtime through the available supervisor/launcher,
-  and navigates into the session once the host announces `host.online`.
-- **Session navigation sidebar is now specified by D-093.** The UI needs a first-class left-sidebar
-  session list showing current-project sessions, live activity, and recency. URL `?session=` remains a deep-link
-  mechanism, but not the only way to move between sessions.
-- **Explicit resume is now specified by D-090.** Resuming a durable session is a user-selected command/list flow,
-  not an implicit cwd lookup or default browser reload behavior. D-061 keeps the broader session manager
-  lifecycle, while D-090 is the near-term resume slice.
-- **Session lifecycle controls are now specified by D-094.** Cancel remains the ordinary UI action for active
-  work. Stop, kill, archive, unarchive, list, and open are lifecycle/management controls, exposed first through
-  CLI and debug-mode UI rather than normal chat/sidebar controls. Lifecycle operations must not delete durable
-  session logs unless an explicit future archive-browser delete action does so with confirmation.
-- **Relationship to Phase 3.** This dovetails with the desktop shell's one-host-per-session/cwd model (D-021-D-024),
-  but now ships through the browser-era launcher/supervisor path in D-085. It must preserve D-014: browser and host
-  still communicate only through the session log; any launcher/supervisor owns lifecycle only.
+D-061 residual scope is moved to `.plans/52-session-manager-residual`. The extracted plan starts with a
+rebaseline because most concrete session-manager slices already live in D-085, D-090, D-093, D-094,
+`.plans/26-archive-browser-and-delete`, and `.plans/48-managed-worktree-hardening`.
 
 ### Soon: session navigation sidebar - current project only <!-- D-093 -->
 
@@ -1212,9 +1145,8 @@ Sequence as each is picked up (no hard order locked here):
 - **Internet connectivity awareness** is specified above as D-060: host-owned public-internet status only, with
   no automatic local/cloud switching or retry behavior (H-026, H-093).
 - **Settings & preferences** for model/provider/thinking mode are specified as part of D-065; deeper
-  **usage/metrics** surface remains separate (H-031, H-034).
-- **Browser/terminal session manager** is specified above as D-061: cwd-targeted terminal launch, browser-created
-  folder sessions, session navigation, and kill/stop from terminal and UI.
+  **usage/metrics** surface is extracted to `.plans/51-usage-metrics-surface` (H-031, H-034).
+- **Browser/terminal session-manager residual** is extracted to `.plans/52-session-manager-residual`.
 - **Session navigation sidebar** is specified above as D-093: current-project-only left-sidebar session
   navigation, upper-left dashboard icon, recency ordering, live activity rows, relative time policy, and shared
   switch semantics with resume.
@@ -1260,20 +1192,13 @@ Sequence as each is picked up (no hard order locked here):
   `.plans/19-capability-manifest-and-trevor-expert`: registry-derived full/compact self-description,
   `trevor-export`, and the built-in `trevor-expert` consumer, with general command/skill interpolation kept
   separately gated and disabled by default (formerly D-074 / H-156).
-- **Fork-lineage navigator** (web) - the V1 "session tree" (H-004) is reframed onto fork lineage (D-025…),
-  built in Phase 4.
+- **Forkable sessions / fork-lineage navigator** is extracted to `.plans/50-forkable-sessions-lineage`.
 
-### Phase 4 - forkable sessions <!-- D-030 -->
+### Extracted: forkable sessions <!-- D-030 -->
 
-Artifacts (item 1) are **done** (§5). Remaining:
-- **Host message-identity refactor** - the load-bearing piece. Stable per-message ids and a clean
-  "build a fresh linear session from a prefix" path are the prerequisite for fork-at-a-point.
-- `session.forkedFrom` (D-026) + `forkReady` (D-027) events and `origin` tags (protocol); the host fork
-  operation (create session, copy prefix with origin tags, mark ready); a web "branch from here"
-  affordance; the lineage navigator (dovetails with the Phase 3 one-window-many-sessions view).
-- Stateful participants adopt the D-029 inheritance contract.
-- Richter stays generic: add a batch-append endpoint **only** if prefix-copy latency demands it - never a
-  `parentSessionId` column or a fork/blob feature in Richter.
+Forkable sessions and lineage moved to `.plans/50-forkable-sessions-lineage`: message identity,
+`session.forkedFrom`, prefix-copy with origin tags, `forkReady`, host fork operation, branch-from-here UI,
+lineage navigator, and opt-in participant inheritance.
 
 ### Phase 3 - desktop shell (Tauri v2) <!-- D-021 -->
 
@@ -1303,7 +1228,7 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Selection copy toolbar reliability** | new | extracted to `.plans/02.5-selection-copy-toolbar-reliability`. Fix drag-highlight-copy in the transcript by snapshotting selected text/source message at selection time, making Copy/Quote reliable after native selection collapses, and making the floating toolbar edge-aware so it cannot clip offscreen |
 | **Tangents** | H-030 | extracted to `.plans/39-tangents`. Tangents are isolated related conversations started from highlighted transcript text, not forks. They use a transcript takeover surface with a back arrow, store parent/source metadata, exclude parent history from tangent prompts, and only affect the parent through explicit visible fold-back |
 | **Bounded-child + takeover** | H-024, H-025, H-086 | extracted to `.plans/47-bounded-child-takeover`. Host-owned constrained helpers plus route escalation/takeover, with an explicit first phase to inspect V1 provenance and flesh out the incomplete design before implementation |
-| **Managed worktrees + cwd locks + merge protocol** | H-140 | <!-- D-091 --> promoted to §6. Stable per-session git worktrees (paths/branches/hashes), cwd-level advisory locks, and a merge/reconciliation protocol remain prerequisite for mutating background subagents |
+| **Managed worktree hardening** | H-140 / D-091 carry-forward | extracted to `.plans/48-managed-worktree-hardening`. D-091's main managed-worktree implementation is complete and archived; the extracted plan owns the remaining dedicated cwd-path advisory lock and live two-host worktree smoke |
 | **Indexed source recall / code retrieval** | H-112, H-138, H-139 | extracted to `.plans/40-indexed-source-recall`. Provider-neutral indexed codebase recall for `source_recall`/code search/status/refresh over multiple external services, distinct from D-044 session recall. First adapters target `/Users/kevin/dev/source-recall` and Aleutian Trace/AleutianFOSS capability discovery |
 | **Archive tools** | H-114 | extracted to `.plans/41-archive-tools`. Bring forward V1 `archive_read` / `archive_unpack` zip handling as a later V2 plan, including validators, bounded previews, media processors/artifacts, safe extraction, transcript rows, and tool-detail inspection |
 | **`video_inspect`** | H-115 | extracted to `.plans/42-video-inspect`. Bring forward V1 `video_inspect` as a later V2 plan for bounded local video frame extraction, ffmpeg/ffprobe availability handling, run-scoped frame artifacts, provider vision feedback, transcript rows, compact rows, and tool-detail inspection |
@@ -1326,7 +1251,7 @@ provenance (where the feature lived in `~/dev/trevor/packages/agent-host`).
 | **Transcript Mermaid rendering** | new | extracted to `.plans/36-transcript-mermaid-rendering`. Render explicit fenced `mermaid` blocks in assistant transcript markdown with safe fallback/source controls, Storybook coverage, and system-prompt guidance that uses Mermaid for inline visual explanations while leaving Lucid/artifacts for reviewable iteration |
 | **Ghosted reasoning rendering** | new | extracted to `.plans/37-ghosted-reasoning-rendering`. Replace the simple `ThinkingMessage` treatment with an assistant-ui-inspired ghosted reasoning surface while preserving `assistant.thinking`, the `show thinking` toggle, transcript scroll behavior, and a compact-mode integration contract |
 | **Syntax highlighting** | new | extracted to `.plans/38-syntax-highlighting`. Add explicit-language syntax highlighting to transcript markdown code blocks while preserving copy behavior, DOMPurify safety, Mermaid language precedence, plain fallback, Storybook coverage, and streaming performance |
-| **Subagents: teams, verifier, mutating background agents** | H-165 | deferred later by user request. General-purpose + explorer + ephemeral definitions + inline/async read-only background are already promoted to §6 (D-045…D-049); **bounded-child** has moved to `.plans/47-bounded-child-takeover`; remaining multi-agent **teams**, **verifier** flavor, and mutating background agents stay parked. Mutating background agents depend on managed worktrees + cwd locks + merge protocol |
+| **Subagent variants** | H-165 | extracted to `.plans/53-subagent-variants`. General-purpose + explorer + ephemeral definitions + inline/async read-only background are already promoted to §6 (D-045…D-049); bounded-child lives in `.plans/47-bounded-child-takeover`; the extracted plan owns teams, verifier flavor, and mutating background agents |
 
 **Nested command menu / `/style` (extracted).** The former D-072 output-style registry item has been moved to
 `.plans/18-nested-command-menu`. The extracted plan reframes the work as a reusable nested command-menu pattern

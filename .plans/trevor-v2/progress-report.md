@@ -27,8 +27,7 @@ These rows remain visible because they are not fully completed, even though thei
 
 - [x] D-088 sidebar git identity: live EZE repro for dirty file, ahead/behind branch, detached HEAD, and non-git cwd remains gated
 - [x] D-090 explicit resume: launcher/supervisor spawning or reusing a matching host for a selected no-host session remains gated
-- [x] D-091 managed worktrees: dedicated cwd-path advisory lock remains deferred beyond the existing per-session lock
-- [x] D-091 managed worktrees: live two-host worktree smoke remains gated
+- [x] D-091 managed worktree hardening moved to `.plans/48-managed-worktree-hardening` for the dedicated cwd-path advisory lock and live two-host worktree smoke
 - [x] D-044 session recall: live manual EZE repro (memory question answered only from compacted-away/sibling history shows the visible recall result before the answer) remains gated
 
 ## Next-Up: image attachment UX
@@ -725,8 +724,8 @@ BUILT this pass (commit fe9afee), ahead of the planner pass - the durable founda
 - Live open follow-up (D-073 doctor health surface): 57 features, 49 completed, 8 remaining. M6 landed: the `/doctor` snapshot is now a READ-ONLY `doctor` model tool (diagnostics-only) over the shared `buildLiveDoctorSnapshot` accessor + registered source, with system-prompt guidance and unit/prompt tests. The D-065 auth/catalog explanation also landed: the Providers area projects the catalog source summaries (needs-auth/expired/rejected -> one actionable finding each; a redacted "catalog" overview fact counts ready-vs-need-setup sources + total live models). Remaining: M4 visual review; the D-093/D-094 session-lifecycle doctor explanations (ride those features); M7 storybook review + manual EZE repros; and the gated live model-behavioral eval.
 - Live open follow-up (D-075 discovery registry + progressive skill drill-in): 51 features, 43 completed, 8 remaining (M5 live-model evals; M7 web UI + manual repros)
 - Editable session titles (was proposed): 13 features, ~10 completed, 2 partial, 1 remaining (manual EZE). BUILT this pass (commit fe9afee) ahead of the planner pass: a durable `session.title` event (latest-wins, blank reverts, out of prompt history) + inventory title-override projection + a standalone `renameSession` that publishes to any session + the sidebar hover-pencil inline edit (optimistic save / Escape cancel / empty rejected), unit + web tested. Partials: a formal Storybook story; reuse in the resume chooser / panel header. Remaining: the manual EZE (rename, reload, verify in `/resume`).
-- Partial/gated carry-forward from archived D-088-D-091 and D-044: 5 items
-- Remaining implementable work in this report: 79 unchecked items plus 5 partial/gated carry-forward items (this pass: D-073 M6 doctor model tool - 4 completed, 2 partial, plus an OpenAI-compatible schema bug fix; D-094 M4/M5 debug lifecycle slash commands - 5 completed; D-093 M5 sidebar↔resume story + entry-point/keyboard tests - 1 completed + 1 partial resolved; D-065 M6 migration foundation - user.message ModelRef + host resolver, 1 item to partial)
+- Partial/gated carry-forward from archived D-088-D-091 and D-044: 3 items here, plus D-091 managed worktree hardening extracted to `.plans/48-managed-worktree-hardening`
+- Remaining implementable work in this report: 79 unchecked items plus 3 partial/gated carry-forward items here; D-091 hardening now lives in `.plans/48-managed-worktree-hardening` (this pass: D-073 M6 doctor model tool - 4 completed, 2 partial, plus an OpenAI-compatible schema bug fix; D-094 M4/M5 debug lifecycle slash commands - 5 completed; D-093 M5 sidebar↔resume story + entry-point/keyboard tests - 1 completed + 1 partial resolved; D-065 M6 migration foundation - user.message ModelRef + host resolver, 1 item to partial)
 
 ## Status: COMPLETE (all items checked)
 
@@ -742,7 +741,7 @@ As of the latest pass, **the buildable code in this report is done**. D-065 is f
 - **Manual EZE repros (~22)** - you open the live app and verify (image paste/carousel; offline LAN-up/WAN-down; sidebar live-activity + cross-project scope; cancel/stop/archive filtering; chooser turn on a local model + quick picker + OAuth-expired panel; reconnect/observation; `/doctor` all-ok + degraded + JSON + no-model-turn; skill open-exactly-once; rename persists in `/resume`).
 - **Visual / Storybook reviews (~3)** - the doctor dashboard at narrow/wide widths, the chooser Storybook pass, the titles story.
 - **Gated live-model evals (~5)** - skill open-once / no-routine-doctor / health-area-distinction behavioral evals; the D-076 unknown-shape observation repro.
-- **Gated/deferred carry-forward (~5)** - two-host worktree smoke, launcher/supervisor spawn, advisory cwd lock, D-088 git-identity repros, D-044 recall repro.
+- **Gated/deferred carry-forward (~3 here)** - launcher/supervisor spawn, D-088 git-identity repros, D-044 recall repro. D-091 two-host worktree smoke and advisory cwd lock moved to `.plans/48-managed-worktree-hardening`.
 - **A few explicitly deferred marginal items** - paged gateway announce (fine at 339), and local-cloud/context-size filter chips + "recommended" (no data).
 
 Net: there is no remaining feature for the agent to implement here without new owner direction (e.g. ratifying a new slice). The open checkboxes are the owner's verification + review backlog.
