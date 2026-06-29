@@ -26,6 +26,10 @@ const gitEnv = Object.fromEntries(
 );
 execFileSync("git", ["init", "-q"], { cwd: ws, env: gitEnv });
 writeFileSync(join(ws, ".gitignore"), "ignored/\n");
+// Also write a `.ignore` file: ripgrep honors it UNCONDITIONALLY (no git-repo detection), so the
+// "skipped by default" assertion stays deterministic even when a freshly-init'd repo's `.git` is
+// momentarily not detected under heavy parallel CPU load (the real workspace's `.git` is stable).
+writeFileSync(join(ws, ".ignore"), "ignored/\n");
 writeFileSync(join(ws, "src", "a.ts"), 'const greeting = "hello";\nconst pattern = "a.b";\n');
 writeFileSync(join(ws, "src", "b.ts"), 'const greeting = "hi";\nconst other = "axb";\n');
 writeFileSync(join(ws, "ignored", "secret.ts"), 'const greeting = "ignored";\n');
