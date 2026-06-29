@@ -11,7 +11,12 @@ import type {
   ToolCall,
   ToolDef,
 } from "../providers";
-import { ProviderUnavailable, providerDiagnostic, providerFailureEvidence } from "../providers";
+import {
+  ProviderUnavailable,
+  protocolAnomalyDiagnostic,
+  providerDiagnostic,
+  providerFailureEvidence,
+} from "../providers";
 import { buildProviderFailureLogFields } from "../providers/failure-record-schema";
 import { recordObservation } from "../providers/observation-store";
 import {
@@ -324,7 +329,14 @@ export type AgentEvent =
       readonly detail: string;
       readonly reclaimed: number;
     }
-  | { readonly type: "stop"; readonly stop: TurnStop }
+  | {
+      readonly type: "stop";
+      readonly stop: TurnStop;
+      /** Set only on a malformed-protocol terminal stop (D-005): the structured incident that rides
+       *  onto the terminal `assistant.completed` so the web can render the anomaly with escaped markup
+       *  and /doctor can correlate it. Absent on budget/context stops, which carry no provider error. */
+      readonly diagnostic?: ProviderDiagnostic;
+    }
   | { readonly type: "step_limit"; readonly steps: number }
   | {
       readonly type: "reconnecting";
@@ -417,6 +429,10 @@ export function runAgent(
   // One retry budget for a turn that ends with text but NO tool call where the text trails off
   // mid-task ("let me continue reading…") instead of finishing - nudge it once to actually act.
   let continueRetried = false;
+  // One nudge budget for a malformed-protocol step (D-005): the model rendered raw tool-call markup
+  // as assistant text instead of a typed tool call. A single nudge often gets it to use the typed
+  // interface; a persistent anomaly then terminates with a diagnostic rather than nudging forever.
+  let protocolNudged = false;
 
   // Graceful overflow recovery (D-034..D-038): in-loop, per-turn, cheap rungs only,
   // bounded so it can never spin. Recovery adjusts the reasoning level and the in-loop
@@ -828,14 +844,36 @@ export function runAgent(
               toolCalls,
             });
             if (protocolDiagnostic) {
+              // Nudge once when tools are still offered and no unsafe boundary crossed: this step
+              // produced no typed tool call (toolCalls is empty), so re-running only re-asks the
+              // model - any prior tool results stay committed in `conversation`, so the nudge
+              // repeats no side effect. The nudge (assistant echo + instruction) is conversation-only,
+              // never emitted or persisted; the retry's output streams as ordinary text below it.
+              if (useTools && !protocolNudged) {
+                protocolNudged = true;
+                conversation.push({ role: "assistant", content: assistantText });
+                conversation.push({
+                  role: "user",
+                  content:
+                    "Your previous message contained raw tool-call protocol markup as text instead " +
+                    "of an actual tool call. Use the typed tool-calling interface to call a tool, or " +
+                    "answer in plain text with no tool-call tags or JSON.",
+                });
+                return step(n);
+              }
+              // Persistent anomaly (already nudged) or a tool-less turn: terminate with the typed
+              // incident so the web renders the leaked markup escaped and /doctor can correlate it.
               const { stop } = assessTurn(n, protocolDiagnostic);
+              const diagnostic = protocolAnomalyDiagnostic(provider, protocolDiagnostic, {
+                textChars: assistantText.length,
+                thinkingChars: 0,
+                toolCalls: 0,
+                toolResults: 0,
+              });
               if (!stop) {
                 return Stream.empty;
               }
-              return Stream.succeed<AgentEvent>({
-                type: "stop",
-                stop,
-              });
+              return Stream.succeed<AgentEvent>({ type: "stop", stop, diagnostic });
             }
             // Non-empty text, no tool call. Normally this IS the final answer - but if the text
             // trails off announcing more work it never did, nudge it once to carry it out. If it

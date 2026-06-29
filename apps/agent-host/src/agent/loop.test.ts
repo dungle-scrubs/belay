@@ -267,14 +267,41 @@ test("a genuine final answer (no trailing announcement) is NOT nudged", async ()
   assert.equal(calls, 1, "a real answer ends the turn with no extra model call");
 });
 
-test("provider-rendered tool markup stops as a protocol anomaly", async () => {
+test("a provider-rendered tool-markup leak is nudged once toward the typed interface", async () => {
+  let nudgePrompt = "";
+  let calls = 0;
   const events = await collect(
     textProvider({
       providerId: "deepseek",
       first: '<tool_call>{"name":"read","arguments":{"path":"AGENTS.md"}}</tool_call>',
-      second: "should-not-be-reached",
+      second: "Read complete. The entry point is src/main.ts.",
+      onMessages: (messages) => {
+        calls += 1;
+        if (calls === 2) {
+          nudgePrompt = messages.map((m) => m.content).join("\n");
+        }
+      },
     }),
   );
+
+  assert.equal(calls, 2, "the model is re-called once after the leak");
+  assert.match(nudgePrompt, /typed tool-calling interface/i, "the nudge is in the re-run prompt");
+  // The nudge recovered: a real answer streamed and no anomaly stop fired.
+  const text = events
+    .filter((e): e is Extract<AgentEvent, { type: "text" }> => e.type === "text")
+    .map((e) => e.text)
+    .join("");
+  assert.match(text, /entry point is src\/main\.ts/, "the turn continues to a real answer");
+  assert.equal(
+    events.find((e) => e.type === "stop"),
+    undefined,
+    "a single leak does not stop",
+  );
+});
+
+test("a persistent provider tool-markup leak stops as a protocol anomaly with a diagnostic", async () => {
+  const leak = '<tool_call>{"name":"read","arguments":{"path":"AGENTS.md"}}</tool_call>';
+  const events = await collect(textProvider({ providerId: "deepseek", first: leak, second: leak }));
 
   const stop = events.find((e) => e.type === "stop");
   assert.equal(stop?.type === "stop" && stop.stop.cause, "provider_protocol_anomaly");
@@ -283,6 +310,9 @@ test("provider-rendered tool markup stops as a protocol anomaly", async () => {
     stop?.type === "stop" ? stop.stop.summary : "",
     /DeepSeek rendered tool-call JSON or tags/i,
   );
+  // The terminal stop carries the typed incident the web/doctor consume.
+  assert.equal(stop?.type === "stop" ? stop.diagnostic?.reason : undefined, "protocol_anomaly");
+  assert.equal(stop?.type === "stop" ? stop.diagnostic?.phase : undefined, "tool-protocol");
 });
 
 test("M2: the budget nudge reaches the model but is never emitted as an event", async () => {

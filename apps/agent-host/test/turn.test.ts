@@ -253,6 +253,64 @@ test("a terminal provider stream failure publishes structured diagnostic data wi
   });
 });
 
+/**
+ * A DeepSeek-style provider that renders raw tool-call markup as assistant TEXT instead of emitting a
+ * typed tool call (the D-005 anomaly). `persistent: false` leaks once then answers cleanly on the
+ * nudge re-run; `persistent: true` leaks every step so the bounded nudge is spent and the turn
+ * terminates with a typed incident. Tools are offered (cloud kind), so the nudge path is eligible.
+ */
+function leakyProvider(opts: { persistent: boolean }): Provider {
+  let calls = 0;
+  const leak = '<｜tool▁calls｜>[{"name":"bash","arguments":"echo hi"}]<｜/tool▁calls｜>';
+  const usage = { input: 10, output: 5, contextWindow: 1000, genMs: 1 };
+  return fakeProvider({
+    id: "deepseek",
+    stream: () => {
+      calls += 1;
+      if (!opts.persistent && calls >= 2) {
+        return Stream.fromIterable<ProviderEvent>([
+          { type: "text", text: "Here is the real answer." },
+          { type: "usage", usage },
+        ]);
+      }
+      return Stream.fromIterable<ProviderEvent>([
+        { type: "text", text: leak },
+        { type: "usage", usage },
+      ]);
+    },
+  });
+}
+
+test("a DeepSeek protocol-markup leak is nudged once, then the model answers cleanly", async () => {
+  const events = await runTurn(leakyProvider({ persistent: false }), history, { runId: "r1" });
+  const completed = events.find((e) => e.type === "assistant.completed")?.payload;
+
+  assert.ok(
+    String(completed?.text ?? "").includes("Here is the real answer."),
+    String(completed?.text),
+  );
+  // The nudge recovered the turn: no anomaly stop and no diagnostic on the completion.
+  assert.equal(completed?.stop, undefined);
+  assert.equal(completed?.diagnostic, undefined);
+});
+
+test("a persistent DeepSeek protocol leak terminates with a protocol_anomaly diagnostic", async () => {
+  const events = await runTurn(leakyProvider({ persistent: true }), history, { runId: "r1" });
+  const completed = events.find((e) => e.type === "assistant.completed")?.payload;
+
+  assert.equal(
+    (completed?.stop as { cause?: string } | undefined)?.cause,
+    "provider_protocol_anomaly",
+  );
+  const diagnostic = completed?.diagnostic as
+    | { reason?: string; phase?: string; provider?: string; safeToRetry?: boolean }
+    | undefined;
+  assert.equal(diagnostic?.reason, "protocol_anomaly");
+  assert.equal(diagnostic?.phase, "tool-protocol");
+  assert.equal(diagnostic?.provider, "deepseek");
+  assert.equal(diagnostic?.safeToRetry, false);
+});
+
 test("cancellation interrupts a streaming turn before it completes", async () => {
   // A model step that emits one delta then never finishes: the only way the turn ends is by
   // interrupting its fiber, which is exactly how user.cancel stops a real turn (no AbortSignal

@@ -5,6 +5,7 @@ import type {
 } from "@trevor/session";
 import { providerFailureEvidence } from "./errors";
 import { redactSecrets } from "./failure-taxonomy";
+import type { ProviderProtocolDiagnostic } from "./protocol-anomaly";
 import type { Provider, ProviderError } from "./types";
 
 /**
@@ -50,5 +51,31 @@ export function providerDiagnostic(
     ...(evidence.status !== undefined ? { status: evidence.status } : {}),
     ...(evidence.code ? { code: evidence.code } : {}),
     ...(evidence.requestId ? { requestId: evidence.requestId } : {}),
+  };
+}
+
+/**
+ * Builds the diagnostic for a malformed-protocol incident (D-005): the model rendered raw tool-call
+ * markup as assistant text instead of a typed tool call. Unlike a stream failure this is not a
+ * {@link ProviderError}, so the loop hands the classified anomaly + the leaked-text partial counts
+ * here directly. `safeToRetry` is false: by the time this builds, the bounded nudge has already been
+ * spent (or was unavailable), so the turn is terminating - re-running is no longer in scope. The
+ * `reason` is a templated provider name + fixed phrase (no secret), re-redacted defensively.
+ */
+export function protocolAnomalyDiagnostic(
+  provider: Provider,
+  anomaly: ProviderProtocolDiagnostic,
+  partials: ProviderPartialCounts,
+): ProviderDiagnostic {
+  return {
+    provider: provider.id,
+    model: provider.model,
+    phase: "tool-protocol",
+    reason: "protocol_anomaly",
+    retryable: anomaly.retryable,
+    safeToRetry: false,
+    attempt: 1,
+    detail: redactSecrets(anomaly.reason),
+    partials,
   };
 }

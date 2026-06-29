@@ -1,4 +1,4 @@
-import { events, type TurnStop } from "@trevor/session";
+import { events, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
 import {
   type AgentEvent,
@@ -109,6 +109,10 @@ export function publishTurn(
     // answer, so the UI can show "stopped after N steps" (D-051).
     let stepLimitSteps = 0;
     let stop: TurnStop | undefined;
+    // The structured incident from a NON-error terminal stop (a malformed-protocol anomaly, D-005):
+    // it rides onto the success-path completion alongside `stop`. The error path carries its own
+    // diagnostic through `extra` (from the typed ProviderError), which overrides this.
+    let diagnostic: ProviderDiagnostic | undefined;
     // How many auto-reconnect attempts the loop emitted this turn (D-076 M6): if the turn still
     // ends in a provider failure, a nonzero count means the bounded retry budget was EXHAUSTED (a
     // transient outage that gave up) - distinct from a non-retryable terminal failure, which never
@@ -129,7 +133,11 @@ export function publishTurn(
       yield* thinking.flush();
     });
 
-    const complete = (extra: { error?: string; cancelled?: boolean }) =>
+    const complete = (extra: {
+      error?: string;
+      cancelled?: boolean;
+      diagnostic?: ProviderDiagnostic;
+    }) =>
       emit.publish(
         events.assistantCompleted({
           runId,
@@ -139,6 +147,7 @@ export function publishTurn(
           ...(noReply ? { noReply: true } : {}),
           ...(stepLimitSteps > 0 ? { stepLimit: stepLimitSteps } : {}),
           ...(stop ? { stop } : {}),
+          ...(diagnostic ? { diagnostic } : {}),
           ...extra,
         }),
       );
@@ -216,6 +225,9 @@ export function publishTurn(
         } else if (event.type === "stop") {
           yield* flushAll;
           stop = event.stop;
+          if (event.diagnostic) {
+            diagnostic = event.diagnostic;
+          }
           yield* Effect.promise(() =>
             recordTurnStop({
               runId,

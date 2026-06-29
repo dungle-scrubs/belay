@@ -13,7 +13,11 @@ export {
   ProviderUnavailable,
   providerFailureEvidence,
 } from "./errors";
-export { incidentReasonOf, providerDiagnostic } from "./provider-diagnostic";
+export {
+  incidentReasonOf,
+  protocolAnomalyDiagnostic,
+  providerDiagnostic,
+} from "./provider-diagnostic";
 export type {
   ChatImage,
   ChatMessage,

@@ -24,7 +24,11 @@ const TOOL_TAG_PATTERNS = [
   /DSML\s*\|\s*\|\s*parameter\s+name\s*=/i,
 ] as const;
 
-const TOOL_JSON_PATTERN = /["'](?:tool_call|tool_calls|function_call|arguments|name)["']\s*:/i;
+// Only the UNAMBIGUOUS tool-call envelope keys. `name`/`arguments` are left out on purpose: they
+// appear in ordinary JSON the model legitimately quotes (a package manifest, a config snippet), so
+// matching them would flag prose as a protocol leak. A real bare-JSON leak still carries one of these
+// envelope keys; a tagged leak is caught by TOOL_TAG_PATTERNS regardless.
+const TOOL_JSON_PATTERN = /["'](?:tool_call|tool_calls|function_call)["']\s*:/i;
 
 /** Every pattern that means "tool-call markup leaked into assistant text"; one set for all providers. */
 const ANOMALY_PATTERNS = [...TOOL_TAG_PATTERNS, TOOL_JSON_PATTERN] as const;
