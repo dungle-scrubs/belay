@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
 import {
   type DoctorSnapshot,
@@ -7,14 +8,15 @@ import {
   type SourceSummary,
   UNKNOWN_INTERNET,
 } from "@trevor/session";
-import { resolveTrevorStateHome } from "@trevor/session/node-paths";
+import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
+import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
 import { Effect } from "effect";
 import { fmtFields } from "../log";
 import { abbrevHome } from "../paths";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { providerFailures } from "../providers/provider-failure-log";
-import { buildDoctorSnapshot, type DoctorProviderProbe } from "./snapshot";
+import { buildDoctorSnapshot, type DoctorProviderProbe, type DoctorRootProbe } from "./snapshot";
 
 /**
  * Builds the live `doctor.current` snapshot from already-resolved host facts (D-073). This is the
@@ -50,8 +52,7 @@ export interface DoctorCommandInput extends DoctorRuntimeFacts {
 
 export interface DoctorProbeResults {
   readonly providers: readonly DoctorProviderProbe[];
-  readonly storageHome: string;
-  readonly storageWritable: boolean;
+  readonly roots: readonly DoctorRootProbe[];
   readonly tools: readonly string[];
   readonly observations: {
     readonly distinct: number;
@@ -186,6 +187,34 @@ async function storageWritable(dir: string): Promise<boolean> {
   }
 }
 
+/**
+ * Probes one policy root for the Storage/Roots area: its sanitized path, existence, and (for a
+ * writable Trevor root that exists) writability. Writability is `null` where it does not apply
+ * (external/legacy roots, the browser store, or a root that does not exist yet); the legacy root
+ * additionally reports whether importable ~/.trevor data is present via the migration planner.
+ */
+async function probeRoot(category: RootCategory): Promise<DoctorRootProbe> {
+  const path = category.path === null ? null : abbrevHome(category.path);
+  const exists = category.path !== null && existsSync(category.path);
+  const writable =
+    category.writable && category.path !== null && exists
+      ? await storageWritable(category.path)
+      : null;
+  const overridden = category.envOverride ? Boolean(process.env[category.envOverride]) : false;
+  const migrationAvailable =
+    category.id === "legacy" ? planLegacyMigration(nodeMigrationFs).willMigrate : false;
+  return {
+    id: category.id,
+    label: category.label,
+    ownership: category.ownership,
+    path,
+    exists,
+    writable,
+    overridden,
+    migrationAvailable,
+  };
+}
+
 /** Reads a string field off the host turn-machine record (the /doctor session facts). */
 function hostStr(host: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = host?.[key];
@@ -196,12 +225,11 @@ function hostStr(host: Record<string, unknown> | undefined, key: string): string
 export async function collectDoctorProbeResults(
   providers: ProviderRegistry,
 ): Promise<DoctorProbeResults> {
-  const home = resolveTrevorStateHome();
-  const [providerProbes, writable, observationStore, tools] = await Promise.all([
+  const [providerProbes, roots, observationStore, tools] = await Promise.all([
     Promise.all(
       Object.entries(providers).map(([key, provider]) => doctorProviderProbe(key, provider)),
     ),
-    storageWritable(home),
+    Promise.all(resolveRootPolicy().map(probeRoot)),
     readObservations(),
     toolNames(),
   ]);
@@ -209,8 +237,7 @@ export async function collectDoctorProbeResults(
   const summary = providerFailures.summary();
   return {
     providers: providerProbes,
-    storageHome: home,
-    storageWritable: writable,
+    roots,
     tools,
     observations: { distinct: obs.distinct, unknown: obs.unknown, total: obs.total },
     providerFailures: {
@@ -237,7 +264,7 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
     internet: facts.internet ?? UNKNOWN_INTERNET,
     tools: probes.tools,
     workspace: { cwd: facts.cwd, workspace: facts.workspace, branch: facts.branch },
-    storage: { home: abbrevHome(probes.storageHome), writable: probes.storageWritable },
+    storage: { roots: probes.roots },
     // Package/build/version facts (D-073): the embedded version when present (else a dev build),
     // plus the always-available Node + runtime kind. Update-availability is not probed here.
     build: {

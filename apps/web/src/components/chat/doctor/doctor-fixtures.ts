@@ -501,9 +501,12 @@ export const storageOk: DoctorArea = {
   status: "ok",
   verdict: "All roots resolved and writable.",
   facts: [
-    { label: "config", value: "~/.trevorV2" },
-    { label: "state", value: "~/.trevorV2", status: "ok" },
-    { label: "auth", value: "~/.pi" },
+    { label: "config", value: "~/.trevorV2", status: "ok" },
+    { label: "state", value: "~/.local/state/trevorV2", status: "ok" },
+    { label: "legacy", value: "~/.trevor · none", status: "not_checked" },
+    { label: "temp", value: "/var/folders/4p/T", status: "ok" },
+    { label: "external:pi", value: "~/.pi · external (read-only)", status: "ok" },
+    { label: "external:agents", value: "~/.agents · external (read-only)", status: "ok" },
   ],
 };
 
@@ -511,20 +514,46 @@ export const storageRootInvalid: DoctorArea = {
   id: "storage",
   label: "Storage / Roots",
   status: "error",
-  verdict: "State root is not writable.",
+  verdict: "A storage root needs attention.",
   facts: [
-    { label: "config", value: "~/.trevorV2" },
-    { label: "state", value: "~/.trevorV2 · not writable", status: "error" },
+    { label: "config", value: "~/.trevorV2", status: "ok" },
+    { label: "state", value: "~/.local/state/trevorV2 · not writable", status: "error" },
+    { label: "legacy", value: "~/.trevor · none", status: "not_checked" },
   ],
   findings: [
     {
-      id: "storage.state.notwritable",
+      id: "storage.state",
       status: "error",
-      title: "State root not writable",
-      message: "Trevor can't write its state root, so durable loops, leases, and caches will fail.",
-      source: "~/.trevorV2",
+      title: "state not writable",
+      message: "Trevor cannot write this root.",
+      source: "~/.local/state/trevorV2",
       evidence: "stat: EACCES permission denied\nowner: root  mode: 0755",
-      nextAction: { label: "Fix ownership", command: "chown -R $USER ~/.trevorV2" },
+      nextAction: { label: "Check permissions on", command: "~/.local/state/trevorV2" },
+    },
+  ],
+};
+
+/** Storage/Roots with leftover ~/.trevor data: a warn finding nudges the import (D-009). */
+export const storageLegacyImportable: DoctorArea = {
+  id: "storage",
+  label: "Storage / Roots",
+  status: "warn",
+  verdict: "Legacy data is importable.",
+  facts: [
+    { label: "config", value: "~/.trevorV2", status: "ok" },
+    { label: "state", value: "~/.local/state/trevorV2", status: "ok" },
+    { label: "legacy", value: "~/.trevor · legacy data (importable)", status: "warn" },
+  ],
+  findings: [
+    {
+      id: "storage.legacy",
+      status: "warn",
+      title: "Legacy data",
+      message: "Importable ~/.trevor data is present.",
+      source: "~/.trevor",
+      nextAction: {
+        label: "Import ~/.trevor data via migration or set SESSION_STORE_DB / BLOB_STORE_DIR",
+      },
     },
   ],
 };

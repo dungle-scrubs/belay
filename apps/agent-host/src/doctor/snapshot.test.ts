@@ -6,7 +6,12 @@ import {
   summarizeSnapshot,
 } from "@trevor/session";
 import { test } from "vitest";
-import { buildDoctorSnapshot, type DoctorProbeInput, type PeripheralState } from "./snapshot";
+import {
+  buildDoctorSnapshot,
+  type DoctorProbeInput,
+  type DoctorRootProbe,
+  type PeripheralState,
+} from "./snapshot";
 
 /**
  * D-073 M1-M3: the structured doctor.current snapshot construction. Pure over probed facts, so these
@@ -22,6 +27,48 @@ const ONLINE: InternetSnapshot = {
   targetClass: "dns+https",
 };
 
+function root(over: Partial<DoctorRootProbe> & Pick<DoctorRootProbe, "id">): DoctorRootProbe {
+  return {
+    label: over.id,
+    ownership: "trevor",
+    path: `~/.${over.id}`,
+    exists: true,
+    writable: true,
+    overridden: false,
+    migrationAvailable: false,
+    ...over,
+  };
+}
+
+/** A healthy resolved root set (sanitized paths) the storage default builds from. */
+const HEALTHY_ROOTS: readonly DoctorRootProbe[] = [
+  root({ id: "config", label: "config", path: "~/.trevorV2" }),
+  root({ id: "state", label: "state", path: "~/.local/state/trevorV2" }),
+  root({
+    id: "legacy",
+    label: "legacy",
+    ownership: "trevor",
+    path: "~/.trevor",
+    exists: false,
+    writable: null,
+  }),
+  root({ id: "temp", label: "temp", path: "/tmp" }),
+  root({
+    id: "browser",
+    label: "browser",
+    path: null,
+    exists: false,
+    writable: true,
+  }),
+  root({
+    id: "external-pi",
+    label: "external:pi",
+    ownership: "external",
+    path: "~/.pi",
+    writable: null,
+  }),
+];
+
 function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
   return {
     host: { instanceId: "abc12345", role: "leader", live: true },
@@ -30,7 +77,7 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
     internet: ONLINE,
     tools: ["read", "grep", "bash"],
     workspace: { cwd: "~/dev/trevorV2", workspace: "~/dev/trevorV2", branch: "main" },
-    storage: { home: "~/.trevorV2", writable: true },
+    storage: { roots: HEALTHY_ROOTS },
     build: { version: "2.0.0", node: "v22.0.0", runtime: "trevor" },
     peripherals: {
       mcp: { kind: "unconfigured" },
@@ -43,7 +90,7 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
   };
 }
 
-test("builds all twelve areas in canonical order, with findings (internet is binary)", () => {
+test("builds all twelve areas in canonical order, with findings (internet/storage are facts-driven)", () => {
   const snap = buildDoctorSnapshot(input());
   assert.deepEqual(
     snap.areas.map((a) => a.id),
@@ -54,6 +101,12 @@ test("builds all twelve areas in canonical order, with findings (internet is bin
     if (area.id === "internet") {
       // Internet is binary - its verdict carries online/offline directly, no redundant finding row.
       assert.equal(area.findings?.length ?? 0, 0, "internet has no finding");
+      continue;
+    }
+    if (area.id === "storage") {
+      // Storage/Roots is facts-driven: a fact per root carries the verdict; findings appear only on a
+      // problem (a not-writable root or importable legacy data), so a healthy host has none.
+      assert.ok((area.facts?.length ?? 0) >= 1, "storage lists root facts");
       continue;
     }
     assert.ok((area.findings?.length ?? 0) >= 1, `area ${area.id} has a finding`);
@@ -419,12 +472,94 @@ test("offline internet warns; unknown is not_checked", () => {
   assert.equal(unknown.areas.find((a) => a.id === "internet")?.status, "not_checked");
 });
 
-test("unwritable storage is an error with a next action and a source path", () => {
-  const snap = buildDoctorSnapshot(input({ storage: { home: "~/.trevorV2", writable: false } }));
-  const area = snap.areas.find((a) => a.id === "storage");
+test("all-healthy roots roll the Storage area up to ok with one fact per root", () => {
+  const area = buildDoctorSnapshot(input()).areas.find((a) => a.id === "storage");
+  assert.equal(area?.status, "ok");
+  assert.equal(area?.findings?.length ?? 0, 0, "a healthy area carries no problem finding");
+  assert.equal(area?.facts?.length, HEALTHY_ROOTS.length, "one fact per resolved root");
+  assert.match(area?.verdict ?? "", /resolved and writable/);
+  // Sanitized: the home directory is shown as ~, never a raw /Users path or secret.
+  assert.ok(!/\/Users\/|\/home\//.test(JSON.stringify(area)), "no raw home path leaks");
+});
+
+test("an unwritable state root is an error finding and lifts the Storage area to error", () => {
+  const area = buildDoctorSnapshot(
+    input({
+      storage: {
+        roots: HEALTHY_ROOTS.map((r) => (r.id === "state" ? { ...r, writable: false } : r)),
+      },
+    }),
+  ).areas.find((a) => a.id === "storage");
   assert.equal(area?.status, "error");
-  assert.equal(area?.findings?.[0]?.source, "~/.trevorV2");
-  assert.ok(area?.findings?.[0]?.nextAction);
+  const finding = area?.findings?.find((f) => f.id === "storage.state");
+  assert.ok(finding, "an unwritable root gets a problem finding");
+  assert.equal(finding?.status, "error");
+  assert.equal(finding?.source, "~/.local/state/trevorV2");
+  assert.equal(finding?.nextAction?.command, "~/.local/state/trevorV2");
+  assert.ok(
+    area?.facts?.some((f) => f.label === "state" && /not writable/.test(f.value)),
+    "the state fact reads not writable",
+  );
+});
+
+test("an importable legacy root warns with a migration hint", () => {
+  const area = buildDoctorSnapshot(
+    input({
+      storage: {
+        roots: HEALTHY_ROOTS.map((r) =>
+          r.id === "legacy" ? { ...r, exists: true, migrationAvailable: true } : r,
+        ),
+      },
+    }),
+  ).areas.find((a) => a.id === "storage");
+  assert.equal(area?.status, "warn");
+  const finding = area?.findings?.find((f) => f.id === "storage.legacy");
+  assert.equal(finding?.status, "warn");
+  assert.match(finding?.message ?? "", /Importable ~\/\.trevor data/);
+  assert.match(finding?.nextAction?.label ?? "", /SESSION_STORE_DB \/ BLOB_STORE_DIR/);
+  assert.ok(
+    area?.facts?.some((f) => f.label === "legacy" && /legacy data \(importable\)/.test(f.value)),
+    "the legacy fact reads importable",
+  );
+});
+
+test("an overridden root marks its fact value", () => {
+  const area = buildDoctorSnapshot(
+    input({
+      storage: {
+        roots: HEALTHY_ROOTS.map((r) => (r.id === "state" ? { ...r, overridden: true } : r)),
+      },
+    }),
+  ).areas.find((a) => a.id === "storage");
+  const fact = area?.facts?.find((f) => f.label === "state");
+  assert.match(fact?.value ?? "", /overridden/, "an overridden writable root says so");
+});
+
+test("an external root reads as read-only and adds no finding", () => {
+  const area = buildDoctorSnapshot(input()).areas.find((a) => a.id === "storage");
+  const fact = area?.facts?.find((f) => f.label === "external:pi");
+  assert.match(fact?.value ?? "", /external \(read-only\)/);
+  assert.equal(fact?.status, "ok", "an external root is never a problem");
+  assert.ok(
+    !area?.findings?.some((f) => f.id === "storage.external-pi"),
+    "an external root never gets a finding",
+  );
+});
+
+test("a writable root that does not exist yet is not_checked, not an error", () => {
+  const area = buildDoctorSnapshot(
+    input({
+      storage: {
+        roots: HEALTHY_ROOTS.map((r) =>
+          r.id === "config" ? { ...r, exists: false, writable: null } : r,
+        ),
+      },
+    }),
+  ).areas.find((a) => a.id === "storage");
+  const fact = area?.facts?.find((f) => f.label === "config");
+  assert.equal(fact?.status, "not_checked");
+  assert.match(fact?.value ?? "", /not created yet/);
+  assert.notEqual(area?.status, "error", "a not-yet-created root is not an outage");
 });
 
 test("the snapshot carries host context + a checked-at stamp and is ready", () => {

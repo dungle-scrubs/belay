@@ -87,6 +87,13 @@ explicitly adds a new root.
   read them when integrating with those tools, but new Trevor-owned data should
   not be written there.
 
+A new file-backed feature must resolve its location through the root policy in
+`@trevor/session/node-paths` (`resolveRootPolicy` / `rootCategory` / the
+`STORAGE_INVENTORY`) and add itself to the inventory, rather than spelling a
+home-relative path. A drift test fails if a new `~/.trevorV2` literal appears
+outside that owner. This taxonomy is the single citation for storage placement;
+see `.plans/03-filesystem-root-taxonomy` for the detailed model and rationale.
+
 ## Testing
 
 Tests are organized by **scope, not by one global placement rule**. "Where does

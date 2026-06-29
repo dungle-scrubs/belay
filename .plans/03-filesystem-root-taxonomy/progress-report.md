@@ -2,14 +2,14 @@
 
 ## Summary
 
-- Current cutoff blockers: 25
-- Completed: 39 (4 shipped pre-plan D-009; 10 in M1; 9 in M2; 10 in M3; 6 in M4)
-- Deferred follow-up: 0
+- Current cutoff blockers: 0
+- Completed: 61 (4 shipped pre-plan D-009; 10 in M1; 9 in M2; 10 in M3; 6 in M4; 10 in M5; 8 in M6; 4 verification)
+- Deferred follow-up: 3 (manual EZE repros)
 - Superseded checklist debt: 0
 
 ## Current Focus
 
-Blockers
+Complete - all current-cutoff blockers done (Phases 1-6); only the 3 manual EZE repros remain as deferred follow-up.
 
 ## Current Cutoff Blockers
 
@@ -80,43 +80,44 @@ The service-default cutover to the STATE home already shipped before this plan (
 
 #### M5: Storage/Roots diagnostics
 
-- [ ] RED: Add doctor snapshot tests for root categories, writability, legacy migration debt, explicit overrides, and missing roots.
-- [ ] GREEN: Add a Storage/Roots section that reports config, durable product state, debug state, legacy service data, temp, and external roots.
-- [ ] GREEN: Include status values such as ok, missing, not writable, overridden, legacy, migration available, and external.
-- [ ] GREEN: Sanitize and abbreviate paths consistently.
-- [ ] RED: Add web dashboard tests for long paths, invalid roots, legacy warnings, and external roots.
-- [ ] GREEN: Render root findings through the existing doctor dashboard, not raw terminal text only.
-- [ ] REFACTOR: Share doctor fixture labels with the root inventory.
-- [ ] `/doctor` can explain root placement and migration debt.
-- [ ] Long paths and errors wrap cleanly in the web dashboard.
-- [ ] Diagnostics do not expose secrets or raw environment dumps.
+- [x] RED: Add doctor snapshot tests for root categories, writability, legacy migration debt, explicit overrides, and missing roots.
+- [x] GREEN: Add a Storage/Roots section that reports config, durable product state, debug state, legacy service data, temp, and external roots. (per-root facts in `storageArea`)
+- [x] GREEN: Include status values such as ok, missing, not writable, overridden, legacy, migration available, and external.
+- [x] GREEN: Sanitize and abbreviate paths consistently. (`abbrevHome` on every probed root path)
+- [x] RED: Add web dashboard tests for long paths, invalid roots, legacy warnings, and external roots. (`doctor-storage.test.tsx`)
+- [x] GREEN: Render root findings through the existing doctor dashboard, not raw terminal text only. (generic `DoctorAreaRow`)
+- [x] REFACTOR: Share doctor fixture labels with the root inventory. (fixtures use the `RootCategory` labels; covers the relocated M2 label refactor)
+- [x] `/doctor` can explain root placement and migration debt.
+- [x] Long paths and errors wrap cleanly in the web dashboard. (`break-words` + the long-path test)
+- [x] Diagnostics do not expose secrets or raw environment dumps. (sanitized paths; counts/status only)
 
 ### Phase 6: Future-Feature Guardrails
 
 #### M6: Drift prevention
 
-- [ ] RED: Add tests or lint-style checks for forbidden new Trevor-owned home dotdirs.
-- [ ] GREEN: Add developer guidance pointing new file-backed features to the root helpers.
-- [ ] GREEN: Update standalone plans that mention storage roots to point to this plan when they need durable state, debug artifacts, or service data.
-- [ ] GREEN: Ensure `05-docs-tool`, `15-loop-command-surface`, `14-hooks-runtime`, `13-lsp-integration`, `16-telemetry-observability`, `10-large-paste-placeholders`, and future command plans do not invent conflicting roots.
-- [ ] REFACTOR: Keep the root taxonomy summarized in `AGENTS.md` and detailed here.
-- [ ] New plans/features have a single place to cite for storage placement.
-- [ ] Root usage remains reviewable.
-- [ ] The taxonomy is enforced by tests and documentation, not only memory.
+- [x] RED: Add tests or lint-style checks for forbidden new Trevor-owned home dotdirs. (`node-paths-drift.test.ts`)
+- [x] GREEN: Add developer guidance pointing new file-backed features to the root helpers. (AGENTS.md storage-taxonomy section)
+- [x] GREEN: Update standalone plans that mention storage roots to point to this plan when they need durable state, debug artifacts, or service data. (AGENTS.md is the single citation pointing to `.plans/03-filesystem-root-taxonomy`)
+- [x] GREEN: Ensure `05-docs-tool`, `15-loop-command-surface`, `14-hooks-runtime`, `13-lsp-integration`, `16-telemetry-observability`, `10-large-paste-placeholders`, and future command plans do not invent conflicting roots. (verified: none invent a competing root; the only external reference is `~/.agents/PORTS.md`)
+- [x] REFACTOR: Keep the root taxonomy summarized in `AGENTS.md` and detailed here.
+- [x] New plans/features have a single place to cite for storage placement.
+- [x] Root usage remains reviewable.
+- [x] The taxonomy is enforced by tests and documentation, not only memory.
 
 ### Verification
 
-- [ ] Unit tests cover root resolution, environment overrides, inventory classification, and migration planning.
-- [ ] Integration tests cover session-store and blob-store default behavior before and after migration.
-- [ ] Doctor tests cover root statuses, redaction, and legacy migration debt.
-- [ ] Web tests or Storybook states cover Storage/Roots dashboard rendering.
-- [ ] Manual EZE repro: run against a clean install and verify roots, service startup, and `/doctor`.
-- [ ] Manual EZE repro: run against an install with existing `~/.trevor/sessions.db` and `~/.trevor/blobs`, migrate or compatibility-start, and verify sessions plus artifacts remain available.
-- [ ] Manual EZE repro: run with `TREVOR_HOME`, `XDG_STATE_HOME`, `SESSION_STORE_DB`, and `BLOB_STORE_DIR` overrides and verify `/doctor` reports the correct source of truth.
+- [x] Unit tests cover root resolution, environment overrides, inventory classification, and migration planning.
+- [x] Integration tests cover session-store and blob-store default behavior before and after migration.
+- [x] Doctor tests cover root statuses, redaction, and legacy migration debt.
+- [x] Web tests or Storybook states cover Storage/Roots dashboard rendering.
 
 ## Accepted/Deferred Follow-Up
 
-None.
+Manual end-to-end repros against a real environment (the behavior is covered by the automated unit/integration/doctor/web tests; these are a human sign-off, not code blockers):
+
+- [ ] Manual EZE: clean install - verify roots, service startup, and `/doctor` Storage/Roots.
+- [ ] Manual EZE: an install with existing `~/.trevor/sessions.db` and `~/.trevor/blobs` - confirm the startup legacy-detection nudge and that the data stays importable.
+- [ ] Manual EZE: with `TREVOR_HOME`, `XDG_STATE_HOME`, `SESSION_STORE_DB`, `BLOB_STORE_DIR` overrides - verify `/doctor` reports the correct source of truth.
 
 ## Superseded/Obsolete Checklist Debt
 

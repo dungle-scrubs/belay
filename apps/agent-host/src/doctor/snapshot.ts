@@ -9,6 +9,7 @@ import {
   type InternetSnapshot,
   rollupStatus,
 } from "@trevor/session";
+import type { RootCategoryId } from "@trevor/session/node-paths";
 
 /**
  * Builds the structured `doctor.current` snapshot (D-073) from already-probed host facts. PURE over
@@ -30,6 +31,18 @@ export interface DoctorProviderProbe {
   readonly status: "warm" | "cold" | "unreachable";
 }
 
+/** A probed filesystem root for the Storage/Roots area: its sanitized path + health. */
+export interface DoctorRootProbe {
+  readonly id: RootCategoryId;
+  readonly label: string;
+  readonly ownership: "trevor" | "external";
+  readonly path: string | null; // already sanitized (home-abbreviated); null for browser
+  readonly exists: boolean;
+  readonly writable: boolean | null; // null when not applicable/not probed (external, legacy, browser)
+  readonly overridden: boolean;
+  readonly migrationAvailable: boolean; // legacy only: importable ~/.trevor data present
+}
+
 export interface DoctorProbeInput {
   readonly host: { readonly instanceId: string; readonly role: string; readonly live: boolean };
   /** The live turn-machine facts (active run, queue, last termination), already string-formatted. */
@@ -47,7 +60,7 @@ export interface DoctorProbeInput {
     readonly workspace: string;
     readonly branch?: string;
   };
-  readonly storage: { readonly home: string; readonly writable: boolean };
+  readonly storage: { readonly roots: readonly DoctorRootProbe[] };
   readonly build: DoctorBuildInfo;
   readonly peripherals: DoctorPeripherals;
   readonly web: DoctorWebDocs;
@@ -370,18 +383,82 @@ function toolsArea(input: DoctorProbeInput): DoctorArea {
   );
 }
 
+/** A root's status + display value: ownership, lifecycle (legacy), and writability drive the verdict. */
+function rootFact(root: DoctorRootProbe): {
+  readonly status: DoctorStatus;
+  readonly value: string;
+} {
+  if (root.ownership === "external") {
+    return { status: "ok", value: `${root.path} · external (read-only)` };
+  }
+  if (root.path === null) {
+    return { status: "ok", value: "browser storage (ephemeral)" };
+  }
+  if (root.id === "legacy") {
+    if (root.migrationAvailable) {
+      return { status: "warn", value: `${root.path} · legacy data (importable)` };
+    }
+    return root.exists
+      ? { status: "ok", value: `${root.path} · legacy data present` }
+      : { status: "not_checked", value: `${root.path} · none` };
+  }
+  // A writable Trevor root (config/state/temp): not-created-yet and unwritable are the only problems.
+  const base = !root.exists
+    ? { status: "not_checked" as const, value: `${root.path} · not created yet` }
+    : root.writable === false
+      ? { status: "error" as const, value: `${root.path} · not writable` }
+      : { status: "ok" as const, value: root.path };
+  return root.overridden ? { ...base, value: `${base.value} · overridden` } : base;
+}
+
+/**
+ * The Storage / Roots area (D-005): one fact per resolved root with its health, plus problem-only
+ * findings (an unwritable Trevor root errors; importable ~/.trevor data warns with a migration hint).
+ * External roots read as read-only and never warn; a not-yet-created root is `not_checked`, not an
+ * error. The area status rolls up from the per-root fact statuses, and every path is already
+ * home-abbreviated by the probe, so no raw home directory leaks into the diagnostics.
+ */
 function storageArea(input: DoctorProbeInput): DoctorArea {
-  const finding: DoctorFinding = {
-    id: "storage.home",
-    status: input.storage.writable ? "ok" : "error",
-    title: "state home",
-    message: input.storage.writable ? "writable" : "not writable",
-    source: input.storage.home,
-    ...(input.storage.writable
-      ? {}
-      : { nextAction: { label: "Check permissions on", command: input.storage.home } }),
-  };
-  return area("storage", "Storage / Roots", finding.message, [finding]);
+  const roots = input.storage.roots;
+  const facts: DoctorFact[] = roots.map((root) => {
+    const { status, value } = rootFact(root);
+    return { label: root.label, value, status };
+  });
+
+  const findings: DoctorFinding[] = [];
+  for (const root of roots) {
+    if (root.writable === false) {
+      findings.push({
+        id: `storage.${root.id}`,
+        status: "error",
+        title: `${root.label} not writable`,
+        message: "Trevor cannot write this root.",
+        source: root.path ?? undefined,
+        nextAction: { label: "Check permissions on", command: root.path ?? undefined },
+      });
+    }
+    if (root.id === "legacy" && root.migrationAvailable) {
+      findings.push({
+        id: "storage.legacy",
+        status: "warn",
+        title: "Legacy data",
+        message: "Importable ~/.trevor data is present.",
+        source: root.path ?? undefined,
+        nextAction: {
+          label: "Import ~/.trevor data via migration or set SESSION_STORE_DB / BLOB_STORE_DIR",
+        },
+      });
+    }
+  }
+
+  const statusOverride = rollupStatus(facts.map((f) => f.status ?? "not_checked"));
+  const verdict =
+    statusOverride === "error"
+      ? "A storage root needs attention."
+      : statusOverride === "warn"
+        ? "Legacy data is importable."
+        : "All roots resolved and writable.";
+  return area("storage", "Storage / Roots", verdict, findings, facts, statusOverride);
 }
 
 function workspaceArea(input: DoctorProbeInput): DoctorArea {
