@@ -38,11 +38,11 @@
 
 ## M4: Style Metadata and Menu Choices
 
-- [ ] RED: Add host tests for style metadata
-- [ ] GREEN: Define built-in styles as host-owned metadata
-- [ ] RED: Add tests proving `/style` choices come from host data, not web hardcoding
-- [ ] GREEN: Implement bare `/style` as a menu payload with select/reset/default actions
-- [ ] REFACTOR: Keep style metadata reusable by settings, `/doctor`, and future capability surfaces
+- [x] RED: Add host tests for style metadata (`apps/agent-host/src/style/styles.test.ts`, 13 tests)
+- [x] GREEN: Define built-in styles as host-owned metadata (`styles.ts BUILTIN_STYLES`: default/concise/diagnostic/reviewer/explanatory with id/label/description/guidance)
+- [x] RED: Add tests proving `/style` choices come from host data, not web hardcoding (`buildStyleMenu` is a pure projection of `BUILTIN_STYLES`; the web renderer has no style branches)
+- [x] GREEN: Implement bare `/style` as a menu payload with select/reset/default actions (`handleStyleCommand`: bare -> menu; `<id>`/`select <id>` -> selected; `reset`/`default` -> default; unknown -> structured error)
+- [x] REFACTOR: Keep style metadata reusable by settings, `/doctor`, and future capability surfaces (`OutputStyle`/`resolveStyle`/`findStyle` are generic host data, importable anywhere)
 
 ## M5: Style Preference Persistence and Run Attribution
 
