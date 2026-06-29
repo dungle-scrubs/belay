@@ -176,8 +176,9 @@ function warnFailureGuidance(state: SignatureState): string {
 
 function blockFailureGuidance(state: SignatureState): string {
   return (
-    `Guardrail: this exact "${state.tool}" call has now failed ${state.failures} times with no change, ` +
-    "so it was not retried. Change the arguments, the tool, or the underlying cause before continuing."
+    `Guardrail: this exact "${state.tool}" call has failed ${state.failures} times with no change, so ` +
+    "its repeated output is withheld. Change the arguments, the tool, or the underlying cause before " +
+    "calling it again."
   );
 }
 
@@ -191,8 +192,8 @@ function warnNoProgressGuidance(state: SignatureState): string {
 
 function blockNoProgressGuidance(state: SignatureState): string {
   return (
-    `Guardrail: this exact "${state.tool}" call has returned the same result ${state.sameResults} times, ` +
-    "so it was not run again. Use the result you already have or change your approach."
+    `Guardrail: this exact "${state.tool}" call keeps returning the same result (${state.sameResults} ` +
+    "times), so its repeated output is withheld. Use the result you already have or change your approach."
   );
 }
 

@@ -262,15 +262,21 @@ export function withToolStallTimeout(
 }
 
 /**
- * Composes a guardrail decision onto the model-facing tool result (M4 / D-007). A `warn` appends the
- * action-oriented guidance after the raw result, so the model both keeps the output and reads the
- * advice to change approach. Any other action returns the raw result unchanged. The guidance names
- * only the tool and a count - it never carries raw arguments or output - so this is safe to persist
- * onto the tool result. The redacted guardrail event (M5) is a separate telemetry surface.
+ * Composes a guardrail decision onto the model-facing tool result (M4/M6 / D-007). A `warn` appends
+ * the action-oriented guidance after the raw result, so the model both keeps the output and reads the
+ * advice to change approach. A `block` (opt-in hard stop) SUBSTITUTES the synthetic, retryable
+ * guidance for the repeated output: the tool still executed (D-003), but its stale repeat is withheld
+ * so the model stops re-reading it and changes course; the turn continues normally toward synthesis or
+ * a typed terminal stop. Any other action returns the raw result unchanged. The guidance names only the
+ * tool and a count - never raw arguments or output - so it is safe on the tool result; the redacted
+ * guardrail event (M5) is the separate telemetry surface.
  */
 export function guardedToolResult(rawResult: string, decision: GuardrailDecision): string {
   if (decision.action === "warn" && decision.guidance) {
     return `${rawResult}\n\n${decision.guidance}`;
+  }
+  if (decision.action === "block" && decision.guidance) {
+    return decision.guidance;
   }
   return rawResult;
 }

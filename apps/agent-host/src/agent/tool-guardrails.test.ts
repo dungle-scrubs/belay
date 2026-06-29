@@ -246,3 +246,76 @@ test("M3: a read-only call's args fingerprint round-trips the canonical helper",
   assert.notEqual(decision.resultFingerprint, undefined);
   assert.equal(decision.resultFingerprint, resultFingerprint("x"));
 });
+
+// --- M6: optional hard stops ---
+
+test("M6: hard stops are disabled by default - a repeating path only ever warns", () => {
+  const guardrails = createToolGuardrails({ readOnly }); // default config: hardStop off
+  let last = guardrails.observe("read", ARGS, FAIL);
+  for (let i = 0; i < 9; i += 1) {
+    last = guardrails.observe("read", ARGS, FAIL);
+  }
+  assert.equal(last.action, "warn", "without hardStop, even a long failure streak never blocks");
+
+  const readOnlyGuard = createToolGuardrails({ readOnly });
+  let lastRead = readOnlyGuard.observe("read", ARGS, "same");
+  for (let i = 0; i < 9; i += 1) {
+    lastRead = readOnlyGuard.observe("read", ARGS, "same");
+  }
+  assert.equal(lastRead.action, "warn", "without hardStop, no-progress never blocks either");
+});
+
+test("M6: an enabled hard stop blocks once the failure threshold is met", () => {
+  const guardrails = createToolGuardrails({
+    readOnly,
+    config: { failureWarnAt: 3, hardStop: true, hardStopAt: 5 },
+  });
+  const actions = Array.from({ length: 5 }, () => guardrails.observe("read", ARGS, FAIL).action);
+  assert.deepEqual(
+    actions,
+    ["allow", "allow", "warn", "warn", "block"],
+    "warn first, then block at 5",
+  );
+  const block = guardrails.observe("read", ARGS, FAIL);
+  assert.equal(block.action, "block");
+  assert.equal(block.reason, "repeated_failure");
+  assert.match(
+    block.guidance ?? "",
+    /withheld/i,
+    "the block guidance frames the output as withheld",
+  );
+});
+
+test("M6: a hard stop requires an UNINTERRUPTED streak - an intervening success resets it", () => {
+  const guardrails = createToolGuardrails({
+    readOnly,
+    config: { failureWarnAt: 3, hardStop: true, hardStopAt: 5 },
+  });
+  for (let i = 0; i < 4; i += 1) {
+    guardrails.observe("read", ARGS, FAIL); // streak climbs to 4 (one short of block)
+  }
+  guardrails.observe("read", ARGS, "recovered output"); // a success clears the streak
+  const actions = Array.from({ length: 5 }, () => guardrails.observe("read", ARGS, FAIL).action);
+  assert.deepEqual(
+    actions,
+    ["allow", "allow", "warn", "warn", "block"],
+    "the post-success streak starts over - block needs 5 fresh consecutive failures",
+  );
+});
+
+test("M6: a no-progress hard stop requires the SAME result with no intervening change", () => {
+  const guardrails = createToolGuardrails({
+    readOnly,
+    config: { noProgressWarnAt: 3, hardStop: true, hardStopAt: 5 },
+  });
+  for (let i = 0; i < 4; i += 1) {
+    guardrails.observe("read", ARGS, "same"); // same-result streak climbs to 4
+  }
+  guardrails.observe("read", ARGS, "DIFFERENT"); // a changed result resets it
+  const actions = Array.from({ length: 5 }, () => guardrails.observe("read", ARGS, "same").action);
+  assert.deepEqual(
+    actions,
+    ["allow", "allow", "warn", "warn", "block"],
+    "a changed result restarts the streak; block needs 5 fresh identical results",
+  );
+});

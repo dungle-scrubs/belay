@@ -837,3 +837,54 @@ test("M5: an allow-only tool path emits no guardrail event", async () => {
   );
   assert.equal(guardrailEvents(events).length, 0, "two failures stay advisory - no event");
 });
+
+test("M6: hard stops are off by default - a repeating loop path is never synthetically blocked", async () => {
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "a.ts" }), rounds: 20 }),
+    { runTool: () => Effect.succeed("error: read failed - file not found") },
+  );
+  // Every tool result still carries the real failure output (warn appends, never substitutes).
+  assert.ok(
+    toolEnds(events).every((r) => /file not found/.test(r)),
+    "with hard stops off, the raw failure output is always preserved",
+  );
+  assert.equal(
+    guardrailEvents(events).every((e) => e.decision.action === "warn"),
+    true,
+    "no block decision ever fires by default",
+  );
+});
+
+test("M6: an enabled hard stop substitutes a synthetic retryable result and the loop still terminates", async () => {
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "a.ts" }), rounds: 20 }),
+    {
+      runTool: () => Effect.succeed("error: read failed - file not found"),
+      guardrails: { failureWarnAt: 3, hardStop: true, hardStopAt: 5 },
+    },
+  );
+  const results = toolEnds(events);
+  // The 5th identical failure (hardStopAt) is blocked: its raw output is WITHHELD and replaced by the
+  // synthetic retryable guidance (execution still happened - D-003).
+  const blocked = results[4] ?? "";
+  assert.match(
+    blocked,
+    /Guardrail:.*withheld/i,
+    "the synthetic block result replaces the raw output",
+  );
+  assert.doesNotMatch(
+    blocked,
+    /file not found/,
+    "the repeated raw output is withheld from the model",
+  );
+  // Composition with the existing turn-termination policy: the same repeating signature still trips
+  // the loop-stall gate, so the guarded loop reaches a typed terminal reason rather than spinning.
+  const stop = events.find((e) => e.type === "stop");
+  assert.equal(stop?.type === "stop" && stop.stop.cause, "loop_stalled");
+  assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
+  // A redacted block event also rode out for the UI.
+  assert.ok(
+    guardrailEvents(events).some((e) => e.decision.action === "block"),
+    "a block guardrail event was emitted",
+  );
+});

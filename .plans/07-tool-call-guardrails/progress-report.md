@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M6: Optional Hard Stops
-- Current cutoff blockers: 10 unchecked (29 done)
+> Current focus: complete - all 39 current-cutoff items done
+- Current cutoff blockers: 0 (39/39 done)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -58,16 +58,16 @@
 
 ### M6: Optional Hard Stops
 
-- [ ] RED: Add tests proving hard-stop behavior is disabled by default.
-- [ ] GREEN: Add an explicit runtime/config option for synthetic blocked results.
-- [ ] RED: Add tests proving hard stops require repeated same failure/result with no intervening success or different result.
-- [ ] GREEN: Return a synthetic retryable tool result only when hard stops are enabled and thresholds are met.
-- [ ] RED: Add integration tests proving a guarded loop still reaches forced synthesis or a typed terminal reason.
-- [ ] GREEN: Compose hard-stop decisions with the existing turn-termination policy.
+- [x] RED: Add tests proving hard-stop behavior is disabled by default.
+- [x] GREEN: Add an explicit runtime/config option for synthetic blocked results.
+- [x] RED: Add tests proving hard stops require repeated same failure/result with no intervening success or different result.
+- [x] GREEN: Return a synthetic retryable tool result only when hard stops are enabled and thresholds are met.
+- [x] RED: Add integration tests proving a guarded loop still reaches forced synthesis or a typed terminal reason.
+- [x] GREEN: Compose hard-stop decisions with the existing turn-termination policy.
 
 ### Gate 2 to Done
 
-- [ ] `pnpm test --project unit` passes for guardrail and loop tests.
-- [ ] Relevant web/protocol tests pass if the event surface changes.
-- [ ] No output cache exists.
-- [ ] Existing `loop_stalled`, context-pressure, and step-backstop behavior remains covered.
+- [x] `pnpm test --project unit` passes for guardrail and loop tests.
+- [x] Relevant web/protocol tests pass if the event surface changes.
+- [x] No output cache exists.
+- [x] Existing `loop_stalled`, context-pressure, and step-backstop behavior remains covered.
