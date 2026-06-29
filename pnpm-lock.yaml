@@ -57,6 +57,9 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@trevor/test-kit':
+        specifier: workspace:*
+        version: link:../../packages/test-kit
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0
@@ -113,6 +116,9 @@ importers:
 
   apps/trevor-cli:
     dependencies:
+      '@trevor/server-kit':
+        specifier: workspace:*
+        version: link:../../packages/server-kit
       '@trevor/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -217,6 +223,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@trevor/test-kit':
+        specifier: workspace:*
+        version: link:../../packages/test-kit
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
@@ -303,19 +312,19 @@ importers:
 
   packages/test-kit:
     dependencies:
-      '@trevor/session':
-        specifier: workspace:*
-        version: link:../session
-    devDependencies:
       '@trevor/blob-store':
         specifier: workspace:*
         version: link:../../apps/blob-store
       '@trevor/server-kit':
         specifier: workspace:*
         version: link:../server-kit
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../session
       '@trevor/session-store':
         specifier: workspace:*
         version: link:../../apps/session-store
+    devDependencies:
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0

@@ -5,15 +5,16 @@ import {
   runDirectHandoff,
   TurnScheduler,
 } from "@trevor/agent-host/testing";
-import { type RunningServer, startServer } from "@trevor/server-kit";
+import type { RunningServer } from "@trevor/server-kit";
 import {
   decodeTrevorEvent,
   PRODUCER_IDS,
   type SessionEvent,
   events as sessionEvents,
+  streamTransport,
 } from "@trevor/session";
-import { createSessionStore } from "@trevor/session-store/server";
-import { subscribe, testTransport, waitFor } from "@trevor/test-kit";
+import { subscribe, waitFor } from "@trevor/test-kit";
+import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
@@ -31,7 +32,7 @@ const CONTROL = `${HOST}:control`;
 let store: RunningServer;
 
 beforeAll(async () => {
-  store = await startServer(createSessionStore(":memory:"), { port: 0 });
+  store = await bootStore();
 });
 
 afterAll(async () => {
@@ -40,7 +41,7 @@ afterAll(async () => {
 
 /** Reads a session's full durable log via a replay-then-read subscriber. */
 async function readLog(url: string, sessionId: string): Promise<SessionEvent[]> {
-  const transport = testTransport(url);
+  const transport = streamTransport(url);
   const viewer = subscribe(transport, sessionId, `reader-${sessionId}`);
   await waitFor(viewer.isReplayed, { label: `${sessionId} replay` });
   viewer.connection.close();
@@ -90,7 +91,7 @@ function replayAndSchedule(events: readonly SessionEvent[]): SessionEvent[] {
 }
 
 function directDeps(url: string): DirectHandoffDeps {
-  const transport = testTransport(url);
+  const transport = streamTransport(url);
   return {
     sourceSessionId: "src",
     cwd: "/work/proj",
@@ -119,7 +120,7 @@ function directDeps(url: string): DirectHandoffDeps {
 }
 
 test("direct handoff injects the target prompt via the control producer, and the target host runs it", async () => {
-  const transport = testTransport(store.url);
+  const transport = streamTransport(store.url);
   await transport.ensureSession("src");
 
   const result = await runDirectHandoff("continue the parser work", directDeps(store.url));
@@ -164,7 +165,7 @@ test("direct handoff injects the target prompt via the control producer, and the
 
 test("regression: a prompt stamped with the host's own producer is dropped (the original bug)", async () => {
   // Reproduce the pre-fix injection: the target prompt published with the host's BARE producer id.
-  const transport = testTransport(store.url);
+  const transport = streamTransport(store.url);
   await transport.ensureSession("bug");
   await transport.publishEvent("bug", {
     ...sessionEvents.handoffAccepted({ handoffId: "h", targetSessionId: "bug", prompt: "run me" }),

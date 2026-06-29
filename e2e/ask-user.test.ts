@@ -5,15 +5,16 @@ import {
   publishTurnVia,
   transportEmit,
 } from "@trevor/agent-host/testing";
-import { type RunningServer, startServer } from "@trevor/server-kit";
+import type { RunningServer } from "@trevor/server-kit";
 import {
   decodeTrevorEvent,
   type ProviderQuestionAnswer,
   type SessionEvent,
   events as sessionEvents,
+  streamTransport,
 } from "@trevor/session";
-import { createSessionStore } from "@trevor/session-store/server";
-import { subscribe, testTransport, waitFor } from "@trevor/test-kit";
+import { subscribe, waitFor } from "@trevor/test-kit";
+import { bootStore } from "@trevor/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, afterEach, beforeAll, test } from "vitest";
 
@@ -30,7 +31,7 @@ import { afterAll, afterEach, beforeAll, test } from "vitest";
 let store: RunningServer;
 
 beforeAll(async () => {
-  store = await startServer(createSessionStore(":memory:"), { port: 0 });
+  store = await bootStore();
 });
 
 afterAll(async () => {
@@ -42,7 +43,7 @@ afterEach(() => {
 });
 
 test("a fake-provider ask_user turn blocks, then resumes with the browser's answer", async () => {
-  const transport = testTransport(store.url);
+  const transport = streamTransport(store.url);
   const SESSION = "ask-user";
   await transport.ensureSession(SESSION);
 

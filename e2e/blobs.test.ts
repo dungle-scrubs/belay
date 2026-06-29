@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
-import { createBlobServer } from "@trevor/blob-store/server";
-import { type RunningServer, startServer } from "@trevor/server-kit";
-import { tempDir } from "@trevor/test-kit";
+import { type BootedBlob, bootBlob } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
@@ -11,17 +8,14 @@ import { afterAll, beforeAll, test } from "vitest";
  * This is the blob lifecycle the web upload and host vision-inlining both depend on.
  */
 
-let blob: RunningServer;
-let blobRoot: string;
+let blob: BootedBlob;
 
 beforeAll(async () => {
-  blobRoot = tempDir("trevor-blob-");
-  blob = await startServer(createBlobServer(blobRoot, 25 * 1024 * 1024), { port: 0 });
+  blob = await bootBlob();
 });
 
 afterAll(async () => {
   await blob.close();
-  rmSync(blobRoot, { recursive: true, force: true });
 });
 
 async function put(body: string, contentType: string) {

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
-import { type RunningServer, startServer } from "@trevor/server-kit";
-import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
-import { createSessionStore } from "@trevor/session-store/server";
-import { subscribe, testTransport, waitFor } from "@trevor/test-kit";
+import type { RunningServer } from "@trevor/server-kit";
+import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
+import { subscribe, waitFor } from "@trevor/test-kit";
+import { bootStore } from "@trevor/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -18,7 +18,7 @@ import { afterAll, beforeAll, test } from "vitest";
 let store: RunningServer;
 
 beforeAll(async () => {
-  store = await startServer(createSessionStore(":memory:"), { port: 0 });
+  store = await bootStore();
 });
 
 afterAll(async () => {
@@ -26,7 +26,7 @@ afterAll(async () => {
 });
 
 test("a fake-provider turn streams through the store to a subscriber, tool result and all", async () => {
-  const transport = testTransport(store.url);
+  const transport = streamTransport(store.url);
   await transport.ensureSession("golden");
 
   const viewer = subscribe(transport, "golden", "viewer");
@@ -63,7 +63,7 @@ test("a fake-provider turn streams through the store to a subscriber, tool resul
 });
 
 test("a DeepSeek-like 1M-context low-pressure stop replays as an adaptive step_backstop", async () => {
-  const transport = testTransport(store.url);
+  const transport = streamTransport(store.url);
   await transport.ensureSession("low-context-stop");
 
   const viewer = subscribe(transport, "low-context-stop", "viewer");
@@ -116,7 +116,7 @@ test("a DeepSeek-like 1M-context low-pressure stop replays as an adaptive step_b
 });
 
 test("a high-context pressure stop replays as context_pressure after synthesis", async () => {
-  const transport = testTransport(store.url);
+  const transport = streamTransport(store.url);
   await transport.ensureSession("context-pressure-stop");
 
   const viewer = subscribe(transport, "context-pressure-stop", "viewer");
