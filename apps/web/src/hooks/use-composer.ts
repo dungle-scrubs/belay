@@ -1,4 +1,4 @@
-import { type ArtifactRef, errorMessage } from "@trevor/session";
+import { type ArtifactRef, errorMessage, isLargePaste, type PastePayload } from "@trevor/session";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -13,12 +13,13 @@ import {
 import { buildQuotedComposerText } from "@/components/assistant-ui/quote";
 import { uploadArtifact } from "../blob";
 import {
-  EMPTY_DRAFT,
-  type ImageDraft,
+  type ComposerDraft,
+  EMPTY_COMPOSER_DRAFT,
   insertImages,
+  insertPaste,
   removeAdjacentToken,
-  syncDraft,
-} from "../composer/image-tokens";
+  syncComposerDraft,
+} from "../composer/draft";
 
 /**
  * The composer's local state as one boundary (D-019 + D-092 image tokens): the draft text WITH its
@@ -37,6 +38,8 @@ export interface Composer {
   readonly setDraft: Dispatch<SetStateAction<string>>;
   /** The image refs paired to the draft's `[Image #N]` tokens, in reading order. */
   readonly imageRefs: readonly ArtifactRef[];
+  /** The exact pasted payloads paired to the draft's `[Pasted text #N +M lines]` tokens (D-001). */
+  readonly pastes: readonly PastePayload[];
   /** Pending NON-image attachments (documents) shown as chips. */
   readonly attachments: readonly ArtifactRef[];
   readonly setAttachments: Dispatch<SetStateAction<readonly ArtifactRef[]>>;
@@ -56,8 +59,8 @@ export interface Composer {
 }
 
 export function useComposer(): Composer {
-  // The draft text + its image-token refs as one unit, so they cannot drift.
-  const [imageDraft, setImageDraft] = useState<ImageDraft>(EMPTY_DRAFT);
+  // The draft text + its image-token refs AND pasted-text payloads as one unit, so they cannot drift.
+  const [composerDraft, setComposerDraft] = useState<ComposerDraft>(EMPTY_COMPOSER_DRAFT);
   // Pending NON-image attachments (documents): uploaded refs waiting to ride the next prompt.
   const [attachments, setAttachments] = useState<readonly ArtifactRef[]>([]);
   const [uploading, setUploading] = useState(0);
@@ -65,14 +68,15 @@ export function useComposer(): Composer {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const draft = imageDraft.text;
+  const draft = composerDraft.text;
 
-  // `setDraft` keeps the string API; every text change reconciles the image refs against the new
-  // text (surviving tokens keep their numbers, so a deleted token drops the right ref).
+  // `setDraft` keeps the string API; every text change reconciles BOTH the image refs and the pasted
+  // payloads against the new text (surviving tokens keep their numbers, so a deleted token of either
+  // kind drops the right ref/payload).
   const setDraft: Dispatch<SetStateAction<string>> = (action) => {
-    setImageDraft((prev) => {
+    setComposerDraft((prev) => {
       const nextText = typeof action === "function" ? action(prev.text) : action;
-      return syncDraft(prev, nextText);
+      return syncComposerDraft(prev, nextText);
     });
   };
 
@@ -96,7 +100,7 @@ export function useComposer(): Composer {
   // Inserts uploaded image tokens at the captured cursor (clamped to the latest text), then parks
   // the caret after them. Deterministic order: the whole batch inserts together.
   const insertUploadedImages = (refs: readonly ArtifactRef[], at: number) => {
-    setImageDraft((prev) => {
+    setComposerDraft((prev) => {
       const pos = Math.min(at, prev.text.length);
       const { draft: next, cursor } = insertImages(prev, pos, pos, refs);
       parkCaret(cursor);
@@ -158,11 +162,35 @@ export function useComposer(): Composer {
     }
     event.target.value = ""; // let the same file be re-picked
   };
+  // Inserts a large pasted-text token at the current selection (paired to the exact payload), parking
+  // the caret after it. Reads the live selection so a paste over a selection replaces it.
+  const insertPastedText = (text: string) => {
+    const el = inputRef.current;
+    const selStart = el?.selectionStart ?? draft.length;
+    const selEnd = el?.selectionEnd ?? selStart;
+    setComposerDraft((prev) => {
+      const { draft: next, cursor } = insertPaste(prev, selStart, selEnd, { text });
+      parkCaret(cursor);
+      return next;
+    });
+  };
+
   const onPaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    // Files (images/documents) win and route to upload intake, even when the clipboard ALSO carries
+    // text, so a copied image is never demoted to a paste token.
     const files = [...event.clipboardData.files];
     if (files.length) {
       event.preventDefault();
       addFiles(files, caretNow());
+      return;
+    }
+    // A large plain-text paste becomes a compact token paired to the exact payload (D-001), so the
+    // textarea stays readable. The shell lane is excluded (D-006): pasted command text stays literal
+    // there. Small text and any non-text paste fall through to the browser's normal insertion (D-003).
+    const text = event.clipboardData.getData("text/plain");
+    if (text && !draft.startsWith("!") && isLargePaste(text)) {
+      event.preventDefault();
+      insertPastedText(text);
     }
   };
   const onDrop = (event: ReactDragEvent<HTMLDivElement>) => {
@@ -183,13 +211,13 @@ export function useComposer(): Composer {
       return; // a range selection deletes normally (syncDraft reconciles the refs)
     }
     const result = removeAdjacentToken(
-      imageDraft,
+      composerDraft,
       el.selectionStart,
       event.key === "Backspace" ? -1 : 1,
     );
     if (result) {
       event.preventDefault();
-      setImageDraft(result.draft);
+      setComposerDraft(result.draft);
       parkCaret(result.cursor);
     }
   };
@@ -200,7 +228,8 @@ export function useComposer(): Composer {
   return {
     draft,
     setDraft,
-    imageRefs: imageDraft.refs,
+    imageRefs: composerDraft.imageRefs,
+    pastes: composerDraft.pastes,
     attachments,
     setAttachments,
     uploading,

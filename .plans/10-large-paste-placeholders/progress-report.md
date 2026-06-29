@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M3 - Paste Interception
-- Current cutoff blockers: 51
+- Current focus: M4 - Token Overlay, Hover, and Actions
+- Current cutoff blockers: 44
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 19
+- Completed current work: 26
 - Thresholds (D-003): large paste = 20+ lines OR 1500+ chars (DEFAULT_PASTE_THRESHOLDS, configurable).
 - Token format (D-001): `[Pasted text #N +M lines]`, M = derived display line count (CRLF/CR normalized, lone trailing newline ignored).
 
@@ -46,13 +46,13 @@
 
 #### M3: Paste Interception
 
-- [ ] RED: Add `useComposer.onPaste` tests for large plain text creating a pasted-text token.
-- [ ] GREEN: Intercept `clipboardData.getData("text/plain")` when it crosses the large-paste threshold.
-- [ ] RED: Add tests proving small text paste falls through as literal text.
-- [ ] GREEN: Preserve normal browser paste for small text and non-text cases.
-- [ ] RED: Add tests for mixed clipboard content with images/files and text.
-- [ ] GREEN: Preserve existing image/file paste behavior while handling large text deterministically.
-- [ ] REFACTOR: Keep paste branching readable and independent of upload logic.
+- [x] RED: Add `useComposer.onPaste` tests for large plain text creating a pasted-text token.
+- [x] GREEN: Intercept `clipboardData.getData("text/plain")` when it crosses the large-paste threshold.
+- [x] RED: Add tests proving small text paste falls through as literal text.
+- [x] GREEN: Preserve normal browser paste for small text and non-text cases.
+- [x] RED: Add tests for mixed clipboard content with images/files and text.
+- [x] GREEN: Preserve existing image/file paste behavior while handling large text deterministically.
+- [x] REFACTOR: Keep paste branching readable and independent of upload logic.
 
 #### M4: Token Overlay, Hover, and Actions
 
