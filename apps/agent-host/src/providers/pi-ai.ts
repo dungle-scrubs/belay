@@ -6,7 +6,12 @@ import {
   type ThinkingLevel,
   type TSchema,
 } from "@earendil-works/pi-ai/compat";
-import { parseImageTokens, stripImageTokens } from "@trevor/session";
+import {
+  type PastePayload,
+  parseImageTokens,
+  parsePasteTokens,
+  stripImageTokens,
+} from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { debug } from "../log";
 import { msg } from "../messages";
@@ -42,6 +47,28 @@ const imageBlock = (img: { data: string; mimeType: string }): ImageBlock => ({
   mimeType: img.mimeType,
 });
 
+/**
+ * Expands `[Pasted text #N +M lines]` tokens into their exact payloads at the token position, in
+ * reading order (10-large-paste-placeholders): the k-th token becomes the k-th payload's text, so the
+ * model receives the full pasted content where the user placed it - never the compact placeholder. A
+ * token with no paired payload (a legacy / restored message) drops to empty rather than leaking the
+ * placeholder. Runs BEFORE image projection (escape hatch #2) so image interleaving sees ordinary
+ * text. <!-- D-002 -->
+ */
+function expandPasteTokens(content: string, pastes: readonly PastePayload[]): string {
+  const tokens = parsePasteTokens(content);
+  if (tokens.length === 0) {
+    return content;
+  }
+  let out = "";
+  let last = 0;
+  tokens.forEach((token, k) => {
+    out += content.slice(last, token.start) + (pastes[k]?.text ?? "");
+    last = token.end;
+  });
+  return out + content.slice(last);
+}
+
 /** The `[attachments: ...]` note for artifacts not sent as image blocks (or "" when none). */
 function attachmentsNote(
   refs: readonly { readonly name?: string; readonly kind: string }[],
@@ -58,18 +85,21 @@ function attachmentsNote(
  * note. A legacy message with no tokens keeps the old shape: text + note, with images appended.
  */
 function userContent(message: ChatMessage): string | (TextBlock | ImageBlock)[] {
+  // Expand pasted-text tokens into their exact payloads FIRST, so the rest of the projection (image
+  // interleaving, the no-token path) operates on ordinary text and never sees a paste placeholder.
+  const content = expandPasteTokens(message.content, message.pastes ?? []);
   const images = message.images ?? [];
   const imageByHash = new Map(images.map((img) => [img.hash, img] as const));
   const artifacts = message.artifacts ?? [];
   const inlined = new Set(images.map((i) => i.hash));
   // Documents + any image the host couldn't inline (non-vision, undecodable, HEIC) ride as a note.
   const noted = artifacts.filter((a) => !inlined.has(a.hash));
-  const tokens = parseImageTokens(message.content);
+  const tokens = parseImageTokens(content);
 
   if (tokens.length === 0) {
     // Legacy / no-token path: text (+ note) as before, images appended after.
     const note = noted.length ? `\n\n${attachmentsNote(noted)}` : "";
-    const text = `${message.content}${note}`;
+    const text = `${content}${note}`;
     if (images.length === 0) {
       return text;
     }
@@ -82,7 +112,7 @@ function userContent(message: ChatMessage): string | (TextBlock | ImageBlock)[] 
   const blocks: (TextBlock | ImageBlock)[] = [];
   let last = 0;
   tokens.forEach((token, k) => {
-    const pre = message.content.slice(last, token.start);
+    const pre = content.slice(last, token.start);
     if (pre) {
       blocks.push(textBlock(pre));
     }
@@ -93,7 +123,7 @@ function userContent(message: ChatMessage): string | (TextBlock | ImageBlock)[] 
     }
     last = token.end;
   });
-  const tail = message.content.slice(last);
+  const tail = content.slice(last);
   if (tail) {
     blocks.push(textBlock(tail));
   }
@@ -105,7 +135,7 @@ function userContent(message: ChatMessage): string | (TextBlock | ImageBlock)[] 
   // tokens stripped, never literal [Image #N] clutter.
   if (!blocks.some((block) => block.type === "image")) {
     const note = noted.length ? `\n\n${attachmentsNote(noted)}` : "";
-    return `${stripImageTokens(message.content)}${note}`.trim();
+    return `${stripImageTokens(content)}${note}`.trim();
   }
 
   return blocks;
@@ -190,7 +220,12 @@ async function* piAiEvents<TApi extends Api>(
     (promptOverheadChars(context.systemPrompt, tools) +
       messages.reduce(
         (sum, m) =>
-          sum + m.content.length + (m.toolCalls?.reduce((a, c) => a + c.arguments.length, 0) ?? 0),
+          sum +
+          m.content.length +
+          // A pasted-text token's content is a compact placeholder, but the model receives the full
+          // expanded payload - count it so a large paste is reflected in the overflow estimate.
+          (m.pastes?.reduce((a, p) => a + p.text.length, 0) ?? 0) +
+          (m.toolCalls?.reduce((a, c) => a + c.arguments.length, 0) ?? 0),
         0,
       )) /
       4,

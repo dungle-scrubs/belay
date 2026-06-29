@@ -1,4 +1,10 @@
-import type { ArtifactRef, DecodedEvent, SessionEvent, TaskSnapshot } from "@trevor/session";
+import type {
+  ArtifactRef,
+  DecodedEvent,
+  PastePayload,
+  SessionEvent,
+  TaskSnapshot,
+} from "@trevor/session";
 
 /**
  * The baseline that both the prompt projection (history-projection.ts) and the compaction planner
@@ -18,7 +24,11 @@ export interface Baseline {
     readonly foldId: string;
   } | null;
   /** The goal pin: the first non-self user.message of the baseline (re-injected outside the fold). */
-  readonly goal: { readonly text: string; readonly artifacts: readonly ArtifactRef[] } | null;
+  readonly goal: {
+    readonly text: string;
+    readonly artifacts: readonly ArtifactRef[];
+    readonly pastes: readonly PastePayload[];
+  } | null;
   /** The live task list (latest tasks.current), which rides in the fold message. */
   readonly tasks: readonly TaskSnapshot[];
 }
@@ -48,7 +58,7 @@ export function analyzeBaseline(
       goal = null;
       tasks = [];
     } else if (d.type === "user.message" && !isSelf(event)) {
-      goal ??= { text: d.text, artifacts: d.artifacts };
+      goal ??= { text: d.text, artifacts: d.artifacts, pastes: d.pastes };
     } else if (d.type === "tasks.current") {
       tasks = d.tasks;
     } else if (d.type === "context.compacted") {

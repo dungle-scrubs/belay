@@ -39,6 +39,7 @@ test("events.userMessage round-trips through decodeTrevorEvent", () => {
     provider: "qwen",
     reasoning: undefined,
     artifacts: [],
+    pastes: [],
   });
 });
 
@@ -52,6 +53,37 @@ test("optional fields are omitted on the wire, not sent as null", () => {
   assert.equal("reasoning" in msg.payload, false);
   assert.equal("artifacts" in msg.payload, false);
   assert.equal("model" in msg.payload, false);
+  assert.equal("pastes" in msg.payload, false);
+});
+
+test("user.message carries exact pasted payloads and round-trips them (10-large-paste)", () => {
+  const pastes = [{ text: "alpha\r\nbeta\n\ngamma 😀" }, { text: "x".repeat(2000) }];
+  const msg = events.userMessage({ text: "[Pasted text #1 +3 lines]", provider: "qwen", pastes });
+  assert.deepEqual(msg.payload.pastes, pastes, "the exact payloads ride the wire");
+  const decoded = decodeTrevorEvent(stored(msg));
+  assert.equal(decoded?.type, "user.message");
+  assert.deepEqual(
+    decoded?.type === "user.message" ? decoded.pastes : null,
+    pastes,
+    "payloads survive decode byte-for-byte",
+  );
+});
+
+test("a garbled pastes entry is dropped; a legacy message decodes to no pastes", () => {
+  const decoded = decodeTrevorEvent(
+    stored({
+      type: "user.message",
+      payload: { text: "hi", provider: "qwen", pastes: [{ text: "ok" }, { nope: 1 }, "junk"] },
+    }),
+  );
+  assert.deepEqual(
+    decoded?.type === "user.message" ? decoded.pastes : null,
+    [{ text: "ok" }],
+    "only the well-formed payload survives",
+  );
+
+  const legacy = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
+  assert.deepEqual(legacy?.type === "user.message" ? legacy.pastes : null, []);
 });
 
 test("user.message carries a ModelRef alongside the legacy provider, and round-trips it (D-065)", () => {
@@ -65,6 +97,7 @@ test("user.message carries a ModelRef alongside the legacy provider, and round-t
     reasoning: undefined,
     model,
     artifacts: [],
+    pastes: [],
   });
 });
 

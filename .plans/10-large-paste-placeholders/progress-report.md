@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M5 - Protocol and Provider Projection
-- Current cutoff blockers: 32
+- Current focus: M6 - Queue, Draft Persistence, and Transcript Rendering
+- Current cutoff blockers: 24
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 38
+- Completed current work: 46
 - Thresholds (D-003): large paste = 20+ lines OR 1500+ chars (DEFAULT_PASTE_THRESHOLDS, configurable).
 - Token format (D-001): `[Pasted text #N +M lines]`, M = derived display line count (CRLF/CR normalized, lone trailing newline ignored).
 
@@ -76,14 +76,14 @@
 
 #### M5: Protocol and Provider Projection
 
-- [ ] RED: Add protocol tests for submitted user messages carrying pasted-text token metadata.
-- [ ] GREEN: Extend the submitted prompt representation to carry pasted payloads durably.
-- [ ] RED: Add provider projection tests proving payloads expand at the token position.
-- [ ] GREEN: Expand pasted payloads when building model-facing user content.
-- [ ] RED: Add tests proving visible tokens do not leak as the only model-facing content.
-- [ ] GREEN: Keep transcript-visible token text while sending full payload content to the provider.
-- [ ] RED: Add decode compatibility tests for older messages without pasted payload metadata.
-- [ ] REFACTOR: Keep paste expansion separate from image token stripping/projection.
+- [x] RED: Add protocol tests for submitted user messages carrying pasted-text token metadata.
+- [x] GREEN: Extend the submitted prompt representation to carry pasted payloads durably.
+- [x] RED: Add provider projection tests proving payloads expand at the token position.
+- [x] GREEN: Expand pasted payloads when building model-facing user content.
+- [x] RED: Add tests proving visible tokens do not leak as the only model-facing content.
+- [x] GREEN: Keep transcript-visible token text while sending full payload content to the provider.
+- [x] RED: Add decode compatibility tests for older messages without pasted payload metadata.
+- [x] REFACTOR: Keep paste expansion separate from image token stripping/projection.
 
 #### M6: Queue, Draft Persistence, and Transcript Rendering
 

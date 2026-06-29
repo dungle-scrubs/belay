@@ -1,4 +1,4 @@
-import type { ArtifactRef, SessionEvent, TaskSnapshot } from "@trevor/session";
+import type { ArtifactRef, PastePayload, SessionEvent, TaskSnapshot } from "@trevor/session";
 import type { ChatMessage } from "../providers";
 import { CompactionPlanner } from "./compaction-planner";
 import { toolCallGrouper } from "./tool-messages";
@@ -66,10 +66,16 @@ export function buildHistory(
   const { selfProducerId } = options;
   const isSelf = (event: SessionEvent): boolean =>
     selfProducerId !== undefined && event.producerId === selfProducerId;
-  const toUserTurn = (decoded: { text: string; artifacts: readonly ArtifactRef[] }): ChatMessage =>
-    decoded.artifacts.length
-      ? { role: "user", content: decoded.text, artifacts: decoded.artifacts }
-      : { role: "user", content: decoded.text };
+  const toUserTurn = (decoded: {
+    text: string;
+    artifacts: readonly ArtifactRef[];
+    pastes: readonly PastePayload[];
+  }): ChatMessage => ({
+    role: "user",
+    content: decoded.text,
+    ...(decoded.artifacts.length ? { artifacts: decoded.artifacts } : {}),
+    ...(decoded.pastes.length ? { pastes: decoded.pastes } : {}),
+  });
 
   // The baseline (everything after the last /clear) and, within it, the latest fold plus the pins.
   // Shared with the compaction planner so the fold and goal can't drift. The pins

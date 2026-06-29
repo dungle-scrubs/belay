@@ -1,4 +1,4 @@
-import type { ArtifactRef, ProviderModel, Usage } from "@trevor/session";
+import type { ArtifactRef, PastePayload, ProviderModel, Usage } from "@trevor/session";
 import type { Effect, Stream } from "effect";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
 
@@ -83,6 +83,7 @@ export interface ChatMessage {
   readonly name?: string; // tool result: the tool name
   readonly artifacts?: readonly ArtifactRef[]; // user turn: content-addressed attachments
   readonly images?: readonly ChatImage[]; // user turn: image artifacts resolved to base64
+  readonly pastes?: readonly PastePayload[]; // user turn: exact payloads for [Pasted text #N] tokens
 }
 
 /**

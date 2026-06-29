@@ -1,6 +1,7 @@
 import type { UsageBreakdown } from "./breakdown";
 import type { InternetSnapshot } from "./connectivity";
 import type { CatalogEntry, ModelRef, SourceSignInState, SourceSummary } from "./model-source";
+import type { PastePayload } from "./paste-tokens";
 import type { DecodedEvent } from "./protocol-decode";
 import type { ProviderQuestionAnswer, ProviderQuestionContract } from "./provider-question";
 
@@ -313,6 +314,9 @@ export const events = {
      *  `reasoning` so old consumers keep working; the host prefers it via resolveUserTurnModel. */
     model?: ModelRef;
     artifacts?: readonly ArtifactRef[];
+    /** Exact pasted-text payloads paired to the message's `[Pasted text #N +M lines]` tokens, in
+     *  reading order (10-large-paste-placeholders). Expanded at the token position for the provider. */
+    pastes?: readonly PastePayload[];
   }): TrevorEventInput => ({
     type: "user.message",
     payload: {
@@ -321,6 +325,7 @@ export const events = {
       ...(p.reasoning ? { reasoning: p.reasoning } : {}),
       ...(p.model ? { model: p.model } : {}),
       ...(p.artifacts?.length ? { artifacts: p.artifacts } : {}),
+      ...(p.pastes?.length ? { pastes: p.pastes } : {}),
     },
   }),
   assistantStarted: (p: {

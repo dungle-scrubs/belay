@@ -141,3 +141,56 @@ test("a plain text message with no artifacts projects to a plain string", () => 
   const content = userContentOf({ role: "user", content: "just text" });
   assert.equal(content, "just text");
 });
+
+test("expands a [Pasted text #N] token into its exact payload at the token position", () => {
+  const payload = "line one\nline two\nline three";
+  const content = userContentOf({
+    role: "user",
+    content: "here is the log [Pasted text #1 +3 lines] - what failed?",
+    pastes: [{ text: payload }],
+  });
+  assert.equal(
+    content,
+    `here is the log ${payload} - what failed?`,
+    "the payload lands where the token was, and no placeholder leaks",
+  );
+  assert.ok(typeof content === "string" && !content.includes("[Pasted text"), "no token clutter");
+});
+
+test("multiple paste tokens expand to their payloads in reading order", () => {
+  const content = userContentOf({
+    role: "user",
+    content: "first [Pasted text #1 +1 lines] then [Pasted text #2 +1 lines]",
+    pastes: [{ text: "ALPHA" }, { text: "BETA" }],
+  });
+  assert.equal(content, "first ALPHA then BETA");
+});
+
+test("a paste token with no paired payload drops to empty (legacy / restored message)", () => {
+  const content = userContentOf({
+    role: "user",
+    content: "see [Pasted text #1 +2 lines] here",
+    // No `pastes`: the placeholder must not leak to the model.
+  });
+  assert.equal(content, "see  here");
+  assert.ok(typeof content === "string" && !content.includes("[Pasted text"), "no leak");
+});
+
+test("paste tokens expand BEFORE image interleaving when a turn carries both", () => {
+  const content = userContentOf({
+    role: "user",
+    content: "log [Pasted text #1 +1 lines] and image [Image #1]",
+    pastes: [{ text: "PAYLOAD" }],
+    artifacts: [A],
+    images: [image(A)],
+  });
+  assert.ok(Array.isArray(content), "the image turn still projects to blocks");
+  const blocks = content as Block[];
+  assert.deepEqual(
+    blocks.map((b) => b.type),
+    ["text", "image"],
+    "the expanded paste text precedes the inlined image",
+  );
+  assert.equal(blocks[0]?.text, "log PAYLOAD and image ", "the paste payload is inlined as text");
+  assert.ok(!(blocks[0]?.text ?? "").includes("[Pasted text"), "no paste placeholder leaks");
+});

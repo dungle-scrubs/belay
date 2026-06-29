@@ -13,6 +13,7 @@ import {
   type SourceSignInState,
   type SourceSummary,
 } from "./model-source";
+import type { PastePayload } from "./paste-tokens";
 import type {
   AgentSpec,
   ArtifactRef,
@@ -300,6 +301,16 @@ function coerceArtifacts(value: unknown): ArtifactRef[] {
   });
 }
 
+/**
+ * Coerces the pasted-text payloads on a user.message (10-large-paste-placeholders): each item must
+ * carry a `text` string, preserved EXACTLY (no coercion/trim) so the model receives byte-for-byte
+ * what was pasted. Junk items are dropped, so a malformed payload never crashes the decode. A legacy
+ * message with no `pastes` decodes to `[]`.
+ */
+function coercePastes(value: unknown): PastePayload[] {
+  return coerceArray(value, (p) => (typeof p.text === "string" ? { text: p.text } : null));
+}
+
 /** Coerces the announced per-source catalog (D-065): `{ sourceId: CatalogEntry[] }`, tolerant of junk. */
 function coerceCatalog(value: unknown): Record<string, readonly CatalogEntry[]> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -348,6 +359,9 @@ export type DecodedEvent =
       /** The selected model reference (D-065 migration), when the producer sent one. */
       readonly model?: ModelRef;
       readonly artifacts: readonly ArtifactRef[];
+      /** Exact pasted-text payloads paired to the message's `[Pasted text #N +M lines]` tokens, in
+       *  reading order (10-large-paste-placeholders). `[]` on a legacy message with no pastes. */
+      readonly pastes: readonly PastePayload[];
     }
   | {
       readonly type: "assistant.started";
@@ -577,6 +591,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         reasoning: optStr(p.reasoning),
         ...(model ? { model } : {}),
         artifacts: coerceArtifacts(p.artifacts),
+        pastes: coercePastes(p.pastes),
       };
     }
     case "assistant.started":
