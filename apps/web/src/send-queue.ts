@@ -40,6 +40,19 @@ export function combineSteer(queue: readonly QueuedPrompt[], draft: string): str
   return [...queue.map((q) => q.text), draft.trim()].filter(Boolean).join("\n\n");
 }
 
+/**
+ * Folds ONLY the queued prompts into one steering prompt text, one trimmed line per prompt
+ * (empties dropped, no blank-line gaps). This is the queue-only fold for the first-Escape
+ * steer (D-001/D-003): the active composer draft is deliberately NOT mixed in, and prompts join
+ * with a single `\n` so the steer reads as one prompt per queued line, not paragraph blocks.
+ */
+export function combineQueued(queue: readonly QueuedPrompt[]): string {
+  return queue
+    .map((q) => q.text.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** The active selection snapshot a steer stamps onto its folded prompt (the same fields submit carries). */
 export type SteerMeta = {
   readonly id: string;
@@ -86,6 +99,32 @@ export function foldSteer(
 ): QueuedPrompt | null {
   const text = combineSteer(queue, draft);
   const artifacts = [...queue.flatMap((q) => q.artifacts ?? []), ...attachments];
+  if (!text && artifacts.length === 0) {
+    return null;
+  }
+  return {
+    id: meta.id,
+    text,
+    provider: meta.provider,
+    reasoning: meta.reasoning,
+    ...(meta.model ? { model: meta.model } : {}),
+    ...(artifacts.length ? { artifacts } : {}),
+  };
+}
+
+/**
+ * Builds the single steering prompt that collapses the queue on the first Escape (D-001): the
+ * queued texts folded one-per-line (`combineQueued`) and the queued artifacts gathered into one
+ * list, stamped with the current selection (`meta`). Unlike `foldSteer` this is queue-only - it
+ * ignores the draft and the composer attachments, which keep their own behavior. Returns null when
+ * the queue carries no text and no artifacts, so there is nothing to steer.
+ */
+export function foldQueuedSteer(
+  queue: readonly QueuedPrompt[],
+  meta: SteerMeta,
+): QueuedPrompt | null {
+  const text = combineQueued(queue);
+  const artifacts = queue.flatMap((q) => q.artifacts ?? []);
   if (!text && artifacts.length === 0) {
     return null;
   }

@@ -1,7 +1,13 @@
 import type { ArtifactRef, ModelRef } from "@trevor/session";
 import { usePrevious } from "ahooks";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { foldSteer, type QueuedPrompt, type SteerMeta, sendQueueReducer } from "@/send-queue";
+import {
+  foldQueuedSteer,
+  foldSteer,
+  type QueuedPrompt,
+  type SteerMeta,
+  sendQueueReducer,
+} from "@/send-queue";
 
 /**
  * The browser's local send-queue React state machine, lifted out of App.tsx so the
@@ -28,6 +34,13 @@ export interface UseSendQueue {
   readonly submit: (prompt: QueuedPrompt) => void;
   /** Hard steer: fold the queue + draft + artifacts into one prompt that replaces the queue. */
   readonly steer: (draft: string, attachments: readonly ArtifactRef[], meta: SteerMeta) => void;
+  /**
+   * First-Escape queued steer (D-001): fold ONLY the queued prompts into one prompt and publish it
+   * now, draining the queue. The host queues a user.message that arrives mid-turn and runs it after
+   * the active turn, so this collapses the queue into one steering prompt WITHOUT cancelling. A no-op
+   * when the queue is empty (nothing to steer).
+   */
+  readonly flushQueuedSteer: (meta: SteerMeta) => void;
 }
 
 export function useSendQueue({
@@ -115,5 +128,32 @@ export function useSendQueue({
     [queue],
   );
 
-  return { pending, queue, submit, steer };
+  const flushQueuedSteer = useCallback(
+    (meta: SteerMeta) => {
+      // Fold ONLY the queued prompts into one steering prompt and publish it now, then drop the
+      // queue. We bypass the busy-gated drain on purpose: the host's TurnScheduler queues a
+      // user.message that arrives mid-turn and runs it after the active turn, so the first Escape
+      // collapses the queue into one prompt WITHOUT cancelling. Draining the queue here is what lets
+      // a deliberate second Escape fall through to cancel (the queue is now empty). <!-- D-001 -->
+      const folded = foldQueuedSteer(queue, meta);
+      if (!folded) {
+        return;
+      }
+      dispatchQueue({ type: "clear" });
+      void publish(
+        folded.text,
+        folded.provider,
+        folded.reasoning,
+        folded.artifacts,
+        folded.model,
+      ).catch(() => {
+        // The publish failed (transient transport error): put the folded prompt back so it is not
+        // lost - it drains when the turn ends, and the queue is non-empty again for a retry.
+        dispatchQueue({ type: "enqueue", prompt: folded });
+      });
+    },
+    [queue, publish],
+  );
+
+  return { pending, queue, submit, steer, flushQueuedSteer };
 }

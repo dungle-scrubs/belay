@@ -338,7 +338,11 @@ export function App() {
   // cleanly paired. ESC-steer prepends, so an interruption preempts what's waiting.
   // The reducer wiring + the in-flight/echo latch + the release/drain effects live in
   // useSendQueue; App.tsx calls submit/steer and renders the queue.
-  const { pending, queue, submit, steer } = useSendQueue({ busy, publish, resetKey: sessionId });
+  const { pending, queue, submit, steer, flushQueuedSteer } = useSendQueue({
+    busy,
+    publish,
+    resetKey: sessionId,
+  });
   const visibleQueue = pending ? [pending, ...queue] : queue;
 
   const firstAnnouncedProvider = Object.keys(hostModels)[0];
@@ -547,22 +551,32 @@ export function App() {
     }
   };
 
-  // Hard steer: abort the active turn and fold queued prompts + draft into ONE
-  // steering prompt that runs next. The single steer replaces the queue, so the
-  // cancelled turn is followed by one combined interruption (not a replay of the
-  // queue). It publishes only once the cancel resolves the turn (busy -> idle),
-  // keeping the cancel strictly ahead of the steer.
+  // Steer meta: the active selection (provider/reasoning/model) stamped onto a folded prompt.
+  const steerMeta = () => ({
+    id: crypto.randomUUID(),
+    provider: activeProvider,
+    reasoning: reasoning || undefined,
+    model: sendModelRef,
+  });
+
+  // First Escape with queued prompts (D-001): fold the queue into ONE steering prompt and publish
+  // it now, WITHOUT cancelling. The host queues that user.message mid-turn and runs it after the
+  // active turn, so the transcript reads current message -> folded steering prompt with no cancelled
+  // assistant message in between. The draft is left untouched (D-003); cancel waits for a deliberate
+  // second Escape, which sees the now-empty queue and routes to onCancel.
+  const onFlushQueuedSteer = () => {
+    flushQueuedSteer(steerMeta());
+    // Return focus to the composer so the user can keep typing immediately after steering.
+    inputRef.current?.focus();
+  };
+
+  // Explicit cancel (Escape with no queued prompts to steer): abort the active turn / awaiting turn /
+  // manual fold. A typed draft still folds into one steering prompt that runs after the cancel (its
+  // image-token refs ride with the document attachments so a steered prompt keeps its images); the
+  // queue is empty on this branch, so this no longer collapses queued prompts - that is onFlushQueuedSteer.
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
-    // Fold the queued prompts + draft + queued/attached artifacts into ONE steering
-    // prompt that replaces the queue, then ask the host to cancel the active run. The draft's
-    // image-token refs ride with the document attachments so a steered prompt keeps its images.
-    steer(draft, [...imageRefs, ...attachments], {
-      id: crypto.randomUUID(),
-      provider: activeProvider,
-      reasoning: reasoning || undefined,
-      model: sendModelRef,
-    });
+    steer(draft, [...imageRefs, ...attachments], steerMeta());
     setDraft("");
     setAttachments([]);
     if (runId !== null) {
@@ -587,8 +601,10 @@ export function App() {
     compacting,
     draft,
     modalOpen,
+    queued: queue.length,
     setDraft,
     onCancel,
+    onFlushQueuedSteer,
     resetHistory: history.resetNavigation,
   });
   escRef.current = {
@@ -597,8 +613,11 @@ export function App() {
     compacting,
     draft,
     modalOpen,
+    // The queue length (excluding the already-published pending row) decides queued-steer vs cancel.
+    queued: queue.length,
     setDraft,
     onCancel,
+    onFlushQueuedSteer,
     resetHistory: history.resetNavigation,
   };
   useEffect(() => {
@@ -613,9 +632,14 @@ export function App() {
         compacting: s.compacting,
         draft: s.draft,
         modalOpen: s.modalOpen,
+        queued: s.queued,
       });
-      // A turn to cancel, OR a manual fold to abort - either routes through onCancel.
-      if (action === "cancel") {
+      // First Escape with queued prompts folds them into one steering prompt (no cancel); a turn to
+      // cancel or a manual fold to abort routes through onCancel; otherwise clear a non-empty draft.
+      if (action === "flush-queued-steer") {
+        event.preventDefault();
+        s.onFlushQueuedSteer();
+      } else if (action === "cancel") {
         event.preventDefault();
         s.onCancel();
       } else if (action === "clear-draft") {

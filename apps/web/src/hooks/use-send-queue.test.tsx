@@ -79,6 +79,39 @@ test("hard steer folds the queued prompts + draft into a single prompt", () => {
   );
 });
 
+test("flushQueuedSteer publishes the folded queue once and drains it, without cancel", async () => {
+  const published: string[] = [];
+  const publish = async (text: string) => {
+    published.push(text);
+  };
+  // Busy throughout (a turn is active), so submits accumulate instead of draining.
+  const { result, rerender } = renderHook(() => useSendQueue({ busy: true, publish }));
+
+  act(() => result.current.submit(prompt("1", "first")));
+  act(() => result.current.submit(prompt("2", "second")));
+  assert.equal(result.current.queue.length, 2);
+
+  // First Escape: fold the queue into one prompt and publish it now (the host queues it mid-turn).
+  act(() => result.current.flushQueuedSteer({ id: "s", provider: "qwen" }));
+  assert.deepEqual(published, ["first\nsecond"], "one folded prompt, one line per queued prompt");
+  assert.deepEqual(result.current.queue, [], "the queue is drained so a second Escape can cancel");
+
+  // Across a re-render the flush does not double-send: the queue is already empty, so it is a no-op.
+  rerender();
+  act(() => result.current.flushQueuedSteer({ id: "s2", provider: "qwen" }));
+  assert.deepEqual(published, ["first\nsecond"], "no second publish");
+});
+
+test("flushQueuedSteer is a no-op with an empty queue", () => {
+  const published: string[] = [];
+  const publish = async (text: string) => {
+    published.push(text);
+  };
+  const { result } = renderHook(() => useSendQueue({ busy: true, publish }));
+  act(() => result.current.flushQueuedSteer({ id: "s", provider: "qwen" }));
+  assert.deepEqual(published, []);
+});
+
 test("session changes clear queued prompts and the in-flight latch", () => {
   const published: string[] = [];
   const publish = async (text: string) => {

@@ -17,22 +17,31 @@ export interface EscState {
   readonly draft: string;
   /** A modal, picker, or full-screen takeover is open and owns Escape. */
   readonly modalOpen: boolean;
+  /**
+   * How many prompts are queued behind the in-progress work (the local send queue, excluding the
+   * already-published pending row). With work in progress and a non-empty queue, the FIRST Escape
+   * folds the queue into one steering prompt instead of cancelling - cancel waits for a deliberate
+   * second press, by which point the flush has emptied the queue. <!-- D-001 -->
+   */
+  readonly queued: number;
 }
 
-export type EscAction = "cancel" | "clear-draft" | "none";
+export type EscAction = "flush-queued-steer" | "cancel" | "clear-draft" | "none";
 
 /**
- * Resolves one Escape press: an open overlay wins (the transcript is left alone); otherwise Escape
- * cancels an active/awaiting run or an in-progress manual fold, else clears a non-empty draft, else
- * does nothing.
+ * Resolves one Escape press. Precedence: an open overlay wins (the transcript is left alone);
+ * otherwise, while work is in progress (active/awaiting run or a manual fold), queued prompts steer
+ * BEFORE cancel - the first press with a non-empty queue folds it into one prompt
+ * (`flush-queued-steer`), and only a press with an empty queue cancels. With nothing in progress,
+ * Escape clears a non-empty draft, else does nothing. <!-- D-001 D-002 -->
  */
 export function escapeAction(s: EscState): EscAction {
   if (s.modalOpen) {
     return "none";
   }
-  const hasRun = s.active !== null || s.awaiting;
-  if (hasRun || s.compacting) {
-    return "cancel";
+  const inProgress = s.active !== null || s.awaiting || s.compacting;
+  if (inProgress) {
+    return s.queued > 0 ? "flush-queued-steer" : "cancel";
   }
   if (s.draft) {
     return "clear-draft";

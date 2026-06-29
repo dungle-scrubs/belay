@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import type { ArtifactRef } from "@trevor/session";
 import { test } from "vitest";
-import { combineSteer, foldSteer, type QueuedPrompt, sendQueueReducer } from "./send-queue";
+import {
+  combineQueued,
+  combineSteer,
+  foldQueuedSteer,
+  foldSteer,
+  type QueuedPrompt,
+  sendQueueReducer,
+} from "./send-queue";
 
 /**
  * Characterization tests for the web send-queue / steering machine (M7 / D-007).
@@ -96,4 +103,57 @@ test("foldSteer keeps artifacts even when the folded text is empty", () => {
   assert.ok(steer);
   assert.equal(steer.text, "");
   assert.deepEqual(steer.artifacts, [a]);
+});
+
+// --- queue-only fold for the first-Escape steer (D-001/D-003) ---
+
+test("combineQueued folds queued texts one trimmed line per prompt, no draft, no blank gaps", () => {
+  assert.equal(combineQueued([prompt("1", "first"), prompt("2", "second")]), "first\nsecond");
+  // empty / whitespace-only queued prompts are dropped without leaving blank lines
+  assert.equal(
+    combineQueued([prompt("1", "first"), prompt("2", "   "), prompt("3", "third")]),
+    "first\nthird",
+  );
+  assert.equal(combineQueued([prompt("1", "  spaced  ")]), "spaced");
+  assert.equal(combineQueued([]), "");
+});
+
+test("foldQueuedSteer folds the queue (one line each) and gathers queued artifacts, ignoring the draft", () => {
+  const a1 = art("a", 1);
+  const a2 = art("b", 2);
+  const folded = foldQueuedSteer([prompt("1", "first", [a1]), prompt("2", "second", [a2])], {
+    id: "s",
+    provider: "gpt",
+    reasoning: "high",
+  });
+  assert.ok(folded);
+  assert.equal(folded.text, "first\nsecond", "one line per queued prompt, no draft mixed in");
+  assert.equal(folded.provider, "gpt");
+  assert.equal(folded.reasoning, "high");
+  assert.deepEqual(folded.artifacts, [a1, a2], "queued artifacts are preserved in order");
+});
+
+test("foldQueuedSteer stamps the steer meta's ModelRef onto the folded prompt (D-065)", () => {
+  const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
+  const folded = foldQueuedSteer([prompt("1", "first")], {
+    id: "s",
+    provider: "deepseek",
+    reasoning: "high",
+    model,
+  });
+  assert.ok(folded);
+  assert.deepEqual(folded.model, model);
+});
+
+test("foldQueuedSteer returns null for an empty or whitespace-only queue with no artifacts", () => {
+  assert.equal(foldQueuedSteer([], { id: "s", provider: "qwen" }), null);
+  assert.equal(foldQueuedSteer([prompt("1", "   ")], { id: "s", provider: "qwen" }), null);
+});
+
+test("foldQueuedSteer keeps queued artifacts even when every queued text is empty", () => {
+  const a = art("c", 1);
+  const folded = foldQueuedSteer([prompt("1", "   ", [a])], { id: "s", provider: "qwen" });
+  assert.ok(folded);
+  assert.equal(folded.text, "");
+  assert.deepEqual(folded.artifacts, [a]);
 });
