@@ -16,8 +16,14 @@ import { abbrevHome } from "../paths";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { providerFailures } from "../providers/provider-failure-log";
+import { incidentCategory, providerIncidents } from "../providers/provider-incidents";
 import { lastWebFetchError } from "../tools/web-fetch/web-fetch-log";
-import { buildDoctorSnapshot, type DoctorProviderProbe, type DoctorRootProbe } from "./snapshot";
+import {
+  buildDoctorSnapshot,
+  type DoctorProviderIncident,
+  type DoctorProviderProbe,
+  type DoctorRootProbe,
+} from "./snapshot";
 
 /**
  * Builds the live `doctor.current` snapshot from already-resolved host facts (D-073). This is the
@@ -66,6 +72,7 @@ export interface DoctorProbeResults {
     readonly lastRetryExhausted?: string;
     readonly lastTerminal?: string;
   };
+  readonly providerIncidents: readonly DoctorProviderIncident[];
 }
 
 export interface DoctorSnapshotInput {
@@ -236,6 +243,20 @@ export async function collectDoctorProbeResults(
   ]);
   const obs = summarizeObservations(observationStore);
   const summary = providerFailures.summary();
+  // Project the latest incident per provider into the redaction-safe doctor shape: the typed reason,
+  // its actionable category, and the already-sanitized detail - never the raw diagnostic partials,
+  // status, or request id (those stay in the structured log, not the user-facing finding).
+  const incidents: DoctorProviderIncident[] = providerIncidents
+    .latestByProvider()
+    .map((incident) => ({
+      provider: incident.diagnostic.provider,
+      ...(incident.diagnostic.model ? { model: incident.diagnostic.model } : {}),
+      category: incidentCategory(incident.diagnostic),
+      reason: incident.diagnostic.reason,
+      detail: incident.diagnostic.detail,
+      attempt: incident.diagnostic.attempt,
+      at: incident.at,
+    }));
   return {
     providers: providerProbes,
     roots,
@@ -247,6 +268,7 @@ export async function collectDoctorProbeResults(
       lastRetryExhausted: summary.lastRetryExhausted?.detail,
       lastTerminal: summary.lastTerminal?.detail,
     },
+    providerIncidents: incidents,
   };
 }
 
@@ -306,6 +328,7 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
       lastRetryExhausted: probes.providerFailures.lastRetryExhausted,
       lastTerminal: probes.providerFailures.lastTerminal,
     },
+    providerIncidents: probes.providerIncidents,
     // D-065 catalog sources: a redaction-safe projection (status/auth/counts only) so /doctor can
     // explain provider auth/setup state and the live model picture without exposing any key.
     catalogSources: (facts.catalog ?? []).map((s) => ({

@@ -9,6 +9,7 @@ import {
 import { recordTurnStop } from "./agent/turn-stop-metrics";
 import type { HistoryImageResolver } from "./artifacts";
 import { DeltaBuffer } from "./delta-buffer";
+import { debug } from "./log";
 import {
   type ChatMessage,
   type Provider,
@@ -17,6 +18,7 @@ import {
   type Usage,
 } from "./providers";
 import { providerFailures } from "./providers/provider-failure-log";
+import { providerIncidents } from "./providers/provider-incidents";
 import { buildSystemPrompt, promptOverheadChars } from "./providers/system-prompt";
 import { Emit } from "./services";
 import { offeredToolDefs } from "./tools";
@@ -151,6 +153,27 @@ export function publishTurn(
           ...extra,
         }),
       );
+
+    // Records the terminal incident into the per-provider latest-incident store and emits the
+    // structured provider-incident log line (D-007), keyed by runId, provider, model, phase, reason,
+    // retryability, and attempt. The detail is already redacted at the provider boundary; this carries
+    // no prompt body, header, key, or raw tool result. Best-effort - a no-op when there is no incident.
+    const recordIncident = (incident: ProviderDiagnostic | undefined) =>
+      incident
+        ? Effect.sync(() => {
+            providerIncidents.record(incident, new Date().toISOString(), runId);
+            debug("provider", "incident", {
+              runId,
+              provider: incident.provider,
+              model: incident.model,
+              phase: incident.phase,
+              reason: incident.reason,
+              retryable: incident.retryable,
+              safeToRetry: incident.safeToRetry,
+              attempt: incident.attempt,
+            });
+          })
+        : Effect.void;
 
     const handle = (event: AgentEvent) =>
       Effect.gen(function* () {
@@ -290,6 +313,9 @@ export function publishTurn(
           yield* Effect.sync(() => logUsageBreakdown(runId, breakdown, usage));
 
           if (Exit.isSuccess(exit)) {
+            // A clean end OR a malformed-protocol anomaly (which ends the stream successfully with a
+            // typed diagnostic): record the latter as the provider's latest incident.
+            yield* recordIncident(diagnostic);
             yield* complete({});
           } else if (Cause.isInterruptedOnly(exit.cause)) {
             yield* complete({ cancelled: true });
@@ -321,6 +347,7 @@ export function publishTurn(
               Option.isSome(failure) && failure.value instanceof ProviderUnavailable
                 ? failure.value
                 : undefined;
+            yield* recordIncident(unavailable?.diagnostic);
             yield* complete({
               error: Option.isSome(failure) ? failure.value.message : "stream failed",
               ...(unavailable?.diagnostic ? { diagnostic: unavailable.diagnostic } : {}),

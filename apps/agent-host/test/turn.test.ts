@@ -3,6 +3,7 @@ import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
+import { providerIncidents } from "../src/providers";
 import { ProviderUnavailable } from "../src/providers/errors";
 import { publishTurn } from "../src/turn";
 import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
@@ -309,6 +310,48 @@ test("a persistent DeepSeek protocol leak terminates with a protocol_anomaly dia
   assert.equal(diagnostic?.phase, "tool-protocol");
   assert.equal(diagnostic?.provider, "deepseek");
   assert.equal(diagnostic?.safeToRetry, false);
+});
+
+test("a persistent protocol leak records the provider's latest incident for /doctor", async () => {
+  providerIncidents.reset();
+  await runTurn(leakyProvider({ persistent: true }), history, { runId: "r1" });
+
+  const incident = providerIncidents
+    .latestByProvider()
+    .find((i) => i.diagnostic.provider === "deepseek");
+  assert.equal(incident?.diagnostic.reason, "protocol_anomaly");
+  assert.equal(incident?.diagnostic.phase, "tool-protocol");
+  assert.equal(incident?.runId, "r1");
+});
+
+test("a terminal transport failure records the latest incident with a redacted detail", async () => {
+  providerIncidents.reset();
+  const provider = fakeProvider({
+    id: "deepseek",
+    // Stream a token first so the failure is terminal immediately (no auto-reconnect on a partial).
+    stream: () =>
+      Stream.concat(
+        Stream.fromIterable<ProviderEvent>([{ type: "text", text: "partial" }]),
+        Stream.fail(
+          new ProviderUnavailable({
+            provider: "deepseek",
+            detail: "stream failed; x-api-key: pi-7f2a91c4e3b8aa00bb11",
+            retryable: true,
+            classification: "transient_transport",
+          }),
+        ),
+      ),
+  });
+  await runTurn(provider, history, { runId: "r9" });
+
+  const incident = providerIncidents
+    .latestByProvider()
+    .find((i) => i.diagnostic.provider === "deepseek");
+  assert.equal(incident?.diagnostic.reason, "transport_loss");
+  assert.ok(
+    !incident?.diagnostic.detail.includes("pi-7f2a91c4e3b8aa00bb11"),
+    incident?.diagnostic.detail,
+  );
 });
 
 test("cancellation interrupts a streaming turn before it completes", async () => {

@@ -1,14 +1,14 @@
 # DeepSeek Provider Reliability and Diagnostics - Progress Report
 
-> Current focus: Phase 4 - Provider incident observability (M8)
+> Current focus: Phase 4 - Verification and regression lane (M9)
 > Source plan: [implementation.md](./implementation.md)
 
 ## Summary
 
 - Total features: 45
-- Completed: 36
-- Remaining: 9
-- Current cutoff blockers: 9
+- Completed: 41
+- Remaining: 4
+- Current cutoff blockers: 4
 - Accepted/deferred follow-up: 3
 - Superseded/obsolete checklist debt: 0
 
@@ -84,11 +84,11 @@
 
 #### M8: Provider incident observability
 
-- [ ] Add `/doctor` tests for latest DeepSeek incident and sanitized upstream detail
-- [ ] Store bounded latest incident state per provider
-- [ ] Add structured provider-incident logs keyed by runId, provider, model, phase, reason, retryability, and attempt
-- [ ] Render `/doctor` provider findings for auth/quota, transport, malformed protocol, and unsafe retry
-- [ ] Verify debug info never includes credentials, prompt bodies, headers, or full tool result contents
+- [x] Add `/doctor` tests for latest DeepSeek incident and sanitized upstream detail
+- [x] Store bounded latest incident state per provider
+- [x] Add structured provider-incident logs keyed by runId, provider, model, phase, reason, retryability, and attempt
+- [x] Render `/doctor` provider findings for auth/quota, transport, malformed protocol, and unsafe retry
+- [x] Verify debug info never includes credentials, prompt bodies, headers, or full tool result contents
 
 #### M9: Verification and regression lane
 

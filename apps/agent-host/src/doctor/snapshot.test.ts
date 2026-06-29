@@ -672,3 +672,84 @@ test("the snapshot carries host context + a checked-at stamp and is ready", () =
   assert.equal(snap.checkedAt, "2026-06-26T12:00:00.000Z");
   assert.equal(snap.host?.role, "leader");
 });
+
+test("D-007: the latest per-provider incident renders a categorized provider finding", () => {
+  const providers = buildDoctorSnapshot(
+    input({
+      providerIncidents: [
+        {
+          provider: "deepseek",
+          model: "deepseek-v4",
+          category: "malformed_protocol",
+          reason: "protocol_anomaly",
+          detail: "DeepSeek rendered tool-call JSON or tags as assistant text",
+          attempt: 1,
+          at: "2026-06-29T00:00:00.000Z",
+        },
+      ],
+    }),
+  ).areas.find((a) => a.id === "providers");
+
+  const finding = providers?.findings?.find((f) => f.id === "providers.incident.deepseek");
+  assert.ok(finding, "an incident finding is present");
+  assert.match(finding.title, /Malformed provider protocol/);
+  assert.match(finding.title, /deepseek/);
+  // The sanitized upstream detail rides as collapsed evidence.
+  assert.equal(finding.evidence, "DeepSeek rendered tool-call JSON or tags as assistant text");
+  assert.ok(finding.nextAction, "a repair action is offered");
+});
+
+test("D-007: each incident category maps to its own finding title", () => {
+  const cases = [
+    ["auth_quota", /Provider auth \/ quota/],
+    ["transport", /Provider transport failure/],
+    ["malformed_protocol", /Malformed provider protocol/],
+    ["unsafe_retry", /Unsafe partial-stream retry/],
+  ] as const;
+  for (const [category, title] of cases) {
+    const providers = buildDoctorSnapshot(
+      input({
+        providerIncidents: [
+          {
+            provider: "deepseek",
+            category,
+            reason: category,
+            detail: "detail",
+            attempt: 1,
+            at: "2026-06-29T00:00:00.000Z",
+          },
+        ],
+      }),
+    ).areas.find((a) => a.id === "providers");
+    const finding = providers?.findings?.find((f) => f.id === "providers.incident.deepseek");
+    assert.ok(finding, `a ${category} finding is present`);
+    assert.match(finding.title, title);
+  }
+});
+
+test("D-007: no provider incidents means no incident findings", () => {
+  const providers = buildDoctorSnapshot(input()).areas.find((a) => a.id === "providers");
+  assert.ok(!providers?.findings?.some((f) => f.id.startsWith("providers.incident.")));
+});
+
+test("D-007: the incident finding surfaces only the sanitized detail, never a credential", () => {
+  // The detail is redacted at the provider boundary before it reaches /doctor; the finding evidence
+  // is that sanitized string verbatim, so no key/prompt/header can leak through the report.
+  const providers = buildDoctorSnapshot(
+    input({
+      providerIncidents: [
+        {
+          provider: "deepseek",
+          category: "auth_quota",
+          reason: "auth",
+          detail: "401 from upstream: «redacted»",
+          attempt: 1,
+          at: "2026-06-29T00:00:00.000Z",
+        },
+      ],
+    }),
+  ).areas.find((a) => a.id === "providers");
+  const finding = providers?.findings?.find((f) => f.id === "providers.incident.deepseek");
+  assert.equal(finding?.evidence, "401 from upstream: «redacted»");
+  assert.ok(!/Bearer|sk-|x-api-key/i.test(finding?.evidence ?? ""));
+});

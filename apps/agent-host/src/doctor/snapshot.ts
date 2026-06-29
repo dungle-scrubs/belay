@@ -10,6 +10,7 @@ import {
   rollupStatus,
 } from "@trevor/session";
 import type { RootCategoryId } from "@trevor/session/node-paths";
+import type { ProviderIncidentCategory } from "../providers/provider-incidents";
 
 /**
  * Builds the structured `doctor.current` snapshot (D-073) from already-probed host facts. PURE over
@@ -71,6 +72,11 @@ export interface DoctorProbeInput {
    *  surfaced as DISTINCT Providers findings so a transient outage that gave up reads differently from
    *  an auth/quota/rejected failure that was never eligible for retry. */
   readonly providerFailures?: DoctorProviderFailures;
+  /** The latest incident per provider (D-007): the most recent structured diagnostic, categorized for
+   *  an actionable finding. Distinct from the {@link DoctorProviderFailures} COUNTS - this is the
+   *  single most-recent incident per provider with its sanitized detail, and it includes malformed
+   *  -protocol anomalies that never reach the failure ring (they are not provider errors). */
+  readonly providerIncidents?: readonly DoctorProviderIncident[];
   /** D-065 catalog SOURCES (provider/runtime/subscription auth + config state). The legacy `providers`
    *  roster above lists only the configured runnable providers, so an unconfigured/expired/rejected
    *  source is invisible there; these surface its auth/setup state (status + counts only, never a key). */
@@ -89,6 +95,20 @@ export interface DoctorCatalogSource {
   /** authenticated | none | expired. */
   readonly auth: string;
   readonly modelCount: number;
+}
+
+/** A provider's latest incident, projected redaction-safe for the Providers area (D-007). */
+export interface DoctorProviderIncident {
+  readonly provider: string;
+  readonly model?: string;
+  readonly category: ProviderIncidentCategory;
+  /** The typed incident reason (e.g. transport_loss, auth, protocol_anomaly). */
+  readonly reason: string;
+  /** The sanitized one-line upstream detail (already redacted at the provider boundary). */
+  readonly detail: string;
+  readonly attempt: number;
+  /** ISO timestamp the incident was recorded. */
+  readonly at: string;
 }
 
 /** The compact, redaction-safe provider-observation summary the Providers area surfaces (D-076 M6). */
@@ -157,6 +177,39 @@ export interface DoctorPeripherals {
   readonly lsp: PeripheralState;
   readonly hooks: PeripheralState;
 }
+
+/**
+ * The four actionable provider-incident categories (D-007), each with the finding title, one-line
+ * verdict, and repair action it drives. Provider-neutral: the category is a typed value the loop
+ * derived, never a DeepSeek-specific string, so a new provider with the same failure shape reuses
+ * the same finding copy. The leaked/upstream detail rides as the finding's collapsed evidence.
+ */
+const INCIDENT_CATEGORY: Record<
+  ProviderIncidentCategory,
+  { readonly title: string; readonly message: string; readonly nextAction?: DoctorNextAction }
+> = {
+  auth_quota: {
+    title: "Provider auth / quota",
+    message: "The last turn failed on a credential or quota/billing error.",
+    nextAction: { label: "Re-authenticate or check the provider's billing/quota" },
+  },
+  transport: {
+    title: "Provider transport failure",
+    message: "The last turn was interrupted by a transient provider transport error.",
+    nextAction: { label: "Retry the turn; if it persists, check provider/internet status" },
+  },
+  malformed_protocol: {
+    title: "Malformed provider protocol",
+    message: "The model rendered raw tool-call markup as text instead of a typed tool call.",
+    nextAction: { label: "Inspect provider diagnostics or switch models before retrying" },
+  },
+  unsafe_retry: {
+    title: "Unsafe partial-stream retry",
+    message:
+      "A provider stream dropped after partial output, so the turn could not be auto-retried.",
+    nextAction: { label: "Retry the turn manually; partial output was not replayed" },
+  },
+};
 
 /** Rolls an area's findings into its header status (any error wins, then warn, then ok). */
 function areaStatus(findings: readonly DoctorFinding[]): DoctorStatus {
@@ -287,6 +340,21 @@ function providersArea(input: DoctorProbeInput): DoctorArea {
       title: "Non-retryable provider failure",
       message: `${pf.nonRetryableTerminal} turn${pf.nonRetryableTerminal === 1 ? "" : "s"} ended with a terminal provider failure that was not eligible for retry.`,
       ...(pf.lastTerminal ? { evidence: pf.lastTerminal } : {}),
+    });
+  }
+  // The LATEST incident per provider (D-007), categorized into the four actionable buckets
+  // (auth/quota, transport, malformed protocol, unsafe retry). One finding per provider that has had
+  // an incident; the sanitized upstream detail rides as collapsed evidence. Distinct from the COUNTS
+  // above - this names what the last failure actually was and what to do about it.
+  for (const incident of input.providerIncidents ?? []) {
+    const category = INCIDENT_CATEGORY[incident.category];
+    findings.push({
+      id: `providers.incident.${incident.provider}`,
+      status: "warn",
+      title: `${category.title} - ${incident.provider}`,
+      message: category.message,
+      evidence: incident.detail,
+      ...(category.nextAction ? { nextAction: category.nextAction } : {}),
     });
   }
   // D-065 catalog source auth/config state: surface the sources that need ACTION. The legacy roster

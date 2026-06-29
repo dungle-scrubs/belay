@@ -18,6 +18,13 @@ export {
   protocolAnomalyDiagnostic,
   providerDiagnostic,
 } from "./provider-diagnostic";
+export {
+  incidentCategory,
+  type ProviderIncident,
+  type ProviderIncidentCategory,
+  ProviderIncidentLog,
+  providerIncidents,
+} from "./provider-incidents";
 export type {
   ChatImage,
   ChatMessage,
