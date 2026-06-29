@@ -12,14 +12,29 @@ import { storagePathByName } from "@trevor/session/node-paths";
 import { Schema } from "effect";
 import { simpleTool } from "../shared";
 import { runWebFetch, webFetchLiveDeps } from "../web-fetch/web-fetch";
-import { type DocsFs, nodeDocsFs } from "./corpus-store";
+import { runWebSearch } from "../web-search";
 import {
+  type Corpus,
+  corpusIdFor,
+  DOCS_CORPUS_VERSION,
+  type PageDiagnostic,
+  staleAfterFrom,
+} from "./corpus";
+import { createCorpusStore, type DocsFs, nodeDocsFs, summarizeCorpus } from "./corpus-store";
+import { type DiscoveryResult, resolveCandidates } from "./discovery";
+import {
+  corpusResult,
+  corruptResult,
   DOCS_ACTIONS,
+  type DocsAction,
   type DocsResult,
+  errorResult,
   notImplementedResult,
   serializeDocsResult,
   unavailableResult,
 } from "./envelope";
+import { fetchPages } from "./fetch-pages";
+import type { WebFetchReader, WebSearchReader } from "./readers";
 
 const MAX_PAGES_FLOOR = 1;
 const MAX_PAGES_CEILING = 200;
@@ -28,6 +43,15 @@ const DEFAULT_MAX_PAGES = 40;
 const MAX_RESULTS_FLOOR = 1;
 const MAX_RESULTS_CEILING = 50;
 const DEFAULT_MAX_RESULTS = 8;
+
+/** web_fetch strategy docs reads pages with: "auto" lets web_fetch own the static/rendered ladder. */
+const DEFAULT_FETCH_MODE = "auto" as const;
+
+/** Character cap docs asks web_fetch for per page (web_fetch's own default). */
+const DOCS_PAGE_MAX_CHARS = 12_000;
+
+/** How many hours a freshly built corpus stays fresh before Phase 5 considers it stale. */
+const DOCS_FRESHNESS_HOURS = 24;
 
 /** The docs-corpus storage inventory name owned by the root policy (`@trevor/session/node-paths`). */
 const DOCS_CORPUS_ENTRY = "docs-corpus";
@@ -78,26 +102,6 @@ const Params = Schema.Struct({
 
 type DocsArgs = typeof Params.Type;
 
-/**
- * The page reader docs reuses (Phase 4): read one URL into web_fetch's bounded, attributable JSON
- * envelope. Live deps bind it to `runWebFetch`; tests inject a fake. Absent means the dependency gate
- * reports the tool unavailable.
- */
-export type WebFetchReader = (input: {
-  readonly url: string;
-  readonly mode?: "auto" | "static" | "rendered";
-  readonly maxChars?: number;
-}) => Promise<string>;
-
-/**
- * The discovery reader docs reuses (Phase 3): search the web for documentation pages, returning
- * web_search's JSON envelope. Optional - discovery is a later phase, so the gate does not require it.
- */
-export type WebSearchReader = (input: {
-  readonly query: string;
-  readonly count?: number;
-}) => Promise<string>;
-
 /** Injectable dependencies, so the whole docs path is deterministic under test. */
 export interface DocsDeps {
   readonly webFetch?: WebFetchReader;
@@ -106,6 +110,29 @@ export interface DocsDeps {
   readonly corpusRoot: string | null;
   readonly fs: DocsFs;
   readonly now: () => string;
+}
+
+/** `DocsDeps` after the dependency gate has passed: web_fetch and the corpus root are guaranteed. */
+interface ReadyDocsDeps {
+  readonly webFetch: WebFetchReader;
+  readonly webSearch?: WebSearchReader;
+  readonly corpusRoot: string;
+  readonly fs: DocsFs;
+  readonly now: () => string;
+}
+
+/** Clamps a lenient numeric arg into [floor, ceiling], falling back when absent/non-finite. */
+function clamp(
+  value: number | undefined,
+  floor: number,
+  ceiling: number,
+  fallback: number,
+): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(Math.trunc(value), floor), ceiling);
 }
 
 /** The required dependencies that are not ready, in stable order; empty means the gate passes. */
@@ -124,49 +151,220 @@ function missingDependencies(deps: DocsDeps): readonly string[] {
 }
 
 /**
- * Routes one action to its service seam. Each action's real behavior lands in a later phase
- * (3 resolve/discovery, 4 reads, 5 refresh/freshness, 6 search/read, 7 UI); until then every action
- * reports a typed `not-implemented` outcome. The dependency gate has already passed by here.
+ * Routes one action to its service seam. `resolve`/`refresh` build a corpus end-to-end (Phases 3-4);
+ * the query actions (`search`/`read`/`list`/`status`) land in Phase 6 and report `not-implemented`
+ * until then. The dependency gate has already passed by here, so web_fetch and the corpus root exist.
  */
-async function dispatch(args: DocsArgs, deps: DocsDeps): Promise<DocsResult> {
+async function dispatch(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
   switch (args.action) {
     case "resolve":
       return resolveAction(args, deps);
     case "refresh":
       return refreshAction(args, deps);
     case "search":
-      return searchAction(args, deps);
+      return notImplementedResult("search");
     case "read":
-      return readAction(args, deps);
+      return notImplementedResult("read");
     case "list":
-      return listAction(args, deps);
+      return notImplementedResult("list");
     case "status":
-      return statusAction(args, deps);
+      return notImplementedResult("status");
   }
 }
 
-async function resolveAction(_args: DocsArgs, _deps: DocsDeps): Promise<DocsResult> {
-  return notImplementedResult("resolve");
+/** The corpus-shaping inputs both resolve and refresh feed into the build pipeline. */
+interface BuildSpec {
+  readonly subject?: string;
+  readonly url?: string;
+  readonly version?: string;
+  readonly maxPages: number;
 }
 
-async function refreshAction(_args: DocsArgs, _deps: DocsDeps): Promise<DocsResult> {
-  return notImplementedResult("refresh");
+function specFrom(args: DocsArgs): BuildSpec {
+  return {
+    ...(args.subject?.trim() ? { subject: args.subject.trim() } : {}),
+    ...(args.url?.trim() ? { url: args.url.trim() } : {}),
+    ...(args.version?.trim() ? { version: args.version.trim() } : {}),
+    maxPages: clamp(args.maxPages, MAX_PAGES_FLOOR, MAX_PAGES_CEILING, DEFAULT_MAX_PAGES),
+  };
 }
 
-async function searchAction(_args: DocsArgs, _deps: DocsDeps): Promise<DocsResult> {
-  return notImplementedResult("search");
+/** The corpus-level provenance line: how the root was found plus how pages were read. */
+function provenanceLine(discovery: DiscoveryResult, pages: number, failed: number): string {
+  return `${discovery.provenance}; web_fetch ${DEFAULT_FETCH_MODE}; ${pages} page(s), ${failed} failed`;
 }
 
-async function readAction(_args: DocsArgs, _deps: DocsDeps): Promise<DocsResult> {
-  return notImplementedResult("read");
+/** The model-facing diagnostics for a built corpus: discovery notes, failed reads, and a skip count. */
+function buildDiagnostics(
+  discovery: DiscoveryResult,
+  failed: readonly PageDiagnostic[],
+  skipped: readonly PageDiagnostic[],
+): readonly string[] {
+  const lines = [...discovery.diagnostics];
+
+  for (const page of failed) {
+    lines.push(`failed: ${page.url}: ${page.reason}`);
+  }
+
+  if (skipped.length > 0) {
+    lines.push(`skipped ${skipped.length} url(s): out of scope / robots / cap / duplicate`);
+  }
+
+  return lines;
 }
 
-async function listAction(_args: DocsArgs, _deps: DocsDeps): Promise<DocsResult> {
-  return notImplementedResult("list");
+/**
+ * Discovers, fetches, normalizes, and persists a corpus for one (subject|url, version). This is the
+ * shared pipeline behind `resolve` and `refresh`; freshness-based reuse of an existing corpus lands in
+ * Phase 5, so for now both always rebuild. A failed page read marks the corpus partial rather than
+ * throwing the turn; a corpus with zero usable pages reports a typed error with the read diagnostics.
+ */
+async function buildAndStore(
+  action: DocsAction,
+  spec: BuildSpec,
+  deps: ReadyDocsDeps,
+): Promise<DocsResult> {
+  const discovery = await resolveCandidates(
+    {
+      ...(spec.subject ? { subject: spec.subject } : {}),
+      ...(spec.url ? { url: spec.url } : {}),
+      ...(spec.version ? { version: spec.version } : {}),
+      maxPages: spec.maxPages,
+    },
+    { webFetch: deps.webFetch, ...(deps.webSearch ? { webSearch: deps.webSearch } : {}) },
+  );
+
+  if (discovery.candidates.length === 0) {
+    if (spec.subject && !spec.url && !deps.webSearch) {
+      return unavailableResult(action, ["web_search"]);
+    }
+
+    return errorResult(
+      action,
+      `docs ${action} could not resolve any documentation pages`,
+      discovery.diagnostics,
+    );
+  }
+
+  const subject = spec.subject ?? discovery.host;
+  const corpusId = corpusIdFor({
+    subject,
+    rootUrl: discovery.rootUrl,
+    ...(spec.version ? { version: spec.version } : {}),
+  });
+
+  const store = createCorpusStore(deps.fs, deps.corpusRoot);
+  const existing = await store.loadCorpus(corpusId);
+  const createdAt = existing.state === "loaded" ? existing.corpus.createdAt : deps.now();
+
+  const fetched = await fetchPages(
+    {
+      corpusId,
+      host: discovery.host,
+      candidates: discovery.candidates,
+      fetchMode: DEFAULT_FETCH_MODE,
+      maxChars: DOCS_PAGE_MAX_CHARS,
+      freshnessHours: DOCS_FRESHNESS_HOURS,
+      now: deps.now,
+    },
+    deps.webFetch,
+  );
+
+  if (fetched.pages.length === 0) {
+    return errorResult(action, `docs ${action} fetched no usable pages for ${subject}`, [
+      ...discovery.diagnostics,
+      ...fetched.failed.map((page) => `failed: ${page.url}: ${page.reason}`),
+    ]);
+  }
+
+  const now = deps.now();
+  const skipped = [...discovery.skipped, ...fetched.skipped];
+  const partial = discovery.partial || fetched.failed.length > 0;
+
+  const corpus: Corpus = {
+    version: DOCS_CORPUS_VERSION,
+    corpusId,
+    subject,
+    name: subject,
+    source: {
+      rootUrl: discovery.rootUrl,
+      host: discovery.host,
+      ...(spec.version ? { version: spec.version } : {}),
+    },
+    createdAt,
+    updatedAt: now,
+    staleAfter: staleAfterFrom(now, DOCS_FRESHNESS_HOURS),
+    policy: {
+      maxPages: spec.maxPages,
+      fetchMode: DEFAULT_FETCH_MODE,
+      freshnessHours: DOCS_FRESHNESS_HOURS,
+    },
+    pageCount: fetched.pages.length,
+    byteCount: fetched.byteCount,
+    truncated: fetched.truncated,
+    partial,
+    provenance: provenanceLine(discovery, fetched.pages.length, fetched.failed.length),
+    skipped,
+    failed: fetched.failed,
+  };
+
+  await store.saveCorpus(corpus, fetched.pages);
+
+  const detail = `docs ${action} built corpus ${corpusId} for ${subject}: ${corpus.pageCount} page(s)${
+    partial ? " (partial)" : ""
+  }`;
+
+  return corpusResult(
+    action,
+    detail,
+    summarizeCorpus(corpus),
+    buildDiagnostics(discovery, fetched.failed, skipped),
+  );
 }
 
-async function statusAction(_args: DocsArgs, _deps: DocsDeps): Promise<DocsResult> {
-  return notImplementedResult("status");
+async function resolveAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
+  if (!args.subject?.trim() && !args.url?.trim()) {
+    return errorResult("resolve", "docs resolve needs a subject or a url");
+  }
+
+  return buildAndStore("resolve", specFrom(args), deps);
+}
+
+async function refreshAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<DocsResult> {
+  if (args.corpusId) {
+    const store = createCorpusStore(deps.fs, deps.corpusRoot);
+    const loaded = await store.loadCorpus(args.corpusId);
+
+    if (loaded.state === "missing") {
+      return errorResult("refresh", `docs refresh: corpus ${args.corpusId} not found`);
+    }
+
+    if (loaded.state === "corrupt") {
+      return corruptResult(
+        "refresh",
+        `docs refresh: corpus ${args.corpusId} is corrupt: ${loaded.detail}`,
+      );
+    }
+
+    const corpus = loaded.corpus;
+
+    return buildAndStore(
+      "refresh",
+      {
+        subject: corpus.subject,
+        url: corpus.source.rootUrl,
+        ...(corpus.source.version ? { version: corpus.source.version } : {}),
+        maxPages: corpus.policy.maxPages,
+      },
+      deps,
+    );
+  }
+
+  if (!args.subject?.trim() && !args.url?.trim()) {
+    return errorResult("refresh", "docs refresh needs a corpusId, subject, or url");
+  }
+
+  return buildAndStore("refresh", specFrom(args), deps);
 }
 
 /** Runs the docs path against injected deps; the exported tool binds the live deps. */
@@ -177,7 +375,21 @@ export async function runDocs(args: DocsArgs, deps: DocsDeps): Promise<string> {
     return serializeDocsResult(unavailableResult(args.action, missing));
   }
 
-  return serializeDocsResult(await dispatch(args, deps));
+  const { webFetch, corpusRoot } = deps;
+
+  if (!webFetch || corpusRoot === null) {
+    return serializeDocsResult(unavailableResult(args.action, missingDependencies(deps)));
+  }
+
+  const ready: ReadyDocsDeps = {
+    webFetch,
+    ...(deps.webSearch ? { webSearch: deps.webSearch } : {}),
+    corpusRoot,
+    fs: deps.fs,
+    now: deps.now,
+  };
+
+  return serializeDocsResult(await dispatch(args, ready));
 }
 
 /** Resolves the docs-corpus root through the root policy, or null when it cannot be classified. */
@@ -189,9 +401,11 @@ function resolveCorpusRoot(): string | null {
   }
 }
 
-/** Live dependencies: the real web_fetch reader, the classified corpus root, node fs, the wall clock. */
+/** Live dependencies: the real web_fetch + web_search readers, the classified corpus root, node fs,
+ *  the wall clock. docs reads pages and discovers roots ONLY through these seams. */
 const liveDeps: DocsDeps = {
   webFetch: ({ url, mode, maxChars }) => runWebFetch({ url, mode, maxChars }, webFetchLiveDeps),
+  webSearch: ({ query, count }) => runWebSearch({ query, count }),
   corpusRoot: resolveCorpusRoot(),
   fs: nodeDocsFs,
   now: () => new Date().toISOString(),
@@ -210,5 +424,6 @@ export const docsTool = simpleTool({
   execute: (args) => runDocs(args, liveDeps),
 });
 
+export type { WebFetchReader, WebSearchReader } from "./readers";
 export type { DocsArgs };
 export { DOCS_CORPUS_ENTRY, Params as DocsParams };

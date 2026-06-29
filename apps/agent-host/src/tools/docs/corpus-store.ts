@@ -124,11 +124,12 @@ async function saveCorpusTo(
     });
   }
 
-  // Finalize: only now is the corpus complete and healthy.
+  // Finalize: the write is done, so the manifest's completeness flag now reflects the corpus's own
+  // partial intent (a cap hit or a failed page read) rather than the in-flight-write window.
   await writeJsonAtomic(fs, manifestPath(dir), {
     ...corpus,
     version: DOCS_CORPUS_VERSION,
-    partial: false,
+    partial: corpus.partial === true,
   });
 }
 
@@ -204,7 +205,8 @@ async function loadCorpusFrom(fs: DocsFs, root: string, corpusId: string): Promi
   return { state: "loaded", corpus: { ...manifest, partial }, pages, partial, diagnostics };
 }
 
-function summarize(corpus: Corpus): CorpusSummary {
+/** A compact projection of a corpus for listings and the resolve/status outcomes. */
+export function summarizeCorpus(corpus: Corpus): CorpusSummary {
   return {
     corpusId: corpus.corpusId,
     subject: corpus.subject,
@@ -240,7 +242,7 @@ async function listCorporaIn(fs: DocsFs, root: string): Promise<readonly CorpusS
       continue;
     }
 
-    summaries.push(summarize(result.corpus));
+    summaries.push(summarizeCorpus(result.corpus));
   }
 
   return summaries;

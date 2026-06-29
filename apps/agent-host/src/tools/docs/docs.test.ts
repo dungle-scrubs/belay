@@ -8,9 +8,13 @@ import { DOCS_ACTIONS } from "./envelope";
 /**
  * Tool-entry coverage: the param schema accepts every action and rejects an unknown/absent one, the
  * tool declares read-only, the dependency gate yields a typed `unavailable` outcome (never a thrown
- * turn) when web_fetch or the corpus root is missing, and a ready call routes each action to its
- * service seam (a typed `not-implemented` until later phases). No real disk or network is touched.
+ * turn) when web_fetch or the corpus root is missing, and a ready call routes each query action to a
+ * typed `not-implemented` (Phase 6 owns them). resolve/refresh are wired in Phases 3-4 and covered in
+ * docs-resolve.test.ts. No real disk or network is touched here.
  */
+
+/** The actions still awaiting their phase; resolve/refresh are wired in Phases 3-4. */
+const QUERY_ACTIONS = DOCS_ACTIONS.filter((action) => action !== "resolve" && action !== "refresh");
 
 function decode(input: unknown): Either.Either<DocsArgs, unknown> {
   return Schema.decodeUnknownEither(DocsParams)(input);
@@ -103,8 +107,8 @@ test("both dependencies missing are reported together", async () => {
   assert.deepEqual(parsed.missing, ["web_fetch", "docs corpus root"]);
 });
 
-test("a ready call routes each action to its seam and reports not-implemented in Phase 1", async () => {
-  for (const action of DOCS_ACTIONS) {
+test("a ready call routes each query action to a typed not-implemented (Phase 6 owns them)", async () => {
+  for (const action of QUERY_ACTIONS) {
     const parsed = await run({ action }, readyDeps);
     assert.equal(parsed.action, action);
     assert.equal(parsed.outcome, "not-implemented", `action ${action} should be not-implemented`);

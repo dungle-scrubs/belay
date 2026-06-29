@@ -9,6 +9,12 @@
 
 import type { CorpusSummary, Page, QueryResult } from "./corpus";
 
+function withDiagnostics(diagnostics: readonly string[] | undefined): {
+  diagnostics?: readonly string[];
+} {
+  return diagnostics && diagnostics.length > 0 ? { diagnostics } : {};
+}
+
 /** The actions the docs tool exposes. */
 export const DOCS_ACTIONS = ["resolve", "refresh", "search", "read", "list", "status"] as const;
 
@@ -64,6 +70,34 @@ export function notImplementedResult(action: DocsAction): DocsResult {
     outcome: "not-implemented",
     detail: `docs ${action} is not implemented yet`,
   };
+}
+
+/** A successful action that produced or targeted a corpus (resolve/refresh/status). */
+export function corpusResult(
+  action: DocsAction,
+  detail: string,
+  corpus: CorpusSummary,
+  diagnostics?: readonly string[],
+): DocsResult {
+  return { action, outcome: "ok", detail, corpus, ...withDiagnostics(diagnostics) };
+}
+
+/** A typed failure that is neither a missing dependency nor an unbuilt phase. */
+export function errorResult(
+  action: DocsAction,
+  detail: string,
+  diagnostics?: readonly string[],
+): DocsResult {
+  return { action, outcome: "error", detail, ...withDiagnostics(diagnostics) };
+}
+
+/** A targeted corpus that exists on disk but could not be read. */
+export function corruptResult(
+  action: DocsAction,
+  detail: string,
+  diagnostics?: readonly string[],
+): DocsResult {
+  return { action, outcome: "corrupt", detail, ...withDiagnostics(diagnostics) };
 }
 
 /** Serializes an envelope to the compact JSON the model reads, omitting absent optional fields. */

@@ -53,6 +53,25 @@ function renderResponse(
   });
 }
 
+/**
+ * Runs the web_search path and returns the serialized envelope. Exported so a sibling tool (docs)
+ * can reuse the real search reader through `runWebSearch(...)` without re-deriving the provider keys
+ * or the Effect layers, mirroring web_fetch's `runWebFetch`/`webFetchLiveDeps` reuse seam.
+ */
+export async function runWebSearch(input: {
+  readonly query: string;
+  readonly count?: number;
+  readonly freshness?: Freshness;
+}): Promise<string> {
+  const response = await Effect.runPromise(
+    webSearch(input).pipe(
+      Effect.provide(PROVIDED),
+      Effect.mapError((error) => new Error(formatError(error))),
+    ),
+  );
+  return renderResponse(input.query.trim(), input.freshness, response);
+}
+
 /** Searches the web via Brave (Serper fallback) and returns normalized results. */
 export const webSearchTool = simpleTool({
   name: "web_search",
@@ -64,14 +83,5 @@ export const webSearchTool = simpleTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: async (args) => {
-    const { query, count, freshness } = args;
-    const response = await Effect.runPromise(
-      webSearch({ query, count, freshness }).pipe(
-        Effect.provide(PROVIDED),
-        Effect.mapError((error) => new Error(formatError(error))),
-      ),
-    );
-    return renderResponse(query.trim(), freshness, response);
-  },
+  execute: (args) => runWebSearch(args),
 });

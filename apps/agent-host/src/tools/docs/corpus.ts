@@ -222,3 +222,11 @@ export function pageIdFor(corpusId: string, pageUrl: string): string {
 export function contentHash(content: string): string {
   return sha256Hex(content);
 }
+
+/** The freshness horizon `freshnessHours` after a fetch instant; falls back to wall-clock on a bad input. */
+export function staleAfterFrom(now: string, freshnessHours: number): string {
+  const parsed = Date.parse(now);
+  const base = Number.isNaN(parsed) ? Date.now() : parsed;
+
+  return new Date(base + freshnessHours * 3_600_000).toISOString();
+}
