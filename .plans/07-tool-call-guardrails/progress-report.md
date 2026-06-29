@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M4: Warn-First Integration
-- Current cutoff blockers: 20 unchecked (19 done)
+> Current focus: M5: Redacted Event Surface
+- Current cutoff blockers: 15 unchecked (24 done)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -42,11 +42,11 @@
 
 ### M4: Warn-First Integration
 
-- [ ] RED: Add `runAgent` tests proving repeated exact failures append concise guidance to the current tool result.
-- [ ] GREEN: Call the controller after tool execution and append guidance for `warn` decisions.
-- [ ] RED: Add tests proving repeated read-only same-result warnings are appended without suppressing tool execution.
-- [ ] GREEN: Append no-progress guidance that tells the model to use the existing result or change query/strategy.
-- [ ] REFACTOR: Keep guidance text action-oriented and avoid telling the model to stop using tools entirely.
+- [x] RED: Add `runAgent` tests proving repeated exact failures append concise guidance to the current tool result.
+- [x] GREEN: Call the controller after tool execution and append guidance for `warn` decisions.
+- [x] RED: Add tests proving repeated read-only same-result warnings are appended without suppressing tool execution.
+- [x] GREEN: Append no-progress guidance that tells the model to use the existing result or change query/strategy.
+- [x] REFACTOR: Keep guidance text action-oriented and avoid telling the model to stop using tools entirely.
 
 ### M5: Redacted Event Surface
 

@@ -663,3 +663,144 @@ test("03.1 M4: the empty-retry budget is shared - a normal-path retry leaves syn
     "the blank synthesis still surfaces empty",
   );
 });
+
+/**
+ * Plan 07 (tool-call guardrails) loop integration. A small provider calls one tool for the first
+ * `rounds` steps, then answers - so a test can drive a repeating tool path. The `runTool` seam
+ * injects deterministic, hermetic tool results (success or `error:` failure) so the guardrail's
+ * append-guidance behavior is exercised without the real executor or the filesystem.
+ */
+function repeatedToolProvider(opts: {
+  tool: string;
+  args: string;
+  rounds: number;
+  onMessages?: (messages: readonly ChatMessage[], tools: number) => void;
+}): Provider {
+  let calls = 0;
+  return {
+    id: "fake",
+    label: "Fake",
+    model: "fake-1",
+    reasoningLevels: ["off", "low"],
+    defaultReasoning: "off",
+    kind: "cloud",
+    describe: () => ({
+      label: "Fake",
+      model: "fake-1",
+      reasoningLevels: ["off", "low"],
+      defaultReasoning: "off",
+      kind: "cloud",
+    }),
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: (messages, tools) => {
+      opts.onMessages?.(messages, tools.length);
+      calls += 1;
+      if (calls > opts.rounds || tools.length === 0) {
+        return Stream.fromIterable<ProviderEvent>([
+          { type: "text", text: "DONE" },
+          { type: "usage", usage: usage(100, 1_000_000) },
+        ]);
+      }
+      return Stream.fromIterable<ProviderEvent>([
+        { type: "tool_call", call: { id: `c${calls}`, name: opts.tool, arguments: opts.args } },
+        { type: "usage", usage: usage(100, 1_000_000) },
+      ]);
+    },
+  };
+}
+
+const toolEnds = (events: readonly AgentEvent[]): string[] =>
+  events
+    .filter((e): e is Extract<AgentEvent, { type: "tool_end" }> => e.type === "tool_end")
+    .map((e) => e.result);
+
+test("M4: repeated exact failures append concise guidance to the current tool result", async () => {
+  // `read` is a registry read-only tool, but the injected runner makes it FAIL identically each round;
+  // the guardrail tracks the exact-failure streak and warns at the threshold (3).
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "a.ts" }), rounds: 4 }),
+    {
+      runTool: () => Effect.succeed("error: read failed - file not found"),
+      guardrails: { failureWarnAt: 3 },
+    },
+  );
+  const results = toolEnds(events);
+  assert.equal(
+    results.length,
+    4,
+    "all four tool calls executed (guidance never suppresses a call)",
+  );
+  assert.equal(
+    results.slice(0, 2).filter((r) => /Guardrail:/.test(r)).length,
+    0,
+    "the first two failures stay advisory - no guidance appended",
+  );
+  assert.match(results[2] ?? "", /Guardrail:.*failed 3 times/i, "the third repeat warns the model");
+  assert.match(
+    results[2] ?? "",
+    /^error: read failed - file not found\n\n/,
+    "the raw tool result is preserved; guidance is appended after it",
+  );
+});
+
+test("M4: repeated read-only same-result warnings are appended without suppressing execution", async () => {
+  let toolRuns = 0;
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "a.ts" }), rounds: 4 }),
+    {
+      runTool: () =>
+        Effect.sync(() => {
+          toolRuns += 1;
+          return "the identical file contents";
+        }),
+      guardrails: { noProgressWarnAt: 3 },
+    },
+  );
+  assert.equal(
+    toolRuns,
+    4,
+    "the read still executed every round - no cached/skipped output (D-003)",
+  );
+  const starts = events.filter((e) => e.type === "tool_start").length;
+  assert.equal(starts, 4, "every tool call still emits a start");
+  const results = toolEnds(events);
+  assert.match(
+    results[2] ?? "",
+    /Guardrail:.*identical result 3 times/i,
+    "the no-progress warning is appended once the same result repeats",
+  );
+  assert.match(
+    results[2] ?? "",
+    /use the result you already have, or change the query, path, or strategy/i,
+    "the guidance is action-oriented: use the result or change strategy, not stop using tools",
+  );
+  assert.doesNotMatch(
+    results[2] ?? "",
+    /stop using tools|do not use tools/i,
+    "the guidance never tells the model to abandon tools entirely (M4 REFACTOR)",
+  );
+});
+
+test("M4: a read-only path that keeps making progress is never warned", async () => {
+  // The injected runner returns a DIFFERENT result each round, so the read is genuinely progressing;
+  // no-progress must never fire even though the args repeat (D-004).
+  let round = 0;
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "a.ts" }), rounds: 5 }),
+    {
+      runTool: () =>
+        Effect.sync(() => {
+          round += 1;
+          return `distinct contents ${round}`;
+        }),
+      guardrails: { noProgressWarnAt: 3 },
+    },
+  );
+  assert.equal(
+    toolEnds(events).filter((r) => /Guardrail:/.test(r)).length,
+    0,
+    "changing results are progress: no guidance is ever appended",
+  );
+});

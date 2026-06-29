@@ -26,6 +26,11 @@ import {
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
+import {
+  createToolGuardrails,
+  type GuardrailConfig,
+  type GuardrailDecision,
+} from "./tool-guardrails";
 import { deriveTurnBudget, EMERGENCY_MAX_STEPS, type TurnBudget } from "./turn-budget";
 import { TurnTerminationGate } from "./turn-policy";
 
@@ -257,6 +262,20 @@ export function withToolStallTimeout(
 }
 
 /**
+ * Composes a guardrail decision onto the model-facing tool result (M4 / D-007). A `warn` appends the
+ * action-oriented guidance after the raw result, so the model both keeps the output and reads the
+ * advice to change approach. Any other action returns the raw result unchanged. The guidance names
+ * only the tool and a count - it never carries raw arguments or output - so this is safe to persist
+ * onto the tool result. The redacted guardrail event (M5) is a separate telemetry surface.
+ */
+export function guardedToolResult(rawResult: string, decision: GuardrailDecision): string {
+  if (decision.action === "warn" && decision.guidance) {
+    return `${rawResult}\n\n${decision.guidance}`;
+  }
+  return rawResult;
+}
+
+/**
  * Bounded auto-reconnect for a transient provider outage (D-076…D-079): backoff (ms) BEFORE each
  * retry. Nine entries = ten total attempts (the initial plus nine retries), ramping then capped at 15s
  * for ~75s cumulative - under the 90s stream-stall watchdog that bounds each single attempt. A small
@@ -393,6 +412,14 @@ export interface RunAgentOptions {
    *  fraction synthesizes at step 0 instead of opening one mandatory tool round. Absent on a session's
    *  first turn (no prior usage) - the trackers then default to 0 and the loop behaves as today. */
   readonly seedUsage?: { readonly input: number; readonly contextWindow: number };
+  /** Tool-call guardrail thresholds (07): partial overrides merged onto the controller defaults.
+   *  Production leaves this absent (warn-first, hard stops off); a test tunes thresholds or flips
+   *  `hardStop` on for the synthetic-block path. */
+  readonly guardrails?: Partial<GuardrailConfig>;
+  /** Test seam: overrides how a (non-delegation, allow-listed) tool call is executed, so a loop test
+   *  can drive the guardrail with deterministic, hermetic tool results without touching the real
+   *  executor. Absent in production - the real `executeTool` path (with the stall watchdog) runs. */
+  readonly runTool?: (name: string, args: string, callId: string) => Effect.Effect<string>;
 }
 
 export function runAgent(
@@ -410,6 +437,17 @@ export function runAgent(
   // gets the delegation tools (a child gets none - depth-1).
   const delegate = opts.delegate;
   const tools = offeredToolDefs(useTools, opts.toolNames, delegate?.defs);
+  // The per-turn tool-call guardrail controller (07): it observes each completed tool call and returns
+  // a typed, redacted decision the loop acts on (append guidance / synthetic block). Read-only purity
+  // comes from the registry-derived set (D-006); thresholds default to warn-first with hard stops off.
+  const guardrails = createToolGuardrails({
+    readOnly: READ_ONLY_TOOLS,
+    ...(opts.guardrails ? { config: opts.guardrails } : {}),
+  });
+  const executeOne =
+    opts.runTool ??
+    ((name: string, args: string, callId: string): Effect.Effect<string> =>
+      withToolStallTimeout(name, executeTool(name, args, runId, callId), config.toolStallMs));
   const runTool = (name: string, args: string, callId: string): Effect.Effect<string> => {
     // A delegation tool-call is routed to the injected runner (it has the provider + transport the
     // generic executor lacks); everything else goes to the executor, gated by the allow-list. `callId`
@@ -420,7 +458,7 @@ export function runAgent(
     if (opts.toolNames && !opts.toolNames.has(name)) {
       return Effect.succeed(`error: tool "${name}" is not available to this agent`);
     }
-    return withToolStallTimeout(name, executeTool(name, args, runId, callId), config.toolStallMs);
+    return executeOne(name, args, callId);
   };
   // One retry budget for an empty answer (the model ending a turn with no text and no
   // tool calls). A single nudge often gets it to synthesize; if it stays empty we
@@ -922,7 +960,12 @@ export function runAgent(
           ): Stream.Stream<AgentEvent, ProviderError> =>
             Stream.fromEffect(
               runTool(call.name, call.arguments, call.id).pipe(
-                Effect.map((result): AgentEvent => {
+                Effect.map((rawResult): AgentEvent => {
+                  // Observe the completed call (07): the controller fingerprints the args + result and
+                  // returns a redacted decision. A `warn` appends guidance to the model-facing result;
+                  // execution is never suppressed (D-003), so the model still gets the tool output.
+                  const decision = guardrails.observe(call.name, call.arguments, rawResult);
+                  const result = guardedToolResult(rawResult, decision);
                   slots[index] = result;
                   return { type: "tool_end", call, result };
                 }),
