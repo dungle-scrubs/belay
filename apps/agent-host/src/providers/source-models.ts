@@ -1,4 +1,4 @@
-import { getModels } from "@earendil-works/pi-ai/compat";
+import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import type { SourceType } from "@trevor/session";
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 
@@ -29,7 +29,9 @@ function baseUrlOf(source: SourceModelDef): string | null {
   if (!source.piProvider) {
     return null;
   }
-  const model = (getModels(source.piProvider as "deepseek") as Array<{ baseUrl?: string }>)[0];
+  const model = (
+    getBuiltinModels(source.piProvider as "deepseek") as Array<{ baseUrl?: string }>
+  )[0];
   return typeof model?.baseUrl === "string" ? model.baseUrl : null;
 }
 
@@ -63,7 +65,7 @@ export async function fetchSourceModels(
   }
   if (models.length === 0 && source.piProvider) {
     models = (
-      getModels(source.piProvider as "deepseek") as Array<{ id: string; name?: string }>
+      getBuiltinModels(source.piProvider as "deepseek") as Array<{ id: string; name?: string }>
     ).map((m) => ({ id: m.id, name: m.name }));
   }
   return { models, stale };

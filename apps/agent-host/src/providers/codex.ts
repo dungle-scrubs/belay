@@ -1,5 +1,6 @@
-import { getModel } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
+import { lookupPiModel } from "./pi-model";
 import { oauthCredentialResolver } from "./provider-auth";
 
 /** The pi-ai registry + OAuth key for GPT-5.x (distinct from this provider's "codex" id). */
@@ -26,9 +27,9 @@ export function codexProviderFromConfig(config: CodexConfig): PiAiProviderBase {
     label: config.label,
     model: config.model,
     credentials: oauthCredentialResolver({ providerId: "codex", oauthName: CODEX }),
-    // The model id is configurable at runtime; pi-ai validates it against its registry, so the
-    // literal cast only satisfies getModel's strict typing.
-    resolveModel: () => getModel(CODEX, config.model as "gpt-5.5"),
+    // A registry miss surfaces downstream (pi-ai-base falls back to the declared shape; the stream
+    // surfaces an unserved id as an error), as before lookupPiModel centralized the cast.
+    resolveModel: () => lookupPiModel(CODEX, config.model) as Model<Api>,
     fallback: { levels: ["minimal", "low", "medium", "high", "xhigh"], images: true },
   });
 }

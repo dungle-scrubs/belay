@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getModel } from "@earendil-works/pi-ai/compat";
+import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 import { test } from "vitest";
 import {
   explicitOffEffortFor,
@@ -17,13 +17,13 @@ import {
  */
 
 // gpt-5.5 -> api "openai-codex-responses": the graded Responses family.
-const graded = getModel("openai-codex", "gpt-5.5");
+const graded = getBuiltinModel("openai-codex", "gpt-5.5");
 // gpt-5.2 -> api "openai-responses": its descriptor carries off -> none directly.
-const descriptorOff = getModel("openai", "gpt-5.2");
+const descriptorOff = getBuiltinModel("openai", "gpt-5.2");
 // deepseek -> api "openai-completions": a toggle adapter (disables on a falsy effort).
-const toggle = getModel("deepseek", "deepseek-v4-pro");
+const toggle = getBuiltinModel("deepseek", "deepseek-v4-pro");
 // Claude adaptive thinking uses a different option surface; off still means omit reasoningEffort.
-const anthropic = getModel("anthropic", "claude-opus-4-7");
+const anthropic = getBuiltinModel("anthropic", "claude-opus-4-7");
 
 test("explicit off comes from the descriptor when available", () => {
   assert.equal(explicitOffEffortFor(descriptorOff), "none");

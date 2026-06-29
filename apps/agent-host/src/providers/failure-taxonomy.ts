@@ -75,8 +75,14 @@ const QUOTA_BILLING =
 const MODEL_UNAVAILABLE =
   /model[\s_-]*not[\s_-]*found|unknown model|no such model|model.*(not (loaded|available)|does not exist)|model_not_found|no models loaded|failed to load model/i;
 
-const LOCAL_UNREACHABLE =
-  /econnrefused|enotfound|connection refused|connect(ion)? (error|failed)|fetch failed|socket hang ?up|server is not running|is the server running|not reachable|unreachable/i;
+/** Connection-refusal tokens shared by LOCAL_UNREACHABLE (a down local runtime) and
+ *  TRANSIENT_TRANSPORT (a transient cloud transport fault); `local` decides which class wins. */
+const CONNECTION_REFUSED = /econnrefused|enotfound|connection refused/i;
+
+const LOCAL_UNREACHABLE = new RegExp(
+  `${CONNECTION_REFUSED.source}|connect(ion)? (error|failed)|fetch failed|socket hang ?up|server is not running|is the server running|not reachable|unreachable`,
+  "i",
+);
 
 const RATE_LIMITED = /\b429\b|rate[\s_-]*limit|too many requests/i;
 
@@ -86,8 +92,10 @@ const OVERLOADED =
 const PROVIDER_UNAVAILABLE =
   /\b50[024]\b|\b503\b|service unavailable|bad gateway|gateway time ?out|upstream|temporarily unavailable/i;
 
-const TRANSIENT_TRANSPORT =
-  /websocket|\bws\b|socket hang ?up|\b1006\b|econnreset|econnrefused|enotfound|epipe|etimedout|enetunreach|connection (reset|closed|refused|aborted|error)|reset by peer|timed? ?out|fetch failed|stream (closed|interrupted|aborted unexpectedly)|premature close|aborted unexpectedly/i;
+const TRANSIENT_TRANSPORT = new RegExp(
+  `websocket|\\bws\\b|socket hang ?up|\\b1006\\b|econnreset|${CONNECTION_REFUSED.source}|epipe|etimedout|enetunreach|connection (reset|closed|refused|aborted|error)|reset by peer|timed? ?out|fetch failed|stream (closed|interrupted|aborted unexpectedly)|premature close|aborted unexpectedly`,
+  "i",
+);
 
 const DEEPSEEK_TRANSPORT =
   /stream failed|stream failure|response stream failed|upstream stream failed/i;

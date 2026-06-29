@@ -1,5 +1,6 @@
-import { getModel } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
+import { lookupPiModel } from "./pi-model";
 import { oauthCredentialResolver } from "./provider-auth";
 
 /** The pi-ai registry id + the ~/.pi/auth.json OAuth entry for Anthropic (Claude Pro/Max). */
@@ -26,9 +27,9 @@ export function anthropicProvider(config: AnthropicConfig): PiAiProviderBase {
     label: config.label,
     model: config.model,
     credentials: oauthCredentialResolver({ providerId: "anthropic", oauthName: ANTHROPIC }),
-    // The model id is configurable at runtime; pi-ai validates it against its registry, so the
-    // literal cast only satisfies getModel's strict typing.
-    resolveModel: () => getModel(ANTHROPIC, config.model as "claude-opus-4-0"),
+    // A registry miss surfaces downstream (pi-ai-base falls back to the declared shape; the stream
+    // surfaces an unserved id as an error), as before lookupPiModel centralized the cast.
+    resolveModel: () => lookupPiModel(ANTHROPIC, config.model) as Model<Api>,
     fallback: { levels: ["off", "high"], images: true },
   });
 }

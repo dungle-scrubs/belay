@@ -11,6 +11,22 @@ export interface CredentialResolver {
   resolveApiKey(): Promise<string>;
 }
 
+/**
+ * The static-key value for a `~/.pi/auth.json` `{ key }` entry, or null when absent/empty. The one
+ * owner of the `{ key }` shape predicate - both the credential resolver below and the catalog's
+ * configured/key projection read a static key through here, so "what counts as a present key" is
+ * defined once.
+ */
+export function staticKeyEntry(auth: Record<string, unknown>, authName: string): string | null {
+  const entry = auth[authName] as { key?: unknown } | undefined;
+  return typeof entry?.key === "string" && entry.key.length > 0 ? entry.key : null;
+}
+
+/** Whether a `~/.pi/auth.json` OAuth entry is present (the configured signal for an oauth source). */
+export function oauthPresent(auth: Record<string, unknown>, oauthName: string): boolean {
+  return auth[oauthName] != null;
+}
+
 async function readAuth(
   providerId: string,
   authPath: string,
@@ -71,14 +87,14 @@ export function staticKeyCredentialResolver(params: {
         authPath,
         `add a ${params.authName} key with the pi CLI`,
       );
-      const entry = auth[params.authName] as { key?: unknown } | undefined;
-      if (!entry || typeof entry.key !== "string" || entry.key.length === 0) {
+      const key = staticKeyEntry(auth, params.authName);
+      if (key === null) {
         throw new ProviderAuthError({
           provider: params.providerId,
           detail: `no ${params.authName}.key in ${authPath}`,
         });
       }
-      return entry.key;
+      return key;
     },
   };
 }

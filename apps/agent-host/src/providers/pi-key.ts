@@ -1,5 +1,7 @@
-import { type Api, getModel, getModels, type Model } from "@earendil-works/pi-ai/compat";
+import type { Api, Model } from "@earendil-works/pi-ai/compat";
+import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
+import { lookupPiModel } from "./pi-model";
 import { staticKeyCredentialResolver } from "./provider-auth";
 
 /** Length of the common leading run of two ids (for picking the closest sibling model). */
@@ -13,8 +15,8 @@ function sharedPrefix(a: string, b: string): number {
 
 /**
  * The pi-ai model for a static-key provider. The provider/model ids are configurable at runtime;
- * pi-ai validates them against its registry, so the literal casts only satisfy getModel's strict
- * typing.
+ * pi-ai validates them against its registry, so the literal casts only satisfy the registry lookup's
+ * strict typing.
  *
  * If the id is NOT in the registry (a model newer than the installed pi-ai - e.g. glm-5.2 against
  * a registry that only knows glm-5.1), we synthesize it: clone the closest sibling from the same
@@ -23,17 +25,13 @@ function sharedPrefix(a: string, b: string): number {
  * surfaces as a stream error, not a silent stall.
  */
 export function resolvePiModel(piProvider: string, model: string): Model<Api> {
-  // getModel returns undefined (not a throw) for an id absent from the registry; some providers
-  // throw instead, so handle both before falling through to synthesis.
-  try {
-    const found = getModel(piProvider as "deepseek", model as "deepseek-v4-pro");
-    if (found) {
-      return found as Model<Api>;
-    }
-  } catch {
-    // fall through to synthesis
+  // lookupPiModel normalizes the undefined-or-throw a missing registry id surfaces as; a hit is the
+  // registry model, a miss falls through to synthesis below.
+  const found = lookupPiModel(piProvider, model);
+  if (found) {
+    return found;
   }
-  const siblings = getModels(piProvider as "deepseek") as Model<Api>[];
+  const siblings = getBuiltinModels(piProvider as "deepseek") as Model<Api>[];
   const base = siblings.reduce<Model<Api> | undefined>((best, candidate) => {
     if (!best) {
       return candidate;

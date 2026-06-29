@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getModel } from "@earendil-works/pi-ai/compat";
+import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 import { test } from "vitest";
 import { resolvePiModel } from "./pi-key";
 
@@ -13,7 +13,7 @@ test("resolvePiModel returns the registry model when the id is known", () => {
   const model = resolvePiModel("deepseek", "deepseek-v4-pro");
   assert.equal(model.id, "deepseek-v4-pro");
   // It is the genuine registry entry, not a synthesized clone.
-  assert.equal(model.contextWindow, getModel("deepseek", "deepseek-v4-pro")?.contextWindow);
+  assert.equal(model.contextWindow, getBuiltinModel("deepseek", "deepseek-v4-pro")?.contextWindow);
 });
 
 test("resolvePiModel synthesizes an unregistered id from the closest sibling", () => {

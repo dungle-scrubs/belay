@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { getModel, getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import type {
   CatalogEntry,
   CatalogFreshness,
@@ -14,7 +14,8 @@ import { lmStudioProvider } from "./lmstudio";
 import { resolveContextWindow } from "./model-metadata-overrides";
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
-import { AUTH_PATH } from "./provider-auth";
+import { lookupPiModel } from "./pi-model";
+import { AUTH_PATH, oauthPresent, staticKeyEntry } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
 import { asLiveModel, fetchSourceModels, type LiveModel } from "./source-models";
 import type { Provider } from "./types";
@@ -26,7 +27,7 @@ import type { Provider } from "./types";
  * an OAuth subscription (OpenAI/ChatGPT), or a direct API-key provider (DeepSeek, Z.ai, MiniMax) - and
  * a configured source exposes its WHOLE model catalog, queried LIVE from the provider's `/models`
  * endpoint with the user's key (NOT pi-ai's bundled static registry, which can be stale). pi-ai's
- * `getModel` is used only to ENRICH a live id with its shape (context window, reasoning, vision); when
+ * `getBuiltinModel` is used only to ENRICH a live id with its shape (context window, reasoning, vision); when
  * the live query fails the static registry is the fallback so a source is never empty for no reason.
  *
  * The host is the source of truth for source status + auth state + the catalog; the browser renders
@@ -113,28 +114,34 @@ async function readAuthJson(): Promise<Record<string, unknown>> {
   }
 }
 
-/** Whether a source's credential is present in auth.json (local runtimes are always "configured"). */
-function isConfigured(source: SourceDef, auth: Record<string, unknown>): boolean {
-  if (source.type === "local") {
-    return true;
-  }
-  if (source.oauthName) {
-    return auth[source.oauthName] != null;
-  }
-  if (source.authName) {
-    const entry = auth[source.authName] as { key?: unknown } | undefined;
-    return typeof entry?.key === "string" && entry.key.length > 0;
-  }
-  return false;
+/** A source's resolved auth state: whether it's configured + its static key (api-key sources only). */
+interface SourceAuth {
+  readonly configured: boolean;
+  readonly staticKey: string | null;
 }
 
-/** The static-key value for an api-key source, or null. */
+/** A source's static key (api-key sources only; via the shared `{ key }` predicate), or null. */
 function staticKeyOf(source: SourceDef, auth: Record<string, unknown>): string | null {
-  if (!source.authName) {
-    return null;
+  return source.authName ? staticKeyEntry(auth, source.authName) : null;
+}
+
+/** Resolves one source's auth state: local runtimes are always configured; an oauth source needs its
+ *  OAuth entry; an api-key source needs a present static key (both via the shared predicates). */
+function resolveSourceAuth(source: SourceDef, auth: Record<string, unknown>): SourceAuth {
+  if (source.type === "local") {
+    return { configured: true, staticKey: null };
   }
-  const entry = auth[source.authName] as { key?: unknown } | undefined;
-  return typeof entry?.key === "string" && entry.key.length > 0 ? entry.key : null;
+  if (source.oauthName) {
+    return { configured: oauthPresent(auth, source.oauthName), staticKey: null };
+  }
+  const staticKey = staticKeyOf(source, auth);
+  return { configured: staticKey !== null, staticKey };
+}
+
+/** The per-source auth state in ONE pass over SOURCES, so the configured signal + static key are
+ *  resolved once and shared by the snapshot builder and the live-models fetch. */
+function projectSourceAuth(auth: Record<string, unknown>): Map<string, SourceAuth> {
+  return new Map(SOURCES.map((source) => [source.sourceId, resolveSourceAuth(source, auth)]));
 }
 
 /** The pi-ai registry Model for an id (full object), for shape + reasoning enrichment, or undefined. */
@@ -144,14 +151,7 @@ type PiModel = {
   readonly input?: readonly string[];
 };
 function piModelOf(piProvider: string | undefined, id: string): PiModel | undefined {
-  if (!piProvider) {
-    return undefined;
-  }
-  try {
-    return getModel(piProvider as "deepseek", id as "deepseek-v4-pro") as PiModel | undefined;
-  } catch {
-    return undefined;
-  }
+  return piProvider ? (lookupPiModel(piProvider, id) as PiModel | undefined) : undefined;
 }
 
 /** The reasoning levels a model supports: a graded/binary surface for a registry model, the LM Studio
@@ -223,11 +223,12 @@ export function buildCatalogSnapshot(
   auth: Record<string, unknown>,
   modelsBySource: Readonly<Record<string, readonly (string | LiveModel)[]>>,
   staleSources: ReadonlySet<string> = new Set(),
+  sourceAuth: ReadonlyMap<string, SourceAuth> = projectSourceAuth(auth),
 ): CatalogSnapshot {
   const catalogBySource: Record<string, CatalogEntry[]> = {};
   const sources: SourceSummary[] = [];
   for (const source of SOURCES) {
-    const configured = isConfigured(source, auth);
+    const configured = sourceAuth.get(source.sourceId)?.configured ?? false;
     // Stale only applies to a configured source whose live /models query failed (an unconfigured
     // source has no catalog to be stale).
     const freshness: CatalogFreshness = {
@@ -256,13 +257,6 @@ export function buildCatalogSnapshot(
   return { sources, catalogBySource };
 }
 
-/**
- * Builds a {@link Provider} for an arbitrary `{ sourceId, modelId }` selection (D-065 turn resolution),
- * or null when the source is unknown (the caller then falls back to the legacy registered providers).
- * This is what lets ANY model the chooser surfaces actually run: a pi source builds a per-model pi
- * provider (the adapter synthesizes a registry entry for a just-released id), and the local source
- * builds an LM Studio provider for that model id.
- */
 /**
  * Builds the concrete {@link Provider} for a source + model id, dispatching on the source's type +
  * auth shape: local -> LM Studio, oauth -> Codex/Anthropic, api-key/gateway -> a static-key pi
@@ -321,6 +315,13 @@ export function providerForSource(
   return null;
 }
 
+/**
+ * Builds a {@link Provider} for an arbitrary `{ sourceId, modelId }` selection (D-065 turn resolution),
+ * or null when the source is unknown (the caller then falls back to the legacy registered providers).
+ * This is what lets ANY model the chooser surfaces actually run: a pi source builds a per-model pi
+ * provider (the adapter synthesizes a registry entry for a just-released id), and the local source
+ * builds an LM Studio provider for that model id.
+ */
 export function buildSourceProvider(sourceId: string, modelId: string): Provider | null {
   const source = SOURCES.find((s) => s.sourceId === sourceId);
   return source ? providerForSource(source, modelId) : null;
@@ -334,19 +335,25 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
  */
 export async function loadCatalog(): Promise<CatalogSnapshot> {
   const auth = await readAuthJson();
+  // Resolve each source's auth state ONCE (configured + static key) and reuse it for the fetch filter,
+  // the per-source key, and the snapshot - instead of re-parsing the same auth entry at each step.
+  const sourceAuth = projectSourceAuth(auth);
   // Fetch the raw models (id + name) for each CONFIGURED source (a key/sign-in is present), then
   // build the snapshot purely. Unconfigured sources are skipped (no fetch) and carry a needs-auth
   // summary.
   const modelsBySource: Record<string, readonly LiveModel[]> = {};
   const staleSources = new Set<string>();
   await Promise.all(
-    SOURCES.filter((source) => isConfigured(source, auth)).map(async (source) => {
-      const { models, stale } = await fetchSourceModels(source, staticKeyOf(source, auth));
+    SOURCES.filter((source) => sourceAuth.get(source.sourceId)?.configured).map(async (source) => {
+      const { models, stale } = await fetchSourceModels(
+        source,
+        sourceAuth.get(source.sourceId)?.staticKey ?? null,
+      );
       modelsBySource[source.sourceId] = models;
       if (stale) {
         staleSources.add(source.sourceId);
       }
     }),
   );
-  return buildCatalogSnapshot(auth, modelsBySource, staleSources);
+  return buildCatalogSnapshot(auth, modelsBySource, staleSources, sourceAuth);
 }
