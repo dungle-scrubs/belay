@@ -1,9 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { resolveTrevorStateHome } from "@trevor/session/node-paths";
 
 export const DEFAULT_VIRTUALIZATION_PERFORMANCE_ARTIFACT_ROOT = join(
-  resolve(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "trevorV2"),
+  resolveTrevorStateHome(),
   "virtualization-performance/artifacts",
 );
 

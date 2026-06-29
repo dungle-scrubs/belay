@@ -1,6 +1,12 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import { errorMessage, events, type SessionSummary, streamTransport } from "@trevor/session";
+import {
+  errorMessage,
+  events,
+  PRODUCER_IDS,
+  type SessionSummary,
+  streamTransport,
+} from "@trevor/session";
 import { nodeFs } from "./fs";
 import { loadHosts, removeHost } from "./host-registry";
 import { formatStatus, launch } from "./launch";
@@ -36,7 +42,7 @@ const lifecycleIo: LifecycleIo = {
     const event = events.sessionArchived({ archived });
     await transport.publishEvent(sessionId, {
       type: event.type,
-      producerId: "trevor-cli",
+      producerId: PRODUCER_IDS.cli,
       payload: event.payload,
     });
   },

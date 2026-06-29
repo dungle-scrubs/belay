@@ -7,7 +7,7 @@ import { tempDir } from "./index";
 /**
  * The node-only half of the test harness: booting real local stores on ephemeral ports. Kept in a
  * separate entry (`@trevor/test-kit/boot`) from the browser-safe fixtures in `index.ts`, because it
- * imports the store apps (`node:http` + better-sqlite3) which the web jsdom test project cannot
+ * imports the store apps (`node:http` + node:sqlite) which the web jsdom test project cannot
  * bundle. The two store *app* tests boot their own server from `../src` instead of importing this,
  * to avoid a test-only dependency cycle back through this package.
  */

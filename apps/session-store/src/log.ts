@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { InventoryRow, PublishInput, SessionEvent, StreamEnvelope } from "@trevor/session";
-import { frames, LIFECYCLE_TYPES } from "@trevor/session";
+import { frames, INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@trevor/session";
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
@@ -138,12 +138,12 @@ export class SessionLog {
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
       eventCount: Number(s.eventCount),
-      hostOnline: this.latestOfType(s.sessionId, "host.online"),
-      firstUser: this.firstOfType(s.sessionId, "user.message"),
+      hostOnline: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.hostOnline),
+      firstUser: this.firstOfType(s.sessionId, INVENTORY_EVENT_TYPES.userMessage),
       lifecycle: this.eventsOfTypes(s.sessionId, LIFECYCLE_TYPES),
-      archived: this.latestOfType(s.sessionId, "session.archived"),
-      rename: this.latestOfType(s.sessionId, "session.title"),
-      deleted: this.latestOfType(s.sessionId, "session.deleted"),
+      archived: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionArchived),
+      rename: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionTitle),
+      deleted: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionDeleted),
     }));
   }
 

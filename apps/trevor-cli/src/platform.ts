@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HEALTH_PATH, isHealthBody } from "@trevor/server-kit";
 import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
-import { raceTimeout } from "@trevor/session/async";
+import { raceTimeout, sleep } from "@trevor/session/async";
 import { nodeFs } from "./fs";
 import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
 import { TREVOR_HOME, TREVOR_STATE_HOME } from "./project";
@@ -120,7 +120,7 @@ async function pollUntil(
     if (res && accept(res)) {
       return true;
     }
-    await delay(300);
+    await sleep(300);
   }
   return false;
 }
@@ -134,8 +134,6 @@ function waitForStore(): Promise<boolean> {
 function waitForWeb(): Promise<boolean> {
   return pollUntil(WEB_URL, WEB_READY_TIMEOUT_MS, () => true);
 }
-
-const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Watches a session's stream for `host.online` (or presence), resolving true on the first sighting and

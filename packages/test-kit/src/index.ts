@@ -31,7 +31,9 @@ export function tempDir(prefix = "trevor-test-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-/** A `SessionIdentity` for a test participant; `runtimeKind` "trevor" makes it count as a host. */
+/** A `SessionIdentity` for a test participant. `runtimeKind` defaults to "test", which does NOT count
+ *  as a host - only `RUNTIME_KIND.host` ("trevor") does - so a test participant stays a plain viewer
+ *  unless it overrides the kind. */
 export function testIdentity(id: string, runtimeKind = "test"): SessionIdentity {
   return { displayName: id, runtimeKind, instanceId: id, participantId: id };
 }

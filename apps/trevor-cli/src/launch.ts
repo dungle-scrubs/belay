@@ -102,17 +102,23 @@ export async function launch(
   const services: ServiceReport[] = [];
   const conflicts: ServiceReport[] = [];
   const startedServices: ServiceName[] = [];
-  for (const name of SERVICE_NAMES) {
-    const port = RESERVED_PORTS[name];
-    const status = classifyService(await platform.probeService(name, port));
-    const report: ServiceReport = { name, port, status };
+  // Probe every reserved port at once (each is an independent HTTP round-trip up to ~800ms);
+  // the start decision below still runs in SERVICE_NAMES order so the output is unchanged.
+  const reports = await Promise.all(
+    SERVICE_NAMES.map(async (name): Promise<ServiceReport> => {
+      const port = RESERVED_PORTS[name];
+      const status = classifyService(await platform.probeService(name, port));
+      return { name, port, status };
+    }),
+  );
+  for (const report of reports) {
     services.push(report);
-    if (status === "conflict") {
+    if (report.status === "conflict") {
       conflicts.push(report);
-    } else if (status === "down") {
-      platform.reporter.step(`starting ${name}…`);
-      await platform.startService(name);
-      startedServices.push(name);
+    } else if (report.status === "down") {
+      platform.reporter.step(`starting ${report.name}…`);
+      await platform.startService(report.name);
+      startedServices.push(report.name);
     }
   }
   platform.reporter.step("waiting for session store…");

@@ -60,7 +60,7 @@ export class BlobStore {
       }
       throw cause;
     }
-    const meta: BlobMeta = { size: bytes.byteLength, mimeType };
+    const meta: BlobMeta = { size: result.size, mimeType };
     await writeFile(`${path}.meta`, JSON.stringify(meta), "utf8");
     return { ...result, deduped: false };
   }
