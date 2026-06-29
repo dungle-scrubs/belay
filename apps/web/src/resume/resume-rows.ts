@@ -1,4 +1,4 @@
-import { relativeTime, type SessionSummary } from "@trevor/session";
+import { activeSessions, relativeTime, type SessionSummary, sortInventory } from "@trevor/session";
 import type { CommandRow, RowChooserAdapter, RowTone } from "@/components/command-modal";
 
 /** The current project / session context the resume rows are projected against. */
@@ -53,14 +53,16 @@ export function buildResumeRows(
   sessions: readonly SessionSummary[],
   ctx: ResumeContext,
 ): CommandRow[] {
-  // Archived sessions (D-094) never appear in the default resume view - they are reached only
-  // through an explicit archive browser / `trevor list --archived`.
-  const visible = sessions.filter((s) => !s.archived);
+  // Archived and soft-deleted sessions (D-094) never appear in the default resume view - they are
+  // reached only through an explicit archive browser / `trevor list --archived`.
+  const visible = activeSessions(sessions);
   // Scope to the current working directory's project; with no known project (e.g. the default
   // shared session) we can't identify a cwd to scope to, so fall back to the full list.
   const scoped =
     ctx.currentProject != null ? visible.filter((s) => s.project === ctx.currentProject) : visible;
-  const sorted = [...scoped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // Order to match the sidebar; the scope above already restricts to the current project, so the
+  // current-project block is the whole list and the rest is empty.
+  const sorted = sortInventory(scoped, ctx.currentProject);
 
   return sorted.map((s) => {
     const { status, tone } = statusFor(s);

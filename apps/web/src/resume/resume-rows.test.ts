@@ -115,3 +115,15 @@ test("an archived session never appears in the default resume rows (D-094)", () 
     "the archived session is excluded; the active one remains",
   );
 });
+
+test("a soft-deleted session never appears in the resume rows (D-094)", () => {
+  const rows = buildResumeRows(
+    [summary({ sessionId: "active" }), summary({ sessionId: "gone", deleted: true })],
+    ctx({ currentSessionId: "x" }),
+  );
+  assert.deepEqual(
+    rows.map((r) => r.id),
+    ["active"],
+    "the soft-deleted session is excluded; the active one remains",
+  );
+});
