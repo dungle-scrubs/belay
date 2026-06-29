@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   type DirectHandoffDeps,
+  executeFinalizedHandoff,
   isAnswerablePrompt,
   runDirectHandoff,
   TurnScheduler,
@@ -161,6 +162,41 @@ test("direct handoff injects the target prompt via the control producer, and the
   assert.equal(started.length, 1, "the target host schedules exactly the injected prompt");
   assert.equal(started[0]?.type, "user.message");
   assert.equal((started[0]?.payload as { text?: string }).text, "continue the parser work");
+});
+
+test("generated handoff: an APPROVED draft runs in the target via the shared finalized execution (02.10)", async () => {
+  // A `/handoff` draft is approved (here with an edit): the host runs `executeFinalizedHandoff` with the
+  // approved prompt. It must reach the SAME target outcome as direct mode - the approved text lands as the
+  // target's first prompt on the control producer, so the target host schedules it.
+  const transport = streamTransport(store.url);
+  await transport.ensureSession("gsrc");
+  const deps: DirectHandoffDeps = {
+    ...directDeps(store.url),
+    sourceSessionId: "gsrc",
+    newSessionId: () => "gtgt",
+  };
+
+  const result = await executeFinalizedHandoff(
+    { handoffId: "gen-1", prompt: "Approved: finish the emitter, then wire the CLI." },
+    deps,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.targetSessionId, "gtgt");
+
+  const target = await readLog(store.url, "gtgt");
+  const prompt = target.find((e) => e.type === "user.message");
+  assert.equal(prompt?.producerId, CONTROL, "the approved prompt rides the control producer");
+  assert.equal(
+    (prompt?.payload as { text?: string }).text,
+    "Approved: finish the emitter, then wire the CLI.",
+  );
+  // The faithful end: the target host schedules exactly the approved prompt.
+  const started = replayAndSchedule(target);
+  assert.equal(started.length, 1, "the target host runs the approved prompt");
+  assert.equal(
+    (started[0]?.payload as { text?: string }).text,
+    "Approved: finish the emitter, then wire the CLI.",
+  );
 });
 
 test("regression: a prompt stamped with the host's own producer is dropped (the original bug)", async () => {

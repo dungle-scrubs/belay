@@ -18,6 +18,7 @@ import {
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
+  pendingHandoffFrom,
   pendingQuestionFrom,
   providerModelsFrom,
   summarizeProviderQuestion,
@@ -286,6 +287,59 @@ test("pendingQuestionFrom skips a resolved question and returns a later unresolv
 
 test("pendingQuestionFrom is null when there are no questions", () => {
   assert.equal(pendingQuestionFrom([]), null);
+});
+
+/**
+ * pendingHandoffFrom (02.10): the generate-mode handoff lifecycle the approval surface reads to show a
+ * generating spinner, then the draft with approve/edit/reject, then disappear once it resolves.
+ */
+const hgenerating = (id: string) => evt("handoff.generating", { handoffId: id });
+const hgenerated = (id: string, prompt: string) =>
+  evt("handoff.generated", { handoffId: id, prompt });
+
+test("pendingHandoffFrom reports generating, then the generated draft", () => {
+  assert.deepEqual(pendingHandoffFrom([hgenerating("h1")]), {
+    status: "generating",
+    handoffId: "h1",
+  });
+  assert.deepEqual(pendingHandoffFrom([hgenerating("h1"), hgenerated("h1", "do the work")]), {
+    status: "generated",
+    handoffId: "h1",
+    prompt: "do the work",
+  });
+});
+
+for (const terminal of [
+  "handoff.approved",
+  "handoff.rejected",
+  "handoff.failed",
+  "handoff.accepted",
+]) {
+  test(`pendingHandoffFrom clears once ${terminal} arrives`, () => {
+    const events = [
+      hgenerating("h1"),
+      hgenerated("h1", "do the work"),
+      evt(terminal, { handoffId: "h1", code: "x", targetSessionId: "t", prompt: "p" }),
+    ];
+    assert.equal(pendingHandoffFrom(events), null);
+  });
+}
+
+test("pendingHandoffFrom ignores direct-mode handoffs (no generating/generated)", () => {
+  const events = [
+    evt("handoff.requested", {
+      handoffId: "h1",
+      mode: "direct",
+      sourceSessionId: "s",
+      prompt: "p",
+    }),
+    evt("handoff.accepted", { handoffId: "h1", targetSessionId: "t", prompt: "p" }),
+  ];
+  assert.equal(pendingHandoffFrom(events), null);
+});
+
+test("pendingHandoffFrom is null with no handoff events", () => {
+  assert.equal(pendingHandoffFrom([]), null);
 });
 
 /**

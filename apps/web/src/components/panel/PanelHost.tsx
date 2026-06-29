@@ -24,6 +24,7 @@ import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { RowChooserModal } from "@/components/command-modal";
+import { HandoffApprovalSurface } from "@/components/handoff/HandoffApprovalSurface";
 import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/SidePanel";
 import { SessionSidebar } from "@/components/panel/session-sidebar";
 import { DrawerToggle } from "@/components/panel/side-drawer";
@@ -31,7 +32,7 @@ import { QuestionSurface } from "@/components/question";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 import type { SessionStream } from "@/session/use-session";
-import type { HostStatus, PendingQuestion } from "../../derive";
+import type { HostStatus, PendingHandoff, PendingQuestion } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
 import { TasksPanel } from "../../TasksPanel";
@@ -191,9 +192,16 @@ export function PanelHost(props: {
     readonly pending: PendingQuestion | null;
     readonly onAnswer: (answer: ProviderQuestionAnswer) => void;
   };
+  /** The pending generated handoff (02.10): when set, the approval surface takes over the composer area. */
+  handoff: {
+    readonly pending: PendingHandoff | null;
+    readonly onApprove: (handoffId: string) => void;
+    readonly onReject: (handoffId: string) => void;
+    readonly onEdit: (handoffId: string, prompt: string) => void;
+  };
 }) {
   const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
-  const { sidebar, sessionName, chooser, archived, onUnarchive, question } = props;
+  const { sidebar, sessionName, chooser, archived, onUnarchive, question, handoff } = props;
   const { replayed } = stream;
   const { transcript, toolBatches, onOpenPath, onDoctorRefresh, showThinking, queue } = tv;
   const { active, awaitingResponse, turnStartedAt } = tv;
@@ -362,6 +370,16 @@ export function PanelHost(props: {
               key={question.pending.questionId}
               contract={question.pending.contract}
               onAnswer={question.onAnswer}
+            />
+          ) : handoff.pending ? (
+            // A pending `/handoff` draft takes over the composer until approved/edited/rejected (02.10).
+            // Keyed by handoffId so a fresh draft re-runs the mount focus.
+            <HandoffApprovalSurface
+              key={handoff.pending.handoffId}
+              handoff={handoff.pending}
+              onApprove={() => handoff.onApprove(handoff.pending?.handoffId ?? "")}
+              onReject={() => handoff.onReject(handoff.pending?.handoffId ?? "")}
+              onEdit={(prompt) => handoff.onEdit(handoff.pending?.handoffId ?? "", prompt)}
             />
           ) : (
             <>

@@ -60,9 +60,54 @@ export interface DirectHandoffResult {
 }
 
 /**
+ * The shared FINALIZED-PROMPT execution path, reached once a final target prompt exists - directly
+ * (`/handoff --direct <prompt>`) or after a generated draft is approved (`/handoff`). It ensures the
+ * target session, writes its provenance + first runnable prompt BEFORE the switch, closes the source
+ * lifecycle with `handoff.accepted`, spawns the target host, and switches the browser into it. The
+ * `handoff.requested` event (which carries the mode/provenance) is the CALLER's responsibility, so
+ * direct and generated stay distinguishable in the source log while sharing this execution exactly -
+ * the seam that keeps the two modes from drifting. <!-- D-002 -->
+ */
+export async function executeFinalizedHandoff(
+  args: { readonly handoffId: string; readonly prompt: string },
+  deps: DirectHandoffDeps,
+): Promise<DirectHandoffResult> {
+  const { handoffId, prompt } = args;
+  const targetSessionId = deps.newSessionId();
+  await deps.ensureSession(targetSessionId);
+
+  // Target log, BEFORE the switch: provenance, then the first prompt the target host will run.
+  await deps.publish(
+    targetSessionId,
+    events.handoffAccepted({ handoffId, targetSessionId, prompt }),
+  );
+  const model = deps.targetModel();
+  await deps.publishPrompt(
+    targetSessionId,
+    events.userMessage({
+      text: prompt,
+      provider: model.provider,
+      ...(model.model ? { model: model.model } : {}),
+      ...(model.reasoning ? { reasoning: model.reasoning } : {}),
+    }),
+  );
+
+  // Source lifecycle close, then spawn the target host and switch the browser into it.
+  await deps.publish(
+    deps.sourceSessionId,
+    events.handoffAccepted({ handoffId, targetSessionId, prompt }),
+  );
+  deps.spawnHost({ cwd: deps.cwd, sessionId: targetSessionId, workspace: deps.workspace });
+  await deps.switchAndRetire(targetSessionId);
+
+  return { ok: true, text: `✓ handed off to ${targetSessionId}`, targetSessionId };
+}
+
+/**
  * Run a direct (`/handoff --direct <prompt>`) handoff. Returns a command-result line for the source
  * session. On an empty prompt it emits `handoff.failed` and returns without ensuring, spawning, or
- * switching, so the source session is untouched.
+ * switching, so the source session is untouched. The non-empty path emits the direct `handoff.requested`
+ * then defers to {@link executeFinalizedHandoff} - the same execution generated approval reuses.
  */
 export async function runDirectHandoff(
   rawPrompt: string,
@@ -93,32 +138,5 @@ export async function runDirectHandoff(
     }),
   );
 
-  const targetSessionId = deps.newSessionId();
-  await deps.ensureSession(targetSessionId);
-
-  // Target log, BEFORE the switch: provenance, then the first prompt the target host will run.
-  await deps.publish(
-    targetSessionId,
-    events.handoffAccepted({ handoffId, targetSessionId, prompt }),
-  );
-  const model = deps.targetModel();
-  await deps.publishPrompt(
-    targetSessionId,
-    events.userMessage({
-      text: prompt,
-      provider: model.provider,
-      ...(model.model ? { model: model.model } : {}),
-      ...(model.reasoning ? { reasoning: model.reasoning } : {}),
-    }),
-  );
-
-  // Source lifecycle close, then spawn the target host and switch the browser into it.
-  await deps.publish(
-    deps.sourceSessionId,
-    events.handoffAccepted({ handoffId, targetSessionId, prompt }),
-  );
-  deps.spawnHost({ cwd: deps.cwd, sessionId: targetSessionId, workspace: deps.workspace });
-  await deps.switchAndRetire(targetSessionId);
-
-  return { ok: true, text: `✓ handed off to ${targetSessionId}`, targetSessionId };
+  return executeFinalizedHandoff({ handoffId, prompt }, deps);
 }

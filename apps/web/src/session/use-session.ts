@@ -305,6 +305,11 @@ export interface SessionActions {
   /** Recover an orphaned turn (no host connected to ever finish it): publish the same interrupted
    *  terminal event the host's reaper would, so the in-flight latch clears and the session resumes. */
   readonly reconcileTurn: (runId: string) => Promise<void>;
+  /** Approve a generated handoff draft (02.10): publish `handoff.approved` so the host runs the
+   *  finalized handoff. `prompt` overrides the generated text when the user edited it. */
+  readonly approveHandoff: (handoffId: string, prompt?: string) => Promise<void>;
+  /** Reject a generated handoff draft: publish `handoff.rejected`; the source session stays active. */
+  readonly rejectHandoff: (handoffId: string) => Promise<void>;
 }
 
 type PublishVia = (built: TrevorEventInput) => Promise<void>;
@@ -335,6 +340,11 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
     unarchive: () => publishVia(sessionEvents.sessionArchived({ archived: false })),
     answerQuestion: (questionId: string, answer: ProviderQuestionAnswer) =>
       publishVia(sessionEvents.providerQuestionAnswer({ questionId, answer })),
+    approveHandoff: (handoffId: string, prompt?: string) =>
+      publishVia(
+        sessionEvents.handoffApproved({ handoffId, ...(prompt != null ? { prompt } : {}) }),
+      ),
+    rejectHandoff: (handoffId: string) => publishVia(sessionEvents.handoffRejected({ handoffId })),
     // Mirrors the host's `reapExcept` reconcile: an interrupted (not user-cancelled) completion, so the
     // transcript renders it as a host-style reap rather than an ESC, and the in-flight latch releases.
     reconcileTurn: (runId: string) =>

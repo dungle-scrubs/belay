@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { TrevorEventInput } from "@trevor/session";
 import { test } from "vitest";
-import { type DirectHandoffDeps, runDirectHandoff } from "./handoff-flow";
+import { type DirectHandoffDeps, executeFinalizedHandoff, runDirectHandoff } from "./handoff-flow";
 
 /**
  * The direct continuation-handoff orchestration (M2). These drive `runDirectHandoff` with a recording
@@ -140,4 +140,44 @@ test("direct mode writes no generated-prompt events", async () => {
   const types = calls.filter((c) => c.fn === "publish").map((c) => c.type);
   assert.ok(!types.includes("handoff.generating"));
   assert.ok(!types.includes("handoff.generated"));
+});
+
+test("executeFinalizedHandoff produces the same target execution as direct (minus requested)", async () => {
+  // M3: generated approval reuses this exact path, so an approved prompt must yield the identical
+  // ensure -> target provenance -> target prompt -> source accepted -> spawn -> switch sequence that
+  // direct mode produces after its `handoff.requested`. The handoffId is supplied by the caller (the
+  // source already emitted requested/generating/generated under it), not minted here.
+  const { calls, deps } = recorder();
+  const result = await executeFinalizedHandoff(
+    { handoffId: "h1", prompt: "approved prompt" },
+    deps,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.targetSessionId, "tgt");
+  assert.deepEqual(
+    calls.map((c) => `${c.fn}:${c.sessionId}${c.type ? `:${c.type}` : ""}`),
+    [
+      "ensureSession:tgt",
+      "publish:tgt:handoff.accepted",
+      "publishPrompt:tgt:user.message",
+      "publish:src:handoff.accepted",
+      "spawnHost:tgt",
+      "switchAndRetire:tgt",
+    ],
+  );
+  // It mints no fresh handoff id and emits no requested (the caller owns the mode/provenance).
+  assert.ok(!calls.some((c) => c.type === "handoff.requested"));
+});
+
+test("executeFinalizedHandoff carries the (edited) approved prompt verbatim into the target", async () => {
+  const { calls, deps } = recorder();
+  await executeFinalizedHandoff({ handoffId: "h9", prompt: "edited target prompt" }, deps);
+
+  const prompt = calls.find((c) => c.sessionId === "tgt" && c.type === "user.message");
+  assert.equal(payloadOf(prompt).text, "edited target prompt");
+  // Provenance on both logs uses the same handoffId the caller passed.
+  for (const c of calls.filter((c) => c.type === "handoff.accepted")) {
+    assert.equal(payloadOf(c).handoffId, "h9");
+  }
 });

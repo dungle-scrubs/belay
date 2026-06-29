@@ -56,7 +56,8 @@ import { registerDoctorSnapshotSource } from "./doctor/source";
 import { envNumber } from "./env";
 import { nodeGitRunner, readGitStatus } from "./git-status";
 import { parseHandoff } from "./handoff";
-import { type DirectHandoffDeps, runDirectHandoff } from "./handoff-flow";
+import { type DirectHandoffDeps, executeFinalizedHandoff, runDirectHandoff } from "./handoff-flow";
+import { generateHandoffPrompt, hasGenerableContext } from "./handoff-generate";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
 import { msg } from "./messages";
@@ -1203,31 +1204,22 @@ async function switchToWorkspace(opts: {
 }
 
 /**
- * `/handoff` (02, M2): continue this session's work in a FRESH target session. Direct mode
- * (`--direct <prompt>`) injects the prompt verbatim; generated mode arrives in a later milestone. The
- * pure event ordering lives in `runDirectHandoff`; this wires the real transport/mint/spawn/switch and
- * reuses the same `spawnReplacementHost` + `session.switch` + retire mechanic as `/clear` and `/cd`.
- * Gated by the workspace-switch blocker so a handoff never abandons a running source turn (which would
- * leave it stuck mid-flight - the exact failure the turn reconcile guards against).
+ * Drafts pending generated handoffs by `handoffId`: the generated target prompt awaiting the user's
+ * approve/edit/reject. Set when `handoff.generated` lands (live OR replayed, so a fresh leader can still
+ * honor an approval) and cleared on the terminal `handoff.accepted` / `.rejected` / `.failed`. An
+ * approval for an id not in this map is stale (host restarted past the draft) and is refused. <!-- D-003 -->
  */
-async function runHandoff(args: string): Promise<void> {
-  const { mode, prompt } = parseHandoff(args);
-  if (mode === "generate") {
-    await emit(
-      events.commandResult({
-        command: "/handoff",
-        text: "Generated handoff is not available yet - use /handoff --direct <prompt>.",
-        ok: false,
-      }),
-    );
-    return;
-  }
+const pendingHandoffs = new Map<string, { readonly prompt: string }>();
 
-  if (await blockedFromWorkspaceSwitch("/handoff", "hand off")) {
-    return;
-  }
-
-  const deps: DirectHandoffDeps = {
+/**
+ * The real transport/mint/spawn/switch effects a handoff orchestrates, shared by direct mode and
+ * generated approval so neither rebuilds target creation or the switch. Reuses the same
+ * `spawnReplacementHost` + `session.switch` + retire mechanic as `/clear` and `/cd`. The injected
+ * prompt rides the control producer (not PRODUCER_ID) so the target host schedules a turn for it
+ * instead of ignoring it as a self-echo - the bug that left a handed-off session "Working" forever.
+ */
+function handoffDeps(): DirectHandoffDeps {
+  return {
     sourceSessionId: SESSION_ID,
     cwd: process.cwd(),
     workspace: WORKSPACE_ROOT,
@@ -1236,9 +1228,6 @@ async function runHandoff(args: string): Promise<void> {
     targetModel: controlModel,
     publish: (sessionId, event) =>
       transport.publishEvent(sessionId, { ...event, producerId: PRODUCER_ID }),
-    // The injected prompt rides the control producer (not PRODUCER_ID) so the target host schedules a
-    // turn for it instead of ignoring it as a self-echo - the bug that left a handed-off session
-    // "Working" forever. Same path host control prompts (continue/retry) use.
     publishPrompt: (sessionId, event) =>
       transport.publishEvent(sessionId, { ...event, producerId: CONTROL_PRODUCER_ID }),
     ensureSession: async (sessionId) => {
@@ -1254,9 +1243,28 @@ async function runHandoff(args: string): Promise<void> {
       retireAfterSessionSwitch();
     },
   };
+}
+
+/**
+ * `/handoff` (02): continue this session's work in a FRESH target session. Direct mode (`--direct
+ * <prompt>`) injects the prompt verbatim and switches immediately; generated mode (`/handoff` or
+ * `/handoff <request>`) drafts a target prompt with the provider and waits for the user to approve,
+ * edit, or reject it (02.10) before any target launches. Both are gated by the workspace-switch
+ * blocker so a handoff never abandons a running source turn (the exact failure the turn reconcile
+ * guards against) - direct gates before switching, generated gates before drafting.
+ */
+async function runHandoff(args: string): Promise<void> {
+  const { mode, prompt } = parseHandoff(args);
+  if (await blockedFromWorkspaceSwitch("/handoff", "hand off")) {
+    return;
+  }
+  if (mode === "generate") {
+    await runGeneratedHandoff(prompt);
+    return;
+  }
 
   try {
-    const result = await runDirectHandoff(prompt, deps);
+    const result = await runDirectHandoff(prompt, handoffDeps());
     await emit(events.commandResult({ command: "/handoff", text: result.text, ok: result.ok }));
     if (result.ok) {
       log("host", "handoff: switched session", { from: SESSION_ID, to: result.targetSessionId });
@@ -1271,6 +1279,139 @@ async function runHandoff(args: string): Promise<void> {
       }),
     );
   }
+}
+
+/**
+ * Generated handoff (02.10): emit the source lifecycle (`handoff.requested` generate -> `generating`),
+ * draft the target prompt with the source's last-turn provider (the same provider compaction folds
+ * with), then emit `handoff.generated` for the browser to surface for approval. No command result is
+ * emitted here - the draft rides the approval surface, not a transcript line, so the source never shows
+ * a misleading failure beside a pending draft. Failure (no context, no provider, provider error, empty
+ * draft) emits a stable `handoff.failed` + a command result and leaves the source session active.
+ */
+async function runGeneratedHandoff(request: string): Promise<void> {
+  const handoffId = crypto.randomUUID();
+  const fail = async (code: string, detail: string, resultText: string) => {
+    await emit(events.handoffFailed({ handoffId, code, detail }));
+    await emit(events.commandResult({ command: "/handoff", text: resultText, ok: false }));
+  };
+
+  if (!hasGenerableContext(history)) {
+    await fail(
+      "empty_context",
+      "No conversation to summarize into a handoff.",
+      "Nothing to hand off yet — start the work first, then /handoff.",
+    );
+    return;
+  }
+  const provider = compactionController.providerOrDefault();
+  if (!provider) {
+    await fail(
+      "no_provider",
+      "No provider available to generate.",
+      "No provider available to generate a handoff.",
+    );
+    return;
+  }
+
+  await emit(
+    events.handoffRequested({
+      handoffId,
+      mode: "generate",
+      sourceSessionId: SESSION_ID,
+      ...(request.trim() ? { prompt: request.trim() } : {}),
+    }),
+  );
+  await emit(events.handoffGenerating({ handoffId }));
+
+  const exit = await Effect.runPromiseExit(
+    generateHandoffPrompt(provider, {
+      history: history.slice(),
+      cwd: process.cwd(),
+      workspace: WORKSPACE_ROOT,
+      ...(request.trim() ? { request: request.trim() } : {}),
+    }),
+  );
+  if (Exit.isFailure(exit)) {
+    warn("host", "handoff generation failed", { cause: Cause.pretty(exit.cause) });
+    await fail(
+      "generation_failed",
+      "The provider failed while generating the handoff.",
+      "Could not generate a handoff prompt — try again, or /handoff --direct <prompt>.",
+    );
+    return;
+  }
+  const draft = exit.value.trim();
+  if (!draft) {
+    await fail(
+      "empty_generation",
+      "The model produced no handoff prompt.",
+      "The model produced an empty handoff prompt — try again, or /handoff --direct <prompt>.",
+    );
+    return;
+  }
+
+  pendingHandoffs.set(handoffId, { prompt: draft });
+  await emit(events.handoffGenerated({ handoffId, prompt: draft }));
+  log("host", "handoff: generated draft", { handoffId: handoffId.slice(0, 8) });
+}
+
+/**
+ * The user approved a generated handoff (from the browser's approval surface). Runs the shared
+ * finalized-execution path with the approved prompt - the edited text when the user edited it in the
+ * prompt editor, else the generated draft. A stale id (no pending draft, e.g. the host restarted past
+ * it) is a no-op with a clear command result; the source session stays active. <!-- D-003 -->
+ */
+async function approveHandoff(handoffId: string, editedPrompt: string | undefined): Promise<void> {
+  const pending = pendingHandoffs.get(handoffId);
+  const prompt = (editedPrompt ?? "").trim() || pending?.prompt?.trim() || "";
+  if (!prompt) {
+    await emit(
+      events.handoffFailed({
+        handoffId,
+        code: "stale_approval",
+        detail: "No pending handoff draft.",
+      }),
+    );
+    await emit(
+      events.commandResult({
+        command: "/handoff",
+        text: "This handoff is no longer pending — run /handoff again.",
+        ok: false,
+      }),
+    );
+    pendingHandoffs.delete(handoffId);
+    return;
+  }
+  try {
+    const result = await executeFinalizedHandoff({ handoffId, prompt }, handoffDeps());
+    await emit(events.commandResult({ command: "/handoff", text: result.text, ok: result.ok }));
+    log("host", "handoff: approved + switched", { from: SESSION_ID, to: result.targetSessionId });
+  } catch (error) {
+    warn("host", "handoff approve failed", { error: msg(error) });
+    await emit(events.handoffFailed({ handoffId, code: "execute_failed", detail: msg(error) }));
+    await emit(
+      events.commandResult({
+        command: "/handoff",
+        text: `Failed to hand off: ${msg(error)}`,
+        ok: false,
+      }),
+    );
+  } finally {
+    pendingHandoffs.delete(handoffId);
+  }
+}
+
+/** The user rejected a generated handoff: drop the pending draft and acknowledge; source stays active. */
+async function rejectHandoff(handoffId: string): Promise<void> {
+  pendingHandoffs.delete(handoffId);
+  await emit(
+    events.commandResult({
+      command: "/handoff",
+      text: "Handoff cancelled — staying in this session.",
+      ok: true,
+    }),
+  );
 }
 
 /** Switches to a managed worktree (or the baseline checkout) by row id, gated like `/cd`. */
@@ -1956,6 +2097,31 @@ function handleEvent(message: SessionEvent): void {
           issues: result.issues,
         });
       }
+    }
+  } else if (decoded.type === "handoff.generated") {
+    // Track the draft so an approval can run it - on replay too, so a fresh leader that took over after
+    // the draft was written can still honor the approval (it is rebuildable state, not an action).
+    pendingHandoffs.set(decoded.handoffId, { prompt: decoded.prompt });
+  } else if (decoded.type === "handoff.accepted" || decoded.type === "handoff.failed") {
+    // Terminal lifecycle: the draft is resolved, so drop it from the pending set (replay-safe).
+    pendingHandoffs.delete(decoded.handoffId);
+  } else if (decoded.type === "handoff.approved" && message.producerId !== PRODUCER_ID) {
+    // The browser approved a generated handoff draft. Like commands it is an ACTION (it spawns + switches),
+    // so only the live leader runs it, never on replay or a standby. `prompt` is set only when the user
+    // edited the draft in the prompt editor; otherwise approveHandoff falls back to the stored draft.
+    if (live && lease.isLeader()) {
+      approveHandoff(decoded.handoffId, decoded.prompt).catch((error) =>
+        warn("host", "handoff approve failed", { error: msg(error) }),
+      );
+    }
+  } else if (decoded.type === "handoff.rejected") {
+    // Terminal cleanup on every host (replay-safe); only the live leader acknowledges with one command
+    // result. `rejectHandoff` re-drops the (already-cleared) draft idempotently and leaves source active.
+    pendingHandoffs.delete(decoded.handoffId);
+    if (live && lease.isLeader() && message.producerId !== PRODUCER_ID) {
+      rejectHandoff(decoded.handoffId).catch((error) =>
+        warn("host", "handoff reject failed", { error: msg(error) }),
+      );
     }
   } else if (decoded.type === "tasks.current") {
     // Recorded WITHOUT a rebuild: the task list only matters as a compaction pin (history-projection)

@@ -35,6 +35,7 @@ import {
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
+  pendingHandoffFrom,
   pendingQuestionFrom,
   providerModelsFrom,
   sourceSignInFrom,
@@ -159,6 +160,8 @@ export function App() {
     unarchive,
     answerQuestion,
     reconcileTurn,
+    approveHandoff,
+    rejectHandoff,
   } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
@@ -278,6 +281,9 @@ export function App() {
   const tasks = useMemo(() => tasksFrom(events), [events]);
   // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
   const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);
+  // The pending generated handoff (02.10): a `/handoff` draft awaiting approve/edit/reject. Like a
+  // question, it takes over the composer until resolved.
+  const pendingHandoff = useMemo(() => pendingHandoffFrom(events), [events]);
 
   // The SidePanel's whole view-model in one pure selector: live-vs-completed precedence
   // for the Request data (ctx meter + treemap) and the per-category context aggregation,
@@ -891,6 +897,17 @@ export function App() {
             void answerQuestion(pendingQuestion.questionId, answer);
           }
         },
+      }}
+      handoff={{
+        pending: pendingHandoff,
+        onApprove: (handoffId) => void approveHandoff(handoffId),
+        onReject: (handoffId) => void rejectHandoff(handoffId),
+        onEdit: (handoffId, prompt) =>
+          editor.open({
+            text: prompt,
+            title: "Edit handoff prompt",
+            onConfirm: (edited) => void approveHandoff(handoffId, edited),
+          }),
       }}
     />
   );

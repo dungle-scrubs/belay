@@ -9,5 +9,9 @@ export { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "../../src/ag
 // Continuation handoff (02): the direct-flow orchestration + the turn-dispatch scheduler and the
 // self-echo predicate, so cross-service e2e can drive a handoff through a real store and replay the
 // target log through the same scheduling logic the real host uses (the role main.ts plays live).
-export { type DirectHandoffDeps, runDirectHandoff } from "../../src/handoff-flow";
+export {
+  type DirectHandoffDeps,
+  executeFinalizedHandoff,
+  runDirectHandoff,
+} from "../../src/handoff-flow";
 export * from "./fake-provider";

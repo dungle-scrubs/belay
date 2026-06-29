@@ -367,6 +367,48 @@ export function pendingQuestionFrom(events: readonly SessionEvent[]): PendingQue
   return pending;
 }
 
+/**
+ * A generated (`/handoff`) handoff awaiting the user's approve/edit/reject. `generating` while the model
+ * drafts the target prompt; `generated` once the draft exists. Drives the approval surface that replaces
+ * the composer - the lifecycle the dead-end `/handoff` failure used to skip (02.10).
+ */
+export type PendingHandoff =
+  | { readonly status: "generating"; readonly handoffId: string }
+  | { readonly status: "generated"; readonly handoffId: string; readonly prompt: string };
+
+/**
+ * The newest generate-mode handoff still awaiting a decision, or null. A handoff is tracked from
+ * `handoff.generating`/`generated` and cleared by any terminal event (`approved`/`rejected`/`failed`/
+ * `accepted`) for the same `handoffId`. Direct-mode handoffs (no generating/generated) never surface
+ * here, so `/handoff --direct` keeps switching immediately with no approval step.
+ */
+export function pendingHandoffFrom(events: readonly SessionEvent[]): PendingHandoff | null {
+  const byId = new Map<string, PendingHandoff>();
+  for (const event of events) {
+    const d = decodeTrevorEvent(event);
+    if (!d) {
+      continue;
+    }
+    if (d.type === "handoff.generating") {
+      byId.set(d.handoffId, { status: "generating", handoffId: d.handoffId });
+    } else if (d.type === "handoff.generated") {
+      byId.set(d.handoffId, { status: "generated", handoffId: d.handoffId, prompt: d.prompt });
+    } else if (
+      d.type === "handoff.approved" ||
+      d.type === "handoff.rejected" ||
+      d.type === "handoff.failed" ||
+      d.type === "handoff.accepted"
+    ) {
+      byId.delete(d.handoffId);
+    }
+  }
+  let pending: PendingHandoff | null = null;
+  for (const handoff of byId.values()) {
+    pending = handoff;
+  }
+  return pending;
+}
+
 /** How a provider question terminated (the `provider.question.resolved` outcome). */
 export type QuestionOutcome = "answered" | "declined" | "cancelled" | "expired";
 
