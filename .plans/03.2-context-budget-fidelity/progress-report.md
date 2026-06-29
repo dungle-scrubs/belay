@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 15
-- **Completed current work:** 0
+- **Current cutoff blockers:** 7
+- **Completed current work:** 8
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - estimate-driven compaction trigger
+- **Current focus:** M2 - MiniMax-M3 static override
 
 ## Completed Current State / Hard Dependencies
 
@@ -19,10 +19,10 @@
 ## Current Cutoff Blockers
 
 ### M1 - estimate-driven compaction trigger
-- [ ] RED: provider `usage.input` under `0.8*window` but assembled-history `estimateTokens` over it marks the controller over-budget (today it does not).
-- [ ] RED: agreeing provider/estimate turn behaves exactly as today (regression).
-- [ ] GREEN: at `main.ts:1828` feed `max(decoded.usage.input, estimateTokens(assembled))` into `noteUsage`; `overBudget` sees the true size.
-- [ ] REFACTOR: trigger, planner, and guard all read one estimator; no second token notion remains.
+- [x] RED: provider `usage.input` under `0.8*window` but assembled-history `estimateTokens` over it marks the controller over-budget (today it does not).
+- [x] RED: agreeing provider/estimate turn behaves exactly as today (regression).
+- [x] GREEN: at `main.ts:1828` feed `max(decoded.usage.input, estimateTokens(assembled))` into `noteUsage`; `overBudget` sees the true size.
+- [x] REFACTOR: trigger, planner, and guard all read one estimator; no second token notion remains.
 
 ### M2 - MiniMax-M3 static override
 - [ ] RED: `resolveContextWindow("MiniMax-M3", 512000)` returns `262144`.
@@ -36,10 +36,10 @@
 - [ ] REFACTOR: dedupe `N`-extraction with the classifier; emit the self-heal log.
 
 ### M4 - foreground / session-minimum window in CompactionController
-- [ ] RED: delegate turns at `1,000,000` between foreground turns at `262,144` still mark over-budget from the foreground window.
-- [ ] RED: post-restart full-history replay against the smaller window does not overflow.
-- [ ] GREEN: retain the foreground/session-minimum window for budgeting; `overBudget` uses it; re-validate/fold on a switch to a smaller window.
-- [ ] REFACTOR: a genuine foreground upgrade to a larger window is still honored once it is the foreground.
+- [x] RED: delegate turns at `1,000,000` between foreground turns at `262,144` still mark over-budget from the foreground window.
+- [x] RED: post-restart full-history replay against the smaller window does not overflow.
+- [x] GREEN: retain the foreground/session-minimum window for budgeting; `overBudget` uses it; re-validate/fold on a switch to a smaller window.
+- [x] REFACTOR: a genuine foreground upgrade to a larger window is still honored once it is the foreground.
 
 ## Accepted / Deferred Follow-Up
 

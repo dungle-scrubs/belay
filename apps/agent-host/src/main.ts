@@ -7,6 +7,7 @@ import {
   freshSessionId,
   type GitStatus,
   gitRefLabel,
+  inputEstimateTokens,
   type ModelRef,
   PRODUCER_IDS,
   type PublishInput,
@@ -1832,7 +1833,15 @@ function handleEvent(message: SessionEvent): void {
     // before-size stay current even when the turn is CANCELLED (a cancel carries no usage of its
     // own). Also stash the per-run usage so the cancel/reap completion can carry it.
     if (decoded.usage) {
-      compactionController.noteUsage(decoded.usage.input, decoded.usage.contextWindow);
+      // Budget off the LARGER of the provider's reported input and the assembled-history chars/4
+      // estimate (03.2 D-002): a provider that under-counts (cached/billable input below the full
+      // prompt) no longer hides a history the pre-send guard later trips on, so the fold schedules.
+      const assembledEstimate = decoded.breakdown ? inputEstimateTokens(decoded.breakdown) : 0;
+      compactionController.noteUsage(
+        decoded.usage.input,
+        decoded.usage.contextWindow,
+        assembledEstimate,
+      );
       turnMachine.progress(decoded.runId, decoded.usage, decoded.breakdown);
     }
   } else if (decoded.type === "assistant.completed") {
@@ -1854,7 +1863,8 @@ function handleEvent(message: SessionEvent): void {
     // Capture this turn's prompt size + window for the compaction gate, and clear the fold floor
     // (a fresh turn moved the needle, so a fold worth trying may exist again).
     if (decoded.usage) {
-      compactionController.noteTurnCompleted(decoded.usage);
+      const assembledEstimate = decoded.breakdown ? inputEstimateTokens(decoded.breakdown) : 0;
+      compactionController.noteTurnCompleted(decoded.usage, assembledEstimate);
     } else {
       compactionController.noteTurnCompleted();
     }
