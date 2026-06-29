@@ -2,7 +2,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 97
+- Current cutoff blockers: 77
+- Completed current work: 20 (Phases 1-2)
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -23,31 +24,31 @@ Blockers
 
 #### M1: Tool schema and dependency readiness
 
-- [ ] RED: Add tool-schema tests for supported actions: `resolve`, `refresh`, `search`, `read`, `list`, and `status`.
-- [ ] GREEN: Define `docs` params and result envelope with typed outcomes.
-- [ ] RED: Add registry tests proving `docs` is read-only.
-- [ ] GREEN: Register `docs` as read-only.
-- [ ] RED: Add dependency-readiness tests or startup diagnostics for `web_fetch` and root-policy availability.
-- [ ] GREEN: Fail gracefully with typed `unavailable` when a hard dependency is missing.
-- [ ] REFACTOR: Keep tool action parsing small and route actions to separate service functions.
-- [ ] Tool schema is stable.
-- [ ] `docs` is read-only.
-- [ ] Missing dependencies produce typed results, not turn failures.
+- [x] RED: Add tool-schema tests for supported actions: `resolve`, `refresh`, `search`, `read`, `list`, and `status`.
+- [x] GREEN: Define `docs` params and result envelope with typed outcomes.
+- [x] RED: Add registry tests proving `docs` is read-only.
+- [x] GREEN: Register `docs` as read-only.
+- [x] RED: Add dependency-readiness tests or startup diagnostics for `web_fetch` and root-policy availability.
+- [x] GREEN: Fail gracefully with typed `unavailable` when a hard dependency is missing.
+- [x] REFACTOR: Keep tool action parsing small and route actions to separate service functions.
+- [x] Tool schema is stable.
+- [x] `docs` is read-only.
+- [x] Missing dependencies produce typed results, not turn failures.
 
 ### Phase 2: Corpus Storage
 
 #### M2: Corpus persistence
 
-- [ ] RED: Add corpus-key tests for subject, root URL, version, and source identity.
-- [ ] GREEN: Implement stable corpus/page keys.
-- [ ] RED: Add storage tests proving the selected root comes from `03-filesystem-root-taxonomy`.
-- [ ] GREEN: Persist corpus metadata, page metadata, normalized content, hashes, and diagnostics.
-- [ ] RED: Add corruption/partial-write tests.
-- [ ] GREEN: Make writes atomic enough that partial corpora are visible as partial, not silently healthy.
-- [ ] REFACTOR: Keep storage format inspectable and migration-friendly.
-- [ ] Corpora are stable across runs.
-- [ ] Root selection follows the hard dependency.
-- [ ] Partial/corrupt corpora produce visible diagnostics.
+- [x] RED: Add corpus-key tests for subject, root URL, version, and source identity.
+- [x] GREEN: Implement stable corpus/page keys.
+- [x] RED: Add storage tests proving the selected root comes from `03-filesystem-root-taxonomy`.
+- [x] GREEN: Persist corpus metadata, page metadata, normalized content, hashes, and diagnostics.
+- [x] RED: Add corruption/partial-write tests.
+- [x] GREEN: Make writes atomic enough that partial corpora are visible as partial, not silently healthy.
+- [x] REFACTOR: Keep storage format inspectable and migration-friendly.
+- [x] Corpora are stable across runs.
+- [x] Root selection follows the hard dependency.
+- [x] Partial/corrupt corpora produce visible diagnostics.
 
 ### Phase 3: Discovery
 
