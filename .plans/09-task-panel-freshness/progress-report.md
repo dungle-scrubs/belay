@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M8 - Stream and UI Coverage
-- Current cutoff blockers: 12
+- Current focus: complete - all milestones landed
+- Current cutoff blockers: 0
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 49
+- Completed current work: 61
 
 ## Current Cutoff Blockers
 
@@ -99,21 +99,42 @@
 
 #### M8: Stream and UI Coverage
 
-- [ ] RED: Add an integration or hermetic e2e test that drives `task_create` and `task_update` through the host/session stream.
-- [ ] GREEN: Verify the emitted `tasks.current` events carry freshness metadata and the web derivation receives the newest state.
-- [ ] RED: Add browser or component coverage for a long task list rendering only five rows plus grouped burst rows and overflow.
-- [ ] GREEN: Verify visual order, grouped labels, counts, and overflow text match the requested behavior.
-- [ ] GREEN: Run host task registry tests, web task panel tests, derive tests, typecheck, lint, and hermetic e2e.
-- [ ] REFACTOR: Record exact verification commands and any gated live-model limitations in the progress report.
+- [x] RED: Add an integration or hermetic e2e test that drives `task_create` and `task_update` through the host/session stream.
+- [x] GREEN: Verify the emitted `tasks.current` events carry freshness metadata and the web derivation receives the newest state.
+- [x] RED: Add browser or component coverage for a long task list rendering only five rows plus grouped burst rows and overflow.
+- [x] GREEN: Verify visual order, grouped labels, counts, and overflow text match the requested behavior.
+- [x] GREEN: Run host task registry tests, web task panel tests, derive tests, typecheck, lint, and hermetic e2e.
+- [x] REFACTOR: Record exact verification commands and any gated live-model limitations in the progress report.
+
+##### Verification commands (all green)
+
+```bash
+pnpm -r typecheck
+pnpm -s exec vitest run --project unit --project web --project integration
+pnpm -s exec vitest run --project e2e e2e/golden-path.test.ts e2e/boot.test.ts \
+  e2e/handoff.test.ts e2e/ask-user.test.ts e2e/blobs.test.ts
+pnpm -s exec biome check apps/web/src/tasks-display.ts apps/web/src/TasksPanel.tsx \
+  apps/web/src/TasksPanel.stories.tsx apps/agent-host/src/tasks.ts \
+  apps/agent-host/test/tasks-stream.test.ts packages/session/src/protocol.ts
+```
+
+Task-focused suites: `apps/agent-host/src/tasks.test.ts` (8), `apps/agent-host/test/tasks-stream.test.ts`
+(2), `apps/web/src/tasks-display.test.ts` (11), `apps/web/src/TasksPanel.test.tsx` (6),
+`apps/web/src/derive.test.ts` (45), `packages/session/src/protocol.test.ts` (45).
+
+Gated (not run): the `e2e/live/*` suites need a live model and the
+`e2e/virtualization-performance-artifacts.test.ts` browser harness, so a live-model task workflow is
+not exercised here; the freshness + panel behavior is fully covered by the hermetic integration +
+component tests above.
 
 ### Done Gate
 
-- [ ] Each provider request is proven to receive the current full task registry at prompt-build time.
-- [ ] UI shows at most five tasks and `...N more` underneath when needed.
-- [ ] UI coalesces 10-15 task bursts into broader grouped rows when individual rows would make the panel noisy.
-- [ ] Visible task order is active, upcoming, then terminal states.
-- [ ] Stale task snapshots cannot overwrite newer task state.
-- [ ] Full verification commands pass.
+- [x] Each provider request is proven to receive the current full task registry at prompt-build time.
+- [x] UI shows at most five tasks and `...N more` underneath when needed.
+- [x] UI coalesces 10-15 task bursts into broader grouped rows when individual rows would make the panel noisy.
+- [x] Visible task order is active, upcoming, then terminal states.
+- [x] Stale task snapshots cannot overwrite newer task state.
+- [x] Full verification commands pass.
 
 ## Accepted/Deferred Follow-Up
 

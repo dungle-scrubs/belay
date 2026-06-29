@@ -106,3 +106,23 @@ test("active and pending tasks are visible before terminal states", () => {
   assert.ok(screen.getByText("pending-b"));
   assert.ok(screen.getByText("...1 more"));
 });
+
+// M8: a long list renders individual active rows, a coalesced group row, AND an overflow line at once.
+test("renders active rows, a group row, and an overflow line together for a long list", () => {
+  const tasks = [
+    ...Array.from({ length: 4 }, (_, i) => task("in_progress", `running-${i}`)),
+    ...Array.from({ length: 6 }, (_, i) => task("pending", `queued-${i}`)),
+    ...Array.from({ length: 3 }, (_, i) => task("completed", `finished-${i}`)),
+  ];
+
+  render(<TasksPanel tasks={tasks} />);
+
+  // Four active tasks individual, the pending bucket grouped, the terminal bucket overflowed.
+  assert.ok(screen.getByText("running-0"));
+  assert.ok(screen.getByText("running-3"));
+  assert.ok(screen.getByText("6 upcoming tasks"));
+  assert.ok(screen.getByText("...3 more"));
+  // No pending task leaks through as an individual row, and the header counts all 13 tasks.
+  assert.equal(screen.queryByText("queued-0"), null);
+  assert.ok(screen.getByText("tasks 3/13"));
+});
