@@ -220,31 +220,48 @@ export const webOk: DoctorArea = {
   id: "web",
   label: "Web / Docs",
   status: "ok",
-  verdict: "Web fetch and docs ready.",
-  facts: [
-    { label: "web_fetch", value: "static + Jina", status: "ok" },
-    { label: "firecrawl", value: "configured", status: "ok" },
-    { label: "docs", value: "fresh (2h ago)" },
+  verdict: "Web/docs tools are configured.",
+  findings: [
+    {
+      id: "web.search",
+      status: "ok",
+      title: "Web search",
+      message: "A web-search provider key is configured.",
+    },
+    {
+      id: "web.fetch",
+      status: "ok",
+      title: "Web fetch",
+      message: "Backend ladder ready (static, Jina keyed, Firecrawl configured).",
+    },
+    {
+      id: "web.docs",
+      status: "ok",
+      title: "Docs cache",
+      message: "The docs cache is present and fresh.",
+    },
   ],
 };
 
 export const webFetchUnavailable: DoctorArea = {
   id: "web",
   label: "Web / Docs",
-  status: "warn",
-  verdict: "Web fetch backends degraded.",
-  facts: [
-    { label: "web_fetch", value: "static only", status: "warn" },
-    { label: "firecrawl", value: "configured", status: "ok" },
-  ],
+  status: "ok",
+  verdict: "Web/docs tools are configured.",
   findings: [
     {
-      id: "web.fetch.degraded",
-      status: "warn",
-      title: "Readability backend unavailable",
+      id: "web.search",
+      status: "ok",
+      title: "Web search",
+      message: "A web-search provider key is configured.",
+    },
+    {
+      id: "web.fetch",
+      status: "ok",
+      title: "Web fetch",
       message:
-        "Jina returned errors, so only raw static fetch is available; thin or JS-heavy pages may not render.",
-      nextAction: { label: "Retry later; Firecrawl covers heavy pages" },
+        "Backend ladder ready (static, Jina keyed, Firecrawl unconfigured). Last backend error: jina error.",
+      nextAction: { label: "Set FIRECRAWL_API_KEY to enable the rendered fallback" },
     },
   ],
 };

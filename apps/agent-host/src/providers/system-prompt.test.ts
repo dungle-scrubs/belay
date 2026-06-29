@@ -67,6 +67,36 @@ test("buildSystemPrompt guides the model to use doctor only as a diagnostic, not
   );
 });
 
+// --- Plan 04 M7: web_search (discovery) vs web_fetch (reading) guidance ---
+
+test("buildSystemPrompt distinguishes web_search for discovery from web_fetch for reading", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("Use web_search for DISCOVERY"),
+    "the prompt frames web_search as discovery",
+  );
+  assert.ok(
+    prompt.includes("web_fetch to READ a source you already have a URL for"),
+    "the prompt frames web_fetch as reading a selected source URL",
+  );
+});
+
+test("buildSystemPrompt describes the static -> Jina -> Firecrawl ladder with Firecrawl as a scarce final fallback", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("static first"),
+    "the prompt explains the ladder starts with the static backend",
+  );
+  assert.ok(
+    prompt.includes("Jina reader only when the static page is unusable"),
+    "the prompt explains Jina is the unusable-static fallback",
+  );
+  assert.ok(
+    prompt.includes("Firecrawl is a scarce final fallback"),
+    "the prompt marks Firecrawl as a scarce final fallback",
+  );
+});
+
 // --- Phase 7 M2: nested AGENTS.md context injected into the per-turn prompt (D-080) ---
 
 test("buildSystemPrompt injects the AGENTS.md context block when a file exists", () => {

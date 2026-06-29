@@ -16,6 +16,7 @@ import { abbrevHome } from "../paths";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { providerFailures } from "../providers/provider-failure-log";
+import { lastWebFetchError } from "../tools/web-fetch/web-fetch-log";
 import { buildDoctorSnapshot, type DoctorProviderProbe, type DoctorRootProbe } from "./snapshot";
 
 /**
@@ -280,15 +281,18 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
       lsp: { kind: "unconfigured" },
       hooks: { kind: "unconfigured" },
     },
-    // Web / Docs config facts (D-073): presence booleans + a provider name only, never key values.
-    // web_search reads BRAVE_API_KEY then SERPER_API_KEY; fetch/rendering would use Jina/Firecrawl.
+    // Web / Docs config facts (D-073, plan 04): presence booleans + readiness enums only, never key
+    // values. web_search reads BRAVE_API_KEY then SERPER_API_KEY; the web_fetch ladder is static
+    // (always), Jina (keyless, "keyed" when JINA_API_KEY is set), and Firecrawl (gated on
+    // FIRECRAWL_API_KEY). The last sanitized backend error is read from the tool path's log module.
     web: {
       searchConfigured: Boolean(process.env.BRAVE_API_KEY || process.env.SERPER_API_KEY),
-      fetchProvider: process.env.JINA_API_KEY
-        ? "Jina"
-        : process.env.FIRECRAWL_API_KEY
-          ? "Firecrawl"
-          : null,
+      fetch: {
+        staticAvailable: true,
+        jina: process.env.JINA_API_KEY ? "keyed" : "available",
+        firecrawl: process.env.FIRECRAWL_API_KEY ? "configured" : "unconfigured",
+        ...(lastWebFetchError() ? { lastError: lastWebFetchError() } : {}),
+      },
       docs: { present: false, stale: false },
     },
     // Redacted provider-failure observation counts (D-076 M6): how many distinct unclassified shapes

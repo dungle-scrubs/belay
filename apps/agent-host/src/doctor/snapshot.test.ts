@@ -84,7 +84,11 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
       lsp: { kind: "unconfigured" },
       hooks: { kind: "unconfigured" },
     },
-    web: { searchConfigured: false, fetchProvider: null, docs: { present: false, stale: false } },
+    web: {
+      searchConfigured: false,
+      fetch: { staticAvailable: true, jina: "available", firecrawl: "unconfigured" },
+      docs: { present: false, stale: false },
+    },
     checkedAt: "2026-06-26T12:00:00.000Z",
     ...over,
   };
@@ -118,7 +122,8 @@ test("an all-healthy snapshot rolls up to ok (unprobed areas are not_checked, no
   assert.equal(overallStatus(snap), "ok", "ok dominates the not_checked placeholders");
   const summary = summarizeSnapshot(snap);
   assert.equal(summary.error, 0);
-  assert.ok(summary.notChecked >= 4, "web/mcp/lsp/hooks are not_checked");
+  // The web area now rolls up to ok (static fetch is always ready); mcp/lsp/hooks stay not_checked.
+  assert.ok(summary.notChecked >= 3, "mcp/lsp/hooks are not_checked");
 });
 
 test("the Updates / Version area reports build facts ok when a version is embedded", () => {
@@ -153,34 +158,133 @@ test("a dev build with no embedded version reports the Updates area as not_check
   assert.match(updates?.verdict ?? "", /dev build/i);
 });
 
-test("the Web / Docs area reports config presence (names/booleans only, never key values)", () => {
-  // Unconfigured: every dependency is not_checked, so the whole area is not_checked (not an error).
+test("the Web / Docs area reports config presence (enums/booleans only, never key values)", () => {
+  // Static fetch always works, so even with no web-search key the area is not an error; the fetch
+  // ladder finding is ok (and the unconfigured Firecrawl carries the configure action).
   const none = buildDoctorSnapshot(input()).areas.find((a) => a.id === "web");
-  assert.equal(none?.status, "not_checked");
   assert.ok(
     none?.findings?.some((f) => f.id === "web.search" && f.nextAction),
     "an unconfigured web-search offers a configure action",
   );
+  const noneFetch = none?.findings?.find((f) => f.id === "web.fetch");
+  assert.equal(
+    noneFetch?.status,
+    "ok",
+    "the fetch ladder is ready even with no keys (static always)",
+  );
+  assert.match(noneFetch?.message ?? "", /static/);
 
-  // A configured search key lifts the area to ok; the finding carries no key value.
+  // A fully-configured area renders with no key value anywhere. The env-var NAME hint (e.g.
+  // FIRECRAWL_API_KEY) only appears in a configure action when a backend is unconfigured; here every
+  // backend is ready, so no env-var name is present either.
   const configured = buildDoctorSnapshot(
     input({
-      web: { searchConfigured: true, fetchProvider: "Jina", docs: { present: true, stale: false } },
+      web: {
+        searchConfigured: true,
+        fetch: { staticAvailable: true, jina: "keyed", firecrawl: "configured" },
+        docs: { present: true, stale: false },
+      },
     }),
   ).areas.find((a) => a.id === "web");
   assert.equal(configured?.status, "ok");
   const text = JSON.stringify(configured);
-  assert.ok(text.includes("Jina"), "the provider name renders");
   assert.ok(!/API_KEY|sk-|brave_/i.test(text), "no key value or env-var name leaks into the area");
 
   // A stale docs cache warns with a refresh action.
   const stale = buildDoctorSnapshot(
     input({
-      web: { searchConfigured: true, fetchProvider: null, docs: { present: true, stale: true } },
+      web: {
+        searchConfigured: true,
+        fetch: { staticAvailable: true, jina: "available", firecrawl: "configured" },
+        docs: { present: true, stale: true },
+      },
     }),
   ).areas.find((a) => a.id === "web");
   assert.equal(stale?.status, "warn");
   assert.ok(stale?.findings?.some((f) => f.id === "web.docs" && f.nextAction));
+});
+
+test("the Web fetch finding reports the ladder readiness: Jina available vs keyed", () => {
+  const available = buildDoctorSnapshot(
+    input({
+      web: {
+        searchConfigured: false,
+        fetch: { staticAvailable: true, jina: "available", firecrawl: "unconfigured" },
+        docs: { present: false, stale: false },
+      },
+    }),
+  )
+    .areas.find((a) => a.id === "web")
+    ?.findings?.find((f) => f.id === "web.fetch");
+  assert.match(available?.message ?? "", /Jina available/);
+
+  const keyed = buildDoctorSnapshot(
+    input({
+      web: {
+        searchConfigured: false,
+        fetch: { staticAvailable: true, jina: "keyed", firecrawl: "unconfigured" },
+        docs: { present: false, stale: false },
+      },
+    }),
+  )
+    .areas.find((a) => a.id === "web")
+    ?.findings?.find((f) => f.id === "web.fetch");
+  assert.match(keyed?.message ?? "", /Jina keyed/);
+});
+
+test("the Web fetch finding reports Firecrawl configured vs unconfigured", () => {
+  const unconfigured = buildDoctorSnapshot(
+    input({
+      web: {
+        searchConfigured: false,
+        fetch: { staticAvailable: true, jina: "available", firecrawl: "unconfigured" },
+        docs: { present: false, stale: false },
+      },
+    }),
+  )
+    .areas.find((a) => a.id === "web")
+    ?.findings?.find((f) => f.id === "web.fetch");
+  assert.match(unconfigured?.message ?? "", /Firecrawl unconfigured/);
+  assert.match(unconfigured?.nextAction?.label ?? "", /FIRECRAWL_API_KEY/);
+
+  const configured = buildDoctorSnapshot(
+    input({
+      web: {
+        searchConfigured: false,
+        fetch: { staticAvailable: true, jina: "available", firecrawl: "configured" },
+        docs: { present: false, stale: false },
+      },
+    }),
+  )
+    .areas.find((a) => a.id === "web")
+    ?.findings?.find((f) => f.id === "web.fetch");
+  assert.match(configured?.message ?? "", /Firecrawl configured/);
+  assert.equal(configured?.nextAction, undefined, "a configured Firecrawl needs no action");
+});
+
+test("the Web fetch finding surfaces a sanitized last backend error when present", () => {
+  const finding = buildDoctorSnapshot(
+    input({
+      web: {
+        searchConfigured: false,
+        fetch: {
+          staticAvailable: true,
+          jina: "available",
+          firecrawl: "unconfigured",
+          lastError: "jina error",
+        },
+        docs: { present: false, stale: false },
+      },
+    }),
+  )
+    .areas.find((a) => a.id === "web")
+    ?.findings?.find((f) => f.id === "web.fetch");
+  assert.match(finding?.message ?? "", /Last backend error: jina error/);
+  // Still redaction-safe: a category only, never a key/header/URL-query fragment.
+  assert.ok(
+    !/API_KEY|sk-|bearer|\?/i.test(finding?.message ?? ""),
+    "no secret material in the error",
+  );
 });
 
 test("the Providers area surfaces unclassified-failure observation counts as a redacted fact (D-076 M6)", () => {
