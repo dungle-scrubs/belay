@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import * as fx from "./fixtures";
 import {
+  advance,
   buildAnswer,
   contractFromRaw,
   draftErrors,
   emptyDraft,
+  firstInvalidIndex,
+  goToTab,
   initialDraft,
   isComplete,
+  questionErrors,
   selectCustom,
   setCustomText,
   setNotes,
@@ -220,4 +224,59 @@ test("a grouped ask needs every question answered", () => {
   d = toggleChoice(d, defined(fx.grouped.questions[1]), "unit");
   d = setCustomText(d, defined(fx.grouped.questions[2]), "ship behind a flag");
   assert.equal(isComplete(fx.grouped, d), true);
+});
+
+// --- 02.18 M1: per-tab validity selectors ---
+
+test("questionErrors returns only one question's issues, [] when that question is satisfied", () => {
+  const d = initialDraft(fx.grouped); // scope pre-selected (valid); checks + notes open
+  assert.deepEqual(
+    questionErrors(fx.grouped, d, "scope"),
+    [],
+    "the pre-selected single-choice is valid",
+  );
+  assert.ok(
+    questionErrors(fx.grouped, d, "checks").length > 0,
+    "the empty multi-select reports its own issue",
+  );
+  // Every returned issue belongs to the queried question, never another's.
+  assert.ok(questionErrors(fx.grouped, d, "checks").every((i) => i.questionId === "checks"));
+});
+
+test("firstInvalidIndex points at the first incomplete tab, -1 when complete", () => {
+  let d = initialDraft(fx.grouped); // scope(0) valid, checks(1) + notes(2) open
+  assert.equal(firstInvalidIndex(fx.grouped, d), 1, "checks is the first incomplete tab");
+  d = toggleChoice(d, defined(fx.grouped.questions[1]), "unit");
+  assert.equal(firstInvalidIndex(fx.grouped, d), 2, "now notes is first");
+  d = setCustomText(d, defined(fx.grouped.questions[2]), "ship it");
+  assert.equal(firstInvalidIndex(fx.grouped, d), -1, "all complete");
+});
+
+// --- 02.18 M2: active-tab cursor reducer ---
+
+test("the cursor defaults to 0 and goToTab clamps into range", () => {
+  const d = initialDraft(fx.grouped);
+  assert.equal(d.activeIndex, 0);
+  assert.equal(goToTab(d, 2).activeIndex, 2);
+  assert.equal(goToTab(d, 9).activeIndex, 2, "clamped to the last tab");
+  assert.equal(goToTab(d, -3).activeIndex, 0, "clamped to the first tab");
+});
+
+test("advance moves forward only when the current tab is valid, never past the last", () => {
+  let d = initialDraft(fx.grouped); // tab 0 (scope) is valid by default
+  d = advance(fx.grouped, d);
+  assert.equal(d.activeIndex, 1, "advanced off the valid first tab");
+  // tab 1 (checks, multi-select) is empty/invalid: advance is a no-op until it is answered.
+  assert.equal(advance(fx.grouped, d).activeIndex, 1, "blocked on the incomplete tab");
+  d = toggleChoice(d, defined(fx.grouped.questions[1]), "unit");
+  d = advance(fx.grouped, d);
+  assert.equal(d.activeIndex, 2, "advanced once checks is answered");
+  // On the last tab, advance never overflows.
+  assert.equal(advance(fx.grouped, d).activeIndex, 2, "no advance past the last tab");
+});
+
+test("editing a question preserves the active-tab cursor (patch keeps activeIndex)", () => {
+  let d = goToTab(initialDraft(fx.grouped), 1);
+  d = toggleChoice(d, defined(fx.grouped.questions[1]), "unit");
+  assert.equal(d.activeIndex, 1, "a choice edit did not reset the cursor");
 });

@@ -49,6 +49,12 @@ focused region. Avoid re-binding these globally.
 | `Enter` / `Space` | Collapsible message header (`role="button"`) | Toggle the collapsible. | `src/components/chat/message.tsx` |
 | any key release | While a text selection is active | Hide the quote-selection toolbar. | `src/components/assistant-ui/quote-selection-toolbar.tsx` (`keyup`) |
 | typing / arrows / `Enter` | cmdk popovers (model selector etc.), **only while open** | Filter list / navigate / select. `Enter` is `stopPropagation`-ed. | `src/components/ui/command.tsx`, `model-selector.tsx` |
+| `ArrowUp` / `ArrowDown` (`Home` / `End`) | ask_user question surface, **single-choice rows** | Move the selection + roving focus across the choices and the custom-answer row. | `src/components/question/QuestionSurface.tsx` (`makeChoiceNav`) |
+| `ArrowUp` / `ArrowDown` | ask_user question surface, **multi-select rows** | Roving focus between rows (Space/click toggles). | `src/components/question/QuestionSurface.tsx` |
+| `ArrowLeft` / `ArrowRight` | ask_user question surface, **multi-question only, NOT in a text field** | Move between question TABS (02.18). Bails on `input`/`textarea`/contenteditable so the caret moves there instead. | `src/components/question/QuestionSurface.tsx` (`onSectionKeyDown`) |
+| `Enter` | ask_user question surface, **not in a textarea** | Confirm-and-advance: move to the next tab, or submit on the final/only tab. In a textarea it stays a newline; `Cmd`/`Ctrl+Enter` advances/submits. | `src/components/question/QuestionSurface.tsx` |
+| `n` | ask_user question surface, **non-input focus** | Reveal + focus the optional note for the question. | `src/components/question/QuestionSurface.tsx` |
+| `Esc` / `i` | **Global** | Still fire over the surface's non-input focus targets (choice rows, custom-answer row): `Esc` cancels/clears, `i` focuses the composer. | `src/App.tsx` |
 
 **Practical takeaway:** treat bare `Esc`, `Enter`, `Tab`, `Space`, and the
 arrow keys as taken inside the composer and lists. Everything modifier-based is

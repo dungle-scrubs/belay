@@ -81,10 +81,63 @@ export const Expired: Story = {
   decorators: [atWidth(DESKTOP)],
 };
 
-/** Narrow side-panel width with a multi-question group - the layout must not overflow. */
+/** Narrow side-panel width with a multi-question group - the 5-tab strip must not overflow (02.18). */
 export const NarrowGrouped: Story = {
   args: { contract: fx.grouped },
   decorators: [atWidth(NARROW)],
+};
+
+/** A grouped ask whose questions omit `header`: every tab falls back to "Question N", never blank (D-014). */
+export const GroupedNoHeaders: Story = {
+  args: {
+    contract: fx.contract([
+      fx.question({
+        id: "a",
+        question: "Pick a deploy target",
+        answerShape: "single_choice",
+        choices: [
+          fx.choice({ id: "staging", label: "Staging", recommended: true }),
+          fx.choice({ id: "prod", label: "Production" }),
+        ],
+      }),
+      fx.question({
+        id: "b",
+        question: "Which artifacts to attach?",
+        answerShape: "multi_select",
+        choices: [
+          fx.choice({ id: "logs", label: "Logs" }),
+          fx.choice({ id: "sbom", label: "SBOM" }),
+        ],
+      }),
+      fx.question({ id: "c", question: "Any notes for the release?", answerShape: "free_text" }),
+    ]),
+  },
+  decorators: [atWidth(DESKTOP)],
+};
+
+/** A grouped ask that already expired: the tab strip stays navigable for review, every control disabled. */
+export const GroupedExpired: Story = {
+  args: { contract: fx.grouped, expired: true },
+  decorators: [atWidth(DESKTOP)],
+};
+
+/** Interactive grouped: advance Next -> Next -> Submit and confirm ONE batched accept payload (D-002). */
+export const GroupedInteractive: Story = {
+  render: (args) => {
+    const [last, setLast] = useState<ProviderQuestionAnswer | null>(null);
+    return (
+      <div className="flex flex-col gap-3">
+        <QuestionSurface {...args} onAnswer={setLast} />
+        <pre className="max-h-48 overflow-auto rounded-md bg-smui-surface-sunken p-3 text-[11px] text-muted-foreground">
+          {last
+            ? JSON.stringify(last, null, 2)
+            : "// answer each tab, then Submit, for one accept event"}
+        </pre>
+      </div>
+    );
+  },
+  args: { contract: fx.grouped },
+  decorators: [atWidth(DESKTOP)],
 };
 
 /** Long labels and descriptions wrap cleanly instead of pushing the card wide. */

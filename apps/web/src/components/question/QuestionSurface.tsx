@@ -6,15 +6,20 @@ import type {
 } from "@trevor/session";
 import { Check } from "lucide-react";
 import type * as React from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
+  advance,
   buildAnswer,
-  draftErrors,
+  firstInvalidIndex,
   type GroupDraft,
+  goToTab,
   initialDraft,
+  isComplete,
+  questionErrors,
   selectCustom,
   setCustomText,
   setNotes,
@@ -72,10 +77,23 @@ export function QuestionSurface({
   className,
 }: QuestionSurfaceProps) {
   const [draft, setDraft] = useState<GroupDraft>(() => initialDraft(contract));
+  // A multi-question ask renders the SEQUENCED TAB interface (02.18); a single question keeps exactly
+  // today's single-pane layout. Both render the identical reused QuestionCard. <!-- D-001 -->
   const grouped = contract.questions.length > 1;
-  const errors = draftErrors(contract, draft);
-  const ready = errors.length === 0 && !expired;
+  const ready = isComplete(contract, draft) && !expired;
   const sectionRef = useRef<HTMLElement>(null);
+  // The active question's panel; focus is scoped to it (never the tab strip) so the keyboard flow stays
+  // in the panel and Radix's trigger roving never fights our Left/Right tab nav. <!-- D-009 D-012 -->
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const lastIndex = contract.questions.length - 1;
+  const activeIndex = grouped ? Math.min(draft.activeIndex, lastIndex) : 0;
+  const activeQuestion = contract.questions[activeIndex];
+  const isFinalTab = activeIndex >= lastIndex;
+  const currentTabValid = activeQuestion
+    ? questionErrors(contract, draft, activeQuestion.id).length === 0
+    : true;
+  const firstInvalid = firstInvalidIndex(contract, draft);
 
   const submit = () => {
     if (ready) {
@@ -83,31 +101,45 @@ export function QuestionSurface({
     }
   };
 
-  // Move keyboard focus into the surface as soon as a question appears, so arrow keys navigate the
-  // choices and Enter submits without a click first. The surface replaces the composer while a
-  // question is pending, so there is nothing else competing for focus. Skip when expired, since the
-  // surface is read-only then.
-  useEffect(() => {
+  // The primary action: on the final tab (or a single question) SUBMIT when the whole contract is
+  // ready; otherwise CONFIRM-AND-ADVANCE past a valid tab. Enter no longer submits from a mid-flow tab
+  // (D-011). `advance` is a no-op on an invalid tab, so this can never skip an unanswered question.
+  const confirmOrAdvance = () => {
     if (expired) {
       return;
     }
-    if (sectionRef.current) {
-      focusQuestionTarget(sectionRef.current);
+    if (isFinalTab) {
+      submit();
+      return;
     }
-  }, [expired]);
+    setDraft((d) => advance(contract, d));
+  };
 
-  // Restore keyboard focus when the tab/window regains focus or becomes visible again, so ArrowUp/
-  // ArrowDown work immediately on return without a click (D-001). Returning to the tab can leave focus
-  // on document.body (the composer that App would refocus is unmounted while a question is up), so the
-  // surface restores its own. Conservative: never steal focus from a field the user is typing in
-  // INSIDE the surface (notes, required reason, free-text, custom answer) - only restore when focus
-  // has landed outside the surface. Inert while expired (read-only). <!-- D-004 -->
+  // Move keyboard focus into the ACTIVE panel as soon as a question appears AND on every tab change, so
+  // arrow keys navigate the choices without a click first. `useLayoutEffect` keyed on `activeIndex`
+  // refocuses after the keyed card remounts (D-012), so focus never falls to <body>. Read-only while
+  // expired.
+  // `activeIndex` is an intentional trigger: the effect re-runs on every tab change to refocus the new
+  // panel, even though its body reads only the (stable) panel ref.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeIndex is a deliberate re-run trigger.
+  useLayoutEffect(() => {
+    if (expired) {
+      return;
+    }
+    if (panelRef.current) {
+      focusQuestionTarget(panelRef.current);
+    }
+  }, [expired, activeIndex]);
+
+  // Restore keyboard focus when the tab/window regains focus, so Arrow keys work immediately on return
+  // without a click (D-001). Conservative: never steal focus from a field the user is typing in INSIDE
+  // the active panel - only restore when focus has landed outside it. Inert while expired. <!-- D-004 -->
   useEffect(() => {
     if (expired) {
       return;
     }
     const restore = () => {
-      const root = sectionRef.current;
+      const root = panelRef.current;
       if (!root || document.hidden) {
         return;
       }
@@ -124,6 +156,43 @@ export function QuestionSurface({
     };
   }, [expired]);
 
+  const onSectionKeyDown = (e: React.KeyboardEvent) => {
+    const el = e.target as HTMLElement;
+    // Left/Right move between TABS (grouped only), but stay inert inside a text field so the caret keeps
+    // moving (D-009/D-013): bail on input/textarea/contenteditable.
+    if (grouped && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable) {
+        return;
+      }
+      e.preventDefault();
+      setDraft((d) => goToTab(d, d.activeIndex + (e.key === "ArrowRight" ? 1 : -1)));
+      return;
+    }
+    if (e.key !== "Enter") {
+      return;
+    }
+    // Enter confirms-and-advances (submits on the final/only tab). Inside a textarea plain Enter stays a
+    // newline and only Cmd/Ctrl+Enter advances; everywhere else plain Enter advances. Shift+Enter never.
+    const inTextarea = el.tagName === "TEXTAREA";
+    if (e.metaKey || e.ctrlKey || (!inTextarea && !e.shiftKey)) {
+      e.preventDefault();
+      confirmOrAdvance();
+    }
+  };
+
+  const card = activeQuestion ? (
+    <QuestionCard
+      key={activeQuestion.id}
+      question={activeQuestion}
+      index={activeIndex + 1}
+      grouped={grouped}
+      draft={draft}
+      disabled={expired === true}
+      onChange={setDraft}
+    />
+  ) : null;
+
   return (
     <section
       ref={sectionRef}
@@ -132,25 +201,13 @@ export function QuestionSurface({
         "flex w-full flex-col gap-4 rounded-xl bg-card p-4 text-foreground shadow-sm",
         className,
       )}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter") {
-          return;
-        }
-        // Enter submits the answer. Inside a textarea (notes / required reason / free-text answer)
-        // plain Enter stays a newline and only Cmd/Ctrl+Enter submits; everywhere else (choice rows,
-        // the single-line custom-answer input) plain Enter submits. Shift+Enter never submits.
-        const inTextarea = (e.target as HTMLElement).tagName === "TEXTAREA";
-        if (e.metaKey || e.ctrlKey || (!inTextarea && !e.shiftKey)) {
-          e.preventDefault();
-          submit();
-        }
-      }}
+      onKeyDown={onSectionKeyDown}
     >
       <header className="flex flex-col gap-1">
         <h2 className="text-sm font-semibold">{title ?? "Trevor needs your input"}</h2>
         {grouped ? (
           <p className="text-xs text-muted-foreground">
-            {contract.questions.length} questions - answer each to continue.
+            Question {activeIndex + 1} of {contract.questions.length}
           </p>
         ) : null}
       </header>
@@ -164,20 +221,45 @@ export function QuestionSurface({
         </p>
       ) : null}
 
-      <ol className="flex flex-col gap-5">
-        {contract.questions.map((q, i) => (
-          <li key={q.id}>
-            <QuestionCard
-              question={q}
-              index={i + 1}
-              grouped={grouped}
-              draft={draft}
-              disabled={expired === true}
-              onChange={setDraft}
-            />
-          </li>
-        ))}
-      </ol>
+      {grouped ? (
+        // Manual activation + controlled value: switching tabs is driven by our cursor, never by a
+        // trigger auto-firing on focus (D-006/D-009). The strip is click-only for the keyboard flow.
+        <Tabs
+          value={String(activeIndex)}
+          onValueChange={(v) => setDraft((d) => goToTab(d, Number(v)))}
+          activationMode="manual"
+        >
+          <TabsList className="flex w-full">
+            {contract.questions.map((q, i) => {
+              const valid = questionErrors(contract, draft, q.id).length === 0;
+              return (
+                <TabsTrigger
+                  key={q.id}
+                  value={String(i)}
+                  disabled={expired === true}
+                  className="min-w-0"
+                >
+                  {/* Header, or a never-blank "Question N" fallback (D-014); truncates at 320px (D-015). */}
+                  <span className="min-w-0 truncate">{q.header || `Question ${i + 1}`}</span>
+                  {valid ? (
+                    <Check className="size-3 shrink-0 text-primary" aria-label="answered" />
+                  ) : null}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+          {/* Only the active question renders, keyed so transient card state never leaks across tabs. */}
+          <div ref={panelRef} data-question-panel>
+            {card}
+          </div>
+        </Tabs>
+      ) : (
+        <div ref={panelRef}>
+          <ol className="flex flex-col gap-5">
+            <li>{card}</li>
+          </ol>
+        </div>
+      )}
 
       <footer className="flex items-center justify-end gap-2">
         <Button
@@ -189,9 +271,38 @@ export function QuestionSurface({
         >
           Decline
         </Button>
-        <Button type="button" size="sm" disabled={!ready} onClick={submit}>
-          {grouped ? "Submit answers" : "Submit answer"}
-        </Button>
+        {grouped && !isFinalTab ? (
+          // Non-final tab: advance, enabled only when THIS tab is valid (so Next never skips an answer).
+          <Button
+            type="button"
+            size="sm"
+            disabled={expired === true || !currentTabValid}
+            onClick={confirmOrAdvance}
+          >
+            Next →
+          </Button>
+        ) : grouped && !ready && firstInvalid >= 0 ? (
+          // Final tab, earlier tab incomplete: NOT an enabled Submit that silently no-ops - a disabled
+          // Submit plus an explicit jump to the first unanswered question (D-011).
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={expired === true}
+              onClick={() => setDraft((d) => goToTab(d, firstInvalid))}
+            >
+              Go to incomplete (Q{firstInvalid + 1})
+            </Button>
+            <Button type="button" size="sm" disabled>
+              Submit answers
+            </Button>
+          </>
+        ) : (
+          <Button type="button" size="sm" disabled={!ready} onClick={submit}>
+            {grouped ? "Submit answers" : "Submit answer"}
+          </Button>
+        )}
       </footer>
     </section>
   );
@@ -381,9 +492,10 @@ function tabIndexFor(
 
 /**
  * The single-choice ARIA radio keyboard pattern, extended to include the custom-answer row as the LAST
- * navigable item. Arrow keys move selection AND DOM focus across the choices and the custom input (so the
- * roving tab-stop follows). In the custom input, Left/Right/Home/End edit text instead of navigating.
- * Multi-select rows are plain toggles, so they keep the browser's default Tab/Space behavior.
+ * navigable item. UP/DOWN (+Home/End) move selection AND DOM focus across the choices and the custom
+ * input (so the roving tab-stop follows). LEFT/RIGHT are NO LONGER choice nav (02.18 D-013): they bubble
+ * to the surface's tab handler so they move between questions instead. Multi-select rows are plain
+ * toggles, so they keep the browser's default Tab/Space behavior.
  */
 function makeChoiceNav(
   q: ProviderQuestionItem,
@@ -396,9 +508,8 @@ function makeChoiceNav(
       return;
     }
     const inCustomInput = current === customIndex;
-    const keys = inCustomInput
-      ? ["ArrowDown", "ArrowUp"]
-      : ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"];
+    // Left/Right are intentionally absent so they reach the surface's tab navigation (D-013).
+    const keys = inCustomInput ? ["ArrowDown", "ArrowUp"] : ["ArrowDown", "ArrowUp", "Home", "End"];
     if (!keys.includes(e.key)) {
       return;
     }
@@ -409,7 +520,7 @@ function makeChoiceNav(
         ? 0
         : e.key === "End"
           ? last
-          : e.key === "ArrowDown" || e.key === "ArrowRight"
+          : e.key === "ArrowDown"
             ? Math.min(current + 1, last)
             : Math.max(current - 1, 0);
     if (target === current) {

@@ -41,9 +41,13 @@ export interface QuestionDraft {
   readonly deferred: boolean;
 }
 
-/** The editable answer state for a whole group, keyed by question id. */
+/** The editable answer state for a whole group, keyed by question id. The `activeIndex` cursor (02.18)
+ *  is the sequenced-tab position; it lives alongside `byId` (whose shape is unchanged) so the surface
+ *  keeps ONE state object and stays presentational. */
 export interface GroupDraft {
   readonly byId: Readonly<Record<string, QuestionDraft>>;
+  /** The active question/tab index (sequenced multi-question surface); always 0 for a single question. */
+  readonly activeIndex: number;
 }
 
 const EMPTY_QUESTION: QuestionDraft = {
@@ -65,7 +69,7 @@ export function emptyDraft(contract: ProviderQuestionContract): GroupDraft {
   for (const q of contract.questions) {
     byId[q.id] = EMPTY_QUESTION;
   }
-  return { byId };
+  return { byId, activeIndex: 0 };
 }
 
 /**
@@ -81,12 +85,13 @@ export function initialDraft(contract: ProviderQuestionContract): GroupDraft {
       ? { ...EMPTY_QUESTION, selectedIds: [recommended.id] }
       : EMPTY_QUESTION;
   }
-  return { byId };
+  return { byId, activeIndex: 0 };
 }
 
 function patch(draft: GroupDraft, qid: string, change: Partial<QuestionDraft>): GroupDraft {
   const current = draft.byId[qid] ?? EMPTY_QUESTION;
-  return { byId: { ...draft.byId, [qid]: { ...current, ...change } } };
+  // Spread the draft so the active-tab cursor survives every per-question edit.
+  return { ...draft, byId: { ...draft.byId, [qid]: { ...current, ...change } } };
 }
 
 /**
@@ -223,3 +228,45 @@ export function draftErrors(
 /** Whether the draft is a complete, submittable answer (no validation issues). */
 export const isComplete = (contract: ProviderQuestionContract, draft: GroupDraft): boolean =>
   draftErrors(contract, draft).length === 0;
+
+// --- sequenced-tab cursor + per-tab validity (02.18) ---
+//
+// `validateAnswer` validates a WHOLE contract, so per-tab validity is DERIVED here by filtering its
+// issues by `questionId` (D-010) - there is no per-question validator to reach for. The active-tab
+// cursor reducers keep the surface presentational: it dispatches `goToTab`/`advance` and reads back
+// `activeIndex`, never owning the clamp/gating itself.
+
+/** The validation issues for ONE question (filtered from the whole-contract `draftErrors` by id). Empty
+ *  means that tab is satisfied - it drives the tab checkmark and the "Next" gate. <!-- D-010 --> */
+export function questionErrors(
+  contract: ProviderQuestionContract,
+  draft: GroupDraft,
+  questionId: string,
+): readonly AnswerIssue[] {
+  return draftErrors(contract, draft).filter((issue) => issue.questionId === questionId);
+}
+
+/** The index of the first question that still has validation issues, or -1 when the whole group is
+ *  complete. Drives the "go to incomplete (Qk)" jump on the final tab. <!-- D-011 --> */
+export function firstInvalidIndex(contract: ProviderQuestionContract, draft: GroupDraft): number {
+  const issues = draftErrors(contract, draft);
+  return contract.questions.findIndex((q) => issues.some((i) => i.questionId === q.id));
+}
+
+/** Move the active tab to `index`, clamped to a valid tab. */
+export function goToTab(draft: GroupDraft, index: number): GroupDraft {
+  const count = Object.keys(draft.byId).length;
+  const clamped = Math.max(0, Math.min(index, Math.max(0, count - 1)));
+  return clamped === draft.activeIndex ? draft : { ...draft, activeIndex: clamped };
+}
+
+/** Advance to the next tab, but ONLY when the current tab is valid; a no-op past the last tab or while
+ *  the current tab has issues (so "Next" can never skip an unanswered question). <!-- D-011 --> */
+export function advance(contract: ProviderQuestionContract, draft: GroupDraft): GroupDraft {
+  const current = contract.questions[draft.activeIndex];
+  if (!current || questionErrors(contract, draft, current.id).length > 0) {
+    return draft;
+  }
+  const next = Math.min(draft.activeIndex + 1, contract.questions.length - 1);
+  return next === draft.activeIndex ? draft : { ...draft, activeIndex: next };
+}

@@ -269,18 +269,163 @@ test("expired: every control is disabled and nothing can be submitted", () => {
   assert.equal(onAnswer.mock.calls.length, 0);
 });
 
-test("grouped: a multi-question ask submits one answer entry per question", () => {
-  const { onAnswer } = renderSurface(fx.grouped);
-  // scope's "Minimal slice" is recommended (pre-selected); answer the remaining two.
+// --- 02.18: the sequenced tab interface (multi-question only) ---
+
+test("single-question keeps the single-pane layout: no tab strip, 'Submit answer' (D-001)", () => {
+  renderSurface(fx.singleChoice);
+  assert.equal(screen.queryByRole("tablist"), null, "no tabs for a single question");
+  assert.ok(screen.getByRole("button", { name: /submit answer/i }));
+});
+
+test("grouped: one tab per question with a 1-based label, checkmark when valid, and a counter (M4)", () => {
+  renderSurface(fx.grouped);
+  const tabs = screen.getAllByRole("tab");
+  assert.equal(tabs.length, 3);
+  assert.match(tabs[0]?.textContent ?? "", /Planning/); // header label
+  assert.match(tabs[1]?.textContent ?? "", /Question 2/); // no header -> "Question N" fallback (D-014)
+  assert.match(tabs[2]?.textContent ?? "", /Question 3/);
+  assert.ok(screen.getByText("Question 1 of 3"));
+  // scope is pre-selected (valid) so its tab shows a checkmark; checks/notes are not answered yet.
+  assert.ok(tabs[0]?.querySelector('[aria-label="answered"]'), "the valid tab is checked");
+  assert.equal(tabs[1]?.querySelector('[aria-label="answered"]'), null, "an open tab is unchecked");
+});
+
+test("grouped: Next is gated on the current tab; Submit appears only on the final tab (M5)", () => {
+  renderSurface(fx.grouped);
+  // Tab 0 (scope) is valid -> Next enabled, no Submit yet.
+  assert.equal(
+    (screen.getByRole("button", { name: /next/i }) as HTMLButtonElement).disabled,
+    false,
+  );
+  assert.equal(screen.queryByRole("button", { name: /submit answers/i }), null);
+  // Advance to tab 1 (checks, multi-select) - now Next is disabled until a box is picked.
+  fireEvent.click(screen.getByRole("button", { name: /next/i }));
+  assert.ok(screen.getByText("Question 2 of 3"));
+  assert.equal((screen.getByRole("button", { name: /next/i }) as HTMLButtonElement).disabled, true);
   fireEvent.click(screen.getByRole("checkbox", { name: /Unit tests/ }));
+  assert.equal(
+    (screen.getByRole("button", { name: /next/i }) as HTMLButtonElement).disabled,
+    false,
+  );
+});
+
+test("grouped: a multi-question ask advances through the tabs and submits ONE batched answer (M5/M6)", () => {
+  const { onAnswer } = renderSurface(fx.grouped);
+  // Tab 0 (scope) pre-selected: advance with Enter (confirm-and-advance, not submit).
+  fireEvent.keyDown(screen.getByRole("region", { name: /question from trevor/i }), {
+    key: "Enter",
+  });
+  assert.equal(onAnswer.mock.calls.length, 0, "Enter mid-flow advances, it does not submit");
+  // Tab 1 (checks): pick a box, advance.
+  fireEvent.click(screen.getByRole("checkbox", { name: /Unit tests/ }));
+  fireEvent.click(screen.getByRole("button", { name: /next/i }));
+  // Tab 2 (notes, final): type, then a single Submit emits one accept for all three questions.
   fireEvent.change(screen.getByLabelText("Anything else the reviewer should know?"), {
     target: { value: "ship behind a flag" },
   });
   fireEvent.click(screen.getByRole("button", { name: /submit answers/i }));
-
+  assert.equal(onAnswer.mock.calls.length, 1, "exactly one batched answer event");
   const answer = lastAccept(onAnswer);
   assert.deepEqual(
     answer.questions.map((a) => a.id),
     ["scope", "checks", "notes"],
   );
+});
+
+test("grouped: on the final tab with an earlier tab incomplete, Submit is disabled + a jump appears (M5/D-011)", () => {
+  renderSurface(fx.grouped);
+  // Jump straight to the final tab via Right/Right (leaving checks unanswered).
+  const region = screen.getByRole("region", { name: /question from trevor/i });
+  fireEvent.keyDown(region, { key: "ArrowRight" });
+  fireEvent.keyDown(region, { key: "ArrowRight" });
+  assert.ok(screen.getByText("Question 3 of 3"));
+  // Type the (optional-shape) notes so only `checks` is incomplete.
+  fireEvent.change(screen.getByLabelText("Anything else the reviewer should know?"), {
+    target: { value: "done" },
+  });
+  const submit = screen.getByRole("button", { name: /submit answers/i });
+  assert.equal((submit as HTMLButtonElement).disabled, true, "Submit is disabled, never a no-op");
+  // The jump points at the first incomplete tab (checks = Q2) and goes there.
+  fireEvent.click(screen.getByRole("button", { name: /go to incomplete \(Q2\)/i }));
+  assert.ok(screen.getByText("Question 2 of 3"));
+});
+
+test("grouped: Left/Right move between tabs; Up/Down still move the choice within a tab (M7/D-013)", () => {
+  renderSurface(fx.grouped);
+  const region = screen.getByRole("region", { name: /question from trevor/i });
+  // Right advances the tab; Left goes back.
+  fireEvent.keyDown(region, { key: "ArrowRight" });
+  assert.ok(screen.getByText("Question 2 of 3"));
+  fireEvent.keyDown(region, { key: "ArrowLeft" });
+  assert.ok(screen.getByText("Question 1 of 3"));
+  // Up/Down change the single-choice selection (NOT the tab).
+  fireEvent.keyDown(screen.getByRole("radio", { name: /Minimal slice/ }), { key: "ArrowDown" });
+  assert.equal(
+    screen.getByRole("radio", { name: /Full feature/ }).getAttribute("aria-checked"),
+    "true",
+  );
+  assert.ok(screen.getByText("Question 1 of 3"), "Up/Down did not change the tab");
+});
+
+test("grouped: Left/Right inside a text field move the caret, not the tab (M7/D-009)", () => {
+  renderSurface(fx.grouped);
+  const region = screen.getByRole("region", { name: /question from trevor/i });
+  // Go to the free-text tab and focus the textarea.
+  fireEvent.keyDown(region, { key: "ArrowRight" });
+  fireEvent.keyDown(region, { key: "ArrowRight" });
+  const box = screen.getByLabelText("Anything else the reviewer should know?");
+  box.focus();
+  fireEvent.keyDown(box, { key: "ArrowLeft" });
+  assert.ok(screen.getByText("Question 3 of 3"), "Left in a textarea did not change the tab");
+});
+
+test("grouped: going back to an answered tab shows the already-chosen answer (M7)", () => {
+  renderSurface(fx.grouped);
+  const region = screen.getByRole("region", { name: /question from trevor/i });
+  fireEvent.keyDown(region, { key: "ArrowRight" }); // to checks
+  fireEvent.click(screen.getByRole("checkbox", { name: /Unit tests/ }));
+  fireEvent.keyDown(region, { key: "ArrowLeft" }); // back to scope
+  fireEvent.keyDown(region, { key: "ArrowRight" }); // forward to checks again
+  assert.equal(
+    screen.getByRole("checkbox", { name: /Unit tests/ }).getAttribute("aria-checked"),
+    "true",
+    "the earlier choice persisted across tab navigation",
+  );
+});
+
+test("grouped: focus follows the active tab onto its first choice (M8)", () => {
+  renderSurface(fx.grouped);
+  fireEvent.keyDown(screen.getByRole("region", { name: /question from trevor/i }), {
+    key: "ArrowRight",
+  });
+  // Tab 1 (checks) is active: focus landed on a choice row in the new panel, not <body>.
+  assert.notEqual(document.activeElement, document.body);
+  assert.equal(
+    (document.activeElement as HTMLElement | null)?.getAttribute("role"),
+    "checkbox",
+    "focus moved into the newly active panel",
+  );
+});
+
+test("grouped: Decline works from any tab and emits a single decline (M5)", () => {
+  const { onAnswer } = renderSurface(fx.grouped);
+  fireEvent.keyDown(screen.getByRole("region", { name: /question from trevor/i }), {
+    key: "ArrowRight",
+  });
+  fireEvent.click(screen.getByRole("button", { name: /decline/i }));
+  assert.deepEqual(onAnswer.mock.calls.at(-1)?.[0], { action: "decline" });
+});
+
+test("grouped + expired: tabs are navigable read-only but nothing submits or declines", () => {
+  const { onAnswer } = renderSurface(fx.grouped, { expired: true });
+  assert.ok(screen.getByText(/this question expired/i));
+  // The strip still renders for review, but every action control is disabled.
+  assert.equal(screen.getAllByRole("tab").length, 3);
+  assert.equal(
+    (screen.getByRole("button", { name: /decline/i }) as HTMLButtonElement).disabled,
+    true,
+  );
+  // A disabled control cannot fire, so nothing is ever emitted from an expired grouped surface.
+  fireEvent.click(screen.getByRole("button", { name: /decline/i }));
+  assert.equal(onAnswer.mock.calls.length, 0);
 });
