@@ -93,26 +93,14 @@ export function insertPaste(
 }
 
 /**
- * Backspace (`dir = -1`) or Delete (`dir = 1`) next to a whole token removes the token AND its
- * payload in one step, collapsing a now-redundant double space. Returns the new draft + cursor, or
- * `null` when no token is immediately adjacent (so the textarea handles the keystroke normally).
+ * Removes the reading-order `index`-th paste token AND its paired payload in one step, collapsing a
+ * now-redundant double space, then renumbers the survivors. The explicit-remove entry point (the
+ * inspection UI's remove action wires to this); a no-op when no such token exists. <!-- D-007 -->
  */
-export function removeAdjacentPasteToken(
-  draft: PasteDraft,
-  cursor: number,
-  dir: -1 | 1,
-): { draft: PasteDraft; cursor: number } | null {
-  const spans = parsePasteTokens(draft.text);
-  const index = spans.findIndex((span) =>
-    dir === -1 ? span.end === cursor : span.start === cursor,
-  );
-  if (index === -1) {
-    return null;
-  }
-
-  const span = spans[index];
+export function removePasteAt(draft: PasteDraft, index: number): PasteDraft {
+  const span = parsePasteTokens(draft.text)[index];
   if (!span) {
-    return null;
+    return draft;
   }
 
   const { start } = span;
@@ -124,7 +112,28 @@ export function removeAdjacentPasteToken(
 
   const rawText = draft.text.slice(0, start) + draft.text.slice(end);
   const pastes = draft.pastes.filter((_, i) => i !== index);
-  return { draft: { text: renumberPastes(rawText), pastes }, cursor: start };
+  return { text: renumberPastes(rawText), pastes };
+}
+
+/**
+ * Backspace (`dir = -1`) or Delete (`dir = 1`) next to a whole token removes the token AND its
+ * payload in one step (via {@link removePasteAt}). Returns the new draft + cursor, or `null` when no
+ * token is immediately adjacent (so the textarea handles the keystroke normally).
+ */
+export function removeAdjacentPasteToken(
+  draft: PasteDraft,
+  cursor: number,
+  dir: -1 | 1,
+): { draft: PasteDraft; cursor: number } | null {
+  const spans = parsePasteTokens(draft.text);
+  const index = spans.findIndex((span) =>
+    dir === -1 ? span.end === cursor : span.start === cursor,
+  );
+  const span = spans[index];
+  if (index === -1 || !span) {
+    return null;
+  }
+  return { draft: removePasteAt(draft, index), cursor: span.start };
 }
 
 /**

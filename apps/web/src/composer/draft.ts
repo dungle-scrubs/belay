@@ -9,6 +9,7 @@ import {
   insertPaste as insertPasteToken,
   type PasteDraft,
   removeAdjacentPasteToken,
+  removePasteAt as removePasteTokenAt,
   syncPasteDraft,
 } from "./paste-tokens";
 
@@ -76,6 +77,12 @@ export function insertPaste(
 ): { draft: ComposerDraft; cursor: number } {
   const { draft: next, cursor } = insertPasteToken(pasteView(draft), selStart, selEnd, payload);
   return { draft: { text: next.text, imageRefs: draft.imageRefs, pastes: next.pastes }, cursor };
+}
+
+/** Removes the reading-order `index`-th pasted-text token + its payload, leaving image tokens intact. */
+export function removePasteAt(draft: ComposerDraft, index: number): ComposerDraft {
+  const next = removePasteTokenAt(pasteView(draft), index);
+  return { text: next.text, imageRefs: draft.imageRefs, pastes: next.pastes };
 }
 
 /**

@@ -8,6 +8,7 @@ import {
   insertImages,
   insertPaste,
   removeAdjacentToken,
+  removePasteAt,
   syncComposerDraft,
 } from "./draft";
 
@@ -155,6 +156,27 @@ test("clearing the draft drops both image refs and paste payloads", () => {
   });
   const synced = syncComposerDraft(base, "");
   assert.deepEqual(synced, EMPTY_COMPOSER_DRAFT);
+});
+
+test("removePasteAt deletes the indexed token + payload and leaves images alone", () => {
+  const base = draftOf({
+    text: "[Pasted text #1 +3 lines] [Image #1] [Pasted text #2 +2 lines]",
+    imageRefs: [IMG],
+    pastes: [P, Q],
+  });
+  const next = removePasteAt(base, 0);
+  assert.deepEqual(next.pastes, [Q], "the indexed payload is dropped");
+  assert.deepEqual(next.imageRefs, [IMG], "the image ref is untouched");
+  assert.deepEqual(
+    parsePasteTokens(next.text).map((s) => s.num),
+    [1],
+    "the surviving paste token renumbers to #1",
+  );
+  assert.deepEqual(
+    parseImageTokens(next.text).map((s) => s.num),
+    [1],
+    "the image token stays #1",
+  );
 });
 
 test("inserting an image after a paste token keeps the paste payload aligned", () => {

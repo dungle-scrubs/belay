@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M4 - Token Overlay, Hover, and Actions
-- Current cutoff blockers: 44
+- Current focus: M5 - Protocol and Provider Projection
+- Current cutoff blockers: 32
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 26
+- Completed current work: 38
 - Thresholds (D-003): large paste = 20+ lines OR 1500+ chars (DEFAULT_PASTE_THRESHOLDS, configurable).
 - Token format (D-001): `[Pasted text #N +M lines]`, M = derived display line count (CRLF/CR normalized, lone trailing newline ignored).
 
@@ -56,21 +56,21 @@
 
 #### M4: Token Overlay, Hover, and Actions
 
-- [ ] RED: Add Storybook states for one pasted token, multiple pasted tokens, long surrounding prompt, mobile width, and mixed image/paste tokens.
-- [ ] GREEN: Render pasted-text tokens with distinct overlay styling from image tokens.
-- [ ] RED: Add hover/focus tests for payload preview capped to a safe height/width.
-- [ ] GREEN: Show an inspectable preview with line count, character count, copy action, and remove action.
-- [ ] RED: Add tests proving remove action deletes both visible token and hidden payload.
-- [ ] GREEN: Wire remove/copy actions to the composer draft model.
-- [ ] REFACTOR: Keep token controls accessible without replacing the textarea with a rich editor.
+- [x] RED: Add Storybook states for one pasted token, multiple pasted tokens, long surrounding prompt, mobile width, and mixed image/paste tokens.
+- [x] GREEN: Render pasted-text tokens with distinct overlay styling from image tokens.
+- [x] RED: Add hover/focus tests for payload preview capped to a safe height/width.
+- [x] GREEN: Show an inspectable preview with line count, character count, copy action, and remove action.
+- [x] RED: Add tests proving remove action deletes both visible token and hidden payload.
+- [x] GREEN: Wire remove/copy actions to the composer draft model.
+- [x] REFACTOR: Keep token controls accessible without replacing the textarea with a rich editor.
 
 ### Gate 2 -> 3
 
-- [ ] Large text paste creates a compact token in the normal chat composer.
-- [ ] Small text paste remains literal.
-- [ ] Existing image/file paste behavior is unchanged.
-- [ ] Users can inspect, copy, and remove the full pasted payload.
-- [ ] Shell mode does not hide command text behind paste tokens.
+- [x] Large text paste creates a compact token in the normal chat composer.
+- [x] Small text paste remains literal.
+- [x] Existing image/file paste behavior is unchanged.
+- [x] Users can inspect, copy, and remove the full pasted payload.
+- [x] Shell mode does not hide command text behind paste tokens.
 
 ### Phase 3: Submission, Queue, and Transcript
 
