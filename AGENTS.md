@@ -23,6 +23,14 @@ feature branch. A plan's **implementation** (the source changes) is done on **it
 and do not mix two plans on one branch. When the plan is **complete**, **delete its plan directory**
 (`.plans/<NN-plan-name>/`) and **merge the branch into `main`**.
 
+**Prune a merged branch immediately - locally AND on the remote.** Once a branch is merged into
+`main`, its commits live in `main`, so the branch ref is dead weight: delete it locally
+(`git branch -d <branch>`) and on origin (`git push origin --delete <branch>`), then
+`git remote prune origin` to drop stale tracking refs. **Only `main` should ever persist** - no merged
+`feat/*` branch lingers locally or on origin. This branch cleanup (deleting a ref whose commits are
+already in `main`) is part of completing the merge, not a separate content push; it does not need a
+second go-ahead once the merge itself is authorized.
+
 Do **not** `git commit`, `git push`, or `git merge` unless the owner explicitly tells
 you to in that moment. Completing, building, verifying, or being asked to "build it" /
 "add it" is **not** authorization to commit, push, or merge - make the changes and
