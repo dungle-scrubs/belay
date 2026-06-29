@@ -753,3 +753,73 @@ test("D-007: the incident finding surfaces only the sanitized detail, never a cr
   assert.equal(finding?.evidence, "401 from upstream: «redacted»");
   assert.ok(!/Bearer|sk-|x-api-key/i.test(finding?.evidence ?? ""));
 });
+
+test("the Workspace area shows the cwd-lock state as a fact (held reads ok, no finding)", () => {
+  const snap = buildDoctorSnapshot(
+    input({
+      workspace: {
+        cwd: "~/dev/trevorV2",
+        workspace: "~/dev/trevorV2",
+        branch: "main",
+        cwdLock: { state: "held", path: "~/.local/state/trevorV2/cwd-locks/x.lock" },
+      },
+    }),
+  );
+  const workspace = snap.areas.find((a) => a.id === "workspace");
+  assert.equal(workspace?.status, "ok", "a held lock is healthy");
+  assert.ok(
+    workspace?.facts?.some((f) => f.label === "cwd lock" && /held by this session/.test(f.value)),
+    "the held lock is a fact",
+  );
+  assert.ok(
+    !workspace?.findings?.some((f) => f.id === "workspace.cwd-lock"),
+    "a held lock raises no finding",
+  );
+});
+
+test("a contended cwd lock raises a warn finding with a non-destructive next action", () => {
+  const snap = buildDoctorSnapshot(
+    input({
+      workspace: {
+        cwd: "~/dev/trevorV2",
+        workspace: "~/dev/trevorV2",
+        branch: "main",
+        cwdLock: {
+          state: "contended",
+          path: "~/.local/state/trevorV2/cwd-locks/x.lock",
+          owner: "host deadbeef (session other-9999, pid 4242, alive, ...)",
+          heartbeatAgeMs: 1200,
+        },
+      },
+    }),
+  );
+  const workspace = snap.areas.find((a) => a.id === "workspace");
+  assert.equal(workspace?.status, "warn", "contention surfaces as a warning, not ok");
+  const finding = workspace?.findings?.find((f) => f.id === "workspace.cwd-lock");
+  assert.equal(finding?.status, "warn");
+  assert.match(finding?.message ?? "", /another live session/i);
+  assert.match(finding?.nextAction?.label ?? "", /only force-clear/i);
+  // The owner detail (redaction-safe: session/host/pid only) is carried as the finding source.
+  assert.match(finding?.source ?? "", /session other-9999/);
+});
+
+test("a stale cwd lock raises a warn finding that explains it is auto-reclaimed", () => {
+  const snap = buildDoctorSnapshot(
+    input({
+      workspace: {
+        cwd: "~/dev/trevorV2",
+        workspace: "~/dev/trevorV2",
+        branch: "main",
+        cwdLock: {
+          state: "stale",
+          path: "~/.local/state/trevorV2/cwd-locks/x.lock",
+          owner: "host deadbeef (session gone-0000, pid 999, no live process, ...)",
+        },
+      },
+    }),
+  );
+  const workspace = snap.areas.find((a) => a.id === "workspace");
+  const finding = workspace?.findings?.find((f) => f.id === "workspace.cwd-lock");
+  assert.equal(finding?.status, "warn");
+  assert.match(finding?.message ?? "", /reclaimed on next acquire/i);
+});

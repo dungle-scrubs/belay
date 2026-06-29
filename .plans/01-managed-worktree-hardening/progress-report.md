@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 23
-- **Completed current work:** 11
+- **Current cutoff blockers:** 14
+- **Completed current work:** 20
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M2 - Lock Acquisition and Diagnostics
+- **Current focus:** M3 - Smoke Harness
 
 ## Completed Current State / Hard Dependencies
 
@@ -29,18 +29,18 @@
 
 ### M2 - Lock Acquisition and Diagnostics
 
-- [ ] RED: Add tests for two different session ids targeting the same real cwd.
-- [ ] GREEN: Implement advisory lock acquisition that blocks conflicting Trevor-owned mutating hosts.
-- [ ] RED: Add stale lock and owner-missing tests.
-- [ ] GREEN: Add safe stale handling and user-visible diagnostics without automatic destructive cleanup.
-- [ ] REFACTOR: Surface lock failures as typed errors reused by worktree switch/open paths.
+- [x] RED: Add tests for two different session ids targeting the same real cwd. (`cwd-lock.test.ts` conflict + switch-gate suites)
+- [x] GREEN: Implement advisory lock acquisition that blocks conflicting Trevor-owned mutating hosts. (`main.ts` `onBecomeLeader` acquires; `worktreeSwitch` blocks via `cwdSwitchConflict`)
+- [x] RED: Add stale lock and owner-missing tests. (`cwd-lock.test.ts` stale-takeover + malformed/missing suites)
+- [x] GREEN: Add safe stale handling and user-visible diagnostics without automatic destructive cleanup. (stale reclaimed only on next acquire; `/doctor` Workspace cwd-lock fact + finding, structured + plaintext; inspect is read-only)
+- [x] REFACTOR: Surface lock failures as typed errors reused by worktree switch/open paths. (`CwdLockConflict` surfaced from the worktree-switch gate)
 
 ### Gate 1-2
 
-- [ ] Cwd-path lock identity is normalized and tested.
-- [ ] Conflicting Trevor-owned mutating hosts are blocked before workspace mutation.
-- [ ] Stale lock behavior is observable and safe.
-- [ ] Completed D-091 create/switch/merge behavior does not regress.
+- [x] Cwd-path lock identity is normalized and tested. (realpath identity; `cwd-lock.test.ts` aliasing + worktree/non-worktree parity)
+- [x] Conflicting Trevor-owned mutating hosts are blocked before workspace mutation. (worktree-switch pre-check + leader-acquire conflict surfacing)
+- [x] Stale lock behavior is observable and safe. (dead-pid + heartbeat-window staleness, `/doctor` stale finding, no auto-destructive cleanup)
+- [x] Completed D-091 create/switch/merge behavior does not regress. (full agent-host unit suite green; switch path only gains a non-mutating pre-check)
 
 ### M3 - Smoke Harness
 

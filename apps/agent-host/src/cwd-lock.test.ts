@@ -7,6 +7,8 @@ import {
   type CwdLockFile,
   type CwdLockFs,
   cwdLockConflictMessage,
+  cwdLockDoctorFact,
+  cwdSwitchConflict,
   inspectCwdLock,
   refreshCwdLock,
   releaseCwdLock,
@@ -375,5 +377,65 @@ describe("inspect (read-only diagnostics)", () => {
     expect(view.file).toBeNull();
     expect(view.owner).toBeNull();
     expect(view.stale).toBe(false);
+  });
+});
+
+describe("doctor fact (state relative to this host's session)", () => {
+  test("a free directory is unlocked", () => {
+    const h = harness({ nowMs: 0 });
+    const fact = cwdLockDoctorFact("/repo", "alpha-1111", h.caps);
+    expect(fact.state).toBe("unlocked");
+    expect(fact.owner).toBeUndefined();
+  });
+
+  test("our own session's lock reads as held", () => {
+    const h = harness({ nowMs: 0, alive: [100] });
+    acquireCwdLock("/repo", owner({ sessionId: "alpha-1111", pid: 100 }), h.caps);
+    const fact = cwdLockDoctorFact("/repo", "alpha-1111", h.caps);
+    expect(fact.state).toBe("held");
+    expect(fact.owner).toContain("session alpha-1111");
+  });
+
+  test("a different live session reads as contended", () => {
+    const h = harness({ nowMs: 0, alive: [200] });
+    acquireCwdLock("/repo", owner({ sessionId: "beta-2222", pid: 200 }), h.caps);
+    const fact = cwdLockDoctorFact("/repo", "alpha-1111", h.caps);
+    expect(fact.state).toBe("contended");
+    expect(fact.heartbeatAgeMs).toBe(0);
+  });
+
+  test("a dead-owner lock from another session reads as stale", () => {
+    const h = harness({ nowMs: 0, alive: [] });
+    acquireCwdLock("/repo", owner({ sessionId: "beta-2222", pid: 200 }), h.caps);
+    expect(cwdLockDoctorFact("/repo", "alpha-1111", h.caps).state).toBe("stale");
+  });
+});
+
+describe("switch gate (cwdSwitchConflict)", () => {
+  test("blocks a switch into a directory a different live session owns", () => {
+    const h = harness({ nowMs: 0, alive: [200] });
+    acquireCwdLock("/wt", owner({ sessionId: "beta-2222", hostId: "host-b", pid: 200 }), h.caps);
+
+    const conflict = cwdSwitchConflict("/wt", "alpha-1111", h.caps);
+    expect(conflict).not.toBeNull();
+    expect(conflict?._tag).toBe("CwdLockConflict");
+    expect(conflict?.heldBy.sessionId).toBe("beta-2222");
+  });
+
+  test("allows a switch into a directory owned by the target's own session (a resume)", () => {
+    const h = harness({ nowMs: 0, alive: [200] });
+    acquireCwdLock("/wt", owner({ sessionId: "wt-7777", pid: 200 }), h.caps);
+    expect(cwdSwitchConflict("/wt", "wt-7777", h.caps)).toBeNull();
+  });
+
+  test("allows a switch when the existing lock is stale", () => {
+    const h = harness({ nowMs: 0, alive: [] }); // owner pid dead
+    acquireCwdLock("/wt", owner({ sessionId: "beta-2222", pid: 200 }), h.caps);
+    expect(cwdSwitchConflict("/wt", "alpha-1111", h.caps)).toBeNull();
+  });
+
+  test("allows a switch into a free directory", () => {
+    const h = harness({ nowMs: 0 });
+    expect(cwdSwitchConflict("/wt", "alpha-1111", h.caps)).toBeNull();
   });
 });

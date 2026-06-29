@@ -10,6 +10,7 @@ import {
   rollupStatus,
 } from "@trevor/session";
 import type { RootCategoryId } from "@trevor/session/node-paths";
+import { type CwdLockDoctorFact, cwdLockSummary } from "../cwd-lock";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
 
 /**
@@ -60,6 +61,8 @@ export interface DoctorProbeInput {
     readonly cwd: string;
     readonly workspace: string;
     readonly branch?: string;
+    /** Cwd advisory-lock state for this host's working directory (plan 01); absent when not probed. */
+    readonly cwdLock?: CwdLockDoctorFact;
   };
   readonly storage: { readonly roots: readonly DoctorRootProbe[] };
   readonly build: DoctorBuildInfo;
@@ -539,7 +542,33 @@ function storageArea(input: DoctorProbeInput): DoctorArea {
   return area("storage", "Storage / Roots", verdict, findings, facts, statusOverride);
 }
 
+/** A cwd-lock finding for the Workspace area, only when the lock is contended or stale (both advisory
+ *  warnings - a held or unlocked directory needs no finding, just the fact row). */
+function cwdLockFinding(lock: CwdLockDoctorFact | undefined): DoctorFinding[] {
+  if (!lock || (lock.state !== "contended" && lock.state !== "stale")) {
+    return [];
+  }
+  return [
+    {
+      id: "workspace.cwd-lock",
+      status: "warn",
+      title: lock.state === "contended" ? "Cwd lock contended" : "Stale cwd lock",
+      message:
+        lock.state === "contended"
+          ? "another live session owns this working directory"
+          : "a leftover lock from a dead/abandoned owner (reclaimed on next acquire)",
+      ...(lock.owner ? { source: lock.owner } : {}),
+      nextAction: {
+        label:
+          "Inspect the owning host; only force-clear the lock file if you are certain no host is using this directory",
+        ...(lock.path ? { command: lock.path } : {}),
+      },
+    },
+  ];
+}
+
 function workspaceArea(input: DoctorProbeInput): DoctorArea {
+  const lock = input.workspace.cwdLock;
   const finding: DoctorFinding = {
     id: "workspace.cwd",
     status: "ok",
@@ -547,14 +576,24 @@ function workspaceArea(input: DoctorProbeInput): DoctorArea {
     message: input.workspace.branch ? `on ${input.workspace.branch}` : "not a git repository",
     source: input.workspace.workspace,
   };
+  const lockWarn = lock?.state === "contended" || lock?.state === "stale";
   const facts: DoctorArea["facts"] = [
     { label: "cwd", value: input.workspace.cwd },
     ...(input.workspace.cwd !== input.workspace.workspace
       ? [{ label: "workspace", value: input.workspace.workspace }]
       : []),
     ...(input.workspace.branch ? [{ label: "branch", value: input.workspace.branch }] : []),
+    ...(lock
+      ? [
+          {
+            label: "cwd lock",
+            value: cwdLockSummary(lock),
+            ...(lockWarn ? { status: "warn" as const } : {}),
+          },
+        ]
+      : []),
   ];
-  return area("workspace", "Workspace", finding.message, [finding], facts);
+  return area("workspace", "Workspace", finding.message, [finding, ...cwdLockFinding(lock)], facts);
 }
 
 /**

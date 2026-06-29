@@ -11,6 +11,7 @@ import {
 import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
 import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
 import { Effect } from "effect";
+import { type CwdLockDoctorFact, cwdLockSummary } from "../cwd-lock";
 import { fmtFields } from "../log";
 import { abbrevHome } from "../paths";
 import type { ProviderRegistry } from "../providers";
@@ -51,6 +52,8 @@ export interface DoctorRuntimeFacts {
   readonly host?: Record<string, unknown>;
   /** D-065 catalog source summaries (auth/config + model counts), surfaced in the Providers area. */
   readonly catalog?: readonly SourceSummary[];
+  /** Cwd advisory-lock state for this host's working directory (plan 01), surfaced in the Workspace area. */
+  readonly cwdLock?: CwdLockDoctorFact;
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
@@ -170,6 +173,9 @@ async function doctorText(input: DoctorCommandInput): Promise<string> {
   if (input.cwd !== input.workspace) {
     lines.push(`cwd: ${input.cwd}`);
   }
+  if (input.cwdLock) {
+    lines.push(`cwd lock: ${cwdLockSummary(input.cwdLock)}`);
+  }
   lines.push(`host: ${input.instanceId} (${input.role})`);
   if (input.host) {
     lines.push(`turn: ${fmtFields(input.host)}`);
@@ -286,7 +292,12 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
     providers: probes.providers,
     internet: facts.internet ?? UNKNOWN_INTERNET,
     tools: probes.tools,
-    workspace: { cwd: facts.cwd, workspace: facts.workspace, branch: facts.branch },
+    workspace: {
+      cwd: facts.cwd,
+      workspace: facts.workspace,
+      branch: facts.branch,
+      ...(facts.cwdLock ? { cwdLock: facts.cwdLock } : {}),
+    },
     storage: { roots: probes.roots },
     // Package/build/version facts (D-073): the embedded version when present (else a dev build),
     // plus the always-available Node + runtime kind. Update-availability is not probed here.

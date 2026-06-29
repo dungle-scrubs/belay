@@ -29,6 +29,10 @@ import { Data } from "effect";
  *  long-abandoned owner. Generous so a briefly-busy live leader is never stolen out from under itself. */
 export const CWD_LOCK_STALE_MS = 300_000;
 
+/** How often the live leader refreshes its lock heartbeat. Far below {@link CWD_LOCK_STALE_MS} so an
+ *  actively-running owner stays comfortably fresh while a crashed one ages into stale within minutes. */
+export const CWD_LOCK_HEARTBEAT_MS = 5_000;
+
 /** The inventory name of the state-home directory holding cwd lock files (see node-paths STORAGE_INVENTORY). */
 export const CWD_LOCKS_STORAGE_NAME = "cwd-locks";
 
@@ -385,4 +389,84 @@ export class CwdLockConflict extends Data.TaggedError("CwdLockConflict")<{
   override get message(): string {
     return cwdLockConflictMessage(this.cwd, this.heldBy);
   }
+}
+
+/** How this host stands relative to the cwd lock, the way /doctor renders it. */
+export type CwdLockState =
+  /** No lock file: the directory is free. */
+  | "unlocked"
+  /** Held by this host's own session (the normal, healthy case). */
+  | "held"
+  /** A different, LIVE session owns it - the contention hazard this lock exists to catch. */
+  | "contended"
+  /** A leftover lock from a dead / abandoned owner; reclaimed on the next acquire. */
+  | "stale";
+
+/** The redaction-safe cwd-lock projection /doctor surfaces (session id + short host + pid + age - no
+ *  secrets). `owner` is a one-line description when a lock exists; absent when unlocked. */
+export interface CwdLockDoctorFact {
+  readonly state: CwdLockState;
+  /** The lock-file path (caller may abbreviate the home prefix for display). */
+  readonly path: string;
+  readonly owner?: string;
+  readonly heartbeatAgeMs?: number;
+}
+
+/**
+ * Classifies a cwd's lock relative to THIS host's session for the /doctor Workspace area: unlocked,
+ * held (our session), stale (dead/abandoned owner), or contended (a different live session). Pure read
+ * model - it inspects, never mutates.
+ */
+export function cwdLockDoctorFact(
+  cwd: string,
+  ownSessionId: string,
+  caps: CwdLockCaps,
+): CwdLockDoctorFact {
+  const view = inspectCwdLock(cwd, caps);
+  if (!view.owner) {
+    return { state: "unlocked", path: view.path };
+  }
+  const base = {
+    path: view.path,
+    owner: describeCwdLockOwner(view.owner),
+    heartbeatAgeMs: view.owner.heartbeatAgeMs,
+  };
+  if (view.owner.sessionId === ownSessionId) {
+    return { state: "held", ...base };
+  }
+  return { state: view.stale ? "stale" : "contended", ...base };
+}
+
+/** A one-line cwd-lock summary shared by both /doctor surfaces (the structured fact and the plaintext
+ *  dump), so they never disagree on how a state reads. */
+export function cwdLockSummary(lock: CwdLockDoctorFact): string {
+  switch (lock.state) {
+    case "unlocked":
+      return "unlocked";
+    case "held":
+      return "held by this session";
+    case "contended":
+      return `contended - ${lock.owner ?? "another live session"}`;
+    case "stale":
+      return `stale - ${lock.owner ?? "dead owner"} (reclaimed on next acquire)`;
+  }
+}
+
+/**
+ * The pre-switch availability gate: returns a {@link CwdLockConflict} when a DIFFERENT live session
+ * already owns the target directory, so the worktree / workspace switch is blocked before any mutating
+ * host is spawned. Read-only (it inspects, never claims) - the spawned host takes the lock when it
+ * becomes leader. A free directory, a stale lock, or one owned by the target's own session returns null
+ * (the switch proceeds; same-session ownership is a resume, not a conflict).
+ */
+export function cwdSwitchConflict(
+  targetCwd: string,
+  targetSessionId: string,
+  caps: CwdLockCaps,
+): CwdLockConflict | null {
+  const view = inspectCwdLock(targetCwd, caps);
+  if (view.owner && !view.stale && view.owner.alive && view.owner.sessionId !== targetSessionId) {
+    return new CwdLockConflict({ cwd: view.cwd, heldBy: view.owner });
+  }
+  return null;
 }

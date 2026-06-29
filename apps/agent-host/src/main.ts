@@ -47,6 +47,17 @@ import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { contextRegistry } from "./context/registry";
 import { buildControlTurns, controlPromptModel, controlPromptProvider } from "./control-model";
+import {
+  acquireCwdLock,
+  CWD_LOCK_HEARTBEAT_MS,
+  type CwdLockDoctorFact,
+  type CwdLockOwner,
+  cwdLockDoctorFact,
+  cwdSwitchConflict,
+  nodeCwdLockCaps,
+  refreshCwdLock,
+  releaseCwdLock,
+} from "./cwd-lock";
 import { debugCommandSpecs, isStopConfirmed } from "./debug-commands";
 import {
   buildLiveDoctorSnapshot,
@@ -214,6 +225,47 @@ let debugMode = process.env.TREVOR_DEBUG === "1";
 /** Stable per-process identity: shared producerId on events, unique stream id + instance. */
 const INSTANCE_ID = crypto.randomUUID();
 const PARTICIPANT_ID = `${PRODUCER_ID}:${INSTANCE_ID.slice(0, 8)}`;
+
+// Cwd advisory lock (plan 01): this host owns the lock for WORKSPACE_ROOT while it is the session
+// LEADER (the single mutating owner of the directory), so a SECOND session targeting the same real
+// path is detected and surfaced instead of silently double-mutating it. Node-backed capabilities; the
+// owner identity is this session + host instance + pid.
+const cwdLockCaps = nodeCwdLockCaps();
+const cwdLockOwner = (): CwdLockOwner => ({
+  sessionId: SESSION_ID,
+  hostId: INSTANCE_ID,
+  pid: process.pid,
+});
+
+/** Acquire (or re-take) the cwd advisory lock for WORKSPACE_ROOT as the new leader. A different live
+ *  session already owning the same realpath is surfaced (logged + shown in /doctor) rather than
+ *  assumed; same-session failover/restart just re-takes it. Best-effort - never blocks leadership. */
+function acquireWorkspaceCwdLock(): void {
+  try {
+    const result = acquireCwdLock(WORKSPACE_ROOT, cwdLockOwner(), cwdLockCaps);
+    if (result.status === "conflict") {
+      warn("host", "cwd lock contended by another session", {
+        cwd: abbrevHome(WORKSPACE_ROOT),
+        heldBy: result.heldBy.sessionId,
+        pid: result.heldBy.pid,
+      });
+    } else if (result.status === "tookOverStale") {
+      log("host", "cwd lock: reclaimed a stale lock", { previous: result.previous.sessionId });
+    }
+  } catch (error) {
+    warn("host", "cwd lock acquire failed", { error: msg(error) });
+  }
+}
+
+/** Release the cwd advisory lock if this exact process still holds it (graceful stop / exit). A crash
+ *  skips this; the stale lock is reclaimed on the next acquire. Best-effort. */
+function releaseWorkspaceCwdLock(): void {
+  try {
+    releaseCwdLock(WORKSPACE_ROOT, cwdLockOwner(), cwdLockCaps);
+  } catch {
+    // best-effort release
+  }
+}
 
 // Single live connection's state (rebuilt from replay on each connect).
 let live = false;
@@ -867,6 +919,8 @@ const scheduler = new TurnScheduler({
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
 function onBecomeLeader(): void {
+  // Claim the cwd advisory lock now that we are the mutating owner of this directory (plan 01).
+  acquireWorkspaceCwdLock();
   // The leader owns the internet probe (D-060): kick off a fresh check + re-announce so the advisory
   // reflects this host's reachability. Fire-and-forget - a turn never waits on it.
   internet
@@ -998,6 +1052,17 @@ function goLive(): void {
     leaseRunning = true;
     lease.start(Date.now());
     setInterval(() => lease.tick(Date.now()), 500);
+    // Keep the cwd advisory lock's heartbeat fresh while we lead, so a crashed leader's lock ages into
+    // stale and is reclaimable (plan 01). Leader-gated, cheap, best-effort.
+    setInterval(() => {
+      if (lease.isLeader()) {
+        try {
+          refreshCwdLock(WORKSPACE_ROOT, cwdLockOwner(), cwdLockCaps);
+        } catch {
+          // best-effort heartbeat
+        }
+      }
+    }, CWD_LOCK_HEARTBEAT_MS);
   }
   emit(events.hostHello({ instanceId: INSTANCE_ID })).catch(() => {});
   announceOnline();
@@ -1495,6 +1560,19 @@ async function worktreeSwitch(id: string): Promise<void> {
     );
     return;
   }
+  // Block the switch before spawning a host if a DIFFERENT live session already owns the target
+  // directory (plan 01) - it would otherwise become a second mutating owner of the same path.
+  const lockConflict = cwdSwitchConflict(target.path, target.sessionId, cwdLockCaps);
+  if (lockConflict) {
+    await emit(
+      events.commandResult({
+        command: "/worktree",
+        text: `Cannot switch - ${lockConflict.message}`,
+        ok: false,
+      }),
+    );
+    return;
+  }
   try {
     await emit(
       events.commandResult({
@@ -1687,6 +1765,8 @@ async function restartHost(): Promise<void> {
  * never touched - nothing here can reach it.
  */
 function performGracefulStop(): StopOutcome {
+  // Free the cwd advisory lock for the next owner before we tear the session down (plan 01).
+  releaseWorkspaceCwdLock();
   return stopSession({
     abortActive: () => abortRuns(""),
     clearQueue: () => scheduler.clearPending(),
@@ -1804,6 +1884,7 @@ async function worktreeReconcile(): Promise<void> {
  * snapshot source below) draw from the exact same state.
  */
 function doctorFacts(): DoctorRuntimeFacts {
+  const cwdLock = workspaceCwdLockFact();
   return {
     cwd: abbrevHome(process.cwd()),
     workspace: abbrevHome(WORKSPACE_ROOT),
@@ -1813,7 +1894,19 @@ function doctorFacts(): DoctorRuntimeFacts {
     internet: internet.current(),
     branch: currentGit().branch,
     catalog: catalog.sources,
+    ...(cwdLock ? { cwdLock } : {}),
   };
+}
+
+/** The cwd advisory-lock state for /doctor (plan 01), with the lock-file path home-abbreviated.
+ *  Best-effort: a probe failure just omits the fact rather than breaking the health report. */
+function workspaceCwdLockFact(): CwdLockDoctorFact | undefined {
+  try {
+    const fact = cwdLockDoctorFact(WORKSPACE_ROOT, SESSION_ID, cwdLockCaps);
+    return { ...fact, path: abbrevHome(fact.path) };
+  } catch {
+    return undefined;
+  }
 }
 
 // The `doctor` tool (D-073 M6) has no CommandContext, so the host registers the snapshot accessor it
@@ -2315,6 +2408,7 @@ function connect(): void {
 // Ctrl-C (SIGINT) is a quick exit: tear down child processes (dev servers, watchers) so they aren't
 // orphaned, then go. No turn bookkeeping - an interactive Ctrl-C wants out now.
 process.once("SIGINT", () => {
+  releaseWorkspaceCwdLock();
   supervisor.killAll();
   process.exit(0);
 });
