@@ -3,10 +3,10 @@
 ## Summary
 
 - **Current cutoff blockers:** 16
-- **Completed current work:** 0
+- **Completed current work:** 3
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - `usageSeed()` accessor on `CompactionController`
+- **Current focus:** M2 - thread `seedUsage` through `publishTurn` -> `runAgent`
 
 ## Completed Current State / Hard Dependencies
 
@@ -17,9 +17,9 @@
 ## Current Cutoff Blockers
 
 ### M1 - `usageSeed()` accessor on `CompactionController`
-- [ ] RED: `usageSeed()` returns `undefined` before any usage; returns latest `{ input, contextWindow }` after `noteUsage` / `noteTurnCompleted` / `noteCompacted`.
-- [ ] GREEN: add read-only `usageSeed()` returning captured values when `lastWindowValue > 0`, else `undefined`.
-- [ ] REFACTOR: keep read-only; no fraction logic in the accessor.
+- [x] RED: `usageSeed()` returns `undefined` before any usage; returns latest `{ input, contextWindow }` after `noteUsage` / `noteTurnCompleted` / `noteCompacted`.
+- [x] GREEN: add read-only `usageSeed()` returning captured values when `lastWindowValue > 0`, else `undefined`.
+- [x] REFACTOR: keep read-only; no fraction logic in the accessor.
 
 ### M2 - thread `seedUsage` through `publishTurn` -> `runAgent`
 - [ ] RED: seeded over-fraction `runAgent` emits `context_pressure` and routes to `synthesize()` at step 0 (no `tool_*` before the stop).

@@ -68,6 +68,20 @@ export class CompactionController {
     this.lastWindowValue = window;
   }
 
+  /**
+   * The prior turn's measured prompt size + served window (the same real numbers the ctx meter
+   * renders), for carry-forward seeding of the next turn's context-pressure gate at step 0 (03.1
+   * D-002). `undefined` until a turn has reported a positive window, so a session's first turn seeds
+   * nothing and the loop behaves exactly as today. Read-only: it carries no fraction logic - the gate
+   * owns the threshold.
+   */
+  usageSeed(): { readonly input: number; readonly contextWindow: number } | undefined {
+    if (this.lastWindowValue <= 0) {
+      return undefined;
+    }
+    return { input: this.lastInputValue, contextWindow: this.lastWindowValue };
+  }
+
   noteTurnCompleted(usage?: { readonly input: number; readonly contextWindow: number }): void {
     if (usage) {
       this.noteUsage(usage.input, usage.contextWindow);
