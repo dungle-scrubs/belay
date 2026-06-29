@@ -17,13 +17,11 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
-import type { ToolStatus } from "@/components/chat/message";
-import { parseToolArgs } from "@/components/chat/tool-message";
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { ControlsPanel } from "@/components/panel/panel-controls";
 import { useModelSelection } from "@/hooks/use-model-selection";
+import { resolveReasoning } from "@/model-selection";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeTurnStartedAt,
@@ -41,7 +39,8 @@ import {
   sourceSignInFrom,
   sourcesFrom,
   tasksFrom,
-  toolSummary,
+  truncate,
+  workspaceBasename,
 } from "./derive";
 import { escapeAction } from "./esc-action";
 import { useComposer } from "./hooks/use-composer";
@@ -60,12 +59,7 @@ import {
   useSessionActions,
   webTabId,
 } from "./session/use-session";
-import {
-  panelModel,
-  readOnlyToolBatches,
-  type ToolMessage as ToolMessageData,
-  toTranscript,
-} from "./transcript";
+import { panelModel, readOnlyToolBatches, toTranscript } from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -191,27 +185,6 @@ export function App() {
   // they render as a single compact block instead of stacked cards.
   const toolBatches = useMemo(() => readOnlyToolBatches(transcript), [transcript]);
   const scroll = useScrollFollow(transcript.length);
-  // Maps one batched read-only tool message to a ConcurrentTools row: status from done + an
-  // `error:` result, args via the shared summary, and a clickable path for path-bearing tools.
-  const toConcurrentTool = (tool: ToolMessageData): ConcurrentTool => {
-    // An aborted tool (run cancelled before it completed) is an error state, not "running" or a
-    // successful "done" - so a parallel read-only batch stops counting it as in-flight after ESC.
-    const status: ToolStatus = tool.aborted
-      ? "error"
-      : !tool.done
-        ? "running"
-        : tool.result?.startsWith("error:")
-          ? "error"
-          : "done";
-    const path = parseToolArgs(tool.args).path;
-    return {
-      id: tool.id,
-      name: tool.name,
-      args: toolSummary(tool.name, tool.args),
-      status,
-      onOpenPath: typeof path === "string" && path ? () => void openInEditor(path) : undefined,
-    };
-  };
   const awaitingResponse = transcript.at(-1)?.kind === "user";
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
@@ -220,10 +193,9 @@ export function App() {
   // host-announced workspace basename when known, else the session-id slug (the `<name>-<hash>` the
   // launcher mints, hash stripped). The default shared session stays plain "Trevor".
   useEffect(() => {
-    const fromWorkspace = host.workspace?.split("/").filter(Boolean).pop();
     const fromSession =
       target === DEFAULT_SESSION ? null : target.replace(/-[0-9a-f]{8}$/, "") || target;
-    const label = (fromWorkspace && fromWorkspace !== "~" ? fromWorkspace : null) ?? fromSession;
+    const label = workspaceBasename(host.workspace) ?? fromSession;
     document.title = label ? `${label} · Trevor` : "Trevor";
   }, [host.workspace, target]);
   const hostModels = useMemo(() => providerModelsFrom(events), [events]);
@@ -263,7 +235,7 @@ export function App() {
     if (!text) {
       return target;
     }
-    return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+    return truncate(text, 60);
   }, [transcript, target]);
   // The in-flight turn's start time (ms epoch), driving the live "Working (elapsed)" timer.
   const turnStartedAt = useMemo(() => activeTurnStartedAt(events), [events]);
@@ -384,9 +356,11 @@ export function App() {
   // Model options for the picker, grouped local-first then cloud (the picker renders a
   // labeled section per group). Falls back to the active model before the host announces.
   // Keep a stale stored level from showing as selected if the model's options changed.
-  const stored = reasoningMap?.[activeProvider];
-  const reasoning =
-    stored && modelMeta.reasoningLevels.includes(stored) ? stored : modelMeta.defaultReasoning;
+  const reasoning = resolveReasoning(
+    modelMeta.reasoningLevels,
+    reasoningMap?.[activeProvider],
+    modelMeta.defaultReasoning,
+  );
   const showThinkingOn = showThinking ?? true;
   const setReasoning = (level: string) =>
     setReasoningMap({ ...(reasoningMap ?? {}), [activeProvider]: level });
@@ -437,11 +411,11 @@ export function App() {
     activeEntry && activeEntry.reasoningLevels.length > 0
       ? activeEntry.reasoningLevels
       : modelMeta.reasoningLevels;
-  const storedReasoning = reasoningMap?.[activeProvider];
-  const activeReasoning =
-    storedReasoning && activeReasoningLevels.includes(storedReasoning)
-      ? storedReasoning
-      : (activeEntry?.defaultReasoning ?? modelMeta.defaultReasoning);
+  const activeReasoning = resolveReasoning(
+    activeReasoningLevels,
+    reasoningMap?.[activeProvider],
+    activeEntry?.defaultReasoning ?? modelMeta.defaultReasoning,
+  );
   // The ModelRef sent with the turn: the active model + the live reasoning (so changing the toggle
   // takes effect on the next turn even after an explicit chooser pick).
   const sendModelRef: ModelRef = {
@@ -793,7 +767,6 @@ export function App() {
       transcript={{
         transcript,
         toolBatches,
-        toConcurrentTool,
         onOpenPath: (path) => void openInEditor(path),
         onDoctorRefresh: () => void command("/doctor", "refresh"),
         showThinking: showThinkingOn,

@@ -2,7 +2,7 @@ import type { SessionActivity, SessionEvent } from "@trevor/session";
 import { useLocalStorageState } from "ahooks";
 import { useMemo, useRef, useState } from "react";
 import type { HostStatus } from "../derive";
-import { worktreesFrom } from "../derive";
+import { workspaceBasename, worktreesFrom } from "../derive";
 import { useInventory } from "../resume";
 
 export function useModalState(opts: {
@@ -30,11 +30,11 @@ export function useModalState(opts: {
   // The session inventory powers the resume chooser, decorates worktree rows, and backs the sidebar.
   const inventory = useInventory(resumeOpen || worktreeOpen || Boolean(sidebarOpen));
   const resolvedProject = useMemo(() => {
-    const base = (opts.host.workspace ?? opts.host.cwd)?.split("/").filter(Boolean).pop();
-    if (base && base !== "~") {
-      return base;
-    }
-    return inventory.sessions.find((s) => s.sessionId === opts.target)?.project ?? null;
+    return (
+      workspaceBasename(opts.host.workspace ?? opts.host.cwd) ??
+      inventory.sessions.find((s) => s.sessionId === opts.target)?.project ??
+      null
+    );
   }, [opts.host.workspace, opts.host.cwd, inventory.sessions, opts.target]);
   const lastKnownProjectRef = useRef<string | null>(null);
   if (resolvedProject != null) {

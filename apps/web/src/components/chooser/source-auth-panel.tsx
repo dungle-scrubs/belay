@@ -53,11 +53,16 @@ export interface SourceAuthPanelProps {
   readonly className?: string;
 }
 
-/** The label + icon for the primary auth action a source row offers. */
-const ACTION_META: Record<SourceAction, { label: string; icon: typeof LogIn }> = {
+/**
+ * The label + icon for every `SourceAction`, shared by the auth panel's buttons and the model
+ * chooser's action chips so the two can't drift on what a source action is called (they previously
+ * disagreed - "Refresh catalog" vs "Refresh"). `SourceAction` ships no projection, so this presentation
+ * map lives here; it carries lucide icons, which keep it web-side rather than in the session contract.
+ */
+export const SOURCE_ACTION_META: Record<SourceAction, { label: string; icon: typeof LogIn }> = {
   authenticate: { label: "Sign in", icon: LogIn },
   reauthenticate: { label: "Re-authenticate", icon: LogIn },
-  refresh: { label: "Refresh", icon: RefreshCw },
+  refresh: { label: "Refresh catalog", icon: RefreshCw },
   configure: { label: "Configure", icon: KeyRound },
   disable: { label: "Disable", icon: ShieldAlert },
 };
@@ -195,10 +200,10 @@ export function SourceAuthPanel({
             onClick={() => onAction(action)}
           >
             {(() => {
-              const ActionIcon = ACTION_META[action].icon;
+              const ActionIcon = SOURCE_ACTION_META[action].icon;
               return <ActionIcon />;
             })()}
-            {ACTION_META[action].label}
+            {SOURCE_ACTION_META[action].label}
           </Button>
           {/* Make the no-secret boundary explicit next to the action. */}
           {source.type === "api-key" || source.type === "gateway" ? (

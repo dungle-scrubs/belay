@@ -5,6 +5,7 @@ import {
   type TrevorEventInput,
   type UsageBreakdown,
 } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import { type Message, panelModel, readOnlyToolBatches, toTranscript } from "./transcript";
 
@@ -29,17 +30,8 @@ const breakdown: UsageBreakdown = {
   output: { thinking: 100, answer: 100, toolCallArgs: 0 },
 };
 
-function ev(seq: number, input: TrevorEventInput): SessionEvent {
-  return {
-    createdAt: "2026-06-24T00:00:00.000Z",
-    eventId: `e${seq}`,
-    payload: input.payload,
-    producerId: "trevor-host",
-    seq,
-    sessionId: "test",
-    type: input.type,
-  };
-}
+const ev = (seq: number, input: TrevorEventInput): SessionEvent =>
+  storedEvent(input, { seq, producerId: "trevor-host", createdAt: "2026-06-24T00:00:00.000Z" });
 
 test("M4: tool results land by call id when tool.completed arrives out of call order", () => {
   // Phase 1 (D-050) runs a step's read-only calls concurrently. tool.started is hoisted in CALL

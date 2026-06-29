@@ -7,7 +7,7 @@ import { MultiEditDiff } from "./multi-edit-diff";
 import { SessionRecallResults } from "./session-recall";
 import { ToolDiff } from "./tool-diff";
 import { ToolOutput } from "./tool-output";
-import type { ToolStatus } from "./tool-status";
+import { type ToolStatus, toolMessageStatus } from "./tool-status";
 import { type WebSearchResultItem, WebSearchResults } from "./web-search";
 
 // Tool-call arguments arrive as a JSON string; parse defensively (a streaming or
@@ -249,9 +249,9 @@ export function ToolRenderer({
   /** Opens a local file in the editor (path-bearing tools wire the path to this). */
   onOpenPath: (path: string) => void;
 }) {
-  // A tool aborted by a cancel/interrupt (the run ended before it completed) shows the error state,
-  // not a successful "done" - and crucially never an endless "running" spinner.
-  const status: ToolStatus = message.aborted ? "error" : message.done ? "done" : "running";
+  // The shared lifecycle rule: aborted -> error, unfinished -> running, finished -> error when the
+  // result is the `error:` convention else done (so an error-result read-only tool matches the batch).
+  const status: ToolStatus = toolMessageStatus(message);
   const ctx: RenderContext = { message, status, onOpenPath, className };
 
   const arm = Object.hasOwn(TOOL_RENDERERS, message.name)

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { DoctorSnapshot } from "@trevor/session";
 import { useState } from "react";
+import { storyFrame } from "@/components/chat/story-frame";
 import {
   healthySnapshot,
   loadingSnapshot,
@@ -34,9 +35,7 @@ type Story = StoryObj<typeof DoctorPanel>;
 const onRefresh = () => window.alert("/doctor refresh");
 
 /** The panel reads as a command result: a single column at a comfortable width. */
-const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="mx-auto w-full max-w-3xl">{children}</div>
-);
+const Frame = storyFrame("mx-auto w-full max-w-3xl");
 
 /** All twelve areas healthy - twelve quiet lines, no boxes. */
 export const AllHealthy: Story = {

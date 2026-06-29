@@ -1,15 +1,8 @@
-import type { ArtifactRef } from "@trevor/session";
 import { Plus, Terminal, X } from "lucide-react";
-import {
-  type ChangeEvent,
-  type ClipboardEvent as ReactClipboardEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type RefObject,
-  type SubmitEvent,
-  useEffect,
-} from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type SubmitEvent, useEffect } from "react";
 import { ArtifactThumb } from "@/ArtifactThumb";
 import { Button } from "@/components/ui/button";
+import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,46 +21,56 @@ import { cn } from "@/lib/utils";
  * App keeps the surrounding wiring (the drop target, the slash menu overlay, submit/steer/queue);
  * this component is purely "what the composer looks like and accepts right now".
  */
+/**
+ * The composer-owned slice PromptInput reads, a subset of the full {@link Composer}. Passing the
+ * cohesive object (not a flat re-spread of a dozen fields) means adding or renaming a composer field
+ * is one edit on the hook, not a parallel edit in PanelHost's prop list.
+ */
+type ComposerInput = Pick<
+  Composer,
+  | "draft"
+  | "setDraft"
+  | "attachments"
+  | "uploading"
+  | "uploadError"
+  | "setUploadError"
+  | "inputRef"
+  | "fileInputRef"
+  | "onPickFiles"
+  | "onPaste"
+  | "handleKeyDown"
+  | "removeAttachment"
+>;
+
 export interface PromptInputProps {
-  readonly draft: string;
-  readonly onDraftChange: (value: string) => void;
+  readonly composer: ComposerInput;
   readonly onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   readonly onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
-  /** Composer-owned key handling (image-token atomic delete); runs before {@link onKeyDown} and may
-   *  `preventDefault` to swallow the key (e.g. backspacing a whole `[Image #N]` token). */
-  readonly onComposerKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
-  readonly onPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  readonly inputRef: RefObject<HTMLTextAreaElement | null>;
-  readonly fileInputRef: RefObject<HTMLInputElement | null>;
-  readonly onPickFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly disabled: boolean;
   readonly placeholder: string;
-  readonly attachments: readonly ArtifactRef[];
-  readonly onRemoveAttachment: (hash: string) => void;
-  /** Count of uploads in flight, so the composer can show progress. */
-  readonly uploading: number;
-  readonly uploadError: string | null;
-  readonly onDismissError: () => void;
 }
 
 export function PromptInput({
-  draft,
-  onDraftChange,
+  composer,
   onSubmit,
   onKeyDown,
-  onComposerKeyDown,
-  onPaste,
-  inputRef,
-  fileInputRef,
-  onPickFiles,
   disabled,
   placeholder,
-  attachments,
-  onRemoveAttachment,
-  uploading,
-  uploadError,
-  onDismissError,
 }: PromptInputProps) {
+  const {
+    draft,
+    setDraft,
+    attachments,
+    uploading,
+    uploadError,
+    setUploadError,
+    inputRef,
+    fileInputRef,
+    onPickFiles,
+    onPaste,
+    handleKeyDown,
+    removeAttachment,
+  } = composer;
   // The prompt shell lane is triggered by the RAW first character being `!` (a space before it stays
   // an ordinary prompt) - mirrors `parseBangShell`, so the visual state and the submit routing agree.
   const shellMode = draft[0] === "!";
@@ -90,7 +93,7 @@ export function PromptInput({
           <span>⚠ {uploadError}</span>
           <button
             type="button"
-            onClick={onDismissError}
+            onClick={() => setUploadError(null)}
             className="cursor-pointer text-muted-foreground hover:text-foreground"
           >
             dismiss
@@ -113,7 +116,7 @@ export function PromptInput({
               ) : null}
               <button
                 type="button"
-                onClick={() => onRemoveAttachment(ref.hash)}
+                onClick={() => removeAttachment(ref.hash)}
                 title="Remove"
                 className="cursor-pointer text-muted-foreground hover:text-smui-red"
               >
@@ -141,11 +144,11 @@ export function PromptInput({
           <textarea
             ref={inputRef}
             value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
+            onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               // Composer token-delete runs first and may swallow the key; otherwise App's handler
               // (Enter submit, slash menu, history) runs.
-              onComposerKeyDown?.(event);
+              handleKeyDown(event);
               if (!event.defaultPrevented) {
                 onKeyDown(event);
               }

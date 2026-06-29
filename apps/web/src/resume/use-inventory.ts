@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { SessionSummary } from "@trevor/session";
+import { type SessionSummary, streamTransport } from "@trevor/session";
 
 export interface InventoryState {
   readonly sessions: readonly SessionSummary[];
@@ -8,17 +8,11 @@ export interface InventoryState {
 }
 
 // The inventory rides the same backend as the session transport: same-origin in local dev, or the
-// configured Richter URL. A failed endpoint surfaces as an error in the chooser/sidebar.
+// configured Richter URL. A failed endpoint surfaces as an error in the chooser/sidebar. The fetch +
+// `{ sessions }` envelope guard now lives on the transport seam (`fetchInventory`), so this hook only
+// owns the react-query polling/abort policy.
 const INVENTORY_BASE = import.meta.env.VITE_RICHTER_URL ?? window.location.origin;
-
-async function fetchInventory(signal?: AbortSignal): Promise<SessionSummary[]> {
-  const res = await fetch(`${INVENTORY_BASE}/sessions`, { signal });
-  if (!res.ok) {
-    throw new Error(`inventory request failed (${res.status})`);
-  }
-  const body = (await res.json()) as { sessions?: unknown };
-  return Array.isArray(body.sessions) ? (body.sessions as SessionSummary[]) : [];
-}
+const transport = streamTransport(INVENTORY_BASE);
 
 /**
  * Fetches the session inventory for the resume chooser + the session sidebar, only while `enabled`
@@ -31,7 +25,7 @@ async function fetchInventory(signal?: AbortSignal): Promise<SessionSummary[]> {
 export function useInventory(enabled: boolean): InventoryState {
   const query = useQuery({
     queryKey: ["session-inventory"],
-    queryFn: ({ signal }) => fetchInventory(signal),
+    queryFn: ({ signal }) => transport.fetchInventory(signal),
     enabled,
     staleTime: 0,
     refetchOnWindowFocus: false,

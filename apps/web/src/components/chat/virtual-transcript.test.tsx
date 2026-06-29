@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { act, render, waitFor } from "@testing-library/react";
 import { type RefObject, useRef } from "react";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
-import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
-import type { ToolMessage as ToolMessageData } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
 const noop = () => {};
@@ -61,11 +59,6 @@ function Harness({
         pinned={pinned}
         scrollToBottomRequest={scrollToBottomRequest}
         showThinking
-        toConcurrentTool={(tool: ToolMessageData): ConcurrentTool => ({
-          id: tool.id,
-          name: tool.name,
-          status: "done",
-        })}
         onOpenPath={noop}
         onDoctorRefresh={noop}
         testInitialRect={{ width: 900, height: 600 }}

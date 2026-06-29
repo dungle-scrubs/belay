@@ -7,6 +7,7 @@ import {
   type TrevorEventInput,
   type WorktreeSummary,
 } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { beforeEach, test, vi } from "vitest";
 import type { HostStatus } from "../derive";
 import { useModalState } from "./use-modal-state";
@@ -72,15 +73,13 @@ const worktree: WorktreeSummary = {
   missing: false,
 };
 
-const stored = (input: TrevorEventInput): SessionEvent => ({
-  sessionId: "s-current",
-  seq: 1,
-  eventId: "ev-1",
-  producerId: "host",
-  createdAt: "2026-06-28T00:00:00.000Z",
-  type: input.type,
-  payload: input.payload,
-});
+const stored = (input: TrevorEventInput): SessionEvent =>
+  storedEvent(input, {
+    sessionId: "s-current",
+    eventId: "ev-1",
+    producerId: "host",
+    createdAt: "2026-06-28T00:00:00.000Z",
+  });
 
 beforeEach(() => {
   localStorage.clear();

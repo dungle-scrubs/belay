@@ -1,15 +1,13 @@
 import type { GitStatus, UsageBreakdown } from "@trevor/session";
 import { type ReactNode, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fmtCtx } from "@/derive";
+import { fmtCtx, fmtTokens } from "@/derive";
 import { useArmedAfterMount } from "@/hooks/use-armed-after-mount";
 import { panelBreakdown } from "./breakdown";
 import { DrawerToggle, SideDrawer } from "./side-drawer";
 import { Treemap } from "./Treemap";
 import { WorkspaceIdentity } from "./WorkspaceIdentity";
 
-const fmtTok = (n: number): string =>
-  n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;
 
@@ -187,7 +185,7 @@ export function SidePanelBreakdown({
             </TabsList>
             {activeTotal != null ? (
               <span className="text-label tracking-wider text-muted-foreground">
-                {fmtTok(activeTotal)} tok
+                {fmtTokens(activeTotal)} tok
               </span>
             ) : null}
           </div>
@@ -269,7 +267,7 @@ function BreakdownView({
                 />
                 <span className="truncate text-foreground">{leaf.label}</span>
                 <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-                  {leafTokens != null ? `${fmtTok(leafTokens)} · ${shareLabel}` : shareLabel}
+                  {leafTokens != null ? `${fmtTokens(leafTokens)} · ${shareLabel}` : shareLabel}
                 </span>
               </li>
             );

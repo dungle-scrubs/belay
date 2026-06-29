@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { render, screen } from "@testing-library/react";
 import { test } from "vitest";
-import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
-import type { AssistantMessage, ToolMessage as ToolMessageData } from "../../transcript";
+import type { AssistantMessage } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
 const noop = () => {};
@@ -27,17 +26,7 @@ const assistant = (over: Partial<AssistantMessage>): TranscriptRow => ({
 
 function renderRow(row: TranscriptRow) {
   return render(
-    <TranscriptRowView
-      row={row}
-      showThinking
-      toConcurrentTool={(tool: ToolMessageData): ConcurrentTool => ({
-        id: tool.id,
-        name: tool.name,
-        status: "done",
-      })}
-      onOpenPath={noop}
-      onDoctorRefresh={noop}
-    />,
+    <TranscriptRowView row={row} showThinking onOpenPath={noop} onDoctorRefresh={noop} />,
   );
 }
 

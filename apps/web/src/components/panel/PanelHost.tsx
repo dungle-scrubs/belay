@@ -19,7 +19,6 @@ import {
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { CommandMenu } from "@/components/chat/command-menu";
-import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
@@ -36,12 +35,7 @@ import type { HostStatus, PendingQuestion } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
 import { TasksPanel } from "../../TasksPanel";
-import type {
-  PanelModel,
-  readOnlyToolBatches,
-  ToolMessage as ToolMessageData,
-  toTranscript,
-} from "../../transcript";
+import type { PanelModel, readOnlyToolBatches, toTranscript } from "../../transcript";
 import { buildTranscriptRows } from "../../transcript-rows";
 import { WORKTREE_CHOOSER } from "../../worktrees";
 import type { WorktreeRowsContext } from "../../worktrees/worktree-rows";
@@ -56,7 +50,6 @@ type ToolBatches = ReturnType<typeof readOnlyToolBatches>;
 export interface TranscriptView {
   readonly transcript: Transcript;
   readonly toolBatches: ToolBatches;
-  readonly toConcurrentTool: (tool: ToolMessageData) => ConcurrentTool;
   readonly onOpenPath: (path: string) => void;
   /** Re-runs `/doctor` on the host (a no-model-turn immediate command), wired to the dashboard's
    *  refresh control. App owns it because it depends on the session command action. */
@@ -200,15 +193,7 @@ export function PanelHost(props: {
   const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
   const { sidebar, sessionName, chooser, archived, onUnarchive, question } = props;
   const { replayed } = stream;
-  const {
-    transcript,
-    toolBatches,
-    toConcurrentTool,
-    onOpenPath,
-    onDoctorRefresh,
-    showThinking,
-    queue,
-  } = tv;
+  const { transcript, toolBatches, onOpenPath, onDoctorRefresh, showThinking, queue } = tv;
   const { active, awaitingResponse, turnStartedAt } = tv;
   const rows = useMemo(
     () =>
@@ -323,7 +308,6 @@ export function PanelHost(props: {
                 pinned={scroll.atBottom}
                 scrollToBottomRequest={scroll.bottomRequestId}
                 showThinking={showThinking}
-                toConcurrentTool={toConcurrentTool}
                 onOpenPath={onOpenPath}
                 onDoctorRefresh={onDoctorRefresh}
               />
@@ -395,22 +379,11 @@ export function PanelHost(props: {
               ) : null}
 
               <PromptInput
-                draft={composer.draft}
-                onDraftChange={composer.setDraft}
+                composer={composer}
                 onSubmit={compose.onSubmit}
                 onKeyDown={compose.onInputKeyDown}
-                onComposerKeyDown={composer.handleKeyDown}
-                onPaste={composer.onPaste}
-                inputRef={composer.inputRef}
-                fileInputRef={composer.fileInputRef}
-                onPickFiles={composer.onPickFiles}
                 disabled={compose.disabled}
                 placeholder={compose.placeholder}
-                attachments={composer.attachments}
-                onRemoveAttachment={composer.removeAttachment}
-                uploading={composer.uploading}
-                uploadError={composer.uploadError}
-                onDismissError={() => composer.setUploadError(null)}
               />
             </>
           )}

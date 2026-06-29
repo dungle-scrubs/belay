@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
+import { storyFrame } from "@/components/chat/story-frame";
 import { ToolCall } from "./message";
 
 const meta = {
@@ -28,9 +29,7 @@ export function Spacer({ size = 4 }: { size?: number }) {
   return <div className={cn("w-full")} style={{ height: size * 4 }} />;
 }`;
 
-const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="w-[64rem] max-w-full">{children}</div>
-);
+const Frame = storyFrame("w-[64rem]");
 
 // The edit tool: old_string -> new_string.
 export const Edit: Story = {

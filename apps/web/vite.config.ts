@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
-import { RESERVED_PORTS } from "@trevor/session/ports";
+import { RESERVED_PORTS, serviceUrl } from "@trevor/session/ports";
+import { SESSIONS_PATH } from "@trevor/session/session-routes";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -29,8 +30,8 @@ export default defineConfig({
     port: RESERVED_PORTS.web,
     strictPort: true,
     proxy: {
-      "/sessions": {
-        target: process.env.VITE_SESSION_PROXY ?? `http://127.0.0.1:${RESERVED_PORTS.store}`,
+      [SESSIONS_PATH]: {
+        target: process.env.VITE_SESSION_PROXY ?? serviceUrl("store"),
         changeOrigin: true,
         ws: true,
       },

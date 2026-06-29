@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { RecallResult } from "@trevor/session";
+import { storyFrame } from "@/components/chat/story-frame";
 import { SessionRecallResults } from "./session-recall";
 
 /**
@@ -23,9 +24,7 @@ type Story = StoryObj<typeof SessionRecallResults>;
 const NOW = Date.parse("2026-06-26T12:00:00.000Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
 
-const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="w-[44rem] max-w-full">{children}</div>
-);
+const Frame = storyFrame("w-[44rem]");
 
 function result(over: Partial<RecallResult>): RecallResult {
   return {

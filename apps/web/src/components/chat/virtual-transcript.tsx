@@ -8,10 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ConcurrentTool } from "@/components/chat/concurrent-tools";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
-import type { ToolMessage as ToolMessageData } from "../../transcript";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
 
 export interface VirtualTranscriptProps {
@@ -20,7 +18,6 @@ export interface VirtualTranscriptProps {
   readonly pinned: boolean;
   readonly scrollToBottomRequest: number;
   readonly showThinking: boolean;
-  readonly toConcurrentTool: (tool: ToolMessageData) => ConcurrentTool;
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
   readonly testInitialRect?: Rect;
@@ -58,7 +55,6 @@ export function VirtualTranscript({
   pinned,
   scrollToBottomRequest,
   showThinking,
-  toConcurrentTool,
   onOpenPath,
   onDoctorRefresh,
   testInitialRect,
@@ -231,7 +227,6 @@ export function VirtualTranscript({
             <TranscriptRowView
               row={row}
               showThinking={showThinking}
-              toConcurrentTool={toConcurrentTool}
               onOpenPath={onOpenPath}
               onDoctorRefresh={onDoctorRefresh}
             />

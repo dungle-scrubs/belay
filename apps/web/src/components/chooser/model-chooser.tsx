@@ -24,8 +24,14 @@ import {
 import { useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fmtCtx } from "@/derive";
 import { cn } from "@/lib/utils";
-import { type DeviceCodeFlow, needsAuthPanel, SourceAuthPanel } from "./source-auth-panel";
+import {
+  type DeviceCodeFlow,
+  needsAuthPanel,
+  SOURCE_ACTION_META,
+  SourceAuthPanel,
+} from "./source-auth-panel";
 
 /**
  * The full model chooser (D-065 M2): the model-source + catalog browser that takes over the
@@ -54,15 +60,6 @@ const SECTION_ICON: Record<SourceType, typeof Cpu> = {
   oauth: Sparkles,
   "api-key": KeyRound,
   gateway: Network,
-};
-
-/** The human label + button variant for a source's primary action. */
-const ACTION_LABEL: Record<SourceAction, string> = {
-  authenticate: "Sign in",
-  reauthenticate: "Re-authenticate",
-  refresh: "Refresh catalog",
-  configure: "Configure",
-  disable: "Disable",
 };
 
 /** The first action a source offers, or null - the chooser renders what the host says, never invents. */
@@ -318,7 +315,7 @@ function SourceRow({
       </span>
       {action ? (
         <Badge variant="outline" className="shrink-0">
-          {ACTION_LABEL[action]}
+          {SOURCE_ACTION_META[action].label}
         </Badge>
       ) : null}
       <ChevronRight className="size-4 shrink-0 text-muted-foreground/60" />
@@ -410,7 +407,7 @@ function SourceDetail({
               size="sm"
               onClick={() => onSourceAction?.(source.sourceId, action)}
             >
-              {ACTION_LABEL[action]}
+              {SOURCE_ACTION_META[action].label}
             </Button>
           ) : null}
         </div>
@@ -556,17 +553,6 @@ function ModelList({
   );
 }
 
-/** A compact context-length label (e.g. 128000 -> "128K", 1_000_000 -> "1M"). */
-function contextLabel(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    return `${Math.round(tokens / 100_000) / 10}M`;
-  }
-  if (tokens >= 1_000) {
-    return `${Math.round(tokens / 1_000)}K`;
-  }
-  return String(tokens);
-}
-
 /** One catalog model row: name, capability tags, context length, cost tier, a selected check, and a
  *  pin star (when pinning is enabled). The select target and the pin toggle are SIBLING buttons (never
  *  nested), so the row stays valid + accessible; the pin star reveals on hover and stays lit when set. */
@@ -612,9 +598,7 @@ function ModelRow({
                 {cap}
               </Badge>
             ))}
-            {entry.contextLength != null ? (
-              <span>{contextLabel(entry.contextLength)} ctx</span>
-            ) : null}
+            {entry.contextLength != null ? <span>{fmtCtx(entry.contextLength)} ctx</span> : null}
             {entry.costTier != null ? <span>· {entry.costTier}</span> : null}
           </span>
         </span>

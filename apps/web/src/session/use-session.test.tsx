@@ -1,48 +1,15 @@
 import assert from "node:assert/strict";
 import { act, renderHook } from "@testing-library/react";
-import type {
-  ConnectSessionOptions,
-  PublishInput,
-  SessionConnection,
-  SessionEvent,
-  SessionTransport,
-} from "@trevor/session";
+import type { PublishInput, SessionEvent } from "@trevor/session";
+import { recordingTransport, storedEvent } from "@trevor/test-kit";
 import { afterEach, test, vi } from "vitest";
 import { createSessionActions, useSessionWithTransport } from "./use-session";
 
-const event = (seq: number, type: string): SessionEvent => ({
-  sessionId: "s",
-  seq,
-  eventId: `e-${seq}`,
-  type,
-  producerId: "test",
-  payload: {},
-  createdAt: "2026-06-27T00:00:00.000Z",
-});
-
-function fakeTransport(): {
-  readonly connects: ConnectSessionOptions[];
-  readonly published: PublishInput[];
-  readonly transport: SessionTransport;
-} {
-  const connects: ConnectSessionOptions[] = [];
-  const published: PublishInput[] = [];
-  return {
-    connects,
-    published,
-    transport: {
-      connectSession: (options): SessionConnection => {
-        connects.push(options);
-        options.onStatus?.("open");
-        return { close: () => {} };
-      },
-      ensureSession: async (sessionId) => sessionId,
-      publishEvent: async (_sessionId, input) => {
-        published.push(input);
-      },
-    },
-  };
-}
+const event = (seq: number, type: string): SessionEvent =>
+  storedEvent(
+    { type, payload: {} },
+    { sessionId: "s", seq, eventId: `e-${seq}`, producerId: "test" },
+  );
 
 afterEach(() => {
   vi.useRealTimers();
@@ -50,7 +17,7 @@ afterEach(() => {
 
 test("reconnects after a closed stream and catches up from the last seen seq", async () => {
   vi.useFakeTimers();
-  const { connects, transport } = fakeTransport();
+  const { connects, transport } = recordingTransport();
 
   const { result, unmount } = renderHook(() => useSessionWithTransport(transport, "s"));
 

@@ -2,6 +2,7 @@ import type { ArtifactRef } from "@trevor/session";
 import { FileText } from "lucide-react";
 import { useState } from "react";
 import { artifactSrc } from "@/blob";
+import { partitionArtifacts } from "@/derive";
 import { cn } from "@/lib/utils";
 
 /**
@@ -81,8 +82,7 @@ export function MessageImages({
   srcOf = artifactSrc,
   className,
 }: MessageImagesProps) {
-  const images = artifacts.filter((a) => a.kind === "image");
-  const others = artifacts.filter((a) => a.kind !== "image");
+  const { images, others } = partitionArtifacts(artifacts);
   if (images.length === 0 && others.length === 0) {
     return null;
   }

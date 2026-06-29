@@ -5,6 +5,7 @@ import {
   type ProviderQuestionContract,
   type SessionEvent,
 } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import {
   commandsFrom,
@@ -36,7 +37,7 @@ const evt = (
   createdAt = "2026-06-25T00:00:00.000Z",
 ): SessionEvent => {
   n += 1;
-  return { sessionId: "s", seq: n, eventId: `e${n}`, producerId: "host", createdAt, type, payload };
+  return storedEvent({ type, payload }, { sessionId: "s", seq: n, producerId: "host", createdAt });
 };
 
 const online = (instanceId: string, extra: Record<string, unknown> = {}) =>

@@ -1,4 +1,4 @@
-import type { GitStatus } from "@trevor/session";
+import { type GitStatus, gitRefLabel } from "@trevor/session";
 import { GitBranch } from "lucide-react";
 
 /**
@@ -21,26 +21,18 @@ export interface GitLine {
 
 /** Projects a host `GitStatus` into the sidebar line, or null when there's no ref to show. */
 export function gitLine(git: GitStatus): GitLine | null {
-  if (git.branch) {
-    return {
-      ref: git.branch,
-      detached: false,
-      dirty: git.dirty,
-      ahead: git.ahead,
-      behind: git.behind,
-    };
-  }
-  if (git.detached) {
-    return {
-      ref: `detached ${git.detached}`,
-      detached: true,
-      dirty: git.dirty,
-      ahead: git.ahead,
-      behind: git.behind,
-    };
-  }
+  const ref = gitRefLabel(git);
   // A repo with no branch and no commit yet: nothing meaningful to show as a ref.
-  return null;
+  if (ref === null) {
+    return null;
+  }
+  return {
+    ref,
+    detached: !git.branch,
+    dirty: git.dirty,
+    ahead: git.ahead,
+    behind: git.behind,
+  };
 }
 
 /**

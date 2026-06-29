@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import { type ArtifactRef, errorMessage } from "@trevor/session";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -117,8 +117,7 @@ export function useComposer(): Composer {
       uploadArtifact(file)
         .then((ref) => setAttachments((a) => [...a, ref]))
         .catch((cause: unknown) => {
-          const detail = cause instanceof Error ? cause.message : String(cause);
-          setUploadError(`couldn't attach ${file.name || "file"}: ${detail}`);
+          setUploadError(`couldn't attach ${file.name || "file"}: ${errorMessage(cause)}`);
         })
         .finally(() => setUploading((n) => n - 1));
     }
@@ -132,7 +131,7 @@ export function useComposer(): Composer {
           uploadArtifact(file)
             .then((ref) => ({ ref }))
             .catch((cause: unknown) => ({
-              error: cause instanceof Error ? cause.message : String(cause),
+              error: errorMessage(cause),
             })),
         ),
       )

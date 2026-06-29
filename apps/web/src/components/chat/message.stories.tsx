@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { storyFrame } from "@/components/chat/story-frame";
 import {
   AssistantMessage,
   CommandResult,
@@ -43,9 +44,7 @@ providers:
 
 tools: read, bash, write, edit, glob, grep, skill`;
 
-const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="w-[40rem] max-w-full">{children}</div>
-);
+const Frame = storyFrame("w-[40rem]");
 
 export const Headings: Story = {
   render: () => (

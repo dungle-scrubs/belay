@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { storyFrame } from "@/components/chat/story-frame";
 import { ToolCall } from "./message";
 import { type MultiEdit, MultiEditDiff } from "./multi-edit-diff";
 import { ToolDiff } from "./tool-diff";
@@ -19,9 +20,7 @@ export default meta;
 
 type Story = StoryObj;
 
-const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="w-[48rem] max-w-full">{children}</div>
-);
+const Frame = storyFrame("w-[48rem]");
 
 /** Stacks a tool's two renderings under small labels so border vs flat reads at a glance. */
 const Variants = ({ children }: { children: React.ReactNode }) => (

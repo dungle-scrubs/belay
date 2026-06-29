@@ -2,6 +2,7 @@ import {
   type ArtifactRef,
   addBreakdown,
   decodeTrevorEvent,
+  inputEstimateTokens,
   READ_ONLY_TOOL_NAMES,
   type SessionEvent,
   type TurnStop,
@@ -181,30 +182,11 @@ export interface LiveCall {
   readonly breakdown?: UsageBreakdown;
 }
 
-const CHARS_PER_TOKEN = 4;
-
-function estimatedBreakdownInputTokens(breakdown: UsageBreakdown | undefined): number | undefined {
-  if (!breakdown) {
-    return undefined;
-  }
-
-  const input = breakdown.input;
-  return Math.round(
-    (input.systemAndTools +
-      input.userText +
-      input.assistantText +
-      input.toolCallArgs +
-      input.toolResults +
-      input.imagesBase64) /
-      CHARS_PER_TOKEN,
-  );
-}
-
 function displayInputTokens(
   usage: Usage | undefined,
   breakdown: UsageBreakdown | undefined,
 ): number | undefined {
-  const estimated = estimatedBreakdownInputTokens(breakdown);
+  const estimated = breakdown ? inputEstimateTokens(breakdown) : undefined;
   if (!usage) {
     return estimated;
   }

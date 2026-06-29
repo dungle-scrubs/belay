@@ -1,5 +1,5 @@
-import { type ArtifactRef, artifactRef, blobUrl, putBlob } from "@trevor/session";
-import { RESERVED_PORTS } from "@trevor/session/ports";
+import { type ArtifactRef, artifactRef, blobUrl, errorMessage, putBlob } from "@trevor/session";
+import { serviceUrl } from "@trevor/session/ports";
 
 /**
  * Web binding for the content-addressed blob store (D-028): resolves the store URL
@@ -7,8 +7,7 @@ import { RESERVED_PORTS } from "@trevor/session/ports";
  * and turns a stored hash into a GET url for rendering. The browser talks to the store
  * directly (it serves permissive CORS); the host later fetches the same bytes by hash.
  */
-const BLOB_STORE_URL =
-  import.meta.env.VITE_BLOB_STORE_URL ?? `http://127.0.0.1:${RESERVED_PORTS.blob}`;
+const BLOB_STORE_URL = import.meta.env.VITE_BLOB_STORE_URL ?? serviceUrl("blob");
 
 function kindOf(mimeType: string): ArtifactRef["kind"] {
   if (mimeType.startsWith("image/")) {
@@ -30,8 +29,7 @@ export async function uploadArtifact(file: File): Promise<ArtifactRef> {
   } catch (cause) {
     // A network/fetch failure here almost always means the store isn't running; turn the
     // opaque "Failed to fetch" into something actionable so the composer can show it.
-    const detail = cause instanceof Error ? cause.message : String(cause);
-    throw new Error(`blob store unreachable at ${BLOB_STORE_URL} (${detail})`);
+    throw new Error(`blob store unreachable at ${BLOB_STORE_URL} (${errorMessage(cause)})`);
   }
 }
 

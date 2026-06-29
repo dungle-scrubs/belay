@@ -22,6 +22,20 @@ import {
 
 type Roster = Readonly<Record<string, ProviderModel>>;
 
+/**
+ * Resolves the reasoning level to show/send for a model surface: the stored level if it is still one
+ * of the model's `levels`, else the `fallback` (the model's default). The ONE owner of the
+ * "stored-level-if-still-valid-else-default" rule, which App previously spelled twice (the sidebar
+ * provider reasoning and the active-model reasoning) and could drift between.
+ */
+export function resolveReasoning(
+  levels: readonly string[],
+  stored: string | undefined,
+  fallback: string,
+): string {
+  return stored && levels.includes(stored) ? stored : fallback;
+}
+
 export interface ModelSelectionProjectionInput {
   readonly preferences: ModelPreferences;
   readonly roster: Roster;

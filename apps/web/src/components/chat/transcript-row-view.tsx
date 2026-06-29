@@ -1,4 +1,4 @@
-import { isContextOverflowText } from "@trevor/session";
+import { estimateTokens, isContextOverflowText } from "@trevor/session";
 import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { CompactingBar } from "@/components/chat/compacting-bar";
@@ -13,11 +13,31 @@ import {
   WorkingIndicator,
 } from "@/components/chat/message";
 import { MessageAttachments } from "@/components/chat/message-attachments";
-import { ToolRenderer } from "@/components/chat/tool-message";
+import { ToneAlert } from "@/components/chat/tone-alert";
+import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
+import { toolMessageStatus } from "@/components/chat/tool-status";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { fmtCtx, fmtTokens } from "../../derive";
+import { fmtCtx, fmtTokens, toolSummary } from "../../derive";
 import type { ToolMessage as ToolMessageData } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
+
+/**
+ * Projects one read-only tool message into a concurrent-batch row. Lives beside its renderer (not in
+ * App) and shares `toolMessageStatus`, so the batch's status can't diverge from the transcript row's.
+ */
+function toConcurrentTool(
+  tool: ToolMessageData,
+  onOpenPath: (path: string) => void,
+): ConcurrentTool {
+  const path = parseToolArgs(tool.args).path;
+  return {
+    id: tool.id,
+    name: tool.name,
+    args: toolSummary(tool.name, tool.args),
+    status: toolMessageStatus(tool),
+    onOpenPath: typeof path === "string" && path ? () => onOpenPath(path) : undefined,
+  };
+}
 
 function stopTitle(cause: string): string {
   switch (cause) {
@@ -49,7 +69,6 @@ function stopTitle(cause: string): string {
 export interface TranscriptRowViewProps {
   readonly row: TranscriptRow;
   readonly showThinking: boolean;
-  readonly toConcurrentTool: (tool: ToolMessageData) => ConcurrentTool;
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
 }
@@ -57,14 +76,13 @@ export interface TranscriptRowViewProps {
 export function TranscriptRowView({
   row,
   showThinking,
-  toConcurrentTool,
   onOpenPath,
   onDoctorRefresh,
 }: TranscriptRowViewProps) {
   if (row.kind === "tool_batch") {
     return (
       <div className="pl-3.5">
-        <ConcurrentTools tools={row.tools.map(toConcurrentTool)} />
+        <ConcurrentTools tools={row.tools.map((tool) => toConcurrentTool(tool, onOpenPath))} />
       </div>
     );
   }
@@ -116,17 +134,13 @@ export function TranscriptRowView({
 
   if (message.kind === "recovered") {
     const reclaimed =
-      message.reclaimed > 0 ? ` · ~${fmtTokens(Math.round(message.reclaimed / 4))} reclaimed` : "";
+      message.reclaimed > 0 ? ` · ~${fmtTokens(estimateTokens(message.reclaimed))} reclaimed` : "";
     return (
       <div className="pl-3.5">
-        <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-          <RotateCw className="h-3.5 w-3.5" />
-          <AlertTitle className="text-smui-yellow">context full</AlertTitle>
-          <AlertDescription>
-            {message.detail}
-            {reclaimed} · retrying
-          </AlertDescription>
-        </Alert>
+        <ToneAlert tone="yellow" icon={RotateCw} title="context full">
+          {message.detail}
+          {reclaimed} · retrying
+        </ToneAlert>
       </div>
     );
   }
@@ -134,13 +148,9 @@ export function TranscriptRowView({
   if (message.kind === "reconnecting") {
     return (
       <div className="pl-3.5">
-        <Alert className="border-smui-blue/25 bg-smui-blue/[0.04] [&>svg]:text-smui-blue">
-          <RotateCw className="h-3.5 w-3.5" />
-          <AlertTitle className="text-smui-blue">connection dropped</AlertTitle>
-          <AlertDescription>
-            {message.detail} · reconnecting (attempt {message.attempt}/3)
-          </AlertDescription>
-        </Alert>
+        <ToneAlert tone="blue" icon={RotateCw} title="connection dropped">
+          {message.detail} · reconnecting (attempt {message.attempt}/3)
+        </ToneAlert>
       </div>
     );
   }
@@ -163,18 +173,19 @@ export function TranscriptRowView({
         : "delegated";
     return (
       <div className="pl-3.5">
-        <Alert className="border-smui-purple/25 bg-smui-purple/[0.04] [&>svg]:text-smui-purple">
-          <PanelRight className="h-3.5 w-3.5" />
-          <AlertTitle className={tone}>
-            {message.agent} · {verb}
-          </AlertTitle>
-          <AlertDescription>
-            <div className="text-muted-foreground">{message.task}</div>
-            {message.result ? (
-              <div className="mt-1 whitespace-pre-wrap">{message.result}</div>
-            ) : null}
-          </AlertDescription>
-        </Alert>
+        <ToneAlert
+          tone="purple"
+          icon={PanelRight}
+          title={
+            <>
+              {message.agent} · {verb}
+            </>
+          }
+          titleClassName={tone}
+        >
+          <div className="text-muted-foreground">{message.task}</div>
+          {message.result ? <div className="mt-1 whitespace-pre-wrap">{message.result}</div> : null}
+        </ToneAlert>
       </div>
     );
   }
@@ -184,11 +195,9 @@ export function TranscriptRowView({
 
   const overflowNote =
     message.kind === "assistant" && message.overflow ? (
-      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-        <TriangleAlert className="h-3.5 w-3.5" />
-        <AlertTitle className="text-smui-yellow">context overflow</AlertTitle>
-        <AlertDescription>{message.overflow}</AlertDescription>
-      </Alert>
+      <ToneAlert tone="yellow" icon={TriangleAlert} title="context overflow">
+        {message.overflow}
+      </ToneAlert>
     ) : null;
 
   const errorNote =
@@ -214,26 +223,23 @@ export function TranscriptRowView({
 
   const noReplyNote =
     message.kind === "assistant" && message.noReply ? (
-      <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-        <TriangleAlert className="h-3.5 w-3.5" />
-        <AlertTitle className="text-smui-yellow">no reply</AlertTitle>
-        <AlertDescription>
-          The model ended the turn without a reply. Try again or rephrase.
-        </AlertDescription>
-      </Alert>
+      <ToneAlert tone="yellow" icon={TriangleAlert} title="no reply">
+        The model ended the turn without a reply. Try again or rephrase.
+      </ToneAlert>
     ) : null;
 
   let stepLimitNote: ReactNode = null;
   if (message.kind === "assistant") {
     if (message.stop) {
       stepLimitNote = (
-        <Alert className="border-smui-yellow/25 bg-smui-yellow/[0.04] [&>svg]:text-smui-yellow">
-          <TriangleAlert className="h-3.5 w-3.5" />
-          <AlertTitle className="text-smui-yellow">{stopTitle(message.stop.cause)}</AlertTitle>
-          <AlertDescription className="break-words">
-            <div>{message.stop.summary.slice(0, 240)}</div>
-          </AlertDescription>
-        </Alert>
+        <ToneAlert
+          tone="yellow"
+          icon={TriangleAlert}
+          title={stopTitle(message.stop.cause)}
+          descriptionClassName="break-words"
+        >
+          <div>{message.stop.summary.slice(0, 240)}</div>
+        </ToneAlert>
       );
     } else if (message.stepLimit) {
       stepLimitNote = (

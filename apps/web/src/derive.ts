@@ -1,4 +1,5 @@
 import {
+  type ArtifactRef,
   activeTurnRunId,
   type CatalogEntry,
   type CommandSpec,
@@ -59,6 +60,70 @@ export function fmtCtx(n: number): string {
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
 }
 
+/**
+ * Human elapsed time from milliseconds. The single "how long did this take" formatter, parameterized
+ * for the two surfaces that previously diverged: `hours` rolls over to `1h 5m` past an hour (the
+ * message timing line); `tenths` shows `<1s` and one decimal under 10s (the tool-call duration chip).
+ * Both share the `Mm Ss` / `Ss` breakpoints in between.
+ */
+export function formatElapsed(
+  ms: number,
+  opts: { readonly tenths?: boolean; readonly hours?: boolean } = {},
+): string {
+  if (opts.tenths && ms < 1000) {
+    return "<1s";
+  }
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  if (opts.hours && totalSeconds >= 3600) {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    return `${h}h ${m}m`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  if (opts.tenths && totalSeconds < 10) {
+    return `${(Math.floor((ms / 1000) * 10) / 10).toFixed(1)}s`;
+  }
+  return `${seconds}s`;
+}
+
+/**
+ * Splits a message's artifacts into inline `images` and `others` (file rows). The one owner of the
+ * image-vs-other rule, so the attachments wrapper and the image set can't classify an artifact two
+ * different ways.
+ */
+export function partitionArtifacts(artifacts: readonly ArtifactRef[]): {
+  readonly images: readonly ArtifactRef[];
+  readonly others: readonly ArtifactRef[];
+} {
+  const images: ArtifactRef[] = [];
+  const others: ArtifactRef[] = [];
+  for (const artifact of artifacts) {
+    (artifact.kind === "image" ? images : others).push(artifact);
+  }
+  return { images, others };
+}
+
+/** Truncates `text` to `max` characters with an ellipsis. The one owner of the transcript's
+ *  60-char cap idiom (the session-name preview and the tool summary share it). */
+export function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/**
+ * The project label from a workspace/cwd path: its last path segment, ignoring `~` (the home marker
+ * isn't a project name). Null when there's nothing meaningful. The one owner of the "workspace
+ * basename ignoring ~" rule the tab title and the resume/sidebar scoping both derive, so they can't
+ * disagree on what the current project is called.
+ */
+export function workspaceBasename(path: string | null | undefined): string | null {
+  const base = path?.split("/").filter(Boolean).pop();
+  return base && base !== "~" ? base : null;
+}
+
 /** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
 export function toolSummary(name: string, argsJson: string): string {
   let args: Record<string, unknown> = {};
@@ -77,7 +142,7 @@ export function toolSummary(name: string, argsJson: string): string {
   const text =
     typeof primary === "string" ? primary : Object.keys(args).length === 0 ? "" : argsJson;
 
-  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+  return truncate(text, 60);
 }
 
 export type HostStatus = {

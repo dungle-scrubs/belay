@@ -1,5 +1,6 @@
 import type { ArtifactRef } from "@trevor/session";
 import { useState } from "react";
+import { partitionArtifacts } from "@/derive";
 import { ImageCarousel } from "./image-carousel";
 import { MessageImages } from "./message-images";
 
@@ -17,7 +18,7 @@ export interface MessageAttachmentsProps {
 }
 
 export function MessageAttachments({ artifacts, srcOf, className }: MessageAttachmentsProps) {
-  const images = artifacts.filter((a) => a.kind === "image");
+  const { images } = partitionArtifacts(artifacts);
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
 

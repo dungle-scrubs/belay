@@ -2,6 +2,7 @@ import { useBoolean } from "ahooks";
 import { ChevronRight, Wrench } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { formatElapsed } from "@/derive";
 import { cn } from "@/lib/utils";
 import { MarkdownBody } from "./markdown-body";
 import { ToolSection } from "./tool-section";
@@ -44,21 +45,6 @@ function PulseDots() {
   );
 }
 
-/** Human elapsed time: 29s, 5m 29s, 1h 5m. */
-function formatElapsed(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  if (h > 0) {
-    return `${h}h ${m}m`;
-  }
-  if (m > 0) {
-    return `${m}m ${s}s`;
-  }
-  return `${s}s`;
-}
-
 /** Live elapsed since `startedAt` (ms epoch), re-rendered each second; null when no start time. */
 function useElapsedLabel(startedAt?: number): string | null {
   const [, tick] = useState(0);
@@ -69,7 +55,7 @@ function useElapsedLabel(startedAt?: number): string | null {
     const id = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [startedAt]);
-  return startedAt === undefined ? null : formatElapsed(Date.now() - startedAt);
+  return startedAt === undefined ? null : formatElapsed(Date.now() - startedAt, { hours: true });
 }
 
 /**

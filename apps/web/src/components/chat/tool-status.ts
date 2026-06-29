@@ -14,6 +14,31 @@ import { cn } from "@/lib/utils";
 /** The lifecycle of a tool call as the chat renders it: the single union every tool renderer shares. */
 export type ToolStatus = "running" | "done" | "error";
 
+/** True when a completed tool result is the `error:` failure convention (what tool-message parses). */
+export function isErrorResult(result: string | undefined): boolean {
+  return result?.startsWith("error:") ?? false;
+}
+
+/**
+ * The single rule mapping a tool message to its lifecycle status: an aborted run is an error (never a
+ * stuck spinner), an unfinished call is running, and a finished call is `error` when its result is the
+ * `error:` convention else `done`. Both the transcript row and the concurrent batch derive from this,
+ * so a done-with-error-result tool can't read "done" in one and "error" in the other.
+ */
+export function toolMessageStatus(tool: {
+  readonly aborted?: boolean;
+  readonly done?: boolean;
+  readonly result?: string;
+}): ToolStatus {
+  if (tool.aborted) {
+    return "error";
+  }
+  if (!tool.done) {
+    return "running";
+  }
+  return isErrorResult(tool.result) ? "error" : "done";
+}
+
 /** Status shows in the wrench icon color (no separate dot). */
 const TOOL_STATUS_COLOR: Record<ToolStatus, string> = {
   running: "text-smui-yellow",

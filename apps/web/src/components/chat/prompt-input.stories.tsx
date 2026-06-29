@@ -29,6 +29,23 @@ function ComposerHarness({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // The composer-owned slice PromptInput reads (a subset of the live `useComposer` Composer); the
+  // story fakes only the fields the input actually uses.
+  const composer = {
+    draft,
+    setDraft,
+    attachments: chips,
+    uploading,
+    uploadError: error,
+    setUploadError: setError,
+    inputRef,
+    fileInputRef,
+    onPickFiles: () => {},
+    onPaste: () => {},
+    handleKeyDown: () => {},
+    removeAttachment: (hash: string) => setChips((a) => a.filter((ref) => ref.hash !== hash)),
+  };
+
   // The slash menu lives in App as an absolute overlay above this input; mirror that layout so the
   // story shows the shell chrome is distinct from the slash menu.
   const slashMatches = [
@@ -49,21 +66,11 @@ function ComposerHarness({
           />
         ) : null}
         <PromptInput
-          draft={draft}
-          onDraftChange={setDraft}
+          composer={composer}
           onSubmit={(event) => event.preventDefault()}
           onKeyDown={() => {}}
-          onPaste={() => {}}
-          inputRef={inputRef}
-          fileInputRef={fileInputRef}
-          onPickFiles={() => {}}
           disabled={false}
           placeholder="message qwen… (/ for commands, ! for shell)"
-          attachments={chips}
-          onRemoveAttachment={(hash) => setChips((a) => a.filter((ref) => ref.hash !== hash))}
-          uploading={uploading}
-          uploadError={error}
-          onDismissError={() => setError(null)}
         />
       </div>
     </div>

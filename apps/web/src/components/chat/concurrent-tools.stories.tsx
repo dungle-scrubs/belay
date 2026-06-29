@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useEffect, useState } from "react";
+import { storyFrame } from "@/components/chat/story-frame";
 import { type ConcurrentTool, ConcurrentTools } from "./concurrent-tools";
 import { ToolCall } from "./message";
 
@@ -17,9 +18,7 @@ export default meta;
 
 type Story = StoryObj;
 
-const Frame = ({ children }: { children: React.ReactNode }) => (
-  <div className="w-[48rem] max-w-full">{children}</div>
-);
+const Frame = storyFrame("w-[48rem]");
 
 // In the live app a clicked read path opens the local editor (via the host). Storybook
 // has no host, so this just reports the path - enough to see the link + click wiring.

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
 import type { DoctorFinding, DoctorSnapshot } from "@trevor/session";
+import { doctorArea, doctorSnapshot } from "@trevor/test-kit";
 import { afterEach, beforeEach, test } from "vitest";
 import { DoctorPanel } from "./doctor-panel";
 
@@ -10,23 +11,18 @@ import { DoctorPanel } from "./doctor-panel";
  * labels - so the panel says what's wrong and the inspection actions act on the sanitized snapshot.
  */
 
-const SNAPSHOT: DoctorSnapshot = {
-  state: "ready",
+const SNAPSHOT: DoctorSnapshot = doctorSnapshot({
   checkedAt: "12s ago",
   host: { workspace: "~/dev/trevorV2" },
   areas: [
-    {
-      id: "core",
+    doctorArea("core", "ok", {
       label: "Core",
-      status: "ok",
       verdict: "running",
       facts: [{ label: "uptime", value: "2h 14m" }],
       findings: [{ id: "core.process", status: "ok", title: "Host process", message: "running" }],
-    },
-    {
-      id: "providers",
+    }),
+    doctorArea("providers", "error", {
       label: "Providers",
-      status: "error",
       verdict: "no auth",
       findings: [
         {
@@ -37,9 +33,9 @@ const SNAPSHOT: DoctorSnapshot = {
           nextAction: { label: "Add the key", command: "opchain primary" },
         },
       ],
-    },
+    }),
   ],
-};
+});
 
 test("issues-only filter keeps the error area and hides the healthy one", () => {
   const { container, getByRole } = render(<DoctorPanel snapshot={SNAPSHOT} />);

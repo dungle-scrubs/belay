@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { render } from "@testing-library/react";
 import type { DoctorSnapshot } from "@trevor/session";
+import { doctorArea, doctorSnapshot } from "@trevor/test-kit";
 import { test } from "vitest";
 import { DoctorResult } from "./doctor-result";
 
@@ -9,14 +10,11 @@ import { DoctorResult } from "./doctor-result";
  * a legacy `/doctor text` dump (or an error) falls back to the plain command-result row.
  */
 
-const SNAPSHOT: DoctorSnapshot = {
-  state: "ready",
+const SNAPSHOT: DoctorSnapshot = doctorSnapshot({
   checkedAt: "just now",
   areas: [
-    {
-      id: "internet",
+    doctorArea("internet", "warn", {
       label: "Internet",
-      status: "warn",
       verdict: "unreachable",
       findings: [
         {
@@ -26,16 +24,14 @@ const SNAPSHOT: DoctorSnapshot = {
           message: "unreachable",
         },
       ],
-    },
-    {
-      id: "core",
+    }),
+    doctorArea("core", "ok", {
       label: "Core",
-      status: "ok",
       verdict: "running",
       findings: [{ id: "core.process", status: "ok", title: "Host process", message: "running" }],
-    },
+    }),
   ],
-};
+});
 
 test("a structured snapshot renders the dashboard, not raw JSON", () => {
   const { container } = render(

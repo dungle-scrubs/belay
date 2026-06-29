@@ -15,8 +15,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { formatElapsed } from "@/derive";
+import { cn } from "@/lib/utils";
 import { statusIcon } from "@/components/chat/tool-status";
 import {
   ANIMATION_DURATION,
@@ -68,14 +69,6 @@ function ToolFallbackRoot({
   );
 }
 
-const formatToolDuration = (ms: number) => {
-  if (ms < 1000) return "<1s";
-  const seconds = ms / 1000;
-  if (seconds < 10) return `${(Math.floor(seconds * 10) / 10).toFixed(1)}s`;
-  if (seconds < 60) return `${Math.floor(seconds)}s`;
-  return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
-};
-
 function ToolFallbackDuration({
   className,
   ...props
@@ -92,7 +85,7 @@ function ToolFallbackDuration({
       )}
       {...props}
     >
-      {formatToolDuration(elapsedMs)}
+      {formatElapsed(elapsedMs, { tenths: true })}
     </span>
   );
 }
