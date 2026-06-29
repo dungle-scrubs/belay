@@ -73,6 +73,17 @@ export type RecoveredMessage = {
   detail: string;
   reclaimed: number;
 };
+// A step-budget CHECKPOINT auto-continue (02.17), rendered inline as a QUIET breadcrumb: the loop
+// reached the adaptive step budget with context headroom + progress, so it continued past it instead of
+// pausing. Distinct from the alarming `step_backstop` pause card, which renders only on a genuine
+// terminating stop. `steps` is where it continued, `pressure` the context fraction (0..1).
+export type ContinuedMessage = {
+  kind: "continued";
+  id: string;
+  steps: number;
+  pressure: number;
+  detail: string;
+};
 // A transient provider outage being auto-retried before any token streamed (D-076…D-079),
 // rendered inline as a status marker: the stream dropped and the loop is reconnecting. `attempt`
 // is the 1-based retry number (of MAX_RECONNECT_ATTEMPTS). Distinct from `recovered` (context
@@ -148,6 +159,7 @@ export type Message =
   | ToolMessage
   | CommandResultMessage
   | RecoveredMessage
+  | ContinuedMessage
   | ReconnectingMessage
   | CompactingMessage
   | DelegationMessage
@@ -466,6 +478,23 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           action: decoded.action,
           detail: decoded.detail,
           reclaimed: decoded.reclaimed,
+        });
+        break;
+      }
+      case "assistant.continued": {
+        // A step-budget checkpoint auto-continued the turn (02.17): finalize the open segment so the
+        // continued output starts fresh below the quiet breadcrumb.
+        const open = openByRun.get(decoded.runId);
+        if (open) {
+          open.done = true;
+          openByRun.delete(decoded.runId);
+        }
+        messages.push({
+          kind: "continued",
+          id: event.eventId,
+          steps: decoded.steps,
+          pressure: decoded.pressure,
+          detail: decoded.detail,
         });
         break;
       }

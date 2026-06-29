@@ -33,8 +33,11 @@ const CONTEXT_TIERS: readonly {
 export const FALLBACK_MAX_STEPS = 32;
 
 /** Absolute runaway ceiling, independent of the adaptive budget (D-011). Above every healthy tier and
- *  the unknown-telemetry fallback, and finite, so a pathological loop or bad telemetry can never spin. */
-export const EMERGENCY_MAX_STEPS = 128;
+ *  the unknown-telemetry fallback, and finite, so a pathological loop or bad telemetry can never spin.
+ *  Raised 128 -> 256 (02.17 D-004): the step backstop is now a re-evaluation CHECKPOINT (auto-continue
+ *  at the adaptive budget when context has room and is advancing) rather than a hard pause, so this
+ *  ceiling is the SOLE finite step-axis terminating stop and gets more headroom before it fires. */
+export const EMERGENCY_MAX_STEPS = 256;
 
 /** Floor for the adaptive budget so a turn always gets real room before pausing, even when penalties
  *  stack. The emergency ceiling still wins over this floor when it is set lower (e.g. a test override). */

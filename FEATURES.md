@@ -55,6 +55,7 @@ per turn and owns turn scheduling, leadership, and session lifecycle.
 | Capability | Implementation anchor | Validation |
 |---|---|---|
 | Per-turn agent loop (model ↔ tools), streaming deltas/thinking/usage, typed termination | `apps/agent-host/src/turn.ts`, `turn-termination.test.ts`, `turn-preflight.ts` | `turn-termination.test.ts`, `e2e/live/agent.test.ts` |
+| Adaptive step budget with auto-continue checkpoints: the step backstop is a re-evaluation CHECKPOINT, not a hard pause - a turn that reaches the adaptive budget with context headroom + progress AUTO-CONTINUES (quiet `assistant.continued` breadcrumb) instead of pausing; it terminates on the step axis only at the absolute emergency ceiling (256) or when context stops advancing (progress guard). Context-pressure and loop-stall stops stay authoritative | `apps/agent-host/src/agent/turn-policy.ts`, `turn-budget.ts`, `loop.ts`; web `transcript.ts` + `transcript-row-view.tsx` (quiet breadcrumb) | `turn-policy.test.ts`, `turn-budget.test.ts`, `loop.test.ts`, `test/turn.test.ts`, `transcript.test.ts`, `transcript-row-view.test.tsx` |
 | Turn scheduler: one-turn-at-a-time, FIFO queue of mid-turn prompts, catch-up on leadership | `apps/agent-host/src/agent/turn-scheduler.ts` | `agent/*.test.ts` |
 | Lease-based single-leader election (only the leader answers prompts) | `apps/agent-host/src/lease.ts` | `lease.test.ts` |
 | Session lifecycle: ensure/switch/retire, replacement-host spawn | `apps/agent-host/src/session-lifecycle.ts` | `session-lifecycle.test.ts` |

@@ -132,3 +132,21 @@ test("a shell row is a selectable transcript segment", () => {
   );
   assert.ok(container.querySelector('[data-message-id="shell1"]'));
 });
+
+test("02.17: a checkpoint breadcrumb renders quietly, not as the alarming step_backstop card", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "continued",
+      id: "cont1",
+      steps: 64,
+      pressure: 0.207,
+      detail: "continued at step 64 - 20.7% context, room left",
+    }),
+  );
+  assert.match(container.textContent ?? "", /continued at step 64/);
+  assert.match(container.textContent ?? "", /20\.7% context, room left/);
+  // It is the quiet muted breadcrumb, NOT the alarming pause card: no destructive/alert role and no
+  // "paused" / "step backstop" wording.
+  assert.equal(container.querySelector('[role="alert"]'), null);
+  assert.doesNotMatch(container.textContent ?? "", /paused|backstop/i);
+});

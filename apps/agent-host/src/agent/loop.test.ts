@@ -109,10 +109,19 @@ test("M3: a 1M-context low-pressure loop runs past 32 to the large-context budge
   assert.equal(stop?.type === "stop" && stop.stop.cause, "step_backstop");
   assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
   assert.equal(stop?.type === "stop" && stop.stop.context?.pressure, 0.089022);
+  // 02.17: the step backstop is now a checkpoint. This provider's context is FLAT (constant input), so
+  // the first checkpoint's progress guard fails and the turn pauses at the budget (96) - now named for
+  // the failed progress guard rather than a static backstop. A productive (growing) turn would continue.
   assert.match(
     stop?.type === "stop" ? stop.stop.summary : "",
-    /adaptive 96-step budget/,
-    "the pause names the adaptive budget, not a static backstop",
+    /context stopped advancing across the step-budget checkpoint/,
+    "the pause names the progress guard, not a static backstop",
+  );
+  // A flat turn does not auto-continue: no checkpoint breadcrumb was emitted.
+  assert.equal(
+    events.filter((e) => e.type === "checkpoint").length,
+    0,
+    "a flat-context turn pauses rather than auto-continuing",
   );
   const answer = events
     .filter((e): e is Extract<AgentEvent, { type: "text" }> => e.type === "text")

@@ -101,9 +101,10 @@ test("one live progress snapshot per model step, each carrying usage + breakdown
   );
 });
 
-test("assistant.completed publishes typed stop metadata for an adaptive step backstop", async () => {
-  // A 1M window at ~8.9% pressure earns the >=1M tier budget (96), so the backstop fires at 96, not the
-  // old static 32, and the summary names the adaptive budget and its reason (D-021, D-025).
+test("a flat-context turn pauses at the budget via the progress guard (02.17)", async () => {
+  // A 1M window at ~8.9% pressure earns the >=1M tier budget (96). Context never grows (constant
+  // 89_022 input every step), so at the first checkpoint the progress guard fails and the turn PAUSES
+  // at 96 - the step backstop is no longer a hard pause, but an unproductive flat loop still stops.
   const events = await runTurn(lowContextBackstopProvider(), history, { runId: "r1" });
   const completed = events.find((e) => e.type === "assistant.completed")?.payload;
   assert.equal(completed?.stepLimit, 96);
@@ -111,11 +112,104 @@ test("assistant.completed publishes typed stop metadata for an adaptive step bac
     cause: "step_backstop",
     action: "paused",
     summary:
-      "Paused at the adaptive 96-step budget before context pressure (>=1M context, 8.9% pressure -> 96 steps).",
+      "Paused at step 96: context stopped advancing across the step-budget checkpoint (>=1M context, 8.9% pressure -> 96 steps).",
     steps: 96,
     context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
   });
   assert.equal(completed?.text, "");
+  // No auto-continue breadcrumb: the guard failed at the first checkpoint, so it never continued.
+  assert.equal(
+    events.filter((e) => e.type === "assistant.continued").length,
+    0,
+    "a flat turn does not auto-continue",
+  );
+});
+
+/**
+ * A chatty-but-PRODUCTIVE model (the MiniMax-M3 case): it keeps emitting cheap tool calls whose
+ * results GROW the prompt (low, slowly-rising context pressure), so the same-tool stall detector and
+ * the context-pressure stop never fire. After `answerAfter` rounds it answers with text. Each step's
+ * usage rises by `inputStep`, kept well under the window so pressure stays low.
+ */
+function chattyProvider(opts: {
+  window: number;
+  inputBase: number;
+  inputStep: number;
+  answerAfter: number;
+}): Provider {
+  let calls = 0;
+  const describe = {
+    label: "Fake",
+    model: "fake-1",
+    reasoningLevels: ["off"] as const,
+    defaultReasoning: "off",
+    kind: "cloud" as const,
+  };
+  return {
+    id: "fake",
+    ...describe,
+    describe: () => describe,
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: (_messages, tools) => {
+      calls += 1;
+      const input = opts.inputBase + calls * opts.inputStep;
+      const usage: ProviderEvent = {
+        type: "usage",
+        usage: { input, output: 1, contextWindow: opts.window, genMs: 1 },
+      };
+      if (tools.length === 0 || calls > opts.answerAfter) {
+        return Stream.fromIterable<ProviderEvent>([{ type: "text", text: "all done" }, usage]);
+      }
+      return Stream.fromIterable<ProviderEvent>([
+        // Vary the args each round so the same-tool stall detector never fires - this models DIVERSE
+        // productive work, the case the step budget (not the stall gate) governs.
+        {
+          type: "tool_call",
+          call: { id: `c${calls}`, name: "noop", arguments: JSON.stringify({ round: calls }) },
+        },
+        usage,
+      ]);
+    },
+  };
+}
+
+test("02.17: a chatty low-pressure turn auto-continues past the budget and finishes (breadcrumb)", async () => {
+  // 32k window -> tier budget 32. Context grows each step, so at the budget the progress guard holds and
+  // the turn AUTO-CONTINUES (one breadcrumb) instead of pausing, then answers a few steps later.
+  const events = await runTurn(
+    chattyProvider({ window: 32_000, inputBase: 1_000, inputStep: 200, answerAfter: 40 }),
+    history,
+    { runId: "r1" },
+  );
+  const continued = events.filter((e) => e.type === "assistant.continued");
+  assert.ok(continued.length >= 1, "the turn auto-continued at least one checkpoint");
+  assert.match(String(continued[0]?.payload.detail ?? ""), /continued at step 32/);
+  const completed = events.find((e) => e.type === "assistant.completed")?.payload;
+  assert.equal(completed?.text, "all done", "it finished the work past the old budget");
+  assert.equal(completed?.stop, undefined, "no step_backstop pause - it continued and answered");
+});
+
+test("02.17: an unproductive chatty turn still terminates at the emergency ceiling", async () => {
+  // Same growing context but it never answers; with a small emergency override the loop auto-continues
+  // once, then the ABSOLUTE ceiling terminates the step axis (the runaway guard stays intact).
+  const events = await runTurn(
+    chattyProvider({ window: 32_000, inputBase: 1_000, inputStep: 200, answerAfter: 9_999 }),
+    history,
+    { runId: "r1", loop: { emergencyMaxSteps: 50 } },
+  );
+  assert.ok(
+    events.filter((e) => e.type === "assistant.continued").length >= 1,
+    "it auto-continued before the ceiling",
+  );
+  const completed = events.find((e) => e.type === "assistant.completed")?.payload;
+  assert.equal((completed?.stop as { cause?: string } | undefined)?.cause, "step_backstop");
+  assert.equal((completed?.stop as { steps?: number } | undefined)?.steps, 50);
+  assert.match(
+    String((completed?.stop as { summary?: string } | undefined)?.summary ?? ""),
+    /emergency ceiling/,
+  );
 });
 
 test("a terminal provider stream failure publishes structured diagnostic data with the legacy error", async () => {

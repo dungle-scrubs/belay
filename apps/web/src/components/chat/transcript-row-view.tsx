@@ -1,5 +1,5 @@
 import { estimateTokens, isContextOverflowText } from "@trevor/session";
-import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
+import { CircleX, CornerDownRight, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
@@ -163,6 +163,19 @@ export function TranscriptRowView({
           {message.detail}
           {reclaimed} · retrying
         </ToneAlert>
+      </div>
+    );
+  }
+
+  if (message.kind === "continued") {
+    // A QUIET breadcrumb (02.17): the loop auto-continued past the adaptive step budget because there
+    // was context headroom and progress. Deliberately understated muted text - NOT the alarming
+    // step_backstop pause card (which renders only on a genuine terminating stop).
+    return (
+      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+        <CornerDownRight className="size-3 shrink-0" />
+        continued at step {message.steps} · {(message.pressure * 100).toFixed(1)}% context, room
+        left
       </div>
     );
   }

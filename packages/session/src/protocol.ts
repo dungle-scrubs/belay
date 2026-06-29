@@ -340,6 +340,27 @@ export const events = {
     type: "assistant.recovered",
     payload: { runId: p.runId, action: p.action, detail: p.detail, reclaimed: p.reclaimed },
   }),
+  /** A step-budget CHECKPOINT auto-continued the turn (02.17): the adaptive step budget was reached
+   *  with context headroom + progress below the emergency ceiling, so the loop continued instead of
+   *  pausing. A durable, NON-terminating inline breadcrumb (sibling to `assistant.recovered`); the
+   *  alarming `step_backstop` pause card renders only on a genuine terminating stop. `steps` is where it
+   *  continued, `pressure` the context fraction (0..1), `threshold` the next checkpoint's step bound. */
+  assistantContinued: (p: {
+    runId: string;
+    steps: number;
+    pressure: number;
+    threshold: number;
+    detail: string;
+  }): TrevorEventInput => ({
+    type: "assistant.continued",
+    payload: {
+      runId: p.runId,
+      steps: p.steps,
+      pressure: p.pressure,
+      threshold: p.threshold,
+      detail: p.detail,
+    },
+  }),
   /** A transient provider outage is being auto-retried before any token streamed (D-076…D-079):
    *  the loop reconnected the dropped stream and is re-running the current step. `attempt` is the
    *  1-based retry number. Sibling to `assistant.recovered`, applied to transport faults. */

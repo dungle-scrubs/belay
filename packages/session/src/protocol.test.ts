@@ -98,6 +98,28 @@ test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () 
   });
 });
 
+test("assistant.continued (step-budget checkpoint) round-trips through decodeTrevorEvent (02.17)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.assistantContinued({
+        runId: "r",
+        steps: 64,
+        pressure: 0.207,
+        threshold: 128,
+        detail: "continued at step 64 - 20.7% context, room left",
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "assistant.continued",
+    runId: "r",
+    steps: 64,
+    pressure: 0.207,
+    threshold: 128,
+    detail: "continued at step 64 - 20.7% context, room left",
+  });
+});
+
 test("assistant.reconnecting round-trips the threaded maxAttempts budget (02.15)", () => {
   const decoded = decodeTrevorEvent(
     stored(

@@ -370,6 +370,14 @@ export type DecodedEvent =
       readonly reclaimed: number;
     }
   | {
+      readonly type: "assistant.continued";
+      readonly runId: string;
+      readonly steps: number;
+      readonly pressure: number;
+      readonly threshold: number;
+      readonly detail: string;
+    }
+  | {
       readonly type: "assistant.reconnecting";
       readonly runId: string;
       readonly attempt: number;
@@ -590,6 +598,15 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         action: str(p.action, "trim"),
         detail: str(p.detail),
         reclaimed: num(p.reclaimed),
+      };
+    case "assistant.continued":
+      return {
+        type: "assistant.continued",
+        runId,
+        steps: num(p.steps),
+        pressure: num(p.pressure),
+        threshold: num(p.threshold),
+        detail: str(p.detail),
       };
     case "assistant.reconnecting":
       return {

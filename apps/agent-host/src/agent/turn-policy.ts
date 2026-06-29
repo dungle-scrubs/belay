@@ -12,8 +12,9 @@ import type { TurnStop } from "@trevor/session";
 
 export interface TurnPolicyObservation {
   readonly steps: number;
-  /** The effective step budget for this evaluation. The loop derives it adaptively (see
-   *  turn-budget.ts); the gate only compares `steps` against it and never derives it itself (D-019). */
+  /** The effective step budget for this evaluation - the active CHECKPOINT threshold. The loop derives
+   *  it adaptively (see turn-budget.ts) and composes the accumulated checkpoint grant into it; the gate
+   *  only compares `steps` against it and never derives it itself (D-019). */
   readonly maxSteps: number;
   readonly inputTokens: number;
   readonly contextWindow: number;
@@ -23,6 +24,16 @@ export interface TurnPolicyObservation {
   /** Optional one-line reason from the budget derivation, used only to enrich the step-backstop
    *  summary; the gate stays ignorant of how the budget was computed (D-019, D-025). */
   readonly budgetReason?: string;
+  /** The absolute runaway ceiling on the step axis (02.17 D-004). When supplied, reaching `maxSteps`
+   *  below this ceiling is a CHECKPOINT (auto-continue), not a pause; the turn terminates on the step
+   *  axis only at this ceiling. Absent => the legacy single-axis backstop (reaching `maxSteps` pauses),
+   *  so existing direct-gate callers/tests are unchanged. */
+  readonly emergencyMaxSteps?: number;
+  /** Whether context advanced by a non-trivial amount over the last checkpoint window (02.17 D-003).
+   *  The progress guard: auto-continue requires it. Defaults to true when absent (the loop always
+   *  provides the real signal). A diverse-no-op-tool turn that the same-tool stall detector misses
+   *  trips this guard and pauses instead of running to the ceiling. */
+  readonly contextAdvanced?: boolean;
   readonly providerDiagnostic?: {
     readonly reason: string;
     readonly retryable: boolean;
@@ -32,6 +43,9 @@ export interface TurnPolicyObservation {
 
 export type TurnPolicyAction =
   | { readonly type: "continue"; readonly debug: TurnPolicyDebug }
+  /** A step checkpoint: the adaptive budget is met with headroom + progress below the ceiling, so the
+   *  loop auto-continues and emits a quiet breadcrumb instead of pausing (02.17 D-001). */
+  | { readonly type: "checkpoint"; readonly debug: TurnPolicyDebug }
   | { readonly type: "synthesize"; readonly stop: TurnStop; readonly debug: TurnPolicyDebug }
   | { readonly type: "pause"; readonly stop: TurnStop; readonly debug: TurnPolicyDebug }
   | { readonly type: "fail"; readonly stop: TurnStop; readonly debug: TurnPolicyDebug };
@@ -55,7 +69,10 @@ interface TurnTerminationAnalysis {
 }
 
 interface TurnTerminationDecision {
-  readonly stop: TurnStop;
+  /** A terminating stop, or null for a non-terminating step checkpoint (auto-continue). */
+  readonly stop: TurnStop | null;
+  /** True when `stop` is null because the step axis hit a checkpoint (the loop continues + breadcrumbs). */
+  readonly checkpoint: boolean;
   readonly debug: TurnPolicyDebug;
 }
 
@@ -103,72 +120,109 @@ function withDebug(
   };
 }
 
+function stopDecision(stop: TurnStop, debug: TurnPolicyDebug): TurnTerminationDecision {
+  return { stop, checkpoint: false, debug };
+}
+
 function decideTermination(obs: TurnPolicyObservation): TurnTerminationDecision | null {
   const analysis = analyzeTermination(obs);
   if (obs.providerDiagnostic) {
-    return {
-      stop: {
+    return stopDecision(
+      {
         cause: "provider_protocol_anomaly",
         action: obs.providerDiagnostic.retryable ? "paused" : "failed",
         summary: `Provider protocol anomaly during ${obs.providerDiagnostic.phase}: ${obs.providerDiagnostic.reason}`,
         steps: obs.steps,
         ...(analysis.context ? { context: analysis.context } : {}),
       },
-      debug: withDebug(
+      withDebug(
         "provider_protocol_anomaly",
         analysis,
         "provider diagnostics outrank budget explanations",
       ),
-    };
+    );
   }
 
   if (analysis.overContext) {
-    return {
-      stop: {
+    return stopDecision(
+      {
         cause: "context_pressure",
         action: "synthesized",
         summary: `Context pressure reached ${(analysis.pressure * 100).toFixed(1)}%; synthesizing before opening more tools.`,
         steps: obs.steps,
         ...(analysis.context ? { context: analysis.context } : {}),
       },
-      debug: withDebug(
-        "context_pressure",
-        analysis,
-        "context pressure outranks the raw step backstop",
-      ),
-    };
+      withDebug("context_pressure", analysis, "context pressure outranks the raw step backstop"),
+    );
   }
 
   if (analysis.stalled) {
-    return {
-      stop: {
+    return stopDecision(
+      {
         cause: "loop_stalled",
         action: "paused",
         summary: `Paused after ${obs.repeatedToolRounds} repeated ${obs.repeatedToolName} tool rounds without enough progress.`,
         steps: obs.steps,
         ...(analysis.context ? { context: analysis.context } : {}),
       },
-      debug: withDebug("loop_stalled", analysis, "repeated tool rounds beat raw step count"),
-    };
+      withDebug("loop_stalled", analysis, "repeated tool rounds beat raw step count"),
+    );
   }
 
   if (analysis.overSteps) {
-    return {
-      stop: {
+    // Legacy single-axis backstop when no emergency ceiling is supplied (older direct-gate callers /
+    // tests): the adaptive budget is the runaway circuit breaker and reaching it pauses, unchanged.
+    if (obs.emergencyMaxSteps === undefined) {
+      return stopDecision(
+        {
+          cause: "step_backstop",
+          action: "paused",
+          summary: obs.budgetReason
+            ? `Paused at the adaptive ${obs.maxSteps}-step budget before context pressure (${obs.budgetReason}).`
+            : `Paused at the ${obs.maxSteps}-step backstop before context pressure.`,
+          steps: obs.steps,
+          ...(analysis.context ? { context: analysis.context } : {}),
+        },
+        withDebug("step_backstop", analysis, "adaptive step budget is a runaway circuit breaker"),
+      );
+    }
+
+    // Checkpoint logic (02.17). By the time execution reaches the step axis, headroom (context_pressure)
+    // and no-stall (loop_stalled) are already guaranteed - they were evaluated and rejected ABOVE this
+    // branch by the priority ordering (D-002) - so auto-continue needs NO second pressure/stall gate.
+    // The only gates are the absolute emergency ceiling (the runaway guard) and the progress guard.
+    const atCeiling = obs.steps >= obs.emergencyMaxSteps;
+    const progressed = obs.contextAdvanced !== false;
+    if (!atCeiling && progressed) {
+      return {
+        stop: null,
+        checkpoint: true,
+        debug: withDebug(
+          "step_checkpoint",
+          analysis,
+          "adaptive budget reached with headroom and progress: auto-continue, not pause",
+        ),
+      };
+    }
+    // Terminate on the step axis: at/over the emergency ceiling (runaway), or the progress guard failed
+    // (context went flat across the checkpoint window - a diverse-no-op-tool loop the stall detector misses).
+    const summary = atCeiling
+      ? `Paused at the ${obs.emergencyMaxSteps}-step emergency ceiling (runaway guard).`
+      : `Paused at step ${obs.steps}: context stopped advancing across the step-budget checkpoint${obs.budgetReason ? ` (${obs.budgetReason})` : ""}.`;
+    return stopDecision(
+      {
         cause: "step_backstop",
         action: "paused",
-        summary: obs.budgetReason
-          ? `Paused at the adaptive ${obs.maxSteps}-step budget before context pressure (${obs.budgetReason}).`
-          : `Paused at the ${obs.maxSteps}-step backstop before context pressure.`,
+        summary,
         steps: obs.steps,
         ...(analysis.context ? { context: analysis.context } : {}),
       },
-      debug: withDebug(
+      withDebug(
         "step_backstop",
         analysis,
-        "adaptive step budget is a runaway circuit breaker",
+        atCeiling ? "emergency ceiling reached" : "progress guard failed",
       ),
-    };
+    );
   }
 
   return null;
@@ -181,15 +235,30 @@ function actionForStop(stop: TurnStop): Exclude<TurnPolicyAction["type"], "conti
   return stop.action === "failed" ? "fail" : "pause";
 }
 
+/** The step-axis assessment the loop reads: a terminating stop, OR a checkpoint (auto-continue), OR
+ *  neither (run the next step). A checkpoint carries no `TurnStop` - emission + the accumulated grant
+ *  are the loop's job, so the gate stays a pure decision (D-007). */
+export interface TurnAssessment {
+  readonly stop: TurnStop | null;
+  readonly checkpoint: boolean;
+}
+
 export const TurnTerminationGate = {
   decide(obs: TurnPolicyObservation): TurnStop | null {
     return decideTermination(obs)?.stop ?? null;
+  },
+  assess(obs: TurnPolicyObservation): TurnAssessment {
+    const decision = decideTermination(obs);
+    return { stop: decision?.stop ?? null, checkpoint: decision?.checkpoint ?? false };
   },
 };
 
 export function evaluateTurnTermination(obs: TurnPolicyObservation): TurnPolicyAction {
   const decision = decideTermination(obs);
-  if (decision) {
+  if (decision?.checkpoint) {
+    return { type: "checkpoint", debug: decision.debug };
+  }
+  if (decision?.stop) {
     return {
       type: actionForStop(decision.stop),
       stop: decision.stop,

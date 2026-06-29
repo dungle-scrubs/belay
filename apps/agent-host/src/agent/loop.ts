@@ -116,6 +116,13 @@ const DEFAULT_TOOL_STALL_MS = envNumber("TREVOR_TOOL_STALL_MS", 300_000);
  */
 const UNBOUNDED_TOOLS: ReadonlySet<string> = new Set(["ask_user"]);
 
+/** The progress guard threshold (02.17 D-003): a step-budget checkpoint auto-continues only if the
+ *  prompt grew by at least this many tokens since the previous checkpoint. Tiny relative to a real
+ *  work window (thousands of tokens of tool results), so genuine work always clears it; a diverse-no-op
+ *  loop that the same-tool stall detector misses adds ~0 and trips it, pausing instead of running to
+ *  the emergency ceiling. */
+const CHECKPOINT_MIN_ADVANCE_TOKENS = 1_024;
+
 export interface TurnLoopConfig {
   /** Absolute runaway ceiling, independent of the adaptive per-step budget (D-011): the loop derives
    *  an effective step budget each round (see turn-budget.ts) and clamps it to never exceed this. Only
@@ -327,6 +334,16 @@ export type AgentEvent =
       readonly detail: string;
       readonly diagnostic?: ProviderDiagnostic;
     }
+  | {
+      /** A step-budget CHECKPOINT (02.17): the loop reached the adaptive budget with headroom + progress
+       *  below the emergency ceiling, so it auto-continues and drops this quiet breadcrumb instead of
+       *  pausing. A durable, non-terminating marker (modeled on `recovered`). */
+      readonly type: "checkpoint";
+      readonly steps: number;
+      readonly pressure: number;
+      readonly threshold: number;
+      readonly detail: string;
+    }
   | { readonly type: "empty" };
 
 /**
@@ -414,6 +431,15 @@ export function runAgent(
   let repeatedToolSignature: string | undefined;
   let repeatedToolRounds = 0;
 
+  // Step-backstop auto-continue (02.17): the adaptive budget is a re-evaluation CHECKPOINT, not a hard
+  // pause. `grantedSteps` accumulates one tier-base worth per auto-continue so checkpoints are DISCRETE
+  // (the active threshold is `effectiveMaxSteps + grantedSteps`, capped at the emergency ceiling);
+  // `checkpointInputTokens` snapshots context at the last checkpoint so the progress guard can require
+  // a non-trivial advance over the window. The emergency ceiling stays the sole step-axis terminator.
+  let grantedSteps = 0;
+  let checkpointInputTokens = 0;
+  let checkpointBaselined = false;
+
   // The adaptive per-step budget (D-009…D-013): derived fresh from the live facts (served context
   // window, prompt pressure, repeated-tool progress, reasoning level) so a large-context, low-pressure
   // turn gets far more room than the old static 32, while a near-overflow or near-stalled turn gets
@@ -441,20 +467,28 @@ export function runAgent(
   const assessTurn = (
     steps: number,
     providerDiagnostic?: ProviderProtocolDiagnostic,
-  ): { stop: TurnStop | null; budget: TurnBudget } => {
+  ): { stop: TurnStop | null; checkpoint: boolean; budget: TurnBudget } => {
     const budget = currentBudget();
-    const stop = TurnTerminationGate.decide({
+    // The active CHECKPOINT threshold composes the accumulated grant onto the live adaptive budget,
+    // capped at the emergency ceiling (02.17 D-005). The progress guard (D-003) measures the prompt's
+    // growth since the last checkpoint; the gate auto-continues below the ceiling when it advanced.
+    const threshold = Math.min(budget.emergencyMaxSteps, budget.effectiveMaxSteps + grantedSteps);
+    const contextAdvanced =
+      lastInputTokens - checkpointInputTokens >= CHECKPOINT_MIN_ADVANCE_TOKENS;
+    const { stop, checkpoint } = TurnTerminationGate.assess({
       steps,
-      maxSteps: budget.effectiveMaxSteps,
+      maxSteps: threshold,
       inputTokens: lastInputTokens,
       contextWindow: lastContextWindow,
       contextBudgetFraction: config.contextBudgetFraction,
       repeatedToolName,
       repeatedToolRounds,
       budgetReason: budget.reason,
+      emergencyMaxSteps: budget.emergencyMaxSteps,
+      contextAdvanced,
       ...(providerDiagnostic ? { providerDiagnostic } : {}),
     });
-    return { stop, budget };
+    return { stop, checkpoint, budget };
   };
 
   // One overflow adjustment: mutate the conversation/reasoning in place and return a
@@ -567,13 +601,22 @@ export function runAgent(
       // governor - the prior step's prompt crossing the configured fraction of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are
       // clear (no prior usage), so the first round always runs.
-      const { stop, budget } = assessTurn(n);
+      const { stop, checkpoint, budget } = assessTurn(n);
+      const activeThreshold = Math.min(
+        budget.emergencyMaxSteps,
+        budget.effectiveMaxSteps + grantedSteps,
+      );
       // Structured budget factors behind the verbose `agent` scope (D-026): a postmortem can tell a
-      // healthy large-context budget exhaustion from an unknown-telemetry fallback via tier/telemetry.
+      // healthy large-context budget exhaustion from an unknown-telemetry fallback via tier/telemetry,
+      // and an auto-continued checkpoint from a ceiling/guard pause via grant + threshold + advance.
       debug("agent", "turn-budget", {
         step: n,
         effective: budget.effectiveMaxSteps,
         emergency: budget.emergencyMaxSteps,
+        grantedSteps,
+        activeThreshold,
+        contextAdvanced: lastInputTokens - checkpointInputTokens,
+        checkpoint,
         tier: budget.factors.contextTier,
         telemetry: budget.factors.telemetryQuality,
         pressure: budget.factors.pressure,
@@ -591,6 +634,29 @@ export function runAgent(
         return Stream.concat(
           Stream.succeed<AgentEvent>({ type: "stop", stop }),
           Stream.succeed<AgentEvent>({ type: "step_limit", steps: n }),
+        );
+      }
+      if (checkpoint) {
+        // Auto-continue: grant one tier-base worth so the NEXT checkpoint is further out (discrete
+        // checkpoints, D-005), snapshot context for the next progress-guard window, drop a quiet
+        // breadcrumb, then RE-ENTER this step - the re-check now passes the raised threshold and runs
+        // the model step. The emergency ceiling still terminates the step axis.
+        grantedSteps += budget.factors.baseBudget;
+        checkpointInputTokens = lastInputTokens;
+        const pressure = budget.factors.pressure;
+        const nextThreshold = Math.min(
+          budget.emergencyMaxSteps,
+          budget.effectiveMaxSteps + grantedSteps,
+        );
+        return Stream.concat(
+          Stream.succeed<AgentEvent>({
+            type: "checkpoint",
+            steps: n,
+            pressure,
+            threshold: nextThreshold,
+            detail: `continued at step ${n} - ${(pressure * 100).toFixed(1)}% context, room left`,
+          }),
+          step(n),
         );
       }
       const toolCalls: ToolCall[] = [];
@@ -648,6 +714,13 @@ export function runAgent(
               // Capture the prompt size + window for the next round's context-budget gate.
               lastInputTokens = event.usage.input;
               lastContextWindow = event.usage.contextWindow;
+              // Baseline the progress guard at the FIRST observed prompt size (02.17): the first
+              // checkpoint then measures growth DURING the turn, so a flat (no-context-growth) turn
+              // pauses at the budget instead of getting a free auto-continue from the start-at-zero.
+              if (!checkpointBaselined) {
+                checkpointInputTokens = lastInputTokens;
+                checkpointBaselined = true;
+              }
             }
             // text/thinking/usage flow through unchanged (shared ModelEvent shapes).
             return Option.some<AgentEvent>(event);

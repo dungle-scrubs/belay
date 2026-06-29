@@ -460,6 +460,42 @@ test("D-079: an assistant.reconnecting event renders an inline reconnecting mark
   );
 });
 
+test("02.17: an assistant.continued event renders a quiet checkpoint breadcrumb", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.assistantContinued({
+        runId: "r1",
+        steps: 64,
+        pressure: 0.207,
+        threshold: 128,
+        detail: "continued at step 64 - 20.7% context, room left",
+      }),
+    ),
+    ev(4, events.assistantDelta({ runId: "r1", text: "more work after the checkpoint" })),
+    ev(5, events.assistantCompleted({ runId: "r1", text: "more work after the checkpoint" })),
+  ];
+  const messages = toTranscript(log);
+  const breadcrumb = messages.find(
+    (m): m is Extract<Message, { kind: "continued" }> => m.kind === "continued",
+  );
+  assert.ok(breadcrumb, "a continued breadcrumb is projected");
+  assert.equal(breadcrumb.steps, 64);
+  assert.equal(breadcrumb.pressure, 0.207);
+  // It is a NON-terminating marker: the turn still completes normally with its answer below.
+  assert.ok(
+    messages.some(
+      (m) => m.kind === "assistant" && m.text.includes("more work after the checkpoint"),
+    ),
+    "the continued output streams after the breadcrumb",
+  );
+  // The completion carries no step_backstop stop - the loop continued, it did not pause.
+  const completed = messages.find((m) => m.kind === "assistant" && m.done);
+  assert.equal(completed?.kind === "assistant" ? completed.stop : "x", undefined);
+});
+
 test("02.15: a reconnecting marker carries the threaded maxAttempts denominator", () => {
   const log = [
     ev(1, events.userMessage({ text: "go", provider: "qwen" })),

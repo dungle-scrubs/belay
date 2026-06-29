@@ -103,7 +103,11 @@ export function collectingEmit(): {
 export async function runTurn(
   provider: Provider,
   history: readonly ChatMessage[],
-  options: { readonly runId: string; readonly reasoning?: string },
+  options: {
+    readonly runId: string;
+    readonly reasoning?: string;
+    readonly loop?: Parameters<typeof publishTurn>[2]["loop"];
+  },
 ): Promise<TrevorEventInput[]> {
   const { layer, events } = collectingEmit();
   await Effect.runPromise(publishTurn(provider, history, options).pipe(Effect.provide(layer)));

@@ -1,6 +1,11 @@
 import { events, type TurnStop } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
-import { type AgentEvent, type DelegateCapability, runAgent } from "./agent/loop";
+import {
+  type AgentEvent,
+  type DelegateCapability,
+  runAgent,
+  type TurnLoopConfig,
+} from "./agent/loop";
 import { recordTurnStop } from "./agent/turn-stop-metrics";
 import type { HistoryImageResolver } from "./artifacts";
 import { DeltaBuffer } from "./delta-buffer";
@@ -39,9 +44,12 @@ export function publishTurn(
     /** The delegation capability for a PARENT turn (D-048); absent on a child turn (depth-1). */
     readonly delegate?: DelegateCapability;
     readonly resolveImages?: HistoryImageResolver;
+    /** Optional turn-loop config overrides (e.g. a small `emergencyMaxSteps` for tests); the loop
+     *  fills the rest from `DEFAULT_TURN_LOOP_CONFIG`. Absent in production. */
+    readonly loop?: Partial<TurnLoopConfig>;
   },
 ): Effect.Effect<void, never, Emit> {
-  const { runId, reasoning, toolNames, delegate, resolveImages } = options;
+  const { runId, reasoning, toolNames, delegate, resolveImages, loop } = options;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -220,6 +228,20 @@ export function publishTurn(
           // distinct from a clean answer; flush so the forced answer reads as a new segment.
           yield* flushAll;
           stepLimitSteps = event.steps;
+        } else if (event.type === "checkpoint") {
+          // A step-budget checkpoint auto-continued the turn (02.17): the adaptive budget was reached
+          // with headroom + progress below the emergency ceiling. Finalize the open segment and surface
+          // a quiet, durable breadcrumb; the continued output streams below it. Modeled on `recovered`.
+          yield* flushAll;
+          yield* emit.publish(
+            events.assistantContinued({
+              runId,
+              steps: event.steps,
+              pressure: event.pressure,
+              threshold: event.threshold,
+              detail: event.detail,
+            }),
+          );
         } else {
           // input is the prompt size of the latest step (current context); output sums.
           usage = {
@@ -239,7 +261,11 @@ export function publishTurn(
       });
 
     yield* Stream.runForEach(
-      runAgent(provider, history, reasoning, runId, useTools, { toolNames, delegate }),
+      runAgent(provider, history, reasoning, runId, useTools, {
+        toolNames,
+        delegate,
+        ...(loop ? { loop } : {}),
+      }),
       handle,
     ).pipe(
       Effect.onExit((exit) =>

@@ -152,6 +152,12 @@ test("M2: missing telemetry is conservative but still returns the emergency ceil
   assert.equal(budget.emergencyMaxSteps, EMERGENCY_MAX_STEPS);
 });
 
+test("02.17: the emergency ceiling is pinned at 256 (raised from 128 for checkpoint headroom)", () => {
+  // A deliberate, visible pin: the step backstop now auto-continues at the adaptive budget, so the
+  // ceiling is the sole finite step-axis terminator and was raised to give more room before it fires.
+  assert.equal(EMERGENCY_MAX_STEPS, 256);
+});
+
 test("M2: the emergency ceiling is higher than the ordinary fallback but finite", () => {
   const budget = deriveTurnBudget(base);
   assert.ok(budget.emergencyMaxSteps > FALLBACK_MAX_STEPS);
