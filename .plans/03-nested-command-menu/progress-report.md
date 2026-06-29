@@ -22,11 +22,11 @@
 
 ## M2: Generic Web Renderer
 
-- [ ] RED: Add Storybook states for root, child, breadcrumb/back, search, disabled, empty, long labels, narrow viewport, and keyboard navigation
-- [ ] GREEN: Build reusable nested command-menu component using the shared command modal foundation
-- [ ] RED: Add web tests for keyboard navigation, back behavior, selection, disabled rows, search, and accessibility
-- [ ] GREEN: Wire generic renderer to structured command-menu payloads
-- [ ] REFACTOR: Keep command-specific mapping in data, not component branches
+- [x] RED: Add Storybook states for root, child, breadcrumb/back, search, disabled, empty, long labels, narrow viewport, and keyboard navigation (`command-menu.stories.tsx`: Root, ChildMenu, DisabledRows, NotSearchable, Empty, LongLabels, NarrowViewport)
+- [x] GREEN: Build reusable nested command-menu component using the shared command modal foundation (`command-menu.tsx` reuses the model-chooser takeover shape: back arrow + title/breadcrumb header, search box, row list; `use-command-menu.ts` owns nav/search/keyboard)
+- [x] RED: Add web tests for keyboard navigation, back behavior, selection, disabled rows, search, and accessibility (`command-menu.test.tsx`, 9 tests)
+- [x] GREEN: Wire generic renderer to structured command-menu payloads (the component renders ANY `CommandMenuPayload`; `defaultOpenId` deep-links a submenu)
+- [x] REFACTOR: Keep command-specific mapping in data, not component branches (zero command-specific branches: labels/disabled/badges/submenus all come from the payload)
 
 ## M3: Command Execution Semantics
 
