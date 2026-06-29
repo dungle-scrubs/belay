@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import type { PublishInput, SessionTransport } from "@trevor/session";
+import type { SessionTransport } from "@trevor/session";
+import { recordingTransport } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { AgentDefinition } from "../agents";
@@ -23,25 +24,6 @@ const USAGE = { input: 10, output: 5, contextWindow: 1000, genMs: 1 } as const;
  * folds the child's final message back as the result. Driven with a fake transport that records
  * publishes per session and a fake provider that answers - no store, no model.
  */
-
-/** A fake transport recording ensured sessions and the events published to each. */
-function fakeTransport() {
-  const ensured: string[] = [];
-  const published = new Map<string, PublishInput[]>();
-  const transport: SessionTransport = {
-    ensureSession: async (id) => {
-      ensured.push(id);
-      return id;
-    },
-    publishEvent: async (id, input) => {
-      const list = published.get(id) ?? [];
-      list.push(input);
-      published.set(id, list);
-    },
-    connectSession: () => ({ close: () => {} }),
-  };
-  return { ensured, published, transport };
-}
 
 /** A provider that answers in one step with a fixed final message (no tool calls). */
 function answeringProvider(text: string): Provider {
@@ -95,7 +77,7 @@ function context(transport: SessionTransport): DelegationContext {
 }
 
 test("a delegation creates an isolated child session seeded with only the task", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   const out = await runDelegatedChild(context(t.transport), {
     agent: EXPLORER,
     task: "find the auth code",
@@ -110,7 +92,7 @@ test("a delegation creates an isolated child session seeded with only the task",
   assert.equal(out.result, "auth lives in src/auth.ts", "the child's final message folds back");
   assert.ok(t.ensured.includes("child-0"), "the child session was ensured");
 
-  const childLog = t.published.get("child-0") ?? [];
+  const childLog = t.publishedBy("child-0");
   const first = childLog[0];
   assert.equal(first?.type, "user.message", "the child's first event is the seeded task");
   assert.equal((first?.payload as { text?: string }).text, "find the auth code");
@@ -122,7 +104,7 @@ test("a delegation creates an isolated child session seeded with only the task",
 });
 
 test("the child log shares NO parent transcript events (isolation)", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   await runDelegatedChild(context(t.transport), {
     agent: EXPLORER,
     task: "investigate",
@@ -132,7 +114,7 @@ test("the child log shares NO parent transcript events (isolation)", async () =>
     mode: "inline",
   });
 
-  const childLog = t.published.get("child-0") ?? [];
+  const childLog = t.publishedBy("child-0");
   // Nothing on the child carries the parent run id, and no delegation link rides the child log.
   assert.ok(
     !childLog.some((e) => (e.payload as { runId?: string }).runId === "run-parent"),
@@ -142,7 +124,7 @@ test("the child log shares NO parent transcript events (isolation)", async () =>
 });
 
 test("the parent session gets a running then a done delegated.to link with the result", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   await runDelegatedChild(context(t.transport), {
     agent: EXPLORER,
     task: "look",
@@ -152,9 +134,7 @@ test("the parent session gets a running then a done delegated.to link with the r
     mode: "inline",
   });
 
-  const parentLog = (t.published.get("parent-session") ?? []).filter(
-    (e) => e.type === "delegated.to",
-  );
+  const parentLog = t.publishedBy("parent-session").filter((e) => e.type === "delegated.to");
   assert.equal(parentLog.length, 2, "a running link then a terminal link");
   const running = parentLog[0]?.payload as Record<string, unknown>;
   const done = parentLog[1]?.payload as Record<string, unknown>;
@@ -166,7 +146,7 @@ test("the parent session gets a running then a done delegated.to link with the r
 });
 
 test("a child turn that errors folds back as a failed link, never throwing into the parent", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   // A provider whose stream fails: publishTurn surfaces it as an error completion, not an exception.
   const failing: Provider = {
     ...answeringProvider(""),
@@ -181,7 +161,8 @@ test("a child turn that errors folds back as a failed link, never throwing into 
     mode: "inline",
   });
   assert.equal(out.failed, true);
-  const done = (t.published.get("parent-session") ?? [])
+  const done = t
+    .publishedBy("parent-session")
     .filter((e) => e.type === "delegated.to")
     .at(-1)?.payload as Record<string, unknown>;
   assert.equal(done.status, "failed", "the terminal link marks the failure");
@@ -242,7 +223,7 @@ test("the loop routes a delegate_inline call to the capability and folds the res
 });
 
 test("a child turn is offered NO delegation tool (depth-1)", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   let childOffered: string[] = [];
   const provider: Provider = {
     ...answeringProvider("done"),
@@ -266,7 +247,7 @@ test("a child turn is offered NO delegation tool (depth-1)", async () => {
 });
 
 test("the capability validates the agent id and a non-empty task with structured errors", async () => {
-  const cap = buildDelegateCapability(context(fakeTransport().transport), {
+  const cap = buildDelegateCapability(context(recordingTransport().transport), {
     provider: answeringProvider(""),
     parentRunId: "rp",
     agents: [EXPLORER],
@@ -298,7 +279,7 @@ function capability(transport: SessionTransport, provider: Provider) {
 }
 
 test("an inline ephemeral `define` runs a one-off agent and folds its result back", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   const cap = capability(t.transport, answeringProvider("ephemeral did it"));
   const out = await cap.run(
     "delegate_inline",
@@ -308,13 +289,13 @@ test("an inline ephemeral `define` runs a one-off agent and folds its result bac
     }),
   );
   assert.equal(out, "ephemeral did it");
-  const link = (t.published.get("parent-session") ?? []).find((e) => e.type === "delegated.to")
+  const link = t.publishedBy("parent-session").find((e) => e.type === "delegated.to")
     ?.payload as Record<string, unknown>;
   assert.equal(link.agent, "ephemeral", "the link records it as an ephemeral agent");
 });
 
 test("an ephemeral define is validated strictly against the registry", async () => {
-  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  const cap = capability(recordingTransport().transport, answeringProvider(""));
   assert.match(
     await cap.run(
       "delegate_inline",
@@ -351,7 +332,7 @@ test("an ephemeral define is validated strictly against the registry", async () 
 });
 
 test("an ephemeral define needs a description and instructions", async () => {
-  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  const cap = capability(recordingTransport().transport, answeringProvider(""));
   assert.match(
     await cap.run("delegate_inline", JSON.stringify({ define: { instructions: "y" }, task: "go" })),
     /needs a "description"/,
@@ -363,7 +344,7 @@ test("an ephemeral define needs a description and instructions", async () => {
 });
 
 test("a call with neither agent nor define is a structured error", async () => {
-  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  const cap = capability(recordingTransport().transport, answeringProvider(""));
   assert.match(
     await cap.run("delegate_inline", JSON.stringify({ task: "go" })),
     /requires an "agent" id or an inline "define"/,
@@ -421,7 +402,7 @@ test("both delegation tools are offered, and delegate_background advertises its 
 });
 
 test("delegate_background returns immediately with an ack and starts a tracked child", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   const bg = recordingDelegator(t.transport);
   const cap = capabilityWithBackground(t.transport, answeringProvider("found it"), bg.delegator);
   const ack = await cap.run(
@@ -438,13 +419,13 @@ test("delegate_background returns immediately with an ack and starts a tracked c
   assert.equal(bg.started[0]?.mode, "background");
   // The child runs to completion and lands a terminal link on the parent (the late result).
   await bg.drain();
-  const links = (t.published.get("parent-session") ?? []).filter((e) => e.type === "delegated.to");
+  const links = t.publishedBy("parent-session").filter((e) => e.type === "delegated.to");
   assert.equal((links.at(-1)?.payload as Record<string, unknown>).status, "done");
   assert.equal((links.at(-1)?.payload as Record<string, unknown>).result, "found it");
 });
 
 test("delegate_background is rejected past the cap (and does not start a child)", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   const bg = recordingDelegator(t.transport, 4);
   bg.setAvailable(false); // cap reached
   const cap = capabilityWithBackground(t.transport, answeringProvider("x"), bg.delegator);
@@ -457,7 +438,7 @@ test("delegate_background is rejected past the cap (and does not start a child)"
 });
 
 test("delegate_background is unavailable when the host wires no background delegator", async () => {
-  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  const cap = capability(recordingTransport().transport, answeringProvider(""));
   assert.match(
     await cap.run("delegate_background", JSON.stringify({ agent: "explorer", task: "scan" })),
     /background delegation is not available/,
@@ -465,7 +446,7 @@ test("delegate_background is unavailable when the host wires no background deleg
 });
 
 test("a background child is clamped to READ-ONLY tools (even general-purpose / tools:['*'])", async () => {
-  const t = fakeTransport();
+  const t = recordingTransport();
   let childOffered: string[] = [];
   const provider: Provider = {
     ...answeringProvider("done"),
@@ -493,7 +474,7 @@ test("a background child is clamped to READ-ONLY tools (even general-purpose / t
 });
 
 test("an ephemeral agent cannot allow-list delegate_background either (depth-1 covers both tools)", async () => {
-  const cap = capability(fakeTransport().transport, answeringProvider(""));
+  const cap = capability(recordingTransport().transport, answeringProvider(""));
   assert.match(
     await cap.run(
       "delegate_inline",

@@ -1,17 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { AGENTS_FILE } from "./agents-md";
 import { RuleCollector } from "./rules";
-
-const IGNORE_DIRS = new Set([
-  ".git",
-  ".trevor/generated",
-  ".turbo",
-  "coverage",
-  "dist",
-  "node_modules",
-  "out",
-]);
+import { walkContextTree } from "./walk";
 
 export interface InitEvidence {
   readonly claudeFiles: readonly string[];
@@ -38,33 +29,6 @@ function safeRead(path: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function shouldIgnoreDir(root: string, dir: string): boolean {
-  const rel = relative(root, dir);
-  return rel.split("/").some((part) => IGNORE_DIRS.has(part));
-}
-
-function walk(root: string): string[] {
-  if (!existsSync(root)) {
-    return [];
-  }
-  const files: string[] = [];
-  const visit = (dir: string): void => {
-    if (shouldIgnoreDir(root, dir)) {
-      return;
-    }
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        visit(path);
-      } else if (entry.isFile()) {
-        files.push(path);
-      }
-    }
-  };
-  visit(root);
-  return files.sort();
 }
 
 function readPackageScripts(root: string): {
@@ -104,7 +68,7 @@ function relativeList(root: string, paths: readonly string[]): readonly string[]
 
 export function collectInitEvidence(cwd: string): InitEvidence {
   const root = resolve(cwd);
-  const files = walk(root);
+  const files = walkContextTree(root);
   const packageInfo = readPackageScripts(root);
   const docs = files.filter((path) => {
     const name = basename(path).toLowerCase();

@@ -3,6 +3,7 @@ import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderEvent } from "../../providers";
 import { buildDistillPrompt, distillRecall, parseCitations } from "./distill";
+import { recallRecord, recallSessionRef } from "./recall-test-support";
 import type { RecallNeighborhood, RecallRecord, RecallSessionRef } from "./types";
 
 /**
@@ -40,27 +41,10 @@ function fakeProvider(opts: {
   };
 }
 
-const REF: RecallSessionRef = {
-  sessionId: "sib",
-  label: "old session",
-  project: "p",
-  origin: "sibling-session",
-};
+const REF: RecallSessionRef = recallSessionRef({ label: "old session" });
 
-function rec(seq: number): RecallRecord {
-  return {
-    id: `sib#${seq}`,
-    session: REF,
-    seq,
-    range: { fromSeq: seq, toSeq: seq },
-    kind: "user",
-    runId: null,
-    tool: null,
-    foldId: null,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    text: `content ${seq}`,
-  };
-}
+const rec = (seq: number): RecallRecord =>
+  recallRecord(seq, { session: REF, text: `content ${seq}` });
 
 const NB: RecallNeighborhood = {
   anchor: { record: rec(5), score: 2, excerpt: "content 5" },

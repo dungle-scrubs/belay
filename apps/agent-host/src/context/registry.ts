@@ -8,6 +8,7 @@ import {
   collectEagerSources,
   readAgentsFile,
   renderContext,
+  SCOPE_PRECEDENCE,
 } from "./agents-md";
 import { RuleCollector, type TrevorRuleSource } from "./rules";
 
@@ -27,6 +28,17 @@ export class ContextRegistry {
   private lazyRules = new Map<string, TrevorRuleSource>();
   /** Directories already checked for a below-cwd AGENTS.md (present or not), so a re-touch never re-stats. */
   private scanned = new Set<string>();
+  /** The cached `.trevor/rules` collector for the current cwd. Building one walks the rules tree, so it
+   *  is reused across file touches + the per-turn report and only rebuilt on a cwd change or `reset()`. */
+  private rules: { cwd: string; collector: RuleCollector } | null = null;
+
+  /** The cached rule collector for `cwd`, rebuilt (re-walked) only when cwd changes or after reset(). */
+  private rulesFor(cwd: string): RuleCollector {
+    if (!this.rules || this.rules.cwd !== cwd) {
+      this.rules = { cwd, collector: new RuleCollector(cwd) };
+    }
+    return this.rules.collector;
+  }
 
   /** True when `child` is `root` or sits inside it. */
   private static within(child: string, root: string): boolean {
@@ -78,7 +90,7 @@ export class ContextRegistry {
         });
       }
     }
-    const rules = new RuleCollector(cwd);
+    const rules = this.rulesFor(cwd);
     for (const rule of rules.scopedRulesForFile(absFile)) {
       this.lazyRules.set(rule.path, rule);
     }
@@ -87,7 +99,7 @@ export class ContextRegistry {
   /** The full context report - eager (re-read) + the lazy below-cwd set - for the prompt + /doctor. */
   report(cwd: string = process.cwd(), workspaceRoot: string = WORKSPACE_ROOT): ContextReport {
     const eager = collectEagerSources({ cwd, workspaceRoot });
-    const rules = new RuleCollector(cwd);
+    const rules = this.rulesFor(cwd);
     const alwaysRuleSources = rules.alwaysRules();
     const alwaysRules = alwaysRuleSources.map((rule) => rules.contextScope(rule, "trevor-rule"));
     // Below-cwd is the MOST specific, so it sits last (highest precedence); sort parent-before-child.
@@ -100,7 +112,12 @@ export class ContextRegistry {
       ...alwaysRuleSources.map((rule) => rules.reportSource(rule)),
       ...lazyRuleSources.map((rule) => rules.reportSource(rule)),
     ];
-    return renderContext([...eager, ...alwaysRules, ...lazy, ...lazyRules], undefined, ruleSources);
+    // Order by the owned scope-precedence rank (stable) instead of trusting concatenation order, so a
+    // new band slots in by its declared rank and the comment-vs-code ordering can't drift.
+    const ordered = [...eager, ...alwaysRules, ...lazy, ...lazyRules].sort(
+      (a, b) => SCOPE_PRECEDENCE[a.scope] - SCOPE_PRECEDENCE[b.scope],
+    );
+    return renderContext(ordered, undefined, ruleSources);
   }
 
   /** The prompt block (eager + lazy), or "" when nothing is ingested. Re-rendered every turn. */
@@ -113,6 +130,7 @@ export class ContextRegistry {
     this.lazy.clear();
     this.lazyRules.clear();
     this.scanned.clear();
+    this.rules = null;
   }
 }
 

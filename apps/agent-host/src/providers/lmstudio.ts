@@ -1,5 +1,6 @@
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { Effect, Stream } from "effect";
+import { envNumber } from "../env";
 import { LmStudioClient } from "./lmstudio-client";
 import { streamPiAiModel } from "./pi-ai";
 import {
@@ -54,8 +55,7 @@ export function lmStudioProvider(opts: {
     url: process.env.LMSTUDIO_URL ?? DEFAULT_LMSTUDIO_URL,
     model: opts.model,
     label: opts.label,
-    contextCap:
-      opts.maxContext ?? (Number(process.env.LMSTUDIO_MAX_CONTEXT) || Number.POSITIVE_INFINITY),
+    contextCap: opts.maxContext ?? envNumber("LMSTUDIO_MAX_CONTEXT", Number.POSITIVE_INFINITY),
     visionOverride: visionOverride(process.env.LMSTUDIO_VISION),
     lmsBin: process.env.LMS_BIN ?? "lms",
   });

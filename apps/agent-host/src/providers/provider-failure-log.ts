@@ -1,42 +1,20 @@
-import type { Fields } from "../log";
 import {
-  buildProviderFailureLogFields,
   buildProviderFailureRecord,
-  type ProviderFailureLogInput,
   type ProviderFailureRecord,
   type RecordFailureInput,
 } from "./failure-record-schema";
 
-export type {
-  ProviderFailureLogInput,
-  ProviderFailureRecord,
-  RecordFailureInput,
-} from "./failure-record-schema";
-
 /**
- * The host's recent-provider-failure diagnostics (D-076 M6). Two jobs, one cohesive module:
- *
- * 1. {@link providerFailureLogFields} builds the SANITIZED structured fields a boundary logs for a
- *    failure - classification, retry decision, attempt number, source/model, phase, and a stable
- *    fingerprint - so every log line for the same shape correlates and never carries a secret.
- * 2. {@link ProviderFailureLog} (the `providerFailures` singleton) keeps the last N terminal failures
- *    in memory, tagged retry-exhausted vs non-retryable-terminal, so `/doctor` can report the two
- *    SEPARATELY (a transient outage that gave up reads differently from an auth/quota/rejected
- *    failure that was never eligible for retry).
+ * The host's recent-provider-failure diagnostics ring (D-076 M6). The `providerFailures` singleton
+ * keeps the last N terminal failures in memory, tagged retry-exhausted vs non-retryable-terminal, so
+ * `/doctor` can report the two SEPARATELY (a transient outage that gave up reads differently from an
+ * auth/quota/rejected failure that was never eligible for retry). The sanitized structured fields a
+ * boundary logs for a failure are `buildProviderFailureLogFields`, owned beside the schema in
+ * failure-record-schema.ts; this module is the ring + summary that build on those records.
  *
  * In-memory and best-effort: it informs diagnostics, it never gates a turn. Counts and fingerprints
  * only - no prompt, key, token, or raw payload ever lands here.
  */
-
-/**
- * The flat, greppable fields for a provider-failure log line (D-076 M6). Carries the classification,
- * retry decision, attempt, source/model, phase, and the stable fingerprint - plus the richer shape
- * metadata (status/code/shape field names) that is useful behind the verbose `provider` debug scope.
- * Every value is shape or a sanitized string; no secret can ride here.
- */
-export function providerFailureLogFields(input: ProviderFailureLogInput): Fields {
-  return buildProviderFailureLogFields(input);
-}
 
 /** The redaction-safe summary `/doctor` reads: the two terminal categories, kept distinct. */
 export interface ProviderFailureSummary {

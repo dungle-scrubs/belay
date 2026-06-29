@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { type ArtifactRef, fetchBlobBytes } from "@trevor/session";
-import { RESERVED_PORTS } from "@trevor/session/ports";
+import { serviceUrl } from "@trevor/session/ports";
 import type { ChatImage, ChatMessage } from "./providers";
 
 const execAsync = promisify(exec);
@@ -17,7 +17,7 @@ const execAsync = promisify(exec);
  * as refs - the provider surfaces them as a short text note.
  */
 
-const BLOB_STORE_URL = process.env.BLOB_STORE_URL ?? `http://127.0.0.1:${RESERVED_PORTS.blob}`;
+const BLOB_STORE_URL = process.env.BLOB_STORE_URL ?? serviceUrl("blob");
 
 /** Image formats vision models reliably accept; anything else (e.g. HEIC) is not inlined. */
 const MODEL_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);

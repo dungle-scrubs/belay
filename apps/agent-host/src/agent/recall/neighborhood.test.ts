@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { expandNeighborhoods } from "./neighborhood";
+import { recallRecord, recallSessionRef } from "./recall-test-support";
 import type { RecallAnchor, RecallRecord, RecallSessionRef } from "./types";
 
 /**
@@ -15,27 +16,10 @@ function at<T>(arr: readonly T[], i: number): T {
   return value;
 }
 
-const REF: RecallSessionRef = {
-  sessionId: "s",
-  label: "session",
-  project: "p",
-  origin: "sibling-session",
-};
+const REF: RecallSessionRef = recallSessionRef({ sessionId: "s" });
 
-function rec(seq: number, session: RecallSessionRef = REF): RecallRecord {
-  return {
-    id: `${session.sessionId}#${seq}`,
-    session,
-    seq,
-    range: { fromSeq: seq, toSeq: seq },
-    kind: "user",
-    runId: null,
-    tool: null,
-    foldId: null,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    text: `record ${seq}`,
-  };
-}
+const rec = (seq: number, session: RecallSessionRef = REF): RecallRecord =>
+  recallRecord(seq, { session });
 
 function anchorOf(record: RecallRecord, score = 1): RecallAnchor {
   return { record, score, excerpt: record.text };

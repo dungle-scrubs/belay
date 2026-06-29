@@ -23,9 +23,9 @@ afterEach(() => {
 });
 
 test("turn stop debug metrics append under XDG state", async () => {
-  const { recordTurnStopMetric, turnStopMetricsPath } = await import("./turn-stop-metrics");
+  const { recordTurnStop, turnStopMetricsPath } = await import("./turn-stop-metrics");
 
-  await recordTurnStopMetric({
+  await recordTurnStop({
     runId: "run-1",
     provider: "deepseek",
     model: "deepseek-v4",

@@ -5,7 +5,8 @@ import type {
   SessionTransport,
 } from "@trevor/session";
 import { warn } from "../../log";
-import type { SiblingRead, SiblingSession } from "./engine";
+import { msg } from "../../messages";
+import { engineDiagnostic, type SiblingRead, type SiblingSession } from "./engine";
 import type { RecallDiagnostic, RecallSessionRef } from "./types";
 
 /**
@@ -26,8 +27,6 @@ const READ_TIMEOUT_MS = 4_000;
 
 export interface SiblingReaderOptions {
   readonly transport: SessionTransport;
-  /** Base URL of the durable store (local session-store or Richter) for the inventory fetch. */
-  readonly serviceUrl: string;
   /** A read-only participant identity for the sibling streams. */
   readonly identity: SessionIdentity;
   readonly currentSessionId: string;
@@ -37,19 +36,15 @@ export interface SiblingReaderOptions {
   readonly currentProject: string | null;
 }
 
-/** Fetches the durable-store inventory (`GET /sessions`); returns null on any failure. */
-async function fetchInventory(serviceUrl: string): Promise<SessionSummary[] | null> {
+/** Reads the durable-store inventory over the transport seam; returns null on any failure so recall
+ *  degrades to a diagnostic rather than throwing. */
+async function readInventory(
+  transport: SessionTransport,
+): Promise<readonly SessionSummary[] | null> {
   try {
-    const response = await fetch(`${serviceUrl}/sessions`);
-    if (!response.ok) {
-      return null;
-    }
-    const body = (await response.json()) as { sessions?: SessionSummary[] };
-    return Array.isArray(body.sessions) ? body.sessions : [];
+    return await transport.fetchInventory();
   } catch (error) {
-    warn("recall", "inventory fetch failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    warn("recall", "inventory fetch failed", { error: msg(error) });
     return null;
   }
 }
@@ -116,13 +111,11 @@ function refOf(summary: SessionSummary): RecallSessionRef {
  */
 export function createSiblingReader(opts: SiblingReaderOptions): () => Promise<SiblingRead> {
   return async () => {
-    const inventory = await fetchInventory(opts.serviceUrl);
+    const inventory = await readInventory(opts.transport);
     if (inventory === null) {
       return {
         sessions: [],
-        diagnostics: [
-          { sessionId: "", kind: "unreadable", detail: "session inventory unavailable" },
-        ],
+        diagnostics: [engineDiagnostic("unreadable", "session inventory unavailable")],
       };
     }
 

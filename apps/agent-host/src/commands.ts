@@ -1,6 +1,7 @@
 import type { CommandSpec, InternetSnapshot, SourceSummary } from "@trevor/session";
 import { buildInitProposal } from "./context/init-agents";
 import { buildDoctorCommandResult } from "./doctor/build";
+import { msg } from "./messages";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
 import { buildSkillCommand } from "./skills";
@@ -278,7 +279,7 @@ export function buildCommandRegistry(): CommandRegistry {
         return { text: await command.run(args, command.select(ctx)), ok: true };
       } catch (error) {
         return {
-          text: `error: ${error instanceof Error ? error.message : String(error)}`,
+          text: `error: ${msg(error)}`,
           ok: false,
         };
       }

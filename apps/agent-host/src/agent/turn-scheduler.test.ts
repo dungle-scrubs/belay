@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { PRODUCER_IDS, type SessionEvent } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./turn-scheduler";
 
@@ -28,30 +29,18 @@ import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./turn-sched
  */
 
 let counter = 0;
-function userEv(text: string, seq = counter++): SessionEvent {
-  return {
-    createdAt: "2026-01-01T00:00:00.000Z",
-    eventId: `e${seq}`,
-    payload: { text, provider: "qwen" },
-    producerId: "trevor-web",
-    seq,
-    sessionId: "test",
-    type: "user.message",
-  };
-}
+const userEv = (text: string, seq = counter++): SessionEvent =>
+  storedEvent(
+    { type: "user.message", payload: { text, provider: "qwen" } },
+    { seq, producerId: PRODUCER_IDS.web },
+  );
 
 /** An assistant.started for the attempt watermark (the prompt's turn began streaming). */
-function startedEv(runId: string, seq = counter++): SessionEvent {
-  return {
-    createdAt: "2026-01-01T00:00:00.000Z",
-    eventId: `e${seq}`,
-    payload: { runId },
-    producerId: "trevor-host",
-    seq,
-    sessionId: "test",
-    type: "assistant.started",
-  };
-}
+const startedEv = (runId: string, seq = counter++): SessionEvent =>
+  storedEvent(
+    { type: "assistant.started", payload: { runId } },
+    { seq, producerId: PRODUCER_IDS.host },
+  );
 
 function harness(opts: { leader?: boolean } = {}) {
   let leader = opts.leader ?? true;

@@ -215,3 +215,16 @@ export function buildSystemPrompt(
 ): string {
   return systemPromptBuilder.build(tools, context);
 }
+
+/**
+ * The fixed prompt OVERHEAD in characters for a turn: the system prompt plus the tool schemas the
+ * provider re-sends every step. The one owner of the `systemPrompt.length + JSON.stringify(tools).length`
+ * formula, shared by the turn's breakdown seed and the provider's overflow estimate so the two can't
+ * disagree on overhead. Empty tools contribute nothing (no `"[]"` 2-char artifact).
+ */
+export function promptOverheadChars(
+  systemPrompt: string | undefined,
+  tools: readonly ToolDef[],
+): number {
+  return (systemPrompt?.length ?? 0) + (tools.length > 0 ? JSON.stringify(tools).length : 0);
+}

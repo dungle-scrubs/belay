@@ -30,11 +30,5 @@ export function anthropicProvider(config: AnthropicConfig): PiAiProviderBase {
     // literal cast only satisfies getModel's strict typing.
     resolveModel: () => getModel(ANTHROPIC, config.model as "claude-opus-4-0"),
     fallback: { levels: ["off", "high"], images: true },
-    pickDefaultReasoning: (levels) =>
-      levels.includes("medium")
-        ? "medium"
-        : levels.includes("high")
-          ? "high"
-          : (levels[0] ?? "off"),
   });
 }

@@ -34,10 +34,20 @@ vi.mock("../tools", async () => {
   // The read-only partition is the cross-surface vocabulary (D-031), not a re-spelled literal,
   // so the mock can't drift from the real classification the loop dispatches against.
   const { READ_ONLY_TOOL_NAMES } = await import("@trevor/session");
+  // Non-empty so the loop advertises tools to the provider; content is irrelevant here.
+  const TOOL_DEFS = [{ name: "read", description: "read", parameters: {} }];
   return {
     READ_ONLY_TOOLS: READ_ONLY_TOOL_NAMES,
-    // Non-empty so the loop advertises tools to the provider; content is irrelevant here.
-    TOOL_DEFS: [{ name: "read", description: "read", parameters: {} }],
+    TOOL_DEFS,
+    offeredToolDefs: (
+      useTools: boolean,
+      toolNames: ReadonlySet<string> | undefined,
+      delegateDefs: readonly { name: string }[] | undefined,
+    ) => {
+      const registry = useTools ? TOOL_DEFS : [];
+      const allowed = toolNames ? registry.filter((t) => toolNames.has(t.name)) : registry;
+      return delegateDefs ? [...allowed, ...delegateDefs] : allowed;
+    },
     executeTool: (name: string, args: string): Effect.Effect<string> =>
       Effect.onInterrupt(
         Effect.promise(() => {

@@ -1,6 +1,16 @@
-import { BREAKDOWN_CATEGORIES, type BreakdownPool, type UsageBreakdown } from "@trevor/session";
+import {
+  BREAKDOWN_CATEGORIES,
+  type BreakdownPool,
+  CHARS_PER_TOKEN,
+  estimateTokens,
+  type UsageBreakdown,
+} from "@trevor/session";
 import { log } from "../log";
 import type { ChatMessage, Usage } from "../providers";
+
+// Re-exported from the canonical owner in @trevor/session so host modules keep importing the
+// heuristic from here (their existing import path) while the definition lives beside the schema.
+export { CHARS_PER_TOKEN, estimateTokens };
 
 /**
  * Per-turn token-source breakdown - "where does the context go?" Sizes are
@@ -27,16 +37,6 @@ import type { ChatMessage, Usage } from "../providers";
 
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;
-
-/**
- * The single char -> token heuristic for host-side estimates. Real token counts come from reported
- * provider usage; this is the deliberately rough proxy used only where no measurement exists:
- * usage breakdown display, compaction summaries, and recall distillation budgets.
- */
-export const CHARS_PER_TOKEN = 4;
-
-/** Estimates tokens from a character count via the shared ~4 chars/token heuristic. */
-export const estimateTokens = (chars: number): number => Math.round(chars / CHARS_PER_TOKEN);
 
 /** The accumulator's internal mutable shape (the wire `UsageBreakdown` is readonly). */
 interface InputCats {

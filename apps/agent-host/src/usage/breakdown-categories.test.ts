@@ -7,6 +7,7 @@ import {
   type TrevorEventInput,
   type UsageBreakdown,
 } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import { BreakdownAccumulator } from "./breakdown";
 
@@ -19,17 +20,8 @@ import { BreakdownAccumulator } from "./breakdown";
  * field names are a hard constraint - the round-trip test fails if any change.
  */
 
-function ev(input: TrevorEventInput): SessionEvent {
-  return {
-    createdAt: "2026-01-01T00:00:00.000Z",
-    eventId: "e0",
-    payload: input.payload,
-    producerId: "trevor-host",
-    seq: 0,
-    sessionId: "test",
-    type: input.type,
-  };
-}
+const ev = (input: TrevorEventInput): SessionEvent =>
+  storedEvent(input, { seq: 0, eventId: "e0", producerId: "trevor-host" });
 
 const SAMPLE: UsageBreakdown = {
   input: {

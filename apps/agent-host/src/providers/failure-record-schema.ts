@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Fields } from "../log";
+import type { ProviderFailureEvidence } from "./errors";
 import type { ProviderFailureClass, ProviderUserAction } from "./failure-taxonomy";
 import { redactSecrets } from "./failure-taxonomy";
 
@@ -137,24 +138,20 @@ export function mergeObservation(
   };
 }
 
-/** The inputs to a structured failure log line (already-redacted detail in, sanitized fields out). */
-export interface ProviderFailureLogInput {
+/**
+ * The inputs to a structured failure log line (already-redacted detail in, sanitized fields out). The
+ * failure's diagnostic surface is the shared {@link ProviderFailureEvidence}, so a callsite spreads
+ * `providerFailureEvidence(error)` and adds only where/when this line is about.
+ */
+export type ProviderFailureLogInput = ProviderFailureEvidence & {
   readonly provider: string;
   readonly model: string;
   readonly phase: string;
-  readonly classification?: ProviderFailureClass;
-  readonly retryable: boolean;
-  readonly userAction?: ProviderUserAction;
   /** The reconnect attempt this line is about (0 = the initial attempt / a terminal with no retries). */
   readonly attempt: number;
   /** Whether this line is a between-retries reconnect or the terminal outcome. */
   readonly outcome: "reconnect" | "terminal";
-  readonly status?: number;
-  readonly code?: string;
-  readonly shapeFields?: readonly string[];
-  /** A human detail; re-redacted defensively so a caller that forgot to sanitize still can't leak. */
-  readonly detail: string;
-}
+};
 
 /** Builds the flat, greppable fields for a provider-failure log line. */
 export function buildProviderFailureLogFields(input: ProviderFailureLogInput): Fields {

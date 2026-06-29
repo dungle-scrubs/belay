@@ -2,6 +2,7 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { freshSessionId } from "@trevor/session";
+import { msg } from "./messages";
 
 export interface WorkspaceSwitchFs {
   exists(path: string): boolean;
@@ -92,7 +93,7 @@ export function resolveCdTarget(args: string, options: ResolveCdTargetOptions): 
   } catch (error) {
     return {
       ok: false,
-      error: `Could not resolve directory: ${error instanceof Error ? error.message : String(error)}`,
+      error: `Could not resolve directory: ${msg(error)}`,
     };
   }
 

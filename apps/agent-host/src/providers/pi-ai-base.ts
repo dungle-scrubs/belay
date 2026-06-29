@@ -9,6 +9,7 @@ import { msg } from "../messages";
 import { ProviderAuthError } from "./errors";
 import { streamPiAiModel } from "./pi-ai";
 import type { CredentialResolver } from "./provider-auth";
+import { defaultReasoningLevel } from "./reasoning-policy";
 import {
   type ChatMessage,
   DescribableProvider,
@@ -42,8 +43,10 @@ export interface PiAiProviderParams {
   /** Thinking shape to assume when the model isn't (yet) in pi-ai's registry, so the host still
    *  starts: the levels to advertise and whether to claim image support. */
   readonly fallback: { readonly levels: readonly string[]; readonly images: boolean };
-  /** Picks the default reasoning level from the resolved (or fallback) levels. */
-  readonly pickDefaultReasoning: (levels: readonly string[]) => string;
+  /** Picks the default reasoning level from the resolved (or fallback) levels. Optional: defaults to
+   *  the shared `defaultReasoningLevel` (medium > high > off > lowest); set it only for a genuinely
+   *  different preference. */
+  readonly pickDefaultReasoning?: (levels: readonly string[]) => string;
 }
 
 export class PiAiProviderBase extends DescribableProvider {
@@ -78,7 +81,7 @@ export class PiAiProviderBase extends DescribableProvider {
     }
     this.reasoningLevels = levels;
     this.images = images;
-    this.defaultReasoning = params.pickDefaultReasoning(levels);
+    this.defaultReasoning = (params.pickDefaultReasoning ?? defaultReasoningLevel)(levels);
   }
 
   /** Image support from the registry (or the fallback); tools always supported; context

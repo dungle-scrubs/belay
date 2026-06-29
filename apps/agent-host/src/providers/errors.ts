@@ -46,6 +46,22 @@ export class ProviderUnavailable extends Data.TaggedError("ProviderUnavailable")
   override get message(): string {
     return `${this.provider} unavailable: ${this.detail}`;
   }
+
+  /** Returns a copy of this failure with a structured diagnostic attached. The constructor field
+   *  list lives here, beside the type, so the loop never re-spells it just to annotate a failure. */
+  withDiagnostic(diagnostic: ProviderDiagnostic): ProviderUnavailable {
+    return new ProviderUnavailable({
+      provider: this.provider,
+      detail: this.detail,
+      cause: this.cause,
+      retryable: this.retryable,
+      classification: this.classification,
+      userAction: this.userAction,
+      retryAfterMs: this.retryAfterMs,
+      evidence: this.evidence,
+      diagnostic,
+    });
+  }
 }
 
 /** The provider is reachable but rejected our credentials (re-auth needed). */
@@ -57,6 +73,45 @@ export class ProviderAuthError extends Data.TaggedError("ProviderAuthError")<{
   override get message(): string {
     return `${this.provider} auth failed: ${this.detail}`;
   }
+}
+
+/**
+ * The flat, redaction-safe projection of a provider failure's diagnostic surface: the classification,
+ * user action, retry decision, the structured `evidence` signals (status/code/requestId/shapeFields/
+ * retryAfterMs), and the sanitized detail. The ONE place that knows a failure's evidence lives under
+ * `ProviderUnavailable.evidence` (and that other failures carry none), so the log builder, the
+ * observation, the recent-failures record, and the incident diagnostic all read one projection
+ * instead of each re-walking `instanceof ProviderUnavailable ? error.evidence?.x : undefined`.
+ */
+export interface ProviderFailureEvidence {
+  readonly classification?: ProviderFailureClass;
+  readonly userAction?: ProviderUserAction;
+  readonly retryable: boolean;
+  readonly status?: number;
+  readonly code?: string;
+  readonly requestId?: string;
+  readonly shapeFields?: readonly string[];
+  readonly retryAfterMs?: number;
+  /** The failure's own sanitized detail when present, else its message. */
+  readonly detail: string;
+}
+
+/** Projects any provider failure into its flat {@link ProviderFailureEvidence}. */
+export function providerFailureEvidence(
+  error: ProviderUnavailable | ProviderAuthError,
+): ProviderFailureEvidence {
+  const u = error instanceof ProviderUnavailable ? error : undefined;
+  return {
+    classification: u?.classification,
+    userAction: u?.userAction,
+    retryable: u?.retryable ?? false,
+    status: u?.evidence?.status,
+    code: u?.evidence?.code,
+    requestId: u?.evidence?.requestId,
+    shapeFields: u?.evidence?.shapeFields,
+    retryAfterMs: u?.retryAfterMs ?? u?.evidence?.retryAfterMs,
+    detail: u?.detail ?? error.message,
+  };
 }
 
 /** Loading or unloading a local model failed; the model stays at its previous load. */

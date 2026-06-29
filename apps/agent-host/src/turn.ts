@@ -1,15 +1,20 @@
 import { events, type TurnStop } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
 import { type AgentEvent, type DelegateCapability, runAgent } from "./agent/loop";
-import { recordTurnStopMetric } from "./agent/turn-stop-metrics";
+import { recordTurnStop } from "./agent/turn-stop-metrics";
 import type { HistoryImageResolver } from "./artifacts";
 import { DeltaBuffer } from "./delta-buffer";
-import { log } from "./log";
-import { type ChatMessage, type Provider, ProviderUnavailable, type Usage } from "./providers";
+import {
+  type ChatMessage,
+  type Provider,
+  ProviderUnavailable,
+  providerFailureEvidence,
+  type Usage,
+} from "./providers";
 import { providerFailures } from "./providers/provider-failure-log";
-import { buildSystemPrompt } from "./providers/system-prompt";
+import { buildSystemPrompt, promptOverheadChars } from "./providers/system-prompt";
 import { Emit } from "./services";
-import { TOOL_DEFS } from "./tools";
+import { offeredToolDefs } from "./tools";
 import { MAX_OUTPUT } from "./tools/shared";
 import { prepareTurn } from "./turn-preflight";
 import { BreakdownAccumulator, logUsageBreakdown } from "./usage/breakdown";
@@ -68,11 +73,9 @@ export function publishTurn(
     // A subagent only sees its allow-listed tools, so its overhead (system prompt + tool schemas)
     // is sized from that restricted set, matching what the model is actually offered; a parent's
     // overhead also covers the delegation tools it can call.
-    const allDefs = useTools ? TOOL_DEFS : [];
-    const allowedDefs = toolNames ? allDefs.filter((t) => toolNames.has(t.name)) : allDefs;
-    const toolDefs = delegate ? [...allowedDefs, ...delegate.defs] : allowedDefs;
+    const toolDefs = offeredToolDefs(useTools, toolNames, delegate?.defs);
     const breakdown = new BreakdownAccumulator(
-      buildSystemPrompt(toolDefs).length + (useTools ? JSON.stringify(toolDefs).length : 0),
+      promptOverheadChars(buildSystemPrompt(toolDefs), toolDefs),
     );
     breakdown.seedHistory(history);
 
@@ -202,25 +205,12 @@ export function publishTurn(
           yield* flushAll;
           stop = event.stop;
           yield* Effect.promise(() =>
-            recordTurnStopMetric({
+            recordTurnStop({
               runId,
               provider: provider.id,
               model: provider.model,
               stop: event.stop,
               at: new Date().toISOString(),
-            }),
-          );
-          yield* Effect.sync(() =>
-            log("turn", "stop", {
-              runId,
-              provider: provider.id,
-              model: provider.model,
-              cause: event.stop.cause,
-              action: event.stop.action,
-              steps: event.stop.steps,
-              inputTokens: event.stop.context?.inputTokens,
-              contextWindow: event.stop.context?.contextWindow,
-              pressure: event.stop.context?.pressure,
             }),
           );
         } else if (event.type === "step_limit") {
@@ -267,18 +257,18 @@ export function publishTurn(
             // detail is the already-sanitized error message; the log re-redacts defensively.
             if (Option.isSome(failure)) {
               const error = failure.value;
-              const unavailable = error instanceof ProviderUnavailable ? error : undefined;
+              const evidence = providerFailureEvidence(error);
               yield* Effect.sync(() =>
                 providerFailures.record({
                   provider: provider.id,
                   model: provider.model,
-                  classification: unavailable?.classification,
-                  userAction: unavailable?.userAction,
+                  classification: evidence.classification,
+                  userAction: evidence.userAction,
                   retryExhausted: reconnectAttempts > 0,
                   attempts: reconnectAttempts,
-                  status: unavailable?.evidence?.status,
-                  code: unavailable?.evidence?.code,
-                  shapeFields: unavailable?.evidence?.shapeFields,
+                  status: evidence.status,
+                  code: evidence.code,
+                  shapeFields: evidence.shapeFields,
                   detail: error.message,
                   at: new Date().toISOString(),
                 }),

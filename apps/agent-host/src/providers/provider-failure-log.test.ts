@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  ProviderFailureLog,
-  providerFailureLogFields,
-  type RecordFailureInput,
-  summarizeFailures,
-} from "./provider-failure-log";
+import { buildProviderFailureLogFields, type RecordFailureInput } from "./failure-record-schema";
+import { ProviderFailureLog, summarizeFailures } from "./provider-failure-log";
 
 /**
  * D-076 M6: the recent-provider-failure diagnostics. The structured log line carries classification,
@@ -15,7 +11,7 @@ import {
 
 describe("providerFailureLogFields", () => {
   it("records classification, retry decision, attempt, source/model, phase, and a fingerprint", () => {
-    const fields = providerFailureLogFields({
+    const fields = buildProviderFailureLogFields({
       provider: "codex",
       model: "gpt-5.5",
       phase: "model-step",
@@ -43,7 +39,7 @@ describe("providerFailureLogFields", () => {
   });
 
   it("defaults an absent classification to unknown and re-redacts the detail", () => {
-    const fields = providerFailureLogFields({
+    const fields = buildProviderFailureLogFields({
       provider: "fake",
       model: "fake-1",
       phase: "model-step",
@@ -66,8 +62,8 @@ describe("providerFailureLogFields", () => {
       retryable: true,
       detail: "socket hang up",
     };
-    const a = providerFailureLogFields({ ...base, attempt: 2, outcome: "reconnect" });
-    const b = providerFailureLogFields({ ...base, attempt: 3, outcome: "reconnect" });
+    const a = buildProviderFailureLogFields({ ...base, attempt: 2, outcome: "reconnect" });
+    const b = buildProviderFailureLogFields({ ...base, attempt: 3, outcome: "reconnect" });
     expect(a.fingerprint).toBe(b.fingerprint);
   });
 });

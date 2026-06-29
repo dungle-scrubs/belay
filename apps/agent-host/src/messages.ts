@@ -1,11 +1,13 @@
 /**
  * Neutral host message helpers reached from across the host (not just tools): turning an
- * unknown thrown/rejected value into a displayable message string. This owns the
- * unknown -> string normalization; it is NOT tool-specific (the tool error envelope lives in
- * tools/shared.ts) and it does NOT format log lines (that is log.ts).
+ * unknown thrown/rejected value into a displayable message string. The normalization itself is
+ * the monorepo-wide `errorMessage` in @trevor/session (shared with web + cli, which cannot import
+ * this host module); the host keeps the short `msg` name its ~20 callsites use by re-exporting it.
+ * This module is NOT tool-specific (the tool error envelope lives in tools/shared.ts) and does NOT
+ * format log lines (that is log.ts).
  */
 
-/** Normalizes an unknown thrown value to its message string. */
-export function msg(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+import { errorMessage } from "@trevor/session";
+
+/** Normalizes an unknown thrown value to its message string (the shared `errorMessage`). */
+export const msg = errorMessage;

@@ -114,30 +114,35 @@ function parseDoctorCommand(args: string): DoctorCommand {
   return { view, refresh, copy };
 }
 
+/**
+ * One probe of a provider's reachability: run `readiness()` once and map it - and any throw - to the
+ * warm/cold/unreachable vocabulary both /doctor surfaces render. The single owner of the
+ * readiness -> status ladder + the unreachable-on-throw policy, so the structured probe and the
+ * plaintext line can't drift on what "warm" means.
+ */
+async function probeProviderStatus(
+  provider: ProviderRegistry[string],
+): Promise<DoctorProviderProbe["status"]> {
+  try {
+    const { ready, warm } = await Effect.runPromise(provider.readiness());
+    return ready ? (warm ? "warm" : "cold") : "unreachable";
+  } catch {
+    return "unreachable";
+  }
+}
+
 /** Structured provider reachability for the snapshot (warm/cold/unreachable + kind), defensively probed. */
 async function doctorProviderProbe(
   key: string,
   provider: ProviderRegistry[string],
 ): Promise<DoctorProviderProbe> {
-  let status: DoctorProviderProbe["status"];
-  try {
-    const { ready, warm } = await Effect.runPromise(provider.readiness());
-    status = ready ? (warm ? "warm" : "cold") : "unreachable";
-  } catch {
-    status = "unreachable";
-  }
+  const status = await probeProviderStatus(provider);
   return { key, label: provider.label, model: provider.model, kind: provider.kind, status };
 }
 
 /** One provider's reachability/warmth line for the legacy plaintext /doctor dump. */
 async function providerStatus(key: string, provider: ProviderRegistry[string]): Promise<string> {
-  let status: string;
-  try {
-    const { ready, warm } = await Effect.runPromise(provider.readiness());
-    status = ready ? (warm ? "warm" : "cold") : "unreachable";
-  } catch {
-    status = "unreachable";
-  }
+  const status = await probeProviderStatus(provider);
   // Adapters that expose inspectable state (e.g. LM Studio's served context / last load
   // error) get an indented detail line; cloud providers with nothing to add stay terse.
   const info = provider.debugInfo?.();

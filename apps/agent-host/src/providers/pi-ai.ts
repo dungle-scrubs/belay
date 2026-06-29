@@ -20,7 +20,7 @@ import { ProviderAuthError, ProviderUnavailable } from "./errors";
 import { extractFailureEvidence } from "./failure-evidence";
 import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
 import { reasoningStreamFields } from "./reasoning-policy";
-import { buildSystemPrompt } from "./system-prompt";
+import { buildSystemPrompt, promptOverheadChars } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
 
 function parseArgs(raw: string): Record<string, unknown> {
@@ -186,8 +186,7 @@ async function* piAiEvents<TApi extends Api>(
   // Rough prompt-token estimate (chars/4) for the overflow message - LM Studio's
   // context-length error omits the sizes, so we attach our own.
   const promptTokensEst = Math.round(
-    ((context.systemPrompt?.length ?? 0) +
-      JSON.stringify(tools).length +
+    (promptOverheadChars(context.systemPrompt, tools) +
       messages.reduce(
         (sum, m) =>
           sum + m.content.length + (m.toolCalls?.reduce((a, c) => a + c.arguments.length, 0) ?? 0),

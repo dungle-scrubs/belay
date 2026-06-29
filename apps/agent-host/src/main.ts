@@ -1,22 +1,26 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import {
+  type ArtifactRef,
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
   freshSessionId,
   type GitStatus,
+  gitRefLabel,
   type ModelRef,
   PRODUCER_IDS,
+  type PublishInput,
   RUNTIME_KIND,
+  relativeTime,
   resolveUserTurnModel,
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
 } from "@trevor/session";
+import { serviceUrl } from "@trevor/session/ports";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { CompactionController } from "./agent/compaction-controller";
-import { runCompaction } from "./agent/compactor";
 import {
   type BackgroundChildInfo,
   type BackgroundDelegator,
@@ -28,6 +32,12 @@ import { buildHistory } from "./agent/history-projection";
 import { providerQuestionRuntime } from "./agent/provider-questions";
 import { recallEngine } from "./agent/recall/engine";
 import { createSiblingReader } from "./agent/recall/reader";
+import {
+  CONTINUATION_PREFIX,
+  lastUserPrompt,
+  RESTART_RESUME_REASON,
+  resumeProjection,
+} from "./agent/resume-projection";
 import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
@@ -43,6 +53,7 @@ import {
   type DoctorRuntimeFacts,
 } from "./doctor/build";
 import { registerDoctorSnapshotSource } from "./doctor/source";
+import { envNumber } from "./env";
 import { nodeGitRunner, readGitStatus } from "./git-status";
 import { parseHandoff } from "./handoff";
 import { type DirectHandoffDeps, runDirectHandoff } from "./handoff-flow";
@@ -62,9 +73,7 @@ import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./provid
 import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
 import { Emit } from "./services";
 import {
-  countRestartResumes,
   MAX_RESTART_RESUMES,
-  type ResumeMarker,
   resumeAfterStop,
   type StopOutcome,
   stopSession,
@@ -104,7 +113,7 @@ const CONTROL_PRODUCER_ID = `${PRODUCER_ID}:control`;
 // RICHTER_URL to opt into the Richter durable substrate instead. The host speaks
 // the SessionTransport contract either way.
 const RICHTER_URL = process.env.RICHTER_URL;
-const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? "http://127.0.0.1:17424";
+const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? serviceUrl("store");
 // Richter speaks the same SessionTransport contract as the local store, so backend selection is just
 // which URL the stream transport points at (no separate adapter until Richter needs real divergence).
 const transport = streamTransport(RICHTER_URL ?? SESSION_STORE_URL);
@@ -224,7 +233,7 @@ providerQuestionRuntime.configure((event) => {
 });
 
 const turnMachine = new TurnMachine();
-const compactionController = new CompactionController();
+const compactionController = new CompactionController(providers[DEFAULT_PROVIDER]);
 
 /**
  * The run this host is ACTIVELY executing (its turn fiber is alive), or null. Set when a turn forks and
@@ -322,10 +331,9 @@ function hostState(): Record<string, unknown> {
 /** A compact internet-status line for /doctor (status + checking + last-probe age + sanitized error). */
 function internetState(): string {
   const snap = internet.current();
-  const age =
-    snap.checkedAt !== null
-      ? ` ${Math.round((Date.now() - Date.parse(snap.checkedAt)) / 1000)}s ago`
-      : "";
+  // Same formatter the web's internet-status uses on this snapshot's checkedAt, so /doctor and the
+  // browser can't drift on the probe-age label.
+  const age = snap.checkedAt !== null ? ` ${relativeTime(snap.checkedAt, Date.now())}` : "";
   const checking = snap.checking ? " · checking…" : "";
   const error = snap.status !== "online" && snap.error ? ` · ${snap.error}` : "";
   return `${snap.status}${age}${checking} · probe ${snap.targetClass}${error}`;
@@ -379,12 +387,11 @@ taskRegistry.onChange(() => {
 
 /** Lease timings are overridable via env so tests can run fast. */
 function leaseOptions() {
-  const num = (value: string | undefined) => (value ? Number(value) : undefined);
   return {
-    heartbeatMs: num(process.env.LEASE_HEARTBEAT_MS),
-    probeMs: num(process.env.LEASE_PROBE_MS),
-    ttlMs: num(process.env.LEASE_TTL_MS),
-    settleMs: num(process.env.LEASE_SETTLE_MS),
+    heartbeatMs: envNumber("LEASE_HEARTBEAT_MS"),
+    probeMs: envNumber("LEASE_PROBE_MS"),
+    ttlMs: envNumber("LEASE_TTL_MS"),
+    settleMs: envNumber("LEASE_SETTLE_MS"),
   };
 }
 
@@ -546,22 +553,8 @@ const autoContinuedRuns = new Set<string>();
  *  cap holds across turns and /doctor can report active children. An entry clears when the child settles. */
 const backgroundChildren = new Map<string, BackgroundChildInfo>();
 
-function lastUserPrompt(): Extract<
-  ReturnType<typeof decodeTrevorEvent>,
-  { type: "user.message" }
-> | null {
-  for (let index = historyEvents.length - 1; index >= 0; index -= 1) {
-    const event = historyEvents[index];
-    const decoded = event ? decodeTrevorEvent(event) : null;
-    if (decoded?.type === "user.message") {
-      return decoded;
-    }
-  }
-  return null;
-}
-
 function controlProvider(): string {
-  return compactionController.provider(providers[DEFAULT_PROVIDER])?.id ?? DEFAULT_PROVIDER;
+  return compactionController.providerOrDefault()?.id ?? DEFAULT_PROVIDER;
 }
 
 /** The catalog model the in-flight turn was started with, so a host-issued control prompt resumes on
@@ -578,23 +571,45 @@ function lastTurnModel(): ModelRef | undefined {
   return controlPromptModel(turns);
 }
 
-async function publishControlPrompt(text: string, provider = controlProvider()): Promise<void> {
-  const model = lastTurnModel();
-  await transport.publishEvent(SESSION_ID, {
-    ...events.userMessage({ text, provider, ...(model ? { model } : {}) }),
+/** The provider + model a host-issued control prompt resolves to: the compaction provider's id and
+ *  the in-flight turn's catalog model. The one resolver the continuation/retry/handoff paths share. */
+function controlModel(): { readonly provider: string; readonly model: ModelRef | undefined } {
+  return { provider: controlProvider(), model: lastTurnModel() };
+}
+
+/**
+ * The producer-tagged `user.message` for a host-issued control prompt: the control producer id (the
+ * turn-scheduler self-echo contract that keeps a handed-off/continued session from ignoring it), the
+ * resolved provider + last-turn model, and the event shape. The ONE owner of the control-prompt shape,
+ * so continuation, retry, and handoff can't rebuild it three subtly-different ways. `provider`/`model`
+ * default to the live resolution; a retry passes the original prompt's own values.
+ */
+function controlPromptEvent(over: {
+  readonly text: string;
+  readonly provider?: string;
+  readonly model?: ModelRef;
+  readonly reasoning?: string;
+  readonly artifacts?: readonly ArtifactRef[];
+}): PublishInput {
+  const resolved = controlModel();
+  return {
+    ...events.userMessage({
+      text: over.text,
+      provider: over.provider ?? resolved.provider,
+      model: over.model ?? resolved.model,
+      reasoning: over.reasoning,
+      artifacts: over.artifacts,
+    }),
     producerId: CONTROL_PRODUCER_ID,
-  });
+  };
+}
+
+async function publishControlPrompt(text: string, provider = controlProvider()): Promise<void> {
+  await transport.publishEvent(SESSION_ID, controlPromptEvent({ text, provider }));
 }
 
 /** The prefix every continuation prompt shares; used to recognise a turn that is itself a continuation
  *  (so a step-budget pause is not auto-stacked). */
-const CONTINUATION_PREFIX = "Continue from the paused turn.";
-/** The reason a host-restart auto-resume stamps on its continuation, so the crash-loop bound can spot
- *  its own prior resumes in the durable log (see `trailingResumeMarkers`). Keep in sync with the prefix
- *  match below. */
-const RESTART_RESUME_REASON = "host restarted";
-const RESTART_RESUME_PREFIX = `${CONTINUATION_PREFIX} Reason: ${RESTART_RESUME_REASON}`;
-
 async function continueAfterStop(reason: string): Promise<void> {
   await publishControlPrompt(
     `${CONTINUATION_PREFIX} Reason: ${reason}. Do not repeat completed work; proceed from the current transcript and finish the user's request.`,
@@ -602,21 +617,20 @@ async function continueAfterStop(reason: string): Promise<void> {
 }
 
 async function retryLastPrompt(): Promise<{ readonly ok: boolean; readonly text: string }> {
-  const last = lastUserPrompt();
+  const last = lastUserPrompt(historyEvents);
   if (!last) {
     return { ok: false, text: "No prior user prompt to retry." };
   }
-  const model = last.model ?? lastTurnModel();
-  await transport.publishEvent(SESSION_ID, {
-    ...events.userMessage({
+  await transport.publishEvent(
+    SESSION_ID,
+    controlPromptEvent({
       text: last.text,
-      provider: last.provider ?? controlProvider(),
-      ...(model ? { model } : {}),
+      provider: last.provider,
+      model: last.model,
       reasoning: last.reasoning,
       artifacts: last.artifacts,
     }),
-    producerId: CONTROL_PRODUCER_ID,
-  });
+  );
   return { ok: true, text: "Retrying the last user prompt." };
 }
 
@@ -634,74 +648,6 @@ async function compressThenContinue(): Promise<{ readonly ok: boolean; readonly 
   return { ok: true, text: `${compacted}\nContinuing after compaction.` };
 }
 
-/** The trailing turn's terminal state, read from the log, that the resume policy decides on. `continued`
- *  = a user prompt already follows this completion, so it is not the un-continued tail and is left alone. */
-interface TrailingTurn {
-  readonly runId: string;
-  readonly interrupted: boolean;
-  readonly cancelled: boolean;
-  readonly stopCause?: string;
-  readonly stopSummary?: string;
-  readonly continued: boolean;
-}
-
-/** Scans history back to the most recent `assistant.completed`, noting whether any user prompt follows
- *  it. Null when no turn has completed yet. A pure read over the replayed log projection. */
-function trailingTurn(): TrailingTurn | null {
-  let continued = false;
-  for (let index = historyEvents.length - 1; index >= 0; index -= 1) {
-    const event = historyEvents[index];
-    const decoded = event ? decodeTrevorEvent(event) : null;
-    if (!decoded) {
-      continue;
-    }
-    if (decoded.type === "user.message") {
-      continued = true;
-      continue;
-    }
-    if (decoded.type === "assistant.completed") {
-      return {
-        runId: decoded.runId,
-        interrupted: decoded.interrupted,
-        cancelled: decoded.cancelled,
-        stopCause: decoded.stop?.cause,
-        stopSummary: decoded.stop?.summary,
-        continued,
-      };
-    }
-  }
-  return null;
-}
-
-/** The trailing resume-bound markers (oldest-to-newest), walking back only as far as the streak needs:
- *  a restart-resume continuation extends it; a genuine user prompt or a normal (non-interrupted)
- *  completion ends it. Interrupt completions and all streaming events between resumes are skipped.
- *  `countRestartResumes` reads this to bound the crash-loop durably from the log. */
-function trailingResumeMarkers(): ResumeMarker[] {
-  const markers: ResumeMarker[] = [];
-  for (let index = historyEvents.length - 1; index >= 0; index -= 1) {
-    const event = historyEvents[index];
-    const decoded = event ? decodeTrevorEvent(event) : null;
-    if (!decoded) {
-      continue;
-    }
-    let marker: ResumeMarker | null = null;
-    if (decoded.type === "user.message") {
-      marker = decoded.text.startsWith(RESTART_RESUME_PREFIX) ? "restart-resume" : "user-prompt";
-    } else if (decoded.type === "assistant.completed" && !decoded.interrupted) {
-      marker = "normal-completion";
-    }
-    if (!marker) {
-      continue;
-    }
-    markers.push(marker);
-    if (marker !== "restart-resume") {
-      break; // a boundary: everything earlier is a prior, already-settled streak
-    }
-  }
-  return markers.reverse();
-}
-
 /**
  * Auto-resume the trailing turn when the log shows it stopped without finishing the user's request: a
  * host-restart interrupt (this host reaped it, or the browser recovered the orphan while no host was up)
@@ -712,17 +658,11 @@ function trailingResumeMarkers(): ResumeMarker[] {
  * so the crash-loop bound survives the very restarts it guards.
  */
 function maybeAutoResume(): void {
-  const turn = trailingTurn();
-  if (!turn || turn.continued || autoContinuedRuns.has(turn.runId)) {
+  const { turn, inputs } = resumeProjection(historyEvents);
+  if (!turn || !inputs || turn.continued || autoContinuedRuns.has(turn.runId)) {
     return;
   }
-  const decision = resumeAfterStop({
-    interrupted: turn.interrupted,
-    cancelled: turn.cancelled,
-    stopCause: turn.stopCause,
-    lastWasContinuation: lastUserPrompt()?.text.startsWith(CONTINUATION_PREFIX) ?? false,
-    restartResumesSpent: countRestartResumes(trailingResumeMarkers()),
-  });
+  const decision = resumeAfterStop(inputs);
   if (decision.kind === "none") {
     return;
   }
@@ -814,39 +754,39 @@ function needsCompaction(): boolean {
  * the gate never loops. Not live/leader (or no provider) just releases the gate.
  */
 function startCompaction(): void {
-  const provider = compactionController.provider(providers[DEFAULT_PROVIDER]);
+  const provider = compactionController.providerOrDefault();
   if (!live || !lease.isLeader() || !provider) {
     scheduler.finishCompaction();
     return;
   }
   const foldId = crypto.randomUUID();
   Effect.runFork(
-    runCompaction(
-      provider,
-      historyEvents.slice(),
-      compactionController.lastWindow,
-      PRODUCER_ID,
-      compactionController.lastInput,
-      foldId,
-      compactionProgress(foldId),
-    ).pipe(
-      Effect.flatMap((event) =>
-        event
-          ? // Its echo (the context.compacted case in handleEvent) admits it + releases the gate.
-            Effect.promise(() => emit(event))
-          : Effect.sync(() => {
-              compactionController.markFloorReached();
-              scheduler.finishCompaction();
-            }),
+    compactionController
+      .planFold({
+        provider,
+        events: historyEvents.slice(),
+        producerId: PRODUCER_ID,
+        foldId,
+        onProgress: compactionProgress(foldId),
+      })
+      .pipe(
+        Effect.flatMap((event) =>
+          event
+            ? // Its echo (the context.compacted case in handleEvent) admits it + releases the gate.
+              Effect.promise(() => emit(event))
+            : Effect.sync(() => {
+                compactionController.markFloorReached();
+                scheduler.finishCompaction();
+              }),
+        ),
+        Effect.catchAllCause((cause) =>
+          Effect.sync(() => {
+            warn("host", "compaction failed", { cause: Cause.pretty(cause) });
+            compactionController.markFloorReached();
+            scheduler.finishCompaction();
+          }),
+        ),
       ),
-      Effect.catchAllCause((cause) =>
-        Effect.sync(() => {
-          warn("host", "compaction failed", { cause: Cause.pretty(cause) });
-          compactionController.markFloorReached();
-          scheduler.finishCompaction();
-        }),
-      ),
-    ),
   );
 }
 
@@ -928,8 +868,7 @@ function currentGit(): { git: GitStatus | undefined; branch: string | undefined 
   if (!status) {
     return { git: undefined, branch: undefined };
   }
-  const branch = status.branch ?? (status.detached ? `detached ${status.detached}` : undefined);
-  return { git: status, branch };
+  return { git: status, branch: gitRefLabel(status) ?? undefined };
 }
 
 /**
@@ -1024,7 +963,7 @@ async function forceCompact(): Promise<string> {
   if (manualCompactFiber) {
     return "A compaction is already running.";
   }
-  const provider = compactionController.provider(providers[DEFAULT_PROVIDER]);
+  const provider = compactionController.providerOrDefault();
   if (!provider) {
     return "No provider available to summarize.";
   }
@@ -1032,16 +971,14 @@ async function forceCompact(): Promise<string> {
   // Forked (not awaited inline) so ESC can interrupt it - the summary's provider stream aborts on
   // interrupt. On interrupt nothing is emitted, so the context is left exactly as it was.
   const fiber = Effect.runFork(
-    runCompaction(
+    compactionController.planFold({
       provider,
-      historyEvents.slice(),
-      compactionController.lastWindow,
-      PRODUCER_ID,
-      compactionController.lastInput,
+      events: historyEvents.slice(),
+      producerId: PRODUCER_ID,
       foldId,
-      compactionProgress(foldId),
-      true, // force: fold regardless of the current context %
-    ),
+      onProgress: compactionProgress(foldId),
+      force: true, // fold regardless of the current context %
+    }),
   );
   manualCompactFiber = fiber;
   const exit = await Effect.runPromise(Fiber.await(fiber));
@@ -1174,16 +1111,25 @@ function workspaceSwitchBlocker(): string | null {
   return null;
 }
 
-async function cdToFreshSession(args: string): Promise<void> {
+/**
+ * The workspace-switch precondition the /cd, /handoff, and /worktree-* handlers all share: if a turn,
+ * compaction, background subagent, or shell job is in flight, emit the command's bail result
+ * ("Cannot <verb> while <blocker>.") and return true so the handler stops; otherwise false. One guard,
+ * so a new switch command can't forget the blocker or word the bail differently.
+ */
+async function blockedFromWorkspaceSwitch(command: string, verb: string): Promise<boolean> {
   const blocker = workspaceSwitchBlocker();
-  if (blocker) {
-    await emit(
-      events.commandResult({
-        command: "/cd",
-        text: `Cannot switch directories while ${blocker}.`,
-        ok: false,
-      }),
-    );
+  if (!blocker) {
+    return false;
+  }
+  await emit(
+    events.commandResult({ command, text: `Cannot ${verb} while ${blocker}.`, ok: false }),
+  );
+  return true;
+}
+
+async function cdToFreshSession(args: string): Promise<void> {
+  if (await blockedFromWorkspaceSwitch("/cd", "switch directories")) {
     return;
   }
 
@@ -1277,15 +1223,7 @@ async function runHandoff(args: string): Promise<void> {
     return;
   }
 
-  const blocker = workspaceSwitchBlocker();
-  if (blocker) {
-    await emit(
-      events.commandResult({
-        command: "/handoff",
-        text: `Cannot hand off while ${blocker}.`,
-        ok: false,
-      }),
-    );
+  if (await blockedFromWorkspaceSwitch("/handoff", "hand off")) {
     return;
   }
 
@@ -1295,7 +1233,7 @@ async function runHandoff(args: string): Promise<void> {
     workspace: WORKSPACE_ROOT,
     newHandoffId: () => crypto.randomUUID(),
     newSessionId: () => freshSessionId(),
-    targetModel: () => ({ provider: controlProvider(), model: lastTurnModel() }),
+    targetModel: controlModel,
     publish: (sessionId, event) =>
       transport.publishEvent(sessionId, { ...event, producerId: PRODUCER_ID }),
     // The injected prompt rides the control producer (not PRODUCER_ID) so the target host schedules a
@@ -1337,15 +1275,7 @@ async function runHandoff(args: string): Promise<void> {
 
 /** Switches to a managed worktree (or the baseline checkout) by row id, gated like `/cd`. */
 async function worktreeSwitch(id: string): Promise<void> {
-  const blocker = workspaceSwitchBlocker();
-  if (blocker) {
-    await emit(
-      events.commandResult({
-        command: "/worktree",
-        text: `Cannot switch worktrees while ${blocker}.`,
-        ok: false,
-      }),
-    );
+  if (await blockedFromWorkspaceSwitch("/worktree", "switch worktrees")) {
     return;
   }
   const target = worktrees.resolveSwitch(id, process.cwd());
@@ -1387,15 +1317,7 @@ async function worktreeSwitch(id: string): Promise<void> {
 
 /** Creates a managed worktree on a new branch from HEAD, records it, and switches into it. */
 async function worktreeNew(branch: string): Promise<void> {
-  const blocker = workspaceSwitchBlocker();
-  if (blocker) {
-    await emit(
-      events.commandResult({
-        command: "/worktree-new",
-        text: `Cannot create a worktree while ${blocker}.`,
-        ok: false,
-      }),
-    );
+  if (await blockedFromWorkspaceSwitch("/worktree-new", "create a worktree")) {
     return;
   }
   const name = branch.trim();
@@ -1446,15 +1368,7 @@ async function worktreeNew(branch: string): Promise<void> {
 
 /** Merges a worktree's branch back into the baseline checkout (M5), gated like a switch. */
 async function worktreeMerge(id: string): Promise<void> {
-  const blocker = workspaceSwitchBlocker();
-  if (blocker) {
-    await emit(
-      events.commandResult({
-        command: "/worktree-merge",
-        text: `Cannot merge while ${blocker}.`,
-        ok: false,
-      }),
-    );
+  if (await blockedFromWorkspaceSwitch("/worktree-merge", "merge")) {
     return;
   }
   const result = worktrees.mergeBack(id.trim(), process.cwd());
@@ -2101,7 +2015,6 @@ function configureRecall(): void {
     }),
     siblings: createSiblingReader({
       transport,
-      serviceUrl: RICHTER_URL ?? SESSION_STORE_URL,
       // A passive viewer identity (web runtime kind), so reading a sibling never registers this
       // host as a live host presence on that session.
       identity: {
@@ -2114,7 +2027,7 @@ function configureRecall(): void {
       currentWorkspace: abbrevPath(WORKSPACE_ROOT),
       currentProject: projectName(WORKSPACE_ROOT),
     }),
-    provider: () => compactionController.provider(providers[DEFAULT_PROVIDER]) ?? null,
+    provider: () => compactionController.providerOrDefault() ?? null,
   });
 }
 

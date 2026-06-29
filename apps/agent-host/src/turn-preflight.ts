@@ -1,9 +1,10 @@
 import { Effect } from "effect";
 import { type HistoryImageResolver, resolveHistoryImages } from "./artifacts";
+import { envNumber } from "./env";
 import type { ChatMessage, Provider } from "./providers";
 import type { ModelCapabilities } from "./providers/types";
 
-const MIN_CONTEXT_TOKENS = Number(process.env.TREVOR_MIN_CONTEXT) || 16_384;
+const MIN_CONTEXT_TOKENS = envNumber("TREVOR_MIN_CONTEXT", 16_384);
 
 export type TurnPreflight =
   | {

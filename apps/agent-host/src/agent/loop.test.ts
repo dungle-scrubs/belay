@@ -272,7 +272,7 @@ test("provider-rendered tool markup stops as a protocol anomaly", async () => {
   assert.equal(stop?.type === "stop" && stop.stop.action, "paused");
   assert.match(
     stop?.type === "stop" ? stop.stop.summary : "",
-    /DeepSeek rendered raw tool-call markup/i,
+    /DeepSeek rendered tool-call JSON or tags/i,
   );
 });
 

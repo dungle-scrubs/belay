@@ -36,6 +36,19 @@ export interface ContextScope {
   readonly bytes: number;
 }
 
+/**
+ * The precedence rank of each scope band (low to high), owned next to the `scope` union so the
+ * ordering is enforced rather than reconstructed positionally by whoever concatenates the sources.
+ * Sorting ingested sources by this rank yields the canonical low-to-high precedence order.
+ */
+export const SCOPE_PRECEDENCE: Record<ContextScope["scope"], number> = {
+  "user-global": 0,
+  project: 1,
+  "trevor-rule": 2,
+  "below-cwd": 3,
+  "below-cwd-rule": 4,
+};
+
 export interface ContextRuleSource {
   readonly bytes: number;
   readonly folder: string | undefined;

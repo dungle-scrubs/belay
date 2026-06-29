@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { events, type SessionEvent, type TrevorEventInput } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderError, ProviderEvent } from "../../providers";
@@ -15,18 +16,8 @@ import { type RecallDeps, runRecall, type SiblingRead } from "./engine";
  */
 
 let seq = 0;
-function ev(input: TrevorEventInput, sessionId: string, producerId = "trevor-web"): SessionEvent {
-  const n = seq++;
-  return {
-    createdAt: "2026-01-01T00:00:00.000Z",
-    eventId: `e${n}`,
-    payload: input.payload,
-    producerId,
-    seq: n,
-    sessionId,
-    type: input.type,
-  };
-}
+const ev = (input: TrevorEventInput, sessionId: string, producerId = "trevor-web"): SessionEvent =>
+  storedEvent(input, { seq: seq++, sessionId, producerId });
 
 function fakeProvider(text: string, fail = false): Provider {
   const reasoningLevels = ["off"];

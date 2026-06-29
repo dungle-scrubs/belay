@@ -6,7 +6,14 @@ import type { Provider } from "./types";
 // The provider error classes are part of the package's public surface: callers discriminate
 // failures by these tags. Re-exporting them here keeps `errors.ts` internal so its taxonomy can
 // be refactored without touching callsites.
-export { ModelLoadError, ProviderAuthError, ProviderUnavailable } from "./errors";
+export {
+  ModelLoadError,
+  ProviderAuthError,
+  type ProviderFailureEvidence,
+  ProviderUnavailable,
+  providerFailureEvidence,
+} from "./errors";
+export { incidentReasonOf, providerDiagnostic } from "./provider-diagnostic";
 export type {
   ChatImage,
   ChatMessage,

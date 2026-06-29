@@ -1,13 +1,12 @@
 /**
- * Context source identity shared by AGENTS.md ingestion, Trevor rules, and
- * instruction-file migration diagnostics. Rendering remains owned by the
- * existing D-080 context registry; these types make new sources explicit before
- * they are wired into prompt output.
+ * Context source identity for the context subsystem. `ContextSource`/`ContextSourceDiagnostic` are
+ * the shared shape; the kind map enumerates the source kinds actually produced. Today only Trevor
+ * rules flow through this shape (AGENTS.md ingestion keeps its own `ContextScope`); add a kind here
+ * when a second producer (e.g. CLAUDE.md migration diagnostics) is wired into prompt output, rather
+ * than advertising kinds nothing emits.
  */
 
 export const CONTEXT_SOURCE_KINDS = {
-  agentsMd: "agents-md",
-  claudeMigration: "claude-migration",
   trevorRule: "trevor-rule",
 } as const;
 

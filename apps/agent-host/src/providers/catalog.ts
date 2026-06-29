@@ -14,6 +14,7 @@ import { lmStudioProvider } from "./lmstudio";
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
 import { AUTH_PATH } from "./provider-auth";
+import { defaultReasoningLevel } from "./reasoning-policy";
 import { asLiveModel, fetchSourceModels, type LiveModel } from "./source-models";
 import type { Provider } from "./types";
 
@@ -170,20 +171,6 @@ function reasoningLevelsFor(source: SourceDef, model: PiModel | undefined): read
   }
 }
 
-/** The default reasoning level within a surface: medium, then high, then off, then the lowest level. */
-function defaultReasoningFor(levels: readonly string[]): string {
-  if (levels.length === 0) {
-    return "off";
-  }
-  return (
-    (levels.includes("medium") && "medium") ||
-    (levels.includes("high") && "high") ||
-    (levels.includes("off") && "off") ||
-    levels[0] ||
-    "off"
-  );
-}
-
 /** LM Studio's /models lists more than chat models (embeddings, rerankers, filters); keep only chat. */
 const NON_CHAT_LOCAL =
   /embed|embedding|gliner|rerank|reranker|privacy-filter|whisper|\btts\b|bge-/i;
@@ -214,7 +201,7 @@ function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshnes
     aliases: [],
     freshness,
     reasoningLevels,
-    defaultReasoning: defaultReasoningFor(reasoningLevels),
+    defaultReasoning: defaultReasoningLevel(reasoningLevels),
   };
 }
 
@@ -274,20 +261,28 @@ export function buildCatalogSnapshot(
  * provider (the adapter synthesizes a registry entry for a just-released id), and the local source
  * builds an LM Studio provider for that model id.
  */
-export function buildSourceProvider(sourceId: string, modelId: string): Provider | null {
-  const source = SOURCES.find((s) => s.sourceId === sourceId);
-  if (!source) {
-    return null;
-  }
+/**
+ * Builds the concrete {@link Provider} for a source + model id, dispatching on the source's type +
+ * auth shape: local -> LM Studio, oauth -> Codex/Anthropic, api-key/gateway -> a static-key pi
+ * provider or (when there's a fixed base URL and no pi registry entry) an OpenAI-compatible one.
+ * The ONE owner of the adapter-per-source mapping, so catalog turn-resolution can't dispatch a source
+ * a different way than anything else that resolves a source. `label` defaults to the model id.
+ * Returns null when no adapter matches.
+ */
+export function providerForSource(
+  source: SourceDef,
+  modelId: string,
+  label: string = modelId,
+): Provider | null {
   if (source.type === "local") {
-    return lmStudioProvider({ model: modelId, label: modelId });
+    return lmStudioProvider({ model: modelId, label });
   }
   if (source.type === "oauth") {
     // Each OAuth subscription has its own provider (different registry + token shape); Codex for
     // OpenAI, Anthropic for Claude Pro/Max.
     return source.sourceId === "anthropic"
-      ? anthropicProvider({ model: modelId, label: modelId })
-      : codexProviderFromConfig({ model: modelId, label: modelId });
+      ? anthropicProvider({ model: modelId, label })
+      : codexProviderFromConfig({ model: modelId, label });
   }
   // A gateway/api-key source NOT in pi-ai's registry (Ollama Cloud) streams through its fixed
   // OpenAI-compatible base URL with a static key; the Model is constructed directly (no sibling to
@@ -303,7 +298,7 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
       authName: source.authName,
       baseUrl: source.baseUrl,
       model: modelId,
-      label: modelId,
+      label,
     });
   }
   // Direct API-key AND gateway (OpenRouter) sources both stream through a static-key pi provider; the
@@ -318,10 +313,15 @@ export function buildSourceProvider(sourceId: string, modelId: string): Provider
       piProvider: source.piProvider,
       authName: source.authName,
       model: modelId,
-      label: modelId,
+      label,
     });
   }
   return null;
+}
+
+export function buildSourceProvider(sourceId: string, modelId: string): Provider | null {
+  const source = SOURCES.find((s) => s.sourceId === sourceId);
+  return source ? providerForSource(source, modelId) : null;
 }
 
 /**

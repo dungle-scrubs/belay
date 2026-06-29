@@ -6,6 +6,7 @@ import {
   type SessionEvent,
   type TrevorEventInput,
 } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import type { ChatMessage } from "../providers";
 import { buildHistory } from "./history-projection";
@@ -33,18 +34,8 @@ const WEB: ProducerId = PRODUCER_IDS.web;
 
 let seq = 0;
 /** Wraps an `events.*` constructor output in a durable-log envelope for the fold. */
-function ev(input: TrevorEventInput, producerId = WEB): SessionEvent {
-  const n = seq++;
-  return {
-    createdAt: "2026-01-01T00:00:00.000Z",
-    eventId: `e${n}`,
-    payload: input.payload,
-    producerId,
-    seq: n,
-    sessionId: "test",
-    type: input.type,
-  };
-}
+const ev = (input: TrevorEventInput, producerId: ProducerId = WEB): SessionEvent =>
+  storedEvent(input, { seq: seq++, producerId });
 
 const project = (log: SessionEvent[]): ChatMessage[] => buildHistory(log, { selfProducerId: SELF });
 

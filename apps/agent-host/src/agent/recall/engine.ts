@@ -7,6 +7,7 @@ import { distillRecall } from "./distill";
 import { expandNeighborhoods, type NeighborhoodCaps } from "./neighborhood";
 import { type RecallSearchCaps, searchCorpus } from "./search";
 import type {
+  RecallActivity,
   RecallCitedSource,
   RecallDiagnostic,
   RecallFilters,
@@ -92,27 +93,40 @@ function sourceOf(neighborhood: RecallNeighborhood): RecallCitedSource {
   };
 }
 
-/** An empty-result envelope carrying a status, the query, and any diagnostics. */
+/**
+ * An engine-level diagnostic not tied to a specific session: the empty `sessionId` is the "not a
+ * particular session" encoding. The one owner of that convention, so neither the engine's six call
+ * sites nor the sibling reader hand-spell `{ sessionId: "" }`.
+ */
+export function engineDiagnostic(kind: RecallDiagnostic["kind"], detail: string): RecallDiagnostic {
+  return { sessionId: "", kind, detail };
+}
+
+/** A recall-activity counter; callers override only the fields they have actually searched. */
+function recallActivity(over: Partial<RecallActivity> = {}): RecallActivity {
+  return {
+    searchedSessions: 0,
+    searchedFolds: 0,
+    searchedRecords: 0,
+    anchors: 0,
+    neighborhoods: 0,
+    ...over,
+  };
+}
+
+/** A status is `partial` when any diagnostics accompany it, else the base status. */
+function resolveStatus(base: RecallStatus, diagnostics: readonly RecallDiagnostic[]): RecallStatus {
+  return diagnostics.length > 0 ? "partial" : base;
+}
+
+/** An empty-result envelope carrying a status, the query, diagnostics, and the activity so far. */
 function empty(
   query: string,
   status: RecallStatus,
   diagnostics: readonly RecallDiagnostic[],
-  searched: { sessions: number; folds: number; records: number },
+  activity: RecallActivity,
 ): RecallResult {
-  return {
-    status,
-    query,
-    findings: [],
-    sources: [],
-    diagnostics,
-    activity: {
-      searchedSessions: searched.sessions,
-      searchedFolds: searched.folds,
-      searchedRecords: searched.records,
-      anchors: 0,
-      neighborhoods: 0,
-    },
-  };
+  return { status, query, findings: [], sources: [], diagnostics, activity };
 }
 
 /**
@@ -126,8 +140,8 @@ export async function runRecall(deps: RecallDeps, request: RecallRequest): Promi
     return empty(
       request.query,
       "invalid_filters",
-      [{ sessionId: "", kind: "skipped", detail: "empty query" }],
-      { sessions: 0, folds: 0, records: 0 },
+      [engineDiagnostic("skipped", "empty query")],
+      recallActivity(),
     );
   }
 
@@ -136,8 +150,8 @@ export async function runRecall(deps: RecallDeps, request: RecallRequest): Promi
     return empty(
       query,
       "invalid_filters",
-      [{ sessionId: "", kind: "skipped", detail: badFilter }],
-      { sessions: 0, folds: 0, records: 0 },
+      [engineDiagnostic("skipped", badFilter)],
+      recallActivity(),
     );
   }
 
@@ -169,12 +183,12 @@ export async function runRecall(deps: RecallDeps, request: RecallRequest): Promi
 
   if (corpus.length === 0) {
     // Nothing recallable at all: no fold has happened yet AND no sibling sessions were readable.
-    const status: RecallStatus = diagnostics.length > 0 ? "partial" : "unavailable";
-    return empty(query, status, diagnostics, {
-      sessions: searchedSessions,
-      folds: searchedFolds,
-      records: 0,
-    });
+    return empty(
+      query,
+      resolveStatus("unavailable", diagnostics),
+      diagnostics,
+      recallActivity({ searchedSessions, searchedFolds }),
+    );
   }
 
   const { anchors, searchedRecords } = searchCorpus(
@@ -185,12 +199,12 @@ export async function runRecall(deps: RecallDeps, request: RecallRequest): Promi
   );
 
   if (anchors.length === 0) {
-    const status: RecallStatus = diagnostics.length > 0 ? "partial" : "no_hits";
-    return empty(query, status, diagnostics, {
-      sessions: searchedSessions,
-      folds: searchedFolds,
-      records: searchedRecords,
-    });
+    return empty(
+      query,
+      resolveStatus("no_hits", diagnostics),
+      diagnostics,
+      recallActivity({ searchedSessions, searchedFolds, searchedRecords }),
+    );
   }
 
   const { neighborhoods, droppedAnchors } = expandNeighborhoods(
@@ -199,30 +213,29 @@ export async function runRecall(deps: RecallDeps, request: RecallRequest): Promi
     request.neighborhoodCaps,
   );
   if (droppedAnchors > 0) {
-    diagnostics.push({
-      sessionId: "",
-      kind: "skipped",
-      detail: `${droppedAnchors} lower-ranked anchor(s) dropped at the recall context budget`,
-    });
+    diagnostics.push(
+      engineDiagnostic(
+        "skipped",
+        `${droppedAnchors} lower-ranked anchor(s) dropped at the recall context budget`,
+      ),
+    );
   }
 
   const sources = neighborhoods.map(sourceOf);
   const provider = deps.provider();
 
-  const baseActivity = {
+  const baseActivity = recallActivity({
     searchedSessions,
     searchedFolds,
     searchedRecords,
     anchors: anchors.length,
     neighborhoods: neighborhoods.length,
-  };
+  });
 
   if (!provider) {
-    diagnostics.push({
-      sessionId: "",
-      kind: "unreadable",
-      detail: "no provider available for the recall reasoning pass",
-    });
+    diagnostics.push(
+      engineDiagnostic("unreadable", "no provider available for the recall reasoning pass"),
+    );
     return { status: "error", query, findings: [], sources, diagnostics, activity: baseActivity };
   }
 
@@ -235,11 +248,9 @@ export async function runRecall(deps: RecallDeps, request: RecallRequest): Promi
 
   if (!distilled.ok) {
     warn("recall", "reasoning pass failed", { error: distilled.error.message });
-    diagnostics.push({
-      sessionId: "",
-      kind: "unreadable",
-      detail: `reasoning pass failed: ${distilled.error.message}`,
-    });
+    diagnostics.push(
+      engineDiagnostic("unreadable", `reasoning pass failed: ${distilled.error.message}`),
+    );
     return { status: "error", query, findings: [], sources, diagnostics, activity: baseActivity };
   }
 
@@ -248,8 +259,7 @@ export async function runRecall(deps: RecallDeps, request: RecallRequest): Promi
     .filter((id): id is string => Boolean(id));
 
   const findings = distilled.output.text ? [{ summary: distilled.output.text, citations }] : [];
-  const status: RecallStatus =
-    findings.length === 0 ? "no_hits" : diagnostics.length > 0 ? "partial" : "ok";
+  const status = findings.length === 0 ? "no_hits" : resolveStatus("ok", diagnostics);
 
   return { status, query, findings, sources, diagnostics, activity: baseActivity };
 }
@@ -274,14 +284,8 @@ class RecallEngine {
         empty(
           request.query,
           "unavailable",
-          [
-            {
-              sessionId: "",
-              kind: "unreadable",
-              detail: "recall engine not configured on this host",
-            },
-          ],
-          { sessions: 0, folds: 0, records: 0 },
+          [engineDiagnostic("unreadable", "recall engine not configured on this host")],
+          recallActivity(),
         ),
       );
     }

@@ -2,6 +2,7 @@ import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
 import { Effect, Either, JSONSchema, ParseResult, Schema } from "effect";
 import { log, warn } from "../log";
 import { supervisor } from "../processes";
+import type { ToolDef } from "../providers";
 import { buildSkillTool, discoverSkills } from "../skills";
 import { buildTaskTools } from "../tasks";
 import { askUserTool } from "./ask-user";
@@ -122,6 +123,22 @@ export const TOOL_DEFS = TOOLS.map((tool) => ({
   description: tool.description,
   parameters: toParametersJsonSchema(tool.params),
 }));
+
+/**
+ * The exact tool-def set the model is OFFERED for one turn: the registry tools when tools are enabled,
+ * narrowed to a subagent's allow-list (`toolNames`), plus a parent turn's delegation defs. The ONE
+ * owner of this filter-then-append rule, so the turn's breakdown overhead (which SIZES the offered
+ * set) can't silently diverge from what the loop actually hands the model.
+ */
+export function offeredToolDefs(
+  useTools: boolean,
+  toolNames: ReadonlySet<string> | undefined,
+  delegateDefs: readonly ToolDef[] | undefined,
+): readonly ToolDef[] {
+  const registryTools = useTools ? TOOL_DEFS : [];
+  const allowed = toolNames ? registryTools.filter((t) => toolNames.has(t.name)) : registryTools;
+  return delegateDefs ? [...allowed, ...delegateDefs] : allowed;
+}
 
 /**
  * Executes a tool by name with a raw JSON argument string, as an Effect that never

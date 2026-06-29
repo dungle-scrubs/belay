@@ -78,73 +78,41 @@ export interface Skill {
   readonly rootKind: SkillRootKind;
 }
 
-/** Builds a Skill from a SKILL.md, or null if its frontmatter disables it. */
-function toSkill(id: string, path: string, text: string, rootKind: SkillRootKind): Skill | null {
-  const { data } = parseFrontmatter(text);
-
-  if (data.disabled === true) {
-    return null;
-  }
-
-  const meta =
-    data.meta && typeof data.meta === "object" ? (data.meta as Record<string, unknown>) : {};
-
+/** Projects an `available` registry entry down to the selected-skill shape (SkillEntry supersets Skill). */
+function skillOf(entry: SkillEntry): Skill {
   return {
-    id,
-    name: trimStr(data.name) ?? id,
-    // Collapse folded-scalar whitespace so the level-1 blurb is one tidy line.
-    description: (trimStr(data.description) ?? "").replace(/\s+/g, " ").trim(),
-    icon: trimStr(meta.icon),
-    path,
-    rootKind,
+    id: entry.id,
+    name: entry.name,
+    description: entry.description,
+    icon: entry.icon,
+    path: entry.path,
+    rootKind: entry.rootKind,
   };
 }
 
 /**
  * Discovers skills across the ordered roots (project-local first, then global), selecting the first
  * enabled skill for each id - so a project-local skill OVERRIDES a global one of the same id, and a
- * disabled project file leaves no tombstone (the global skill of that id still wins). A missing or
- * unreadable root contributes nothing. Pure over the passed roots, so the precedence + override rules
- * are unit-tested with temp dirs (the memoized `discoverSkills` wraps it over the default roots).
+ * disabled project file leaves no tombstone (the global skill of that id still wins). A projection of
+ * `buildSkillRegistry`'s `available` entries, so the precedence/override/disabled rules live in ONE
+ * walk: the roster and the registry can't disagree, and there's no second FS scan.
  */
 export function discoverSkillsIn(roots: readonly SkillRoot[]): Skill[] {
-  const byId = new Map<string, Skill>();
-  for (const root of roots) {
-    for (const entry of sortedVisibleEntries(root.dir)) {
-      // A higher-precedence root already selected this id (entry === id), so skip without reading.
-      // A DISABLED file in a higher root never reached `byId`, so its id stays open for a lower root.
-      if (byId.has(entry)) {
-        continue;
-      }
-      const path = join(root.dir, entry, "SKILL.md");
-      try {
-        // No statSync pre-check: readFileSync throws (caught below) when the entry is a plain file or
-        // a dir without a SKILL.md, which is exactly what we skip.
-        const skill = toSkill(entry, path, readFileSync(path, "utf8"), root.kind);
-        if (skill) {
-          byId.set(skill.id, skill);
-        }
-      } catch {
-        // No readable SKILL.md here - skip it.
-      }
-    }
-  }
-  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  return buildSkillRegistry(roots)
+    .filter((entry) => entry.status === "available")
+    .map(skillOf);
 }
 
-let cache: Skill[] | null = null;
-
-/** Discovers skills across the effective roots (memoized; a missing root yields no skills). */
+/** Discovers skills across the effective roots (derived from the memoized registry; a missing root
+ *  yields no skills). */
 export function discoverSkills(): readonly Skill[] {
-  if (!cache) {
-    cache = discoverSkillsIn(skillRoots());
-  }
-  return cache;
+  return skillRegistry()
+    .filter((entry) => entry.status === "available")
+    .map(skillOf);
 }
 
-/** Clears the discovery memo - for tests that vary the roots/fixtures between cases. */
+/** Clears the registry memo - for tests that vary the roots/fixtures between cases. */
 export function resetSkillCache(): void {
-  cache = null;
   registryCache = null;
 }
 
@@ -181,10 +149,17 @@ export interface SkillEntry {
   readonly status: SkillStatus;
 }
 
-/** Splits a description into its main blurb source and the `Triggers:` tail (either may be ""). */
-function extractTriggers(description: string): string {
+/**
+ * Splits a skill description into its main blurb and the `Triggers:` tail (either may be ""). The ONE
+ * owner of the "description up to Triggers:" parse, shared by the registry's `triggers` field, the
+ * level-1 roster blurb, and the skills_list search blurb so the three can't split it differently.
+ */
+export function splitDescription(description: string): { blurb: string; triggers: string } {
   const parts = description.split(/\btriggers:/i);
-  return parts.length > 1 ? (parts[1] ?? "").trim() : "";
+  return {
+    blurb: (parts[0] ?? "").trim() || description,
+    triggers: parts.length > 1 ? (parts[1] ?? "").trim() : "",
+  };
 }
 
 /**
@@ -226,7 +201,7 @@ export function buildSkillRegistry(roots: readonly SkillRoot[]): SkillEntry[] {
         id: entry,
         name: trimStr(data.name) ?? entry,
         description,
-        triggers: extractTriggers(description),
+        triggers: splitDescription(description).triggers,
         icon: trimStr(meta.icon),
         path,
         rootKind: root.kind,
@@ -348,7 +323,7 @@ export async function expandSkill(skill: Skill): Promise<string> {
  * the always-present inventory stays terse; the full body loads on demand (level 2).
  */
 function blurb(description: string): string {
-  const main = (description.split(/\btriggers:/i)[0] ?? description).trim() || description;
+  const main = splitDescription(description).blurb;
   return main.length > 90 ? `${main.slice(0, 90).trimEnd()}…` : main;
 }
 

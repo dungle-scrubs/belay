@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { buildBm25Index, tokenize } from "./bm25";
+import { recallRecord, recallSessionRef } from "./recall-test-support";
 import { excerptFor, searchCorpus } from "./search";
 import type { RecallRecord, RecallSessionRef } from "./types";
 
@@ -17,28 +18,10 @@ function at<T>(arr: readonly T[], i: number): T {
   return value;
 }
 
-const SIB: RecallSessionRef = {
-  sessionId: "sib",
-  label: "sibling",
-  project: "p",
-  origin: "sibling-session",
-};
+const SIB: RecallSessionRef = recallSessionRef({ label: "sibling" });
 
-function rec(seq: number, text: string, over: Partial<RecallRecord> = {}): RecallRecord {
-  return {
-    id: `${over.session?.sessionId ?? SIB.sessionId}#${seq}`,
-    session: SIB,
-    seq,
-    range: { fromSeq: seq, toSeq: seq },
-    kind: "user",
-    runId: null,
-    tool: null,
-    foldId: null,
-    timestamp: "2026-01-01T00:00:00.000Z",
-    text,
-    ...over,
-  };
-}
+const rec = (seq: number, text: string, over: Partial<RecallRecord> = {}): RecallRecord =>
+  recallRecord(seq, { session: SIB, text, ...over });
 
 test("tokenize lowercases, splits on non-word chars, and drops single chars", () => {
   assert.deepEqual(tokenize("Read the BM25_index, a!"), ["read", "the", "bm25_index"]);

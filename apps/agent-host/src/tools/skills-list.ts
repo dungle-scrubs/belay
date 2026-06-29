@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { type SkillEntry, skillRegistry } from "../skills";
+import { type SkillEntry, skillRegistry, splitDescription } from "../skills";
 import { simpleTool } from "./shared";
 
 /**
@@ -32,7 +32,7 @@ function matchesQuery(entry: SkillEntry, terms: readonly string[]): boolean {
 
 /** The blurb (description up to its Triggers: tail) for a compact list line. */
 function blurbOf(entry: SkillEntry): string {
-  return (entry.description.split(/\btriggers:/i)[0] ?? entry.description).trim();
+  return splitDescription(entry.description).blurb;
 }
 
 /**

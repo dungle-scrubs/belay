@@ -12,13 +12,6 @@ export interface ProtocolAnomalyInput {
   readonly toolCalls: readonly ToolCall[];
 }
 
-interface ProviderRule {
-  readonly providers: readonly string[];
-  readonly reason: string;
-  readonly retryable: boolean;
-  readonly patterns: readonly RegExp[];
-}
-
 const TOOL_TAG_PATTERNS = [
   /<\s*tool[_-]?call\b/i,
   /<\s*\/\s*tool[_-]?call\s*>/i,
@@ -33,42 +26,23 @@ const TOOL_TAG_PATTERNS = [
 
 const TOOL_JSON_PATTERN = /["'](?:tool_call|tool_calls|function_call|arguments|name)["']\s*:/i;
 
-const RULES: readonly ProviderRule[] = [
-  {
-    providers: ["deepseek"],
-    reason: "DeepSeek rendered raw tool-call markup instead of emitting a tool call",
-    retryable: true,
-    patterns: [...TOOL_TAG_PATTERNS, TOOL_JSON_PATTERN],
-  },
-  {
-    providers: ["glm"],
-    reason: "GLM rendered tool-call JSON or tags as assistant text",
-    retryable: true,
-    patterns: [...TOOL_TAG_PATTERNS, TOOL_JSON_PATTERN],
-  },
-  {
-    providers: ["minimax"],
-    reason: "MiniMax rendered tool-call JSON or tags as assistant text",
-    retryable: true,
-    patterns: [...TOOL_TAG_PATTERNS, TOOL_JSON_PATTERN],
-  },
-  {
-    providers: ["qwen", "qwen4bit"],
-    reason: "LM Studio rendered tool-call JSON or tags as assistant text",
-    retryable: true,
-    patterns: [...TOOL_TAG_PATTERNS, TOOL_JSON_PATTERN],
-  },
-  {
-    providers: ["gpt"],
-    reason: "Codex rendered tool-call JSON or tags as assistant text",
-    retryable: true,
-    patterns: [...TOOL_TAG_PATTERNS, TOOL_JSON_PATTERN],
-  },
-];
+/** Every pattern that means "tool-call markup leaked into assistant text"; one set for all providers. */
+const ANOMALY_PATTERNS = [...TOOL_TAG_PATTERNS, TOOL_JSON_PATTERN] as const;
 
-function providerRules(providerId: string): readonly ProviderRule[] {
-  return RULES.filter((rule) => rule.providers.includes(providerId));
-}
+/**
+ * The providers that exhibit this anomaly, mapped to the display name templated into the (otherwise
+ * identical) diagnostic reason. The detection is the same retryable rule for every provider - only
+ * the name in the message differs - so adding a provider is one entry here, not a new rule that could
+ * drift in its pattern set. A provider absent from this map never produces an anomaly diagnostic.
+ */
+const ANOMALY_PROVIDER_NAMES: Record<string, string> = {
+  deepseek: "DeepSeek",
+  glm: "GLM",
+  minimax: "MiniMax",
+  qwen: "LM Studio",
+  qwen4bit: "LM Studio",
+  gpt: "Codex",
+};
 
 export function classifyProviderProtocolAnomaly(
   input: ProtocolAnomalyInput,
@@ -80,14 +54,13 @@ export function classifyProviderProtocolAnomaly(
   if (!text) {
     return null;
   }
-  for (const rule of providerRules(input.providerId)) {
-    if (rule.patterns.some((pattern) => pattern.test(text))) {
-      return {
-        phase: "model-step",
-        reason: rule.reason,
-        retryable: rule.retryable,
-      };
-    }
+  const name = ANOMALY_PROVIDER_NAMES[input.providerId];
+  if (!name || !ANOMALY_PATTERNS.some((pattern) => pattern.test(text))) {
+    return null;
   }
-  return null;
+  return {
+    phase: "model-step",
+    reason: `${name} rendered tool-call JSON or tags as assistant text`,
+    retryable: true,
+  };
 }

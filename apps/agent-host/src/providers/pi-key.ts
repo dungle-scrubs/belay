@@ -78,12 +78,6 @@ export function piKeyProviderFromConfig(config: PiKeyConfig): PiAiProviderBase {
     }),
     resolveModel: () => resolvePiModel(config.piProvider, config.model),
     fallback: { levels: ["off", "high"], images: false },
-    pickDefaultReasoning: (levels) =>
-      levels.includes("medium")
-        ? "medium"
-        : levels.includes("high")
-          ? "high"
-          : (levels[Math.floor(levels.length / 2)] ?? "off"),
   });
 }
 

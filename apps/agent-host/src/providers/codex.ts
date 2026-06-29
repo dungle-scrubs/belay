@@ -30,8 +30,6 @@ export function codexProviderFromConfig(config: CodexConfig): PiAiProviderBase {
     // literal cast only satisfies getModel's strict typing.
     resolveModel: () => getModel(CODEX, config.model as "gpt-5.5"),
     fallback: { levels: ["minimal", "low", "medium", "high", "xhigh"], images: true },
-    pickDefaultReasoning: (levels) =>
-      levels.includes("medium") ? "medium" : (levels[Math.floor(levels.length / 2)] ?? "medium"),
   });
 }
 

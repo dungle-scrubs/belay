@@ -1,25 +1,24 @@
-import type {
-  ProviderDiagnostic,
-  ProviderIncidentReason,
-  ProviderPartialCounts,
-  TurnStop,
-} from "@trevor/session";
+import type { ProviderDiagnostic, ProviderPartialCounts, TurnStop } from "@trevor/session";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
+import { envNumber } from "../env";
 import { debug, warn } from "../log";
 import type {
   ChatMessage,
   ModelEvent,
   Provider,
   ProviderError,
+  ProviderEvent,
   ToolCall,
   ToolDef,
 } from "../providers";
-import { ProviderUnavailable } from "../providers";
-import { redactSecrets } from "../providers/failure-taxonomy";
+import { ProviderUnavailable, providerDiagnostic, providerFailureEvidence } from "../providers";
+import { buildProviderFailureLogFields } from "../providers/failure-record-schema";
 import { recordObservation } from "../providers/observation-store";
-import { classifyProviderProtocolAnomaly } from "../providers/protocol-anomaly";
-import { providerFailureLogFields } from "../providers/provider-failure-log";
-import { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
+import {
+  classifyProviderProtocolAnomaly,
+  type ProviderProtocolDiagnostic,
+} from "../providers/protocol-anomaly";
+import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
 import { deriveTurnBudget, EMERGENCY_MAX_STEPS, type TurnBudget } from "./turn-budget";
@@ -37,23 +36,16 @@ function logProviderFailure(
   attempt: number,
   outcome: "reconnect" | "terminal",
 ): void {
-  const unavailable = error instanceof ProviderUnavailable ? error : undefined;
   debug(
     "provider",
     outcome === "reconnect" ? "reconnect" : "failure",
-    providerFailureLogFields({
+    buildProviderFailureLogFields({
+      ...providerFailureEvidence(error),
       provider: provider.id,
       model: provider.model,
       phase: "model-step",
-      classification: unavailable?.classification,
-      retryable: unavailable?.retryable ?? false,
-      userAction: unavailable?.userAction,
       attempt,
       outcome,
-      status: unavailable?.evidence?.status,
-      code: unavailable?.evidence?.code,
-      shapeFields: unavailable?.evidence?.shapeFields,
-      detail: unavailable?.detail ?? error.message,
     }),
   );
 }
@@ -73,6 +65,7 @@ function observeUnknownFailure(
   if (error._tag !== "ProviderUnavailable" || error.classification !== "unknown") {
     return Stream.empty;
   }
+  const evidence = providerFailureEvidence(error);
   return Stream.fromEffect(
     Effect.promise(() =>
       recordObservation(
@@ -81,72 +74,17 @@ function observeUnknownFailure(
           model: provider.model,
           phase: "model-step",
           classification: "unknown",
-          retryable: error.retryable ?? false,
-          status: error.evidence?.status,
-          code: error.evidence?.code,
+          retryable: evidence.retryable,
+          status: evidence.status,
+          code: evidence.code,
           message: error.detail,
-          shapeFields: error.evidence?.shapeFields,
+          shapeFields: evidence.shapeFields,
           outputStarted,
         },
         new Date().toISOString(),
       ),
     ),
   ).pipe(Stream.drain);
-}
-
-function incidentReasonOf(error: ProviderError): ProviderIncidentReason {
-  if (error._tag === "ProviderAuthError") {
-    return "auth";
-  }
-  if (error.classification === "transient_transport") {
-    return "transport_loss";
-  }
-  if (error.classification === "context_overflow") {
-    return "context_overflow";
-  }
-  return error.classification ?? "unknown";
-}
-
-function providerDiagnostic(
-  provider: Provider,
-  error: ProviderError,
-  attempt: number,
-  safeToRetry: boolean,
-  partials: ProviderPartialCounts,
-): ProviderDiagnostic {
-  const unavailable = error instanceof ProviderUnavailable ? error : undefined;
-  const detail = redactSecrets(unavailable?.detail ?? error.message);
-  return {
-    provider: provider.id,
-    model: provider.model,
-    phase: "model-step",
-    reason: incidentReasonOf(error),
-    retryable: unavailable?.retryable === true,
-    safeToRetry,
-    attempt,
-    detail,
-    partials,
-    ...(unavailable?.evidence?.status !== undefined ? { status: unavailable.evidence.status } : {}),
-    ...(unavailable?.evidence?.code ? { code: unavailable.evidence.code } : {}),
-    ...(unavailable?.evidence?.requestId ? { requestId: unavailable.evidence.requestId } : {}),
-  };
-}
-
-function withDiagnostic(error: ProviderError, diagnostic: ProviderDiagnostic): ProviderError {
-  if (error instanceof ProviderUnavailable) {
-    return new ProviderUnavailable({
-      provider: error.provider,
-      detail: error.detail,
-      cause: error.cause,
-      retryable: error.retryable,
-      classification: error.classification,
-      userAction: error.userAction,
-      retryAfterMs: error.retryAfterMs,
-      evidence: error.evidence,
-      diagnostic,
-    });
-  }
-  return error;
 }
 
 /**
@@ -156,10 +94,7 @@ function withDiagnostic(error: ProviderError, diagnostic: ProviderDiagnostic): P
  * tokens, close, or error. Env-overridable; set to 0 to disable. Default 90s (xhigh reasoning can
  * pause for a while, so the gap is generous - it only catches a genuinely dead stream).
  */
-const DEFAULT_STREAM_STALL_MS = (() => {
-  const raw = process.env.TREVOR_STREAM_STALL_MS;
-  return raw !== undefined && Number.isFinite(Number(raw)) ? Number(raw) : 90_000;
-})();
+const DEFAULT_STREAM_STALL_MS = envNumber("TREVOR_STREAM_STALL_MS", 90_000);
 
 /**
  * Per-tool-call wall-clock watchdog (ms): the tool-side analog of the provider-stream idle watchdog
@@ -170,10 +105,7 @@ const DEFAULT_STREAM_STALL_MS = (() => {
  * trips on a genuine hang, never on legitimately slow work. Env-overridable; set to 0 to disable.
  * Default 300s.
  */
-const DEFAULT_TOOL_STALL_MS = (() => {
-  const raw = process.env.TREVOR_TOOL_STALL_MS;
-  return raw !== undefined && Number.isFinite(Number(raw)) ? Number(raw) : 300_000;
-})();
+const DEFAULT_TOOL_STALL_MS = envNumber("TREVOR_TOOL_STALL_MS", 300_000);
 
 /**
  * Tools that block by design and must be EXEMPT from the per-tool stall watchdog: `ask_user` pauses the
@@ -434,12 +366,8 @@ export function runAgent(
   // The model is OFFERED only the allow-listed tools; the executor enforces the same set below, so
   // a child can neither see nor run a tool outside its agent's allow-list. A parent additionally
   // gets the delegation tools (a child gets none - depth-1).
-  const registryTools = useTools ? TOOL_DEFS : [];
-  const allowed = opts.toolNames
-    ? registryTools.filter((t) => opts.toolNames?.has(t.name))
-    : registryTools;
   const delegate = opts.delegate;
-  const tools = delegate ? [...allowed, ...delegate.defs] : allowed;
+  const tools = offeredToolDefs(useTools, opts.toolNames, delegate?.defs);
   const runTool = (name: string, args: string, callId: string): Effect.Effect<string> => {
     // A delegation tool-call is routed to the injected runner (it has the provider + transport the
     // generic executor lacks); everything else goes to the executor, gated by the allow-list. `callId`
@@ -498,6 +426,29 @@ export function runAgent(
       emergencyMaxSteps: config.emergencyMaxSteps,
     });
 
+  // Derives the adaptive budget from the live facts and runs the termination gate against the SAME
+  // facts in one call. The budget+gate pairing and the 7-field gate observation live here, so the
+  // step backstop and the protocol-anomaly gate are each a one-liner that can't read a different set
+  // of mutables than the budget was derived from.
+  const assessTurn = (
+    steps: number,
+    providerDiagnostic?: ProviderProtocolDiagnostic,
+  ): { stop: TurnStop | null; budget: TurnBudget } => {
+    const budget = currentBudget();
+    const stop = TurnTerminationGate.decide({
+      steps,
+      maxSteps: budget.effectiveMaxSteps,
+      inputTokens: lastInputTokens,
+      contextWindow: lastContextWindow,
+      contextBudgetFraction: config.contextBudgetFraction,
+      repeatedToolName,
+      repeatedToolRounds,
+      budgetReason: budget.reason,
+      ...(providerDiagnostic ? { providerDiagnostic } : {}),
+    });
+    return { stop, budget };
+  };
+
   // One overflow adjustment: mutate the conversation/reasoning in place and return a
   // `recovered` event, or null when nothing cheap is left. Cheapest-first and
   // provider-aware - cut thinking (the output lever) when the model hit the wall
@@ -550,6 +501,19 @@ export function runAgent(
   // no tools to recurse on). An empty result falls through to the `empty` -> noReply path, so a
   // capped turn still never dead-ends in silence. `step_limit` is emitted first as the
   // observable termination signal, then the forced answer streams as ordinary text.
+  // One model step's watchdog-wrapped stream: the provider stream over the live conversation, guarded
+  // by the stall timeout. The single owner of "how a model step is wrapped + observed"; each caller
+  // pipes its own siphon (the synthesize and connect steps accumulate/forward different events).
+  const modelStream = (
+    stepTools: readonly ToolDef[],
+    reasoning: string | undefined,
+  ): Stream.Stream<ProviderEvent, ProviderError> =>
+    withStallTimeout(
+      provider.stream(conversation, stepTools, reasoning),
+      provider.model,
+      config.streamStallMs,
+    );
+
   const synthesize = (n: number, stop: TurnStop): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
       conversation.push({
@@ -560,11 +524,7 @@ export function runAgent(
       });
       const synthReasoning = cheapestReasoning(provider.reasoningLevels);
       let answer = "";
-      const model = withStallTimeout(
-        provider.stream(conversation, [], synthReasoning),
-        provider.model,
-        config.streamStallMs,
-      ).pipe(
+      const model = modelStream([], synthReasoning).pipe(
         Stream.filterMap((event) => {
           // Tools were removed; drop any stray tool_call/overflow and keep text/thinking/usage.
           if (event.type === "tool_call" || event.type === "overflow") {
@@ -599,7 +559,7 @@ export function runAgent(
       // governor - the prior step's prompt crossing the configured fraction of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are
       // clear (no prior usage), so the first round always runs.
-      const budget = currentBudget();
+      const { stop, budget } = assessTurn(n);
       // Structured budget factors behind the verbose `agent` scope (D-026): a postmortem can tell a
       // healthy large-context budget exhaustion from an unknown-telemetry fallback via tier/telemetry.
       debug("agent", "turn-budget", {
@@ -615,16 +575,6 @@ export function runAgent(
         reasoningPenalty: budget.factors.reasoningPenalty,
         providerKind: budget.factors.providerKind,
         reason: budget.reason,
-      });
-      const stop = TurnTerminationGate.decide({
-        steps: n,
-        maxSteps: budget.effectiveMaxSteps,
-        inputTokens: lastInputTokens,
-        contextWindow: lastContextWindow,
-        contextBudgetFraction: config.contextBudgetFraction,
-        repeatedToolName,
-        repeatedToolRounds,
-        budgetReason: budget.reason,
       });
       if (stop?.action === "synthesized") {
         return synthesize(n, stop);
@@ -665,11 +615,7 @@ export function runAgent(
         });
         const safeToRetry = () => textChars === 0 && toolCallsStarted === 0 && toolResults === 0;
         const outputStarted = () => textChars > 0;
-        const mapped = withStallTimeout(
-          provider.stream(conversation, tools, currentReasoning),
-          provider.model,
-          config.streamStallMs,
-        ).pipe(
+        const mapped = modelStream(tools, currentReasoning).pipe(
           Stream.filterMap((event) => {
             if (event.type === "text") {
               textChars += event.text.length;
@@ -727,7 +673,8 @@ export function runAgent(
             // the turn.
             logProviderFailure(provider, error, attempt, "terminal");
             const diagnostic = providerDiagnostic(provider, error, attempt, retrySafe, partials());
-            const diagnosticError = withDiagnostic(error, diagnostic);
+            const diagnosticError =
+              error instanceof ProviderUnavailable ? error.withDiagnostic(diagnostic) : error;
             return Stream.concat(
               observeUnknownFailure(provider, diagnosticError, outputStarted()),
               Stream.fail(diagnosticError),
@@ -774,18 +721,7 @@ export function runAgent(
               toolCalls,
             });
             if (protocolDiagnostic) {
-              const anomalyBudget = currentBudget();
-              const stop = TurnTerminationGate.decide({
-                steps: n,
-                maxSteps: anomalyBudget.effectiveMaxSteps,
-                inputTokens: lastInputTokens,
-                contextWindow: lastContextWindow,
-                contextBudgetFraction: config.contextBudgetFraction,
-                repeatedToolName,
-                repeatedToolRounds,
-                budgetReason: anomalyBudget.reason,
-                providerDiagnostic: protocolDiagnostic,
-              });
+              const { stop } = assessTurn(n, protocolDiagnostic);
               if (!stop) {
                 return Stream.empty;
               }

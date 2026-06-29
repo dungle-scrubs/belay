@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import { assembleCorpus, buildRecords } from "./corpus";
 import type { RecallSessionRef } from "./types";
@@ -14,20 +15,17 @@ import type { RecallSessionRef } from "./types";
 const SELF = PRODUCER_IDS.host;
 const WEB = PRODUCER_IDS.web;
 
-function ev(
+const ev = (
   input: TrevorEventInput,
   opts: { seq: number; producerId?: string; sessionId?: string },
-): SessionEvent {
-  return {
-    createdAt: `2026-01-01T00:00:${String(opts.seq % 60).padStart(2, "0")}.000Z`,
-    eventId: `e${opts.seq}`,
-    payload: input.payload,
-    producerId: opts.producerId ?? WEB,
+): SessionEvent =>
+  storedEvent(input, {
     seq: opts.seq,
+    producerId: opts.producerId ?? WEB,
     sessionId: opts.sessionId ?? "s",
-    type: input.type,
-  };
-}
+    // Each event a distinct second so corpus ordering is deterministic across the synthetic log.
+    createdAt: `2026-01-01T00:00:${String(opts.seq % 60).padStart(2, "0")}.000Z`,
+  });
 
 const REF: RecallSessionRef = {
   sessionId: "s",

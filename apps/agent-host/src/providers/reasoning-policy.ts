@@ -25,6 +25,27 @@ import {
  */
 
 /**
+ * The default reasoning level to advertise/stream at for a surface, given its resolved level menu:
+ * prefer "medium", then "high", then "off", then the lowest available, else "off" when there are no
+ * levels at all. The ONE owner of this preference - the catalog default, the per-turn default, and
+ * every pi-ai adapter (codex/anthropic/pi-key) all derive from it, so a model's catalog default can't
+ * disagree with the level it actually streams at. An adapter passes its own `pickDefaultReasoning`
+ * only when it genuinely wants a different preference.
+ */
+export function defaultReasoningLevel(levels: readonly string[]): string {
+  if (levels.length === 0) {
+    return "off";
+  }
+  return (
+    (levels.includes("medium") && "medium") ||
+    (levels.includes("high") && "high") ||
+    (levels.includes("off") && "off") ||
+    levels[0] ||
+    "off"
+  );
+}
+
+/**
  * The explicit effort value that disables reasoning for this model, when its descriptor says one
  * exists. Undefined means omit `reasoningEffort`; that is how toggle-style adapters disable thinking.
  */

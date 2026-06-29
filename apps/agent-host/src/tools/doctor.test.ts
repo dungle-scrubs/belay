@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { type DoctorSnapshot, formatDoctorReport } from "@trevor/session";
+import { doctorArea, doctorSnapshot } from "@trevor/test-kit";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { registerDoctorSnapshotSource } from "../doctor/source";
@@ -13,29 +14,24 @@ import { executeTool } from "./index";
  * failure to one clean `error:` line instead of collapsing the turn.
  */
 
-const SNAPSHOT: DoctorSnapshot = {
-  state: "ready",
+const SNAPSHOT: DoctorSnapshot = doctorSnapshot({
   checkedAt: "just now",
   host: { workspace: "~/dev/trevorV2", instanceId: "abcd1234", role: "leader" },
   areas: [
-    {
-      id: "core",
+    doctorArea("core", "ok", {
       label: "Core",
-      status: "ok",
       verdict: "running as leader",
       findings: [
         { id: "core.process", status: "ok", title: "Host process", message: "running as leader" },
       ],
-    },
-    {
-      id: "internet",
+    }),
+    doctorArea("internet", "warn", {
       label: "Internet",
-      status: "warn",
       verdict: "offline",
       facts: [{ label: "detail", value: "DNS lookup failed", status: "warn" }],
-    },
+    }),
   ],
-};
+});
 
 test("the doctor tool is read-only and named 'doctor'", () => {
   assert.equal(doctorTool.name, "doctor");
