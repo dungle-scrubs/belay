@@ -1,6 +1,7 @@
 import {
   type ArtifactRef,
   addBreakdown,
+  type CommandMenuPayload,
   decodeTrevorEvent,
   inputEstimateTokens,
   type PastePayload,
@@ -67,6 +68,8 @@ export type CommandResultMessage = {
   command: string;
   text: string;
   ok: boolean;
+  /** A host-owned nested command menu (plan 03) rendered inline; absent for plain text results. */
+  menu?: CommandMenuPayload;
 };
 // A graceful-overflow-recovery adjustment, rendered inline as a status marker: the
 // loop recovered (trimmed a tool result / reduced thinking) and retried. Distinct from
@@ -430,6 +433,7 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           command: decoded.command,
           text: decoded.text,
           ok: decoded.ok,
+          ...(decoded.menu ? { menu: decoded.menu } : {}),
         });
         break;
       case "user.shell": {

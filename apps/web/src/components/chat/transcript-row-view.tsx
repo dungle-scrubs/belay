@@ -24,6 +24,7 @@ import { QuestionTranscriptItem } from "@/components/chat/question-item";
 import { ToneAlert } from "@/components/chat/tone-alert";
 import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
 import { toolMessageStatus } from "@/components/chat/tool-status";
+import { CommandMenu } from "@/components/command-menu/command-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { fmtCtx, fmtTokens, toolSummary } from "../../derive";
 import { LEGACY_RECONNECT_ATTEMPTS, type ToolMessage as ToolMessageData } from "../../transcript";
@@ -79,6 +80,9 @@ export interface TranscriptRowViewProps {
   readonly showThinking: boolean;
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
+  /** Dispatch a nested command-menu row selection back through the command path, e.g. `/style concise`
+   *  (plan 03). A leaf action sends a host command; it never starts a model turn. */
+  readonly onMenuAction?: (command: string, args: string) => void;
   /** Render resolved-question rows as a single compact line (D-003). Off by default; a future compact
    *  transcript mode flips it on. */
   readonly questionsOneLine?: boolean;
@@ -89,6 +93,7 @@ export function TranscriptRowView({
   showThinking,
   onOpenPath,
   onDoctorRefresh,
+  onMenuAction,
   questionsOneLine = false,
 }: TranscriptRowViewProps) {
   if (row.kind === "tool_batch") {
@@ -126,7 +131,14 @@ export function TranscriptRowView({
   if (message.kind === "result") {
     return (
       <div data-message-id={message.id} className="pl-3.5">
-        {message.command === "/doctor" ? (
+        {message.menu ? (
+          <div className="overflow-hidden rounded-md border border-border">
+            <CommandMenu
+              payload={message.menu}
+              onAction={(family, actionId) => onMenuAction?.(`/${family}`, actionId)}
+            />
+          </div>
+        ) : message.command === "/doctor" ? (
           <DoctorResult
             command={message.command}
             text={message.text}

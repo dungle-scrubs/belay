@@ -849,6 +849,7 @@ export function App() {
         toolBatches,
         onOpenPath: (path) => void openInEditor(path),
         onDoctorRefresh: () => void command("/doctor", "refresh"),
+        onMenuAction: (cmd: string, args: string) => void command(cmd, args),
         showThinking: showThinkingOn,
         active,
         // Suppress the "Working" row when the trailing prompt is stranded with no host (02.14); the

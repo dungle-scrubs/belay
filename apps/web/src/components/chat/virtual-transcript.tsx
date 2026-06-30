@@ -21,6 +21,7 @@ export interface VirtualTranscriptProps {
   readonly showThinking: boolean;
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
+  readonly onMenuAction?: (command: string, args: string) => void;
   readonly testInitialRect?: Rect;
 }
 
@@ -58,6 +59,7 @@ export function VirtualTranscript({
   showThinking,
   onOpenPath,
   onDoctorRefresh,
+  onMenuAction,
   testInitialRect,
 }: VirtualTranscriptProps) {
   const lastRowIdRef = useRef<string | null>(null);
@@ -256,6 +258,7 @@ export function VirtualTranscript({
             style={{ transform: `translateY(${item.start}px)` }}
           >
             <TranscriptRowView
+              onMenuAction={onMenuAction}
               row={row}
               showThinking={showThinking}
               onOpenPath={onOpenPath}

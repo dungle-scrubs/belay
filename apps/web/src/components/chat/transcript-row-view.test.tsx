@@ -37,6 +37,46 @@ function renderRow(row: TranscriptRow) {
   );
 }
 
+const resultRow = (message: Extract<Message, { kind: "result" }>): TranscriptRow => ({
+  kind: "message",
+  id: `message:${message.id}`,
+  compactAbove: false,
+  message,
+});
+
+test("a command result carrying a menu renders the nested menu and dispatches a row as a command (plan 03)", () => {
+  const onMenuAction = vi.fn();
+  render(
+    <TranscriptRowView
+      row={resultRow({
+        kind: "result",
+        id: "m1",
+        command: "/style",
+        text: "Output style",
+        ok: true,
+        menu: {
+          family: "style",
+          title: "Output style",
+          rows: [{ id: "concise", label: "Concise" }],
+        },
+      })}
+      showThinking
+      onOpenPath={noop}
+      onDoctorRefresh={noop}
+      onMenuAction={onMenuAction}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /Concise/ }));
+  assert.deepEqual(onMenuAction.mock.calls[0], ["/style", "concise"]);
+});
+
+test("a plain command result (no menu) renders its text, not a menu", () => {
+  renderRow(
+    resultRow({ kind: "result", id: "m2", command: "/help", text: "the help output", ok: true }),
+  );
+  assert.ok(screen.getByText("the help output"));
+});
+
 test("renders typed stop notes for non-automatic adaptive termination causes", () => {
   for (const [cause, title] of [
     ["context_pressure", "context pressure"],

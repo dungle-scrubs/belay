@@ -55,6 +55,8 @@ export interface TranscriptView {
   /** Re-runs `/doctor` on the host (a no-model-turn immediate command), wired to the dashboard's
    *  refresh control. App owns it because it depends on the session command action. */
   readonly onDoctorRefresh: () => void;
+  /** Dispatch a nested command-menu row selection as a host command (plan 03), e.g. `/style concise`. */
+  readonly onMenuAction?: (command: string, args: string) => void;
   readonly showThinking: boolean;
   /** The running run id, or null once the turn ends; drives the persistent "Working" pulse. */
   readonly active: string | null;
@@ -203,7 +205,15 @@ export function PanelHost(props: {
   const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
   const { sidebar, sessionName, chooser, archived, onUnarchive, question, handoff } = props;
   const { replayed } = stream;
-  const { transcript, toolBatches, onOpenPath, onDoctorRefresh, showThinking, queue } = tv;
+  const {
+    transcript,
+    toolBatches,
+    onOpenPath,
+    onDoctorRefresh,
+    onMenuAction,
+    showThinking,
+    queue,
+  } = tv;
   const { active, awaitingResponse, turnStartedAt } = tv;
   const rows = useMemo(
     () =>
@@ -320,6 +330,7 @@ export function PanelHost(props: {
                 showThinking={showThinking}
                 onOpenPath={onOpenPath}
                 onDoctorRefresh={onDoctorRefresh}
+                onMenuAction={onMenuAction}
               />
             )}
           </div>
