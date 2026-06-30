@@ -16,6 +16,17 @@ import type { VimMode } from "./mode";
  *
  * Surface-agnostic: the inline composer and the full-surface editor both attach the same hook to their
  * textarea, so Vim mode is identical on both (D-007).
+ *
+ * Conflict precedence (plan 06, M7), highest first:
+ *   1. Composer token-delete (D-092) - Backspace/Delete adjacent to an image/paste token.
+ *   2. The slash command menu while open - it owns arrows/Enter/Escape, so the composer SUSPENDS the
+ *      Vim layer while `menuOpen` (a `/`-draft is typed in insert anyway).
+ *   3. This Vim layer - in insert only Escape (-> normal); in normal/visual the motions/edits.
+ *   4. App's Enter-submit + Up/Down history (insert mode, where Vim yields).
+ *   5. The global Escape (cancel a turn / clear the draft): reached only by a SECOND Escape, since the
+ *      first enters normal mode and is consumed (stopPropagation). The full-surface editor instead
+ *      consumes the first Escape for normal-mode and closes on the second; Cmd/Ctrl-Enter always
+ *      confirms there. The `!` shell lane is submit-time routing, not a keydown, so it never conflicts.
  */
 
 export interface VimController {

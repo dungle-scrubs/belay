@@ -25,6 +25,12 @@ test("carries an accessible name describing the Vim mode (no visible instruction
   assert.equal(el.textContent, "normal");
 });
 
+test("the indicator is a status live region, so a mode change is announced to screen readers (M7)", () => {
+  const { getByRole } = render(<VimModeIndicator mode="normal" />);
+  const el = getByRole("status");
+  assert.equal(el.getAttribute("aria-label"), "Vim mode: normal");
+});
+
 test("every mode pill carries the fixed-height + min-width classes (no reflow on mode change)", () => {
   for (const mode of VIM_MODES) {
     const { getByLabelText, unmount } = render(<VimModeIndicator mode={mode} />);

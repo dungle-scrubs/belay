@@ -55,6 +55,9 @@ export interface PromptInputProps {
   /** Whether the host-owned Vim prompt mode is enabled (plan 06). When on, the composer gains the Vim
    *  layer + a mode indicator; when off it is exactly the plain composer. */
   readonly vimEnabled?: boolean;
+  /** Whether the slash command menu is open (plan 06 conflict precedence): while it is, the menu owns
+   *  the keys (arrows/Enter/Escape), so the Vim layer is suspended. */
+  readonly menuOpen?: boolean;
 }
 
 export function PromptInput({
@@ -65,6 +68,7 @@ export function PromptInput({
   placeholder,
   onExpand,
   vimEnabled = false,
+  menuOpen = false,
 }: PromptInputProps) {
   const {
     draft,
@@ -159,14 +163,15 @@ export function PromptInput({
             onChange={(event) => setDraft(event.target.value)}
             onFocus={vim.onFocus}
             onKeyDown={(event) => {
-              // Precedence: composer token-delete (D-092) first; then the Vim layer (in normal/visual it
-              // consumes motions/edits + enters/leaves modes; in insert it only catches Escape, yielding
-              // everything else); then App's handler (slash menu, Enter submit, Up/Down history).
+              // Precedence: composer token-delete (D-092) first; then the Vim layer - SUSPENDED while
+              // the slash menu is open so the menu keeps owning arrows/Enter/Escape; then App's handler
+              // (slash menu, Enter submit, Up/Down history). In insert the Vim layer only catches Escape,
+              // yielding everything else; in normal/visual it consumes motions/edits + mode changes.
               handleKeyDown(event);
               if (event.defaultPrevented) {
                 return;
               }
-              if (vim.onKeyDown(event)) {
+              if (!menuOpen && vim.onKeyDown(event)) {
                 return;
               }
               onKeyDown(event);

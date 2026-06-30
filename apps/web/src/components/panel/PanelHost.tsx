@@ -439,6 +439,7 @@ export function PanelHost(props: {
                 placeholder={compose.placeholder}
                 onExpand={compose.onExpand}
                 vimEnabled={compose.vimEnabled}
+                menuOpen={compose.menuOpen}
               />
             </>
           )}
