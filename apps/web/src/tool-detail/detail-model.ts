@@ -61,6 +61,23 @@ export function toToolDetailModel(message: Message): ToolDetailModel | null {
   return null;
 }
 
+/**
+ * Re-derives the open detail from the LIVE transcript by its source row id (plan 08 M6). The detail
+ * tracks the row as session events update it (a running tool's status/output land in place), and
+ * resolves to null once the source row leaves the transcript (e.g. /clear) so the takeover closes
+ * itself. A null id (closed) is null. This is why the App holds the id, never a stale snapshot.
+ */
+export function findDetailModel(
+  messages: readonly Message[],
+  sourceId: string | null,
+): ToolDetailModel | null {
+  if (sourceId === null) {
+    return null;
+  }
+  const source = messages.find((message) => message.id === sourceId);
+  return source ? toToolDetailModel(source) : null;
+}
+
 function fromTool(t: ToolMessage): ToolDetailModel {
   const status = toolMessageStatus(t);
   return {

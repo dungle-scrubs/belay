@@ -34,7 +34,7 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
-import { type ToolDetailModel, toToolDetailModel } from "@/tool-detail/detail-model";
+import { findDetailModel, toToolDetailModel } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
@@ -495,9 +495,12 @@ export function App() {
     sessionId,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
-  // The tool detail takeover (plan 08): the projected ToolDetailModel of the row being inspected, or
-  // null when closed. Opening it closes any other center-column takeover (one at a time).
-  const [detail, setDetail] = useState<ToolDetailModel | null>(null);
+  // The tool detail takeover (plan 08): the id of the transcript row being inspected, or null when
+  // closed. We hold the ID, not a snapshot, so the detail model is RE-DERIVED from the live transcript
+  // each render (M6) - a running tool's detail updates in place through completion/error/abort, and the
+  // takeover closes itself if its source row ever leaves the transcript (e.g. /clear).
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = useMemo(() => findDetailModel(transcript, detailId), [detailId, transcript]);
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();
@@ -935,20 +938,19 @@ export function App() {
   ) : undefined;
 
   // The tool detail takeover (plan 08): open it from a transcript row's inspect affordance, closing any
-  // other center-column takeover first (only one at a time). Close returns to chat and restores focus +
-  // scroll to the source row where it still exists in the DOM.
+  // other center-column takeover first (only one at a time). The model is derived LIVE below, so a
+  // running tool keeps updating while open.
   const onOpenDetail = (message: Message) => {
-    const projected = toToolDetailModel(message);
-    if (!projected) {
+    if (!toToolDetailModel(message)) {
       return;
     }
     setChooserOpen(false);
     modal.setArchiveOpen(false);
-    setDetail(projected);
+    setDetailId(message.id);
   };
   const closeDetail = () => {
-    const sourceId = detail?.id;
-    setDetail(null);
+    const sourceId = detailId;
+    setDetailId(null);
     if (sourceId) {
       // Best-effort: bring the source row back into view where the DOM still has it (the takeover
       // unmounts this frame, so defer to the next so the transcript is laid out again first).

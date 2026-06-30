@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { Message } from "@/transcript";
-import { isDetailEligible, toToolDetailModel } from "./detail-model";
+import { findDetailModel, isDetailEligible, toToolDetailModel } from "./detail-model";
 
 /**
  * M1: detail eligibility + the pure ToolDetailModel projection. Every tool row (including unknown / MCP
@@ -89,6 +89,26 @@ test("an aborted tool is the error status with an aborted reason", () => {
   assert.equal(m?.status, "error");
   assert.equal(m?.aborted, true);
   assert.equal(m?.error, "aborted before completion");
+});
+
+test("findDetailModel re-derives the detail live by source id (M6)", () => {
+  // The same source id: a running tool, then the SAME row after tool.completed lands. The detail tracks
+  // the live row, so its status/output flip from running to done without re-opening.
+  const running: Message[] = [tool({ id: "c9", done: false, result: undefined })];
+  const r = findDetailModel(running, "c9");
+  assert.equal(r?.status, "running");
+  assert.equal(r?.output, undefined);
+
+  const completed: Message[] = [tool({ id: "c9", done: true, result: "42 files" })];
+  const d = findDetailModel(completed, "c9");
+  assert.equal(d?.status, "done");
+  assert.equal(d?.output, "42 files");
+});
+
+test("findDetailModel is null for a closed takeover or a source row that has left the transcript", () => {
+  const messages: Message[] = [tool({ id: "c1" })];
+  assert.equal(findDetailModel(messages, null), null, "no id -> closed");
+  assert.equal(findDetailModel(messages, "gone"), null, "source row left (e.g. /clear) -> closes");
 });
 
 test("a shell-lane row projects the command as args and is shell-sourced", () => {

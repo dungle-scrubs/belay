@@ -54,9 +54,9 @@
 
 ### Gate 2->3
 
-- [ ] Filesystem, shell, search, web/docs, MCP, and unknown detail stories exist
-- [ ] Running/streaming fixtures update in place
-- [ ] Redaction and truncation indicators are visible where applicable
+- [x] Filesystem, shell, search, web/docs, MCP, and unknown detail stories exist
+- [x] Running/streaming fixtures update in place
+- [x] Redaction and truncation indicators are visible where applicable
 
 ## Phase 3: Live App Integration
 
@@ -70,17 +70,17 @@
 
 ### M6: Live Streaming Detail
 
-- [ ] RED: Add tests for a running bash/tool detail view receiving incremental updates
-- [ ] GREEN: Wire live session events into the open detail model without requiring transcript re-open
-- [ ] RED: Add tests for tool completion, error, abort, and late-arriving updates while detail is open
-- [ ] GREEN: Keep detail status/output synchronized with transcript rows
-- [ ] REFACTOR: Ensure detail state is derived from session events/read models, not copied stale local snapshots
+- [x] RED: Add tests for a running bash/tool detail view receiving incremental updates
+- [x] GREEN: Wire live session events into the open detail model without requiring transcript re-open
+- [x] RED: Add tests for tool completion, error, abort, and late-arriving updates while detail is open
+- [x] GREEN: Keep detail status/output synchronized with transcript rows
+- [x] REFACTOR: Ensure detail state is derived from session events/read models, not copied stale local snapshots
 
 ### Gate 3->4
 
-- [ ] Live detail opens from regular and compact transcript rows
-- [ ] Escape/back returns to chat and does not trigger background actions
-- [ ] Running tool detail updates live through completion/error/abort
+- [x] Live detail opens from regular and compact transcript rows
+- [x] Escape/back returns to chat and does not trigger background actions
+- [x] Running tool detail updates live through completion/error/abort
 
 ## Phase 4: Validation
 
