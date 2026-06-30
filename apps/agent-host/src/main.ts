@@ -1877,8 +1877,12 @@ function toggleDebug(): void {
  * the new leader reaps it. The headline reason debug mode exists: a stable (non-watch) host plus an
  * explicit "pick up my changes" instead of an auto-watch restart that silently breaks a live turn.
  */
-async function restartHost(): Promise<void> {
-  if (!debugMode) {
+async function restartHost(args: string): Promise<void> {
+  // The typed `/restart` stays debug-gated (so a normal session can't be restarted by a stray
+  // keystroke), but the sidebar's explicit "restart" button sends `force` to bypass the gate - a
+  // deliberate click is its own confirmation and shouldn't require toggling debug first.
+  const forced = args.trim() === "force";
+  if (!debugMode && !forced) {
     await emit(
       events.commandResult({
         command: "/restart",
@@ -2354,13 +2358,14 @@ function handleEvent(message: SessionEvent): void {
         );
         return;
       }
-      // Debug surface: /debug toggles the mode (always available); /restart is gated inside its handler.
+      // Debug surface: /debug toggles the mode (always available); /restart is gated inside its
+      // handler unless called with `force` (the sidebar restart button bypasses the gate).
       if (command === "/debug") {
         toggleDebug();
         return;
       }
       if (command === "/restart") {
-        restartHost().catch((error) => warn("host", "restart failed", { error: msg(error) }));
+        restartHost(args).catch((error) => warn("host", "restart failed", { error: msg(error) }));
         return;
       }
       // Debug lifecycle controls (D-094 M4): archive/unarchive flip the durable session flag; /stop is

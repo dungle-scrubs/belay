@@ -976,18 +976,13 @@ export function App() {
   // worktree affordances and the session id for orientation. `restart` is a temporary debug surface.
   const panelFooter = (
     <>
-      {/* TEMP dev affordance (remove later): restart the host to pick up code changes. /restart is a
-          debug-mode command (announced only while debug is on), so enable debug first if it isn't,
-          then re-exec the host. */}
+      {/* TEMP dev affordance (remove later): restart the host to pick up code changes. The typed
+          `/restart` is debug-gated, but this explicit button sends `force` so a click restarts
+          straight away regardless of debug mode (the click is its own confirmation). */}
       <button
         type="button"
-        onClick={() => {
-          if (!commands.some((c) => c.name === "/restart")) {
-            void command("/debug", "");
-          }
-          void command("/restart", "");
-        }}
-        title="Restart the host with fresh code (debug)"
+        onClick={() => void command("/restart", "force")}
+        title="Restart the host with fresh code"
         aria-label="Restart the host"
         className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
       >
