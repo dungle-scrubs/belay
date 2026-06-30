@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M0: Shared Playwright + Docker + CI foundation
+> Current focus: Done - M0-M4 implemented, both lanes verified, gate green
 
 - Total checklist items: 39
-- Completed: 7
-- Current cutoff blockers: 32
+- Completed: 39
+- Current cutoff blockers: 0
 
 ## 0. Hard Dependencies
 
