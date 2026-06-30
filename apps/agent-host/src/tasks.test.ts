@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { TaskSnapshot, TaskStatus } from "@trevor/session";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { contextRegistry } from "./context/registry";
 import { SystemPromptBuilder } from "./providers/system-prompt";
@@ -62,6 +63,28 @@ test("the task tool descriptions name the single canonical list (so a tool-first
     assert.match(tool.description, /single task list for this session/);
     assert.match(tool.description, /task panel/);
   }
+});
+
+test("task_list returns the current checklist so a tool-first model can enumerate it (09.1)", async () => {
+  // MiniMax/GLM call task_list expecting a tool; without one they ask the user to paste the list even
+  // though the same tasks are in their prompt. task_list returns the live registry on demand.
+  const registry = new TaskRegistry();
+  registry.create({ subject: "first", activeForm: "doing first", status: "in_progress" });
+  registry.create({ subject: "second" });
+  const [, , list] = buildTaskTools(registry);
+
+  const out = await Effect.runPromise(list.execute({}));
+
+  assert.match(out, /task_1 \[in progress\] doing first/);
+  assert.match(out, /task_2 \[pending\] second/);
+});
+
+test("task_list on an empty checklist says so plainly (not an error)", async () => {
+  const [, , list] = buildTaskTools(new TaskRegistry());
+  assert.equal(
+    await Effect.runPromise(list.execute({})),
+    "Your checklist is empty - there are no tasks.",
+  );
 });
 
 test("a task updated before the prompt build is rendered at its new status", () => {

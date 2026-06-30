@@ -357,10 +357,19 @@ const UpdateParams = Schema.Struct({
   blocks: TaskIds,
 });
 
-/** The model-facing checklist tools (create + update); reads are covered ambiently. */
+/** task_list takes no arguments - it returns the whole current checklist. */
+const ListParams = Schema.Struct({});
+
+/**
+ * The model-facing checklist tools: create, update, and list. The checklist is ALSO rendered into the
+ * system prompt every turn ({@link TaskRegistry.renderForPrompt}), but weak local models (GLM/MiniMax)
+ * reach for an explicit TOOL to enumerate rather than reading the ambient block - they call task_list
+ * and, finding none, ask the user to paste the list. task_list returns the same registry on demand so
+ * those models can actually see their tasks. <!-- 09.1 -->
+ */
 export function buildTaskTools(
   registry: TaskRegistry = taskRegistry,
-): [Tool<typeof CreateParams.Type>, Tool<typeof UpdateParams.Type>] {
+): [Tool<typeof CreateParams.Type>, Tool<typeof UpdateParams.Type>, Tool<typeof ListParams.Type>] {
   const create: Tool<typeof CreateParams.Type> = {
     name: "task_create",
     description:
@@ -424,5 +433,25 @@ export function buildTaskTools(
       }),
   };
 
-  return [create, update];
+  const list: Tool<typeof ListParams.Type> = {
+    name: "task_list",
+    description:
+      "List your working checklist - the single task list for this session (the one shown in the user's task panel) - returning each task's id, status, and title. This is the SAME checklist already in your prompt, returned on demand. Use it to see what exists, what's in progress, or what's stale (e.g. before cleaning up) rather than asking the user to paste it.",
+    params: ListParams,
+    execute: () =>
+      Effect.sync(() => {
+        const tasks = registry.list();
+        if (!tasks.length) {
+          return "Your checklist is empty - there are no tasks.";
+        }
+        return tasks
+          .map((t) => {
+            const dep = t.blockedBy.length ? ` (blocked by: ${t.blockedBy.join(", ")})` : "";
+            return `${t.id} [${STATUS_LABEL[t.status]}] ${t.activeForm}${dep}`;
+          })
+          .join("\n");
+      }),
+  };
+
+  return [create, update, list];
 }
