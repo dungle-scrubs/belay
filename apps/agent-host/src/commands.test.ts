@@ -137,3 +137,30 @@ test("/handoff is announced in the inventory with its generate/direct usage (02 
   assert.match(spec.usage ?? "", /--generate/);
   assert.match(spec.usage ?? "", /--direct/);
 });
+
+test("/style is announced and bare /style returns a nested command-menu payload (03 M3)", async () => {
+  const registry = buildCommandRegistry();
+  assert.ok(
+    registry.specs.some((spec) => spec.name === "/style"),
+    "/style is announced",
+  );
+  const { ok, menu } = await registry.run("/style", "", baseCtx);
+  assert.equal(ok, true);
+  assert.equal(menu?.family, "style");
+  assert.ok((menu?.rows.length ?? 0) > 0, "the menu carries style rows from host data");
+});
+
+test("an unknown /style id is a plain error result with no menu (03 M3)", async () => {
+  const registry = buildCommandRegistry();
+  const { ok, menu } = await registry.run("/style", "definitely-not-a-style", baseCtx);
+  assert.equal(ok, false);
+  assert.equal(menu, undefined);
+});
+
+test("a plain command result carries no menu, unchanged (03 M1 backward-compat)", async () => {
+  const registry = buildCommandRegistry();
+  const { ok, menu, text } = await registry.run("/help", "", baseCtx);
+  assert.equal(ok, true);
+  assert.equal(menu, undefined);
+  assert.ok(text.length > 0);
+});

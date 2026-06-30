@@ -2054,13 +2054,13 @@ registerDoctorSnapshotSource(async () =>
  * turn is streaming, and answers with a single command.result.
  */
 async function runCommand(name: string, args: string): Promise<void> {
-  const { text, ok } = await commands.run(name, args, {
+  const { text, ok, menu } = await commands.run(name, args, {
     ...doctorFacts(),
     providers,
     lease: lease.debugInfo(Date.now()),
     compact: forceCompact,
   });
-  await emit(events.commandResult({ command: name, text, ok }));
+  await emit(events.commandResult({ command: name, text, ok, ...(menu ? { menu } : {}) }));
 }
 
 /** Admits one event to the prompt projection and recomputes the derived history.

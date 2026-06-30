@@ -1,10 +1,17 @@
-import type { CommandSpec, InternetSnapshot, SourceSummary } from "@trevor/session";
+import type {
+  CommandMenuPayload,
+  CommandSpec,
+  InternetSnapshot,
+  SourceSummary,
+} from "@trevor/session";
 import { buildInitProposal } from "./context/init-agents";
 import { buildDoctorCommandResult } from "./doctor/build";
 import { msg } from "./messages";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
 import { buildSkillCommand } from "./skills";
+import { loadStylePref, saveStylePref } from "./style/style-store";
+import { handleStyleCommand } from "./style/styles";
 import { runCommand } from "./tools/run-shell";
 
 /**
@@ -55,23 +62,35 @@ export interface CompactInput {
   readonly compact?: () => Promise<string>;
 }
 
+/** What a command's `run` may return: bare result text, or text plus an optional nested command-menu
+ *  payload (plan 03) and/or an explicit ok. A plain string is shorthand for `{ text, ok: true }`. */
+export interface CommandRunResult {
+  readonly text: string;
+  readonly ok?: boolean;
+  readonly menu?: CommandMenuPayload;
+}
+
 /**
  * One immediate command: its announced spec, a `select` that derives the command's NARROW input
  * (`I`) from the full CommandContext - the only fields its `run` may read - and the `run` that
- * produces the result text. A command that needs no context uses `I = void`. The registry always
- * calls `run(args, select(ctx))`, so each command declares its own input shape instead of every
- * command sharing one wide context.
+ * produces the result text (or a {@link CommandRunResult} with a menu). A command that needs no context
+ * uses `I = void`. The registry always calls `run(args, select(ctx))`, so each command declares its own
+ * input shape instead of every command sharing one wide context.
  */
 export interface Command<I = void> {
   readonly spec: CommandSpec;
   readonly select: (ctx: CommandContext) => I;
-  run(args: string, input: I): Promise<string> | string;
+  run(args: string, input: I): Promise<string | CommandRunResult> | string | CommandRunResult;
 }
 
 /** The command registry: the announced specs plus a name -> result runner. */
 export interface CommandRegistry {
   readonly specs: readonly CommandSpec[];
-  run(name: string, args: string, ctx: CommandContext): Promise<{ text: string; ok: boolean }>;
+  run(
+    name: string,
+    args: string,
+    ctx: CommandContext,
+  ): Promise<{ text: string; ok: boolean; menu?: CommandMenuPayload }>;
 }
 
 const noContext = (): void => undefined;
@@ -186,6 +205,30 @@ function buildJobsCommand(): Command {
   };
 }
 
+/**
+ * `/style [id|reset]` (plan 03): bare renders the output-style chooser as a nested command-menu payload
+ * (the web's generic renderer draws it); `/style <id>` (or a menu-row dispatch) selects + persists a
+ * style under the config home; `/style reset` returns to default. Presentation-only - it changes nothing
+ * but the active style preference, read at turn start for response shaping + run attribution.
+ */
+function buildStyleCommand(): Command {
+  return {
+    spec: { name: "/style", summary: "Choose the output style", usage: "/style [id|reset]" },
+    select: noContext,
+    run: (args): CommandRunResult => {
+      const result = handleStyleCommand(args, loadStylePref().activeStyle);
+      if (result.kind === "menu") {
+        return { text: result.menu.title, menu: result.menu };
+      }
+      if (result.kind === "selected") {
+        saveStylePref(result.styleId);
+        return { text: result.text };
+      }
+      return { text: result.text, ok: false };
+    },
+  };
+}
+
 function buildJobsStopCommand(): Command {
   return {
     spec: {
@@ -272,6 +315,7 @@ export function buildCommandRegistry(): CommandRegistry {
 
   // /skills is owned by skills.ts (it knows skill discovery); registered here as one line.
   add(buildSkillCommand());
+  add(buildStyleCommand());
   add(buildJobsCommand());
   add(buildJobsStopCommand());
 
@@ -286,7 +330,14 @@ export function buildCommandRegistry(): CommandRegistry {
       }
       try {
         // Hand the command only its own slice of the context (select), never the whole thing.
-        return { text: await command.run(args, command.select(ctx)), ok: true };
+        const result = await command.run(args, command.select(ctx));
+        return typeof result === "string"
+          ? { text: result, ok: true }
+          : {
+              text: result.text,
+              ok: result.ok ?? true,
+              ...(result.menu ? { menu: result.menu } : {}),
+            };
       } catch (error) {
         return {
           text: `error: ${msg(error)}`,

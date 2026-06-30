@@ -240,6 +240,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     relativePath: ".env.op",
     description: "1Password-injected env (web_search keys) read at startup.",
   },
+  {
+    name: "style-pref",
+    category: "config",
+    relativePath: "style.json",
+    description: "Active output-style preference (plan 03): { activeStyle }.",
+  },
   // state (TREVOR_STATE_HOME) - all machine-local runtime state
   {
     name: "sessions-db",

@@ -43,6 +43,13 @@ export const USER_AGENTS_MD = join(TREVOR_HOME, "AGENTS.md");
 export const USER_MODELS_JSON = join(TREVOR_HOME, "models.json");
 
 /**
+ * The user's active output-style preference (plan 03): a small `{ activeStyle }` JSON under the config
+ * home, written when `/style` selects a style and read at turn start for run attribution. Host-owned and
+ * portable (it travels with `TREVOR_HOME`), separate from provider/model/reasoning preferences.
+ */
+export const USER_STYLE_JSON = join(TREVOR_HOME, "style.json");
+
+/**
  * The directory the workspace-confined tools operate inside. Point the agent at a
  * target repo with TREVOR_WORKSPACE; defaults to the host's working directory.
  * Confinement is a path-escape guard (no `../` or absolute path may leave the
