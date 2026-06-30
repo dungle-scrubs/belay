@@ -22,17 +22,17 @@
 
 ### M2: Takeover Shell Stories
 
-- [ ] RED: Add Storybook stories for generic detail open, running, completed, error, aborted, empty/unavailable, narrow width, both sidebars visible, and long-output states
-- [ ] GREEN: Build the detail takeover shell with top-left back arrow and stable header/status area
-- [ ] RED: Add interaction tests for back arrow and Escape returning to chat
-- [ ] GREEN: Implement focus return to the source transcript row when closing where possible
-- [ ] REFACTOR: Reuse takeover shell patterns only where already clean; do not prematurely force model chooser/archive/detail into one abstraction
+- [x] RED: Add Storybook stories for generic detail open, running, completed, error, aborted, empty/unavailable, narrow width, both sidebars visible, and long-output states
+- [x] GREEN: Build the detail takeover shell with top-left back arrow and stable header/status area
+- [x] RED: Add interaction tests for back arrow and Escape returning to chat
+- [x] GREEN: Implement focus return to the source transcript row when closing where possible
+- [x] REFACTOR: Reuse takeover shell patterns only where already clean; do not prematurely force model chooser/archive/detail into one abstraction
 
 ### Gate 1->2
 
-- [ ] Storybook shell states are reviewed
-- [ ] Escape and back-arrow behavior are covered in component tests
-- [ ] Detail view clearly reads as a focused inspection surface, not normal chat
+- [x] Storybook shell states are reviewed
+- [x] Escape and back-arrow behavior are covered in component tests
+- [x] Detail view clearly reads as a focused inspection surface, not normal chat
 
 ## Phase 2: Tool-Specific Detail Adapters
 
