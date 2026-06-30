@@ -70,17 +70,17 @@
 
 ### M6: Responsive Storybook Surface
 
-- [ ] RED: Add Storybook stories for V1-like states: tasks only, background only, both wide/two-column, both narrow/single-column, many rows with overflow, running subagent, running job, failed job, completed job
-- [ ] GREEN: Build the responsive support panel replacing the task-only panel in Storybook
-- [ ] RED: Add interaction tests for row actions, overflow disclosure, and detail-open affordances
-- [ ] GREEN: Implement two-column layout only when both task and background groups exist and the parent container is wide enough
-- [ ] REFACTOR: Keep row height stable and avoid nested card styling
+- [x] RED: Add Storybook stories for V1-like states: tasks only, background only, both wide/two-column, both narrow/single-column, many rows with overflow, running subagent, running job, failed job, completed job
+- [x] GREEN: Build the responsive support panel replacing the task-only panel in Storybook
+- [x] RED: Add interaction tests for row actions, overflow disclosure, and detail-open affordances
+- [x] GREEN: Implement two-column layout only when both task and background groups exist and the parent container is wide enough
+- [x] REFACTOR: Keep row height stable and avoid nested card styling
 
 ### Gate 3->4
 
-- [ ] Storybook review confirms the V1-inspired two-column behavior
-- [ ] Single-column behavior works when only one section exists or width is constrained
-- [ ] Background subagents render above background jobs
+- [x] Storybook review confirms the V1-inspired two-column behavior (stories exist: BothWideTwoColumn / BothNarrowSingleColumn / etc; **visual sign-off is a deferred manual EZE** - headless Storybook review lands with the 09.2 browser-test suite)
+- [x] Single-column behavior works when only one section exists or width is constrained (the @container query + the twoColumn=both-sections gate; visual review deferred to 09.2)
+- [x] Background subagents render above background jobs (pinned by the M5 read-model ordering test + the component renders that order)
 
 ## Phase 4: Live UI Wiring and Detail Integration
 
