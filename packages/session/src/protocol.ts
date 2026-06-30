@@ -789,6 +789,33 @@ export const events = {
     type: "host.sourceAuth",
     payload: { ...p.state },
   }),
+  /**
+   * A turn's local-model admission status (plan 11 M7): emitted when a turn QUEUES for a busy local
+   * runtime ("waiting for LM Studio"), then when it is granted (`acquired`), and when the wait/hold ends
+   * (`released`/`cancelled`) or is `refused`. Advisory/presence-style live status - kept OUT of
+   * conversation memory / prompt-history projection (like host.internet); it never becomes durable
+   * assistant content. `position` is the 0-based queue spot when queued; `refusal` the class when refused.
+   */
+  admissionStatus: (p: {
+    runId: string;
+    phase: "queued" | "acquired" | "released" | "refused" | "cancelled";
+    provider: string;
+    model: string;
+    priority: string;
+    position?: number;
+    refusal?: string;
+  }): TrevorEventInput => ({
+    type: "admission.status",
+    payload: {
+      runId: p.runId,
+      phase: p.phase,
+      provider: p.provider,
+      model: p.model,
+      priority: p.priority,
+      ...(p.position !== undefined ? { position: p.position } : {}),
+      ...(p.refusal !== undefined ? { refusal: p.refusal } : {}),
+    },
+  }),
   hostOnline: (p: {
     branch?: string;
     git?: GitStatus;

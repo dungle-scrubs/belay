@@ -42,11 +42,19 @@ export interface AdmissionHandle {
 /** A status callback the runtime invokes as a request moves through queued -> acquired (for events). */
 export type AdmissionStatusListener = (status: AdmissionStatusUpdate) => void;
 
+/** The target identity + priority every status update carries, so a listener can build the user-facing
+ *  "waiting for {model}" event without re-deriving them. */
+interface AdmissionStatusBase {
+  readonly provider: string;
+  readonly model: string;
+  readonly priority: AdmissionPriority;
+}
+
 /** A status update emitted while waiting/holding, for the protocol + /doctor surfaces. */
 export type AdmissionStatusUpdate =
-  | { readonly phase: "queued"; readonly position: number }
-  | { readonly phase: "acquired" }
-  | { readonly phase: "refused"; readonly refusal: AdmissionRefusalClass };
+  | (AdmissionStatusBase & { readonly phase: "queued"; readonly position: number })
+  | (AdmissionStatusBase & { readonly phase: "acquired" })
+  | (AdmissionStatusBase & { readonly phase: "refused"; readonly refusal: AdmissionRefusalClass });
 
 /** What the runtime needs to acquire + hold admission for one unit of local-model work. */
 export interface AdmitOptions {
@@ -73,6 +81,22 @@ const NOOP_HANDLE: AdmissionHandle = {
   ownerId: null,
   release: async () => {},
 };
+
+/** The phase-specific status core; {@link notify} stamps the shared target identity + priority onto it. */
+type StatusCore =
+  | { readonly phase: "queued"; readonly position: number }
+  | { readonly phase: "acquired" }
+  | { readonly phase: "refused"; readonly refusal: AdmissionRefusalClass };
+
+/** Invokes the caller's status listener with the target identity + priority filled in from the request. */
+function notify(opts: AdmitOptions, update: StatusCore): void {
+  opts.onStatus?.({
+    ...update,
+    provider: opts.owner.provider,
+    model: opts.owner.model,
+    priority: opts.priority,
+  });
+}
 
 function sleep(caps: AdmissionCaps, ms: number, signal?: AbortSignal): Promise<void> {
   // The caps clock advances via caps.sleep; honor an abort so a cancelled wait wakes immediately.
@@ -117,7 +141,7 @@ export async function admit(
       model: owner.model,
       error: cause instanceof Error ? cause.message : String(cause),
     });
-    opts.onStatus?.({ phase: "refused", refusal: "store_unavailable" });
+    notify(opts, { phase: "refused", refusal: "store_unavailable" });
     return NOOP_HANDLE;
   }
 
@@ -128,12 +152,12 @@ export async function admit(
       model: owner.model,
       refusal: outcome.refusal,
     });
-    opts.onStatus?.({ phase: "refused", refusal: outcome.refusal });
+    notify(opts, { phase: "refused", refusal: outcome.refusal });
     return NOOP_HANDLE;
   }
 
   if (outcome.status === "queued") {
-    opts.onStatus?.({ phase: "queued", position: outcome.position });
+    notify(opts, { phase: "queued", position: outcome.position });
     const acquired = await waitForSlot(opts, caps, pollIntervalMs, report);
     if (!acquired) {
       // Aborted while queued: the queue entry was released; proceed with nothing held.
@@ -141,7 +165,7 @@ export async function admit(
     }
   }
 
-  opts.onStatus?.({ phase: "acquired" });
+  notify(opts, { phase: "acquired" });
   return heldHandle(key, owner.ownerId, caps, heartbeatIntervalMs);
 }
 
@@ -194,7 +218,7 @@ async function waitForSlot(
       }
       // Still queued (or refused) - keep waiting on the next loop.
     } else {
-      opts.onStatus?.({ phase: "queued", position: poll.position });
+      notify(opts, { phase: "queued", position: poll.position });
     }
   }
 }

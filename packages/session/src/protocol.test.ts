@@ -30,6 +30,61 @@ const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): Sess
   ...over,
 });
 
+test("events.admissionStatus round-trips queued + refused admission status (plan 11 M7)", () => {
+  const queued = decodeTrevorEvent(
+    stored(
+      events.admissionStatus({
+        runId: "run-1",
+        phase: "queued",
+        provider: "lmstudio",
+        model: "qwen3.6-27b-mlx",
+        priority: "background",
+        position: 2,
+      }),
+    ),
+  );
+  assert.deepEqual(queued, {
+    type: "admission.status",
+    runId: "run-1",
+    phase: "queued",
+    provider: "lmstudio",
+    model: "qwen3.6-27b-mlx",
+    priority: "background",
+    position: 2,
+  });
+
+  // Acquired/released omit the queue position; refused carries a refusal class.
+  const acquired = decodeTrevorEvent(
+    stored(
+      events.admissionStatus({
+        runId: "run-1",
+        phase: "acquired",
+        provider: "lmstudio",
+        model: "qwen3.6-27b-mlx",
+        priority: "foreground",
+      }),
+    ),
+  );
+  assert.equal(acquired?.type === "admission.status" && acquired.position, undefined);
+
+  const refused = decodeTrevorEvent(
+    stored(
+      events.admissionStatus({
+        runId: "run-1",
+        phase: "refused",
+        provider: "lmstudio",
+        model: "qwen3.6-27b-mlx",
+        priority: "foreground",
+        refusal: "estimated_tokens_exceed_context_window",
+      }),
+    ),
+  );
+  assert.equal(
+    refused?.type === "admission.status" && refused.refusal,
+    "estimated_tokens_exceed_context_window",
+  );
+});
+
 test("events.userMessage round-trips through decodeTrevorEvent", () => {
   const decoded = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
   assert.equal(decoded?.type, "user.message");

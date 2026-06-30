@@ -66,7 +66,9 @@ test("admit acquires immediately when the resource is free and the handle releas
   );
   assert.equal(handle.held, true);
   assert.equal(handle.ownerId, "w");
-  assert.deepEqual(statuses, [{ phase: "acquired" }]);
+  assert.deepEqual(statuses, [
+    { phase: "acquired", provider: "lmstudio", model: "qwen3.6-27b-mlx", priority: "foreground" },
+  ]);
   assert.equal(inspectResource(KEY, h.caps).active.length, 1);
 
   await handle.release("success");

@@ -137,6 +137,8 @@ export async function runDelegatedChild(
       publishTurn(req.provider, childHistory(req.agent, req.task), {
         runId: req.childRunId,
         toolNames: resolveChildTools(req),
+        // A subagent's local-model work queues behind foreground user turns sharing the runtime (D-004).
+        priority: "background",
       }).pipe(Effect.provide(childEmit)),
     );
   } catch (cause) {

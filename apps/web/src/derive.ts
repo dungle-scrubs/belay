@@ -590,6 +590,44 @@ interface LatestSessionSwitchOptions {
 }
 
 /** The newest host-authored session handoff target, optionally scoped after a replay boundary. */
+/** The current local-model admission wait for the active turn (plan 11 M7), for the "waiting for the
+ *  local runtime" status row. */
+export interface AdmissionWaiting {
+  readonly runId: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly priority: string;
+  /** The 0-based queue position when known. */
+  readonly position?: number;
+}
+
+/**
+ * The active turn's local-model admission wait, or null when it is not waiting (plan 11 M7). Scoped to
+ * the in-flight run: its LATEST `admission.status` of phase `queued` is a live wait; any later
+ * acquired/released/cancelled/refused supersedes it (chronologically) and clears the wait. So a turn
+ * queued behind another project/subagent shows a bounded "waiting for LM Studio" status, never durable
+ * transcript content.
+ */
+export function admissionWaiting(events: readonly SessionEvent[]): AdmissionWaiting | null {
+  const runId = activeTurnRunId(events);
+  if (!runId) {
+    return null;
+  }
+  const status = latest(events, (d) =>
+    d.type === "admission.status" && d.runId === runId ? d : undefined,
+  );
+  if (!status || status.phase !== "queued") {
+    return null;
+  }
+  return {
+    runId: status.runId,
+    provider: status.provider,
+    model: status.model,
+    priority: status.priority,
+    ...(status.position !== undefined ? { position: status.position } : {}),
+  };
+}
+
 export function latestSessionSwitch(
   events: readonly SessionEvent[],
   options: LatestSessionSwitchOptions = {},

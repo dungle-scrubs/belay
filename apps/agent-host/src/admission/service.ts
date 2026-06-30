@@ -54,6 +54,8 @@ export interface LocalAdmissionGate {
       readonly estimate?: AdmissionEstimate;
       readonly signal?: AbortSignal;
       readonly onStatus?: AdmissionStatusListener;
+      /** The per-turn context (priority + attribution); overrides the gate's default resolver. */
+      readonly context?: LocalAdmissionContext;
     },
   ): Promise<AdmissionHandle>;
   withLifecycle<T>(
@@ -103,7 +105,7 @@ export function createLocalAdmissionGate(deps: LocalAdmissionDeps): LocalAdmissi
   return {
     acquireGeneration(target, opts) {
       const key = generationResourceKey(target.provider, target.baseUrl, target.model);
-      const ctx = resolveContext();
+      const ctx = opts?.context ?? resolveContext();
       return admit(
         {
           key,

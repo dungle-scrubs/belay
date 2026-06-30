@@ -23,10 +23,10 @@ function fakeHandle(log: string[]): AdmissionHandle {
 test("acquires before the stream emits and releases success on completion", async () => {
   const log: string[] = [];
   const stream = admittedStream(
-    async () => {
+    Effect.promise(async () => {
       log.push("acquire");
       return fakeHandle(log);
-    },
+    }),
     () =>
       Stream.fromIterable([1, 2, 3]).pipe(Stream.tap(() => Effect.sync(() => log.push("emit")))),
   );
@@ -41,7 +41,7 @@ test("acquires before the stream emits and releases success on completion", asyn
 test("releases with provider_failure when the stream fails", async () => {
   const log: string[] = [];
   const stream = admittedStream(
-    async () => fakeHandle(log),
+    Effect.promise(async () => fakeHandle(log)),
     () => Stream.fail("boom" as const),
   );
   const exit = await Effect.runPromiseExit(Stream.runDrain(stream));
@@ -52,7 +52,7 @@ test("releases with provider_failure when the stream fails", async () => {
 test("releases with cancelled when the stream scope is interrupted", async () => {
   const log: string[] = [];
   const stream = admittedStream(
-    async () => fakeHandle(log),
+    Effect.promise(async () => fakeHandle(log)),
     // A never-ending stream so the fiber is still running when we interrupt it.
     () => Stream.never,
   );

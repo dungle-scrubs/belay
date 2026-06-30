@@ -24,19 +24,19 @@ export function releaseReason(exit: Exit.Exit<unknown, unknown>): AdmissionRelea
 }
 
 /**
- * Wraps `makeStream` with admission. `acquire` (given an AbortSignal wired to interruption) resolves to
- * the held handle; the inner stream then runs holding it, and the handle is released with the
- * exit-derived reason when the scope closes. With a no-op (fail-open) handle this is transparent - the
- * stream runs and the release does nothing.
+ * Wraps `makeStream` with admission. `acquire` is the Effect that resolves the held handle (the caller
+ * builds it, e.g. reading the per-turn reporter from a fiber-local then awaiting the gate with an
+ * interruption-wired AbortSignal); the inner stream then runs holding it, and the handle is released
+ * with the exit-derived reason when the scope closes. With a no-op (fail-open) handle this is
+ * transparent - the stream runs and the release does nothing.
  */
 export function admittedStream<A, E>(
-  acquire: (signal: AbortSignal) => Promise<AdmissionHandle>,
+  acquire: Effect.Effect<AdmissionHandle>,
   makeStream: () => Stream.Stream<A, E>,
 ): Stream.Stream<A, E> {
   return Stream.unwrapScoped(
-    Effect.acquireRelease(
-      Effect.promise((signal) => acquire(signal)),
-      (handle, exit) => Effect.promise(() => handle.release(releaseReason(exit))),
+    Effect.acquireRelease(acquire, (handle, exit) =>
+      Effect.promise(() => handle.release(releaseReason(exit))),
     ).pipe(Effect.map(() => makeStream())),
   );
 }

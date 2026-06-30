@@ -1,7 +1,8 @@
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
-import { Effect, Stream } from "effect";
+import { Effect, FiberRef, Stream } from "effect";
 import { admittedStream } from "../admission/effect";
 import type { LocalAdmissionGate } from "../admission/service";
+import { AdmissionTurnRef } from "../admission/turn-ref";
 import { envNumber } from "../env";
 import { LmStudioClient } from "./lmstudio-client";
 import { streamPiAiModel } from "./pi-ai";
@@ -138,20 +139,29 @@ export class LmStudioProvider extends DescribableProvider {
     reasoning?: string,
   ): Stream.Stream<ProviderEvent, ProviderError> {
     const inner = () => this.streamModel(messages, tools, reasoning);
+    const gate = this.gate;
     // Generation admission (M6): hold a per-model lease for the whole stream so two local streams for
     // the same LM Studio resource serialize by default (D-003); released when the stream scope closes
     // (completion / failure / cancellation). Without a gate the stream runs unwrapped (cloud parity).
-    if (!this.gate) {
+    if (!gate) {
       return inner();
     }
-    return admittedStream(
-      (signal) =>
-        this.gate!.acquireGeneration(
-          { provider: this.id, baseUrl: this.url, model: this.model },
-          { signal },
+    const target = { provider: this.id, baseUrl: this.url, model: this.model };
+    // Read the per-turn reporter off the fiber (set by publishTurn): it carries the run's priority +
+    // attribution and the status emitter, so a queued turn surfaces "waiting for LM Studio" attributed
+    // to the right run (M7). The acquire's AbortSignal is wired to interruption, so cancelling a queued
+    // turn frees its lease.
+    const acquire = FiberRef.get(AdmissionTurnRef).pipe(
+      Effect.flatMap((turn) =>
+        Effect.promise((signal) =>
+          gate.acquireGeneration(target, {
+            signal,
+            ...(turn ? { context: turn.context, onStatus: turn.onStatus } : {}),
+          }),
         ),
-      inner,
+      ),
     );
+    return admittedStream(acquire, inner);
   }
 
   /** The raw model stream (no admission): unwrap the best-effort context reload, then stream pi-ai. */

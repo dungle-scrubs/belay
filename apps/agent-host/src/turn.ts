@@ -1,5 +1,11 @@
 import { events, type ModelRef, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
-import { Cause, Effect, Exit, Option, Stream } from "effect";
+import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
+import type { AdmissionPriority } from "./admission/contract";
+import {
+  AdmissionTurnRef,
+  type AdmissionTurnReporter,
+  admissionStatusEvent,
+} from "./admission/turn-ref";
 import {
   type AgentEvent,
   type DelegateCapability,
@@ -63,6 +69,9 @@ export function publishTurn(
     /** The turn's starting model ref (09.1 M4): the identity a mid-turn switch compares against to tell a
      *  real model change from a reasoning-only re-send. Absent when the turn carried no resolved ref. */
     readonly initialModel?: ModelRef;
+    /** The local-admission priority class for this turn (plan 11): foreground for a user turn (default),
+     *  background for a subagent so it queues behind foreground local-model work. */
+    readonly priority?: AdmissionPriority;
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
@@ -72,6 +81,17 @@ export function publishTurn(
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
+
+    // Carry the per-turn admission reporter on the fiber (plan 11 M7): the local provider reads it when
+    // it acquires a generation lease, so a queued turn emits "waiting for LM Studio" attributed to this
+    // run. Fire-and-forget emit (advisory status), so admission never blocks the turn loop.
+    const admissionReporter: AdmissionTurnReporter = {
+      context: { priority: options.priority ?? "foreground", runId },
+      onStatus: (status) => {
+        Effect.runFork(emit.publish(admissionStatusEvent(runId, status)));
+      },
+    };
+    yield* FiberRef.set(AdmissionTurnRef, admissionReporter);
 
     const preflight = yield* prepareTurn(provider, turnHistory, { resolveImages });
     if (preflight.type === "blocked") {

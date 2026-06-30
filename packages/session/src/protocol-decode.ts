@@ -652,7 +652,17 @@ export type DecodedEvent =
   | { readonly type: "host.sourceAuth"; readonly auth: SourceSignInState }
   | { readonly type: "host.hello"; readonly instanceId?: string }
   | { readonly type: "host.beat"; readonly instanceId?: string }
-  | { readonly type: "host.role"; readonly instanceId?: string; readonly role?: string };
+  | { readonly type: "host.role"; readonly instanceId?: string; readonly role?: string }
+  | {
+      readonly type: "admission.status";
+      readonly runId: string;
+      readonly phase: string;
+      readonly provider: string;
+      readonly model: string;
+      readonly priority: string;
+      readonly position?: number;
+      readonly refusal?: string;
+    };
 
 /**
  * Decodes one raw SessionEvent into a typed trevor event, or `null` for an
@@ -985,6 +995,17 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       return { type: "host.beat", instanceId: optStr(p.instanceId) };
     case "host.role":
       return { type: "host.role", instanceId: optStr(p.instanceId), role: optStr(p.role) };
+    case "admission.status":
+      return {
+        type: "admission.status",
+        runId,
+        phase: str(p.phase, "queued"),
+        provider: str(p.provider),
+        model: str(p.model),
+        priority: str(p.priority, "foreground"),
+        ...(typeof p.position === "number" ? { position: num(p.position) } : {}),
+        ...(typeof p.refusal === "string" ? { refusal: optStr(p.refusal) } : {}),
+      };
     default:
       return null;
   }
