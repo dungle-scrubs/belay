@@ -7,6 +7,7 @@
 - Existing `apps/web/src/markdown.test.tsx` coverage for table wrapping, copy buttons, and dedent/copy behavior.
 - Existing `.plans/19-transcript-mermaid-rendering` language-route contract for fenced `mermaid` blocks.
 - Existing chat message Storybook fixtures for realistic transcript markdown states.
+- `09.2-web-browser-test-suite` (lands first) - the "Storybook should cover visual regressions across dark/narrow/long/wide" goal is fulfilled by 09.2's automated Storybook visual-regression lane; regenerate its baselines for the code-block story matrix, and the "very long code blocks must not freeze the virtualized list" concern is covered by Lane B. <!-- D-004 -->
 
 ## 1. Architecture
 

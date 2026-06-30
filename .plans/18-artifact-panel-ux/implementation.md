@@ -3,6 +3,7 @@
 ## 0. Hard Dependencies
 
 - [x] `.plans/trevor-v2` D-028 blob-backed artifacts - Trevor already has durable `ArtifactRef` transport and blob storage for artifact bytes.
+- [ ] `09.2-web-browser-test-suite` (lands first) - this plan's "live visual tests" for the artifact panel (narrow/desktop/wide composer states) and viewer-state fixtures run through 09.2's automated Storybook visual-regression lane; regenerate its committed baselines when adding/changing panel and viewer stories, rather than relying on manual screenshot review. <!-- D-004 -->
 
 ## 1. Architecture
 

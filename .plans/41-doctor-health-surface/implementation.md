@@ -10,6 +10,7 @@
 - [x] Existing `apps/agent-host/src/tools/doctor.ts` exposes the read-only model-facing `doctor` diagnostic tool.
 - [x] Existing `apps/web/src/components/chat/doctor` renders a Storybook-backed Doctor panel from fixture snapshots.
 - [ ] `.plans/09.1-mid-turn-model-switch` lets a turn switch model/reasoning mid-turn and records `model.switched`; Doctor's Session/Run and Providers/Models/Auth areas treat the active model/reasoning as mid-turn-mutable and may summarize a per-turn switch count, without becoming raw telemetry. <!-- D-006 -->
+- [ ] `09.2-web-browser-test-suite` (lands first) - resolves this plan's "If Storybook visual automation is not ready" fallback: 09.2 provides it, so the Doctor state matrix (M7) runs through the automated Storybook visual-regression lane and regenerates committed baselines, rather than the jsdom/layout fallback. <!-- D-007 -->
 
 ## Architecture
 

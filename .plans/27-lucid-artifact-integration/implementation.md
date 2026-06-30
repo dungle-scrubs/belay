@@ -3,8 +3,7 @@
 ## 0. Hard Dependencies
 
 - [ ] `18-artifact-panel-ux` - Lucid should render inside Trevor's reusable artifact panel rather than opening a separate Lucid browser workflow.
-
-## 1. Architecture
+- [ ] `09.2-web-browser-test-suite` (lands first) - this plan's iframe/panel browser tests and the M9 E2E review loop build on 09.2's shared headless-Playwright foundation and app-boot harness; reuse that lane rather than introducing a separate browser driver, and regenerate 09.2 Storybook baselines for the Lucid panel/annotation story states. <!-- D-004 -->
 
 Lucid currently works as an agent-agnostic CLI that serves addressable HTML artifacts in its own browser viewer. In Trevor, Lucid should work differently: generated Lucid artifacts should appear as first-class artifacts in Trevor's right-side artifact panel. The artifact panel owns the host application's layout, selection, resizing, and transcript relationship; Lucid owns addressability, annotation anchoring, versioning, and the feedback loop for HTML artifacts.
 

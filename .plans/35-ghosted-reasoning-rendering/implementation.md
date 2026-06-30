@@ -9,6 +9,7 @@
 - Existing assistant-ui `ReasoningGroup` / disclosure primitives in `apps/web/src/components/assistant-ui/reasoning.tsx`.
 - Existing `.plans/05-compact-transcript-layout` as the future compact-mode integration boundary.
 - Coordinate with `.plans/09.1-mid-turn-model-switch` (lands first): it adds a `model.switched` inline marker row that renders a reasoning-level delta (`X (high) -> X (medium)`) and shares `apps/web/src/components/chat/transcript-row-view.tsx`. That marker is owned by 09.1 and is distinct from this plan's ghosted reasoning trace.
+- `09.2-web-browser-test-suite` (lands first) - "streaming behavior must not yank transcript scroll" is exactly 09.2 Lane B's mid-stream-no-yank assertion; keep it green, and regenerate Lane A baselines for the reasoning story states (hidden/collapsed/expanded/streaming/narrow). <!-- D-005 -->
 
 ## 1. Architecture
 

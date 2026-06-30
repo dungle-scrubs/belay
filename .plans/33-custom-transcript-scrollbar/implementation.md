@@ -6,6 +6,7 @@
 - Existing `useScrollFollow` pinned/live-edge behavior.
 - Existing `VirtualTranscript` TanStack virtualizer wiring against the same scroll ref.
 - Existing transcript scroll Storybook fixture and web tests.
+- `09.2-web-browser-test-suite` (lands first) - this plan restyles the exact transcript scroll element 09.2 Lane B asserts (pin / stick-to-bottom / mid-stream-no-yank / jump-to-bottom). Keep the scroll element and ref identity stable so Lane B stays green, and regenerate Lane A baselines for the scrollbar story states. <!-- D-003 -->
 
 ## 1. Architecture
 
