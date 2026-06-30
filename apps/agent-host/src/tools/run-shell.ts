@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { classifyAlwaysPreventedBashCommand } from "./bash-safety";
-import { cap } from "./shared";
+import { cap, combineStreams } from "./shared";
 
 const execAsync = promisify(exec);
 
@@ -26,11 +26,7 @@ export async function runCommand(command: string): Promise<CommandResult> {
       timeout: 30_000,
       maxBuffer: 1024 * 1024,
     });
-    const output = [stdout, stderr]
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join("\n");
-    return { output: cap(output || "(no output)"), ok: true };
+    return { output: cap(combineStreams(stdout, stderr) || "(no output)"), ok: true };
   } catch (error) {
     const fail = error as { message?: string; stdout?: string; stderr?: string };
     return {

@@ -1,19 +1,20 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import type { JobLifecycle, JobSource } from "@trevor/session";
 import { invariant } from "./log";
 import { msg } from "./messages";
 import { classifyAlwaysPreventedBashCommand } from "./tools/bash-safety";
 import { ProcessError, ToolExecutionError, ToolInputError } from "./tools/errors";
+import { combineStreams } from "./tools/shared";
 
 const RING_LIMIT = 64 * 1024;
 /** How much combined output tail a job snapshot carries for the detail takeover (host.online is announced
  *  often, so this is bounded well below the full ring). */
 const JOB_TAIL_LIMIT = 4 * 1024;
 
-export type ProcessStatus = "running" | "exited" | "killed";
-
-/** How a tracked job came to exist: a direct `process` tool start, or a promoted bash / prompt-shell
- *  command that crossed the promotion threshold (plan 09). */
-export type JobSource = "process" | "bash" | "shell";
+// The lifecycle + source unions are the wire contract (@trevor/session), reused here so the host's
+// snapshot can never drift from what it announces.
+export type { JobSource } from "@trevor/session";
+export type ProcessStatus = JobLifecycle;
 
 /** Where a job originated, so the support panel + detail can trace it back to its run/tool/request. */
 export interface JobOrigin {
@@ -24,14 +25,6 @@ export interface JobOrigin {
   readonly callId?: string;
   /** The prompt-shell request id, when promoted from the `!` shell lane. */
   readonly requestId?: string;
-}
-
-/** The metadata a caller attaches when registering a job (origin + cwd + promotion timestamp). */
-export interface JobMeta {
-  readonly origin: JobOrigin;
-  readonly cwd: string;
-  /** When a foreground command was promoted into this job; absent for a directly-started process. */
-  readonly promotedAt?: number;
 }
 
 /**
@@ -87,6 +80,11 @@ class Ring {
     const from = Math.max(cursor, this.start);
     return { text: this.buffer.slice(from - this.start), cursor: this.total };
   }
+
+  /** The last `limit` retained chars - slices the tail directly, never copying the whole ring. */
+  tail(limit: number): string {
+    return this.buffer.length > limit ? this.buffer.slice(-limit) : this.buffer;
+  }
 }
 
 interface ManagedProcess {
@@ -118,15 +116,19 @@ export interface JobInfo {
 export class ProcessRegistry {
   private readonly processes = new Map<string, ManagedProcess>();
   private seq = 0;
-  /** Called after any job state change (start / exit / kill / promote / remove), so the host can
-   *  re-announce its job snapshots and the support panel updates live (plan 09 M7). */
+  /** Called after a *visible* job changes (a `process` start or a promoted command: start / exit / kill /
+   *  promote / remove), so the host re-announces its job snapshots and the support panel updates live
+   *  (plan 09 M7). A foreground bash/shell command that never promotes is invisible, so its
+   *  start+exit+remove churn fires nothing - no announce storm for ordinary commands. */
   onChange: (() => void) | undefined;
 
-  private changed(): void {
-    this.onChange?.();
+  private changed(proc: ManagedProcess): void {
+    if (isVisible(proc)) {
+      this.onChange?.();
+    }
   }
 
-  start(command: string, cwd: string, meta?: JobMeta): { id: string; status: ProcessStatus } {
+  start(command: string, cwd: string, origin?: JobOrigin): { id: string; status: ProcessStatus } {
     const blocked = classifyAlwaysPreventedBashCommand(command, { workspaceRoot: process.cwd() });
     if (blocked) {
       throw new ToolInputError({ tool: "process", detail: `refused: ${blocked}` });
@@ -149,10 +151,10 @@ export class ProcessRegistry {
       id,
       command,
       startedAt: Date.now(),
-      // A direct `process` start has no run/tool origin; a promoted job passes its origin + promotedAt.
-      origin: meta?.origin ?? { source: "process" },
-      cwd: meta?.cwd ?? cwd,
-      promotedAt: meta?.promotedAt,
+      // A direct `process` start has no run/tool origin; a promoted command passes its bash/shell origin.
+      origin: origin ?? { source: "process" },
+      cwd,
+      promotedAt: undefined,
       child,
       stdout: new Ring(),
       stderr: new Ring(),
@@ -174,7 +176,7 @@ export class ProcessRegistry {
       proc.exitCode = code;
       proc.signal = signal;
       markDone();
-      this.changed();
+      this.changed(proc);
     });
     child.on("error", (error) => {
       proc.stderr.append(`\n[spawn error] ${error.message}\n`);
@@ -182,10 +184,10 @@ export class ProcessRegistry {
         proc.status = "exited";
       }
       markDone();
-      this.changed();
+      this.changed(proc);
     });
     this.processes.set(id, proc);
-    this.changed();
+    this.changed(proc);
     return { id, status: "running" };
   }
 
@@ -211,7 +213,7 @@ export class ProcessRegistry {
     }
     this.processes.delete(id);
     if (proc) {
-      this.changed();
+      this.changed(proc);
     }
   }
 
@@ -255,7 +257,7 @@ export class ProcessRegistry {
       } catch {
         // already gone
       }
-      this.changed();
+      this.changed(proc);
     }
     return { id, status: proc.status };
   }
@@ -277,14 +279,16 @@ export class ProcessRegistry {
     const proc = this.processes.get(id);
     if (proc && proc.promotedAt === undefined) {
       proc.promotedAt = at;
-      this.changed();
+      this.changed(proc);
     }
   }
 
-  /** The structured, session-visible {@link JobSnapshot} read model for every job (plan 09 M2) - richer
-   *  than the model-facing {@link JobInfo} list, for the support panel + detail takeover. */
+  /** The structured, session-visible {@link JobSnapshot} read model (plan 09 M2) - richer than the
+   *  model-facing {@link JobInfo} list, for the support panel + detail takeover. Only *visible* jobs
+   *  appear: direct `process` starts and promoted commands. A foreground bash/shell command in its
+   *  pre-promotion race window is omitted, so ordinary commands never flash a `pN` row. */
   snapshots(): JobSnapshot[] {
-    return [...this.processes.values()].map((proc) => ({
+    return [...this.processes.values()].filter(isVisible).map((proc) => ({
       id: proc.id,
       command: proc.command,
       source: proc.origin.source,
@@ -316,11 +320,15 @@ export class ProcessRegistry {
   }
 }
 
+/** A job is session-visible once it is a direct `process` start or has been promoted - the panel and the
+ *  re-announce hook both key off this, so a foreground command that never promotes stays hidden. */
+function isVisible(proc: ManagedProcess): boolean {
+  return proc.origin.source === "process" || proc.promotedAt !== undefined;
+}
+
 /** The bounded combined-output tail a snapshot carries: stdout then stderr, capped to the last few KB. */
 function jobTail(proc: ManagedProcess): string {
-  const combined = [proc.stdout.read(0).text, proc.stderr.read(0).text]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join("\n");
-  return combined.length > JOB_TAIL_LIMIT ? combined.slice(-JOB_TAIL_LIMIT) : combined;
+  return combineStreams(proc.stdout.tail(JOB_TAIL_LIMIT), proc.stderr.tail(JOB_TAIL_LIMIT)).slice(
+    -JOB_TAIL_LIMIT,
+  );
 }

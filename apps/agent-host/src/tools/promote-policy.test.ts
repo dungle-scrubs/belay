@@ -12,7 +12,6 @@ function input(over: Partial<PromotionInput> = {}): PromotionInput {
   return {
     command: "sleep 600",
     cwd: "/work",
-    source: "bash",
     enabled: true,
     thresholdMs: 30_000,
     outcome: "running-at-threshold",
@@ -43,11 +42,10 @@ describe("decidePromotion", () => {
     assert.equal(decidePromotion(input({ enabled: false })).decision, "fail");
   });
 
-  test("the same policy + safety floor applies to the prompt-shell lane (source: shell)", () => {
-    assert.equal(decidePromotion(input({ source: "shell" })).decision, "promote");
-    assert.equal(
-      decidePromotion(input({ source: "shell", command: "rm -rf /" })).decision,
-      "refuse",
-    );
+  test("the policy is lane-agnostic: bash and prompt-shell share one decision (no source branch)", () => {
+    // Both the bash tool and the `!` prompt-shell lane run through this one policy; it has no per-lane
+    // branch, so the same outcome drives the same decision no matter which surface asked.
+    assert.equal(decidePromotion(input()).decision, "promote");
+    assert.equal(decidePromotion(input({ command: "rm -rf /" })).decision, "refuse");
   });
 });

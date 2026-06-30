@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { TaskSnapshot } from "@trevor/session";
+import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
 import type { ReactNode } from "react";
-import type { SupportJob, SupportSubagent } from "./support-panel";
+import type { SupportSubagent } from "./support-panel";
 import { SupportPanel } from "./support-panel-view";
 
 /**
@@ -36,9 +36,14 @@ const sub = (id: string, agent: string, status: string): SupportSubagent => ({
   task: "explore the codebase",
   status,
 });
-const job = (over: Partial<SupportJob> & { id: string; command: string }): SupportJob => ({
+const job = (over: Partial<JobSnapshot> & { id: string; command: string }): JobSnapshot => ({
+  source: "bash",
+  cwd: "/work",
+  startedAt: 1,
   status: "running",
   exitCode: null,
+  stdoutTotal: 0,
+  stderrTotal: 0,
   ...over,
 });
 
@@ -51,7 +56,7 @@ const SUBAGENTS: SupportSubagent[] = [
   sub("s1", "explorer", "running"),
   sub("s2", "reviewer", "done"),
 ];
-const JOBS: SupportJob[] = [
+const JOBS: JobSnapshot[] = [
   job({ id: "p1", command: "pnpm dev", status: "running" }),
   job({ id: "p2", command: "vitest --watch", status: "running" }),
 ];

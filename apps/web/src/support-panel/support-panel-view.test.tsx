@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { TaskSnapshot } from "@trevor/session";
+import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
 import { test, vi } from "vitest";
-import type { SupportJob, SupportSubagent } from "./support-panel";
+import type { SupportSubagent } from "./support-panel";
 import { SupportPanel } from "./support-panel-view";
 
 /**
@@ -20,10 +20,15 @@ const task = (id: string): TaskSnapshot => ({
   blockedBy: [],
   blocks: [],
 });
-const job = (over: Partial<SupportJob> & { id: string }): SupportJob => ({
+const job = (over: Partial<JobSnapshot> & { id: string }): JobSnapshot => ({
   command: `cmd-${over.id}`,
+  source: "bash",
+  cwd: "/work",
+  startedAt: 1,
   status: "running",
   exitCode: null,
+  stdoutTotal: 0,
+  stderrTotal: 0,
   ...over,
 });
 

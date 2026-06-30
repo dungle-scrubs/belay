@@ -12,7 +12,6 @@ import { promotedResultText } from "./promote-runner";
  * it); a fast command returns its output; a refused command is a ToolInputError. Real short commands.
  */
 
-const CWD = process.cwd();
 const reg = new ProcessRegistry();
 afterEach(() => reg.killAll());
 

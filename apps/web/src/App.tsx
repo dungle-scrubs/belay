@@ -34,7 +34,7 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
-import { jobsToSupport, jobToDetailModel, runningSubagents } from "@/support-panel/support-panel";
+import { jobToDetailModel, runningSubagents } from "@/support-panel/support-panel";
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
@@ -362,7 +362,8 @@ export function App() {
   const staleTasks = useMemo(() => tasksStale(events), [events]);
   // The support panel's background work (plan 09): promoted jobs the host announces live, and the
   // running subagent delegations from the transcript. Both derived from the live session, never cached.
-  const jobs = useMemo(() => jobsToSupport(jobsFrom(events)), [events]);
+  // One scan over the events feeds both the panel rows and the job-detail lookup below.
+  const jobs = useMemo(() => jobsFrom(events), [events]);
   const subagents = useMemo(() => runningSubagents(transcript), [transcript]);
   // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
   const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);
@@ -514,9 +515,9 @@ export function App() {
     if (jobDetailId === null) {
       return null;
     }
-    const snap = jobsFrom(events).find((j) => j.id === jobDetailId);
+    const snap = jobs.find((j) => j.id === jobDetailId);
     return snap ? jobToDetailModel(snap) : null;
-  }, [jobDetailId, events]);
+  }, [jobDetailId, jobs]);
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();

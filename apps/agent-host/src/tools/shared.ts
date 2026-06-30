@@ -14,6 +14,15 @@ export function cap(text: string): string {
   return text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}\n…[truncated]` : text;
 }
 
+/** Merges a command's stdout + stderr into one block: each side trimmed, blanks dropped, joined by a
+ *  newline. Shared by the foreground shell runner, the promotable runner, and the job-snapshot tail. */
+export function combineStreams(stdout: string, stderr: string): string {
+  return [stdout, stderr]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
 class SimpleToolInputFailure extends Error {
   constructor(readonly detail: string) {
     super(detail);

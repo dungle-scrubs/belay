@@ -17,9 +17,6 @@ import { classifyAlwaysPreventedBashCommand } from "./bash-safety";
  */
 export type PromotionDecision = "refuse" | "complete" | "fail" | "promote";
 
-/** Which surface asked to run the command - both share one policy + safety floor. */
-export type PromotionSource = "bash" | "shell";
-
 /** The observed lifecycle point the policy is deciding at. */
 export type CommandOutcome = "completed" | "failed" | "running-at-threshold";
 
@@ -27,7 +24,6 @@ export interface PromotionInput {
   readonly command: string;
   /** The directory the command runs in - the safety floor is workspace-relative. */
   readonly cwd: string;
-  readonly source: PromotionSource;
   /** Whether background-job promotion is enabled (host/user config). When off, a long command times out
    *  exactly as before instead of detaching. */
   readonly enabled: boolean;

@@ -1,7 +1,7 @@
 import type { JobOrigin, ProcessRegistry } from "../process-registry";
 import { classifyAlwaysPreventedBashCommand } from "./bash-safety";
-import { type CommandOutcome, decidePromotion, type PromotionSource } from "./promote-policy";
-import { cap } from "./shared";
+import { type CommandOutcome, decidePromotion, type PromotionDecision } from "./promote-policy";
+import { cap, combineStreams } from "./shared";
 
 /**
  * The promotable shell runner (plan 09 M3). It runs a command through the {@link ProcessRegistry} - so
@@ -15,7 +15,6 @@ import { cap } from "./shared";
  */
 
 export interface PromotableOptions {
-  readonly source: PromotionSource;
   /** Whether background-job promotion is enabled; off means a long command times out (fail) as before. */
   readonly enabled: boolean;
   /** Threshold in ms past which a still-running command is promoted instead of timed out. */
@@ -25,7 +24,7 @@ export interface PromotableOptions {
 }
 
 export interface PromotableResult {
-  readonly decision: "refuse" | "complete" | "fail" | "promote";
+  readonly decision: PromotionDecision;
   /** The captured output (foreground result, or everything printed before promotion), capped. */
   readonly output: string;
   readonly ok: boolean;
@@ -52,7 +51,7 @@ export async function runPromotable(
     return { decision: "refuse", output: `refused: ${blocked}`, ok: false, reason: blocked };
   }
 
-  const { id } = registry.start(command, cwd, { origin: opts.origin, cwd });
+  const { id } = registry.start(command, cwd, opts.origin);
   let timedOut = false;
   let timer: NodeJS.Timeout | undefined;
   await Promise.race([
@@ -69,12 +68,7 @@ export async function runPromotable(
   }
 
   const poll = registry.poll(id, 0, 0);
-  const output = cap(
-    [poll.stdout, poll.stderr]
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join("\n") || "(no output)",
-  );
+  const output = cap(combineStreams(poll.stdout, poll.stderr) || "(no output)");
   const outcome: CommandOutcome = timedOut
     ? "running-at-threshold"
     : poll.exitCode === 0
@@ -83,7 +77,6 @@ export async function runPromotable(
   const { decision, reason } = decidePromotion({
     command,
     cwd,
-    source: opts.source,
     enabled: opts.enabled,
     thresholdMs: opts.thresholdMs,
     outcome,

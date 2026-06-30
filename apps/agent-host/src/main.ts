@@ -1061,9 +1061,11 @@ function announceOnline(): void {
   ).catch(() => {});
 }
 
-// Re-announce host.online whenever a tracked job changes (start / exit / kill / promote / remove), so the
-// support panel reflects promoted jobs + their lifecycle live without polling (plan 09 M7). announceOnline
-// is latched + idempotent, so a burst of changes coalesces harmlessly.
+// Re-announce host.online whenever a *visible* tracked job changes (a `process` start or a promoted
+// command's start / exit / kill / promote / remove), so the support panel reflects it live without polling
+// (plan 09 M7). The supervisor already gates this to visible jobs, so an ordinary foreground command fires
+// nothing; each announce is a full host.online snapshot the web folds via latest(), so a re-emit is a
+// harmless no-op for consumers (it is not debounced - the gating is what bounds the volume).
 supervisor.onChange = announceOnline;
 
 /** On go-live: start the lease (once), announce presence, and report online. */
@@ -1161,7 +1163,6 @@ async function runShellCommand(requestId: string, command: string): Promise<void
   // background job rather than timing out. The shell.result output stays out of the model context (D-082);
   // a promoted result names its `pN` and is `ok` (it is running, not failed).
   const result = await runPromotable(supervisor, command, process.cwd(), {
-    source: "shell",
     enabled: DEFAULT_PROMOTION_CONFIG.enabled,
     thresholdMs: DEFAULT_PROMOTION_CONFIG.thresholdMs,
     origin: { source: "shell", requestId },

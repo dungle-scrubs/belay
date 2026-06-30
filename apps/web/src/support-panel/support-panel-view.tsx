@@ -1,4 +1,4 @@
-import type { TaskSnapshot } from "@trevor/session";
+import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
 import { Maximize2, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -6,7 +6,6 @@ import { TasksPanel } from "@/TasksPanel";
 import {
   buildSupportPanel,
   type SupportBackgroundRow,
-  type SupportJob,
   type SupportSubagent,
   type SupportTone,
 } from "./support-panel";
@@ -41,7 +40,7 @@ export function SupportPanel({
 }: {
   readonly tasks: readonly TaskSnapshot[];
   readonly subagents: readonly SupportSubagent[];
-  readonly jobs: readonly SupportJob[];
+  readonly jobs: readonly JobSnapshot[];
   readonly stale?: boolean;
   readonly onClearTasks?: () => void;
   readonly onOpenJobDetail?: (jobId: string) => void;
@@ -121,7 +120,7 @@ function BackgroundRow({
   readonly onOpenJobDetail?: (jobId: string) => void;
   readonly onKillJob?: (jobId: string) => void;
 }) {
-  const running = row.statusLabel === "running";
+  const running = row.tone === "running";
   return (
     <li className="group/row flex h-6 items-center gap-1.5">
       <span className={cn("select-none", TONE_GLYPH[row.tone])}>

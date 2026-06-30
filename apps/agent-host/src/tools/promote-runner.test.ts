@@ -16,7 +16,6 @@ afterEach(() => reg.killAll());
 
 function opts(over: Partial<PromotableOptions> = {}): PromotableOptions {
   return {
-    source: "bash",
     enabled: true,
     thresholdMs: 60,
     origin: { source: "bash", runId: "r1", callId: "c1" },

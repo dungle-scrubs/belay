@@ -10,15 +10,6 @@ import type { Message } from "@/transcript";
  * exist; whether the layout actually splits also depends on width, which the component decides (M6).
  */
 
-/** A promoted background job as the panel sees it - the web mirror of the host `JobSnapshot` (M7 maps
- *  the host-announced snapshots into this). */
-export interface SupportJob {
-  readonly id: string;
-  readonly command: string;
-  readonly status: "running" | "exited" | "killed";
-  readonly exitCode: number | null;
-}
-
 /** A background subagent delegation row (projected from a `delegation` transcript message). */
 export interface SupportSubagent {
   readonly id: string;
@@ -62,7 +53,7 @@ export interface ThreadSupportPanel {
 export function buildSupportPanel(input: {
   readonly tasks: readonly TaskSnapshot[];
   readonly subagents: readonly SupportSubagent[];
-  readonly jobs: readonly SupportJob[];
+  readonly jobs: readonly JobSnapshot[];
 }): ThreadSupportPanel {
   const tasks: SupportTaskRow[] = input.tasks.map((t) => ({
     id: t.id,
@@ -85,18 +76,24 @@ export function buildSupportPanel(input: {
   };
 }
 
+/** A job's terminal disposition, the single source of truth for both its panel-row tone and its
+ *  detail-model status (they previously disagreed on an exited job with a null exit code). A `running`
+ *  job is in flight; a killed job or one that exited non-zero is an error; anything else is done (an
+ *  exit code of 0 or an absent code from a clean exit). */
+export function jobOutcome(job: Pick<JobSnapshot, "status" | "exitCode">): SupportTone {
+  if (job.status === "running") {
+    return "running";
+  }
+  return job.status === "killed" || (job.exitCode ?? 0) !== 0 ? "error" : "done";
+}
+
 /**
  * Maps a promoted job to the shared tool-detail model (plan 09 M8 REFACTOR), so a job opens the SAME
  * detail takeover as a transcript tool row. The command + cwd ride the args (the bash detail body reads
- * them); the bounded tail is the output; status/exit map to running/done/error (a killed job is aborted).
+ * them); the bounded tail is the output; the outcome maps to running/done/error (a killed job is aborted).
  */
 export function jobToDetailModel(job: JobSnapshot): ToolDetailModel {
-  const status =
-    job.status === "running"
-      ? "running"
-      : job.status === "killed" || (job.exitCode ?? 0) !== 0
-        ? "error"
-        : "done";
+  const status = jobOutcome(job);
   return {
     id: job.id,
     source: "shell",
@@ -110,16 +107,6 @@ export function jobToDetailModel(job: JobSnapshot): ToolDetailModel {
       ? { error: job.status === "killed" ? "stopped" : `exited with code ${job.exitCode}` }
       : {}),
   };
-}
-
-/** Maps the host's announced job snapshots to the panel's job rows (plan 09 M7). */
-export function jobsToSupport(jobs: readonly JobSnapshot[]): SupportJob[] {
-  return jobs.map((j) => ({
-    id: j.id,
-    command: j.command,
-    status: j.status,
-    exitCode: j.exitCode,
-  }));
 }
 
 /** The live background subagents (plan 09 M7): the non-terminal `delegation` rows from the transcript -
@@ -147,20 +134,15 @@ function subagentRow(s: SupportSubagent): SupportBackgroundRow {
   };
 }
 
-function jobRow(j: SupportJob): SupportBackgroundRow {
-  const tone: SupportTone =
-    j.status === "running"
-      ? "running"
-      : j.status === "killed" || j.exitCode !== 0
-        ? "error"
-        : "done";
+function jobRow(job: JobSnapshot): SupportBackgroundRow {
+  const tone = jobOutcome(job);
   const statusLabel =
-    j.status === "running"
-      ? "running"
-      : j.status === "killed"
-        ? "killed"
-        : j.exitCode === 0
-          ? "done"
-          : `exit ${j.exitCode}`;
-  return { id: j.id, kind: "job", label: j.command, statusLabel, tone, detailEligible: true };
+    job.status === "killed"
+      ? "killed"
+      : tone === "running"
+        ? "running"
+        : tone === "error"
+          ? `exit ${job.exitCode}`
+          : "done";
+  return { id: job.id, kind: "job", label: job.command, statusLabel, tone, detailEligible: true };
 }

@@ -23,7 +23,6 @@ test("a long shell command promotes to a tracked job, announces changes, and kil
   reg.onChange = () => announces.push(reg.snapshots().length);
 
   const result = await runPromotable(reg, "echo starting && sleep 5", CWD, {
-    source: "bash",
     enabled: true,
     thresholdMs: 80,
     origin: { source: "bash", runId: "r1", callId: "c1" },
@@ -56,7 +55,6 @@ test("a long shell command promotes to a tracked job, announces changes, and kil
 
 test("a fast command never promotes and leaves no job for the panel", async () => {
   const result = await runPromotable(reg, "echo quick", CWD, {
-    source: "shell",
     enabled: true,
     thresholdMs: 2000,
     origin: { source: "shell", requestId: "q1" },

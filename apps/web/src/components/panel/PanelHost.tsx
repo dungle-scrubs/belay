@@ -1,6 +1,7 @@
 import type {
   CommandSpec,
   GitStatus,
+  JobSnapshot,
   ProviderQuestionAnswer,
   SessionActivity,
   SessionSummary,
@@ -35,7 +36,7 @@ import type { SessionStream } from "@/session/use-session";
 import type { HostStatus, PendingHandoff, PendingQuestion } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
-import type { SupportJob, SupportSubagent } from "../../support-panel/support-panel";
+import type { SupportSubagent } from "../../support-panel/support-panel";
 import { SupportPanel } from "../../support-panel/support-panel-view";
 import type { Message, PanelModel, readOnlyToolBatches, toTranscript } from "../../transcript";
 import { buildTranscriptRows } from "../../transcript-rows";
@@ -192,7 +193,7 @@ export function PanelHost(props: {
   /** Background subagents (running delegations) for the support panel (plan 09). */
   subagents?: readonly SupportSubagent[];
   /** Promoted background jobs for the support panel (plan 09). */
-  jobs?: readonly SupportJob[];
+  jobs?: readonly JobSnapshot[];
   /** Open a promoted job's detail takeover (plan 09 M8). */
   onOpenJobDetail?: (jobId: string) => void;
   /** Stop a running promoted job (plan 09 M8). */

@@ -23,7 +23,6 @@ export function buildBashTool(supervisor: ProcessRegistry, config: PromotionConf
     params: Params,
     execute: async (args) => {
       const result = await runPromotable(supervisor, args.command, process.cwd(), {
-        source: "bash",
         enabled: config.enabled,
         thresholdMs: config.thresholdMs,
         origin: { source: "bash" },

@@ -6,7 +6,6 @@ import type { Tool } from "./tools/types";
 
 export type {
   JobInfo,
-  JobMeta,
   JobOrigin,
   JobSnapshot,
   JobSource,

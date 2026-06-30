@@ -4,15 +4,14 @@ import { test } from "vitest";
 import type { Message } from "@/transcript";
 import {
   buildSupportPanel,
-  jobsToSupport,
+  jobOutcome,
   jobToDetailModel,
   runningSubagents,
-  type SupportJob,
   type SupportSubagent,
 } from "./support-panel";
 
-const snapshot = (over: Partial<JobSnapshot> & { id: string }): JobSnapshot => ({
-  command: "pnpm dev",
+const job = (over: Partial<JobSnapshot> & { id: string }): JobSnapshot => ({
+  command: "sleep 9",
   source: "bash",
   cwd: "/work",
   startedAt: 1,
@@ -42,12 +41,6 @@ const subagent = (id: string): SupportSubagent => ({
   agent: `agent-${id}`,
   task: "t",
   status: "running",
-});
-const job = (over: Partial<SupportJob> & { id: string }): SupportJob => ({
-  command: "sleep 9",
-  status: "running",
-  exitCode: null,
-  ...over,
 });
 
 test("empty input yields empty sections and no two-column", () => {
@@ -112,21 +105,14 @@ test("job status -> tone + label: running / done (exit 0) / killed / non-zero ex
   );
 });
 
-test("jobsToSupport maps the host job snapshot to the panel's minimal job row (M7)", () => {
-  const snap: JobSnapshot = {
-    id: "p1",
-    command: "pnpm dev",
-    source: "bash",
-    cwd: "/w",
-    startedAt: 1,
-    status: "running",
-    exitCode: null,
-    stdoutTotal: 5,
-    stderrTotal: 0,
-  };
-  assert.deepEqual(jobsToSupport([snap]), [
-    { id: "p1", command: "pnpm dev", status: "running", exitCode: null },
-  ]);
+test("jobOutcome resolves the terminal disposition the row + detail both key off (incl. null exit)", () => {
+  assert.equal(jobOutcome(job({ id: "a", status: "running" })), "running");
+  assert.equal(jobOutcome(job({ id: "b", status: "exited", exitCode: 0 })), "done");
+  assert.equal(jobOutcome(job({ id: "c", status: "exited", exitCode: 2 })), "error");
+  assert.equal(jobOutcome(job({ id: "d", status: "killed" })), "error");
+  // A clean exit with no numeric code is done, not an error - the row tone + the detail status must agree
+  // here (they previously disagreed: the row read null as error, the detail read it as done).
+  assert.equal(jobOutcome(job({ id: "e", status: "exited", exitCode: null })), "done");
 });
 
 test("runningSubagents keeps only non-terminal delegation rows from the transcript (M7)", () => {
@@ -158,7 +144,7 @@ test("runningSubagents keeps only non-terminal delegation rows from the transcri
 });
 
 test("jobToDetailModel opens the shared tool-detail with command/cwd as args + the tail as output (M8)", () => {
-  const m = jobToDetailModel(snapshot({ id: "p1", tail: "compiled\nwatching..." }));
+  const m = jobToDetailModel(job({ id: "p1", command: "pnpm dev", tail: "compiled\nwatching..." }));
   assert.equal(m.id, "p1");
   assert.equal(m.toolName, "bash", "renders via the bash detail body (command + cwd + output)");
   assert.equal(m.status, "running");
@@ -167,14 +153,14 @@ test("jobToDetailModel opens the shared tool-detail with command/cwd as args + t
 });
 
 test("jobToDetailModel maps status: a killed job is aborted/error, a non-zero exit is error (M8)", () => {
-  const killed = jobToDetailModel(snapshot({ id: "p2", status: "killed" }));
+  const killed = jobToDetailModel(job({ id: "p2", status: "killed" }));
   assert.equal(killed.status, "error");
   assert.equal(killed.aborted, true);
   assert.equal(killed.error, "stopped");
-  const failed = jobToDetailModel(snapshot({ id: "p3", status: "exited", exitCode: 2 }));
+  const failed = jobToDetailModel(job({ id: "p3", status: "exited", exitCode: 2 }));
   assert.equal(failed.status, "error");
   assert.match(failed.error ?? "", /code 2/);
-  const done = jobToDetailModel(snapshot({ id: "p4", status: "exited", exitCode: 0 }));
+  const done = jobToDetailModel(job({ id: "p4", status: "exited", exitCode: 0 }));
   assert.equal(done.status, "done");
   assert.equal(done.error, undefined);
 });
