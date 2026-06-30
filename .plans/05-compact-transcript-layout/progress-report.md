@@ -11,11 +11,11 @@
 
 ### M1: Compact Row Inventory
 
-- [ ] RED: Add fixture coverage for user prompt, final assistant response, thinking-only segment, streaming assistant segment, running tool, completed tool, failed tool, aborted tool, concurrent read batch, shell lane, recovery/status row, image result, and session recall/web search rows
-- [ ] GREEN: Define a compact display contract with row kind, icon, status, primary label, secondary summary, action slot, progress/loader slot, and detail eligibility
-- [ ] RED: Add tests proving user prompts and final assistant responses are not compacted by default
-- [ ] GREEN: Implement pure row classification for compact eligibility
-- [ ] REFACTOR: Keep compact eligibility separate from durable transcript semantics
+- [x] RED: Add fixture coverage for user prompt, final assistant response, thinking-only segment, streaming assistant segment, running tool, completed tool, failed tool, aborted tool, concurrent read batch, shell lane, recovery/status row, image result, and session recall/web search rows
+- [x] GREEN: Define a compact display contract with row kind, icon, status, primary label, secondary summary, action slot, progress/loader slot, and detail eligibility
+- [x] RED: Add tests proving user prompts and final assistant responses are not compacted by default
+- [x] GREEN: Implement pure row classification for compact eligibility
+- [x] REFACTOR: Keep compact eligibility separate from durable transcript semantics
 
 ### M2: Shared Compact Row Component
 
