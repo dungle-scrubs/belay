@@ -35,6 +35,18 @@ the local HTTP/WebSocket services add authentication and origin enforcement.
   `apps/web/index.html`.
 - Browser extensions with broad permissions remain outside the app's control and
   should be treated as equivalent to a compromised browser session.
+- The XSS attack surface is broader than the main markdown renderer. Mermaid
+  diagram rendering, syntax highlighting, Lucid artifact embedding, web
+  fetch/search result rendering, and image/SVG rendering all render model- or
+  network-sourced content and must each be audited for injection, not just the
+  DOMPurify-sanitized markdown path. Any single injection point can read all of
+  the origin's `localStorage`.
+- The browser send queue / prompt-recall history (durable follow-up queue
+  feature) persists prompt text in `localStorage`. `localStorage` is plaintext at
+  rest in the browser profile and readable by any script on the origin, so an XSS
+  exfiltrates the full recall history. The data is prompt text, not credentials,
+  so the blast radius is confidentiality (drafts, pasted paths/snippets), not
+  privilege escalation - but it is still browser-local persisted content to bound.
 
 ## Priority Fixes
 
@@ -52,6 +64,13 @@ the local HTTP/WebSocket services add authentication and origin enforcement.
    in the host, not the frontend.
 8. For stronger operational isolation, run Trevor in a dedicated browser profile
    or browser instance with extensions disabled.
+9. Audit every model- or network-sourced render path for injection (markdown,
+   mermaid, syntax highlighting, Lucid artifacts, web fetch/search results,
+   image/SVG), not just the primary DOMPurify-sanitized markdown renderer.
+10. Bound the browser-local prompt-recall buffer: cap its size, expose a "clear
+    recall history" control, and keep secret-shaped content out of it (extends
+    fix 7 to the new `localStorage` recall store). Rely on client-side disk
+    encryption (FileVault) for at-rest protection.
 
 ## Security Model
 
