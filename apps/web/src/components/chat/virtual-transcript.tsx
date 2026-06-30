@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { isCompactEligible } from "@/components/chat/compact-display";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
 import { mayAutoFollow } from "@/scroll";
@@ -22,10 +23,26 @@ export interface VirtualTranscriptProps {
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
   readonly onMenuAction?: (command: string, args: string) => void;
+  /** Compact transcript mode (plan 05): non-primary rows collapse to one line. Off by default. */
+  readonly compact?: boolean;
   readonly testInitialRect?: Rect;
 }
 
-function estimateRowSize(row: TranscriptRow): number {
+function estimateRowSize(
+  row: TranscriptRow,
+  compact: boolean,
+  expandedRows: ReadonlySet<string>,
+): number {
+  // A collapsed compact row is one line; an expanded one falls through to the full estimate (its
+  // detail is the full renderer, then measureElement corrects it anyway).
+  if (
+    compact &&
+    row.kind === "message" &&
+    isCompactEligible(row.message) &&
+    !expandedRows.has(row.message.id)
+  ) {
+    return 28;
+  }
   if (row.kind === "working") {
     return 32;
   }
@@ -60,20 +77,37 @@ export function VirtualTranscript({
   onOpenPath,
   onDoctorRefresh,
   onMenuAction,
+  compact = false,
   testInitialRect,
 }: VirtualTranscriptProps) {
   const lastRowIdRef = useRef<string | null>(null);
   const [readyToReveal, setReadyToReveal] = useState(false);
   const [settleTick, setSettleTick] = useState(0);
+  // Which compacted rows have their detail expanded. Owned here (not per-row) so the state survives a
+  // row scrolling out of and back into the virtual window, keyed by message id.
+  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleRow = useCallback((id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
   const estimatedTotalSize = useMemo(
-    () => rows.reduce((total, row) => total + estimateRowSize(row), 0),
-    [rows],
+    () => rows.reduce((total, row) => total + estimateRowSize(row, compact, expandedRows), 0),
+    [rows, compact, expandedRows],
   );
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: (index) =>
-      estimateRowSize(rows[index] ?? { kind: "working", id: "fallback", interruptible: true }),
+      estimateRowSize(
+        rows[index] ?? { kind: "working", id: "fallback", interruptible: true },
+        compact,
+        expandedRows,
+      ),
     getItemKey: (index) =>
       transcriptRowKey(
         rows[index] ?? { kind: "working", id: `missing:${index}`, interruptible: true },
@@ -263,6 +297,9 @@ export function VirtualTranscript({
               showThinking={showThinking}
               onOpenPath={onOpenPath}
               onDoctorRefresh={onDoctorRefresh}
+              compact={compact}
+              expandedRows={expandedRows}
+              onToggleRow={toggleRow}
             />
           </div>
         );

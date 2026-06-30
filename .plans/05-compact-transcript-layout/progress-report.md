@@ -35,11 +35,11 @@
 
 ### M3: Transcript Fixture and Toggle
 
-- [ ] RED: Add Storybook stories for full transcript regular mode, compact mode, and live-running compact mode using the same fixture data
-- [ ] GREEN: Add a transcript-level compact-mode prop that switches eligible rows to compact rendering
-- [ ] RED: Add tests proving toggling compact mode preserves semantic row keys and does not mutate messages
-- [ ] GREEN: Update virtualization estimates for compact rows
-- [ ] REFACTOR: Keep compact mode out of transcript folding and provider history code
+- [x] RED: Add Storybook stories for full transcript regular mode, compact mode, and live-running compact mode using the same fixture data
+- [x] GREEN: Add a transcript-level compact-mode prop that switches eligible rows to compact rendering
+- [x] RED: Add tests proving toggling compact mode preserves semantic row keys and does not mutate messages
+- [x] GREEN: Update virtualization estimates for compact rows
+- [x] REFACTOR: Keep compact mode out of transcript folding and provider history code
 
 ### M4: Tool-by-Tool Summaries
 

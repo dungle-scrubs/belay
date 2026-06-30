@@ -8,6 +8,8 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { compactDisplayFor } from "@/components/chat/compact-display";
+import { CompactRow } from "@/components/chat/compact-row";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import { DoctorResult } from "@/components/chat/doctor/doctor-result";
@@ -86,6 +88,13 @@ export interface TranscriptRowViewProps {
   /** Render resolved-question rows as a single compact line (D-003). Off by default; a future compact
    *  transcript mode flips it on. */
   readonly questionsOneLine?: boolean;
+  /** Compact transcript mode (plan 05): collapse non-primary rows (thinking, tools, status, results)
+   *  to one line, keeping user prompts + final assistant responses full. Off by default. */
+  readonly compact?: boolean;
+  /** The compacted message ids whose detail is expanded (compact mode only). */
+  readonly expandedRows?: ReadonlySet<string>;
+  /** Toggles a compacted row's expanded detail (compact mode only). */
+  readonly onToggleRow?: (id: string) => void;
 }
 
 export function TranscriptRowView({
@@ -95,7 +104,43 @@ export function TranscriptRowView({
   onDoctorRefresh,
   onMenuAction,
   questionsOneLine = false,
+  compact = false,
+  expandedRows,
+  onToggleRow,
 }: TranscriptRowViewProps) {
+  // Compact mode collapses an eligible message row to a one-line CompactRow; its detail, when expanded,
+  // is the SAME full renderer (a recursive render with compact off), so no renderer is duplicated. The
+  // tool_batch + working rows are already dense, so they keep their normal rendering.
+  if (compact && row.kind === "message") {
+    const display = compactDisplayFor(row.message);
+    if (display) {
+      const expanded = expandedRows?.has(row.message.id) ?? false;
+      return (
+        <div data-message-id={row.message.id} className="pl-3.5">
+          <CompactRow
+            display={display}
+            expanded={expanded}
+            onToggle={
+              display.hasDetail && onToggleRow ? () => onToggleRow(row.message.id) : undefined
+            }
+          >
+            {expanded ? (
+              <TranscriptRowView
+                row={row}
+                compact={false}
+                showThinking={showThinking}
+                onOpenPath={onOpenPath}
+                onDoctorRefresh={onDoctorRefresh}
+                onMenuAction={onMenuAction}
+                questionsOneLine={questionsOneLine}
+              />
+            ) : null}
+          </CompactRow>
+        </div>
+      );
+    }
+  }
+
   if (row.kind === "tool_batch") {
     return (
       <div className="pl-3.5">
