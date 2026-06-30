@@ -30,13 +30,13 @@
 
 ### M1: Storybook visual-regression lane
 
-- [ ] RED: Add a `@storybook/test-runner` smoke pass over `build-storybook` that fails when a story throws or renders blank
-- [ ] GREEN: Add `@storybook/test-runner`, a `test-storybook` pnpm script, and the smoke pass across all 48 stories
-- [ ] RED: Add a `postVisit` screenshot-diff with a tolerance threshold; commit container-generated baselines; prove a deliberately broken story (zero-height collapse) fails the diff
-- [ ] GREEN: Implement `postVisit` capture + compare; disable animations/transitions globally; freeze timestamps/`Math.random`
-- [ ] RED: Add a "new story must have a baseline" check - a new story with no baseline fails the required pass
-- [ ] GREEN: Wire baseline-missing as a hard failure
-- [ ] REFACTOR: Add the optional axe a11y pass via `addon-a11y` (warn-only); document the in-container `--update-snapshots` workflow
+- [x] RED: Add a `@storybook/test-runner` smoke pass over `build-storybook` that fails when a story throws or renders blank
+- [x] GREEN: Add `@storybook/test-runner`, a `test-storybook` pnpm script, and the smoke pass across all 48 stories
+- [x] RED: Add a `postVisit` screenshot-diff with a tolerance threshold; commit container-generated baselines; prove a deliberately broken story (zero-height collapse) fails the diff
+- [x] GREEN: Implement `postVisit` capture + compare; disable animations/transitions globally; freeze timestamps/`Math.random`
+- [x] RED: Add a "new story must have a baseline" check - a new story with no baseline fails the required pass
+- [x] GREEN: Wire baseline-missing as a hard failure
+- [x] REFACTOR: Add the optional axe a11y pass via `addon-a11y` (warn-only); document the in-container `--update-snapshots` workflow
 
 ### Gate 1 -> 2
 

@@ -29,6 +29,10 @@ const preview: Preview = {
     controls: {
       matchers: { color: /(background|color)$/i, date: /Date$/i },
     },
+    // The Lane A axe pass (plan 09.2 D-008) runs warn-only: `todo` reports violations in the test-runner
+    // output without failing, so accessibility issues are surfaced but never gate a PR. Flip a specific
+    // story to `a11y: { test: 'error' }` to make its axe pass required.
+    a11y: { test: "todo" },
   },
   decorators: [
     (Story, context) => {
