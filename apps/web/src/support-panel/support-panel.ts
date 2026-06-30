@@ -1,4 +1,5 @@
 import type { JobSnapshot, TaskSnapshot, TaskStatus } from "@trevor/session";
+import type { ToolDetailModel } from "@/tool-detail/detail-model";
 import type { Message } from "@/transcript";
 
 /**
@@ -81,6 +82,33 @@ export function buildSupportPanel(input: {
     twoColumn: tasks.length > 0 && background.length > 0,
     taskCount: tasks.length,
     backgroundCount: background.length,
+  };
+}
+
+/**
+ * Maps a promoted job to the shared tool-detail model (plan 09 M8 REFACTOR), so a job opens the SAME
+ * detail takeover as a transcript tool row. The command + cwd ride the args (the bash detail body reads
+ * them); the bounded tail is the output; status/exit map to running/done/error (a killed job is aborted).
+ */
+export function jobToDetailModel(job: JobSnapshot): ToolDetailModel {
+  const status =
+    job.status === "running"
+      ? "running"
+      : job.status === "killed" || (job.exitCode ?? 0) !== 0
+        ? "error"
+        : "done";
+  return {
+    id: job.id,
+    source: "shell",
+    // The bash detail body renders Command + working directory + Output, which fits a job exactly.
+    toolName: "bash",
+    status,
+    aborted: job.status === "killed",
+    args: JSON.stringify({ command: job.command, cwd: job.cwd }),
+    ...(job.tail ? { output: job.tail } : {}),
+    ...(status === "error"
+      ? { error: job.status === "killed" ? "stopped" : `exited with code ${job.exitCode}` }
+      : {}),
   };
 }
 

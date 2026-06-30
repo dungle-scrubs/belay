@@ -5,6 +5,9 @@ import { classifyAlwaysPreventedBashCommand } from "./tools/bash-safety";
 import { ProcessError, ToolExecutionError, ToolInputError } from "./tools/errors";
 
 const RING_LIMIT = 64 * 1024;
+/** How much combined output tail a job snapshot carries for the detail takeover (host.online is announced
+ *  often, so this is bounded well below the full ring). */
+const JOB_TAIL_LIMIT = 4 * 1024;
 
 export type ProcessStatus = "running" | "exited" | "killed";
 
@@ -293,6 +296,7 @@ export class ProcessRegistry {
       exitCode: proc.exitCode,
       stdoutTotal: proc.stdout.total,
       stderrTotal: proc.stderr.total,
+      tail: jobTail(proc),
     }));
   }
 
@@ -308,4 +312,13 @@ export class ProcessRegistry {
       }
     }
   }
+}
+
+/** The bounded combined-output tail a snapshot carries: stdout then stderr, capped to the last few KB. */
+function jobTail(proc: ManagedProcess): string {
+  const combined = [proc.stdout.read(0).text, proc.stderr.read(0).text]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("\n");
+  return combined.length > JOB_TAIL_LIMIT ? combined.slice(-JOB_TAIL_LIMIT) : combined;
 }

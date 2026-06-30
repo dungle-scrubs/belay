@@ -350,6 +350,7 @@ function coerceJobs(value: unknown): readonly JobSnapshot[] {
       exitCode: typeof j.exitCode === "number" ? j.exitCode : null,
       stdoutTotal: typeof j.stdoutTotal === "number" ? j.stdoutTotal : 0,
       stderrTotal: typeof j.stderrTotal === "number" ? j.stderrTotal : 0,
+      ...(typeof j.tail === "string" ? { tail: j.tail } : {}),
     });
   }
   return jobs;

@@ -94,17 +94,17 @@
 
 ### M8: Job Detail and Controls
 
-- [ ] RED: Add tests for opening a promoted job detail view from the support panel
-- [ ] GREEN: Open the tool-detail takeover with live stdout/stderr, command, cwd, status, age, and truncation indicators
-- [ ] RED: Add tests for kill/stop controls and failure states
-- [ ] GREEN: Wire kill/stop controls to supervisor actions with row-level feedback
-- [ ] REFACTOR: Share process detail model between transcript tool rows and support panel rows
+- [x] RED: Add tests for opening a promoted job detail view from the support panel
+- [x] GREEN: Open the tool-detail takeover with live stdout/stderr, command, cwd, status, age, and truncation indicators
+- [x] RED: Add tests for kill/stop controls and failure states
+- [x] GREEN: Wire kill/stop controls to supervisor actions with row-level feedback
+- [x] REFACTOR: Share process detail model between transcript tool rows and support panel rows
 
 ### Gate 4->5
 
-- [ ] Live promoted jobs appear in the support panel
-- [ ] Detail takeover opens from promoted job rows
-- [ ] Kill/stop controls work and update row state
+- [x] Live promoted jobs appear in the support panel
+- [x] Detail takeover opens from promoted job rows
+- [x] Kill/stop controls work and update row state
 
 ## Phase 5: End-to-End Verification
 

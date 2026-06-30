@@ -284,6 +284,9 @@ export interface JobSnapshot {
   readonly exitCode: number | null;
   readonly stdoutTotal: number;
   readonly stderrTotal: number;
+  /** A bounded tail of the combined output (last few KB), so the detail takeover shows recent output;
+   *  it refreshes when the host re-announces (on each job state change). Absent / empty when none yet. */
+  readonly tail?: string;
 }
 
 /** The revision a `tasks.current` event without freshness metadata decodes to (a legacy/pre-09 log). */

@@ -5,10 +5,23 @@ import type { Message } from "@/transcript";
 import {
   buildSupportPanel,
   jobsToSupport,
+  jobToDetailModel,
   runningSubagents,
   type SupportJob,
   type SupportSubagent,
 } from "./support-panel";
+
+const snapshot = (over: Partial<JobSnapshot> & { id: string }): JobSnapshot => ({
+  command: "pnpm dev",
+  source: "bash",
+  cwd: "/work",
+  startedAt: 1,
+  status: "running",
+  exitCode: null,
+  stdoutTotal: 0,
+  stderrTotal: 0,
+  ...over,
+});
 
 /**
  * M5: the pure support-panel projection. Sections: tasks only / background only / both / empty; in the
@@ -142,6 +155,28 @@ test("runningSubagents keeps only non-terminal delegation rows from the transcri
     runningSubagents(messages).map((s) => s.agent),
     ["explorer"],
   );
+});
+
+test("jobToDetailModel opens the shared tool-detail with command/cwd as args + the tail as output (M8)", () => {
+  const m = jobToDetailModel(snapshot({ id: "p1", tail: "compiled\nwatching..." }));
+  assert.equal(m.id, "p1");
+  assert.equal(m.toolName, "bash", "renders via the bash detail body (command + cwd + output)");
+  assert.equal(m.status, "running");
+  assert.deepEqual(JSON.parse(m.args), { command: "pnpm dev", cwd: "/work" });
+  assert.equal(m.output, "compiled\nwatching...");
+});
+
+test("jobToDetailModel maps status: a killed job is aborted/error, a non-zero exit is error (M8)", () => {
+  const killed = jobToDetailModel(snapshot({ id: "p2", status: "killed" }));
+  assert.equal(killed.status, "error");
+  assert.equal(killed.aborted, true);
+  assert.equal(killed.error, "stopped");
+  const failed = jobToDetailModel(snapshot({ id: "p3", status: "exited", exitCode: 2 }));
+  assert.equal(failed.status, "error");
+  assert.match(failed.error ?? "", /code 2/);
+  const done = jobToDetailModel(snapshot({ id: "p4", status: "exited", exitCode: 0 }));
+  assert.equal(done.status, "done");
+  assert.equal(done.error, undefined);
 });
 
 test("a subagent row is NOT detail-eligible and tones by status", () => {

@@ -34,7 +34,7 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
-import { jobsToSupport, runningSubagents } from "@/support-panel/support-panel";
+import { jobsToSupport, jobToDetailModel, runningSubagents } from "@/support-panel/support-panel";
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
@@ -507,6 +507,16 @@ export function App() {
   // takeover closes itself if its source row ever leaves the transcript (e.g. /clear).
   const [detailId, setDetailId] = useState<string | null>(null);
   const detail = useMemo(() => findDetailModel(transcript, detailId), [detailId, transcript]);
+  // A promoted background job's detail takeover (plan 09 M8): hold the job id and re-derive its detail
+  // model from the live job snapshots, so the takeover updates as the host re-announces (run -> exit).
+  const [jobDetailId, setJobDetailId] = useState<string | null>(null);
+  const jobDetail = useMemo(() => {
+    if (jobDetailId === null) {
+      return null;
+    }
+    const snap = jobsFrom(events).find((j) => j.id === jobDetailId);
+    return snap ? jobToDetailModel(snap) : null;
+  }, [jobDetailId, events]);
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();
@@ -760,7 +770,8 @@ export function App() {
     editor.isOpen ||
     paletteOpen ||
     helpOpen ||
-    detail !== null;
+    detail !== null ||
+    jobDetail !== null;
 
   // App actions shared by their keyboard shortcut (the router below) and their palette command, so the
   // two surfaces can never drift (plan 07 M7/M8).
@@ -952,8 +963,19 @@ export function App() {
     }
     setChooserOpen(false);
     modal.setArchiveOpen(false);
+    setJobDetailId(null);
     setDetailId(message.id);
   };
+  // A promoted job's detail (plan 09 M8): the SAME tool-detail takeover, opened from a support-panel job
+  // row. Stop a running job via the host /jobs-stop command; the row + detail update on the re-announce.
+  const onOpenJobDetail = (jobId: string) => {
+    setChooserOpen(false);
+    modal.setArchiveOpen(false);
+    setDetailId(null);
+    setJobDetailId(jobId);
+  };
+  const onKillJob = (jobId: string) => void command("/jobs-stop", jobId);
+  const closeJobDetail = () => setJobDetailId(null);
   const closeDetail = () => {
     const sourceId = detailId;
     setDetailId(null);
@@ -976,6 +998,10 @@ export function App() {
         onOpenPath={(path) => void openInEditor(path)}
         className="h-full"
       />
+    ) : undefined;
+  const jobDetailView =
+    jobDetail !== null ? (
+      <ToolDetailView model={jobDetail} onBack={closeJobDetail} className="h-full" />
     ) : undefined;
 
   // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the archived +
@@ -1085,6 +1111,8 @@ export function App() {
         onClearTasks={() => void command("/tasks-clear", "")}
         subagents={subagents}
         jobs={jobs}
+        onOpenJobDetail={onOpenJobDetail}
+        onKillJob={onKillJob}
         panel={{
           // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
           // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
@@ -1147,7 +1175,7 @@ export function App() {
               vimEnabled={vimEnabled}
             />
           ) : (
-            (detailView ?? archiveBrowser ?? chooser)
+            (jobDetailView ?? detailView ?? archiveBrowser ?? chooser)
           )
         }
         archived={archived}
