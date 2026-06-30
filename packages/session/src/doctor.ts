@@ -30,6 +30,7 @@ export type DoctorAreaId =
   | "hooks"
   | "storage"
   | "workspace"
+  | "admission"
   | "updates";
 
 /** Canonical area order; the dashboard renders areas in this sequence so a
@@ -46,6 +47,7 @@ export const DOCTOR_AREA_ORDER: readonly DoctorAreaId[] = [
   "hooks",
   "storage",
   "workspace",
+  "admission",
   "updates",
 ];
 

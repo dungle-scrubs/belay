@@ -57,6 +57,10 @@ export class LmStudioClient {
   private nativeContext = 0;
   /** In-flight ensureMaxContext, so concurrent turns share one (re)load. */
   private ensuring: Promise<number> | null = null;
+  /** True while inside the endpoint lifecycle lease (plan 11 M5): waiting for the cross-process reload
+   *  lease and running `lms unload`/`load`. Surfaced via {@link debugInfo} so /doctor can explain a turn
+   *  that is blocked behind another process's reload. */
+  private inLifecycle = false;
   /** Wall-time of the last successful (re)load, ms; surfaced via debugInfo. */
   private lastReloadMs: number | null = null;
   /** Why the model isn't at max context (unreachable / lms load failed), or null if it is. */
@@ -183,9 +187,14 @@ export class LmStudioClient {
             timeout: 300_000,
           });
         };
-        await (this.config.withLifecycleLease
-          ? this.config.withLifecycleLease(runReload)
-          : runReload());
+        this.inLifecycle = true;
+        try {
+          await (this.config.withLifecycleLease
+            ? this.config.withLifecycleLease(runReload)
+            : runReload());
+        } finally {
+          this.inLifecycle = false;
+        }
         this.contextWindow = target;
         this.lastError = null;
         this.lastReloadMs = Date.now() - startedAt;
@@ -248,6 +257,8 @@ export class LmStudioClient {
       served: this.contextWindow || null,
       cap: Number.isFinite(this.config.contextCap) ? this.config.contextCap : "model-max",
       reloading: this.ensuring !== null,
+      // Whether a cross-process lifecycle reload (lease wait + lms unload/load) is in flight (plan 11 M5).
+      lifecycleReload: this.inLifecycle,
       lastReloadMs: this.lastReloadMs,
       lastError: this.lastError ? redactSecrets(this.lastError.message) : null,
       lastErrorClass: failure?.class ?? null,

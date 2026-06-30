@@ -11,6 +11,7 @@ import {
 import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
 import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
 import { Effect } from "effect";
+import type { AdmissionDoctorSummary } from "../admission/doctor";
 import { type CwdLockDoctorFact, cwdLockSummary } from "../cwd-lock";
 import { fmtFields } from "../log";
 import { abbrevHome } from "../paths";
@@ -56,6 +57,8 @@ export interface DoctorRuntimeFacts {
   readonly cwdLock?: CwdLockDoctorFact;
   /** The active output style (plan 03) - run attribution: which style shapes this session's answers. */
   readonly activeStyle?: { readonly id: string; readonly source: string };
+  /** Local-model admission state (plan 11), surfaced in the Local admission area. */
+  readonly admission?: AdmissionDoctorSummary;
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
@@ -304,6 +307,7 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
       ...(facts.cwdLock ? { cwdLock: facts.cwdLock } : {}),
     },
     storage: { roots: probes.roots },
+    ...(facts.admission ? { admission: facts.admission } : {}),
     // Package/build/version facts (D-073): the embedded version when present (else a dev build),
     // plus the always-available Node + runtime kind. Update-availability is not probed here.
     build: {

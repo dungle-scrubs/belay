@@ -10,6 +10,7 @@ import {
   rollupStatus,
 } from "@trevor/session";
 import type { RootCategoryId } from "@trevor/session/node-paths";
+import type { AdmissionDoctorSummary } from "../admission/doctor";
 import {
   CWD_LOCK_FORCE_CLEAR_HINT,
   type CwdLockDoctorFact,
@@ -70,6 +71,9 @@ export interface DoctorProbeInput {
     readonly cwdLock?: CwdLockDoctorFact;
   };
   readonly storage: { readonly roots: readonly DoctorRootProbe[] };
+  /** Local-model admission state (plan 11): active owners, queue depth, oldest wait; absent when not
+   *  probed (e.g. no local provider in use). */
+  readonly admission?: AdmissionDoctorSummary;
   readonly build: DoctorBuildInfo;
   readonly peripherals: DoctorPeripherals;
   readonly web: DoctorWebDocs;
@@ -600,6 +604,61 @@ function workspaceArea(input: DoctorProbeInput): DoctorArea {
   return area("workspace", "Workspace", finding.message, [finding, ...cwdLockFinding(lock)], facts);
 }
 
+/** The local-model admission area (plan 11 M8): who holds each local runtime, how deep the queue is,
+ *  the oldest wait, and a warn when a crashed holder still occupies a slot (a reclaim-on-next-acquire
+ *  signal). Absent admission probe (no local work) reads as a clean "idle". */
+function admissionArea(input: DoctorProbeInput): DoctorArea {
+  const a = input.admission;
+  if (!a || a.resources === 0) {
+    const finding: DoctorFinding = {
+      id: "admission.idle",
+      status: "ok",
+      title: "Local admission",
+      message: "no local model in use",
+    };
+    return area("admission", "Local admission", finding.message, [finding]);
+  }
+  const stale = a.staleOwners > 0;
+  const verdict =
+    `${a.activeOwners} active, ${a.queued} queued` +
+    (a.queued > 0 ? ` (oldest wait ${Math.round(a.oldestWaitMs / 1000)}s)` : "");
+  const findings: DoctorFinding[] = [
+    {
+      id: "admission.summary",
+      status: stale ? "warn" : "ok",
+      title: "Local admission",
+      message: verdict,
+    },
+    ...(stale
+      ? [
+          {
+            id: "admission.stale",
+            status: "warn" as const,
+            title: "Stale local-model owner",
+            message: `${a.staleOwners} active owner(s) have no live process; reclaimed on the next acquire`,
+          },
+        ]
+      : []),
+  ];
+  const facts: DoctorArea["facts"] = [
+    { label: "resources", value: String(a.resources) },
+    { label: "active owners", value: String(a.activeOwners) },
+    {
+      label: "queued",
+      value: String(a.queued),
+      ...(a.queued > 0 ? { status: "warn" as const } : {}),
+    },
+    ...a.rows.map((row) => ({
+      label: row.key,
+      value:
+        `${row.active}/${row.capacity} active, ${row.queued} queued` +
+        (row.staleActive > 0 ? `, ${row.staleActive} stale` : ""),
+      ...(row.staleActive > 0 ? { status: "warn" as const } : {}),
+    })),
+  ];
+  return area("admission", "Local admission", verdict, findings, facts);
+}
+
 /**
  * The Updates / Version area (D-073): the package/build/version facts that ARE available (host build
  * version, runtime kind, Node version), plus an explicit note that this build does not query for a
@@ -793,6 +852,7 @@ export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
       peripheralArea("hooks", "Hooks", input.peripherals.hooks),
       storageArea(input),
       workspaceArea(input),
+      admissionArea(input),
       updatesArea(input),
     ],
   };

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Cpu,
   FolderGit2,
+  Gauge,
   Globe,
   HardDrive,
   Plug,
@@ -33,6 +34,7 @@ const AREA_ICON: Record<DoctorAreaId, ComponentType<{ className?: string }>> = {
   hooks: Webhook,
   storage: HardDrive,
   workspace: FolderGit2,
+  admission: Gauge,
   updates: ArrowUpCircle,
 };
 

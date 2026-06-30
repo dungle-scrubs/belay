@@ -27,6 +27,7 @@ test("debugInfo starts empty: nothing served, no reload, no error", () => {
     served: null,
     cap: "model-max",
     reloading: false,
+    lifecycleReload: false,
     lastReloadMs: null,
     lastError: null,
     lastErrorClass: null,
