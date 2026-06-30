@@ -7,7 +7,7 @@ import {
   modelRefFromProvider,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { ArrowLeft, History, RotateCcw } from "lucide-react";
+import { ArrowLeft, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -788,20 +788,10 @@ export function App() {
     </div>
   ) : undefined;
 
-  // Session affordances, rendered inline at the bottom of the sidebar (not a floating bar): open the
-  // resume chooser, the worktree switcher (when any exist), and the session id for orientation.
+  // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the session id
+  // for orientation. `restart` is the first; more debug actions slot in beside it. A temporary surface.
   const panelFooter = (
     <>
-      <button
-        type="button"
-        onClick={() => modal.setResumeOpen(true)}
-        title="Resume a session (/resume)"
-        aria-label="Resume a session"
-        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-      >
-        <History className="size-3" />
-        resume
-      </button>
       {/* TEMP dev affordance (remove later): restart the host to pick up code changes. /restart is a
           debug-mode command (announced only while debug is on), so enable debug first if it isn't,
           then re-exec the host. */}
