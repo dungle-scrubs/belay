@@ -34,6 +34,12 @@ export interface PromotableResult {
   readonly reason: string;
 }
 
+/** The human result text for a promoted command, shared by the bash tool + prompt-shell lane: it names
+ *  the `pN` job and shows the output captured before promotion, so the reader knows it kept running. */
+export function promotedResultText(jobId: string, output: string): string {
+  return `[promoted to ${jobId}] still running in the background - poll or kill it with the process tool.\n\nOutput so far:\n${output}`;
+}
+
 export async function runPromotable(
   registry: ProcessRegistry,
   command: string,

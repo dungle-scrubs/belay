@@ -8,7 +8,7 @@ import { buildTaskTools } from "../tasks";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
-import { bashTool } from "./bash";
+import { buildBashTool } from "./bash";
 import { clipboardWriteTool } from "./clipboard";
 import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
@@ -17,6 +17,7 @@ import { ToolInputError } from "./errors";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { multiEditTool } from "./multi-edit";
+import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
 import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
@@ -40,7 +41,7 @@ export type { Tool } from "./types";
 const FILE_TOOLS: readonly Tool<any>[] = [
   askUserTool,
   readTool,
-  bashTool,
+  buildBashTool(supervisor, DEFAULT_PROMOTION_CONFIG),
   writeTool,
   editTool,
   multiEditTool,

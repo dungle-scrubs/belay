@@ -6,7 +6,7 @@ import { buildSkillTool } from "../skills";
 import { buildTaskTools } from "../tasks";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
-import { bashTool } from "./bash";
+import { buildBashTool } from "./bash";
 import { clipboardWriteTool } from "./clipboard";
 import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
@@ -15,6 +15,7 @@ import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./index";
 import { multiEditTool } from "./multi-edit";
+import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
 import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
@@ -23,6 +24,10 @@ import type { Tool } from "./types";
 import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
+
+// The bash tool is now a builder (it threads the supervisor + promotion config, plan 09); build one
+// instance for the parity/readOnly checks below - its name + readOnly nature are unchanged.
+const bashTool = buildBashTool(supervisor, DEFAULT_PROMOTION_CONFIG);
 
 /**
  * Pins the `readOnly` partition that drives concurrent dispatch (D-050 / M1). `READ_ONLY_TOOLS`

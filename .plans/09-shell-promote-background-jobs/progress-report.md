@@ -46,17 +46,17 @@
 
 ### M4: Bash and Prompt-Shell Integration
 
-- [ ] RED: Add bash tool tests for promoted result shape: original tool result says promoted and includes `pN`
-- [ ] GREEN: Wire eligible `bash` calls to promote rather than fail on the promotion threshold
-- [ ] RED: Add prompt-shell lane tests for promoted shell commands
-- [ ] GREEN: Publish prompt-shell promoted results without making output model-visible beyond the existing shell-lane contract
-- [ ] REFACTOR: Ensure cancellation/stop behavior is explicit: cancelling the parent run does not silently orphan a promoted job
+- [x] RED: Add bash tool tests for promoted result shape: original tool result says promoted and includes `pN`
+- [x] GREEN: Wire eligible `bash` calls to promote rather than fail on the promotion threshold
+- [x] RED: Add prompt-shell lane tests for promoted shell commands
+- [x] GREEN: Publish prompt-shell promoted results without making output model-visible beyond the existing shell-lane contract
+- [x] REFACTOR: Ensure cancellation/stop behavior is explicit: cancelling the parent run does not silently orphan a promoted job
 
 ### Gate 2->3
 
-- [ ] Eligible bash commands promote to `pN`
-- [ ] Prompt-shell commands can promote under the same policy
-- [ ] Parent cancellation and host shutdown behavior are tested
+- [x] Eligible bash commands promote to `pN`
+- [x] Prompt-shell commands can promote under the same policy
+- [x] Parent cancellation and host shutdown behavior are tested
 
 ## Phase 3: Storybook Activity Panel
 

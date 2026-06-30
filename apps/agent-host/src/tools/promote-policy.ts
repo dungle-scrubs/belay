@@ -42,6 +42,16 @@ export interface PromotionResult {
   readonly reason: string;
 }
 
+/** The runtime promotion config the bash tool + prompt-shell lane consult. */
+export interface PromotionConfig {
+  readonly enabled: boolean;
+  readonly thresholdMs: number;
+}
+
+/** Promotion ON with the threshold at the legacy foreground timeout (30s): a command that would have
+ *  timed out is promoted into a tracked background job instead of failing. */
+export const DEFAULT_PROMOTION_CONFIG: PromotionConfig = { enabled: true, thresholdMs: 30_000 };
+
 /**
  * Decides a command's promotion outcome. Safety is checked FIRST and unconditionally (a refused command
  * can never reach a background job), then the observed outcome resolves complete/fail, and only a command

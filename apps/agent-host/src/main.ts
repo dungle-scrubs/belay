@@ -105,7 +105,8 @@ import { activeStylePref } from "./style/style-store";
 import { taskRegistry } from "./tasks";
 import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
-import { runCommand as runShellCommandResult } from "./tools/run-shell";
+import { DEFAULT_PROMOTION_CONFIG } from "./tools/promote-policy";
+import { promotedResultText, runPromotable } from "./tools/promote-runner";
 import { publishTurn } from "./turn";
 import { vimEnabled } from "./vim/vim-store";
 import { resolveCdTarget } from "./workspace-switch";
@@ -1148,8 +1149,20 @@ async function forceCompact(): Promise<string> {
  * enters the model context (D-082). A refusal (safety floor) or non-zero/timeout maps to `ok: false`.
  */
 async function runShellCommand(requestId: string, command: string): Promise<void> {
-  const { output, ok } = await runShellCommandResult(command);
-  await emit(events.shellResult({ requestId, command, output, ok }));
+  // The prompt-shell lane shares the promotable runner (plan 09): a long `!command` promotes to a tracked
+  // background job rather than timing out. The shell.result output stays out of the model context (D-082);
+  // a promoted result names its `pN` and is `ok` (it is running, not failed).
+  const result = await runPromotable(supervisor, command, process.cwd(), {
+    source: "shell",
+    enabled: DEFAULT_PROMOTION_CONFIG.enabled,
+    thresholdMs: DEFAULT_PROMOTION_CONFIG.thresholdMs,
+    origin: { source: "shell", requestId },
+  });
+  const output =
+    result.decision === "promote"
+      ? promotedResultText(result.jobId ?? "?", result.output)
+      : result.output;
+  await emit(events.shellResult({ requestId, command, output, ok: result.ok }));
   // A shell command can change repository state (checkout, commit, stage); re-announce
   // so the sidebar git line reflects it without polling. Latching + idempotent.
   announceOnline();
