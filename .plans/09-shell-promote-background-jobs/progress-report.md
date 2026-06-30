@@ -62,11 +62,11 @@
 
 ### M5: Support Panel Read Model
 
-- [ ] RED: Add pure projection tests for support panel sections: tasks only, background subagents only, jobs only, tasks plus background, subagents plus jobs, and empty
-- [ ] GREEN: Define a `ThreadSupportPanel` read model with task rows and background groups
-- [ ] RED: Add ordering tests: tasks left; in background group, subagents before jobs
-- [ ] GREEN: Implement row status labels, counts, overflow metadata, and detail eligibility
-- [ ] REFACTOR: Keep projection independent from React layout
+- [x] RED: Add pure projection tests for support panel sections: tasks only, background subagents only, jobs only, tasks plus background, subagents plus jobs, and empty
+- [x] GREEN: Define a `ThreadSupportPanel` read model with task rows and background groups
+- [x] RED: Add ordering tests: tasks left; in background group, subagents before jobs
+- [x] GREEN: Implement row status labels, counts, overflow metadata, and detail eligibility
+- [x] REFACTOR: Keep projection independent from React layout
 
 ### M6: Responsive Storybook Surface
 
