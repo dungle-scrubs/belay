@@ -3,7 +3,7 @@ name: plan-next-feature
 as_slash_command: true
 argument-hint: [topic]
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write
-description: "Spec a new Trevor V2 plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present three comparisons - how V1 (~/dev/trevor) does it, what V2 (this project) already does, and what the existing numbered plans under /Users/kevin/dev/trevorV2/.plans say - then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
+description: "Spec a new Trevor V2 plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present three comparisons - how V1 (~/dev/trevor) does it, what V2 (this project) already does, and what the existing numbered plans under /Users/kevin/dev/trevorV2/.plans say - then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. After writing it, thread the new plan into any later plans whose assumptions it changes (forward-dependency + accommodation), skipping any plan with a live feature branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
 ---
 
 # Plan the Next Trevor V2 Feature
@@ -72,6 +72,20 @@ flight (see "Plan placement, numbering, and git policy").
   *policy*, not a per-plan index (it does not enumerate plans by name), so a new plan usually needs no
   `AGENTS.md` edit. Update `AGENTS.md` only when the policy changes, and `CONTEXT.md` when the plan
   introduces shared domain vocabulary - and include those edits in the same `main` worktree commit.
+
+### Downstream accommodation - adjust the later plans the new plan changes
+
+- **Placement implies downstream edits.** Plans are implemented in number order, so a new plan lands
+  *before* the higher-numbered plans. Any later plan whose assumptions the new plan invalidates or
+  extends must be threaded with a forward dependency + accommodation, or it will be implemented against
+  a stale design. This is the mirror image of the new plan's own `## 0. Hard Dependencies`.
+- **Conservative and concrete.** Only adjust a later plan with a real interaction - a changed contract,
+  a new task, a coexistence boundary - not one that is merely topically related. Record which plans were
+  considered and skipped.
+- **Never edit a plan that has a live branch/worktree.** Run `git worktree list` / `git branch` first; a
+  `feat/<NN>` branch will later merge and delete `.plans/<NN>`, so a `main`-side edit to that dir becomes
+  a modify/delete conflict. Surface those for the owner instead of editing them. (Phase 4 step 9 has the
+  procedure.)
 
 ## Planner Integration
 
@@ -147,7 +161,8 @@ the trade-offs between them. **Stop and discuss - do not write any files yet.**
 
 Converge with the user on what the feature should look like: surface, mechanism, scope/cut, where it
 lives in V2's architecture, its hard dependencies on other plans, and how it numbers/sequences against
-the rest.
+the rest. Once placement is fixed, also name the *downstream* plans the new one changes assumptions for -
+the later plans that will need to accommodate it (threaded in Phase 4 step 9).
 
 > IMPORTANT: Do NOT create or edit any plan files until the design is FULLY agreed with the user.
 > "Fully decided" means the user has confirmed the shape - not your own conclusion. Recommend a default
@@ -208,7 +223,28 @@ the rest.
 
    If either check fails, report the update as non-converged and summarize the remaining issue. Do not present
    it as complete.
-9. **Commit on `main` via the worktree, then tear it down - never switch branches.** The Phase 3 design
+9. **Accommodate the downstream plans the new plan changes.** A new plan often invalidates or extends
+   assumptions that *later* plans were written against (a turn can now span multiple models; a new event
+   or transcript-row kind exists; a child/fork now inherits new state). After the new plan's number and
+   placement are fixed (Phase 3), thread it into every later plan whose design it changes - the same
+   forward-dependency + accommodation you would want if those plans were being authored today:
+   - **Find the real set, conservatively.** Read each candidate later plan's actual `implementation.md`
+     and `progress-report.md` (fan out read-only sub-agents for breadth). Adjust a plan only when there
+     is a *concrete* accommodation - a changed contract, a new task, a coexistence boundary - never for a
+     merely topically-related plan. State which plans you considered and skipped.
+   - **SKIP any plan with a live feature branch or worktree.** Run `git worktree list` and `git branch`
+     first. Editing `.plans/<NN>` on `main` while a `feat/<NN>` branch exists collides with that branch's
+     eventual merge (which deletes the plan dir) - a modify/delete conflict. Leave those for the owner and
+     call them out instead of editing them.
+   - **For each accommodated plan, inside `$WT`:** add a `- [ ]` forward-dependency bullet under its
+     `## 0. Hard Dependencies` referencing the new plan; add a brief note plus a `<!-- D-### -->` marker
+     at the most relevant section; if real new behavior is implied, add matching RED/GREEN tasks to the
+     right milestone in **both** `implementation.md` and `progress-report.md` and bump that progress
+     report's Summary counts. Then `plan-db record-decision --decided-by human`, and run
+     `plan-db check-progress` and `plan-db check-convergence --plan "<NN>-<name>" --streak 3` for that
+     plan before moving on. A reference-only accommodation (no new behavior) is just the dependency bullet
+     + note/marker + decision; it does not touch the progress report's task counts.
+10. **Commit on `main` via the worktree, then tear it down - never switch branches.** The Phase 3 design
    agreement is the review gate, so record and commit the plan inside `$WT` (uncommitted work there is
    lost when the worktree is removed). Stage **only** the plan docs plus any `AGENTS.md`/`CONTEXT.md`
    edits you actually made - never feature-branch source - then commit (no `Co-Authored-By` trailer) and
@@ -218,6 +254,9 @@ the rest.
    cd "$WT"
    git add .plans/<NN.n>-<name>/        # add AGENTS.md / CONTEXT.md only if you changed them
    git commit -m "docs(plans): add plan <NN.n> <name>"
+   # if step 9 accommodated downstream plans, commit those as a SEPARATE commit:
+   git add .plans/<downstream-NN>/ ...   # only the later plans you actually edited
+   git commit -m "docs(plans): thread <NN.n> <name> into downstream plans (...)"
    cd - >/dev/null
    git worktree remove "$WT"
    ```
@@ -225,8 +264,8 @@ the rest.
    If the user wants to eyeball the files before the commit, pause after authoring and keep `$WT`. Never
    `git checkout main` in the shared working tree, and never author or commit plan docs on a feature
    branch. Afterward, confirm the shared checkout is still on its original branch and unmodified.
-10. Report what changed (files + new decisions + new Phase/milestones + AGENTS.md/CONTEXT.md updates +
-    check results).
+11. Report what changed (files + new decisions + new Phase/milestones + AGENTS.md/CONTEXT.md updates +
+    the downstream plans accommodated and the ones considered-but-skipped + check results).
 
 ## Instructions
 
@@ -245,6 +284,11 @@ the rest.
 - **Number by decimal off the work in flight.** A new plan defaults to the next decimal under the plan
   currently being implemented (`03` -> `03.1`), or under a dependency plan when one exists (`40` -> `40.1`).
   Never renumber existing plans.
+- **Thread the new plan into the downstream plans it changes.** Placing a plan is not finished until the
+  *later* plans whose assumptions it invalidates or extends are accommodated (forward-dependency bullet,
+  note/marker, RED/GREEN tasks where real work is implied, recorded decision, re-converged). Any plan
+  with a live `feat/<NN>` branch/worktree is SKIPPED and surfaced, never edited on `main`. Be
+  conservative: accommodate concrete interactions only, and say what you skipped.
 - RED/GREEN/REFACTOR milestone tasks are mandatory for new progress-report implementation work. A generic
   product checklist is drift unless each behavior is tied to test-first RED items, matching GREEN
   implementation items, and REFACTOR cleanup.
