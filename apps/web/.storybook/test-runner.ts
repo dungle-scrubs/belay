@@ -9,7 +9,7 @@ import {
 
 /**
  * Lane A (plan 09.2 M1): the Storybook visual-regression test-runner config. Every story gets a SMOKE
- * check (rendered with real size, did not throw or collapse to zero height - the `df8d7fe` class) plus a
+ * check (rendered with real size, did not throw or collapse to zero height) plus a
  * SCREENSHOT DIFF against a committed, container-generated baseline (D-001/D-002). Animations, the clock,
  * and RNG are frozen before each story renders so a mid-flight transition / shimmer frame / relative
  * timestamp can never flake the capture (D-003). Stories are auto-discovered, so anything added to
@@ -44,7 +44,8 @@ const config: TestRunnerConfig = {
     await page.addStyleTag({ content: DISABLE_ANIMATIONS_CSS });
   },
   async postVisit(page, context) {
-    // Smoke: a story that threw or collapsed to zero height fails here, before the screenshot.
+    // Smoke: a story that threw or collapsed to zero height (the regression that motivated this lane)
+    // fails here, before the screenshot.
     const root = page.locator("#storybook-root");
     const box = await root.boundingBox();
     if (!box || box.width < 1 || box.height < 1) {

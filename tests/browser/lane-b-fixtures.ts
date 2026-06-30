@@ -1,4 +1,4 @@
-import { events, type SessionTransport, streamTransport } from "@trevor/session";
+import { events, PRODUCER_IDS, type SessionTransport, streamTransport } from "@trevor/session";
 
 /**
  * Lane B transcript fixtures (plan 09.2 M3): publish deterministic transcript events straight into the
@@ -18,8 +18,8 @@ export function storeTransport(): SessionTransport {
   return streamTransport(url);
 }
 
-const HOST = "trevor-host";
-const WEB = "trevor-web";
+const HOST = PRODUCER_IDS.host;
+const WEB = PRODUCER_IDS.web;
 
 async function publish(
   transport: SessionTransport,

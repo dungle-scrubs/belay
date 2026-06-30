@@ -20,8 +20,8 @@ export const BROWSER_VIEWPORT = { width: 1280, height: 800 } as const;
 
 /**
  * Screenshot-diff tolerance (D-003): a small per-image pixel-ratio budget so antialiasing noise passes
- * while a collapsed / overlapping layout (the `df8d7fe` zero-height-collapse class) fails. "Looks
- * remotely right", not pixel-perfect.
+ * while a collapsed / overlapping layout (a story whose row list collapses to zero height - the
+ * regression that motivated this lane) fails. "Looks remotely right", not pixel-perfect.
  */
 export const SCREENSHOT_MAX_DIFF_PIXEL_RATIO = 0.02;
 

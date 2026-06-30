@@ -7,16 +7,15 @@ import { defineConfig } from "vite";
 
 // RESERVED_PORTS.web is reserved for the Trevor web UI in ~/.agents/PORTS.md.
 // /sessions is proxied to the local session-store (REST + WebSocket, RESERVED_PORTS.store) so the
-// browser talks same-origin and avoids cross-origin (CORS) failures. Override
-// VITE_SESSION_PROXY to point at another backend; opt into Richter directly with
-// VITE_RICHTER_URL (see src/session/use-session.ts).
+// browser talks same-origin and avoids cross-origin (CORS) failures. Override VITE_SESSION_PROXY to point
+// at another backend; opt into Richter directly with VITE_RICHTER_URL (see src/session/use-session.ts).
 // The Tailwind plugin only processes CSS that imports "tailwindcss", so the
 // live app (which does not yet import src/index.css) builds byte-identically;
 // Storybook opts in via .storybook/preview.ts. Shared by both since Storybook's
 // @storybook/react-vite framework reuses this config.
-// The `/sessions` proxy to the local session-store (REST + WebSocket), so the browser talks same-origin.
-// Shared by `vite dev` and `vite preview` - the built+previewed app (the 09.2 Lane B browser e2e) reaches
-// an ephemeral store via VITE_SESSION_PROXY exactly as dev does, with no per-run rebuild.
+//
+// The proxy is shared by `vite dev` AND `vite preview`, so the built+previewed app (the 09.2 Lane B
+// browser e2e) reaches an ephemeral store via VITE_SESSION_PROXY exactly as dev does, with no rebuild.
 const sessionsProxy = {
   [SESSIONS_PATH]: {
     target: process.env.VITE_SESSION_PROXY ?? serviceUrl("store"),

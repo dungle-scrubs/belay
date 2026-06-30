@@ -8,21 +8,9 @@
 # All edits are container-local; the committed tree is never mutated.
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-IMAGE="mcr.microsoft.com/playwright:v1.50.0-noble"
+source "$(dirname "${BASH_SOURCE[0]}")/_container.sh"
 
-docker run --rm --ipc=host -v "$REPO_ROOT":/src:ro "$IMAGE" bash -lc '
-  set -uo pipefail
-  mkdir -p /app
-  cd /src && tar \
-    --exclude=./node_modules --exclude="*/node_modules" \
-    --exclude=./.git --exclude="*/storybook-static" \
-    --exclude=./test-results --exclude="*/dist" \
-    -cf - . | (cd /app && tar -xf -)
-  cd /app
-  git init -q
-  npm install -g pnpm@11.5.2 >/dev/null 2>&1
-  pnpm install --frozen-lockfile >/dev/null 2>&1
+docker run --rm --ipc=host -v "$REPO_ROOT":/src:ro "$IMAGE" bash -lc "$CONTAINER_PREP"'
   run() { CI=true pnpm --filter @trevor/web test-storybook >/tmp/r.log 2>&1; echo $?; }
 
   echo "### 1. NO-OP (expect PASS) ###"

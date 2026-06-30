@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   type VirtualizationPerformanceBudgets,
   writeVirtualizationPerformanceArtifacts,
-} from "../../e2e/virtualization-performance-artifacts";
+} from "@trevor/test-kit/perf-artifacts";
 import { appendExchange, seedExchanges, storeTransport } from "./lane-b-fixtures";
 
 /**

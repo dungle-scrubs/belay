@@ -6,7 +6,7 @@ import { test } from "vitest";
 import {
   DEFAULT_VIRTUALIZATION_PERFORMANCE_ARTIFACT_ROOT,
   writeVirtualizationPerformanceArtifacts,
-} from "./virtualization-performance-artifacts";
+} from "../src/perf-artifacts";
 
 test("virtualization performance artifacts default to the local state directory", () => {
   assert.ok(

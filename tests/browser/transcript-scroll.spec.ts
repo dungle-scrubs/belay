@@ -14,6 +14,16 @@ import {
  */
 
 const SEED_EXCHANGES = 30; // ~60 rows -> taller than the 800px viewport, so the transcript scrolls.
+const PIN_TOLERANCE_PX = 4; // within this of the bottom counts as pinned/at-the-live-edge.
+const STREAM_TOLERANCE_PX = 8; // a growing row may briefly trail the edge by a partial row height.
+
+/** Total rows the virtualized list reports (data-transcript-row-count). */
+function rowCount(page: Page): Promise<number> {
+  return page
+    .locator("[data-transcript-virtual-list]")
+    .getAttribute("data-transcript-row-count")
+    .then((v) => Number(v));
+}
 
 /** Open the app on a fresh session seeded with a tall, scrollable transcript; return its scroller. */
 async function openTallTranscript(
@@ -44,14 +54,14 @@ test("appending while pinned keeps the last row at the live edge (stick-to-botto
 }) => {
   const { sessionId, scroller } = await openTallTranscript(page, "pin");
   // Opens pinned: at the live edge, no jump affordance.
-  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(4);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
   await expect(jumpButton(page)).toHaveCount(0);
 
   await appendExchange(storeTransport(), sessionId, "while-pinned");
 
   // The new row lands at the live edge and is visible; still pinned (no jump button).
   await expect(scroller).toContainText("reply while-pinned");
-  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(4);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
   await expect(jumpButton(page)).toHaveCount(0);
 });
 
@@ -59,7 +69,7 @@ test("scrolling up unpins, the jump affordance appears, and a later append does 
   page,
 }) => {
   const { sessionId, scroller } = await openTallTranscript(page, "unpin");
-  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(4);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
 
   // A real wheel-up over the scroller is a user scroll-intent -> unpin.
   await scroller.hover();
@@ -70,28 +80,31 @@ test("scrolling up unpins, the jump affordance appears, and a later append does 
   await expect.poll(() => bottomDeltaPx(scroller)).toBeGreaterThan(20);
 
   const before = await scroller.evaluate((el) => el.scrollTop);
+  const beforeRows = await rowCount(page);
   await appendExchange(storeTransport(), sessionId, "while-unpinned");
-  // The appended content exists in the log, but the viewport must not jump to it (no yank).
+  // Wait until the append is actually observed (the row is off-screen/virtualized, so we can't assert on
+  // its text) BEFORE measuring - otherwise "no yank" passes trivially because the row-add hasn't landed.
+  await expect.poll(() => rowCount(page)).toBeGreaterThan(beforeRows);
   await expect(jumpButton(page)).toHaveCount(1);
   const after = await scroller.evaluate((el) => el.scrollTop);
-  expect(Math.abs(after - before)).toBeLessThan(4);
+  expect(Math.abs(after - before)).toBeLessThan(PIN_TOLERANCE_PX);
 });
 
 test("a mid-stream growing row is auto-followed while pinned (bottomDelta stays small, no yank)", async ({
   page,
 }) => {
   const { sessionId, scroller } = await openTallTranscript(page, "stream");
-  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(4);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
 
   const turn = await startStreamingTurn(storeTransport(), sessionId);
   for (let i = 0; i < 8; i += 1) {
     await turn.delta(`streamed line ${i}\n`);
     // While pinned, each growth keeps us at the live edge rather than leaving a gap below.
-    await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(8);
+    await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(STREAM_TOLERANCE_PX);
   }
   await turn.complete(" done");
   await expect(scroller).toContainText("streamed line 7");
-  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(8);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(STREAM_TOLERANCE_PX);
 });
 
 test("clicking jump-to-bottom re-pins and returns to the live edge", async ({ page }) => {
@@ -106,10 +119,10 @@ test("clicking jump-to-bottom re-pins and returns to the live edge", async ({ pa
 
   // Re-pinned: the button is gone and we are back at the live edge.
   await expect(jumpButton(page)).toHaveCount(0);
-  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(4);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
 
   // And a subsequent append now sticks again (re-pin actually re-engaged follow).
   await appendExchange(storeTransport(), sessionId, "after-jump");
   await expect(scroller).toContainText("reply after-jump");
-  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(4);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
 });
