@@ -64,7 +64,10 @@ function PasteTokenChip({
   return (
     <span
       data-paste-token={num}
-      className="group/tok pointer-events-auto relative cursor-default rounded-sm bg-smui-purple/15 px-0.5 font-medium text-smui-purple ring-1 ring-inset ring-smui-purple/30"
+      // The chip must occupy the EXACT width of its text so the mirror wraps identically to the
+      // transparent textarea beneath it - so the highlight is color/background/ring only (no padding,
+      // no font-weight change), since any of those would widen the chip and drift it off the glyphs.
+      className="group/tok pointer-events-auto relative cursor-default rounded-sm bg-smui-purple/20 text-smui-purple ring-1 ring-inset ring-smui-purple/40"
     >
       [Pasted text #{num} +{lines} lines]
       {/* The popover sits directly on top of the chip (no gap) so the pointer can bridge into it to
@@ -123,7 +126,7 @@ function ImageTokenChip({ num }: { num: number }) {
   return (
     <span
       data-image-token={num}
-      className="rounded-sm bg-smui-frost-3/15 px-0.5 font-medium text-smui-frost-3 ring-1 ring-inset ring-smui-frost-3/30"
+      className="rounded-sm bg-smui-frost-3/20 text-smui-frost-3 ring-1 ring-inset ring-smui-frost-3/40"
     >
       [Image #{num}]
     </span>
@@ -160,11 +163,9 @@ function renderMirror(
   let pasteIndex = 0;
   for (const mark of marks) {
     if (mark.start > last) {
-      out.push(
-        <span key={`t${last}`} className="text-transparent">
-          {value.slice(last, mark.start)}
-        </span>,
-      );
+      // The mirror is the VISIBLE layer (the textarea's own glyphs are transparent), so plain runs
+      // render in the foreground color; only token text is swapped for a chip.
+      out.push(<span key={`t${last}`}>{value.slice(last, mark.start)}</span>);
     }
     if (mark.kind === "paste") {
       const index = pasteIndex++;
@@ -183,10 +184,11 @@ function renderMirror(
     last = mark.end;
   }
   out.push(
-    <span key="tail" className="text-transparent">
+    <span key="tail">
       {value.slice(last)}
-      {/* A trailing newline needs a placeholder char so the mirror's last line height matches. */}
-      {value.endsWith("\n") ? "​" : ""}
+      {/* An empty value or trailing newline needs a placeholder char so the mirror keeps a full last
+          line height (the mirror sizes the box, so a collapsed line would shrink the field). */}
+      {value === "" || value.endsWith("\n") ? "​" : ""}
     </span>,
   );
   return out;
@@ -205,18 +207,10 @@ export function PasteTokenOverlay({
 }: PasteTokenOverlayProps) {
   return (
     <div className={cn("relative", className)}>
-      {/* The mirror sits ON TOP: token chips are hover/focus targets; plain runs are transparent +
-          click-through, so the textarea beneath owns the caret, selection, and typing. */}
-      <div
-        aria-hidden
-        className={cn(
-          FIELD,
-          "pointer-events-none absolute inset-0 overflow-hidden text-foreground",
-        )}
-      >
-        {renderMirror(value, pastes, onRemove)}
-      </div>
-
+      {/* The textarea is the BOTTOM layer (absolute, filling the box the mirror sizes): transparent
+          glyphs but a visible caret + selection, and it owns typing. It is painted under the mirror
+          so the mirror's chips can be hover/focus targets - the caret shows through the mirror's
+          transparent gaps. */}
       <textarea
         ref={textareaRef}
         value={value}
@@ -224,14 +218,21 @@ export function PasteTokenOverlay({
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        rows={1}
         spellCheck={false}
         className={cn(
           FIELD,
-          "relative resize-none bg-transparent text-transparent caret-foreground outline-none placeholder:text-muted-foreground",
+          "absolute inset-0 h-full resize-none overflow-hidden bg-transparent text-transparent caret-foreground outline-none placeholder:text-muted-foreground",
           "selection:bg-smui-purple/30 selection:text-transparent",
         )}
       />
+
+      {/* The mirror is the VISIBLE, in-flow layer: it sizes the box to the wrapped content (so the
+          textarea beneath always matches - no scroll, no height drift) and draws the prose + chips on
+          top. pointer-events-none lets clicks/typing fall through to the textarea; only chips opt back
+          in (pointer-events-auto) to catch hover/focus for the inspection popover. */}
+      <div aria-hidden className={cn(FIELD, "pointer-events-none relative text-foreground")}>
+        {renderMirror(value, pastes, onRemove)}
+      </div>
     </div>
   );
 }
