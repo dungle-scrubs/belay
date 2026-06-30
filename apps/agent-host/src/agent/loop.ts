@@ -26,6 +26,7 @@ import {
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
+import type { SwitchCell, SwitchRequest } from "./switch-cell";
 import {
   createToolGuardrails,
   type GuardrailConfig,
@@ -434,6 +435,11 @@ export interface RunAgentOptions {
    *  can drive the guardrail with deterministic, hermetic tool results without touching the real
    *  executor. Absent in production - the real `executeTool` path (with the stall watchdog) runs. */
   readonly runTool?: (name: string, args: string, callId: string) => Effect.Effect<string>;
+  /** The per-turn mid-turn-switch cell (plan 09.1): an external initiator (the UI selector now, the
+   *  auto-router later) requests a model/reasoning change, which the loop applies at the next step
+   *  boundary. Absent on a turn that cannot be switched (a subagent) - the loop behaves exactly as
+   *  before. */
+  readonly switch?: SwitchCell;
 }
 
 export function runAgent(
@@ -699,11 +705,30 @@ export function runAgent(
       );
     });
 
+  // The single mid-turn-switch re-resolution boundary (plan 09.1 D-001/D-002): the loop reads the
+  // per-turn switch cell exactly here - at each step start, before the model stream opens - so a switch
+  // requested while the prior step's stream was open lands on this step and never interrupts a request
+  // in flight. Phase 1 applies a reasoning-only change to `currentReasoning`; later phases rebuild the
+  // provider on a model delta and record the switch. Returns the applied request, or undefined.
+  const applyPendingSwitch = (): SwitchRequest | undefined => {
+    const req = opts.switch?.take();
+    if (!req) {
+      return undefined;
+    }
+    if (req.reasoning !== undefined) {
+      currentReasoning = req.reasoning;
+    }
+    return req;
+  };
+
   // Stream.suspend keeps each step lazy: its provider.stream (which reads `conversation`)
   // is constructed only when the stream actually reaches this step - after the prior
   // step's tools have run and threaded their results - never eagerly while building it.
   const step = (n: number): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
+      // Re-resolve model+reasoning from the switch cell before the budget gate, so a mid-turn switch
+      // both drives this step's model stream and sizes its adaptive budget.
+      applyPendingSwitch();
       // Budget gate before opening another tool round: the step backstop OR - the real
       // governor - the prior step's prompt crossing the configured fraction of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are

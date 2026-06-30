@@ -20,11 +20,11 @@
 
 ### M1 - Switch cell + step-boundary re-read
 
-- [ ] RED: Characterize that a reasoning change injected mid-loop is ignored because `runAgent` reads reasoning once (`loop.ts:494`).
-- [ ] GREEN: Introduce a per-turn mutable cell read at each `step(n)` start; a fake provider asserts the next step uses the cell's reasoning.
-- [ ] RED: Test that a switch requested while a model stream is open does not interrupt it and applies only at the next step boundary.
-- [ ] GREEN: Read the cell only before `connectStep`, never mid-stream.
-- [ ] REFACTOR: Name the single re-resolution boundary so later phases and the auto-router attach to one seam.
+- [x] RED: Characterize that a reasoning change injected mid-loop is ignored because `runAgent` reads reasoning once (`loop.ts:494`).
+- [x] GREEN: Introduce a per-turn mutable cell read at each `step(n)` start; a fake provider asserts the next step uses the cell's reasoning.
+- [x] RED: Test that a switch requested while a model stream is open does not interrupt it and applies only at the next step boundary.
+- [x] GREEN: Read the cell only before `connectStep`, never mid-stream.
+- [x] REFACTOR: Name the single re-resolution boundary so later phases and the auto-router attach to one seam.
 
 ### M2 - Switch control event + host routing + `model.switched`
 
