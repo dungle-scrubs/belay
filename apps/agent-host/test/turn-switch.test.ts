@@ -97,3 +97,56 @@ test("M2: no switch requested means no model.switched event (idle is a no-op)", 
     "a turn with no switch request publishes no model.switched",
   );
 });
+
+test("M5: a same-source model swap records the from/to MODEL delta on model.switched", async () => {
+  // providerB answers; providerA calls a tool on step 1 and requests a swap to model-b.
+  const providerB: Provider = {
+    ...twoStepProvider(() => {}),
+    id: "model-b",
+    model: "model-b",
+    stream: () =>
+      Stream.fromIterable<ProviderEvent>([
+        { type: "text", text: "done" },
+        { type: "usage", usage: { input: 10, output: 1, contextWindow: 1_000_000, genMs: 1 } },
+      ]),
+  };
+  const cell = createSwitchCell();
+  let calls = 0;
+  const providerA: Provider = {
+    ...twoStepProvider(() => {}),
+    id: "model-a",
+    model: "model-a",
+    stream: (_messages, _tools, _reasoning) => {
+      calls += 1;
+      if (calls === 1) {
+        cell.request({
+          model: { sourceId: "s", modelId: "model-b", reasoning: "low" },
+          initiator: "manual",
+        });
+        return Stream.fromIterable<ProviderEvent>([
+          { type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } },
+          { type: "usage", usage: { input: 10, output: 1, contextWindow: 1_000_000, genMs: 1 } },
+        ]);
+      }
+      return Stream.fromIterable<ProviderEvent>([
+        { type: "text", text: "from-a" },
+        { type: "usage", usage: { input: 10, output: 1, contextWindow: 1_000_000, genMs: 1 } },
+      ]);
+    },
+  };
+  const { layer, events } = collectingEmit();
+  await Effect.runPromise(
+    publishTurn(providerA, history, {
+      runId: "r1",
+      reasoning: "low",
+      switch: cell,
+      rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+    }).pipe(Effect.provide(layer)),
+  );
+  const switched = events.find((e) => e.type === "model.switched");
+  assert.deepEqual(switched?.payload.from, { model: "model-a", reasoning: "low" });
+  assert.deepEqual(switched?.payload.to, { model: "model-b", reasoning: "low" });
+  // The final answer streamed from the swapped-in model.
+  const final = events.find((e) => e.type === "assistant.completed");
+  assert.equal(String(final?.payload.text ?? ""), "done");
+});

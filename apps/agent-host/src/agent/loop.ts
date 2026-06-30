@@ -1,4 +1,10 @@
-import type { ProviderDiagnostic, ProviderPartialCounts, TurnStop } from "@trevor/session";
+import {
+  constrainReasoning,
+  type ModelRef,
+  type ProviderDiagnostic,
+  type ProviderPartialCounts,
+  type TurnStop,
+} from "@trevor/session";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
 import { envNumber } from "../env";
 import { debug, warn } from "../log";
@@ -451,6 +457,11 @@ export interface RunAgentOptions {
    *  boundary. Absent on a turn that cannot be switched (a subagent) - the loop behaves exactly as
    *  before. */
   readonly switch?: SwitchCell;
+  /** Rebuilds the active provider for a mid-turn MODEL change (09.1 M4): resolves a target `ModelRef` to
+   *  a fresh `Provider` (the host wires `buildSourceProvider`), since `Provider.model` is readonly.
+   *  Returns null when the target is unresolvable, in which case the switch leaves the provider unchanged.
+   *  Absent means model changes are not honored (reasoning-only), as in Phase 1. */
+  readonly rebuildProvider?: (model: ModelRef) => Provider | null;
 }
 
 export function runAgent(
@@ -510,6 +521,10 @@ export function runAgent(
   let recoveryBudget = config.maxRecovery;
   let currentReasoning = reasoning;
   let thinkingReduced = false;
+  // The active provider for this turn (plan 09.1 M4): seeded from the argument and REBUILT in place when a
+  // mid-turn switch changes the model (Provider.model is readonly). Every model step, budget derivation,
+  // and failure log below reads `currentProvider`, so the swap takes effect at the next step boundary.
+  let currentProvider = provider;
 
   // The latest model step's prompt size + window, captured from its usage event (like
   // overflowReason). Drives the context-pressure budget (D-053): when the prompt that fed
@@ -545,11 +560,11 @@ export function runAgent(
   // Read at each gate check, so it tracks the latest usage/repeat state.
   const currentBudget = (): TurnBudget =>
     deriveTurnBudget({
-      providerId: provider.id,
-      providerKind: provider.kind,
-      model: provider.model,
+      providerId: currentProvider.id,
+      providerKind: currentProvider.kind,
+      model: currentProvider.model,
       reasoning: currentReasoning,
-      reasoningLevels: provider.reasoningLevels,
+      reasoningLevels: currentProvider.reasoningLevels,
       inputTokens: lastInputTokens,
       contextWindow: lastContextWindow,
       contextBudgetFraction: config.contextBudgetFraction,
@@ -606,7 +621,7 @@ export function runAgent(
     }
     const reduced = thinkingReduced
       ? null
-      : reduceReasoning(provider.reasoningLevels, currentReasoning);
+      : reduceReasoning(currentProvider.reasoningLevels, currentReasoning);
     const reduceThinking = (): AgentEvent => {
       currentReasoning = reduced ?? currentReasoning;
       thinkingReduced = true;
@@ -654,8 +669,8 @@ export function runAgent(
     reasoning: string | undefined,
   ): Stream.Stream<ProviderEvent, ProviderError> =>
     withStallTimeout(
-      provider.stream(conversation, stepTools, reasoning),
-      provider.model,
+      currentProvider.stream(conversation, stepTools, reasoning),
+      currentProvider.model,
       config.streamStallMs,
     );
 
@@ -679,7 +694,7 @@ export function runAgent(
 
   const synthesize = (n: number, stop: TurnStop): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
-      const synthReasoning = cheapestReasoning(provider.reasoningLevels);
+      const synthReasoning = cheapestReasoning(currentProvider.reasoningLevels);
       // One forced-answer attempt: push the "answer now, no tools" nudge (conversation-only - never
       // emitted, never persisted) and re-stream with zero tools at the cheapest reasoning. A blank
       // answer recovers through the shared empty-retry (splice + one more attempt, re-pushing the
@@ -717,25 +732,47 @@ export function runAgent(
     });
 
   const endpoint = (): SwitchEndpoint => ({
-    model: provider.model,
+    model: currentProvider.model,
     ...(currentReasoning !== undefined ? { reasoning: currentReasoning } : {}),
   });
+
+  // The provider-rebuild path for a model change (plan 09.1 M4), kept separate from cell-read so the
+  // cross-provider normalization phase (M6) extends only here. Rebuilds `currentProvider` from the target
+  // ModelRef when the model id actually changes (Provider.model is readonly); a failed/absent resolver
+  // leaves the active provider unchanged. The carried `conversation` array is untouched, so history
+  // continuity across a same-provider swap is automatic.
+  const rebuildForModelSwitch = (model: ModelRef): void => {
+    if (model.modelId === currentProvider.model) {
+      return;
+    }
+    const rebuilt = opts.rebuildProvider?.(model);
+    if (rebuilt) {
+      currentProvider = rebuilt;
+    }
+  };
 
   // The single mid-turn-switch re-resolution boundary (plan 09.1 D-001/D-002): the loop reads the
   // per-turn switch cell exactly once per step, right before the model stream opens (below), so a switch
   // requested while the prior step's stream was open lands on this step and never interrupts a request in
-  // flight, and is preserved across a stop/checkpoint that does not open a model step. Phase 1 applies a
-  // reasoning-only change to `currentReasoning`; later phases rebuild the provider on a model delta.
-  // Returns the `model_switched` loop event to emit ahead of the step, or undefined when none was queued.
+  // flight, and is preserved across a stop/checkpoint that does not open a model step. A model delta
+  // rebuilds the provider; reasoning is then clamped to the (possibly new) provider's surface so a level
+  // the target lacks carries to the nearest supported one. Returns the `model_switched` loop event to emit
+  // ahead of the step, or undefined when none was queued.
   const applyPendingSwitch = (): Extract<AgentEvent, { type: "model_switched" }> | undefined => {
     const req = opts.switch?.take();
     if (!req) {
       return undefined;
     }
     const from = endpoint();
-    if (req.reasoning !== undefined) {
-      currentReasoning = req.reasoning;
+    if (req.model) {
+      rebuildForModelSwitch(req.model);
     }
+    const requested = req.reasoning ?? req.model?.reasoning ?? currentReasoning ?? null;
+    currentReasoning =
+      constrainReasoning(
+        { levels: currentProvider.reasoningLevels, default: currentProvider.defaultReasoning },
+        requested,
+      ) ?? undefined;
     return {
       type: "model_switched",
       from,
@@ -881,8 +918,8 @@ export function runAgent(
               const next = attempt + 1;
               const base = config.reconnectBackoffsMs[attempt - 1] ?? 0;
               const wait = base + Math.round(Math.random() * 150); // small jitter, no lockstep
-              logProviderFailure(provider, error, next, "reconnect");
-              const diagnostic = providerDiagnostic(provider, error, next, true, partials());
+              logProviderFailure(currentProvider, error, next, "reconnect");
+              const diagnostic = providerDiagnostic(currentProvider, error, next, true, partials());
               return Stream.concat(
                 Stream.succeed<AgentEvent>({
                   type: "reconnecting",
@@ -900,12 +937,18 @@ export function runAgent(
             // UNKNOWN shape only - record a redacted, deduped observation (D-076 M5) so the
             // classifier's rules can improve later. Best-effort and output-started-aware; never fails
             // the turn.
-            logProviderFailure(provider, error, attempt, "terminal");
-            const diagnostic = providerDiagnostic(provider, error, attempt, retrySafe, partials());
+            logProviderFailure(currentProvider, error, attempt, "terminal");
+            const diagnostic = providerDiagnostic(
+              currentProvider,
+              error,
+              attempt,
+              retrySafe,
+              partials(),
+            );
             const diagnosticError =
               error instanceof ProviderUnavailable ? error.withDiagnostic(diagnostic) : error;
             return Stream.concat(
-              observeUnknownFailure(provider, diagnosticError, outputStarted()),
+              observeUnknownFailure(currentProvider, diagnosticError, outputStarted()),
               Stream.fail(diagnosticError),
             );
           }),
@@ -944,7 +987,7 @@ export function runAgent(
               return recoverEmptyAnswer(() => step(n));
             }
             const protocolDiagnostic = classifyProviderProtocolAnomaly({
-              providerId: provider.id,
+              providerId: currentProvider.id,
               text: assistantText,
               toolCalls,
             });
@@ -969,7 +1012,7 @@ export function runAgent(
               // Persistent anomaly (already nudged) or a tool-less turn: terminate with the typed
               // incident so the web renders the leaked markup escaped and /doctor can correlate it.
               const { stop } = assessTurn(n, protocolDiagnostic);
-              const diagnostic = protocolAnomalyDiagnostic(provider, protocolDiagnostic, {
+              const diagnostic = protocolAnomalyDiagnostic(currentProvider, protocolDiagnostic, {
                 textChars: assistantText.length,
                 thinkingChars: 0,
                 toolCalls: 0,

@@ -77,6 +77,81 @@ test("M1: a reasoning switch requested mid-turn is applied at the next step boun
   assert.deepEqual(seen, ["off", "high"], "step 1 stays at off; the mid-turn switch lands on step 2");
 });
 
+/** A recording provider for the model-swap tests: it streams `behave(call)` each step and reports the
+ *  model id + the message count it was handed, so a test can see which model ran each step and that the
+ *  conversation carried across a swap. */
+function recordingProvider(
+  model: string,
+  behave: (call: number) => ProviderEvent[],
+  record: (model: string, messages: number) => void,
+): Provider {
+  let calls = 0;
+  return {
+    id: model,
+    label: model,
+    model,
+    reasoningLevels: ["off", "low", "high"],
+    defaultReasoning: "off",
+    kind: "cloud",
+    describe: () => ({
+      label: model,
+      model,
+      reasoningLevels: ["off", "low", "high"],
+      defaultReasoning: "off",
+      kind: "cloud",
+    }),
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: (messages, _tools, _reasoning) => {
+      calls += 1;
+      record(model, messages.length);
+      return Stream.fromIterable<ProviderEvent>(behave(calls));
+    },
+  };
+}
+
+test("M4: a model change rebuilds the provider; the next step runs the new model on the carried history", async () => {
+  const cell = createSwitchCell();
+  const ran: Array<{ model: string; messages: number }> = [];
+  const push = (model: string, messages: number) => ran.push({ model, messages });
+  const providerB = recordingProvider("model-b", () => [{ type: "text", text: "done-b" }], push);
+  const providerA = recordingProvider(
+    "model-a",
+    (call) => {
+      if (call === 1) {
+        // Request a same-source model swap while step 1's stream is built; applies at step 2.
+        cell.request({
+          model: { sourceId: "s", modelId: "model-b", reasoning: "low" },
+          initiator: "manual",
+        });
+        return [{ type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } }];
+      }
+      return [{ type: "text", text: "done-a" }];
+    },
+    push,
+  );
+  await Effect.runPromise(
+    Stream.runForEach(
+      runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
+        switch: cell,
+        runTool: () => Effect.succeed("ok"),
+        rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+      }),
+      () => Effect.void,
+    ),
+  );
+  assert.deepEqual(
+    ran.map((r) => r.model),
+    ["model-a", "model-b"],
+    "step 1 runs on the original model; step 2 runs on the rebuilt model",
+  );
+  assert.ok(
+    ran[1] !== undefined && ran[1].messages > (ran[0]?.messages ?? 0),
+    "the rebuilt model sees the carried conversation (history + step 1 + its tool result), not a reset",
+  );
+});
+
 test("M1: an in-flight model stream is never interrupted by a switch", async () => {
   // Step 1 emits text BEFORE its tool call; a switch requested between them must not truncate the open
   // stream - every event of step 1 still rides out, and the switch only affects step 2.

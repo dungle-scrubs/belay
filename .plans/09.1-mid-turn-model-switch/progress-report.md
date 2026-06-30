@@ -52,22 +52,22 @@
 
 ### M4 - Rebuild provider on model change (same source)
 
-- [ ] RED: Test that a model change within the same source rebuilds the `Provider` and the next step uses the new model id.
-- [ ] GREEN: Rebuild via `buildSourceProvider` on a model delta; clamp reasoning via `constrainReasoning` if support differs.
-- [ ] RED: Test intra-provider conversation continuity - the carried conversation replays cleanly on the new model.
-- [ ] GREEN: Carry the existing conversation array unchanged for same-provider swaps.
-- [ ] REFACTOR: Separate provider-rebuild from cell-read so the cross-provider phase extends only the rebuild path.
+- [x] RED: Test that a model change within the same source rebuilds the `Provider` and the next step uses the new model id.
+- [x] GREEN: Rebuild via `buildSourceProvider` on a model delta; clamp reasoning via `constrainReasoning` if support differs.
+- [x] RED: Test intra-provider conversation continuity - the carried conversation replays cleanly on the new model.
+- [x] GREEN: Carry the existing conversation array unchanged for same-provider swaps.
+- [x] REFACTOR: Separate provider-rebuild from cell-read so the cross-provider phase extends only the rebuild path.
 
 ### M5 - `model.switched` model delta + sticky model persist
 
-- [ ] RED: Event records from/to model; the marker shows the model change; the new model sticks for the next turn.
-- [ ] GREEN: Implement the model-delta event + sticky model persistence.
-- [ ] REFACTOR: Deduplicate the reasoning-only and model-change emit/marker paths.
+- [x] RED: Event records from/to model; the marker shows the model change; the new model sticks for the next turn.
+- [x] GREEN: Implement the model-delta event + sticky model persistence.
+- [x] REFACTOR: Deduplicate the reasoning-only and model-change emit/marker paths.
 
 ### Gate 2-3
 
-- [ ] Same-provider model swap works end to end with event + marker + sticky persistence.
-- [ ] Carried history replays without corruption on the new same-provider model.
+- [x] Same-provider model swap works end to end with event + marker + sticky persistence.
+- [x] Carried history replays without corruption on the new same-provider model.
 
 ### M6 - Cross-model normalization
 

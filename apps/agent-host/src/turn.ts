@@ -1,4 +1,4 @@
-import { events, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
+import { events, type ModelRef, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
 import { Cause, Effect, Exit, Option, Stream } from "effect";
 import {
   type AgentEvent,
@@ -57,10 +57,14 @@ export function publishTurn(
      *  `model.switch.requested` control event lands; the loop reads it at the next step boundary. Absent
      *  on a subagent turn (not switchable). */
     readonly switch?: SwitchCell;
+    /** Rebuilds the provider for a mid-turn MODEL change (09.1 M4): the host wires `buildSourceProvider`
+     *  so the loop can swap to a target model. Absent on a turn that only supports reasoning switches. */
+    readonly rebuildProvider?: (model: ModelRef) => Provider | null;
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
   const switchCell = options.switch;
+  const rebuildProvider = options.rebuildProvider;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -349,6 +353,7 @@ export function publishTurn(
         ...(loop ? { loop } : {}),
         ...(seedUsage ? { seedUsage } : {}),
         ...(switchCell ? { switch: switchCell } : {}),
+        ...(rebuildProvider ? { rebuildProvider } : {}),
       }),
       handle,
     ).pipe(

@@ -596,6 +596,11 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       ...(restricted ? { toolNames: CLIPBOARD_TOOL_NAMES } : {}),
       ...(seedUsage ? { seedUsage } : {}),
       ...(switchCell ? { switch: switchCell } : {}),
+      // Resolve a mid-turn model switch to a fresh provider (09.1 M4): same source builder used to build
+      // the turn's initial provider, so any catalog model can be swapped to mid-flight.
+      ...(switchCell
+        ? { rebuildProvider: (model: ModelRef) => buildSourceProvider(model.sourceId, model.modelId) }
+        : {}),
     }).pipe(Effect.provide(EmitLive)),
   );
   fiber.addObserver((exit) => {
