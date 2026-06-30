@@ -1,7 +1,6 @@
 import {
   type CatalogEntry,
   decodeModelPreferences,
-  EMPTY_PREFERENCES,
   type ModelPreferences,
   type ModelRef,
   type ProviderModel,
@@ -30,7 +29,15 @@ import {
  * but the existing sidebar provider behavior keeps working through the migration.
  */
 
+/** Per-SESSION model state: the active pick + per-model reasoning (so two open sessions don't fight). */
 const MODEL_PREFS_KEY = "trevor.modelPreferences";
+/** GLOBAL model library: recents / pinned / default. These are user preferences, not conversation
+ *  state, so they're shared across sessions - a fresh or handed-off session shows the models you
+ *  actually use instead of an empty picker (the per-session split lost them before). */
+const GLOBAL_PREFS_KEY = "trevor.modelPreferences.global";
+
+type GlobalPrefs = Pick<ModelPreferences, "recent" | "pinned" | "default">;
+type SessionPrefs = Pick<ModelPreferences, "active" | "reasoningByModel">;
 
 export interface ModelSelection extends ModelSelectionProjection {
   /** Select a model: clamps its reasoning to the model's surface, records active + recent, persists. */
@@ -61,13 +68,20 @@ export function useModelSelection({
    *  sessions (02.16 D-002). Null (pre-resolve) uses a throwaway key. */
   readonly sessionId: string | null;
 }): ModelSelection {
-  const [rawPrefs, setRawPrefs] = useLocalStorageState<ModelPreferences>(
+  // recents / pinned / default are a GLOBAL user library; active + per-model reasoning are per-session.
+  const [rawGlobal, setRawGlobal] = useLocalStorageState<GlobalPrefs>(GLOBAL_PREFS_KEY, {
+    defaultValue: { recent: [], pinned: [], default: null },
+  });
+  const [rawSession, setRawSession] = useLocalStorageState<SessionPrefs>(
     sessionScopedKey(MODEL_PREFS_KEY, sessionId),
-    { defaultValue: EMPTY_PREFERENCES },
+    { defaultValue: { active: null, reasoningByModel: {} } },
   );
-  // Normalize on every read so a partial/garbled stored object loads to a safe value (decode drops
-  // unusable refs) rather than trusting the raw JSON ahooks hands back.
-  const preferences = useMemo(() => decodeModelPreferences(rawPrefs), [rawPrefs]);
+  // Normalize the merged view on every read (decode drops unusable refs). Global wins on the shared
+  // keys, so a stale recent/pinned left in an old per-session blob can't shadow the global library.
+  const preferences = useMemo(
+    () => decodeModelPreferences({ ...rawSession, ...rawGlobal }),
+    [rawSession, rawGlobal],
+  );
 
   const selection = useMemo(
     () =>
@@ -82,22 +96,25 @@ export function useModelSelection({
     [preferences, roster, hostSources, hostCatalog, legacyProvider, legacyReasoning],
   );
 
+  // selectModel touches both stores (active is per-session; recent + default are global), so compute
+  // the next prefs once from the merged view and split it back into the two backings.
   const select = useCallback(
     (ref: ModelRef) => {
-      const surface = selection.reasoningSurface(ref);
-      setRawPrefs((prev) => selectModel(decodeModelPreferences(prev), ref, surface));
+      const next = selectModel(preferences, ref, selection.reasoningSurface(ref));
+      setRawSession({ active: next.active, reasoningByModel: next.reasoningByModel });
+      setRawGlobal({ recent: next.recent, pinned: next.pinned, default: next.default });
     },
-    [selection, setRawPrefs],
+    [preferences, selection, setRawSession, setRawGlobal],
   );
 
   const togglePin = useCallback(
     (ref: ModelRef) => {
-      setRawPrefs((prev) => {
-        const p = decodeModelPreferences(prev);
-        return p.pinned.some((r) => sameModel(r, ref)) ? unpinModel(p, ref) : pinModel(p, ref);
-      });
+      const next = preferences.pinned.some((r) => sameModel(r, ref))
+        ? unpinModel(preferences, ref)
+        : pinModel(preferences, ref);
+      setRawGlobal({ recent: next.recent, pinned: next.pinned, default: next.default });
     },
-    [setRawPrefs],
+    [preferences, setRawGlobal],
   );
 
   return {
