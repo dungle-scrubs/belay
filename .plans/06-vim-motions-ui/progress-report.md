@@ -23,13 +23,11 @@
 - [x] GREEN: Default Vim mode to disabled and surface parse errors without blocking Trevor startup
 - [x] REFACTOR: Document the config key and keep browser-only storage out of the preference source of truth
 
-## M2: Storybook Mode Indicator Contract
-
-- [ ] RED: Add Storybook/state tests or stories for the prompt bottom row with insert, normal, visual, disabled, shell lane, and narrow widths
-- [ ] GREEN: Render a compact stable mode indicator next to the upload `+` button when Vim mode is enabled
-- [ ] RED: Add visual states with the shell glyph replacing `+`, upload disabled, uploading, and upload error
-- [ ] GREEN: Keep indicator placement stable beside the `+`/shell glyph without composer height reflow
-- [ ] REFACTOR: Extract a small presentational component for mode indicator states
+- [x] RED: Add Storybook/state tests or stories for the prompt bottom row with insert, normal, visual, disabled, shell lane, and narrow widths
+- [x] GREEN: Render a compact stable mode indicator next to the upload `+` button when Vim mode is enabled
+- [x] RED: Add visual states with the shell glyph replacing `+`, upload disabled, uploading, and upload error
+- [x] GREEN: Keep indicator placement stable beside the `+`/shell glyph without composer height reflow
+- [x] REFACTOR: Extract a small presentational component for mode indicator states
 
 ## M3: `vimeejs/vimee` Evaluation Spike
 
