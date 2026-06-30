@@ -4,8 +4,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 43
-- Deferred follow-up: 0
+- Current cutoff blockers: 0
+- Deferred follow-up: 1
 - Superseded checklist debt: 0
 
 ## Hard Dependencies
@@ -77,11 +77,12 @@
 
 - [x] RED: Add Storybook interaction tests for mode transitions and indicator updates
 - [x] GREEN: Make Storybook states pass for insert, normal, visual, shell, slash, image tokens, upload, and narrow/mobile widths
-- [ ] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (Escape enters normal-mode there without closing it)
-- [ ] GREEN: Verify live behavior with preference enabled and disabled, on both prompt surfaces
+- [x] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (the script is the Deferred manual EZE section below)
 - [x] REFACTOR: Update user-facing config docs and AGENTS guidance for the Vim preference
 
 ## Deferred manual EZE (needs the live app + a `vim.json` config)
+
+- [ ] Verify live Vim behavior with the preference enabled AND disabled, on both prompt surfaces (composer + full-surface editor)
 
 Set `~/.trevorV2/vim.json` to `{ "enabled": true }`, start the host + web, then in BOTH the composer
 and the full-surface editor (open via the composer expand button): type in insert; Escape to normal
