@@ -114,3 +114,37 @@ test("exposes accessible names for the region and search (a11y)", () => {
   );
   expect(plain.queryByLabelText("Search Output style")).toBeNull();
 });
+
+/**
+ * M7 (second consumer): a completely unrelated command family - nothing about styles - renders and
+ * dispatches through the SAME component with no code change. Proves the menu is data-driven, not a
+ * `/style` picker in disguise.
+ */
+const DEPLOY_MENU: CommandMenuPayload = {
+  family: "deploy",
+  title: "Deploy target",
+  rows: [
+    { id: "staging", label: "Staging" },
+    {
+      id: "prod",
+      label: "Production",
+      children: [
+        { id: "prod-us", label: "Production (US)" },
+        { id: "prod-eu", label: "Production (EU)", disabledReason: "region not provisioned" },
+      ],
+    },
+  ],
+};
+
+test("a second, unrelated command family works through the same component + action path (03 M7)", () => {
+  const actions: Array<[string, string]> = [];
+  const { getByRole, getByText, getByLabelText } = render(
+    <CommandMenu payload={DEPLOY_MENU} onAction={(family, id) => actions.push([family, id])} />,
+  );
+  // Same nav: open the submenu, dispatch a leaf - but a different family id flows through.
+  fireEvent.click(getByRole("button", { name: /Production/ }));
+  expect(getByText("Production (US)")).toBeTruthy();
+  fireEvent.click(getByLabelText("Back"));
+  fireEvent.click(getByRole("button", { name: /Staging/ }));
+  expect(actions).toEqual([["deploy", "staging"]]);
+});
