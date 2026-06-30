@@ -66,8 +66,9 @@ test("the local source reads /api/v0/models and enriches each model with its nat
   assert.equal(models[2]?.native?.type, "vlm");
 });
 
-test("an unreachable /api/v0 degrades the local source to id-only + stale, never dropping models", async () => {
-  // The native endpoint throws (connection refused); the OpenAI /v1/models still lists the ids.
+test("an UNREACHABLE LM Studio yields an empty, stale local source with NO doomed /v1 retry", async () => {
+  // The native fetch rejects (connection refused) - LM Studio isn't running. The id-only /v1 list
+  // targets the same dead host, so it must NOT be attempted (it would only waste a round-trip).
   const calls = stubFetch((url) => {
     if (url.includes("/api/v0/models")) {
       throw new Error("connection refused");
@@ -77,20 +78,17 @@ test("an unreachable /api/v0 degrades the local source to id-only + stale, never
   const { models, stale } = await fetchSourceModels({ type: "local" }, null);
 
   assert.equal(stale, true, "an unreachable native endpoint marks the source stale");
-  assert.deepEqual(
-    models.map((m) => m.id),
-    ["unsloth/qwen3.6-27b-mlx"],
-    "the model is still listed via the id-only fallback",
-  );
-  assert.equal(models[0]?.native, undefined, "no native record on the degraded entry");
+  assert.deepEqual(models, [], "an unreachable LM Studio lists no models");
   assert.ok(
-    calls.some((u) => /\/v1\/models$/.test(u)),
-    "the degraded path falls back to the OpenAI /v1/models list",
+    !calls.some((u) => /\/v1\/models$/.test(u)),
+    "the doomed /v1/models fallback is skipped when the host is unreachable",
   );
 });
 
-test("a non-OK /api/v0 response degrades to id-only + stale", async () => {
-  stubFetch((url) => {
+test("a REACHABLE-but-non-OK /api/v0 (older LM Studio) degrades to the id-only /v1 list + stale", async () => {
+  // The native endpoint answers non-OK (no /api/v0 on this build), but the host is up, so the id-only
+  // /v1/models list IS worth trying and still lists the models (D-006).
+  const calls = stubFetch((url) => {
     if (url.includes("/api/v0/models")) {
       return { ok: false, status: 503 };
     }
@@ -101,8 +99,13 @@ test("a non-OK /api/v0 response degrades to id-only + stale", async () => {
   assert.deepEqual(
     models.map((m) => m.id),
     ["qwen/qwen3-vl-8b"],
+    "the model is still listed via the id-only fallback",
   );
-  assert.equal(models[0]?.native, undefined);
+  assert.equal(models[0]?.native, undefined, "no native record on the degraded entry");
+  assert.ok(
+    calls.some((u) => /\/v1\/models$/.test(u)),
+    "the reachable-but-no-native path falls back to /v1/models",
+  );
 });
 
 test("cloud/gateway sources keep the OpenAI /v1/models id+name list (no native endpoint)", async () => {

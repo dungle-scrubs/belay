@@ -102,7 +102,9 @@ export const LM_STUDIO_LOCAL_ENTRIES: readonly CatalogEntry[] = [
     modelId: "qwen/qwen3-vl-8b",
     displayName: "qwen/qwen3-vl-8b",
     kind: "local",
-    capabilities: ["vision", "reasoning"],
+    // The catalog pushes capabilities in tools -> reasoning -> vision order; this VLM has no tool_use,
+    // so the derived order is reasoning then vision (kept in lockstep with that derivation).
+    capabilities: ["reasoning", "vision"],
     contextLength: 128000,
     costTier: null,
     aliases: [],

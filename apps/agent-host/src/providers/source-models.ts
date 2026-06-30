@@ -60,41 +60,46 @@ async function fetchLiveModels(baseUrl: string, key: string | null): Promise<Liv
     .map((m) => ({ id: m.id, name: typeof m.name === "string" && m.name ? m.name : undefined }));
 }
 
-/** The LM Studio NATIVE `/api/v0/models` list, mapping each model to its rich record so the catalog can
- *  show quantization / type / arch / context / capabilities (D-001). Throws on an unreachable or non-OK
- *  endpoint so the caller can degrade to the id-only `/v1/models` shape. */
-async function fetchNativeLocalModels(baseUrl: string): Promise<LiveModel[]> {
-  const url = new URL("/api/v0/models", baseUrl).toString();
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) {
-    throw new Error(`native models query failed (${res.status})`);
-  }
-  return parseLmStudioModelList(await res.json()).map((native) => ({ id: native.id, native }));
-}
-
 /**
  * The local (LM Studio) catalog fetch: read the NATIVE `/api/v0/models` so each model carries its
- * quantization / type / arch / context / capabilities. If `/api/v0` is unreachable, non-OK, or garbled,
- * degrade to the OpenAI `/v1/models` id-only list and mark the source STALE - never drop the model
- * (D-006). When even that fails (LM Studio not running) the source is empty + stale.
+ * quantization / type / arch / context / capabilities (D-001).
+ *
+ * The native endpoint can fail two ways, and they degrade differently (D-006):
+ * - REACHABLE but non-OK (an older LM Studio without `/api/v0`): the id-only `/v1/models` list IS
+ *   worth trying against the same reachable host, so the models still list (marked stale).
+ * - UNREACHABLE (connection refused / timeout - the common "LM Studio not running" case): the
+ *   `/v1/models` fallback targets the SAME host:port and is doomed too, so we skip that wasted
+ *   round-trip (it would otherwise double the worst-case startup latency) and report empty + stale.
  */
 async function fetchLocalSourceModels(): Promise<{ models: LiveModel[]; stale: boolean }> {
   const baseUrl = lmStudioBaseUrl();
+  let nativeRes: Response;
   try {
-    const models = await fetchNativeLocalModels(baseUrl);
+    nativeRes = await fetch(new URL("/api/v0/models", baseUrl), {
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (cause) {
+    debug("catalog", "local catalog: LM Studio unreachable, no fallback", { reason: msg(cause) });
+    return { models: [], stale: true };
+  }
+  if (nativeRes.ok) {
+    const models = parseLmStudioModelList(await nativeRes.json()).map((native) => ({
+      id: native.id,
+      native,
+    }));
     debug("catalog", "local catalog via native /api/v0/models", { count: models.length });
     return { models, stale: false };
-  } catch (nativeErr) {
-    try {
-      const models = await fetchLiveModels(baseUrl, null);
-      debug("catalog", "local catalog degraded to id-only /v1/models", {
-        count: models.length,
-        reason: msg(nativeErr),
-      });
-      return { models, stale: true };
-    } catch {
-      return { models: [], stale: true };
-    }
+  }
+  // Reachable but the native endpoint is missing/erroring (older LM Studio): fall back to id-only.
+  try {
+    const models = await fetchLiveModels(baseUrl, null);
+    debug("catalog", "local catalog degraded to id-only /v1/models", {
+      count: models.length,
+      status: nativeRes.status,
+    });
+    return { models, stale: true };
+  } catch {
+    return { models: [], stale: true };
   }
 }
 

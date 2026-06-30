@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { CatalogEntry, SourceSummary } from "@trevor/session";
+import { LM_STUDIO_LOCAL_ENTRIES } from "@trevor/test-kit/lmstudio";
 import { ModelChooser } from "./model-chooser";
 
 /**
@@ -329,43 +330,9 @@ export const LocalQuantsDisambiguated: Story = {
         sources={[
           source({ sourceId: "lmstudio", label: "LM Studio", type: "local", modelCount: 3 }),
         ]}
-        catalogBySource={{
-          lmstudio: [
-            entry({
-              sourceId: "lmstudio",
-              modelId: "unsloth/qwen3.6-27b-mlx",
-              displayName: "unsloth/qwen3.6-27b-mlx",
-              kind: "local",
-              capabilities: ["tools", "reasoning"],
-              contextLength: 262_144,
-              costTier: null,
-              quantization: "8bit",
-              arch: "qwen3",
-            }),
-            entry({
-              sourceId: "lmstudio",
-              modelId: "lmstudio-community/qwen3.6-27b-mlx",
-              displayName: "lmstudio-community/qwen3.6-27b-mlx",
-              kind: "local",
-              capabilities: ["tools", "reasoning"],
-              contextLength: 65_536,
-              costTier: null,
-              quantization: "4bit",
-              arch: "qwen3",
-            }),
-            entry({
-              sourceId: "lmstudio",
-              modelId: "qwen/qwen3-vl-8b",
-              displayName: "qwen/qwen3-vl-8b",
-              kind: "local",
-              capabilities: ["vision", "reasoning"],
-              contextLength: 128_000,
-              costTier: null,
-              quantization: "4bit",
-              arch: "qwen3-vl",
-            }),
-          ],
-        }}
+        // The same shared fixture the chooser + integration tests assert against, so the visual and
+        // the test agree on exactly what the catalog derives from the LM Studio native record.
+        catalogBySource={{ lmstudio: LM_STUDIO_LOCAL_ENTRIES }}
         initialSourceId="lmstudio"
         onSelectModel={noop}
         className="h-full"

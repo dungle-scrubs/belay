@@ -188,6 +188,35 @@ function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshnes
     : cloudEntry(source, live, freshness, model, reasoningLevels);
 }
 
+/** The fields every catalog entry carries regardless of where the model runs, so the cloud + local
+ *  builders don't each re-spell the boilerplate (only the diverging fields - kind, displayName,
+ *  capabilities, context, and the local-only quant/arch - live in the dispatch branches). */
+function baseEntry(
+  source: SourceDef,
+  live: LiveModel,
+  freshness: CatalogFreshness,
+  reasoningLevels: readonly string[],
+) {
+  return {
+    sourceId: source.sourceId,
+    modelId: live.id,
+    costTier: null,
+    aliases: [],
+    freshness,
+    reasoningLevels,
+    defaultReasoning: defaultReasoningLevel(reasoningLevels),
+  } satisfies Partial<CatalogEntry>;
+}
+
+/** Appends the "reasoning" chip when the model has a graded/togglable thinking surface (shared by both
+ *  the cloud and local capability derivations). */
+function withReasoning(capabilities: string[], reasoningLevels: readonly string[]): string[] {
+  if (reasoningLevels.length > 1) {
+    capabilities.push("reasoning");
+  }
+  return capabilities;
+}
+
 /** A CLOUD catalog entry (D-005, unchanged): capabilities seeded from the always-present tools plus the
  *  pi-ai-derived reasoning surface and `input: ["...","image"]` vision; display name prefers pi-ai's
  *  curated name, then the provider's live name, then the raw id; context is the override-or-bundled
@@ -199,26 +228,17 @@ function cloudEntry(
   model: PiModel | undefined,
   reasoningLevels: readonly string[],
 ): CatalogEntry {
-  const capabilities: string[] = ["tools"];
-  if (reasoningLevels.length > 1) {
-    capabilities.push("reasoning");
-  }
+  const capabilities = withReasoning(["tools"], reasoningLevels);
   if (model?.input?.includes("image")) {
     capabilities.push("vision");
   }
   return {
-    sourceId: source.sourceId,
-    modelId: live.id,
+    ...baseEntry(source, live, freshness, reasoningLevels),
     displayName: model?.name ?? live.name ?? live.id,
     kind: "cloud",
     capabilities,
     // A confirmed override wins over pi-ai's bundled (possibly stale) contextWindow (02.16 D-003).
     contextLength: resolveContextWindow(live.id, model?.contextWindow),
-    costTier: null,
-    aliases: [],
-    freshness,
-    reasoningLevels,
-    defaultReasoning: defaultReasoningLevel(reasoningLevels),
   };
 }
 
@@ -235,30 +255,21 @@ function localEntry(
   reasoningLevels: readonly string[],
 ): CatalogEntry {
   const native = live.native;
-  const capabilities: string[] = [];
-  if (native && lmStudioSupportsTools(native)) {
-    capabilities.push("tools");
-  }
-  if (reasoningLevels.length > 1) {
-    capabilities.push("reasoning");
-  }
+  const capabilities = withReasoning(
+    native && lmStudioSupportsTools(native) ? ["tools"] : [],
+    reasoningLevels,
+  );
   if (native && lmStudioIsVision(native)) {
     capabilities.push("vision");
   }
   return {
-    sourceId: source.sourceId,
-    modelId: live.id,
+    ...baseEntry(source, live, freshness, reasoningLevels),
     displayName: live.name ?? live.id,
     kind: "local",
     capabilities,
     // The native max context, with the user's models.json override still winning (override precedence
     // preserved); null when neither is known.
     contextLength: resolveContextWindow(live.id, native?.maxContextLength),
-    costTier: null,
-    aliases: [],
-    freshness,
-    reasoningLevels,
-    defaultReasoning: defaultReasoningLevel(reasoningLevels),
     ...(native?.quantization ? { quantization: native.quantization } : {}),
     ...(native?.arch ? { arch: native.arch } : {}),
   };
