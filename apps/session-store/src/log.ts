@@ -32,6 +32,14 @@ interface EventRow {
   readonly createdAt: string;
 }
 
+/** The per-session aggregate (count + bounds) the inventory projection is built from. */
+interface AggregateRow {
+  readonly sessionId: string;
+  readonly createdAt: string;
+  readonly eventCount: number;
+  readonly updatedAt: string;
+}
+
 /** Maps a private SQLite row (payload as a JSON string) into the shared SessionEvent shape. */
 function rowToEvent(r: EventRow): SessionEvent {
   return {
@@ -126,14 +134,35 @@ export class SessionLog {
            LEFT JOIN events e ON e.sessionId = s.sessionId
           GROUP BY s.sessionId, s.createdAt`,
       )
-      .all() as unknown as {
-      sessionId: string;
-      createdAt: string;
-      eventCount: number;
-      updatedAt: string;
-    }[];
+      .all() as unknown as AggregateRow[];
+    return sessions.map((s) => this.projectRow(s));
+  }
 
-    return sessions.map((s) => ({
+  /**
+   * One session's inventory row, or null if it doesn't exist - the single-session form of `inventory()`
+   * for callers that need exactly one summary (the permanent-delete gate) instead of scanning every
+   * session. Same projection, scoped by `sessionId` (bounded queries, no full-log/whole-table pass).
+   */
+  summaryRow(sessionId: string): Omit<InventoryRow, "hostPresent"> | null {
+    const s = this.db
+      .prepare(
+        `SELECT s.sessionId AS sessionId,
+                s.createdAt  AS createdAt,
+                COUNT(e.seq) AS eventCount,
+                COALESCE(MAX(e.createdAt), s.createdAt) AS updatedAt
+           FROM sessions s
+           LEFT JOIN events e ON e.sessionId = s.sessionId
+          WHERE s.sessionId = ?
+          GROUP BY s.sessionId, s.createdAt`,
+      )
+      .get(sessionId) as AggregateRow | undefined;
+    return s ? this.projectRow(s) : null;
+  }
+
+  /** Projects one aggregate row into the inventory read model's per-session shape (the few events the
+   *  read model needs, each a bounded per-session lookup). `hostPresent` is the server's to fold in. */
+  private projectRow(s: AggregateRow): Omit<InventoryRow, "hostPresent"> {
+    return {
       sessionId: s.sessionId,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
@@ -144,21 +173,19 @@ export class SessionLog {
       archived: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionArchived),
       rename: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionTitle),
       deleted: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionDeleted),
-    }));
+    };
   }
 
   /**
-   * Permanently removes a session and all its events (plan 04). Returns whether the session existed. This
-   * is the destructive purge - distinct from the soft-delete `session.deleted` marker, which only hides a
-   * session while retaining its log. Eligibility (archived, not active) is the caller's gate; this just
-   * deletes. The rows are gone from the SQLite file, so the session never reappears after reload/reconnect.
+   * Permanently removes a session and all its events (plan 04); returns whether a session row was
+   * removed (from the DELETE's own change count - no separate existence probe). This is the destructive
+   * purge - distinct from the soft-delete `session.deleted` marker, which only hides a session while
+   * retaining its log. Eligibility (archived, not active) is the caller's gate; this just deletes. The
+   * rows are gone from the SQLite file, so the session never reappears after reload/reconnect.
    */
   deleteSession(sessionId: string): boolean {
-    const existed =
-      this.db.prepare("SELECT 1 FROM sessions WHERE sessionId = ?").get(sessionId) != null;
     this.db.prepare("DELETE FROM events WHERE sessionId = ?").run(sessionId);
-    this.db.prepare("DELETE FROM sessions WHERE sessionId = ?").run(sessionId);
-    return existed;
+    return this.db.prepare("DELETE FROM sessions WHERE sessionId = ?").run(sessionId).changes > 0;
   }
 
   /** The most recent event of a type in a session, or null. */

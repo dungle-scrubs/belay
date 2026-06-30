@@ -1,7 +1,12 @@
-import { archivedSessions, permanentDeleteEligibility, type SessionSummary } from "@trevor/session";
+import {
+  archivedSessions,
+  permanentDeleteEligibility,
+  type SessionSummary,
+  sortInventory,
+} from "@trevor/session";
 
 /**
- * The archive-browser read model (plan 04, M1): a pure projection of the session inventory into the rows
+ * The archive-browser read model (plan 04): a pure projection of the session inventory into the rows
  * the archive-browser surface renders. It derives ONLY from `archivedSessions` (archived and not
  * soft-deleted) - a projection deliberately separate from the sidebar/resume rows (`resume-rows.ts`),
  * which exclude archived sessions. Each row carries the management metadata the surface shows plus a
@@ -53,9 +58,9 @@ export function toArchiveRow(summary: SessionSummary): ArchivedSessionRow {
  * archived sessions.
  */
 export function buildArchiveRows(summaries: readonly SessionSummary[]): ArchivedSessionRow[] {
-  return archivedSessions(summaries)
-    .map(toArchiveRow)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // `sortInventory(_, null)` is a pure most-recent-first sort (no current-project block), the same
+  // recency order the sidebar/resume use - reused here so "newest activity first" lives in one place.
+  return sortInventory(archivedSessions(summaries), null).map(toArchiveRow);
 }
 
 /** Whether a row may be permanently deleted (no protecting host/turn). */

@@ -7,7 +7,7 @@ import {
   modelRefFromProvider,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { Archive, ArrowLeft, GitBranch, RotateCcw } from "lucide-react";
+import { Archive, GitBranch, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -21,6 +21,7 @@ import { ArchiveBrowser } from "@/archive/archive-browser";
 import { buildArchiveRows } from "@/archive/archive-rows";
 import { useArchiveActions } from "@/archive/use-archive-actions";
 import { ModelChooser } from "@/components/chooser/model-chooser";
+import { BackToChat } from "@/components/panel/back-to-chat";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { ControlsPanel } from "@/components/panel/panel-controls";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
@@ -800,17 +801,7 @@ export function App() {
     <div className="flex h-full flex-col">
       {/* A back arrow on the upper LEFT returns to the chat without changing the selection (the model
         button also toggles the chooser closed). The chooser's own "Choose a model" heading is the title. */}
-      <div className="flex shrink-0 items-center px-1 py-2">
-        <button
-          type="button"
-          onClick={() => setChooserOpen(false)}
-          aria-label="Back to chat"
-          className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-label tracking-wider uppercase text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          Back
-        </button>
-      </div>
+      <BackToChat onBack={() => setChooserOpen(false)} />
       <ModelChooser
         className="min-h-0 flex-1"
         sources={selection.sources}
@@ -841,10 +832,14 @@ export function App() {
   // visible), opened from the sidebar footer. It lists the archived sessions and runs unarchive +
   // permanent-delete against the live mutations; row-scoped action state keeps one row's feedback from
   // blanking the rest. Rendered only while open. Its own back arrow returns to chat.
+  const archiveRows = useMemo(
+    () => buildArchiveRows(modal.inventory.sessions),
+    [modal.inventory.sessions],
+  );
   const archiveBrowser = modal.archiveOpen ? (
     <ArchiveBrowser
       className="h-full"
-      rows={buildArchiveRows(modal.inventory.sessions)}
+      rows={archiveRows}
       loading={modal.inventory.loading}
       error={modal.inventory.error}
       nowMs={now}

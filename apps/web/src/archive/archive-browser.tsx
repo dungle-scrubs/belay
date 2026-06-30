@@ -1,28 +1,30 @@
 import { relativeTime } from "@trevor/session";
-import { AlertTriangle, ArchiveRestore, ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, ArchiveRestore, Loader2, ShieldAlert, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { BackToChat } from "@/components/panel/back-to-chat";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { type ArchivedSessionRow, isArchiveRowDeletable } from "./archive-rows";
 
 /**
- * The archive browser (plan 04, M2/M3/M5): a transcript-takeover surface for managing archived
- * sessions, modeled on the full model chooser (D-065) - it replaces the transcript + composer while
- * the sidebars stay visible, with a top-left back arrow to return to chat. It is unmistakably a
- * management surface, not a conversation: an explicit archived-area title, per-row metadata, and a
- * destructive permanent-delete that demands a typed confirmation (distinct from the soft-delete
- * `session.deleted` marker the sidebar uses).
+ * The archive browser (plan 04): a transcript-takeover surface for managing archived sessions, modeled
+ * on the full model chooser (D-065) - it replaces the transcript + composer while the sidebars stay
+ * visible, with a top-left back arrow to return to chat. It is unmistakably a management surface, not a
+ * conversation: an explicit archived-area title, per-row metadata, and a destructive permanent-delete
+ * that demands a typed confirmation (distinct from the soft-delete `session.deleted` marker the sidebar
+ * uses).
  *
  * Presentational over injected `ArchivedSessionRow[]` + callbacks (like `ModelChooser` over its read
- * models): delete confirmation is local UI state, but the rows and the unarchive/delete actions come
- * from props, so App owns the live inventory query and the publish/transport mutations (M6/M7). Async
- * per-row feedback rides `actionState`, keyed by sessionId, so acting on one row never blanks the rest.
+ * models): which row's delete is being confirmed is local UI state, but the rows and the
+ * unarchive/delete actions come from props, so App owns the live inventory query and the
+ * publish/transport mutations. Async per-row feedback rides `actionState`, keyed by sessionId, so
+ * acting on one row never blanks the rest - and a surface-level load error never blanks rows in hand.
  */
 
-/** The phrase a user must type to arm a permanent delete (M5 strong confirmation). */
+/** The phrase a user must type to arm a permanent delete (strong confirmation). */
 export const DELETE_CONFIRM_PHRASE = "delete";
 
-/** Row-scoped async feedback for an in-flight action, owned by the App wiring (M7). */
+/** Row-scoped async feedback for an in-flight action, owned by the App wiring. */
 export type RowActionState =
   | { readonly kind: "unarchiving" }
   | { readonly kind: "deleting" }
@@ -64,45 +66,17 @@ export function ArchiveBrowser({
   defaultConfirmingId,
   className,
 }: ArchiveBrowserProps) {
-  // Which row's permanent-delete is being confirmed, and the typed phrase so far. Local UI state: the
-  // confirmation is a deliberate gesture, reset whenever a different row is armed or the panel closes.
+  // Which row's permanent-delete is being confirmed (at most one). The typed phrase lives in the
+  // confirmation panel itself, reset naturally when it mounts for a different row.
   const [confirmingId, setConfirmingId] = useState<string | null>(defaultConfirmingId ?? null);
-  const [typed, setTyped] = useState("");
-
-  const openConfirm = (sessionId: string) => {
-    setConfirmingId(sessionId);
-    setTyped("");
-  };
-  const closeConfirm = () => {
-    setConfirmingId(null);
-    setTyped("");
-  };
-  const submitDelete = (sessionId: string) => {
-    if (!isDeleteConfirmed(typed)) {
-      return; // Enter/click cannot confirm while the phrase is incomplete (M5).
-    }
-    onDelete(sessionId);
-    closeConfirm();
-  };
+  const hasRows = rows.length > 0;
 
   return (
     <section
       aria-label="Archived sessions"
       className={cn("@container flex min-h-0 flex-col bg-background text-foreground", className)}
     >
-      {onBack ? (
-        <div className="flex shrink-0 items-center px-1 py-2">
-          <button
-            type="button"
-            onClick={onBack}
-            aria-label="Back to chat"
-            className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-label tracking-wider uppercase text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            Back
-          </button>
-        </div>
-      ) : null}
+      {onBack ? <BackToChat onBack={onBack} /> : null}
 
       <header className="shrink-0 border-b border-border px-4 py-3">
         <h2 className="text-base font-medium">Archived sessions</h2>
@@ -114,24 +88,23 @@ export function ArchiveBrowser({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {loading && rows.length === 0 ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Loading archived sessions…
-          </p>
-        ) : error ? (
-          <p className="flex items-center gap-2 text-sm text-destructive">
-            <AlertTriangle className="size-4 shrink-0" />
+        {/* A load error/spinner banners ABOVE the list when rows are in hand (so a transient refetch
+          never blanks them), and stands alone only when there's nothing else to show. */}
+        {error ? (
+          <StatusLine
+            icon={AlertTriangle}
+            tone="destructive"
+            className={hasRows ? "mb-2" : undefined}
+          >
             {error}
-          </p>
-        ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center">
-            <p className="text-sm font-medium">No archived sessions</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Archive a session from its sidebar menu and it will appear here for management.
-            </p>
-          </div>
-        ) : (
+          </StatusLine>
+        ) : loading && !hasRows ? (
+          <StatusLine icon={Loader2} tone="muted" spin>
+            Loading archived sessions…
+          </StatusLine>
+        ) : null}
+
+        {hasRows ? (
           <ul className="flex flex-col gap-2">
             {rows.map((row) => (
               <ArchiveRow
@@ -139,19 +112,56 @@ export function ArchiveBrowser({
                 row={row}
                 nowMs={nowMs}
                 confirming={confirmingId === row.sessionId}
-                typed={typed}
                 action={actionState?.[row.sessionId]}
                 onUnarchive={() => onUnarchive(row.sessionId)}
-                onOpenConfirm={() => openConfirm(row.sessionId)}
-                onCancelConfirm={closeConfirm}
-                onTyped={setTyped}
-                onSubmitDelete={() => submitDelete(row.sessionId)}
+                onOpenConfirm={() => setConfirmingId(row.sessionId)}
+                onCancelConfirm={() => setConfirmingId(null)}
+                onConfirmDelete={() => {
+                  onDelete(row.sessionId);
+                  setConfirmingId(null);
+                }}
               />
             ))}
           </ul>
-        )}
+        ) : !error && !loading ? (
+          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center">
+            <p className="text-sm font-medium">No archived sessions</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Archive a session from its sidebar menu and it will appear here for management.
+            </p>
+          </div>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+/** A small icon + text status line (loading / error / per-row feedback), so the surface and the rows
+ *  render those one-liners the same way. */
+function StatusLine({
+  icon: Icon,
+  tone,
+  spin = false,
+  className,
+  children,
+}: {
+  icon: typeof AlertTriangle;
+  tone: "muted" | "destructive";
+  spin?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <p
+      className={cn(
+        "flex items-center gap-1.5 text-xs",
+        tone === "destructive" ? "text-destructive" : "text-muted-foreground",
+        className,
+      )}
+    >
+      <Icon className={cn("size-3.5 shrink-0", spin && "animate-spin")} />
+      {children}
+    </p>
   );
 }
 
@@ -160,24 +170,20 @@ function ArchiveRow({
   row,
   nowMs,
   confirming,
-  typed,
   action,
   onUnarchive,
   onOpenConfirm,
   onCancelConfirm,
-  onTyped,
-  onSubmitDelete,
+  onConfirmDelete,
 }: {
   row: ArchivedSessionRow;
   nowMs: number;
   confirming: boolean;
-  typed: string;
   action: RowActionState | undefined;
   onUnarchive: () => void;
   onOpenConfirm: () => void;
   onCancelConfirm: () => void;
-  onTyped: (value: string) => void;
-  onSubmitDelete: () => void;
+  onConfirmDelete: () => void;
 }) {
   const deletable = isArchiveRowDeletable(row);
   const busy = action?.kind === "unarchiving" || action?.kind === "deleting";
@@ -220,46 +226,42 @@ function ArchiveRow({
         </Button>
       </div>
 
-      {action?.kind === "error" ? (
-        <p className="flex items-center gap-1.5 px-3 pb-2 text-xs text-destructive">
-          <AlertTriangle className="size-3.5 shrink-0" />
-          {action.message}
-        </p>
+      {/* A protected row says WHY delete is blocked as visible text (not only the disabled button's
+        tooltip), so it's discoverable without a mouse hover. */}
+      {!deletable && row.protectedReason ? (
+        <StatusLine icon={ShieldAlert} tone="muted" className="px-3 pb-2">
+          {row.protectedReason}
+        </StatusLine>
       ) : null}
-      {action?.kind === "deleting" ? (
-        <p className="flex items-center gap-1.5 px-3 pb-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 shrink-0 animate-spin" />
+      {action?.kind === "error" ? (
+        <StatusLine icon={AlertTriangle} tone="destructive" className="px-3 pb-2">
+          {action.message}
+        </StatusLine>
+      ) : action?.kind === "deleting" ? (
+        <StatusLine icon={Loader2} tone="muted" spin className="px-3 pb-2">
           Deleting…
-        </p>
+        </StatusLine>
       ) : null}
 
       {confirming ? (
-        <DeleteConfirm
-          title={row.title}
-          typed={typed}
-          onTyped={onTyped}
-          onCancel={onCancelConfirm}
-          onConfirm={onSubmitDelete}
-        />
+        <DeleteConfirm title={row.title} onCancel={onCancelConfirm} onConfirm={onConfirmDelete} />
       ) : null}
     </li>
   );
 }
 
-/** The strong-confirmation panel (M5): type the stable phrase to arm an irreversible delete. */
+/** The strong-confirmation panel: type the stable phrase to arm an irreversible delete. Owns the typed
+ *  value (reset on mount/unmount) and the arming guard, so a parent only tracks which row is open. */
 function DeleteConfirm({
   title,
-  typed,
-  onTyped,
   onCancel,
   onConfirm,
 }: {
   title: string;
-  typed: string;
-  onTyped: (value: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const [typed, setTyped] = useState("");
   const armed = isDeleteConfirmed(typed);
   // Focus the confirmation input the instant the panel mounts (a deliberate destructive gesture), so
   // the typed phrase is captured here and can't leak to the chat composer behind the takeover.
@@ -267,6 +269,11 @@ function DeleteConfirm({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+  const confirm = () => {
+    if (armed) {
+      onConfirm(); // a click/Enter can't confirm while the phrase is incomplete
+    }
+  };
   return (
     <fieldset
       aria-label={`Confirm permanent deletion of ${title}`}
@@ -282,12 +289,12 @@ function DeleteConfirm({
           ref={inputRef}
           type="text"
           value={typed}
-          onChange={(e) => onTyped(e.target.value)}
+          onChange={(e) => setTyped(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === "Enter") {
               e.preventDefault();
-              onConfirm();
+              confirm();
             } else if (e.key === "Escape") {
               e.preventDefault();
               onCancel();
@@ -303,7 +310,7 @@ function DeleteConfirm({
         <Button
           variant="destructive"
           size="sm"
-          onClick={onConfirm}
+          onClick={confirm}
           disabled={!armed}
           className="shrink-0"
         >

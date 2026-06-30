@@ -7,11 +7,13 @@ import {
   EVENTS_PATTERN,
   frames,
   type HostPresence,
+  type InventoryRow,
   type PermanentDeleteResult,
   type PublishInput,
   permanentDeleteEligibility,
   RUNTIME_KIND,
   SESSIONS_PATH,
+  type SessionSummary,
   STREAM_PATTERN,
   summarizeSession,
 } from "@trevor/session";
@@ -122,6 +124,12 @@ export function createSessionStore(dbPath: string): Server {
   const broadcastPresence = (sessionId: string): void =>
     broadcast(sessionId, frames.presence(hostsOf(sessionId)));
 
+  // Projects one inventory row into a SessionSummary, folding in live host presence from the socket map
+  // (the durable log can't know a host crashed). Shared by GET /sessions (every row) and the delete gate
+  // (one row), so the two never drift on how presence is folded in.
+  const summarize = (row: Omit<InventoryRow, "hostPresent">): SessionSummary =>
+    summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 });
+
   // The store's domain routes; CORS, the OPTIONS preflight, GET /health, and the 404 fallthrough are
   // owned by createService. The stream (GET /sessions/<id>/stream) is a WebSocket, handled below.
   const routes: Route[] = [
@@ -132,12 +140,7 @@ export function createSessionStore(dbPath: string): Server {
       // presence folded in from the in-memory socket map (the durable log can't know a host crashed).
       // Assembly is the pure summarizeSession; the store just supplies the rows + presence.
       handler: ({ res }) => {
-        const sessions = log
-          .inventory()
-          .map((row) =>
-            summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 }),
-          );
-        json(res, 200, { sessions });
+        json(res, 200, { sessions: log.inventory().map(summarize) });
       },
     },
     {
@@ -197,14 +200,8 @@ export function createSessionStore(dbPath: string): Server {
       match: DELETE_PATTERN,
       handler: ({ res, params }) => {
         const sessionId = decodeURIComponent(params[0] as string);
-        const summary =
-          log
-            .inventory()
-            .map((row) =>
-              summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 }),
-            )
-            .find((s) => s.sessionId === sessionId) ?? null;
-        const verdict = permanentDeleteEligibility(summary);
+        const row = log.summaryRow(sessionId);
+        const verdict = permanentDeleteEligibility(row ? summarize(row) : null);
         if (!verdict.ok) {
           const status = verdict.reason === "not-found" ? 404 : 409;
           json(res, status, {

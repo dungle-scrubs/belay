@@ -175,6 +175,31 @@ export function doctorSnapshot(over?: Partial<DoctorSnapshot>): DoctorSnapshot {
   return { state: "ready", areas: [], ...over };
 }
 
+/**
+ * A `SessionSummary` fixture: a settled, host-less, non-archived session; `over` sets any field a test
+ * names (archived/deleted, host/activity, title/project/cwd, ...). The shared home for the summary
+ * factory the inventory/resume/archive/sidebar tests each used to hand-roll.
+ */
+export function sessionSummary(over?: Partial<SessionSummary>): SessionSummary {
+  return {
+    sessionId: "s",
+    title: "A session",
+    cwd: "~/dev/x",
+    workspace: "~/dev/x",
+    project: "x",
+    branch: "main",
+    git: null,
+    createdAt: "2026-06-01T00:00:00.000Z",
+    updatedAt: "2026-06-01T00:00:00.000Z",
+    eventCount: 3,
+    host: "none",
+    activity: "settled",
+    archived: false,
+    deleted: false,
+    ...over,
+  };
+}
+
 /** Poll until `predicate` holds or the timeout elapses; event callbacks are async. */
 export async function waitFor(
   predicate: () => boolean,

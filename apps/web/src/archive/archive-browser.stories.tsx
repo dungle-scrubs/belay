@@ -4,7 +4,7 @@ import { ArchiveBrowser } from "./archive-browser";
 import type { ArchivedSessionRow } from "./archive-rows";
 
 /**
- * Plan 04 (M2/M5): the archive browser, Storybook-first. Like the model chooser it takes over the
+ * Plan 04: the archive browser, Storybook-first. Like the model chooser it takes over the
  * transcript + composer space while the sidebars stay visible, so the stories frame it in a fixed-size
  * panel using INLINE pixel dimensions (sized reliably under the global centering preview decorator).
  * States cover overview, empty, loading, error, narrow + both-sidebars layouts, long labels, many rows,

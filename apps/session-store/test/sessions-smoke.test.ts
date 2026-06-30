@@ -1,16 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  type SessionEvent,
-  type SessionIdentity,
-  type SessionSummary,
-  streamTransport,
-} from "@trevor/session";
+import { type SessionEvent, streamTransport } from "@trevor/session";
 import { afterEach, beforeEach, test } from "vitest";
-import { createSessionStore } from "../src/server";
+import { identity as id, inventoryById, startStore, waitForLiveHost } from "./support";
 
 /**
  * Session substrate smoke gates beyond the transport conformance suite: the afterSeq replay
@@ -21,16 +15,6 @@ import { createSessionStore } from "../src/server";
  * again" (so clients must tolerate duplicates, never assume the wire dedupes).
  */
 
-async function startStore(dbPath = ":memory:") {
-  const server = createSessionStore(dbPath);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  return {
-    url: `http://127.0.0.1:${port}`,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-  };
-}
-
 async function waitFor(predicate: () => boolean, label = "condition", timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
@@ -38,17 +22,6 @@ async function waitFor(predicate: () => boolean, label = "condition", timeoutMs 
     await new Promise((r) => setTimeout(r, 10));
   }
 }
-
-const id = (
-  instanceId: string,
-  runtimeKind: string,
-  participantId = instanceId,
-): SessionIdentity => ({
-  displayName: instanceId,
-  runtimeKind,
-  instanceId,
-  participantId,
-});
 
 let store: Awaited<ReturnType<typeof startStore>>;
 
@@ -214,20 +187,9 @@ test("GET /sessions returns the inventory read model with live presence folded i
     onEvent: () => {},
   });
 
-  const fetchInventory = async (): Promise<Map<string, SessionSummary>> => {
-    const res = await fetch(`${store.url}/sessions`);
-    const body = (await res.json()) as { sessions: SessionSummary[] };
-    return new Map(body.sessions.map((s) => [s.sessionId, s]));
-  };
-
-  // Poll the endpoint until the host socket has registered as live presence.
-  let byId = await fetchInventory();
-  const deadline = Date.now() + 2000;
-  while (byId.get("with-host")?.host !== "live") {
-    if (Date.now() > deadline) throw new Error("host presence did not reach live");
-    await new Promise((r) => setTimeout(r, 20));
-    byId = await fetchInventory();
-  }
+  // Wait until the host socket has registered as live presence, then read the inventory.
+  await waitForLiveHost(store.url, "with-host");
+  const byId = await inventoryById(store.url);
 
   const withHost = byId.get("with-host");
   assert.equal(withHost?.title, "build the inventory");

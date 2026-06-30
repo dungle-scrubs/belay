@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import type { RunningServer } from "@trevor/server-kit";
-import { archivedSessions, type SessionSummary, streamTransport } from "@trevor/session";
+import {
+  archivedSessions,
+  events,
+  PRODUCER_IDS,
+  type SessionSummary,
+  streamTransport,
+} from "@trevor/session";
+import { testIdentity } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -30,20 +37,22 @@ async function inventory(): Promise<Map<string, SessionSummary>> {
   return new Map(sessions.map((s) => [s.sessionId, s]));
 }
 
-/** Creates a session, gives it a title, and archives it - a discoverable archive-browser row. */
-async function seedArchived(t: ReturnType<typeof transport>, sessionId: string): Promise<void> {
+/** Sets a session's archived flag via the protocol builder (the latest session.archived wins). */
+async function setArchived(
+  t: ReturnType<typeof transport>,
+  sessionId: string,
+  archived: boolean,
+): Promise<void> {
   await t.ensureSession(sessionId);
   await t.publishEvent(sessionId, {
-    type: "user.message",
-    producerId: "trevor-web",
-    payload: { text: `work on ${sessionId}` },
-  });
-  await t.publishEvent(sessionId, {
-    type: "session.archived",
-    producerId: "trevor-web",
-    payload: { archived: true },
+    producerId: PRODUCER_IDS.web,
+    ...events.sessionArchived({ archived }),
   });
 }
+
+/** Creates and archives a session - a discoverable archive-browser row. */
+const seedArchived = (t: ReturnType<typeof transport>, sessionId: string) =>
+  setArchived(t, sessionId, true);
 
 test("an archived session is discoverable through the inventory's archived projection", async () => {
   const t = transport();
@@ -62,11 +71,7 @@ test("unarchive clears the flag so the session leaves the archive projection", a
   assert.equal((await inventory()).get("restore-me")?.archived, true);
 
   // The web unarchive action: republish session.archived with archived:false (latest wins).
-  await t.publishEvent("restore-me", {
-    type: "session.archived",
-    producerId: "trevor-web",
-    payload: { archived: false },
-  });
+  await setArchived(t, "restore-me", false);
 
   const sessions = await t.fetchInventory();
   assert.equal(
@@ -93,12 +98,7 @@ test("permanently deleting an archived session removes it for good (never reappe
 
 test("the destructive gate rejects a non-archived session (not-archived)", async () => {
   const t = transport();
-  await t.ensureSession("not-archived");
-  await t.publishEvent("not-archived", {
-    type: "user.message",
-    producerId: "trevor-web",
-    payload: { text: "keep me" },
-  });
+  await t.ensureSession("not-archived"); // exists, never archived
 
   const result = await t.permanentlyDeleteSession("not-archived");
   assert.equal(result.ok, false);
@@ -117,15 +117,11 @@ test("the destructive gate protects an archived session with a live host", async
   const t = transport();
   await seedArchived(t, "hosted");
 
-  // A live host socket on the session makes its presence read "live", which protects the purge.
+  // A live host socket on the session makes its presence read "live", which protects the purge
+  // (testIdentity's "trevor" runtimeKind is what counts as a host).
   const host = t.connectSession({
     sessionId: "hosted",
-    identity: {
-      displayName: "h",
-      runtimeKind: "trevor",
-      instanceId: "h1",
-      participantId: "h1",
-    },
+    identity: testIdentity("h1", "trevor"),
     onEvent: () => {},
   });
   const deadline = Date.now() + 2000;

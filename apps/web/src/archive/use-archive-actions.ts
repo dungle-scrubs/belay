@@ -1,9 +1,9 @@
-import type { PermanentDeleteResult } from "@trevor/session";
+import { errorMessage, type PermanentDeleteResult } from "@trevor/session";
 import { useCallback, useState } from "react";
 import type { RowActionState } from "./archive-browser";
 
 /**
- * The archive browser's live action controller (plan 04, M7): owns the per-row async state for
+ * The archive browser's live action controller (plan 04): owns the per-row async state for
  * unarchive + permanent delete and runs them against injected mutations, so App just renders the
  * `ArchiveBrowser` over the result. Row-scoped by sessionId - acting on one row never blanks another -
  * and on success it triggers a `refresh` (an inventory re-fetch) so the now-unarchived/purged row
@@ -82,7 +82,8 @@ export function useArchiveActions(deps: ArchiveActionDeps): ArchiveActions {
   return { actionState, onUnarchive, onDelete };
 }
 
-/** The message of a thrown transport error, or a fallback when it isn't an Error. */
+/** A thrown transport error's message (via the shared `errorMessage`), or a friendly fallback when the
+ *  throw carries none (e.g. a non-Error reject), since the row shows this text verbatim. */
 function messageOf(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback;
+  return error instanceof Error && error.message ? errorMessage(error) : fallback;
 }

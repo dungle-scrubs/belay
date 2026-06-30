@@ -1,4 +1,5 @@
 import type { SessionSummary } from "@trevor/session";
+import { sessionSummary } from "@trevor/test-kit";
 import { describe, expect, test } from "vitest";
 import {
   archiveProtectedReason,
@@ -7,25 +8,10 @@ import {
   toArchiveRow,
 } from "./archive-rows";
 
-function summary(over: Partial<SessionSummary>): SessionSummary {
-  return {
-    sessionId: "s",
-    title: "A session",
-    cwd: "~/dev/x",
-    workspace: "~/dev/x",
-    project: "x",
-    branch: "main",
-    git: null,
-    createdAt: "2026-06-01T00:00:00.000Z",
-    updatedAt: "2026-06-01T00:00:00.000Z",
-    eventCount: 3,
-    host: "none",
-    activity: "settled",
-    archived: true,
-    deleted: false,
-    ...over,
-  };
-}
+// The archive rows are built from ARCHIVED sessions, so the local fixture archives by default atop the
+// shared `sessionSummary`.
+const summary = (over?: Partial<SessionSummary>): SessionSummary =>
+  sessionSummary({ archived: true, ...over });
 
 describe("buildArchiveRows", () => {
   test("includes archived (not deleted) sessions, newest activity first", () => {
