@@ -616,7 +616,7 @@ export function admissionWaiting(events: readonly SessionEvent[]): AdmissionWait
   const status = latest(events, (d) =>
     d.type === "admission.status" && d.runId === runId ? d : undefined,
   );
-  if (!status || status.phase !== "queued") {
+  if (status?.phase !== "queued") {
     return null;
   }
   return {

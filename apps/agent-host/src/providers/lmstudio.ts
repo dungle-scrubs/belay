@@ -96,7 +96,8 @@ export class LmStudioProvider extends DescribableProvider {
     this.model = config.model;
     this.label = config.label;
     this.url = config.url;
-    this.gate = config.admissionGate;
+    const gate = config.admissionGate;
+    this.gate = gate;
     this.client = new LmStudioClient({
       url: config.url,
       model: config.model,
@@ -105,12 +106,9 @@ export class LmStudioProvider extends DescribableProvider {
       lmsBin: config.lmsBin,
       providerId: this.id,
       // Serialize `lms load`/`unload` across processes under the endpoint lifecycle lease (M5).
-      withLifecycleLease: config.admissionGate
+      withLifecycleLease: gate
         ? (fn) =>
-            config.admissionGate!.withLifecycle(
-              { provider: this.id, baseUrl: config.url, model: config.model },
-              fn,
-            )
+            gate.withLifecycle({ provider: this.id, baseUrl: config.url, model: config.model }, fn)
         : undefined,
     });
   }
