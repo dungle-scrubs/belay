@@ -38,11 +38,11 @@
 
 ### M3: Promotable Shell Runner
 
-- [ ] RED: Add tests for a shell command that crosses the promotion threshold and becomes a running `pN` job
-- [ ] GREEN: Introduce a promotable runner that uses child-process pipes compatible with the supervisor ring buffer
-- [ ] RED: Add tests for stdout/stderr emitted before, during, and after promotion
-- [ ] GREEN: Preserve output already produced by the command when it is promoted
-- [ ] REFACTOR: Share safety, cwd, env, cap, and spawn-error handling with existing bash/process code
+- [x] RED: Add tests for a shell command that crosses the promotion threshold and becomes a running `pN` job
+- [x] GREEN: Introduce a promotable runner that uses child-process pipes compatible with the supervisor ring buffer
+- [x] RED: Add tests for stdout/stderr emitted before, during, and after promotion
+- [x] GREEN: Preserve output already produced by the command when it is promoted
+- [x] REFACTOR: Share safety, cwd, env, cap, and spawn-error handling with existing bash/process code
 
 ### M4: Bash and Prompt-Shell Integration
 

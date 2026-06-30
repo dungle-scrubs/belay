@@ -97,6 +97,9 @@ interface ManagedProcess {
   status: ProcessStatus;
   exitCode: number | null;
   signal: NodeJS.Signals | null;
+  /** Resolves once the child has exited or errored - the promotable runner races this against the
+   *  promotion threshold (plan 09 M3). */
+  readonly whenDone: Promise<void>;
 }
 
 export interface JobInfo {
@@ -129,6 +132,7 @@ export class ProcessRegistry {
     } catch (error) {
       throw new ToolExecutionError({ tool: "process", detail: msg(error), cause: error });
     }
+    let markDone: () => void = () => undefined;
     const proc: ManagedProcess = {
       id,
       command,
@@ -143,6 +147,9 @@ export class ProcessRegistry {
       status: "running",
       exitCode: null,
       signal: null,
+      whenDone: new Promise<void>((resolve) => {
+        markDone = resolve;
+      }),
     };
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => proc.stdout.append(chunk));
@@ -154,15 +161,40 @@ export class ProcessRegistry {
       }
       proc.exitCode = code;
       proc.signal = signal;
+      markDone();
     });
     child.on("error", (error) => {
       proc.stderr.append(`\n[spawn error] ${error.message}\n`);
       if (proc.status === "running") {
         proc.status = "exited";
       }
+      markDone();
     });
     this.processes.set(id, proc);
     return { id, status: "running" };
+  }
+
+  /** Resolves when a tracked job has exited or errored (or immediately if it is already done / unknown),
+   *  so the promotable runner can race it against the promotion threshold. */
+  async awaitExit(id: string): Promise<void> {
+    const proc = this.processes.get(id);
+    if (proc) {
+      await proc.whenDone;
+    }
+  }
+
+  /** Drops a job from tracking, killing it if still running. Used when a foreground command finished
+   *  before the promotion threshold - it was never a background job, so it leaves no `pN` behind. */
+  remove(id: string): void {
+    const proc = this.processes.get(id);
+    if (proc?.status === "running") {
+      try {
+        proc.child.kill("SIGTERM");
+      } catch {
+        // already gone
+      }
+    }
+    this.processes.delete(id);
   }
 
   poll(
