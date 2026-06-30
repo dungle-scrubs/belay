@@ -7,7 +7,7 @@ import {
   modelRefFromProvider,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { ArrowLeft, GitBranch, History } from "lucide-react";
+import { ArrowLeft, History, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -802,19 +802,25 @@ export function App() {
         <History className="size-3" />
         resume
       </button>
-      {modal.worktrees.length > 0 ? (
-        <button
-          type="button"
-          onClick={() => modal.setWorktreeOpen(true)}
-          title="Switch worktree (/worktree)"
-          aria-label="Switch worktree"
-          className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-        >
-          <GitBranch className="size-3" />
-          worktree
-        </button>
-      ) : null}
-      <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
+      {/* TEMP dev affordance (remove later): restart the host to pick up code changes. /restart is a
+          debug-mode command (announced only while debug is on), so enable debug first if it isn't,
+          then re-exec the host. */}
+      <button
+        type="button"
+        onClick={() => {
+          if (!commands.some((c) => c.name === "/restart")) {
+            void command("/debug", "");
+          }
+          void command("/restart", "");
+        }}
+        title="Restart the host with fresh code (debug)"
+        aria-label="Restart the host"
+        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+      >
+        <RotateCcw className="size-3" />
+        restart
+      </button>
+      <div className="truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
         {target}
       </div>
     </>
