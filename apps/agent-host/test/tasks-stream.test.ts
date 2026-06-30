@@ -55,8 +55,10 @@ test("driving task_create/task_update emits revisioned tasks.current snapshots, 
 
   await Effect.runPromise(create.execute({ subject: "build the parser" }));
   await Effect.runPromise(create.execute({ subject: "wire the UI" }));
-  await Effect.runPromise(update.execute({ taskId: "task_1", status: "in_progress" }));
-  await Effect.runPromise(update.execute({ taskId: "task_1", status: "completed" }));
+  await Effect.runPromise(
+    update.execute({ updates: [{ taskId: "task_1", status: "in_progress" }] }),
+  );
+  await Effect.runPromise(update.execute({ updates: [{ taskId: "task_1", status: "completed" }] }));
 
   // One snapshot per mutation, each decoding with a revision present on the wire.
   assert.equal(emitted.length, 4);
@@ -89,7 +91,9 @@ test("a stale re-delivery of an earlier snapshot does not overwrite the newest s
 
   await Effect.runPromise(create.execute({ subject: "draft" }));
   const stale = emitted[0]; // the rev-1 snapshot, before the status change
-  await Effect.runPromise(update.execute({ taskId: "task_1", status: "in_progress" }));
+  await Effect.runPromise(
+    update.execute({ updates: [{ taskId: "task_1", status: "in_progress" }] }),
+  );
 
   assert.ok(stale);
   // The stale rev-1 snapshot is replayed AFTER the rev-2 update; selection must still yield rev 2.

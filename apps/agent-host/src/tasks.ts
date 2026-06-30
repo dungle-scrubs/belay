@@ -157,9 +157,15 @@ export class TaskRegistry {
     return task;
   }
 
-  /** Updates a task, deletes it (status "deleted"), or auto-clears the checklist. Throws
-   *  on an unknown id; the task tool catches that into the typed `E` channel. */
-  update(id: string, fields: UpdateInput): UpdateResult {
+  /**
+   * Applies one update in place (status / fields / delete) WITHOUT notifying or auto-clearing - the
+   * shared core of {@link update} and {@link updateMany}. Throws on an unknown id (a bare-number id is
+   * tolerated via {@link resolveId}).
+   */
+  private applyUpdate(
+    id: string,
+    fields: UpdateInput,
+  ): { readonly kind: "deleted" } | { readonly kind: "updated"; readonly task: Task } {
     const task = this.tasks.get(this.resolveId(id) ?? id);
 
     if (!task) {
@@ -168,7 +174,6 @@ export class TaskRegistry {
 
     if (fields.status === "deleted") {
       this.tasks.delete(task.id);
-      this.notify();
       return { kind: "deleted" };
     }
 
@@ -202,18 +207,72 @@ export class TaskRegistry {
     task.status = nextStatus;
     task.updatedAt = new Date().toISOString();
 
-    // Completing the last open task clears the finished checklist (V1 behavior), so
-    // a done plan doesn't linger into the next topic.
-    const allDone = [...this.tasks.values()].every((t) => t.status === "completed");
-    const cleared = nextStatus === "completed" && this.tasks.size > 0 && allDone;
+    return { kind: "updated", task };
+  }
 
-    if (cleared) {
+  /** Clears the finished checklist once every task is completed (V1 "a done plan doesn't linger"); the
+   *  single-completion trigger for {@link update} and the end-of-batch trigger for {@link updateMany}. */
+  private autoClearIfDone(): boolean {
+    const allDone =
+      this.tasks.size > 0 && [...this.tasks.values()].every((t) => t.status === "completed");
+
+    if (allDone) {
       this.tasks.clear();
     }
 
+    return allDone;
+  }
+
+  /** Updates a task, deletes it (status "deleted"), or auto-clears the checklist. Throws
+   *  on an unknown id; the task tool catches that into the typed `E` channel. */
+  update(id: string, fields: UpdateInput): UpdateResult {
+    const result = this.applyUpdate(id, fields);
+    // Completing the last open task clears the finished checklist.
+    const cleared =
+      result.kind === "updated" && result.task.status === "completed" && this.autoClearIfDone();
+
     this.notify();
 
-    return cleared ? { kind: "cleared" } : { kind: "updated", task };
+    return cleared ? { kind: "cleared" } : result;
+  }
+
+  /**
+   * Applies MANY updates in ONE shot, emitting a SINGLE tasks.current snapshot (not one per task) - the
+   * registry side of the bulk task_update_many tool, so the model marks/deletes a batch in one call
+   * instead of N. Each entry applies independently: an unknown id fails just that entry (collected in
+   * `failures`) without aborting the batch. After the batch, a completion that left every task done
+   * auto-clears the checklist. <!-- 09.1 -->
+   */
+  updateMany(updates: readonly { readonly id: string; readonly fields: UpdateInput }[]): {
+    readonly outcomes: readonly string[];
+    readonly failures: readonly string[];
+    readonly cleared: boolean;
+  } {
+    const outcomes: string[] = [];
+    const failures: string[] = [];
+    let completedAny = false;
+
+    for (const u of updates) {
+      try {
+        const r = this.applyUpdate(u.id, u.fields);
+        if (r.kind === "deleted") {
+          outcomes.push(`deleted ${u.id}`);
+        } else {
+          outcomes.push(`${r.task.id} -> ${r.task.status}`);
+          completedAny = completedAny || r.task.status === "completed";
+        }
+      } catch (cause) {
+        failures.push(`${u.id}: ${msg(cause)}`);
+      }
+    }
+
+    const cleared = completedAny && this.autoClearIfDone();
+    // Only emit when something actually changed; an all-failures batch (every id unknown) is a no-op.
+    if (outcomes.length > 0) {
+      this.notify();
+    }
+
+    return { outcomes, failures, cleared };
   }
 
   /**
@@ -310,7 +369,7 @@ export class TaskRegistry {
     });
 
     return [
-      "Your task checklist - the single task list for this session. You own it (task_create / task_update), and it is exactly what the user sees in their task panel. Keep it current as you work. When the user asks about tasks - what exists, what's left, what's stale, cleaning up - THIS list is the authority; read and report it directly rather than asking them to paste it:",
+      "Your task checklist - the single task list for this session. You own it (task_create / task_update), and it is exactly what the user sees in their task panel. Keep it current as you work - and when you change several tasks at once, do it in ONE task_update call (it takes an array of updates), not one call per task. When the user asks about tasks - what exists, what's left, what's stale, cleaning up - THIS list is the authority; read and report it directly rather than asking them to paste it:",
       ...rows,
     ].join("\n");
   }
@@ -347,7 +406,8 @@ const CreateParams = Schema.Struct({
   blocks: TaskIds.annotations({ description: "Task ids this one blocks" }),
 });
 
-const UpdateParams = Schema.Struct({
+/** One task's update inside a task_update call: which task, and the fields to set on it. */
+const UpdateEntry = Schema.Struct({
   taskId: Schema.String.annotations({ description: "The id of the task to update" }),
   subject: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
@@ -355,6 +415,15 @@ const UpdateParams = Schema.Struct({
   status: Schema.optional(Schema.Literal(...STATUS_ENUM, "deleted")),
   blockedBy: TaskIds,
   blocks: TaskIds,
+});
+
+/** task_update ALWAYS takes an array of updates (one entry per task) so a batch is a single call; a
+ *  lone change is just a one-element array. */
+const UpdateParams = Schema.Struct({
+  updates: Schema.Array(UpdateEntry).annotations({
+    description:
+      "The tasks to change, ONE entry per task. Batch every change you're making into this one array - strongly prefer a single task_update with many entries over many separate task_update calls.",
+  }),
 });
 
 /** task_list takes no arguments - it returns the whole current checklist. */
@@ -401,28 +470,30 @@ export function buildTaskTools(
   const update: Tool<typeof UpdateParams.Type> = {
     name: "task_update",
     description:
-      "Update a task on your working checklist - the single task list for this session, shown in the user's task panel - by id: set status to in_progress when you start it, completed when done, failed/cancelled if it won't be done, or deleted to retire a stale one. Completing the last open task auto-clears the whole checklist; on a new topic, delete stale tasks and create a fresh list.",
+      "Update one or MORE tasks on your working checklist - the single task list for this session, shown in the user's task panel. Pass `updates` as an ARRAY, one { taskId, status?, ... } per task: set status to in_progress when you start a task, completed when done, failed/cancelled if it won't be done, or deleted to retire a stale one. STRONGLY PREFER batching - when changing several tasks (marking a group completed, clearing stale ones), put them ALL in ONE call's array instead of a separate call per task. A single change is just a one-element array. Completing the last open task auto-clears the whole checklist; on a new topic, delete stale tasks and create a fresh list.",
     params: UpdateParams,
     execute: (args) =>
       Effect.try({
         try: () => {
-          const result = registry.update(args.taskId, {
-            subject: args.subject,
-            description: args.description,
-            activeForm: args.activeForm,
-            status: args.status,
-            blockedBy: ids(args.blockedBy),
-            blocks: ids(args.blocks),
-          });
+          const { outcomes, failures, cleared } = registry.updateMany(
+            args.updates.map((u) => ({
+              id: u.taskId,
+              fields: {
+                subject: u.subject,
+                description: u.description,
+                activeForm: u.activeForm,
+                status: u.status,
+                blockedBy: ids(u.blockedBy),
+                blocks: ids(u.blocks),
+              },
+            })),
+          );
 
-          switch (result.kind) {
-            case "cleared":
-              return "all tasks complete - checklist cleared";
-            case "deleted":
-              return `deleted ${args.taskId}`;
-            case "updated":
-              return `${result.task.id} -> ${result.task.status}`;
+          if (cleared) {
+            return "all tasks complete - checklist cleared";
           }
+          const lines = [...outcomes, ...failures.map((f) => `error: ${f}`)];
+          return lines.length > 0 ? lines.join("\n") : "no updates";
         },
         catch: (cause) =>
           new ToolExecutionError({

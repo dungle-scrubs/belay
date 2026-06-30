@@ -87,6 +87,60 @@ test("task_list on an empty checklist says so plainly (not an error)", async () 
   );
 });
 
+test("task_update takes an array: one call updates many tasks and emits ONE snapshot (09.1)", async () => {
+  const registry = new TaskRegistry();
+  let emits = 0;
+  registry.onChange(() => {
+    emits += 1;
+  });
+  registry.create({ subject: "a" }); // task_1
+  registry.create({ subject: "b" }); // task_2
+  registry.create({ subject: "c" }); // task_3
+  const [, update] = buildTaskTools(registry);
+  emits = 0;
+
+  const out = await Effect.runPromise(
+    update.execute({
+      updates: [
+        { taskId: "1", status: "completed" }, // bare id tolerated inside the batch too
+        { taskId: "task_2", status: "in_progress" },
+        { taskId: "3", status: "deleted" },
+      ],
+    }),
+  );
+
+  assert.equal(emits, 1, "the whole batch emits exactly one snapshot, not one per task");
+  assert.match(out, /task_1 -> completed/);
+  assert.match(out, /task_2 -> in_progress/);
+  assert.match(out, /deleted 3/);
+  assert.deepEqual(
+    registry.list().map((t) => [t.id, t.status]),
+    [
+      ["task_1", "completed"],
+      ["task_2", "in_progress"],
+    ],
+    "task_3 was deleted in the same call",
+  );
+});
+
+test("task_update with a one-element array is just a single update", async () => {
+  const registry = new TaskRegistry();
+  registry.create({ subject: "x" }); // task_1
+  const [, update] = buildTaskTools(registry);
+
+  // Completing the only task auto-clears, exactly like the old single-update path.
+  assert.match(
+    await Effect.runPromise(update.execute({ updates: [{ taskId: "1", status: "completed" }] })),
+    /checklist cleared/,
+  );
+});
+
+test("task_update description steers toward batching (prefer one call over many) (09.1)", () => {
+  const [, update] = buildTaskTools(new TaskRegistry());
+  assert.match(update.description, /array/i);
+  assert.match(update.description, /prefer batching/i);
+});
+
 test("a task updated before the prompt build is rendered at its new status", () => {
   const registry = new TaskRegistry();
   const task = registry.create({ subject: "ship it", activeForm: "shipping it" });

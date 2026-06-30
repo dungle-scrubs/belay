@@ -66,7 +66,9 @@ test("the exact event-log repro: a bare '36' advances task_36, not 'no such task
 
   // The model sends the BARE number, exactly as captured in the event log:
   //   {"taskId":"36","status":"in_progress"}  ->  previously: error no such task "36".
-  const result = await Effect.runPromise(update.execute({ taskId: "36", status: "in_progress" }));
+  const result = await Effect.runPromise(
+    update.execute({ updates: [{ taskId: "36", status: "in_progress" }] }),
+  );
   assert.match(
     result,
     /task_36 -> in_progress/,
@@ -98,23 +100,34 @@ test.each(ID_FORMS)("task_update tolerates id form $sent -> $resolvesTo", async 
   await Effect.runPromise(create.execute({ subject: "a" })); // task_1
   await Effect.runPromise(create.execute({ subject: "b" })); // task_2
 
-  await Effect.runPromise(update.execute({ taskId: sent, status: "completed" }));
+  await Effect.runPromise(update.execute({ updates: [{ taskId: sent, status: "completed" }] }));
 
   assert.equal(statusOf(freshestTasks(emitted), resolvesTo), "completed");
 });
 
-test("a genuinely unknown id still fails and emits nothing (normalization never over-matches)", async () => {
+test("a genuinely unknown id is reported as a per-entry failure and emits nothing (never over-matches)", async () => {
   const { registry, emitted } = wireStream();
   const [create, update] = buildTaskTools(registry);
   await Effect.runPromise(create.execute({ subject: "only" })); // task_1
   const before = emitted.length;
 
-  await assert.rejects(Effect.runPromise(update.execute({ taskId: "999", status: "completed" })));
-  await assert.rejects(
-    Effect.runPromise(update.execute({ taskId: "task_999", status: "completed" })),
+  // Both ids are unknown: the batch reports each as a failure (no over-match) and changes nothing.
+  const out = await Effect.runPromise(
+    update.execute({
+      updates: [
+        { taskId: "999", status: "completed" },
+        { taskId: "task_999", status: "completed" },
+      ],
+    }),
   );
 
-  assert.equal(emitted.length, before, "a failed update mutates nothing and emits no snapshot");
+  assert.match(out, /error: 999/);
+  assert.match(out, /error: task_999/);
+  assert.equal(
+    emitted.length,
+    before,
+    "an all-failures batch mutates nothing and emits no snapshot",
+  );
 });
 
 test("the dismiss control (registry.clear) emits one empty snapshot so the panel hides", async () => {
