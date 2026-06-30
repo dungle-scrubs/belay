@@ -20,11 +20,11 @@
 
 ### M2: Storybook Takeover Surface
 
-- [ ] RED: Add Storybook stories for archive overview, empty archive, loading, error, narrow width, both sidebars visible, long labels, many rows, protected row, and delete-confirmation states
-- [ ] GREEN: Build the presentational archive browser as a transcript-takeover surface matching the model chooser pattern
-- [ ] GREEN: Add the top-left back arrow, archive-area title, explanatory row labels, search/filter controls if needed, and stable row/action layouts
-- [ ] RED: Add interaction tests for back, row focus, unarchive action, delete confirmation open/cancel/confirm, and keyboard navigation
-- [ ] REFACTOR: Share only generic takeover/chrome patterns where they already exist cleanly; do not create a broad abstraction before the archive browser and model chooser prove the same shape
+- [x] RED: Add Storybook stories for archive overview, empty archive, loading, error, narrow width, both sidebars visible, long labels, many rows, protected row, and delete-confirmation states
+- [x] GREEN: Build the presentational archive browser as a transcript-takeover surface matching the model chooser pattern
+- [x] GREEN: Add the top-left back arrow, archive-area title, explanatory row labels, search/filter controls if needed, and stable row/action layouts
+- [x] RED: Add interaction tests for back, row focus, unarchive action, delete confirmation open/cancel/confirm, and keyboard navigation
+- [x] REFACTOR: Share only generic takeover/chrome patterns where they already exist cleanly; do not create a broad abstraction before the archive browser and model chooser prove the same shape
 
 ### Gate 1->2
 
