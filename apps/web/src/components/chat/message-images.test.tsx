@@ -5,8 +5,9 @@ import { test } from "vitest";
 import { MessageImages } from "./message-images";
 
 /**
- * D-092 M4: the transcript image set. Pins responsive contained sizing (single vs set caps), image
- * grouping, click-to-open with the set index, and the broken/non-image file-row fallback.
+ * D-092 M4: the transcript image set. Pins the 200px contained tile cap, the container-query layout
+ * (mobile grid -> tablet flex-wrap), image grouping, click-to-open with the set index, and the
+ * broken/non-image file-row fallback.
  */
 
 function imageRef(seed: string, name: string): ArtifactRef {
@@ -40,15 +41,21 @@ test("renders one contained image per image artifact, grouped in one set", () =>
   assert.ok(container.querySelector('[aria-label="message images"]'), "the images form one set");
 });
 
-test("a single image gets the taller cap; a set gets the shorter cap", () => {
-  const single = render(<MessageImages images={[A]} others={[]} srcOf={src} />);
-  assert.ok(
-    single.container.querySelector("img")?.className.includes("max-h-96"),
-    "single image cap",
-  );
+test("each tile is capped at 200px on either side, regardless of count", () => {
+  for (const images of [[A], [A, B]]) {
+    const { container } = render(<MessageImages images={images} others={[]} srcOf={src} />);
+    const img = container.querySelector("img");
+    assert.ok(img?.className.includes("max-h-[200px]"), "200px height cap");
+    assert.ok(img?.className.includes("max-w-[200px]"), "200px width cap");
+  }
+});
 
-  const set = render(<MessageImages images={[A, B]} others={[]} srcOf={src} />);
-  assert.ok(set.container.querySelector("img")?.className.includes("max-h-48"), "image-set cap");
+test("the set lays out as a container-query grid that becomes a flex-wrap row at tablet width", () => {
+  const { container } = render(<MessageImages images={[A, B]} others={[]} srcOf={src} />);
+  const section = container.querySelector('[aria-label="message images"]');
+  assert.ok(section?.className.includes("grid-cols-2"), "mobile two-column grid");
+  assert.ok(section?.className.includes("@md:flex"), "tablet+ flex-wrap row");
+  assert.ok(section?.className.includes("gap-2"), "row + column gap in all cases");
 });
 
 test("clicking an image opens the carousel at its set index", () => {

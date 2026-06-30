@@ -39,17 +39,15 @@ function FileRow({ artifact, srcOf }: { artifact: ArtifactRef; srcOf: (hash: str
   );
 }
 
-/** One image tile - natural size up to the responsive cap, contained, click-to-open; falls back on error. */
+/** One image tile - a 200px thumbnail (contained, aspect-preserved), click-to-open; falls back on error. */
 function ImageTile({
   artifact,
   index,
-  single,
   onOpen,
   srcOf,
 }: {
   artifact: ArtifactRef;
   index: number;
-  single: boolean;
   onOpen?: (index: number) => void;
   srcOf: (hash: string) => string;
 }) {
@@ -69,9 +67,11 @@ function ImageTile({
         src={srcOf(artifact.hash)}
         alt={artifact.name ?? `image ${index + 1}`}
         onError={() => setBroken(true)}
-        // Natural dimensions, capped responsively; contained so nothing is cropped. A single image
-        // gets a taller cap; a set uses a shorter cap so the row stays scannable.
-        className={cn("h-auto w-auto max-w-full object-contain", single ? "max-h-96" : "max-h-48")}
+        // A compact thumbnail: at most 200px on either side, contained so the aspect ratio is kept and
+        // nothing is cropped (the full image opens in the carousel far larger, so the tile must never
+        // out-size that popup). On a mobile-width container it fills its grid column (still capped at
+        // 200px); at tablet+ it sizes to the image for the flex-wrap row.
+        className="h-auto w-full max-h-[200px] max-w-[200px] object-contain @md:w-auto"
       />
     </button>
   );
@@ -89,15 +89,21 @@ export function MessageImages({
   }
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    // `@container` so the image set lays out by THIS block's width, not the viewport (the ancestor a
+    // container query needs - the section below reads it).
+    <div className={cn("@container flex flex-col gap-2", className)}>
       {images.length > 0 ? (
-        <section className="flex flex-wrap items-start gap-2" aria-label="message images">
+        // Mobile-width container: a tidy two-column grid (tiles fill their column). At tablet width
+        // it switches to a flex row that wraps the 200px tiles. Both keep a row + column gap.
+        <section
+          className="grid grid-cols-2 items-start gap-2 @md:flex @md:flex-wrap"
+          aria-label="message images"
+        >
           {images.map((artifact, i) => (
             <ImageTile
               key={artifact.hash}
               artifact={artifact}
               index={i}
-              single={images.length === 1}
               onOpen={onOpen}
               srcOf={srcOf}
             />

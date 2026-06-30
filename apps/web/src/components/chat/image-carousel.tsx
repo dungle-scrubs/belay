@@ -66,7 +66,11 @@ export function ImageCarousel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl gap-3" onKeyDown={onKeyDown}>
+      {/* The popup sizes to the image's natural dimensions, capped at ~85% of the viewport (the image
+          itself is capped just under that to leave room for the title/dots, so the whole modal lands
+          near 85%). `w-fit` overrides the dialog's default full width so a small image gets a small
+          popup; `max-w-[85vw]` (incl. the sm: override) caps a large one. */}
+      <DialogContent className="w-fit max-w-[85vw] gap-3 sm:max-w-[85vw]" onKeyDown={onKeyDown}>
         <DialogTitle className="text-sm font-normal text-muted-foreground">
           Image {safeIndex + 1} of {count}
           {current?.name ? ` · ${current.name}` : ""}
@@ -84,13 +88,16 @@ export function ImageCarousel({
             </button>
           ) : null}
 
-          <div className="flex min-h-[40vh] min-w-0 flex-1 items-center justify-center">
+          <div className="flex min-w-0 items-center justify-center">
             {current && !broken ? (
               <img
                 src={srcOf(current.hash)}
                 alt={current.name ?? `image ${safeIndex + 1}`}
                 onError={() => setBroken(true)}
-                className="max-h-[78vh] max-w-full object-contain"
+                // Natural size, capped so the whole modal stays near 85% of the viewport - the height
+                // cap sits under 85vh to leave room for the title/dots + padding, the width under 85vw
+                // to leave room for the nav buttons. Contained, so aspect ratio is kept.
+                className="max-h-[75vh] max-w-[80vw] object-contain"
               />
             ) : current ? (
               <a
