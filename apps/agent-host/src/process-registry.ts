@@ -55,6 +55,8 @@ export interface JobSnapshot {
   /** Total chars ever written to each stream (the poll cursor ceiling), for truncation indicators. */
   readonly stdoutTotal: number;
   readonly stderrTotal: number;
+  /** A bounded tail of the combined output (last few KB), for the detail takeover. */
+  readonly tail: string;
 }
 
 /**

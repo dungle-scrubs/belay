@@ -14,7 +14,11 @@ export {
   executeFinalizedHandoff,
   runDirectHandoff,
 } from "../../src/handoff-flow";
+// The background-job promotion runtime (plan 09), so cross-service e2e can drive a real promotable shell
+// command through the supervisor (promote -> tracked pN -> kill) the way the bash tool / shell lane do.
+export { ProcessRegistry } from "../../src/process-registry";
 // The typed provider error, so cross-service e2e can drive a retryable transport drop through a real
 // store (the DeepSeek-style thinking-only reconnect path) without reaching into host internals.
 export { ProviderUnavailable } from "../../src/providers/errors";
+export { runPromotable } from "../../src/tools/promote-runner";
 export * from "./fake-provider";
