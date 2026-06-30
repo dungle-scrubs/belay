@@ -29,15 +29,11 @@
 - [x] GREEN: Keep indicator placement stable beside the `+`/shell glyph without composer height reflow
 - [x] REFACTOR: Extract a small presentational component for mode indicator states
 
-## M3: `vimeejs/vimee` Evaluation Spike
-
-- [ ] RED: Build a throwaway Storybook or test harness that exercises `vimeejs/vimee` against the production textarea constraints
-- [ ] GREEN: Evaluate insert, normal, visual, cursor movement, selection, undo/redo interaction, IME/composition behavior, and textarea selection APIs
-- [ ] RED: Add comparison cases for image tokens, slash menu, shell lane, history recall, and Enter submit
-- [ ] GREEN: Record whether to adopt `vimeejs/vimee`, wrap it, or write a small local prompt-only controller
-- [ ] REFACTOR: Remove spike-only code unless it becomes the chosen implementation
-
-## M4: Prompt Vim State Machine
+- [x] RED: Build a throwaway Storybook or test harness that exercises `vimeejs/vimee` against the production textarea constraints
+- [x] GREEN: Evaluate insert, normal, visual, cursor movement, selection, undo/redo interaction, IME/composition behavior, and textarea selection APIs
+- [x] RED: Add comparison cases for image tokens, slash menu, shell lane, history recall, and Enter submit
+- [x] GREEN: Record whether to adopt `vimeejs/vimee`, wrap it, or write a small local prompt-only controller
+- [x] REFACTOR: Remove spike-only code unless it becomes the chosen implementation
 
 - [ ] RED: Add unit tests for mode transitions: focus starts insert, Esc to normal, normal to visual, visual Esc to normal, normal insert commands back to insert
 - [ ] GREEN: Implement the prompt-local Vim mode state machine
