@@ -36,7 +36,7 @@ import type { HostStatus, PendingHandoff, PendingQuestion } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
 import { TasksPanel } from "../../TasksPanel";
-import type { PanelModel, readOnlyToolBatches, toTranscript } from "../../transcript";
+import type { Message, PanelModel, readOnlyToolBatches, toTranscript } from "../../transcript";
 import { buildTranscriptRows } from "../../transcript-rows";
 import { WORKTREE_CHOOSER } from "../../worktrees";
 import type { WorktreeRowsContext } from "../../worktrees/worktree-rows";
@@ -57,6 +57,8 @@ export interface TranscriptView {
   readonly onDoctorRefresh: () => void;
   /** Dispatch a nested command-menu row selection as a host command (plan 03), e.g. `/style concise`. */
   readonly onMenuAction?: (command: string, args: string) => void;
+  /** Open the tool detail takeover for a detail-eligible transcript row (plan 08). */
+  readonly onOpenDetail?: (message: Message) => void;
   readonly showThinking: boolean;
   /** Compact transcript layout (plan 05): collapse non-primary rows to one line. */
   readonly compact: boolean;
@@ -231,6 +233,7 @@ export function PanelHost(props: {
     onOpenPath,
     onDoctorRefresh,
     onMenuAction,
+    onOpenDetail,
     showThinking,
     compact,
     queue,
@@ -351,6 +354,7 @@ export function PanelHost(props: {
                 showThinking={showThinking}
                 compact={compact}
                 onOpenPath={onOpenPath}
+                onOpenDetail={onOpenDetail}
                 onDoctorRefresh={onDoctorRefresh}
                 onMenuAction={onMenuAction}
               />

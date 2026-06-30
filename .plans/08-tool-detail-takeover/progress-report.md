@@ -62,11 +62,11 @@
 
 ### M5: Open/Close Routing
 
-- [ ] RED: Add app tests for opening detail from regular transcript rows and compact rows
-- [ ] GREEN: Add the detail-open action to eligible rows without cluttering non-eligible rows
-- [ ] RED: Add tests proving only one transcript takeover is active at a time across model chooser, archive browser, and tool detail
-- [ ] GREEN: Route detail takeover through the same center-column takeover slot as other takeover surfaces
-- [ ] REFACTOR: Keep source row identity stable so close can restore focus and scroll
+- [x] RED: Add app tests for opening detail from regular transcript rows and compact rows
+- [x] GREEN: Add the detail-open action to eligible rows without cluttering non-eligible rows
+- [x] RED: Add tests proving only one transcript takeover is active at a time across model chooser, archive browser, and tool detail
+- [x] GREEN: Route detail takeover through the same center-column takeover slot as other takeover surfaces
+- [x] REFACTOR: Keep source row identity stable so close can restore focus and scroll
 
 ### M6: Live Streaming Detail
 

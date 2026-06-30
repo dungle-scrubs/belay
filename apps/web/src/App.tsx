@@ -34,6 +34,8 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
+import { type ToolDetailModel, toToolDetailModel } from "@/tool-detail/detail-model";
+import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
@@ -79,7 +81,7 @@ import {
   useSessionActions,
   webTabId,
 } from "./session/use-session";
-import { panelModel, readOnlyToolBatches, toTranscript } from "./transcript";
+import { type Message, panelModel, readOnlyToolBatches, toTranscript } from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -493,6 +495,9 @@ export function App() {
     sessionId,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
+  // The tool detail takeover (plan 08): the projected ToolDetailModel of the row being inspected, or
+  // null when closed. Opening it closes any other center-column takeover (one at a time).
+  const [detail, setDetail] = useState<ToolDetailModel | null>(null);
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();
@@ -745,7 +750,8 @@ export function App() {
     modal.archiveOpen ||
     editor.isOpen ||
     paletteOpen ||
-    helpOpen;
+    helpOpen ||
+    detail !== null;
 
   // App actions shared by their keyboard shortcut (the router below) and their palette command, so the
   // two surfaces can never drift (plan 07 M7/M8).
@@ -928,6 +934,42 @@ export function App() {
     />
   ) : undefined;
 
+  // The tool detail takeover (plan 08): open it from a transcript row's inspect affordance, closing any
+  // other center-column takeover first (only one at a time). Close returns to chat and restores focus +
+  // scroll to the source row where it still exists in the DOM.
+  const onOpenDetail = (message: Message) => {
+    const projected = toToolDetailModel(message);
+    if (!projected) {
+      return;
+    }
+    setChooserOpen(false);
+    modal.setArchiveOpen(false);
+    setDetail(projected);
+  };
+  const closeDetail = () => {
+    const sourceId = detail?.id;
+    setDetail(null);
+    if (sourceId) {
+      // Best-effort: bring the source row back into view where the DOM still has it (the takeover
+      // unmounts this frame, so defer to the next so the transcript is laid out again first).
+      requestAnimationFrame(() => {
+        const row = document.querySelector<HTMLElement>(
+          `[data-message-id="${CSS.escape(sourceId)}"]`,
+        );
+        row?.scrollIntoView({ block: "center" });
+      });
+    }
+  };
+  const detailView =
+    detail !== null ? (
+      <ToolDetailView
+        model={detail}
+        onBack={closeDetail}
+        onOpenPath={(path) => void openInEditor(path)}
+        className="h-full"
+      />
+    ) : undefined;
+
   // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the archived +
   // worktree affordances and the session id for orientation. `restart` is a temporary debug surface.
   const panelFooter = (
@@ -1023,6 +1065,7 @@ export function App() {
           onOpenPath: (path) => void openInEditor(path),
           onDoctorRefresh: () => void command("/doctor", "refresh"),
           onMenuAction: (cmd: string, args: string) => void command(cmd, args),
+          onOpenDetail,
           showThinking: showThinkingOn,
           compact,
           active,
@@ -1099,7 +1142,7 @@ export function App() {
               vimEnabled={vimEnabled}
             />
           ) : (
-            (archiveBrowser ?? chooser)
+            (detailView ?? archiveBrowser ?? chooser)
           )
         }
         archived={archived}

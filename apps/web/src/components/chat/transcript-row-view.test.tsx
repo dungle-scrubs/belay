@@ -44,6 +44,45 @@ const resultRow = (message: Extract<Message, { kind: "result" }>): TranscriptRow
   message,
 });
 
+const toolRow = (over: Partial<Extract<Message, { kind: "tool" }>> = {}): TranscriptRow => ({
+  kind: "message",
+  id: "message:c1",
+  compactAbove: false,
+  message: { kind: "tool", id: "c1", name: "bash", args: '{"command":"ls"}', done: true, ...over },
+});
+
+test("a tool row exposes the inspect affordance, which opens its detail (plan 08 M5)", () => {
+  const onOpenDetail = vi.fn();
+  render(
+    <TranscriptRowView
+      row={toolRow()}
+      showThinking
+      onOpenPath={noop}
+      onDoctorRefresh={noop}
+      onOpenDetail={onOpenDetail}
+    />,
+  );
+  fireEvent.click(screen.getByLabelText("Inspect tool detail"));
+  assert.equal(onOpenDetail.mock.calls.length, 1);
+  assert.equal(onOpenDetail.mock.calls[0]?.[0]?.id, "c1");
+});
+
+test("a compact tool row also exposes the inspect affordance without expanding first (plan 08 M5)", () => {
+  const onOpenDetail = vi.fn();
+  render(
+    <TranscriptRowView
+      row={toolRow()}
+      compact
+      showThinking
+      onOpenPath={noop}
+      onDoctorRefresh={noop}
+      onOpenDetail={onOpenDetail}
+    />,
+  );
+  fireEvent.click(screen.getByLabelText("Inspect tool detail"));
+  assert.equal(onOpenDetail.mock.calls.length, 1);
+});
+
 test("a command result carrying a menu renders the nested menu and dispatches a row as a command (plan 03)", () => {
   const onMenuAction = vi.fn();
   render(

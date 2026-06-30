@@ -28,8 +28,13 @@ import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
 import { toolMessageStatus } from "@/components/chat/tool-status";
 import { CommandMenu } from "@/components/command-menu/command-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { WithInspect } from "@/tool-detail/inspect-affordance";
 import { fmtCtx, fmtTokens, toolSummary } from "../../derive";
-import { LEGACY_RECONNECT_ATTEMPTS, type ToolMessage as ToolMessageData } from "../../transcript";
+import {
+  LEGACY_RECONNECT_ATTEMPTS,
+  type Message,
+  type ToolMessage as ToolMessageData,
+} from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 
 /**
@@ -95,6 +100,9 @@ export interface TranscriptRowViewProps {
   readonly expandedRows?: ReadonlySet<string>;
   /** Toggles a compacted row's expanded detail (compact mode only). */
   readonly onToggleRow?: (id: string) => void;
+  /** Opens the tool detail takeover for a detail-eligible row (tool call / shell lane), plan 08. The
+   *  inspect affordance is only shown on eligible rows, so non-eligible rows are never cluttered. */
+  readonly onOpenDetail?: (message: Message) => void;
 }
 
 export function TranscriptRowView({
@@ -107,6 +115,7 @@ export function TranscriptRowView({
   compact = false,
   expandedRows,
   onToggleRow,
+  onOpenDetail,
 }: TranscriptRowViewProps) {
   // Compact mode collapses an eligible message row to a one-line CompactRow; its detail, when expanded,
   // is the SAME full renderer (a recursive render with compact off), so no renderer is duplicated. The
@@ -117,29 +126,32 @@ export function TranscriptRowView({
       const expanded = expandedRows?.has(row.message.id) ?? false;
       // Carry the selection segment id on the wrapper only while COLLAPSED; when expanded, the recursive
       // full render below owns it, so exactly one element holds each message id (a duplicate would split
-      // the transcript-selection capture vs. resolve and misplace the persistent highlight).
+      // the transcript-selection capture vs. resolve and misplace the persistent highlight). The inspect
+      // affordance wraps the collapsed row too, so a tool/shell can be inspected without first expanding.
       return (
-        <div data-message-id={expanded ? undefined : row.message.id} className="pl-3.5">
-          <CompactRow
-            display={display}
-            expanded={expanded}
-            onToggle={
-              display.hasDetail && onToggleRow ? () => onToggleRow(row.message.id) : undefined
-            }
-          >
-            {expanded ? (
-              <TranscriptRowView
-                row={row}
-                compact={false}
-                showThinking={showThinking}
-                onOpenPath={onOpenPath}
-                onDoctorRefresh={onDoctorRefresh}
-                onMenuAction={onMenuAction}
-                questionsOneLine={questionsOneLine}
-              />
-            ) : null}
-          </CompactRow>
-        </div>
+        <WithInspect message={row.message} onOpenDetail={onOpenDetail} className="pl-3.5">
+          <div data-message-id={expanded ? undefined : row.message.id}>
+            <CompactRow
+              display={display}
+              expanded={expanded}
+              onToggle={
+                display.hasDetail && onToggleRow ? () => onToggleRow(row.message.id) : undefined
+              }
+            >
+              {expanded ? (
+                <TranscriptRowView
+                  row={row}
+                  compact={false}
+                  showThinking={showThinking}
+                  onOpenPath={onOpenPath}
+                  onDoctorRefresh={onDoctorRefresh}
+                  onMenuAction={onMenuAction}
+                  questionsOneLine={questionsOneLine}
+                />
+              ) : null}
+            </CompactRow>
+          </div>
+        </WithInspect>
       );
     }
   }
@@ -170,9 +182,11 @@ export function TranscriptRowView({
     // selection can start or end inside tool output (02.11). The wrapper carries no styling;
     // ToolRenderer keeps owning its own indent/layout.
     return (
-      <div data-message-id={message.id}>
-        <ToolRenderer message={message} className="pl-3.5" onOpenPath={onOpenPath} />
-      </div>
+      <WithInspect message={message} onOpenDetail={onOpenDetail}>
+        <div data-message-id={message.id}>
+          <ToolRenderer message={message} className="pl-3.5" onOpenPath={onOpenPath} />
+        </div>
+      </WithInspect>
     );
   }
 
@@ -210,14 +224,16 @@ export function TranscriptRowView({
 
   if (message.kind === "shell") {
     return (
-      <div data-message-id={message.id}>
-        <ShellBlock
-          command={message.command}
-          output={message.output}
-          done={message.done}
-          ok={message.ok}
-        />
-      </div>
+      <WithInspect message={message} onOpenDetail={onOpenDetail}>
+        <div data-message-id={message.id}>
+          <ShellBlock
+            command={message.command}
+            output={message.output}
+            done={message.done}
+            ok={message.ok}
+          />
+        </div>
+      </WithInspect>
     );
   }
 

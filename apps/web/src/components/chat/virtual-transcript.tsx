@@ -4,6 +4,7 @@ import { isCompactEligible } from "@/components/chat/compact-display";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
 import { mayAutoFollow } from "@/scroll";
+import type { Message } from "../../transcript";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
 
 export interface VirtualTranscriptProps {
@@ -15,6 +16,8 @@ export interface VirtualTranscriptProps {
   readonly onOpenPath: (path: string) => void;
   readonly onDoctorRefresh: () => void;
   readonly onMenuAction?: (command: string, args: string) => void;
+  /** Opens the tool detail takeover for a detail-eligible row (plan 08). */
+  readonly onOpenDetail?: (message: Message) => void;
   /** Compact transcript mode (plan 05): non-primary rows collapse to one line. Off by default. */
   readonly compact?: boolean;
   readonly testInitialRect?: Rect;
@@ -70,6 +73,7 @@ export function VirtualTranscript({
   onOpenPath,
   onDoctorRefresh,
   onMenuAction,
+  onOpenDetail,
   compact = false,
   testInitialRect,
 }: VirtualTranscriptProps) {
@@ -301,6 +305,7 @@ export function VirtualTranscript({
               compact={compact}
               expandedRows={expandedRows}
               onToggleRow={toggleRow}
+              onOpenDetail={onOpenDetail}
             />
           </div>
         );
