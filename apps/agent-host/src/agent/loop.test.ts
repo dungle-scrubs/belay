@@ -442,7 +442,9 @@ test("03.1 M3: the progress guard measures growth from the seed, not the first m
   );
   const stop = equal.find((e) => e.type === "stop");
   assert.equal(stop?.type === "stop" && stop.stop.cause, "step_backstop");
-});
+  // Two full loop simulations: an explicit timeout keeps this from flaking under heavy parallel suite
+  // load, where the unit project's default 5s starves a healthy ~0.8s test on a saturated machine.
+}, 20_000);
 
 test("M4: context pressure synthesizes before the adaptive budget is spent", async () => {
   // 85% of a 1M window is past the 80% gate: even with the generous 1M tier budget, context pressure
