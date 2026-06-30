@@ -179,6 +179,11 @@ In `$WT`:
 
 ```bash
 git rm -r .plans/P/
+# `git rm` only removes TRACKED files. A plan dir also carries an untracked, never-committed
+# `artifacts/` subdir (git does not track empty dirs), which survives `git rm -r` and keeps an
+# empty `.plans/P/` folder on disk. Remove the whole directory outright so the plan folder is
+# fully gone from the working tree, not just emptied of its tracked files.
+rm -rf .plans/P/
 git commit -m "chore(plans): remove completed P plan"
 ```
 
@@ -199,6 +204,17 @@ shared checkout (it would switch another session's branch out from under it).
   ```
 - If `--ff-only` is rejected because `main` advanced, rebase `feat/P` onto `main` inside `$WT`,
   **re-run the full step-4 gate**, then merge. Never create a merge commit; history stays linear.
+- **After the merge, scrub the plan dir from the primary tree.** The merge removes the *tracked*
+  plan files from `main`'s working tree, but any **untracked** leftover inside `$REPO/.plans/P/` (a
+  Finder `.DS_Store` from browsing the folder, a SQLite `plan.db-wal`/`plan.db-shm` sidecar) keeps the
+  now-empty directory alive on disk - the empty folder the owner sees on `main`. Remove it outright so
+  the plan folder is fully gone, then confirm:
+  ```bash
+  rm -rf "$REPO/.plans/P"
+  test -d "$REPO/.plans/P" && echo "STILL PRESENT - investigate" || echo "plan dir gone"
+  ```
+  This deletes only untracked cruft (the tracked files are already removed by the merge), so it never
+  touches committed history. Do the same in `$WT` before pruning if you ever inspect it post-merge.
 
 ### 7. Prune locally
 
