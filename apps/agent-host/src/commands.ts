@@ -13,6 +13,7 @@ import { buildSkillCommand } from "./skills";
 import { loadStylePref, saveStylePref } from "./style/style-store";
 import { handleStyleCommand } from "./style/styles";
 import { runCommand } from "./tools/run-shell";
+import { resolveVimToggle, saveVimPref, vimEnabled } from "./vim/vim-store";
 
 /**
  * Immediate host commands (slash commands): the host runs these directly and
@@ -229,6 +230,27 @@ function buildStyleCommand(): Command {
   };
 }
 
+/**
+ * `/vim [on|off]` (plan 07): toggles (bare) or sets the Vim prompt-motions preference, persisting it
+ * under the config home via the shared {@link saveVimPref} (same store plan 06 reads at startup).
+ * `main.ts` re-announces `host.online` after a `/vim`, so the web's `vimEnabled` flips without a restart.
+ * The palette's `Toggle Vim mode` action dispatches the bare form.
+ */
+function buildVimCommand(): Command {
+  return {
+    spec: { name: "/vim", summary: "Toggle Vim prompt motions", usage: "/vim [on|off]" },
+    select: noContext,
+    run: (args): CommandRunResult => {
+      const result = resolveVimToggle(args, vimEnabled());
+      if (!result.ok) {
+        return { text: "usage: /vim [on|off]", ok: false };
+      }
+      saveVimPref(result.enabled);
+      return { text: `Vim mode ${result.enabled ? "enabled" : "disabled"}` };
+    },
+  };
+}
+
 function buildJobsStopCommand(): Command {
   return {
     spec: {
@@ -316,6 +338,7 @@ export function buildCommandRegistry(): CommandRegistry {
   // /skills is owned by skills.ts (it knows skill discovery); registered here as one line.
   add(buildSkillCommand());
   add(buildStyleCommand());
+  add(buildVimCommand());
   add(buildJobsCommand());
   add(buildJobsStopCommand());
 

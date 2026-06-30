@@ -30,14 +30,82 @@ exceptions. Behavior varies by browser version - re-verify before relying on a
 
 ## What the app binds today
 
-There are currently **no modifier-based (`Ctrl`/`Cmd`/`Alt`/`Shift`+key)
-hotkeys** anywhere in `apps/web` - a `grep` for `ctrlKey`/`metaKey`/`altKey`/`shiftKey`
-returns nothing. Every existing binding uses a bare key and is scoped to a
-focused region. Avoid re-binding these globally.
+The app binds two layers: a small set of **`Mod`-based app shortcuts** routed
+through the central shortcut router (plan 07, see the next table), and the
+older **bare-key, focus-scoped** bindings (this table). `Mod` is the primary app
+modifier - `Cmd` on macOS, `Ctrl` on Windows/Linux. Every router-owned binding
+is registered declaratively in `src/shortcuts/registry.ts`; a test fails if a
+registered binding is missing from this file, so this ledger and the code can't
+drift.
+
+### `Mod` app shortcuts (plan 07, via the shortcut router)
+
+The router owns a single `window` keydown listener, normalizes `Mod`, applies
+focus guards, and dispatches to the frontmost eligible surface (palette → modal
+→ composer/Vim → panels → global). Each `preventDefault()`s only when it owns
+the key, scoped to the focused app.
+
+| Keys | Action | Policy | Source |
+| --- | --- | --- | --- |
+| `Mod+K` | Open the command palette (first action: toggle Vim mode). | accepted takeover (`Ctrl+K` is an omnibox combo on Win/Linux; scoped + `preventDefault`ed). | `src/shortcuts/`, `src/components/command-palette/` |
+| `Mod+/` | Show the keyboard-shortcuts help. | safe | `src/shortcuts/` |
+| `Mod+Enter` | Send the message (composer-owned). | contextual/safe | `src/shortcuts/`, composer |
+| `Mod+\` | Toggle the sessions sidebar (left). | contextual | `src/shortcuts/` |
+| `Mod+Shift+\` | Toggle the side panel (right). | contextual | `src/shortcuts/` |
+| `Mod+.` | Stop the active run (deliberate non-Escape stop path). | contextual | `src/shortcuts/` |
+| `Cmd`/`Ctrl+Enter` | Confirm + close the full-surface prompt editor (always, even in Vim mode). | contextual, focused-editor only | `src/components/panel/prompt-surface-editor.tsx` |
+
+The panel toggles `Mod+\` (left sidebar) and `Mod+Shift+\` (right panel) are
+**jsdom-verified** (routing, exact-`Shift` disambiguation, `preventDefault`, and
+behind-overlay suppression) and **accepted pending the live-browser matrix** in
+M9 (Chrome, Arc, Firefox, Zen, Safari). `Mod+\` is not a common browser default;
+if a target browser is found to claim it, the binding is demoted to palette-only
+there and this row updated.
+
+`Mod+.` (stop) is **shipped** as a deliberate, immediate stop - distinct from
+Escape's progressive path (which folds queued steer first, then cancels). It
+routes through the same `onCancel`, but only while work is in progress; idle it
+is a no-op, so unlike Escape it never clears the composer draft. A bare `.` is
+left to the focused surface (text / Vim), so the binding never steals typing.
+
+### Browser/OS verification matrix (plan 07 M9)
+
+Two layers verify these bindings. **jsdom** (automated, `src/shortcuts/*.test.tsx`)
+proves the router-side contract on every binding: it routes to the right handler,
+`preventDefault`s when it owns the key, is suppressed behind a frontmost overlay,
+disambiguates `Shift`, and yields to a surface that `stopPropagation`s (Vim/Dialog).
+That is platform-independent, so it stands in for the parts of the matrix that do
+not depend on a specific browser's native chord handling.
+
+What jsdom **cannot** represent is whether a real browser claims a chord before
+the page sees it (an omnibox/menu shortcut). That column is a **deferred manual
+EZE** - it needs the five live browsers and is not runnable headlessly:
+
+| Binding | jsdom | Chrome | Arc | Firefox | Zen | Safari |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Mod+K` | ✅ routed + preventDefault'd | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| `Mod+/` | ✅ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| `Mod+Enter` | ✅ (composer-focused) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| `Mod+\` | ✅ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| `Mod+Shift+\` | ✅ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| `Mod+.` | ✅ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| `Esc` routing | ✅ (Vim/overlay precedence) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+
+Legend: ✅ verified, ⏳ pending live check, ⛔ browser claims it (demote to
+palette-only there). `Mod+K` is already classified an **accepted takeover**
+(`Ctrl+K` is the omnibox combo on Windows/Linux; we scope + `preventDefault` it);
+the rest are **contextual** (`safe` for `Mod+/`). No binding is `rejected` or
+`reserved` today. When the live pass runs, flip each cell and demote any chord a
+target browser is found to claim.
+
+### Bare-key, focus-scoped bindings
+
+Every binding below uses a bare key scoped to a focused region. Avoid re-binding
+these globally.
 
 | Keys | Scope | Action | Source |
 | --- | --- | --- | --- |
-| `Esc` | **Global** (`window`) | Cancel the active/pending run; if none, clear the composer draft. | `src/App.tsx` (window `keydown`) |
+| `Esc` | **Global** (`window`) | Cancel the active/pending run (or fold queued steer first); if none, clear the composer draft. Suppressed while a frontmost overlay is open or the Vim layer consumed it - see **Escape ownership** below. | `src/shortcuts/router.ts` (`onEscape`) -> `src/esc-action.ts` |
 | `i` | **Global** (`window`), **only when no input/textarea/contenteditable is focused** | Focus the composer (Vim-style insert mode). | `src/App.tsx` (window `keydown`) |
 | `Enter` | Composer `<input>` | Submit the message (form submit). | `src/App.tsx` (`<form onSubmit>`) |
 | `ArrowUp` / `ArrowDown` | Composer, **only while slash-menu open** | Move the menu highlight. | `src/App.tsx` `onInputKeyDown` |
@@ -60,6 +128,31 @@ focused region. Avoid re-binding these globally.
 arrow keys as taken inside the composer and lists. Everything modifier-based is
 currently free for the app - the constraints below are entirely
 browser/OS-imposed.
+
+### Escape ownership (plan 07 M5)
+
+`Esc` is resolved by exactly one precedence chain, highest layer first - a layer
+that handles it `stopPropagation`s, so lower layers never also fire:
+
+1. **The composer's Vim layer** (`src/vim/use-vim.ts`). While Vim is enabled and
+   the composer/editor is focused, `Esc` leaves insert/visual mode for normal
+   mode and is consumed (`stopPropagation`), so it does **not** reach the global
+   handler. A second `Esc` in normal mode is a passthrough and falls through to
+   the global layer. The full-surface prompt editor instead consumes the first
+   `Esc` for normal mode and closes on the second.
+2. **The slash-command menu** (`src/App.tsx` `onInputKeyDown`). While open, `Esc`
+   dismisses the menu and is swallowed.
+3. **A frontmost overlay** (palette, resume/worktree/archive chooser, model
+   chooser, takeover). Each `Radix Dialog`/popover closes on its own `Esc`; the
+   global decision additionally treats `modalOpen` as "owned" and does nothing
+   (`escapeAction`'s `modalOpen` guard), so the transcript behind it is left
+   alone.
+4. **The global action** (`src/shortcuts/router.ts` `onEscape` ->
+   `src/esc-action.ts` `escapeAction`): the single window listener that owns all
+   app keys forwards `Esc` here. With work in progress it folds a non-empty
+   queue into one steering prompt (first press) then cancels (next press); idle,
+   it clears a non-empty draft. This is the **only** place the global Escape
+   decision lives.
 
 ---
 

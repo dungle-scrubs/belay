@@ -150,6 +150,18 @@ test("/style is announced and bare /style returns a nested command-menu payload 
   assert.ok((menu?.rows.length ?? 0) > 0, "the menu carries style rows from host data");
 });
 
+test("/vim is announced, and an unrecognized argument is a usage error that persists nothing (07 M4)", async () => {
+  const registry = buildCommandRegistry();
+  assert.ok(
+    registry.specs.some((spec) => spec.name === "/vim"),
+    "/vim is announced so the slash menu + palette can surface it",
+  );
+  // A bad arg short-circuits before saveVimPref, so this never touches the real config home.
+  const { ok, text } = await registry.run("/vim", "definitely-not-a-toggle", baseCtx);
+  assert.equal(ok, false);
+  assert.match(text, /usage: \/vim/);
+});
+
 test("an unknown /style id is a plain error result with no menu (03 M3)", async () => {
   const registry = buildCommandRegistry();
   const { ok, menu } = await registry.run("/style", "definitely-not-a-style", baseCtx);

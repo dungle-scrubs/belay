@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { loadVimPref, parseVimPref, saveVimPref, vimEnabled } from "./vim-store";
+import { loadVimPref, parseVimPref, resolveVimToggle, saveVimPref, vimEnabled } from "./vim-store";
 
 /**
  * M1: the Vim-mode preference store. It reads an explicit `{ enabled }` boolean from `vim.json` under
@@ -55,6 +55,26 @@ describe("saveVimPref", () => {
     const files = new Map<string, string>();
     saveVimPref(true, "/home/.trevorV2/vim.json", (p, c) => void files.set(p, c));
     expect(files.get("/home/.trevorV2/vim.json")).toBe('{\n  "enabled": true\n}\n');
+  });
+});
+
+describe("resolveVimToggle", () => {
+  test("bare /vim toggles the current value", () => {
+    expect(resolveVimToggle("", false)).toEqual({ ok: true, enabled: true });
+    expect(resolveVimToggle("", true)).toEqual({ ok: true, enabled: false });
+  });
+
+  test("an explicit on/off (and aliases, case-insensitive) sets regardless of current", () => {
+    expect(resolveVimToggle("on", false)).toEqual({ ok: true, enabled: true });
+    expect(resolveVimToggle("enable", true)).toEqual({ ok: true, enabled: true });
+    expect(resolveVimToggle("TRUE", false)).toEqual({ ok: true, enabled: true });
+    expect(resolveVimToggle("off", true)).toEqual({ ok: true, enabled: false });
+    expect(resolveVimToggle(" Disable ", true)).toEqual({ ok: true, enabled: false });
+    expect(resolveVimToggle("false", true)).toEqual({ ok: true, enabled: false });
+  });
+
+  test("an unrecognized argument is rejected so the command can report usage", () => {
+    expect(resolveVimToggle("maybe", false)).toEqual({ ok: false });
   });
 });
 

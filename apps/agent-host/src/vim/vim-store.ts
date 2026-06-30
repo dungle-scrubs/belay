@@ -41,9 +41,35 @@ export function loadVimPref(
   return loadJsonConfig(path, parseVimPref, DEFAULT_PREF, read);
 }
 
+/**
+ * Resolves a `/vim [on|off]` argument against the current state to the next enabled value (plan 07).
+ * Bare `/vim` toggles; an explicit `on`/`enable`/`true` or `off`/`disable`/`false` sets regardless of
+ * the current value (case-insensitive); anything else is rejected so the command can report usage. Pure
+ * - the command wrapper persists the result via {@link saveVimPref}.
+ */
+export function resolveVimToggle(
+  args: string,
+  current: boolean,
+): { readonly ok: true; readonly enabled: boolean } | { readonly ok: false } {
+  switch (args.trim().toLowerCase()) {
+    case "":
+      return { ok: true, enabled: !current };
+    case "on":
+    case "enable":
+    case "true":
+      return { ok: true, enabled: true };
+    case "off":
+    case "disable":
+    case "false":
+      return { ok: true, enabled: false };
+    default:
+      return { ok: false };
+  }
+}
+
 /** Persists the Vim-enabled preference, creating the config dir as needed, and clears the read-once
- *  cache so a restart-free re-read reflects the change. The write counterpart to {@link loadVimPref};
- *  the host toggle command that drives it lands with the keyboard-shortcuts work. */
+ *  cache so a restart-free re-read reflects the change. The write counterpart to {@link loadVimPref},
+ *  driven by the host `/vim` toggle command (plan 07). */
 export function saveVimPref(
   enabled: boolean,
   path: string = USER_VIM_JSON,

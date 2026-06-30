@@ -21,12 +21,20 @@ import { ArchiveBrowser } from "@/archive/archive-browser";
 import { buildArchiveRows } from "@/archive/archive-rows";
 import { useArchiveActions } from "@/archive/use-archive-actions";
 import { ModelChooser } from "@/components/chooser/model-chooser";
+import { CommandPalette } from "@/components/command-palette/command-palette";
+import type { PaletteCommand } from "@/components/command-palette/palette-commands";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { ControlsPanel } from "@/components/panel/panel-controls";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
+import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { activeModelLabel, resolveReasoning, sessionScopedKey } from "@/model-selection";
+import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
+import { formatChord } from "@/shortcuts/keys";
+import { type ShortcutId, shortcut } from "@/shortcuts/registry";
+import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
+import { vimToggleCommand } from "@/vim/vim-command";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeTurnStartedAt,
@@ -103,6 +111,17 @@ function urlForSession(sessionId: string): URL {
   return url;
 }
 
+/** A palette command for an app action that also has a keyboard shortcut: its label + chord are read
+ *  from the shortcut registry (single source), so the palette can never drift from the router (plan 07). */
+function shortcutCommand(
+  id: ShortcutId,
+  run: () => void,
+  extra?: Partial<PaletteCommand>,
+): PaletteCommand {
+  const spec = shortcut(id);
+  return { id, label: spec.label, keys: formatChord(spec.keys), run, ...extra };
+}
+
 // The local send queue + hard-steer fold (QueuedPrompt, sendQueueReducer, foldSteer)
 // live in ./send-queue, unit-tested without React; the React state machine that drives
 // them (the busy/in-flight latch + release/drain effects) lives in ./hooks/use-send-queue.
@@ -173,6 +192,9 @@ export function App() {
   // line. Kept session-local (plain state, not persisted) - a persisted preference is deferred to the
   // settings/keyboard plan per the plan's escape hatch.
   const [compact, setCompact] = useState(false);
+  // The Mod+K command palette (plan 07): a frontmost overlay; while open it owns its keys.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   // The composer's local state as one boundary: draft, pending attachments + upload state, refs, and
   // the file-intake handlers. App keeps the submit/steer/slash-menu wiring (send queue + commands)
   // and passes the whole `composer` object to PanelHost; it also reads a few fields here for that
@@ -399,12 +421,7 @@ export function App() {
       if (event.key !== "i" || event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
-      const target = event.target as HTMLElement | null;
-      if (
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable
-      ) {
+      if (isEditableTarget(event.target as Element | null)) {
         return;
       }
       event.preventDefault();
@@ -639,9 +656,10 @@ export function App() {
     }
 
     const el = event.currentTarget;
-    // Menu closed: in a textarea Enter inserts a newline, so submit explicitly. Enter
-    // sends; Shift+Enter keeps the newline (for multi-line prompts and quoted blocks).
-    if (event.key === "Enter" && !event.shiftKey) {
+    // Menu closed: in a textarea Enter inserts a newline, so submit explicitly. Plain Enter sends and
+    // the registry `Mod+Enter` chord sends (the explicit, documented send); Shift+Enter keeps the
+    // newline (for multi-line prompts and quoted blocks). Validity is enforced by onSubmit.
+    if (isComposerSubmitKey(event)) {
       event.preventDefault();
       el.form?.requestSubmit();
       return;
@@ -705,15 +723,55 @@ export function App() {
     inputRef.current?.focus();
   };
 
+  // The deliberate stop path (plan 07 M8): Mod+. and the palette "Stop" command. A direct, non-Escape
+  // stop that routes through the SAME onCancel (steer the draft, abort the run/fold), but ONLY while
+  // work is in progress - idle it is a no-op, so it never clears a draft the way Escape does. Escape
+  // stays the progressive path (queued-steer first, then cancel); Mod+. is the immediate stop.
+  const onStop = () => {
+    if (busy || compacting) {
+      onCancel();
+    }
+  };
+
   // ESC mirrors the cancel button when a run is active/pending; with nothing to
   // cancel it just clears the composer. One window listener reads the latest state
   // from a ref so it never goes stale and works regardless of which element has focus.
   // A modal/picker/takeover (model chooser, resume, worktree switcher) owns Escape while open -
   // it closes itself, and the turn on the transcript behind it must NOT be cancelled.
   const modalOpen =
-    chooserOpen || modal.resumeOpen || modal.worktreeOpen || modal.archiveOpen || editor.isOpen;
-  // The latest Escape inputs + handlers, read by the one window listener so it never goes stale. The
-  // ref is reassigned every render (below); the seed only types it, so it never carries stale state.
+    chooserOpen ||
+    modal.resumeOpen ||
+    modal.worktreeOpen ||
+    modal.archiveOpen ||
+    editor.isOpen ||
+    paletteOpen ||
+    helpOpen;
+
+  // App actions shared by their keyboard shortcut (the router below) and their palette command, so the
+  // two surfaces can never drift (plan 07 M7/M8).
+  const toggleSidebar = () => modal.setSidebarOpen((open) => !open);
+  const togglePanel = () => modal.setPanelOpen((open) => !open);
+  const openHelp = () => setHelpOpen(true);
+
+  // The command palette's data-driven commands (plan 07). The Vim toggle reads the live host preference
+  // for its hint and dispatches the host `/vim` command (which persists + re-announces); the rest are
+  // app actions that also have a keyboard shortcut, their label + chord read from the registry via
+  // `shortcutCommand`. Cheap to build inline (and `onCancel` is a fresh closure each render, so a memo
+  // would not hold anyway). The stop row is disabled, with its reason, exactly when `onStop` is a no-op.
+  const paletteCommands: PaletteCommand[] = [
+    vimToggleCommand(vimEnabled, command),
+    shortcutCommand("toggle-sidebar", toggleSidebar),
+    shortcutCommand("toggle-panel", togglePanel),
+    shortcutCommand(
+      "stop",
+      onStop,
+      busy || compacting ? undefined : { disabledReason: "no active run" },
+    ),
+    shortcutCommand("shortcuts-help", openHelp),
+  ];
+
+  // The latest Escape inputs + handlers, read by the router's window listener so it never goes stale.
+  // The ref is reassigned every render (below); the seed only types it, so it never carries stale state.
   const escRef = useRef<EscRefShape>(null as unknown as EscRefShape);
   escRef.current = {
     active,
@@ -734,41 +792,50 @@ export function App() {
     },
     resetHistory: history.resetNavigation,
   };
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      const s = escRef.current;
-      const action = escapeAction({
-        active: s.active,
-        awaiting: s.awaiting,
-        compacting: s.compacting,
-        draft: s.draft,
-        modalOpen: s.modalOpen,
-        handoffPending: s.handoffPending,
-        queued: s.queued,
-      });
-      // First Escape with queued prompts folds them into one steering prompt (no cancel); a turn to
-      // cancel or a manual fold to abort routes through onCancel; otherwise clear a non-empty draft.
-      if (action === "dismiss-handoff") {
-        event.preventDefault();
-        s.onDismissHandoff();
-      } else if (action === "flush-queued-steer") {
-        event.preventDefault();
-        s.onFlushQueuedSteer();
-      } else if (action === "cancel") {
-        event.preventDefault();
-        s.onCancel();
-      } else if (action === "clear-draft") {
-        event.preventDefault();
-        s.setDraft("");
-        s.resetHistory(); // clearing the composer ends any in-progress history navigation
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  // Escape's global precedence (dismiss-handoff / queued-steer / cancel / clear-draft), resolved by the
+  // pure escapeAction and routed through the one shortcut router below. The Vim layer's stopPropagation
+  // suppresses this before it fires (a first Escape enters normal mode); an open overlay owns Escape via
+  // escapeAction's modalOpen guard.
+  const onEscape = useCallback((event: KeyboardEvent) => {
+    const s = escRef.current;
+    const action = escapeAction({
+      active: s.active,
+      awaiting: s.awaiting,
+      compacting: s.compacting,
+      draft: s.draft,
+      modalOpen: s.modalOpen,
+      handoffPending: s.handoffPending,
+      queued: s.queued,
+    });
+    if (action === "dismiss-handoff") {
+      event.preventDefault();
+      s.onDismissHandoff();
+    } else if (action === "flush-queued-steer") {
+      event.preventDefault();
+      s.onFlushQueuedSteer();
+    } else if (action === "cancel") {
+      event.preventDefault();
+      s.onCancel();
+    } else if (action === "clear-draft") {
+      event.preventDefault();
+      s.setDraft("");
+      s.resetHistory(); // clearing the composer ends any in-progress history navigation
+    }
   }, []);
+  // The one window listener owning every app key: Mod chords + global Escape. While any frontmost overlay
+  // (incl. the palette) is open, the global Mod shortcuts are suppressed so a key never reaches a surface
+  // behind it.
+  useShortcutRouter({
+    overlayOpen: modalOpen,
+    handlers: {
+      "command-palette": () => setPaletteOpen(true),
+      "shortcuts-help": openHelp,
+      "toggle-sidebar": toggleSidebar,
+      "toggle-panel": togglePanel,
+      stop: onStop,
+    },
+    onEscape,
+  });
 
   // Model + reasoning + thinking controls, moved out of the footer into the panel.
   const panelControls = (
@@ -932,129 +999,133 @@ export function App() {
     ) : null;
 
   return (
-    <PanelHost
-      composer={composer}
-      compose={{
-        onSubmit,
-        onInputKeyDown,
-        menuOpen: slashMenu.menuOpen,
-        menuMatches: slashMenu.menuMatches,
-        menuIndex: slashMenu.menuIndex,
-        slashQuery: slashMenu.slashQuery,
-        acceptCommand: slashMenu.acceptCommand,
-        disabled: !sessionId,
-        placeholder: `message ${activeLabel}… (/ for commands, ! for shell)`,
-        onExpand: () => editor.open({ text: draft, onConfirm: setDraft }),
-        vimEnabled,
-      }}
-      stream={stream}
-      host={host}
-      transcript={{
-        transcript,
-        toolBatches,
-        onOpenPath: (path) => void openInEditor(path),
-        onDoctorRefresh: () => void command("/doctor", "refresh"),
-        onMenuAction: (cmd: string, args: string) => void command(cmd, args),
-        showThinking: showThinkingOn,
-        compact,
-        active,
-        // Suppress the "Working" row when the trailing prompt is stranded with no host (02.14); the
-        // no-host status line carries the affordance instead. `busy`/the send queue are unchanged, so a
-        // follow-up prompt still queues behind it and the host's reattach catch-up runs them in order.
-        awaitingResponse: awaitingResponse && !hostlessPending,
-        turnStartedAt,
-        queue: visibleQueue,
-      }}
-      scroll={scroll}
-      tasks={tasks}
-      tasksStale={staleTasks}
-      onClearTasks={() => void command("/tasks-clear", "")}
-      panel={{
-        // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
-        // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
-        open: modal.panelOpen,
-        onOpen: () => modal.setPanelOpen(true),
-        onClose: () => modal.setPanelOpen(false),
-        title: target,
-        subtitle: `${status}${replayed ? " · replayed" : ""} · ${events.length} events`,
-        statusNode,
-        workspace: host.cwd ?? host.workspace ?? undefined,
-        git: host.git,
-        model: panel,
-        controls: panelControls,
-        footer: panelFooter,
-        ready: replayed,
-      }}
-      choosers={{
-        resumeOpen: modal.resumeOpen,
-        setResumeOpen: modal.setResumeOpen,
-        worktreeOpen: modal.worktreeOpen,
-        setWorktreeOpen: modal.setWorktreeOpen,
-        inventory: modal.inventory,
-        resumeContext: {
-          currentSessionId: sessionId,
+    <>
+      <PanelHost
+        composer={composer}
+        compose={{
+          onSubmit,
+          onInputKeyDown,
+          menuOpen: slashMenu.menuOpen,
+          menuMatches: slashMenu.menuMatches,
+          menuIndex: slashMenu.menuIndex,
+          slashQuery: slashMenu.slashQuery,
+          acceptCommand: slashMenu.acceptCommand,
+          disabled: !sessionId,
+          placeholder: `message ${activeLabel}… (/ for commands, ! for shell)`,
+          onExpand: () => editor.open({ text: draft, onConfirm: setDraft }),
+          vimEnabled,
+        }}
+        stream={stream}
+        host={host}
+        transcript={{
+          transcript,
+          toolBatches,
+          onOpenPath: (path) => void openInEditor(path),
+          onDoctorRefresh: () => void command("/doctor", "refresh"),
+          onMenuAction: (cmd: string, args: string) => void command(cmd, args),
+          showThinking: showThinkingOn,
+          compact,
+          active,
+          // Suppress the "Working" row when the trailing prompt is stranded with no host (02.14); the
+          // no-host status line carries the affordance instead. `busy`/the send queue are unchanged, so a
+          // follow-up prompt still queues behind it and the host's reattach catch-up runs them in order.
+          awaitingResponse: awaitingResponse && !hostlessPending,
+          turnStartedAt,
+          queue: visibleQueue,
+        }}
+        scroll={scroll}
+        tasks={tasks}
+        tasksStale={staleTasks}
+        onClearTasks={() => void command("/tasks-clear", "")}
+        panel={{
+          // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
+          // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
+          open: modal.panelOpen,
+          onOpen: () => modal.setPanelOpen(true),
+          onClose: () => modal.setPanelOpen(false),
+          title: target,
+          subtitle: `${status}${replayed ? " · replayed" : ""} · ${events.length} events`,
+          statusNode,
+          workspace: host.cwd ?? host.workspace ?? undefined,
+          git: host.git,
+          model: panel,
+          controls: panelControls,
+          footer: panelFooter,
+          ready: replayed,
+        }}
+        choosers={{
+          resumeOpen: modal.resumeOpen,
+          setResumeOpen: modal.setResumeOpen,
+          worktreeOpen: modal.worktreeOpen,
+          setWorktreeOpen: modal.setWorktreeOpen,
+          inventory: modal.inventory,
+          resumeContext: {
+            currentSessionId: sessionId,
+            currentProject: modal.currentProject,
+            busy,
+            nowMs: now,
+          },
+          onResume: navigateToSession,
+          worktrees: modal.worktrees,
+          worktreeContext: { activityBySession: modal.worktreeActivity, busy },
+          onSwitchWorktree: (id) => void command("/worktree-switch", id),
+        }}
+        sidebar={{
+          open: modal.sidebarOpen,
+          onOpen: () => modal.setSidebarOpen(true),
+          onClose: () => modal.setSidebarOpen(false),
+          sessions: modal.inventory.sessions,
+          currentSessionId: target,
           currentProject: modal.currentProject,
-          busy,
+          // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
+          // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
+          // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
+          // the durable log and replay on return); the row's activity bar shows it from the other view.
+          onSelect: navigateToSession,
+          onRename: (id, title) => void renameSession(id, title),
+          onArchive: (id) => void archiveSession(id),
+          onDelete: (id) => void deleteSession(id),
+          liveActivity: modal.sidebarLiveActivity,
           nowMs: now,
-        },
-        onResume: navigateToSession,
-        worktrees: modal.worktrees,
-        worktreeContext: { activityBySession: modal.worktreeActivity, busy },
-        onSwitchWorktree: (id) => void command("/worktree-switch", id),
-      }}
-      sidebar={{
-        open: modal.sidebarOpen,
-        onOpen: () => modal.setSidebarOpen(true),
-        onClose: () => modal.setSidebarOpen(false),
-        sessions: modal.inventory.sessions,
-        currentSessionId: target,
-        currentProject: modal.currentProject,
-        // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
-        // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
-        // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
-        // the durable log and replay on return); the row's activity bar shows it from the other view.
-        onSelect: navigateToSession,
-        onRename: (id, title) => void renameSession(id, title),
-        onArchive: (id) => void archiveSession(id),
-        onDelete: (id) => void deleteSession(id),
-        liveActivity: modal.sidebarLiveActivity,
-        nowMs: now,
-      }}
-      sessionName={sessionName}
-      chooser={
-        editor.isOpen ? (
-          <PromptSurfaceEditor
-            text={editor.text}
-            title={editor.title}
-            onTextChange={editor.setText}
-            onConfirm={editor.confirm}
-            vimEnabled={vimEnabled}
-          />
-        ) : (
-          (archiveBrowser ?? chooser)
-        )
-      }
-      archived={archived}
-      onUnarchive={() => void unarchive()}
-      question={{
-        pending: pendingQuestion,
-        onAnswer: (answer) => {
-          if (pendingQuestion) {
-            void answerQuestion(pendingQuestion.questionId, answer);
-          }
-        },
-      }}
-      handoff={{
-        pending: pendingHandoff,
-        onApprove: (handoffId) => void approveHandoff(handoffId),
-        onReject: (handoffId) => void rejectHandoff(handoffId),
-        onEdit: (handoffId, prompt) =>
-          editor.open({
-            text: prompt,
-            title: "Edit handoff prompt",
-            onConfirm: (edited) => void approveHandoff(handoffId, edited),
-          }),
-      }}
-    />
+        }}
+        sessionName={sessionName}
+        chooser={
+          editor.isOpen ? (
+            <PromptSurfaceEditor
+              text={editor.text}
+              title={editor.title}
+              onTextChange={editor.setText}
+              onConfirm={editor.confirm}
+              vimEnabled={vimEnabled}
+            />
+          ) : (
+            (archiveBrowser ?? chooser)
+          )
+        }
+        archived={archived}
+        onUnarchive={() => void unarchive()}
+        question={{
+          pending: pendingQuestion,
+          onAnswer: (answer) => {
+            if (pendingQuestion) {
+              void answerQuestion(pendingQuestion.questionId, answer);
+            }
+          },
+        }}
+        handoff={{
+          pending: pendingHandoff,
+          onApprove: (handoffId) => void approveHandoff(handoffId),
+          onReject: (handoffId) => void rejectHandoff(handoffId),
+          onEdit: (handoffId, prompt) =>
+            editor.open({
+              text: prompt,
+              title: "Edit handoff prompt",
+              onConfirm: (edited) => void approveHandoff(handoffId, edited),
+            }),
+        }}
+      />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={paletteCommands} />
+      <ShortcutsHelp open={helpOpen} onOpenChange={setHelpOpen} />
+    </>
   );
 }

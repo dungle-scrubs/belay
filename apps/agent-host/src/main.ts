@@ -2091,6 +2091,11 @@ async function runCommand(name: string, args: string): Promise<void> {
     compact: forceCompact,
   });
   await emit(events.commandResult({ command: name, text, ok, ...(menu ? { menu } : {}) }));
+  // `/vim` flips the Vim-motions preference that host.online carries; re-announce so every client's
+  // `vimEnabled` updates without a restart (same pattern as the shell/debug re-announces).
+  if (name === "/vim" && ok) {
+    announceOnline();
+  }
 }
 
 /** Admits one event to the prompt projection and recomputes the derived history.
