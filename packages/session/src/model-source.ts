@@ -94,6 +94,12 @@ export interface CatalogEntry {
   readonly reasoningLevels: readonly string[];
   /** The reasoning level to default to within {@link reasoningLevels}; "off" when there is none. */
   readonly defaultReasoning: string;
+  /** LM Studio quantization label (LOCAL source only), e.g. "8bit"/"4bit" - the differentiator that
+   *  tells two same-id quants apart in the chooser. Absent for cloud entries and for a local model
+   *  whose native `/api/v0` record was unavailable (the id-only degraded shape). */
+  readonly quantization?: string;
+  /** Model architecture family (LOCAL source only), e.g. "qwen3". Absent for cloud entries. */
+  readonly arch?: string;
 }
 
 /** The catalog entry for a model reference within a per-source catalog map (`catalogBySource`), or
@@ -167,6 +173,12 @@ export function decodeCatalogEntry(v: unknown): CatalogEntry {
     freshness: decodeFreshness(r.freshness),
     reasoningLevels: asStringArray(r.reasoningLevels),
     defaultReasoning: typeof r.defaultReasoning === "string" ? r.defaultReasoning : "off",
+    // Optional local-only fields: kept absent (not null) when missing so the entry round-trips and
+    // cloud entries stay free of them.
+    ...(typeof r.quantization === "string" && r.quantization
+      ? { quantization: r.quantization }
+      : {}),
+    ...(typeof r.arch === "string" && r.arch ? { arch: r.arch } : {}),
   };
 }
 

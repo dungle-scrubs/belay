@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M1 - Local Fetch via `/api/v0/models`
-- **Completed:** 4 / 37
-- **Current cutoff blockers:** 33
+- **Current focus:** M4 - Disambiguating Display
+- **Completed:** 25 / 37
+- **Current cutoff blockers:** 12
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -21,41 +21,41 @@
 
 #### M1: Local Fetch via `/api/v0/models`
 
-- [ ] RED: Add a test where a fake LM Studio `/api/v0/models` returns two same-id quants; assert the local fetch yields enriched models carrying `quantization`, `type`, `arch`, `max_context_length`, and `capabilities`.
-- [ ] GREEN: Extend the local branch of `fetchSourceModels`/`LiveModel` to query `/api/v0/models` and map the native fields; keep cloud/gateway/api-key sources on `/v1/models`.
-- [ ] RED: Add tests for degradation - `/api/v0` unreachable, non-OK, or missing fields - asserting an id-only entry plus `stale`, never a dropped model.
-- [ ] GREEN: Implement the id-only fallback and stale marking on the local path.
-- [ ] REFACTOR: Factor a shared native-record parser used by both `fetchSourceModels` and `LmStudioClient.fetchModelInfo()` so `/api/v0` is parsed in one place.
+- [x] RED: Add a test where a fake LM Studio `/api/v0/models` returns two same-id quants; assert the local fetch yields enriched models carrying `quantization`, `type`, `arch`, `max_context_length`, and `capabilities`.
+- [x] GREEN: Extend the local branch of `fetchSourceModels`/`LiveModel` to query `/api/v0/models` and map the native fields; keep cloud/gateway/api-key sources on `/v1/models`.
+- [x] RED: Add tests for degradation - `/api/v0` unreachable, non-OK, or missing fields - asserting an id-only entry plus `stale`, never a dropped model.
+- [x] GREEN: Implement the id-only fallback and stale marking on the local path.
+- [x] REFACTOR: Factor a shared native-record parser used by both `fetchSourceModels` and `LmStudioClient.fetchModelInfo()` so `/api/v0` is parsed in one place.
 
 #### M2: Extend `CatalogEntry` with Quantization + Arch
 
-- [ ] RED: Add contract tests that `CatalogEntry` carries optional `quantization` and `arch`, that they decode/round-trip, and that send-time model metadata preserves them.
-- [ ] GREEN: Add the optional fields to `CatalogEntry` in `packages/session/src/model-source.ts` and thread them through `entryFor`.
-- [ ] RED: Add tests proving cloud entries leave `quantization`/`arch` absent (no regression to the cloud path).
-- [ ] GREEN: Populate the new fields only for local entries.
-- [ ] REFACTOR: Keep the read-model change additive and backward-compatible for existing decoders.
+- [x] RED: Add contract tests that `CatalogEntry` carries optional `quantization` and `arch`, that they decode/round-trip, and that send-time model metadata preserves them.
+- [x] GREEN: Add the optional fields to `CatalogEntry` in `packages/session/src/model-source.ts` and thread them through `entryFor`.
+- [x] RED: Add tests proving cloud entries leave `quantization`/`arch` absent (no regression to the cloud path).
+- [x] GREEN: Populate the new fields only for local entries.
+- [x] REFACTOR: Keep the read-model change additive and backward-compatible for existing decoders.
 
 #### Gate 1-2
 
-- [ ] The local catalog fetch reads `/api/v0/models` and surfaces quantization/type/arch/context/capabilities.
-- [ ] `/api/v0` failure degrades to id-only + stale, never an empty or dropped local model.
-- [ ] `CatalogEntry` carries optional quantization/arch; cloud entries are unaffected.
+- [x] The local catalog fetch reads `/api/v0/models` and surfaces quantization/type/arch/context/capabilities.
+- [x] `/api/v0` failure degrades to id-only + stale, never an empty or dropped local model.
+- [x] `CatalogEntry` carries optional quantization/arch; cloud entries are unaffected.
 
 ### Phase 2: Live Capability Derivation
 
 #### M3: Derive Capabilities, Vision, and Context for Local
 
-- [ ] RED: Add tests asserting a local VLM (`type: "vlm"`) gets a `vision` capability; a model whose `capabilities` lacks `tool_use` does NOT get `tools`; tools/reasoning reflect the native record.
-- [ ] GREEN: In `entryFor`, derive `capabilities` and `vision` for local entries from the native `capabilities`/`type` instead of the hardcoded `["tools"]` + cloud-only `input` lookup.
-- [ ] RED: Add a test that a local entry's `contextLength` comes from native `max_context_length`, still overridable by `models.json` via `resolveContextWindow`.
-- [ ] GREEN: Source local `contextLength` from the native record while preserving the override precedence.
-- [ ] REFACTOR: Separate the local vs cloud capability-derivation paths cleanly so neither hardcodes the other's assumptions.
+- [x] RED: Add tests asserting a local VLM (`type: "vlm"`) gets a `vision` capability; a model whose `capabilities` lacks `tool_use` does NOT get `tools`; tools/reasoning reflect the native record.
+- [x] GREEN: In `entryFor`, derive `capabilities` and `vision` for local entries from the native `capabilities`/`type` instead of the hardcoded `["tools"]` + cloud-only `input` lookup.
+- [x] RED: Add a test that a local entry's `contextLength` comes from native `max_context_length`, still overridable by `models.json` via `resolveContextWindow`.
+- [x] GREEN: Source local `contextLength` from the native record while preserving the override precedence.
+- [x] REFACTOR: Separate the local vs cloud capability-derivation paths cleanly so neither hardcodes the other's assumptions.
 
 #### Gate 2-3
 
-- [ ] Local capability chips reflect the runtime's real `capabilities`/`type`.
-- [ ] Local VLMs show Vision; non-tool local models do not show Tools.
-- [ ] Local context length comes from the native record, override precedence intact.
+- [x] Local capability chips reflect the runtime's real `capabilities`/`type`.
+- [x] Local VLMs show Vision; non-tool local models do not show Tools.
+- [x] Local context length comes from the native record, override precedence intact.
 
 ### Phase 3: Chooser Display and Verification
 

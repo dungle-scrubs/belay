@@ -111,6 +111,47 @@ test("decodeCatalogEntry defaults unknown context length and cost tier to null",
   assert.equal(decodeCatalogEntry({ modelId: "m", costTier: "cheap" }).costTier, null);
 });
 
+test("decodeCatalogEntry round-trips the optional local quantization + arch fields", () => {
+  // A local entry carries quantization + arch; they survive a JSON round-trip (send-time metadata).
+  const local: CatalogEntry = {
+    sourceId: "lmstudio",
+    modelId: "unsloth/qwen3.6-27b-mlx",
+    displayName: "unsloth/qwen3.6-27b-mlx",
+    kind: "local",
+    capabilities: ["tools", "reasoning"],
+    contextLength: 262144,
+    costTier: null,
+    aliases: [],
+    freshness: { refreshedAt: null, stale: false },
+    reasoningLevels: ["off", "on"],
+    defaultReasoning: "off",
+    quantization: "8bit",
+    arch: "qwen3",
+  };
+  const decoded = decodeCatalogEntry(JSON.parse(JSON.stringify(local)));
+  assert.deepEqual(decoded, local);
+  assert.equal(decoded.quantization, "8bit");
+  assert.equal(decoded.arch, "qwen3");
+});
+
+test("decodeCatalogEntry leaves quantization + arch ABSENT for a cloud entry (no regression)", () => {
+  const cloud = decodeCatalogEntry({
+    sourceId: "openai",
+    modelId: "gpt-x",
+    displayName: "GPT-X",
+    kind: "cloud",
+    capabilities: ["tools"],
+    contextLength: 200000,
+  });
+  // The keys are absent, not present-and-undefined, so a cloud entry stays free of the local fields.
+  assert.ok(!("quantization" in cloud), "no quantization key on a cloud entry");
+  assert.ok(!("arch" in cloud), "no arch key on a cloud entry");
+  // A blank/garbled value is dropped rather than carried as an empty string.
+  const blank = decodeCatalogEntry({ modelId: "m", quantization: "", arch: 7 });
+  assert.ok(!("quantization" in blank));
+  assert.ok(!("arch" in blank));
+});
+
 const summary = (over: Partial<SourceSummary>): SourceSummary => ({
   sourceId: "s",
   type: "oauth",

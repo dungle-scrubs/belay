@@ -3,7 +3,6 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
 import type {
   CatalogEntry,
   CatalogFreshness,
-  ModelKind,
   SourceStatus,
   SourceSummary,
   SourceType,
@@ -11,6 +10,7 @@ import type {
 import { anthropicProvider } from "./anthropic";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
+import { lmStudioIsVision, lmStudioSupportsTools } from "./lmstudio-native";
 import { reloadModelOverrides, resolveContextWindow } from "./model-metadata-overrides";
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
@@ -176,14 +176,29 @@ function reasoningLevelsFor(source: SourceDef, model: PiModel | undefined): read
 const NON_CHAT_LOCAL =
   /embed|embedding|gliner|rerank|reranker|privacy-filter|whisper|\btts\b|bge-/i;
 
-/** Builds a {@link CatalogEntry} for one source model, enriched from the pi-ai shape. The display
- *  name prefers pi-ai's curated name, then the provider's live name, then the raw id - so a model
- *  pi-ai has never heard of still shows the provider's label instead of a bare id. The source's
- *  freshness (stale when its live /models fetch failed) is carried onto each entry. */
+/** Builds a {@link CatalogEntry} for one source model, dispatching on where the model RUNS: a local
+ *  (LM Studio) model derives its capabilities/context from the native `/api/v0` record carried on the
+ *  live model, while a cloud model enriches from the pi-ai registry shape. The two paths are kept
+ *  separate so neither hardcodes the other's assumptions (D-003). */
 function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshness): CatalogEntry {
   const model = piModelOf(source.piProvider, live.id);
-  const kind: ModelKind = source.type === "local" ? "local" : "cloud";
   const reasoningLevels = reasoningLevelsFor(source, model);
+  return source.type === "local"
+    ? localEntry(source, live, freshness, reasoningLevels)
+    : cloudEntry(source, live, freshness, model, reasoningLevels);
+}
+
+/** A CLOUD catalog entry (D-005, unchanged): capabilities seeded from the always-present tools plus the
+ *  pi-ai-derived reasoning surface and `input: ["...","image"]` vision; display name prefers pi-ai's
+ *  curated name, then the provider's live name, then the raw id; context is the override-or-bundled
+ *  window. */
+function cloudEntry(
+  source: SourceDef,
+  live: LiveModel,
+  freshness: CatalogFreshness,
+  model: PiModel | undefined,
+  reasoningLevels: readonly string[],
+): CatalogEntry {
   const capabilities: string[] = ["tools"];
   if (reasoningLevels.length > 1) {
     capabilities.push("reasoning");
@@ -195,7 +210,7 @@ function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshnes
     sourceId: source.sourceId,
     modelId: live.id,
     displayName: model?.name ?? live.name ?? live.id,
-    kind,
+    kind: "cloud",
     capabilities,
     // A confirmed override wins over pi-ai's bundled (possibly stale) contextWindow (02.16 D-003).
     contextLength: resolveContextWindow(live.id, model?.contextWindow),
@@ -204,6 +219,48 @@ function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshnes
     freshness,
     reasoningLevels,
     defaultReasoning: defaultReasoningLevel(reasoningLevels),
+  };
+}
+
+/** A LOCAL (LM Studio) catalog entry: capabilities, vision, context, quantization, and arch come from
+ *  the model's native `/api/v0` record (D-003) - tools from the `tool_use` flag (so a non-tool model no
+ *  longer falsely shows Tools), vision from `type: "vlm"` (so a local VLM finally gets a Vision tag),
+ *  and context from `max_context_length` (still overridable by `models.json` via {@link
+ *  resolveContextWindow}). When the native record is absent (`/api/v0` was down) the entry degrades to
+ *  the id-only shape: no tools/vision/quant, just the reasoning toggle (D-006). */
+function localEntry(
+  source: SourceDef,
+  live: LiveModel,
+  freshness: CatalogFreshness,
+  reasoningLevels: readonly string[],
+): CatalogEntry {
+  const native = live.native;
+  const capabilities: string[] = [];
+  if (native && lmStudioSupportsTools(native)) {
+    capabilities.push("tools");
+  }
+  if (reasoningLevels.length > 1) {
+    capabilities.push("reasoning");
+  }
+  if (native && lmStudioIsVision(native)) {
+    capabilities.push("vision");
+  }
+  return {
+    sourceId: source.sourceId,
+    modelId: live.id,
+    displayName: live.name ?? live.id,
+    kind: "local",
+    capabilities,
+    // The native max context, with the user's models.json override still winning (override precedence
+    // preserved); null when neither is known.
+    contextLength: resolveContextWindow(live.id, native?.maxContextLength),
+    costTier: null,
+    aliases: [],
+    freshness,
+    reasoningLevels,
+    defaultReasoning: defaultReasoningLevel(reasoningLevels),
+    ...(native?.quantization ? { quantization: native.quantization } : {}),
+    ...(native?.arch ? { arch: native.arch } : {}),
   };
 }
 

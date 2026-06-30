@@ -5,6 +5,12 @@ import { debug, log, warn } from "../log";
 import { msg } from "../messages";
 import { ModelLoadError, ProviderUnavailable } from "./errors";
 import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
+import {
+  type LmStudioModelRecord,
+  lmStudioIsVision,
+  lmStudioSupportsTools,
+  parseLmStudioModel,
+} from "./lmstudio-native";
 import type { ModelCapabilities, Readiness } from "./types";
 
 const execAsync = promisify(exec);
@@ -35,17 +41,6 @@ export interface LmStudioClientConfig {
   readonly providerId: string;
 }
 
-/** One LM Studio model's load state, as the native /api/v0 endpoint reports it. */
-interface ModelInfo {
-  /** "vlm" for a vision-language model, "llm" for text-only, "embeddings", etc. */
-  type?: string;
-  /** Feature flags LM Studio reports, e.g. ["tool_use"]. */
-  capabilities?: readonly string[];
-  state?: string;
-  loaded_context_length?: number;
-  max_context_length?: number;
-}
-
 export class LmStudioClient {
   private readonly native: string;
   /** Vision (`type: "vlm"`) and tools (`tool_use`) learned from the loaded model's record. */
@@ -73,8 +68,10 @@ export class LmStudioClient {
     return this.config.visionOverride ?? this.vision;
   }
 
-  /** This model's load state from LM Studio's native endpoint, or null if unreachable. */
-  private async fetchModelInfo(): Promise<ModelInfo | null> {
+  /** This model's load state from LM Studio's native endpoint, or null if unreachable. Parses the
+   *  native record through the shared {@link parseLmStudioModel}, so the catalog list fetch and this
+   *  per-model lookup decode `/api/v0` identically. */
+  private async fetchModelInfo(): Promise<LmStudioModelRecord | null> {
     try {
       const response = await fetch(
         `${this.native}/models/${encodeURIComponent(this.config.model)}`,
@@ -88,10 +85,15 @@ export class LmStudioClient {
         });
         return null;
       }
-      const info = (await response.json()) as ModelInfo;
-      this.vision = info.type === "vlm";
-      this.supportsTools = info.capabilities?.includes("tool_use") ?? this.supportsTools;
-      this.nativeContext = info.max_context_length ?? this.nativeContext;
+      const info = parseLmStudioModel(await response.json());
+      if (!info) {
+        return null;
+      }
+      this.vision = lmStudioIsVision(info);
+      // Keep the assumed-tools default when LM Studio reports no capability list; only a present list
+      // overrides it (an empty list genuinely means no tool use).
+      this.supportsTools = info.capabilities ? lmStudioSupportsTools(info) : this.supportsTools;
+      this.nativeContext = info.maxContextLength ?? this.nativeContext;
       this.learned = true;
       return info;
     } catch (cause) {
@@ -107,8 +109,7 @@ export class LmStudioClient {
     if (!info) {
       return { ready: false, warm: false };
     }
-    this.contextWindow =
-      info.loaded_context_length ?? info.max_context_length ?? this.contextWindow;
+    this.contextWindow = info.loadedContextLength ?? info.maxContextLength ?? this.contextWindow;
     return { ready: true, warm: info.state === "loaded" };
   }
 
@@ -138,7 +139,7 @@ export class LmStudioClient {
     }
     this.ensuring = (async () => {
       const info = await this.fetchModelInfo();
-      const max = info?.max_context_length;
+      const max = info?.maxContextLength;
       if (!max) {
         // Unreachable, or the model reports no ceiling: leave the load alone and serve whatever we
         // last knew. Record why so /doctor and the next turn can see it.
@@ -155,7 +156,7 @@ export class LmStudioClient {
         return served;
       }
       const target = Math.min(max, this.config.contextCap);
-      if (info.state === "loaded" && info.loaded_context_length === target) {
+      if (info.state === "loaded" && info.loadedContextLength === target) {
         this.lastError = null;
         this.contextWindow = target;
         return target;
@@ -164,7 +165,7 @@ export class LmStudioClient {
       log("lmstudio", "loading model at max context", {
         model: this.config.model,
         target,
-        from: info.loaded_context_length ?? "unloaded",
+        from: info.loadedContextLength ?? "unloaded",
         reload: info.state === "loaded",
       });
       try {
@@ -190,7 +191,7 @@ export class LmStudioClient {
           detail: msg(cause),
           cause,
         });
-        this.contextWindow = info.loaded_context_length ?? this.contextWindow;
+        this.contextWindow = info.loadedContextLength ?? this.contextWindow;
         warn("lmstudio", "load failed, keeping current context", {
           model: this.config.model,
           served: this.contextWindow || DEFAULT_CONTEXT_WINDOW,

@@ -69,6 +69,72 @@ test("buildCatalogSnapshot drops LM Studio non-chat models (embeddings, reranker
   );
 });
 
+test("a LOCAL entry derives capabilities, vision, context, and quantization from the native record", () => {
+  // Two same-id quants + a VLM + a non-tool model, each carrying its LM Studio native /api/v0 record.
+  const snap = buildCatalogSnapshot(auth, {
+    lmstudio: [
+      {
+        id: "unsloth/qwen3.6-27b-mlx",
+        native: {
+          id: "unsloth/qwen3.6-27b-mlx",
+          type: "llm",
+          arch: "qwen3",
+          quantization: "8bit",
+          maxContextLength: 262144,
+          capabilities: ["tool_use"],
+        },
+      },
+      {
+        id: "qwen/qwen3-vl-8b",
+        native: { id: "qwen/qwen3-vl-8b", type: "vlm", quantization: "4bit", capabilities: [] },
+      },
+    ],
+  });
+  const by = Object.fromEntries((snap.catalogBySource.lmstudio ?? []).map((e) => [e.modelId, e]));
+
+  // The tool-capable LLM: tools (from tool_use) + reasoning (the local thinking toggle), NO vision,
+  // native context + quantization + arch carried.
+  const qwen = by["unsloth/qwen3.6-27b-mlx"];
+  assert.ok(qwen?.capabilities.includes("tools"), "tool_use -> Tools chip");
+  assert.ok(qwen?.capabilities.includes("reasoning"));
+  assert.ok(!qwen?.capabilities.includes("vision"), "an llm is not vision");
+  assert.equal(qwen?.contextLength, 262144, "context comes from native max_context_length");
+  assert.equal(qwen?.quantization, "8bit");
+  assert.equal(qwen?.arch, "qwen3");
+
+  // The VLM with no tool_use: Vision (from type:vlm) but NOT Tools (capabilities lacked tool_use).
+  const vl = by["qwen/qwen3-vl-8b"];
+  assert.ok(vl?.capabilities.includes("vision"), "type:vlm -> Vision chip");
+  assert.ok(!vl?.capabilities.includes("tools"), "no tool_use -> no Tools chip");
+  assert.equal(vl?.quantization, "4bit");
+});
+
+test("a LOCAL entry with NO native record degrades to id-only: no tools/vision/quant, no crash", () => {
+  // A bare-id local model (native /api/v0 was down) keeps the reasoning toggle but gains no fabricated
+  // tools/vision/quant (D-006) - the disambiguating metadata is simply absent, the model still lists.
+  const snap = buildCatalogSnapshot(auth, { lmstudio: ["unsloth/qwen3.6-27b-mlx"] });
+  const entry = snap.catalogBySource.lmstudio?.[0];
+  assert.equal(entry?.modelId, "unsloth/qwen3.6-27b-mlx");
+  assert.equal(entry?.kind, "local");
+  assert.ok(!entry?.capabilities.includes("tools"), "no fabricated Tools without a native record");
+  assert.ok(
+    !entry?.capabilities.includes("vision"),
+    "no fabricated Vision without a native record",
+  );
+  assert.ok(entry?.capabilities.includes("reasoning"), "the local reasoning toggle still applies");
+  assert.equal(entry?.contextLength, null, "no native context -> null (override may still set it)");
+  assert.ok(!("quantization" in (entry ?? {})), "no quantization without a native record");
+  assert.ok(!("arch" in (entry ?? {})), "no arch without a native record");
+});
+
+test("CLOUD entries never carry quantization/arch and keep the pi-ai capability derivation (D-005)", () => {
+  const snap = buildCatalogSnapshot(auth, { zai: ["glm-5.2"] });
+  const entry = snap.catalogBySource.zai?.[0];
+  assert.ok(entry?.capabilities.includes("tools"), "cloud tools stays always-on");
+  assert.ok(!("quantization" in (entry ?? {})), "no quantization on a cloud entry");
+  assert.ok(!("arch" in (entry ?? {})), "no arch on a cloud entry");
+});
+
 test("a catalog entry carries the model's reasoning surface + capabilities (from the pi-ai shape)", () => {
   const snap = buildCatalogSnapshot(auth, { zai: ["glm-5.2"] });
   const entry = snap.catalogBySource.zai?.[0];

@@ -1,0 +1,144 @@
+import assert from "node:assert/strict";
+import { afterEach, test } from "vitest";
+import { fetchSourceModels } from "./source-models";
+
+/**
+ * The per-source live `/models` fetch (M1 / D-001, D-005, D-006). The local (LM Studio) source reads
+ * the NATIVE `/api/v0/models` endpoint so the catalog carries quantization / type / arch / context /
+ * capabilities; cloud/gateway/api-key sources stay on the OpenAI `/v1/models` id+name list. A native
+ * fetch that is unreachable, non-OK, or garbled degrades to the id-only shape with the source marked
+ * stale - never a dropped model. `fetch` is stubbed so the path is exercised hermetically.
+ */
+
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
+/** Stub `fetch` with a per-URL responder and capture the URLs the code requested. */
+function stubFetch(responder: (url: string) => { ok: boolean; status?: number; body?: unknown }) {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: unknown) => {
+    const url = String(input);
+    calls.push(url);
+    const res = responder(url);
+    return {
+      ok: res.ok,
+      status: res.status ?? (res.ok ? 200 : 500),
+      json: async () => res.body ?? {},
+    } as Response;
+  }) as typeof fetch;
+  return calls;
+}
+
+const TWO_QUANTS = {
+  object: "list",
+  data: [
+    {
+      id: "unsloth/qwen3.6-27b-mlx",
+      type: "llm",
+      arch: "qwen3",
+      quantization: "8bit",
+      state: "loaded",
+      max_context_length: 262144,
+      capabilities: ["tool_use"],
+    },
+    {
+      id: "lmstudio-community/qwen3.6-27b-mlx",
+      type: "llm",
+      arch: "qwen3",
+      quantization: "4bit",
+      state: "not-loaded",
+      max_context_length: 65536,
+      capabilities: ["tool_use"],
+    },
+  ],
+};
+
+test("the local source reads /api/v0/models and enriches each model with its native record", async () => {
+  const calls = stubFetch((url) =>
+    url.includes("/api/v0/models") ? { ok: true, body: TWO_QUANTS } : { ok: false, status: 404 },
+  );
+  const { models, stale } = await fetchSourceModels({ type: "local" }, null);
+
+  assert.equal(stale, false);
+  assert.ok(
+    calls.some((u) => u.includes("/api/v0/models")),
+    "the local fetch hits the native /api/v0/models endpoint",
+  );
+  assert.ok(
+    !calls.some((u) => /\/v1\/models$/.test(u)),
+    "the local fetch does NOT use the OpenAI /v1/models list",
+  );
+
+  // Two same-id quants come back distinct, each carrying its native record.
+  assert.deepEqual(
+    models.map((m) => m.id),
+    ["unsloth/qwen3.6-27b-mlx", "lmstudio-community/qwen3.6-27b-mlx"],
+  );
+  assert.equal(models[0]?.native?.quantization, "8bit");
+  assert.equal(models[0]?.native?.type, "llm");
+  assert.equal(models[0]?.native?.arch, "qwen3");
+  assert.equal(models[0]?.native?.maxContextLength, 262144);
+  assert.deepEqual(models[0]?.native?.capabilities, ["tool_use"]);
+  assert.equal(models[1]?.native?.quantization, "4bit");
+  assert.equal(models[1]?.native?.maxContextLength, 65536);
+});
+
+test("an unreachable /api/v0 degrades the local source to id-only + stale, never dropping models", async () => {
+  // The native endpoint throws (connection refused); the OpenAI /v1/models still lists the ids.
+  const calls = stubFetch((url) => {
+    if (url.includes("/api/v0/models")) {
+      throw new Error("connection refused");
+    }
+    return { ok: true, body: { data: [{ id: "unsloth/qwen3.6-27b-mlx" }] } };
+  });
+  const { models, stale } = await fetchSourceModels({ type: "local" }, null);
+
+  assert.equal(stale, true, "an unreachable native endpoint marks the source stale");
+  assert.deepEqual(
+    models.map((m) => m.id),
+    ["unsloth/qwen3.6-27b-mlx"],
+    "the model is still listed via the id-only fallback",
+  );
+  assert.equal(models[0]?.native, undefined, "no native record on the degraded entry");
+  assert.ok(
+    calls.some((u) => /\/v1\/models$/.test(u)),
+    "the degraded path falls back to the OpenAI /v1/models list",
+  );
+});
+
+test("a non-OK /api/v0 response degrades to id-only + stale", async () => {
+  stubFetch((url) => {
+    if (url.includes("/api/v0/models")) {
+      return { ok: false, status: 503 };
+    }
+    return { ok: true, body: { data: [{ id: "qwen/qwen3-vl-8b" }] } };
+  });
+  const { models, stale } = await fetchSourceModels({ type: "local" }, null);
+  assert.equal(stale, true);
+  assert.deepEqual(
+    models.map((m) => m.id),
+    ["qwen/qwen3-vl-8b"],
+  );
+  assert.equal(models[0]?.native, undefined);
+});
+
+test("cloud/gateway sources keep the OpenAI /v1/models id+name list (no native endpoint)", async () => {
+  const calls = stubFetch((url) =>
+    /\/v1\/models$/.test(url)
+      ? { ok: true, body: { data: [{ id: "glm-5.2", name: "GLM 5.2" }] } }
+      : { ok: false, status: 404 },
+  );
+  const { models, stale } = await fetchSourceModels(
+    { type: "api-key", piProvider: "zai", baseUrl: "https://api.z.ai/v1" },
+    "sk-zai-test",
+  );
+
+  assert.equal(stale, false);
+  assert.ok(
+    !calls.some((u) => u.includes("/api/v0")),
+    "a cloud source never touches the LM-Studio-only /api/v0 endpoint",
+  );
+  assert.deepEqual(models, [{ id: "glm-5.2", name: "GLM 5.2" }]);
+});
