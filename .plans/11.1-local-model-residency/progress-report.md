@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 48
+- **Current cutoff blockers:** 41
 - **Completed current work:** 5
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Consistent Per-Slot Context Cap
+- **Current focus:** M2 - Track Trevor-Loaded Models
 - **Note:** Phases 2-4 are gated on `.plans/11-local-admission-control` (shared store, lifecycle lease, generation registry); Phase 1 (context cap) has no plan 11 dependency. See implementation.md §0 for the full hard-dependency list.
 
 ## Completed Current State / Hard Dependencies
@@ -23,16 +23,16 @@
 
 #### M1: Consistent Per-Slot Context Cap
 
-- [ ] RED: Add a test asserting the 8-bit `qwen` slot loads at a capped context (not native 256k), and that the cap is consistent with the 4-bit slot's policy.
-- [ ] GREEN: Add a `maxContext` to the 8-bit slot in `index.ts` and make the per-slot cap policy explicit.
-- [ ] RED: Add a test that the cap remains overridable (`LMSTUDIO_MAX_CONTEXT` / per-slot `maxContext`).
-- [ ] GREEN: Preserve override precedence over the default cap.
-- [ ] REFACTOR: Unify the per-slot cap policy so 8-bit and 4-bit are not asymmetric by accident; document why the cap exists (KV-cache footprint).
+- [x] RED: Add a test asserting the 8-bit `qwen` slot loads at a capped context (not native 256k), and that the cap is consistent with the 4-bit slot's policy.
+- [x] GREEN: Add a `maxContext` to the 8-bit slot in `index.ts` and make the per-slot cap policy explicit.
+- [x] RED: Add a test that the cap remains overridable (`LMSTUDIO_MAX_CONTEXT` / per-slot `maxContext`).
+- [x] GREEN: Preserve override precedence over the default cap.
+- [x] REFACTOR: Unify the per-slot cap policy so 8-bit and 4-bit are not asymmetric by accident; document why the cap exists (KV-cache footprint).
 
 #### Gate 1-2
 
-- [ ] The 8-bit local slot no longer loads at native 256k by default.
-- [ ] The cap policy is consistent across local slots and overridable.
+- [x] The 8-bit local slot no longer loads at native 256k by default.
+- [x] The cap policy is consistent across local slots and overridable.
 
 ### Phase 2: Trevor-Loaded Tracking and Residency Claims
 

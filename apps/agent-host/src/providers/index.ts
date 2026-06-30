@@ -66,14 +66,14 @@ export function buildProviders(
       admissionGate,
     }),
     gpt: codexProvider("GPT-5.5"),
-    // Loaded at 64k - the working window, and the target compaction (D-036) keeps the prompt under
-    // by summarizing old turns. qwen3.6 is natively 256k-capable; 64k is the load cap we operate at
-    // (a balance of headroom vs. KV-cache memory). Overflow recovery (D-034) was validated against a
-    // tiny 6k cap; normal runs use 64k with compaction as the primary defense and recovery beneath it.
+    // Both local qwen slots load at the bounded DEFAULT_LOCAL_CONTEXT_CAP (64k) - the working window -
+    // CONSISTENTLY (plan 11.1 D-005): qwen3.6 is natively 256k-capable, but 64k is the load cap we
+    // operate at (a balance of headroom vs. KV-cache memory), and target compaction (D-036) keeps the
+    // prompt under it. The 8-bit slot above used to load at native 256k by accident; both now cap via
+    // the factory default. Overflow recovery (D-034) sits beneath compaction.
     qwen4bit: lmStudioProvider({
       model: "lmstudio-community/qwen3.6-27b-mlx",
       label: "Qwen 27B 4-bit (local)",
-      maxContext: 65536,
       admissionGate,
     }),
     // The static-key cloud providers (DeepSeek, Z.ai/GLM, MiniMax) come from one registry

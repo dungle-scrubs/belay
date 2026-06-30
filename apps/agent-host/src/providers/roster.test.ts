@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { buildProviders, DEFAULT_PROVIDER, pickProvider } from "./index";
+import { DEFAULT_LOCAL_CONTEXT_CAP, lmStudioProvider } from "./lmstudio";
 
 /**
  * Characterization test for the host's provider roster.
@@ -39,4 +40,41 @@ test("pickProvider resolves a known key and falls back to the default for an unk
   // Unknown key and a missing/non-string key both fall back to the default (qwen).
   assert.equal(pickProvider(providers, "nonexistent").describe().label, EXPECTED_LABELS.qwen);
   assert.equal(pickProvider(providers, undefined).describe().label, EXPECTED_LABELS.qwen);
+});
+
+test("both local qwen slots load at the bounded default context cap, not the native ceiling (11.1 M1)", () => {
+  const providers = buildProviders();
+  // The 8-bit slot used to load at native 256k ("model-max"); it now caps at the bounded default,
+  // consistent with the 4-bit slot.
+  assert.equal(
+    providers.qwen?.debugInfo?.().cap,
+    DEFAULT_LOCAL_CONTEXT_CAP,
+    "8-bit slot is capped",
+  );
+  assert.equal(
+    providers.qwen4bit?.debugInfo?.().cap,
+    DEFAULT_LOCAL_CONTEXT_CAP,
+    "4-bit slot matches",
+  );
+});
+
+test("the local context cap stays overridable per-slot and via LMSTUDIO_MAX_CONTEXT (11.1 M1)", () => {
+  // A per-slot maxContext wins over the default.
+  assert.equal(
+    lmStudioProvider({ model: "m", label: "L", maxContext: 32_000 }).debugInfo().cap,
+    32_000,
+  );
+
+  // LMSTUDIO_MAX_CONTEXT overrides the default for a slot without its own cap.
+  const prev = process.env.LMSTUDIO_MAX_CONTEXT;
+  process.env.LMSTUDIO_MAX_CONTEXT = "100000";
+  try {
+    assert.equal(lmStudioProvider({ model: "m", label: "L" }).debugInfo().cap, 100_000);
+  } finally {
+    if (prev === undefined) {
+      delete process.env.LMSTUDIO_MAX_CONTEXT;
+    } else {
+      process.env.LMSTUDIO_MAX_CONTEXT = prev;
+    }
+  }
 });

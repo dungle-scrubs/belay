@@ -35,6 +35,16 @@ export interface LmStudioConfig {
   readonly admissionGate?: LocalAdmissionGate;
 }
 
+/**
+ * The default context (tokens) a local model loads at when neither a per-slot `maxContext` nor
+ * `LMSTUDIO_MAX_CONTEXT` is set (plan 11.1 D-005). A bounded default rather than the model's native
+ * ceiling (e.g. qwen3.6's 256k) because the load context sizes the KV cache, and a too-large window is a
+ * direct unified-memory/GPU pressure that contributed to a stalled local turn. Every local slot caps
+ * here CONSISTENTLY (the 8-bit and 4-bit qwen slots no longer differ by accident); target compaction
+ * keeps the prompt under the window, and a slot that genuinely needs more raises its own `maxContext`.
+ */
+export const DEFAULT_LOCAL_CONTEXT_CAP = 65_536;
+
 /** Reads the LMSTUDIO_VISION override into a tri-state: true/false force image support, null
  *  auto-detects from the loaded model type. */
 function visionOverride(value: string | undefined): boolean | null {
@@ -54,7 +64,8 @@ function visionOverride(value: string | undefined): boolean | null {
 export function lmStudioProvider(opts: {
   readonly model: string;
   readonly label: string;
-  /** Pins this model's load below its native ceiling; takes precedence over LMSTUDIO_MAX_CONTEXT. */
+  /** Pins this model's load below the {@link DEFAULT_LOCAL_CONTEXT_CAP} default; takes precedence over
+   *  LMSTUDIO_MAX_CONTEXT. */
   readonly maxContext?: number;
   /** The host's local-admission gate; omitted in tests / when admission is disabled. */
   readonly admissionGate?: LocalAdmissionGate;
@@ -63,7 +74,9 @@ export function lmStudioProvider(opts: {
     url: process.env.LMSTUDIO_URL ?? DEFAULT_LMSTUDIO_URL,
     model: opts.model,
     label: opts.label,
-    contextCap: opts.maxContext ?? envNumber("LMSTUDIO_MAX_CONTEXT", Number.POSITIVE_INFINITY),
+    // Cap precedence: explicit per-slot maxContext, else LMSTUDIO_MAX_CONTEXT, else the bounded default
+    // (so every local slot is capped consistently, not left at the model's native ceiling).
+    contextCap: opts.maxContext ?? envNumber("LMSTUDIO_MAX_CONTEXT", DEFAULT_LOCAL_CONTEXT_CAP),
     visionOverride: visionOverride(process.env.LMSTUDIO_VISION),
     lmsBin: process.env.LMS_BIN ?? "lms",
     admissionGate: opts.admissionGate,
