@@ -16,12 +16,14 @@ function ComposerHarness({
   uploading = 0,
   uploadError = null,
   showSlashMenu = false,
+  vimEnabled = false,
 }: {
   initialDraft?: string;
   attachments?: readonly ArtifactRef[];
   uploading?: number;
   uploadError?: string | null;
   showSlashMenu?: boolean;
+  vimEnabled?: boolean;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [chips, setChips] = useState<readonly ArtifactRef[]>(attachments);
@@ -71,6 +73,8 @@ function ComposerHarness({
           onKeyDown={() => {}}
           disabled={false}
           placeholder="message qwen… (/ for commands, ! for shell)"
+          vimEnabled={vimEnabled}
+          menuOpen={showSlashMenu}
         />
       </div>
     </div>
@@ -140,4 +144,17 @@ export const BangWithAttachment: Story = {
       uploadError="couldn't attach huge.bin: file too large"
     />
   ),
+};
+
+/** Vim mode enabled (plan 06): the INSERT indicator rides the bottom row next to the expand button.
+ *  Focus the textarea and press Escape to walk insert -> normal -> visual (the indicator updates). */
+export const VimMode: Story = {
+  name: "Vim mode (enabled)",
+  render: () => <ComposerHarness initialDraft="refactor the turn scheduler" vimEnabled />,
+};
+
+/** Vim mode in the shell lane: the indicator keeps its place next to the shell glyph. */
+export const VimShellLane: Story = {
+  name: "Vim mode + shell lane",
+  render: () => <ComposerHarness initialDraft="!pnpm test" vimEnabled />,
 };

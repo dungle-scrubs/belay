@@ -23,11 +23,15 @@
 - [x] GREEN: Default Vim mode to disabled and surface parse errors without blocking Trevor startup
 - [x] REFACTOR: Document the config key and keep browser-only storage out of the preference source of truth
 
+## M2: Storybook Mode Indicator Contract
+
 - [x] RED: Add Storybook/state tests or stories for the prompt bottom row with insert, normal, visual, disabled, shell lane, and narrow widths
 - [x] GREEN: Render a compact stable mode indicator next to the upload `+` button when Vim mode is enabled
 - [x] RED: Add visual states with the shell glyph replacing `+`, upload disabled, uploading, and upload error
 - [x] GREEN: Keep indicator placement stable beside the `+`/shell glyph without composer height reflow
 - [x] REFACTOR: Extract a small presentational component for mode indicator states
+
+## M3: `vimeejs/vimee` Evaluation Spike
 
 - [x] RED: Build a throwaway Storybook or test harness that exercises `vimeejs/vimee` against the production textarea constraints
 - [x] GREEN: Evaluate insert, normal, visual, cursor movement, selection, undo/redo interaction, IME/composition behavior, and textarea selection APIs
@@ -35,11 +39,15 @@
 - [x] GREEN: Record whether to adopt `vimeejs/vimee`, wrap it, or write a small local prompt-only controller
 - [x] REFACTOR: Remove spike-only code unless it becomes the chosen implementation
 
-- [ ] RED: Add unit tests for mode transitions: focus starts insert, Esc to normal, normal to visual, visual Esc to normal, normal insert commands back to insert
-- [ ] GREEN: Implement the prompt-local Vim mode state machine
-- [ ] RED: Add tests proving insert mode preserves existing textarea typing, paste, composition, and text selection behavior
-- [ ] GREEN: Route only normal/visual-mode keys through Vim handling; leave insert-mode typing native
-- [ ] REFACTOR: Keep the controller independent of React rendering so it is testable without jsdom where possible
+## M4: Prompt Vim State Machine
+
+- [x] RED: Add unit tests for mode transitions: focus starts insert, Esc to normal, normal to visual, visual Esc to normal, normal insert commands back to insert
+- [x] GREEN: Implement the prompt-local Vim mode state machine
+- [x] RED: Add tests proving insert mode preserves existing textarea typing, paste, composition, and text selection behavior
+- [x] GREEN: Route only normal/visual-mode keys through Vim handling; leave insert-mode typing native
+- [x] REFACTOR: Keep the controller independent of React rendering so it is testable without jsdom where possible
+
+## M5: Motion and Editing Subset
 
 - [x] RED: Add tests for first-cut motions: `h/j/k/l`, `w`, `b`, `0`, `$`, `gg`, `G`, and line-aware movement in a textarea
 - [x] GREEN: Implement the approved first-cut normal-mode movement subset
@@ -69,6 +77,16 @@
 
 - [x] RED: Add Storybook interaction tests for mode transitions and indicator updates
 - [x] GREEN: Make Storybook states pass for insert, normal, visual, shell, slash, image tokens, upload, and narrow/mobile widths
-- [x] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (Escape enters normal-mode there without closing it)
-- [x] GREEN: Verify live behavior with preference enabled and disabled, on both prompt surfaces
+- [ ] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (Escape enters normal-mode there without closing it)
+- [ ] GREEN: Verify live behavior with preference enabled and disabled, on both prompt surfaces
 - [x] REFACTOR: Update user-facing config docs and AGENTS guidance for the Vim preference
+
+## Deferred manual EZE (needs the live app + a `vim.json` config)
+
+Set `~/.trevorV2/vim.json` to `{ "enabled": true }`, start the host + web, then in BOTH the composer
+and the full-surface editor (open via the composer expand button): type in insert; Escape to normal
+(the indicator flips, and in the editor Escape does NOT close it); move with `h/j/k/l/w/b/0/$/gg/G`;
+`v` then a motion to select; `i`/`a` back to insert; submit with Enter. Confirm: with `vim.json` absent
+or `{ "enabled": false }` the composer is exactly the plain composer (no indicator, native typing).
+Every gate item's engineering is automatically covered (the controller, useVim, and editor tests); only
+the live visual/interaction sign-off remains.

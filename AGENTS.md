@@ -60,10 +60,13 @@ explicitly adds a new root.
 
 - **User settings and editable config** live under `TREVOR_HOME`, defaulting to
   `~/.trevorV2`. This is hand-editable, portable configuration only - the
-  user-global `AGENTS.md` and `config.jsonc` - not runtime state. The single code
-  owner for the env override and default directory name is the node-only
-  `@trevor/session/node-paths` subpath; Node packages should import `TREVOR_HOME`
-  or `resolveTrevorHome` from there instead of spelling `~/.trevorV2` themselves.
+  user-global `AGENTS.md` and `config.jsonc`, plus small per-concern preference
+  files like `style.json` (`{ activeStyle }`) and `vim.json`
+  (`{ "enabled": true }` opts the prompt composer into Vim motions; disabled by
+  default) - not runtime state. The single code owner for the env override and
+  default directory name is the node-only `@trevor/session/node-paths` subpath;
+  Node packages should import `TREVOR_HOME` or `resolveTrevorHome` from there
+  instead of spelling `~/.trevorV2` themselves.
 - **All machine-local runtime state** lives under `TREVOR_STATE_HOME`, defaulting
   to `${XDG_STATE_HOME:-~/.local/state}/trevorV2`. This is everything the app owns
   at runtime: the session-store SQLite database, blob-store bytes, managed
