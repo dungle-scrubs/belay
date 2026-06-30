@@ -726,6 +726,9 @@ export const events = {
     sources?: readonly SourceSummary[];
     /** The per-source model catalog (D-065), keyed by sourceId. */
     catalog?: Readonly<Record<string, readonly CatalogEntry[]>>;
+    /** Whether the host's Vim-mode prompt preference is enabled (plan 06), so the web gates the
+     *  composer's opt-in Vim motions on a host-owned setting instead of browser state. */
+    vimEnabled?: boolean;
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
@@ -743,6 +746,7 @@ export const events = {
       ...(p.internet ? { internet: p.internet } : {}),
       ...(p.sources ? { sources: p.sources } : {}),
       ...(p.catalog ? { catalog: p.catalog } : {}),
+      ...(p.vimEnabled !== undefined ? { vimEnabled: p.vimEnabled } : {}),
     },
   }),
   /**

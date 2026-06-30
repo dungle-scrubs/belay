@@ -339,6 +339,15 @@ export function defaultProviderFrom(events: readonly SessionEvent[]): string | u
 }
 
 /**
+ * Whether the host announced Vim-mode prompt motions as enabled (plan 06). The host owns the preference
+ * (its vim.json config) and ships it on host.online; the composer gates its opt-in Vim layer on this
+ * instead of browser state. Defaults to false until a host announces (no host -> no Vim mode).
+ */
+export function vimEnabledFrom(events: readonly SessionEvent[]): boolean {
+  return latest(events, (d) => (d.type === "host.online" ? d.vimEnabled : undefined)) ?? false;
+}
+
+/**
  * The FRESHEST task checklist the host published (empty when there are no tasks / cleared). Selects by
  * the snapshot's monotonic revision rather than blindly taking the last array entry, so a stale
  * `tasks.current` - one with an older revision that arrives or is replayed after a newer one - cannot

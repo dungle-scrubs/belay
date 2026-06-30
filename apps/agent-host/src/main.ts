@@ -107,6 +107,7 @@ import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
 import { runCommand as runShellCommandResult } from "./tools/run-shell";
 import { publishTurn } from "./turn";
+import { vimEnabled } from "./vim/vim-store";
 import { resolveCdTarget } from "./workspace-switch";
 import { nodeWorktreeManager } from "./worktrees";
 
@@ -1049,6 +1050,9 @@ function announceOnline(): void {
       // first async load completes (then a re-announce fills them in).
       sources: catalog.sources,
       catalog: catalog.catalogBySource,
+      // The host-owned Vim-mode prompt preference (plan 06), so the web gates its opt-in composer
+      // motions on this machine's vim.json config rather than per-tab browser state.
+      vimEnabled: vimEnabled(),
     }),
   ).catch(() => {});
 }

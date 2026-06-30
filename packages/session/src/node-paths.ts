@@ -246,6 +246,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     relativePath: "style.json",
     description: "Active output-style preference (plan 03): { activeStyle }.",
   },
+  {
+    name: "vim-pref",
+    category: "config",
+    relativePath: "vim.json",
+    description: "Vim-mode prompt preference (plan 06): { enabled }.",
+  },
   // state (TREVOR_STATE_HOME) - all machine-local runtime state
   {
     name: "sessions-db",

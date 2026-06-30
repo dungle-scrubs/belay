@@ -50,6 +50,13 @@ export const USER_MODELS_JSON = join(TREVOR_HOME, "models.json");
 export const USER_STYLE_JSON = join(TREVOR_HOME, "style.json");
 
 /**
+ * The user's Vim-mode prompt preference (plan 06): a small `{ enabled }` JSON under the config home,
+ * read at host startup and announced to the web (so opt-in Vim motions follow Trevor sessions on this
+ * machine). Host-owned + portable (travels with `TREVOR_HOME`); disabled unless this file enables it.
+ */
+export const USER_VIM_JSON = join(TREVOR_HOME, "vim.json");
+
+/**
  * The directory the workspace-confined tools operate inside. Point the agent at a
  * target repo with TREVOR_WORKSPACE; defaults to the host's working directory.
  * Confinement is a path-escape guard (no `../` or absolute path may leave the

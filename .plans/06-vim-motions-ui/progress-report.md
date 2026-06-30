@@ -10,18 +10,18 @@
 
 ## Hard Dependencies
 
-- [ ] `03-filesystem-root-taxonomy` complete before adding the `~/.trevorV2` Vim preference
+- [x] `03-filesystem-root-taxonomy` complete (no plan dir; TREVOR_HOME + config home settled in node-paths.ts)
 - [x] `.plans/trevor-v2` D-083/D-084 prompt composer recovery/history exists
 - [x] `.plans/trevor-v2` D-092 image attachment UX exists
 - [x] `02.12-prompt-surface-editor` full-surface editor exists - a second prompt textarea Vim mode must serve (D-007)
 
 ## M1: Config Preference Boundary
 
-- [ ] RED: Add tests for reading a Vim-mode preference from the `~/.trevorV2` config file with `TREVOR_HOME` override support
-- [ ] GREEN: Implement a typed config reader/writer or extend the existing config model for `vim.enabled`
-- [ ] RED: Add tests for missing config, malformed config, and explicit disabled state
-- [ ] GREEN: Default Vim mode to disabled and surface parse errors without blocking Trevor startup
-- [ ] REFACTOR: Document the config key and keep browser-only storage out of the preference source of truth
+- [x] RED: Add tests for reading a Vim-mode preference from the `~/.trevorV2` config file with `TREVOR_HOME` override support
+- [x] GREEN: Implement a typed config reader/writer or extend the existing config model for `vim.enabled`
+- [x] RED: Add tests for missing config, malformed config, and explicit disabled state
+- [x] GREEN: Default Vim mode to disabled and surface parse errors without blocking Trevor startup
+- [x] REFACTOR: Document the config key and keep browser-only storage out of the preference source of truth
 
 ## M2: Storybook Mode Indicator Contract
 

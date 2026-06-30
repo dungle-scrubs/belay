@@ -529,6 +529,8 @@ export type DecodedEvent =
       readonly sources: readonly SourceSummary[];
       /** Per-source model catalog (D-065), keyed by sourceId; empty when none announced. */
       readonly catalog: Readonly<Record<string, readonly CatalogEntry[]>>;
+      /** Whether the host's Vim-mode prompt preference is on (plan 06); false when unannounced. */
+      readonly vimEnabled: boolean;
     }
   | {
       readonly type: "provider.question.requested";
@@ -810,6 +812,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         internet: coerceInternetSnapshot(p.internet),
         sources: Array.isArray(p.sources) ? p.sources.map(decodeSourceSummary) : [],
         catalog: coerceCatalog(p.catalog),
+        vimEnabled: p.vimEnabled === true,
       };
     case "provider.question.requested":
       return {

@@ -27,6 +27,7 @@ import {
   tasksFrom,
   tasksStale,
   toolSummary,
+  vimEnabledFrom,
 } from "./derive";
 
 /**
@@ -129,6 +130,17 @@ test("providerModelsFrom / defaultProviderFrom / commandsFrom take the latest ho
   const commands = commandsFrom([online("h1")]);
   assert.equal(commands.length, 1);
   assert.equal(commands[0]?.name, "/clear");
+});
+
+test("vimEnabledFrom reflects the latest host.online preference (plan 06), false with no host", () => {
+  assert.equal(vimEnabledFrom([]), false, "no host announced -> Vim mode off");
+  assert.equal(vimEnabledFrom([online("h1")]), false, "host announced no preference -> off");
+  assert.equal(vimEnabledFrom([online("h1", { vimEnabled: true })]), true);
+  // Latest host.online wins (the host re-announces when the preference changes).
+  assert.equal(
+    vimEnabledFrom([online("h1", { vimEnabled: true }), online("h1", { vimEnabled: false })]),
+    false,
+  );
 });
 
 test("isSessionArchived reflects the latest session.archived event (D-094)", () => {
