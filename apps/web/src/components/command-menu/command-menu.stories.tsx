@@ -52,7 +52,17 @@ const meta: Meta<typeof CommandMenu> = {
   title: "CommandMenu/CommandMenu",
   component: CommandMenu,
   parameters: { layout: "fullscreen" },
-  args: { onAction: () => {}, onClose: () => {} },
+  // The menu fills its container's height (its row list is `flex-1`), so - like the other
+  // transcript-takeover stories - frame it in a fixed-size panel and stretch it with `h-full`. Without a
+  // definite parent height the `flex-1` list collapses to 0 and only the header/search would show.
+  args: { onAction: () => {}, onClose: () => {}, className: "h-full" },
+  decorators: [
+    (Story) => (
+      <div className="h-[560px] w-[440px] overflow-hidden rounded-lg border border-border">
+        <Story />
+      </div>
+    ),
+  ],
 };
 export default meta;
 type Story = StoryObj<typeof CommandMenu>;
