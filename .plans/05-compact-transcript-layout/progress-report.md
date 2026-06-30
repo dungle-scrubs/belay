@@ -19,11 +19,11 @@
 
 ### M2: Shared Compact Row Component
 
-- [ ] RED: Add Storybook stories for compact row visual states: running, done, error, aborted, expandable/detail-eligible, no-detail, long path, long command, narrow width, and high-density lists
-- [ ] GREEN: Build the shared one-line compact row chrome
-- [ ] RED: Add interaction tests for row actions and accessible labels without layout shifts
-- [ ] GREEN: Implement stable sizing, truncation, loader/progress indicators, and consistent hover/focus styles
-- [ ] REFACTOR: Move repeated status/icon mapping into one display helper if existing helpers are insufficient
+- [x] RED: Add Storybook stories for compact row visual states: running, done, error, aborted, expandable/detail-eligible, no-detail, long path, long command, narrow width, and high-density lists
+- [x] GREEN: Build the shared one-line compact row chrome
+- [x] RED: Add interaction tests for row actions and accessible labels without layout shifts
+- [x] GREEN: Implement stable sizing, truncation, loader/progress indicators, and consistent hover/focus styles
+- [x] REFACTOR: Move repeated status/icon mapping into one display helper if existing helpers are insufficient
 
 ### Gate 1->2
 

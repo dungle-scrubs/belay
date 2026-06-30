@@ -32,6 +32,20 @@ import { toolMessageStatus } from "./tool-status";
 /** A compact row's lifecycle, reusing the tool `ToolStatus` axis plus a neutral `info` for quiet markers. */
 export type CompactStatus = "running" | "done" | "error" | "info";
 
+/** The one status -> icon color map for compact rows (the SMUI palette), so every compact row tints its
+ *  leading icon the same way. Extends the tool `running/done/error` colors with a muted `info`. */
+const COMPACT_STATUS_COLOR: Record<CompactStatus, string> = {
+  running: "text-smui-yellow",
+  done: "text-smui-frost-3",
+  error: "text-smui-red",
+  info: "text-muted-foreground",
+};
+
+/** The leading-icon color class for a compact status. */
+export function compactStatusColor(status: CompactStatus): string {
+  return COMPACT_STATUS_COLOR[status];
+}
+
 /** The one-line display descriptor for a compacted transcript row. */
 export interface CompactDisplay {
   /** The source message kind (never "user" - those stay full). */
