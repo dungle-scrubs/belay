@@ -351,6 +351,32 @@ export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
   return bestTasks ? [...bestTasks] : [];
 }
 
+/**
+ * Whether the live checklist is STALE: the model last touched it BEFORE the user's most recent
+ * message, so the panel is showing a plan the conversation has already moved past (the "stale tasks"
+ * complaint - e.g. an audit checklist still visible after the owner switched to a new request). A
+ * soft, non-destructive signal that only drives the panel's "stale" badge + dismiss nudge; the model
+ * staying silent on the checklist is exactly the abandonment this surfaces. An empty or absent
+ * checklist is never stale (the panel hides itself). Pure over the log. <!-- 09.1 -->
+ */
+export function tasksStale(events: readonly SessionEvent[]): boolean {
+  let lastTasksAt = -1;
+  let lastTasksEmpty = true;
+  let lastUserMessageAt = -1;
+
+  events.forEach((event, index) => {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "tasks.current") {
+      lastTasksAt = index;
+      lastTasksEmpty = decoded.tasks.length === 0;
+    } else if (decoded?.type === "user.message") {
+      lastUserMessageAt = index;
+    }
+  });
+
+  return lastTasksAt >= 0 && !lastTasksEmpty && lastUserMessageAt > lastTasksAt;
+}
+
 /** A pending ask_user question projected from the log: the contract to render + its lifecycle ids. */
 export interface PendingQuestion {
   readonly questionId: string;

@@ -95,10 +95,26 @@ export class TaskRegistry {
     }
   }
 
+  /**
+   * Resolves a model-supplied task id to a real registry key, tolerating a missing `task_` prefix.
+   * Models (esp. local ones like GLM/MiniMax) routinely call task_update with the BARE number - "36"
+   * for `task_36` - and a strict `Map.get` rejected those as `no such task`, so the model's progress
+   * updates silently failed and the checklist froze stale. Returns the canonical id when a matching
+   * task exists, else undefined (a genuinely unknown id still surfaces as not-found). <!-- 09.1 -->
+   */
+  resolveId(id: string): string | undefined {
+    const raw = id.trim();
+    if (this.tasks.has(raw)) {
+      return raw;
+    }
+    const prefixed = raw.startsWith("task_") ? raw : `task_${raw}`;
+    return this.tasks.has(prefixed) ? prefixed : undefined;
+  }
+
   /** A task may only start once every task it is blockedBy has completed. */
   private assertUnblocked(blockedBy: readonly string[]): void {
     for (const dep of blockedBy) {
-      const blocker = this.tasks.get(dep);
+      const blocker = this.tasks.get(this.resolveId(dep) ?? dep);
       if (blocker && blocker.status !== "completed") {
         throw new Error(`cannot start: blocked by ${dep} (${blocker.status})`);
       }
@@ -144,14 +160,14 @@ export class TaskRegistry {
   /** Updates a task, deletes it (status "deleted"), or auto-clears the checklist. Throws
    *  on an unknown id; the task tool catches that into the typed `E` channel. */
   update(id: string, fields: UpdateInput): UpdateResult {
-    const task = this.tasks.get(id);
+    const task = this.tasks.get(this.resolveId(id) ?? id);
 
     if (!task) {
       throw new Error(`no such task "${id}"`);
     }
 
     if (fields.status === "deleted") {
-      this.tasks.delete(id);
+      this.tasks.delete(task.id);
       this.notify();
       return { kind: "deleted" };
     }
@@ -198,6 +214,22 @@ export class TaskRegistry {
     this.notify();
 
     return cleared ? { kind: "cleared" } : { kind: "updated", task };
+  }
+
+  /**
+   * Clears the whole checklist at the user's request (the panel's dismiss control). Distinct from the
+   * auto-clear, which only fires when the model completes the LAST task (tasks.ts `update`): this lets
+   * the owner retire a checklist the model abandoned on a topic change - the gap behind the "stale
+   * tasks" complaint. Emits a fresh empty snapshot via `notify()` so standbys and every web client
+   * converge. Returns how many tasks were dropped (0 = already empty, no emit). <!-- 09.1 -->
+   */
+  clear(): number {
+    const count = this.tasks.size;
+    if (count > 0) {
+      this.tasks.clear();
+      this.notify();
+    }
+    return count;
   }
 
   list(): Task[] {

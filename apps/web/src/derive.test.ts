@@ -24,6 +24,7 @@ import {
   providerModelsFrom,
   summarizeProviderQuestion,
   tasksFrom,
+  tasksStale,
   toolSummary,
 } from "./derive";
 
@@ -229,6 +230,30 @@ test("tasksFrom picks the highest revision regardless of array position", () => 
     evt("tasks.current", { tasks: [{ id: "t1", subject: "mid", status: "completed" }], rev: 4 }),
   ]);
   assert.equal(snap[0]?.subject, "high");
+});
+
+// 09.1: the checklist is "stale" when the user spoke after the model last touched it (it may have
+// moved on to a new topic) - the soft signal behind the panel's stale badge + dismiss nudge.
+const task = (status: string) =>
+  evt("tasks.current", { tasks: [{ id: "t1", subject: "do it", status }], rev: 1 });
+const userMsg = () => evt("user.message", { text: "now do something else" });
+
+test("tasksStale: a user message after the latest tasks.current marks it stale", () => {
+  assert.equal(tasksStale([task("in_progress"), userMsg()]), true);
+});
+
+test("tasksStale: a checklist updated after the user's message is fresh", () => {
+  // The model answered and updated the list in the same turn - not stale.
+  assert.equal(tasksStale([userMsg(), task("in_progress")]), false);
+});
+
+test("tasksStale: no checklist (or an empty/cleared one) is never stale", () => {
+  assert.equal(tasksStale([userMsg()]), false, "no tasks.current at all");
+  assert.equal(
+    tasksStale([evt("tasks.current", { tasks: [], rev: 2 }), userMsg()]),
+    false,
+    "a cleared (empty) checklist is not stale - the panel already hides",
+  );
 });
 
 test("hostStatus (live presence): present with the live leader, others are standbys", () => {

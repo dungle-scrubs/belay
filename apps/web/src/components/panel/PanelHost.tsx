@@ -178,6 +178,10 @@ export function PanelHost(props: {
   transcript: TranscriptView;
   scroll: TranscriptScroll;
   tasks: readonly TaskSnapshot[];
+  /** The checklist is stale (the user spoke after the model last touched it); drives the panel badge. */
+  tasksStale?: boolean;
+  /** Dismiss the whole checklist (the abandoned-list escape hatch). */
+  onClearTasks?: () => void;
   panel: PanelBinding;
   choosers: ChooserBinding;
   sidebar: SidebarBinding;
@@ -202,7 +206,19 @@ export function PanelHost(props: {
     readonly onEdit: (handoffId: string, prompt: string) => void;
   };
 }) {
-  const { composer, compose, stream, host, transcript: tv, scroll, tasks, panel, choosers } = props;
+  const {
+    composer,
+    compose,
+    stream,
+    host,
+    transcript: tv,
+    scroll,
+    tasks,
+    tasksStale,
+    onClearTasks,
+    panel,
+    choosers,
+  } = props;
   const { sidebar, sessionName, chooser, archived, onUnarchive, question, handoff } = props;
   const { replayed } = stream;
   const {
@@ -355,7 +371,7 @@ export function PanelHost(props: {
         </div>
 
         {/* Live task checklist, above the composer. */}
-        <TasksPanel tasks={tasks} />
+        <TasksPanel tasks={tasks} stale={tasksStale} onClear={onClearTasks} />
 
         <QueuedPrompts queue={queue} />
 

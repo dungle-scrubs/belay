@@ -2376,6 +2376,13 @@ function handleEvent(message: SessionEvent): void {
         runClip(args).catch((error) => warn("host", "clip failed", { error: msg(error) }));
         return;
       }
+      if (command === "/tasks-clear") {
+        // The task panel's dismiss control (09.1): retire a checklist the model abandoned on a topic
+        // change. The empty tasks.current snapshot emitted via taskRegistry.onChange is the
+        // confirmation (the panel hides itself when the list is empty).
+        taskRegistry.clear();
+        return;
+      }
       runCommand(command, args).catch((error) =>
         warn("host", "command failed", { command, error: msg(error) }),
       );

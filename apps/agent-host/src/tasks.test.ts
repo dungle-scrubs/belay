@@ -140,3 +140,110 @@ test("loadIfFresh adopts the snapshot revision so later mutations stay monotonic
   assert.equal(registry.revision(), 10);
   assert.equal(next.id, "task_2"); // the seq id allocator also advanced past the loaded task_1
 });
+
+// --- 09.1: tolerant task-id resolution (the real bug behind the stale checklists) ---
+//
+// The registry stores ids as `task_<n>` and shows them that way in the prompt, but local models
+// (GLM-5.2, MiniMax) routinely call task_update with the BARE number ("36" for task_36). A strict
+// `Map.get` rejected those as `no such task`, so the model's progress updates silently failed and the
+// checklist froze stale. resolveId() now accepts both forms; a genuinely unknown id still errors.
+
+test("task_update tolerates a bare numeric id (the `task_` prefix is optional)", () => {
+  const registry = new TaskRegistry();
+  registry.create({ subject: "review security" }); // -> task_1
+
+  // The exact call shape observed in the event log: {"taskId":"1","status":"in_progress"}.
+  const result = registry.update("1", { status: "in_progress" });
+
+  assert.equal(result.kind, "updated");
+  assert.equal(registry.list()[0]?.status, "in_progress");
+});
+
+test("task_update still accepts the canonical `task_<n>` id", () => {
+  const registry = new TaskRegistry();
+  registry.create({ subject: "ship" }); // task_1
+
+  // Completing the only task auto-clears the finished checklist (unchanged behavior).
+  assert.equal(registry.update("task_1", { status: "completed" }).kind, "cleared");
+  assert.equal(registry.list().length, 0);
+});
+
+test("a bare id deletes the right task", () => {
+  const registry = new TaskRegistry();
+  registry.create({ subject: "a" }); // task_1
+  registry.create({ subject: "b" }); // task_2
+
+  assert.equal(registry.update("2", { status: "deleted" }).kind, "deleted");
+  assert.deepEqual(
+    registry.list().map((t) => t.id),
+    ["task_1"],
+  );
+});
+
+test("a genuinely unknown id still surfaces as not-found (the raw id is echoed back)", () => {
+  const registry = new TaskRegistry();
+  registry.create({ subject: "only" }); // task_1
+
+  assert.throws(() => registry.update("99", { status: "completed" }), /no such task "99"/);
+  assert.throws(
+    () => registry.update("task_99", { status: "completed" }),
+    /no such task "task_99"/,
+  );
+});
+
+test("resolveId maps a bare number to its canonical task id, else undefined", () => {
+  const registry = new TaskRegistry();
+  registry.create({ subject: "x" }); // task_1
+
+  assert.equal(registry.resolveId("1"), "task_1");
+  assert.equal(registry.resolveId("task_1"), "task_1");
+  assert.equal(registry.resolveId(" 1 "), "task_1"); // trims stray whitespace
+  assert.equal(registry.resolveId("2"), undefined);
+});
+
+test("blockedBy accepts a bare id so a dependency gate still resolves", () => {
+  const registry = new TaskRegistry();
+  registry.create({ subject: "blocker" }); // task_1 (pending)
+  registry.create({ subject: "blocked", blockedBy: ["1"] }); // task_2 blocked by the bare "1"
+
+  // The blocker is still pending, so starting task_2 (referencing it as "1") must be refused.
+  assert.throws(() => registry.update("2", { status: "in_progress" }), /blocked by/);
+
+  // Once the blocker completes, the gate opens.
+  registry.update("1", { status: "completed" });
+  assert.equal(registry.update("2", { status: "in_progress" }).kind, "updated");
+});
+
+// --- 09.1: user-initiated clear (the dismiss control's safety net for an abandoned checklist) ---
+
+test("clear() retires the whole checklist and emits one empty snapshot", () => {
+  const registry = new TaskRegistry();
+  let emits = 0;
+  registry.onChange(() => {
+    emits += 1;
+  });
+  registry.create({ subject: "a" });
+  registry.create({ subject: "b", status: "in_progress" });
+  const revBefore = registry.revision();
+  emits = 0;
+
+  const dropped = registry.clear();
+
+  assert.equal(dropped, 2, "reports how many tasks were dropped");
+  assert.equal(registry.list().length, 0, "the checklist is empty");
+  assert.equal(emits, 1, "exactly one snapshot is emitted (the empty one)");
+  assert.ok(registry.revision() > revBefore, "the freshness revision advances so clients converge");
+});
+
+test("clear() on an already-empty checklist is a no-op (no emit, no rev bump)", () => {
+  const registry = new TaskRegistry();
+  let emits = 0;
+  registry.onChange(() => {
+    emits += 1;
+  });
+  const revBefore = registry.revision();
+
+  assert.equal(registry.clear(), 0);
+  assert.equal(emits, 0, "no listeners fired");
+  assert.equal(registry.revision(), revBefore, "revision unchanged");
+});

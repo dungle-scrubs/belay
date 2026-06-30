@@ -91,7 +91,17 @@ function GroupRow({
  * the first row, and the per-task glyph + styling reads at a glance (filled = active + bold, empty =
  * pending, check = done + strikethrough, cross = failed).
  */
-export function TasksPanel({ tasks }: { tasks: readonly TaskSnapshot[] }) {
+export function TasksPanel({
+  tasks,
+  stale = false,
+  onClear,
+}: {
+  tasks: readonly TaskSnapshot[];
+  /** The checklist is behind the conversation (user spoke after the model last touched it). */
+  stale?: boolean;
+  /** Dismiss the whole checklist (the abandoned-list escape hatch); omitted = no dismiss control. */
+  onClear?: () => void;
+}) {
   if (tasks.length === 0) {
     return null;
   }
@@ -101,8 +111,29 @@ export function TasksPanel({ tasks }: { tasks: readonly TaskSnapshot[] }) {
 
   return (
     <div className="flex flex-col gap-1 py-1 font-mono text-sm">
-      <div className="text-label tracking-wider uppercase text-muted-foreground">
-        tasks {done}/{tasks.length}
+      <div className="flex items-center gap-2 text-label tracking-wider uppercase text-muted-foreground">
+        <span>
+          tasks {done}/{tasks.length}
+        </span>
+        {stale ? (
+          <span
+            className="text-smui-yellow"
+            title="The model hasn't updated this checklist since your last message - it may be out of date."
+          >
+            stale
+          </span>
+        ) : null}
+        {onClear ? (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Dismiss task checklist"
+            title="Dismiss this checklist"
+            className="ml-auto rounded px-1 leading-none text-muted-foreground/50 hover:text-foreground"
+          >
+            ✕
+          </button>
+        ) : null}
       </div>
       <div className="flex flex-col gap-0.5">
         {rows.map((row, index) =>

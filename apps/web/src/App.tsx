@@ -42,6 +42,7 @@ import {
   sourceSignInFrom,
   sourcesFrom,
   tasksFrom,
+  tasksStale,
   truncate,
   workspaceBasename,
 } from "./derive";
@@ -310,6 +311,9 @@ export function App() {
 
   // The agent's live task checklist (host-published snapshots), rendered in the header.
   const tasks = useMemo(() => tasksFrom(events), [events]);
+  // Stale = the model hasn't touched the checklist since the user's last message (it may have moved on
+  // to a new topic); drives the panel's "stale" badge + dismiss nudge (09.1).
+  const staleTasks = useMemo(() => tasksStale(events), [events]);
   // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
   const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);
   // The pending generated handoff (02.10): a `/handoff` draft awaiting approve/edit/reject. Like a
@@ -867,6 +871,8 @@ export function App() {
       }}
       scroll={scroll}
       tasks={tasks}
+      tasksStale={staleTasks}
+      onClearTasks={() => void command("/tasks-clear", "")}
       panel={{
         // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
         // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
