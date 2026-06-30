@@ -107,7 +107,6 @@ function CommandMenuRowView({
       <button
         type="button"
         disabled={disabled}
-        aria-disabled={disabled}
         aria-current={row.selected ? "true" : undefined}
         data-highlighted={highlighted ? "" : undefined}
         onClick={onActivate}

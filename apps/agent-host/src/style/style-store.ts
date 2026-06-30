@@ -1,6 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-import { warn } from "../log";
+import { loadJsonConfig, writeJsonConfig } from "../config-file";
 import { USER_STYLE_JSON } from "../paths";
 import { DEFAULT_STYLE_ID, findStyle, resolveStyle } from "./styles";
 
@@ -33,27 +31,13 @@ export function parseStylePref(raw: unknown): StylePreference {
   return DEFAULT_PREF;
 }
 
-/** Reads the active style preference. A missing/unreadable file is the default silently; a present but
- *  malformed file warns once and falls back, never crashing the host. */
+/** Reads the active style preference (missing/malformed -> the default), through the shared config-file
+ *  scaffold. `read` is injectable for tests. */
 export function loadStylePref(
   path: string = USER_STYLE_JSON,
-  read: (p: string) => string = (p) => readFileSync(p, "utf8"),
+  read?: (p: string) => string,
 ): StylePreference {
-  let text: string;
-  try {
-    text = read(path);
-  } catch {
-    return DEFAULT_PREF; // no file (the common case)
-  }
-  try {
-    return parseStylePref(JSON.parse(text));
-  } catch (error) {
-    warn("style", "style.json present but not valid JSON; using default", {
-      path,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return DEFAULT_PREF;
-  }
+  return loadJsonConfig(path, parseStylePref, DEFAULT_PREF, read);
 }
 
 /** Persists the active style id, creating the config dir as needed. Clears the per-turn cache so the
@@ -61,19 +45,16 @@ export function loadStylePref(
 export function saveStylePref(
   styleId: string,
   path: string = USER_STYLE_JSON,
-  write: (p: string, content: string) => void = (p, c) => {
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, c);
-  },
+  write?: (p: string, content: string) => void,
 ): void {
-  write(path, `${JSON.stringify({ activeStyle: styleId }, null, 2)}\n`);
+  writeJsonConfig(path, { activeStyle: styleId }, write);
   cache = undefined;
 }
 
 /**
  * The active style preference, read once and cached for the host's lifetime so the per-step system-prompt
- * build never re-reads disk (matching the model-overrides cache). {@link saveStylePref} clears the cache
- * on a `/style` change, so a selection takes effect on the next turn without a restart.
+ * build never re-reads disk. {@link saveStylePref} clears the cache on a `/style` change, so a selection
+ * takes effect on the next turn without a restart.
  */
 let cache: StylePreference | undefined;
 

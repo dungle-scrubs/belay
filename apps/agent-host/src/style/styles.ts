@@ -1,4 +1,4 @@
-import { type CommandMenuPayload, findMenuRow } from "@trevor/session";
+import type { CommandMenuPayload } from "@trevor/session";
 
 /**
  * Output-style metadata and the `/style` command logic (plan 03, M4-M6). Styles are HOST-owned: each is
@@ -126,9 +126,4 @@ export function handleStyleCommand(rawArgs: string, activeId: string): StyleComm
     };
   }
   return { kind: "selected", styleId: style.id, text: `✓ output style: ${style.label}` };
-}
-
-/** Whether `actionId` (from a menu-row dispatch) names a selectable built-in style - the dispatch guard. */
-export function isStyleActionId(actionId: string): boolean {
-  return findMenuRow(buildStyleMenu(DEFAULT_STYLE_ID).rows, actionId) !== null;
 }

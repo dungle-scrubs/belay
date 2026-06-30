@@ -5,7 +5,6 @@ import {
   DEFAULT_STYLE_ID,
   defaultStyle,
   handleStyleCommand,
-  isStyleActionId,
   type OutputStyle,
   resolveStyle,
 } from "./styles";
@@ -98,13 +97,5 @@ describe("handleStyleCommand", () => {
     expect(result.kind).toBe("error");
     if (result.kind !== "error") return;
     expect(result.text).toMatch(/unknown style: nonsense/);
-  });
-});
-
-describe("isStyleActionId (dispatch guard)", () => {
-  test("recognizes built-in style ids and rejects others", () => {
-    expect(isStyleActionId("concise")).toBe(true);
-    expect(isStyleActionId("default")).toBe(true);
-    expect(isStyleActionId("not-a-style")).toBe(false);
   });
 });

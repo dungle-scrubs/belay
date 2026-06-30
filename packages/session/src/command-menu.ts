@@ -1,3 +1,5 @@
+import { asMaybeString, asOptRecord } from "./coerce";
+
 /**
  * The host-owned nested command-menu contract (plan 03, M1). A command family describes hierarchical
  * choices - parent rows, child rows, action ids, disabled reasons, search - as a structured payload
@@ -80,26 +82,25 @@ export function findMenuRow(rows: readonly CommandMenuRow[], id: string): Comman
   return null;
 }
 
-function asRecord(v: unknown): Record<string, unknown> | null {
-  return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
-}
-
 /** Permissively decodes one row from untrusted JSON; returns null when it lacks an id/label (dropped). */
 export function decodeCommandMenuRow(v: unknown): CommandMenuRow | null {
-  const o = asRecord(v);
+  const o = asOptRecord(v);
   if (!o || typeof o.id !== "string" || typeof o.label !== "string") {
     return null;
   }
   const children = Array.isArray(o.children)
     ? o.children.map(decodeCommandMenuRow).filter((r): r is CommandMenuRow => r !== null)
     : [];
+  const description = asMaybeString(o.description);
+  const disabledReason = asMaybeString(o.disabledReason);
+  const badge = asMaybeString(o.badge);
   return {
     id: o.id,
     label: o.label,
-    ...(typeof o.description === "string" ? { description: o.description } : {}),
-    ...(typeof o.disabledReason === "string" ? { disabledReason: o.disabledReason } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(disabledReason !== undefined ? { disabledReason } : {}),
     ...(o.selected === true ? { selected: true } : {}),
-    ...(typeof o.badge === "string" ? { badge: o.badge } : {}),
+    ...(badge !== undefined ? { badge } : {}),
     ...(children.length > 0 ? { children } : {}),
   };
 }
@@ -107,16 +108,17 @@ export function decodeCommandMenuRow(v: unknown): CommandMenuRow | null {
 /** Permissively decodes a menu payload, or null when the core fields (family/title/rows) are missing -
  *  so a `command.result` without a (valid) menu just renders its text, backward-compatibly. */
 export function decodeCommandMenu(v: unknown): CommandMenuPayload | null {
-  const o = asRecord(v);
+  const o = asOptRecord(v);
   if (!o || typeof o.family !== "string" || typeof o.title !== "string" || !Array.isArray(o.rows)) {
     return null;
   }
   const rows = o.rows.map(decodeCommandMenuRow).filter((r): r is CommandMenuRow => r !== null);
+  const emptyText = asMaybeString(o.emptyText);
   return {
     family: o.family,
     title: o.title,
     rows,
     ...(o.searchable === true ? { searchable: true } : {}),
-    ...(typeof o.emptyText === "string" ? { emptyText: o.emptyText } : {}),
+    ...(emptyText !== undefined ? { emptyText } : {}),
   };
 }
