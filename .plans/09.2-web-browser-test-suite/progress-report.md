@@ -49,20 +49,20 @@
 
 ### M2: App boot harness
 
-- [ ] RED: Add a Playwright test that fails until the real app serves and loads against a booted store/host with the fake provider
-- [ ] GREEN: Add a Playwright `webServer` running `vite preview`, booting store + host on ephemeral ports (reuse `@trevor/test-kit/boot` + fake provider), serial `workers:1`
-- [ ] REFACTOR: Share hermetic boot (temp state root, ephemeral ports) with node `e2e/` helpers; settle via Playwright auto-wait + `data-transcript-ready`
+- [x] RED: Add a Playwright test that fails until the real app serves and loads against a booted store/host with the fake provider
+- [x] GREEN: Add a Playwright `webServer` running `vite preview`, booting store + host on ephemeral ports (reuse `@trevor/test-kit/boot` + fake provider), serial `workers:1`
+- [x] REFACTOR: Share hermetic boot (temp state root, ephemeral ports) with node `e2e/` helpers; settle via Playwright auto-wait + `data-transcript-ready`
 
 ### M3: Transcript scroll/pin behavioral assertions
 
-- [ ] RED: Failing test - append while pinned lands the last row at the live edge (real layout via `data-transcript-row-count`/`data-index`)
-- [ ] GREEN: Confirm pinned-append stick-to-bottom (assertions only; behavior exists)
-- [ ] RED: Failing test - scroll up unpins, a subsequent append does NOT yank, jump-to-bottom appears (`PanelHost` intent path)
-- [ ] GREEN: Cover the unpin + jump-button round-trip
-- [ ] RED: Failing test - mid-stream growing row keeps `bottomDelta` under threshold while pinned
-- [ ] GREEN: Cover the streaming live-edge follow
-- [ ] RED: Failing test - explicit jump-to-bottom re-pins and returns to the live edge
-- [ ] REFACTOR: Extract reusable transcript-driving fixtures for later app-e2e plans
+- [x] RED: Failing test - append while pinned lands the last row at the live edge (real layout via `data-transcript-row-count`/`data-index`)
+- [x] GREEN: Confirm pinned-append stick-to-bottom (assertions only; behavior exists)
+- [x] RED: Failing test - scroll up unpins, a subsequent append does NOT yank, jump-to-bottom appears (`PanelHost` intent path)
+- [x] GREEN: Cover the unpin + jump-button round-trip
+- [x] RED: Failing test - mid-stream growing row keeps `bottomDelta` under threshold while pinned
+- [x] GREEN: Cover the streaming live-edge follow
+- [x] RED: Failing test - explicit jump-to-bottom re-pins and returns to the live edge
+- [x] REFACTOR: Extract reusable transcript-driving fixtures for later app-e2e plans
 
 ### M4: Perf-artifact producer (nightly/artifact-only)
 

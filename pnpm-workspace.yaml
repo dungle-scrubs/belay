@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "e2e"
+  - "tests/browser"
 overrides:
   # Pin every Playwright surface to the version baked into the pinned browser container
   # (mcr.microsoft.com/playwright:v1.50.0-noble), so the host library, @storybook/test-runner's bundled
