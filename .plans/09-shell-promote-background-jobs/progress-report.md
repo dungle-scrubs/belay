@@ -14,11 +14,11 @@
 
 ### M1: Promotion Eligibility Contract
 
-- [ ] RED: Add tests for promotion decisions: eligible long-running command, safety-refused command, fast command, failed command, timed-out non-promotable command, and user-disabled promotion
-- [ ] GREEN: Define a promotion policy contract with source surface, command, cwd, timeout threshold, explicit disable/enable flag, and reason
-- [ ] RED: Add tests proving promotion uses the same bash/process safety floor
-- [ ] GREEN: Implement a pure policy function that decides `complete`, `fail`, `refuse`, or `promote`
-- [ ] REFACTOR: Keep policy separate from child-process spawning
+- [x] RED: Add tests for promotion decisions: eligible long-running command, safety-refused command, fast command, failed command, timed-out non-promotable command, and user-disabled promotion
+- [x] GREEN: Define a promotion policy contract with source surface, command, cwd, timeout threshold, explicit disable/enable flag, and reason
+- [x] RED: Add tests proving promotion uses the same bash/process safety floor
+- [x] GREEN: Implement a pure policy function that decides `complete`, `fail`, `refuse`, or `promote`
+- [x] REFACTOR: Keep policy separate from child-process spawning
 
 ### M2: Promoted Job Metadata
 
