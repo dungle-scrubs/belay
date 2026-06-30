@@ -9,6 +9,7 @@
 - [x] Existing `apps/agent-host/src/doctor` builds structured snapshots and bounded probes.
 - [x] Existing `apps/agent-host/src/tools/doctor.ts` exposes the read-only model-facing `doctor` diagnostic tool.
 - [x] Existing `apps/web/src/components/chat/doctor` renders a Storybook-backed Doctor panel from fixture snapshots.
+- [ ] `.plans/09.1-mid-turn-model-switch` lets a turn switch model/reasoning mid-turn and records `model.switched`; Doctor's Session/Run and Providers/Models/Auth areas treat the active model/reasoning as mid-turn-mutable and may summarize a per-turn switch count, without becoming raw telemetry. <!-- D-006 -->
 
 ## Architecture
 
@@ -96,7 +97,7 @@ Doctor is itself a user-visible observability surface. Implementation should mak
 - **Dependencies:** M2
 - **Effort:** M
 - **Tasks:**
-  1. RED: Add tests for the canonical area set: Core, Session/Run, Providers/Models/Auth, Internet, Tools/Search, Web/Docs, MCP, LSP, Hooks, Storage/Roots, Workspace, Updates/Version.
+  1. RED: Add tests for the canonical area set: Core, Session/Run, Providers/Models/Auth, Internet, Tools/Search, Web/Docs, MCP, LSP, Hooks, Storage/Roots, Workspace, Updates/Version. Under `.plans/09.1-mid-turn-model-switch` the Providers/Models/Auth active model can change mid-turn and Session/Run may summarize the per-turn switch count. <!-- D-006 -->
   2. GREEN: Fill missing areas or mark them explicitly `not_checked` with a concise reason.
   3. RED: Add representative degraded/error cases for each area that can currently be observed.
   4. GREEN: Emit stable findings with labels, messages, evidence/source where useful, and next actions.

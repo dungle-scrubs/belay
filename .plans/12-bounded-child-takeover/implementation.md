@@ -7,6 +7,7 @@
 - [x] `.plans/09-shell-promote-background-jobs` defines visible background-job inspection patterns that this plan should not duplicate.
 - [x] `.plans/10-desktop-shell-tauri` defines future shell/supervisor boundaries that may affect escalation/takeover UX.
 - [x] `.plans/11-local-admission-control` defines local model/runtime admission limits that bounded children must respect.
+- [ ] `.plans/09.1-mid-turn-model-switch` lands the per-turn model+reasoning switch cell (the "switch boundary") and the `model.switched` event before this plan, so a bounded child created mid-turn can snapshot the parent turn's currently-active model+reasoning from the cell rather than the model the turn started with, and a model/provider "route escalation" can reuse 09.1's switch seam. <!-- D-005 -->
 
 ## Disclaimer: Needs Further Fleshing Out
 
@@ -84,7 +85,7 @@ Bounded child and takeover behavior must be inspectable:
 - **Effort:** S
 - **Tasks:**
   1. RED: Write acceptance criteria for the first bounded-child slice and explicitly out-of-scope variants.
-  2. GREEN: Define initial child contract fields: task, context, tools, budget, output shape, escalation policy, and fold-back behavior.
+  2. GREEN: Define initial child contract fields: task, context, tools, budget, output shape, escalation policy, fold-back behavior, and which model+reasoning the child inherits (the active value snapshotted from the parent turn's `.plans/09.1-mid-turn-model-switch` switch cell, not the turn's starting model). <!-- D-005 -->
   3. RED: Define takeover acceptance criteria for open, inspect, back, Escape, fold/adopt, cancel, and stale child states.
   4. GREEN: Update the plan DB with decisions for scope, takeover meaning, and mutation policy.
   5. REFACTOR: Split future directions into deferred follow-up rather than active blockers.
@@ -110,6 +111,8 @@ Bounded child and takeover behavior must be inspectable:
   3. RED: Add tests for depth limits, tool allow-list enforcement, budget caps, and rejected delegation.
   4. GREEN: Return structured lifecycle and failure events for each bounded-child state.
   5. REFACTOR: Keep bounded-child policy separate from generic subagent execution.
+  6. RED: Add a host test that a bounded child created while the parent turn has already switched model/reasoning captures the parent's currently-active model+reasoning from the `.plans/09.1-mid-turn-model-switch` per-turn switch cell, not the turn's starting model.
+  7. GREEN: Snapshot the active model+reasoning from the parent turn's switch cell into the child contract at creation time; explicit-only context still excludes the parent transcript.
 
 #### M4: Structured Output and Fold-Back
 

@@ -4,7 +4,7 @@
 
 ## Summary
 
-- Current cutoff blockers: 56
+- Current cutoff blockers: 58
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -53,6 +53,8 @@
 - [ ] RED: Add tests for cancellation semantics matching D-094 cancel, not stop/kill
 - [ ] GREEN: Implement cancel helper using established run/session event contract
 - [ ] REFACTOR: Avoid introducing hidden single-call `ask()` API as the primary design
+- [ ] RED: Add tests for an optional `switchModel` workflow that sends the `.plans/09.1-mid-turn-model-switch` switch control event into an active run (initiator: programmatic), and for a typed `model.switched` event projection
+- [ ] GREEN: Implement the optional switch-model workflow over the session event contract, parallel to `cancel`; surface `model.switched` as a typed read with raw event access as the fallback
 
 ## M6: Session Lifecycle Workflow
 

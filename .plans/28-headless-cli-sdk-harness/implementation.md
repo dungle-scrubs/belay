@@ -5,6 +5,7 @@
 - [ ] `14-capability-manifest-and-trevor-expert` - headless clients need capability discovery/export instead of hardcoded assumptions.
 - [x] `.plans/trevor-v2` D-085 project launcher - the CLI already owns local project launch/open behavior.
 - [x] `.plans/trevor-v2` D-094 session lifecycle controls - CLI/SDK lifecycle semantics must reuse cancel/stop/kill/archive definitions.
+- [ ] `.plans/09.1-mid-turn-model-switch` adds the switch control event + `model.switched` session event to the `@trevor/session` protocol before this plan, so the SDK/harness can optionally wrap them as a typed mid-turn switch-model workflow and a typed event read instead of leaving them as opaque raw events. <!-- D-007 -->
 
 ## 1. Architecture
 
@@ -115,7 +116,7 @@ packages/server-kit
   2. GREEN: Implement typed inventory/transcript/capabilities helpers.
   3. RED: Add tests proving SDK does not scrape web UI or prompt text for capabilities.
   4. GREEN: Use `14-capability-manifest-and-trevor-expert` export surfaces when available.
-  5. REFACTOR: Keep raw event access available for advanced clients.
+  5. REFACTOR: Keep raw event access available for advanced clients; `model.switched` and the switch control event from `.plans/09.1-mid-turn-model-switch` flow through raw access until M5 adds typed wrappers.
 
 #### M5: Prompt, Stream, and Cancel Workflow
 
@@ -127,6 +128,8 @@ packages/server-kit
   3. RED: Add tests for cancellation semantics matching D-094 cancel, not stop/kill.
   4. GREEN: Implement cancel helper using the established run/session event contract.
   5. REFACTOR: Avoid introducing a hidden single-call `ask()` API as the primary design.
+  6. RED: Add tests for an optional `switchModel` workflow that sends the `.plans/09.1-mid-turn-model-switch` switch control event into an active run (initiator: programmatic), and for a typed `model.switched` event projection.
+  7. GREEN: Implement the optional switch-model workflow over the session event contract, parallel to `cancel`; surface `model.switched` as a typed read with raw event access as the fallback. <!-- D-007 -->
 
 #### M6: Session Lifecycle Workflow
 

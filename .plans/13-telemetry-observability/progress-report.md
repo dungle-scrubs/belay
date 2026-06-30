@@ -6,7 +6,7 @@
 
 ## Summary
 
-- Current cutoff blockers: 86
+- Current cutoff blockers: 88
 - Completed: 0
 - Deferred follow-up: 2
 - Superseded: 0
@@ -57,6 +57,8 @@
 
 - [ ] RED: Add tests proving metrics reject high-cardinality labels such as run id, session id, raw URL, raw path, prompt, and command string
 - [ ] GREEN: Add low-cardinality metrics for turn duration, stop cause, provider latency, tool duration, exporter drops, retry counts, context pressure, service errors, and blob upload/fetch outcomes
+- [ ] RED: Add tests proving a per-turn model-switch count is recorded as a low-cardinality metric and that model id and reasoning stay bounded labels, not high-cardinality like run id or prompt
+- [ ] GREEN: Add a low-cardinality model-switch metric (count per turn with applied/blocked outcome) and record `model.switched` from `.plans/09.1-mid-turn-model-switch` as a turn-span boundary so multi-model turns are observable
 - [ ] RED: Add tests proving `TREVOR_OTEL_EXPORTER=file` writes bounded local artifacts under `TREVOR_STATE_HOME/otel`
 - [ ] GREEN: Implement local JSONL or OTLP JSON export with size caps and best-effort failure handling
 - [ ] REFACTOR: Add a send/drop ledger that records sanitized event metadata and drop reasons

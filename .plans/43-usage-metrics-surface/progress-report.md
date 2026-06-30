@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 9
+- **Current cutoff blockers:** 11
 - **Completed current work:** 3
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
@@ -21,6 +21,8 @@
 - [ ] REFACTOR: Keep metrics separate from settings and routing.
 - [ ] RED: Cover aggregation, redaction, missing data, and provider differences.
 - [ ] GREEN: Implement bounded aggregation over recorded run/provider events.
+- [ ] RED: Cover per-model-segment attribution within a turn - usage, latency, and token/cost split at each `model.switched` boundary so a turn spanning multiple models/reasoning levels is not attributed to a single model.
+- [ ] GREEN: Partition each turn's recorded run/provider events at `model.switched` events from `.plans/09.1-mid-turn-model-switch` and aggregate usage per model/reasoning segment.
 - [ ] REFACTOR: Reuse telemetry artifacts without making debug metrics user-blocking.
 - [ ] RED: Storybook/test summary, provider breakdown, failure/retry rows, empty states, and export/copy.
 - [ ] GREEN: Add the UI surface and optional export.

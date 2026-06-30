@@ -8,6 +8,7 @@
 - Existing `MarkdownBody` rendering for reasoning text.
 - Existing assistant-ui `ReasoningGroup` / disclosure primitives in `apps/web/src/components/assistant-ui/reasoning.tsx`.
 - Existing `.plans/05-compact-transcript-layout` as the future compact-mode integration boundary.
+- Coordinate with `.plans/09.1-mid-turn-model-switch` (lands first): it adds a `model.switched` inline marker row that renders a reasoning-level delta (`X (high) -> X (medium)`) and shares `apps/web/src/components/chat/transcript-row-view.tsx`. That marker is owned by 09.1 and is distinct from this plan's ghosted reasoning trace.
 
 ## 1. Architecture
 
@@ -34,6 +35,7 @@ The desired behavior is: reasoning reads as secondary, ghosted scaffolding; it c
 - A renamed or replacement `ThinkingMessage`/`ReasoningTrace` component owns presentation.
 - assistant-ui `ReasoningGroup` is reference/local implementation material, not a mandate to migrate the whole transcript to assistant-ui message parts.
 - Compact transcript one-line rendering is an integration contract with `.plans/05-compact-transcript-layout`.
+- The `model.switched` reasoning-level marker is owned by `.plans/09.1-mid-turn-model-switch`, not by this reasoning surface. <!-- D-004 -->
 
 ### Observability
 

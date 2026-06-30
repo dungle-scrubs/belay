@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 12
+- **Current cutoff blockers:** 14
 - **Completed current work:** 3
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
@@ -27,6 +27,8 @@
 - [ ] REFACTOR: Preserve session navigation/resume semantics.
 - [ ] RED: Cover opt-in inheritance and dedupe by origin/id.
 - [ ] GREEN: Implement inheritance contracts only where needed.
+- [ ] RED: Cover a mid-turn fork resuming its next turn on the active (post-switch) model+reasoning reconstructed from the prefix's `model.switched` events, not a reset default (`.plans/09.1-mid-turn-model-switch`).
+- [ ] GREEN: Treat the model+reasoning selection as an inherited stateful participant seeded from the fork point's active model.
 - [ ] REFACTOR: Document stateless provider behavior.
 
 ## Accepted / Deferred Follow-Up

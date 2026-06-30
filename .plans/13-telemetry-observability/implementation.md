@@ -4,6 +4,7 @@
 
 - [ ] `03-filesystem-root-taxonomy` - telemetry artifacts and diagnostic streams use `TREVOR_STATE_HOME` instead of `TREVOR_HOME`.
 - [x] H-072/H-073/H-101 `Deep telemetry` has been rebaselined into this plan instead of becoming a second telemetry plan.
+- [ ] `.plans/09.1-mid-turn-model-switch` makes one turn span multiple models/reasoning levels and emits a `model.switched` event; turn and provider telemetry must treat model/reasoning as per-segment, and a per-turn switch count is surfaced as a low-cardinality metric. <!-- D-010 -->
 
 ## Architecture
 
@@ -131,9 +132,11 @@ The implementation must answer these questions:
 - **Tasks:**
   1. RED: Add tests proving metrics reject high-cardinality labels such as run id, session id, raw URL, raw path, prompt, and command string.
   2. GREEN: Add low-cardinality metrics for turn duration, stop cause, provider latency, tool duration, exporter drops, retry counts, context pressure, service errors, and blob upload/fetch outcomes.
-  3. RED: Add tests proving `TREVOR_OTEL_EXPORTER=file` writes bounded local artifacts under `TREVOR_STATE_HOME/otel`.
-  4. GREEN: Implement local JSONL or OTLP JSON export with size caps and best-effort failure handling.
-  5. REFACTOR: Add a send/drop ledger that records sanitized event metadata and drop reasons.
+  3. RED: Add tests proving a per-turn model-switch count is recorded as a low-cardinality metric and that model id and reasoning stay bounded labels, not high-cardinality like run id or prompt.
+  4. GREEN: Add a low-cardinality model-switch metric (count per turn with applied/blocked outcome) and record `model.switched` from `.plans/09.1-mid-turn-model-switch` as a turn-span boundary so multi-model turns are observable. <!-- D-010 -->
+  5. RED: Add tests proving `TREVOR_OTEL_EXPORTER=file` writes bounded local artifacts under `TREVOR_STATE_HOME/otel`.
+  6. GREEN: Implement local JSONL or OTLP JSON export with size caps and best-effort failure handling.
+  7. REFACTOR: Add a send/drop ledger that records sanitized event metadata and drop reasons.
 
 #### M6: Provider attempts and diagnostic result artifacts
 

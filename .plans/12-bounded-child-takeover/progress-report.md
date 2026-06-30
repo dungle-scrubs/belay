@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 42
+- **Current cutoff blockers:** 44
 - **Completed current work:** 5
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
@@ -47,6 +47,8 @@
 - [ ] RED: Add tests for depth limits, tool allow-list enforcement, budget caps, and rejected delegation.
 - [ ] GREEN: Return structured lifecycle and failure events for each bounded-child state.
 - [ ] REFACTOR: Keep bounded-child policy separate from generic subagent execution.
+- [ ] RED: Add a host test that a bounded child created while the parent turn has already switched model/reasoning captures the parent's currently-active model+reasoning from the `.plans/09.1-mid-turn-model-switch` per-turn switch cell, not the turn's starting model.
+- [ ] GREEN: Snapshot the active model+reasoning from the parent turn's switch cell into the child contract at creation time; explicit-only context still excludes the parent transcript.
 
 ### M4 - Structured Output and Fold-Back
 
