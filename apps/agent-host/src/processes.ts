@@ -4,7 +4,14 @@ import { type ProcessError, type ToolExecutionError, ToolInputError } from "./to
 import { cap } from "./tools/shared";
 import type { Tool } from "./tools/types";
 
-export type { JobInfo, ProcessStatus } from "./process-registry";
+export type {
+  JobInfo,
+  JobMeta,
+  JobOrigin,
+  JobSnapshot,
+  JobSource,
+  ProcessStatus,
+} from "./process-registry";
 
 const ProcessParams = Schema.Struct({
   action: Schema.Literal("start", "poll", "kill", "list"),

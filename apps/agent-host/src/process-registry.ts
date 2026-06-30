@@ -8,6 +8,52 @@ const RING_LIMIT = 64 * 1024;
 
 export type ProcessStatus = "running" | "exited" | "killed";
 
+/** How a tracked job came to exist: a direct `process` tool start, or a promoted bash / prompt-shell
+ *  command that crossed the promotion threshold (plan 09). */
+export type JobSource = "process" | "bash" | "shell";
+
+/** Where a job originated, so the support panel + detail can trace it back to its run/tool/request. */
+export interface JobOrigin {
+  readonly source: JobSource;
+  /** The run that owned the originating bash/shell call (absent for a direct `process` start). */
+  readonly runId?: string;
+  /** The bash tool call id, when promoted from a `bash` call. */
+  readonly callId?: string;
+  /** The prompt-shell request id, when promoted from the `!` shell lane. */
+  readonly requestId?: string;
+}
+
+/** The metadata a caller attaches when registering a job (origin + cwd + promotion timestamp). */
+export interface JobMeta {
+  readonly origin: JobOrigin;
+  readonly cwd: string;
+  /** When a foreground command was promoted into this job; absent for a directly-started process. */
+  readonly promotedAt?: number;
+}
+
+/**
+ * The structured, session-visible snapshot of one background job (plan 09 M2): the UI read model, richer
+ * than the capped, model-facing {@link JobInfo}. It carries the original command, source + originating
+ * ids, cwd, start/promote timestamps, lifecycle status/exit, and the output cursors (total chars), so the
+ * support panel + detail takeover render without re-deriving from model-facing output.
+ */
+export interface JobSnapshot {
+  readonly id: string;
+  readonly command: string;
+  readonly source: JobSource;
+  readonly runId?: string;
+  readonly callId?: string;
+  readonly requestId?: string;
+  readonly cwd: string;
+  readonly startedAt: number;
+  readonly promotedAt?: number;
+  readonly status: ProcessStatus;
+  readonly exitCode: number | null;
+  /** Total chars ever written to each stream (the poll cursor ceiling), for truncation indicators. */
+  readonly stdoutTotal: number;
+  readonly stderrTotal: number;
+}
+
 /**
  * A bounded output buffer with a logical cursor. `total` counts every char ever
  * appended; `start` is the logical offset of the retained window's first char, so a
@@ -42,6 +88,9 @@ interface ManagedProcess {
   readonly id: string;
   readonly command: string;
   readonly startedAt: number;
+  readonly origin: JobOrigin;
+  readonly cwd: string;
+  promotedAt: number | undefined;
   readonly child: ChildProcess;
   readonly stdout: Ring;
   readonly stderr: Ring;
@@ -62,7 +111,7 @@ export class ProcessRegistry {
   private readonly processes = new Map<string, ManagedProcess>();
   private seq = 0;
 
-  start(command: string, cwd: string): { id: string; status: ProcessStatus } {
+  start(command: string, cwd: string, meta?: JobMeta): { id: string; status: ProcessStatus } {
     const blocked = classifyAlwaysPreventedBashCommand(command, { workspaceRoot: process.cwd() });
     if (blocked) {
       throw new ToolInputError({ tool: "process", detail: `refused: ${blocked}` });
@@ -84,6 +133,10 @@ export class ProcessRegistry {
       id,
       command,
       startedAt: Date.now(),
+      // A direct `process` start has no run/tool origin; a promoted job passes its origin + promotedAt.
+      origin: meta?.origin ?? { source: "process" },
+      cwd: meta?.cwd ?? cwd,
+      promotedAt: meta?.promotedAt,
       child,
       stdout: new Ring(),
       stderr: new Ring(),
@@ -164,6 +217,35 @@ export class ProcessRegistry {
       status: proc.status,
       exitCode: proc.exitCode,
       ageMs: now - proc.startedAt,
+    }));
+  }
+
+  /** Marks a tracked job as promoted now (a foreground command that crossed the threshold, plan 09 M3).
+   *  No-op if the id is unknown or it was already promoted. */
+  markPromoted(id: string, at: number = Date.now()): void {
+    const proc = this.processes.get(id);
+    if (proc && proc.promotedAt === undefined) {
+      proc.promotedAt = at;
+    }
+  }
+
+  /** The structured, session-visible {@link JobSnapshot} read model for every job (plan 09 M2) - richer
+   *  than the model-facing {@link JobInfo} list, for the support panel + detail takeover. */
+  snapshots(): JobSnapshot[] {
+    return [...this.processes.values()].map((proc) => ({
+      id: proc.id,
+      command: proc.command,
+      source: proc.origin.source,
+      ...(proc.origin.runId !== undefined ? { runId: proc.origin.runId } : {}),
+      ...(proc.origin.callId !== undefined ? { callId: proc.origin.callId } : {}),
+      ...(proc.origin.requestId !== undefined ? { requestId: proc.origin.requestId } : {}),
+      cwd: proc.cwd,
+      startedAt: proc.startedAt,
+      ...(proc.promotedAt !== undefined ? { promotedAt: proc.promotedAt } : {}),
+      status: proc.status,
+      exitCode: proc.exitCode,
+      stdoutTotal: proc.stdout.total,
+      stderrTotal: proc.stderr.total,
     }));
   }
 

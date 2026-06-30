@@ -22,17 +22,17 @@
 
 ### M2: Promoted Job Metadata
 
-- [ ] RED: Add `ProcessSupervisor` tests for promoted job metadata: original command, source, originating run/tool/request ids, cwd, started/promoted timestamps, status, exit code, and output cursors
-- [ ] GREEN: Extend the process read model without breaking existing `process` tool list/poll/kill behavior
-- [ ] RED: Add tests for promoted job lifecycle events or snapshots
-- [ ] GREEN: Define session-visible background job snapshot events/read model
-- [ ] REFACTOR: Keep model-facing `process` output capped while UI snapshots remain structured
+- [x] RED: Add `ProcessSupervisor` tests for promoted job metadata: original command, source, originating run/tool/request ids, cwd, started/promoted timestamps, status, exit code, and output cursors
+- [x] GREEN: Extend the process read model without breaking existing `process` tool list/poll/kill behavior
+- [x] RED: Add tests for promoted job lifecycle events or snapshots
+- [x] GREEN: Define session-visible background job snapshot events/read model
+- [x] REFACTOR: Keep model-facing `process` output capped while UI snapshots remain structured
 
 ### Gate 1->2
 
-- [ ] Promotion policy tests pass
-- [ ] Existing `process` tool behavior remains compatible
-- [ ] Promoted jobs have stable ids and structured metadata
+- [x] Promotion policy tests pass
+- [x] Existing `process` tool behavior remains compatible
+- [x] Promoted jobs have stable ids and structured metadata
 
 ## Phase 2: Runtime Promotion
 
