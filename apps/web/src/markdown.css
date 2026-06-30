@@ -109,7 +109,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid #d6d6d8;
-  border-radius: 4px;
+  border-radius: 0;
   background: #fff;
   color: #555;
   cursor: pointer;

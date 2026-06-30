@@ -758,12 +758,11 @@ function CustomRow({
         disabled={disabled}
         value={d?.customText ?? ""}
         onChange={(e) => onChange(setCustomText(draft, q, e.target.value))}
-        onFocus={() => {
-          if (!customSelected) {
-            onChange(selectCustom(draft, q));
-          }
-          onActivate?.();
-        }}
+        // Focusing the custom row must NOT switch the answer to it: that let a stray click anywhere in
+        // this full-width label silently clear a required single-choice selection before the user typed
+        // anything. The answer moves to custom only when the user actually TYPES (setCustomText), or via
+        // deliberate keyboard nav to this row (makeChoiceNav). Focus just tracks the preview pane.
+        onFocus={() => onActivate?.()}
         onKeyDown={onKeyNav}
         placeholder={q.multiSelect ? "Add your own option" : "Or enter your own answer"}
         className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"

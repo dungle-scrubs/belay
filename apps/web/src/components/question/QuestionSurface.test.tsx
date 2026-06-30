@@ -120,6 +120,21 @@ test("focus return does not steal focus from an in-surface field being typed in 
   assert.equal(document.activeElement, custom, "an active in-surface field keeps focus");
 });
 
+test("focusing the custom-answer row keeps a pre-selected single choice (regression: a stray click cleared it)", () => {
+  renderSurface(fx.singleChoice);
+  const postgres = screen.getByRole("radio", { name: /PostgreSQL/ });
+  assert.equal(postgres.getAttribute("aria-checked"), "true", "opens on the recommended option");
+
+  // A click/focus anywhere in the full-width custom-answer label must NOT switch the answer to it - the
+  // required selection only moves to custom when the user actually types. (Was: focus cleared it.)
+  fireEvent.focus(screen.getByLabelText(/custom answer for/i));
+  assert.equal(
+    postgres.getAttribute("aria-checked"),
+    "true",
+    "the required selection survives focusing the custom row",
+  );
+});
+
 test("an expired question does not grab focus on window return (read-only)", () => {
   renderSurface(fx.singleChoice, { expired: true });
   (document.activeElement as HTMLElement | null)?.blur();
