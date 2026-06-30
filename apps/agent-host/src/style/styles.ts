@@ -62,7 +62,11 @@ export const DEFAULT_STYLE_ID = "default";
 
 /** The default style record (the fallback for an unknown/retired id). */
 export function defaultStyle(): OutputStyle {
-  return BUILTIN_STYLES.find((s) => s.isDefault) ?? BUILTIN_STYLES[0]!;
+  const found = BUILTIN_STYLES.find((s) => s.isDefault) ?? BUILTIN_STYLES[0];
+  if (!found) {
+    throw new Error("no built-in output styles"); // unreachable: BUILTIN_STYLES is a non-empty const
+  }
+  return found;
 }
 
 /** A style by id, or null when no built-in style matches (a retired/unknown id). */

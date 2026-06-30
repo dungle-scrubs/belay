@@ -4,7 +4,6 @@ import {
   buildStyleMenu,
   DEFAULT_STYLE_ID,
   defaultStyle,
-  findStyle,
   handleStyleCommand,
   isStyleActionId,
   type OutputStyle,
