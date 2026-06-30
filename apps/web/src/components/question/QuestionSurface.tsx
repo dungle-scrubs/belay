@@ -507,13 +507,33 @@ function makeChoiceNav(
   onChange: (next: GroupDraft) => void,
 ) {
   const customIndex = q.choices.length;
+  const focusRow = (e: React.KeyboardEvent, target: number) => {
+    const group = e.currentTarget.closest("[data-qgroup]");
+    group?.querySelector<HTMLElement>(`[data-qrow="${target}"]`)?.focus();
+  };
   return (e: React.KeyboardEvent, current: number) => {
     if (q.multiSelect) {
       return;
     }
-    const inCustomInput = current === customIndex;
-    // Left/Right are intentionally absent so they reach the surface's tab navigation (D-013).
-    const keys = inCustomInput ? ["ArrowDown", "ArrowUp"] : ["ArrowDown", "ArrowUp", "Home", "End"];
+    // The custom row is a multi-line textarea: let arrows move the cursor. Only ArrowUp at the very
+    // START of the text leaves it (nav up to the last choice); ArrowDown stays (it's the final item).
+    if (current === customIndex) {
+      const el = e.target as HTMLTextAreaElement;
+      const atStart = el.selectionStart === 0 && el.selectionEnd === 0;
+      if (e.key === "ArrowUp" && atStart && q.choices.length > 0) {
+        e.preventDefault();
+        const target = customIndex - 1;
+        const c = q.choices[target];
+        if (c) {
+          onChange(toggleChoice(draft, q, c.id));
+        }
+        focusRow(e, target);
+      }
+      return;
+    }
+    // Choice rows: Up/Down/Home/End move the radio selection + DOM focus. Left/Right are intentionally
+    // absent so they reach the surface's tab navigation (D-013).
+    const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
     if (!keys.includes(e.key)) {
       return;
     }
@@ -538,8 +558,7 @@ function makeChoiceNav(
     } else {
       onChange(selectCustom(draft, q));
     }
-    const group = e.currentTarget.closest("[data-qgroup]");
-    group?.querySelector<HTMLElement>(`[data-qrow="${target}"]`)?.focus();
+    focusRow(e, target);
   };
 }
 
@@ -731,9 +750,10 @@ function CustomRow({
   const customSelected = d?.customSelected ?? false;
   return (
     // A label so a click anywhere in the row focuses the input natively (no extra click handler).
+    // items-start (not center) so the radio stays pinned to the first line as the textarea grows.
     <label
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-md px-3 py-2 transition-colors",
+        "flex w-full items-start gap-2.5 rounded-md px-3 py-2 transition-colors",
         customSelected ? "bg-primary/15" : "bg-smui-surface-2 hover:bg-smui-surface-3",
         disabled && "opacity-50",
       )}
@@ -741,7 +761,7 @@ function CustomRow({
       <span
         aria-hidden
         className={cn(
-          "flex size-4 shrink-0 items-center justify-center border",
+          "mt-0.5 flex size-4 shrink-0 items-center justify-center border",
           q.multiSelect ? "rounded-[4px]" : "rounded-full",
           customSelected
             ? "border-primary bg-primary text-primary-foreground"
@@ -750,8 +770,8 @@ function CustomRow({
       >
         {customSelected ? <Check className="size-3" /> : null}
       </span>
-      <input
-        type="text"
+      <textarea
+        rows={1}
         data-qrow={index}
         tabIndex={tabIndex}
         aria-label={`Custom answer for: ${q.question}`}
@@ -765,7 +785,8 @@ function CustomRow({
         onFocus={() => onActivate?.()}
         onKeyDown={onKeyNav}
         placeholder={q.multiSelect ? "Add your own option" : "Or enter your own answer"}
-        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+        // field-sizing:content auto-grows the textarea with its content (no JS); rows=1 is the floor.
+        className="min-w-0 flex-1 resize-none bg-transparent text-sm outline-none [field-sizing:content] placeholder:text-muted-foreground disabled:cursor-not-allowed"
       />
     </label>
   );
