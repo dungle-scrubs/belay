@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
-import type { ToolStatus } from "@/components/chat/tool-status";
+import { type ToolStatus, toolStatusColor } from "@/components/chat/tool-status";
 import { BackToChat } from "@/components/panel/back-to-chat";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DetailBody } from "./detail-body";
 import type { ToolDetailModel } from "./detail-model";
@@ -62,12 +63,14 @@ export function ToolDetailView({
   );
 }
 
-const STATUS_PILL: Record<ToolStatus, { label: string; className: string }> = {
-  running: { label: "Running", className: "bg-smui-yellow/15 text-smui-yellow" },
-  done: { label: "Done", className: "bg-smui-frost-3/15 text-smui-frost-3" },
-  error: { label: "Error", className: "bg-smui-red/15 text-smui-red" },
+const STATUS_LABEL: Record<ToolStatus, string> = {
+  running: "Running",
+  done: "Done",
+  error: "Error",
 };
 
+/** The status chip: the shared Badge for the pill chrome, colored from the same toolStatusColor map the
+ *  transcript wrench uses (so the two can't drift). */
 function StatusPill({
   status,
   aborted,
@@ -75,12 +78,12 @@ function StatusPill({
   readonly status: ToolStatus;
   readonly aborted: boolean;
 }) {
-  const pill = STATUS_PILL[status];
   return (
-    <span
-      className={cn("rounded-full px-2 py-0.5 text-label tracking-wider uppercase", pill.className)}
+    <Badge
+      variant="outline"
+      className={cn("text-label tracking-wider uppercase", toolStatusColor(status))}
     >
-      {aborted ? "Aborted" : pill.label}
-    </span>
+      {aborted ? "Aborted" : STATUS_LABEL[status]}
+    </Badge>
   );
 }

@@ -34,7 +34,7 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
-import { findDetailModel, toToolDetailModel } from "@/tool-detail/detail-model";
+import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
@@ -941,7 +941,7 @@ export function App() {
   // other center-column takeover first (only one at a time). The model is derived LIVE below, so a
   // running tool keeps updating while open.
   const onOpenDetail = (message: Message) => {
-    if (!toToolDetailModel(message)) {
+    if (!isDetailEligible(message)) {
       return;
     }
     setChooserOpen(false);

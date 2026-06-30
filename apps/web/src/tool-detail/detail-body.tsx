@@ -2,6 +2,9 @@ import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import { MultiEditDiff } from "@/components/chat/multi-edit-diff";
 import { ToolDiff } from "@/components/chat/tool-diff";
+import { ToolRenderer } from "@/components/chat/tool-message";
+import { cn } from "@/lib/utils";
+import type { ToolMessage } from "@/transcript";
 import {
   bashDetailArgs,
   editDetailArgs,
@@ -19,6 +22,8 @@ import type { ToolDetailModel } from "./detail-model";
 /** How many output lines render before the "N more lines below the fold" advisory (the detail shows
  *  the full output regardless - this only labels how much sits past the first screenful). */
 const OUTPUT_FOLD_LINES = 40;
+
+const noop = () => {};
 
 /**
  * The detail body dispatcher (plan 08 M3/M4): given a {@link ToolDetailModel}, render the richest body
@@ -51,10 +56,24 @@ export function DetailBody({
     case "web_fetch":
     case "docs":
     case "session_recall":
-      return <RequestDetail model={model} />;
+      return <RequestDetail model={model} onOpenPath={onOpenPath} />;
     default:
       return <GenericDetail model={model} />;
   }
+}
+
+/** Reconstructs the transcript ToolMessage from a detail model, so the detail can reuse the transcript's
+ *  own rich result renderers (M4 reuse) instead of re-parsing/re-rendering their results. */
+function asToolMessage(model: ToolDetailModel): ToolMessage {
+  return {
+    kind: "tool",
+    id: model.id,
+    name: model.toolName,
+    args: model.args,
+    done: model.status !== "running",
+    aborted: model.aborted,
+    ...(model.output !== undefined ? { result: model.output } : {}),
+  };
 }
 
 function SearchDetail({ model }: { readonly model: ToolDetailModel }) {
@@ -81,7 +100,13 @@ function SearchDetail({ model }: { readonly model: ToolDetailModel }) {
   );
 }
 
-function RequestDetail({ model }: { readonly model: ToolDetailModel }) {
+function RequestDetail({
+  model,
+  onOpenPath,
+}: {
+  readonly model: ToolDetailModel;
+  readonly onOpenPath?: (path: string) => void;
+}) {
   const { request, action } = requestDetailArgs(model.args);
   return (
     <>
@@ -89,7 +114,11 @@ function RequestDetail({ model }: { readonly model: ToolDetailModel }) {
         <Mono>{action ? `${action} ${request}` : request || "(none)"}</Mono>
       </DetailSection>
       <ErrorSection model={model} />
-      <OutputSection model={model} title="Results" />
+      <DetailSection title="Results">
+        {/* Reuse the transcript's own rich renderer (search results / fetched source / cited docs /
+            recall findings) so the detail is never a poorer view than the row. */}
+        <ToolRenderer message={asToolMessage(model)} onOpenPath={onOpenPath ?? noop} />
+      </DetailSection>
     </>
   );
 }
@@ -138,19 +167,23 @@ function DiffDetail({
   readonly model: ToolDetailModel;
   readonly onOpenPath?: (path: string) => void;
 }) {
-  const path =
-    model.toolName === "write" ? writeDetailArgs(model.args).path : editDetailArgs(model.args).path;
+  // Parse the args once: write/edit embed the full file content / old+new blocks, so re-parsing per
+  // field would JSON.parse a large string several times per render.
+  const isWrite = model.toolName === "write";
+  const write = isWrite ? writeDetailArgs(model.args) : null;
+  const edit = isWrite ? null : editDetailArgs(model.args);
+  const path = (write ?? edit)?.path ?? "";
   return (
     <>
       <DetailSection title="File">
         <FilePath path={path} onOpenPath={onOpenPath} />
       </DetailSection>
-      <DetailSection title={model.toolName === "write" ? "Contents" : "Change"}>
-        {model.toolName === "write" ? (
+      <DetailSection title={isWrite ? "Contents" : "Change"}>
+        {write ? (
           <ToolDiff
             tool="write"
             path={path}
-            newText={writeDetailArgs(model.args).content}
+            newText={write.content}
             status={model.status}
             onOpenPath={onOpenPath ? () => onOpenPath(path) : undefined}
           />
@@ -158,8 +191,8 @@ function DiffDetail({
           <ToolDiff
             tool="edit"
             path={path}
-            oldText={editDetailArgs(model.args).old}
-            newText={editDetailArgs(model.args).new}
+            oldText={edit?.old}
+            newText={edit?.new ?? ""}
             status={model.status}
             onOpenPath={onOpenPath ? () => onOpenPath(path) : undefined}
           />
@@ -214,7 +247,7 @@ function GenericDetail({ model }: { readonly model: ToolDetailModel }) {
 
 /** The shared file primitive every filesystem body uses: the path, an optional line range, and an
  *  open-in-editor action when the surface can open files (M3 REFACTOR - one place, no drift). */
-export function FilePath({
+function FilePath({
   path,
   range,
   onOpenPath,
@@ -255,9 +288,7 @@ function OutputSection({
     <DetailSection title={title}>
       {model.output ? (
         <>
-          <pre className="overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">
-            {model.output}
-          </pre>
+          <Mono>{model.output}</Mono>
           {fold ? <span className="text-xs text-muted-foreground">{fold}</span> : null}
         </>
       ) : (
@@ -275,14 +306,12 @@ function ErrorSection({ model }: { readonly model: ToolDetailModel }) {
   }
   return (
     <DetailSection title="Error">
-      <pre className="overflow-x-auto rounded bg-smui-red/10 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-smui-red">
-        {model.error}
-      </pre>
+      <Mono tone="error">{model.error}</Mono>
     </DetailSection>
   );
 }
 
-export function DetailSection({
+function DetailSection({
   title,
   children,
 }: {
@@ -297,9 +326,21 @@ export function DetailSection({
   );
 }
 
-function Mono({ children }: { readonly children: ReactNode }) {
+/** The shared code/output block: a wrapping monospace pre, muted by default or red for an error. */
+function Mono({
+  children,
+  tone = "muted",
+}: {
+  readonly children: ReactNode;
+  readonly tone?: "muted" | "error";
+}) {
   return (
-    <pre className="overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">
+    <pre
+      className={cn(
+        "overflow-x-auto rounded px-3 py-2 font-mono text-xs whitespace-pre-wrap",
+        tone === "error" ? "bg-smui-red/10 text-smui-red" : "bg-muted",
+      )}
+    >
       {children}
     </pre>
   );
