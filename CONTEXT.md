@@ -42,3 +42,17 @@ cross-plan terms are anchored here. When a term is baked into the protocol, keep
 reintroduce "teams" for multi-agent orchestration. The orchestration nouns are **workflow** (the
 engine/pattern) and **fleet** (the worktree application). Likewise, **inline self-validation** is cut
 (D-033); a verifier *subagent/auditor leaf* is distinct and allowed.
+
+## Mid-turn switching vocabulary (`.plans/09.1-mid-turn-model-switch`)
+
+| Term | Meaning | Notes |
+|---|---|---|
+| **Mid-turn switch** | Changing the active model and/or reasoning level *between iterations of one in-flight turn*, not just on the next turn. | Manual via the UI selector now; a future auto-router reuses the same mechanism. |
+| **Switch boundary** | The single re-resolution point at the start of each `step(n)` where `runAgent` re-reads the active model+reasoning from a per-turn mutable cell. | Never mid-stream - a switch never interrupts an in-flight `provider.stream` call. The one seam the manual switch and the future auto-router both attach to. |
+| **`model.switched`** | The session event recording a switch: `from`/`to` `{model, reasoning}`, `initiator`, and `outcome` (`applied`/`blocked`). | Recorded on the session log so replay reconstructs the active model at every point; rendered as an inline transcript marker. |
+| **`initiator`** | Who requested the switch: `manual` now, `auto` (the future router) later. | The field that lets the router reuse the manual switch path. |
+
+A UI-selector switch is **sticky** (it also updates the persisted next-turn selection); a switch toward
+a **smaller** context window is **guarded** (refused, `outcome: blocked`, if the conversation would not
+fit). A dedicated plan-25 `ModelChange` hook was considered and **dropped**; per-model prompt guidance,
+if pursued, belongs in the provider/catalog layer, not a user hook.
