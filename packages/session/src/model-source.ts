@@ -96,6 +96,16 @@ export interface CatalogEntry {
   readonly defaultReasoning: string;
 }
 
+/** The catalog entry for a model reference within a per-source catalog map (`catalogBySource`), or
+ *  undefined when the source or model is not listed. Shared by the host (switch context-window lookup)
+ *  and the web (send-time model metadata) so the `bySource[sourceId]?.find(modelId)` shape lives once. */
+export function catalogEntryFor(
+  bySource: Readonly<Record<string, readonly CatalogEntry[]>>,
+  ref: Pick<ModelRef, "sourceId" | "modelId">,
+): CatalogEntry | undefined {
+  return bySource[ref.sourceId]?.find((entry) => entry.modelId === ref.modelId);
+}
+
 const SOURCE_TYPES: readonly SourceType[] = ["local", "oauth", "gateway", "api-key"];
 const SOURCE_STATUSES: readonly SourceStatus[] = ["ready", "needs-auth", "unavailable", "error"];
 const AUTH_STATES: readonly SourceAuthState[] = ["none", "pending", "authenticated", "expired"];

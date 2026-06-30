@@ -32,6 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { WithInspect } from "@/tool-detail/inspect-affordance";
 import { fmtCtx, fmtTokens, toolSummary } from "../../derive";
 import {
+  formatSwitchEndpoint,
   LEGACY_RECONNECT_ATTEMPTS,
   type Message,
   type ToolMessage as ToolMessageData,
@@ -269,14 +270,12 @@ export function TranscriptRowView({
     // side shows `model (reasoning)`, so a reasoning-only change reads `X (high) -> X (medium)`; a blocked
     // larger->smaller switch shows the guard's reason instead of a delta. Understated like the checkpoint
     // breadcrumb, not an alarming card.
-    const side = (e: { model: string; reasoning?: string }) =>
-      e.reasoning ? `${e.model} (${e.reasoning})` : e.model;
     return (
       <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
         <ArrowLeftRight className="size-3 shrink-0" />
         {message.outcome === "blocked"
-          ? `switch to ${side(message.to)} blocked${message.reason ? ` · ${message.reason}` : ""}`
-          : `model ${side(message.from)} -> ${side(message.to)}`}
+          ? `switch to ${formatSwitchEndpoint(message.to)} blocked${message.reason ? ` · ${message.reason}` : ""}`
+          : `model ${formatSwitchEndpoint(message.from)} -> ${formatSwitchEndpoint(message.to)}`}
       </div>
     );
   }

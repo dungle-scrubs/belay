@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   activeTurnRunId,
+  catalogEntryFor,
   constrainReasoning,
   DEFAULT_SESSION_ID,
   type ModelRef,
@@ -538,9 +539,7 @@ export function App() {
   // The active model's reasoning surface (D-065): its catalog entry's levels for a catalog pick, else
   // the legacy roster - so the reasoning control matches the chosen model instead of vanishing, and the
   // turn carries the reasoning the model actually supports. The toggle is keyed by the active source.
-  const activeEntry = (selection.catalogBySource[sendModel.sourceId] ?? []).find(
-    (e) => e.modelId === sendModel.modelId,
-  );
+  const activeEntry = catalogEntryFor(selection.catalogBySource, sendModel);
   // The button label is the SELECTED model's name (the catalog entry's displayName), not the static
   // per-provider roster label - so picking a non-default model updates the button (02.16 D-001).
   const activeLabel = activeModelLabel({

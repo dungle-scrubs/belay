@@ -190,6 +190,12 @@ export type ModelSwitchMessage = {
   outcome: ModelSwitchOutcome;
   reason?: string;
 };
+
+/** One side of a switch as `model (reasoning)`, or just `model` when no level applies - shared by the
+ *  transcript breadcrumb and its compact row so the two surfaces can't drift. */
+export function formatSwitchEndpoint(endpoint: ModelSwitchEndpoint): string {
+  return endpoint.reasoning ? `${endpoint.model} (${endpoint.reasoning})` : endpoint.model;
+}
 export type Message =
   | {
       kind: "user";

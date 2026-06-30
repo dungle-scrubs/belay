@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import {
   type ArtifactRef,
+  catalogEntryFor,
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
@@ -604,6 +605,9 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
               buildSourceProvider(model.sourceId, model.modelId),
           }
         : {}),
+      // The turn's starting ref (when it carried one) seeds the same-model check, so a reasoning-only
+      // re-send of the unchanged model does not pointlessly rebuild the provider.
+      ...(switchCell && decoded.model ? { initialModel: decoded.model } : {}),
     }).pipe(Effect.provide(EmitLive)),
   );
   fiber.addObserver((exit) => {
@@ -2299,9 +2303,7 @@ function handleEvent(message: SessionEvent): void {
       const reasoning = target.reasoning;
       // The target model's context window from the catalog (09.1 M7), so the loop can run the
       // larger->smaller fit guard; absent when the source/model is not in the catalog (guard then off).
-      const targetWindow = catalog.catalogBySource[target.sourceId]?.find(
-        (entry) => entry.modelId === target.modelId,
-      )?.contextLength;
+      const targetWindow = catalogEntryFor(catalog.catalogBySource, target)?.contextLength;
       activeSwitch.cell.request({
         model: target,
         ...(reasoning != null ? { reasoning } : {}),

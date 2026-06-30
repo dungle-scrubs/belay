@@ -1,8 +1,9 @@
-import type { ModelRef } from "@trevor/session";
+import type { ModelRef, ModelSwitchEndpoint, ModelSwitchInitiator } from "@trevor/session";
 
-/** Who asked for a mid-turn switch: `manual` (the UI selector) now, `auto` (the future auto-router)
- *  later. The single seam both initiators attach to (plan 09.1 D-004). */
-export type SwitchInitiator = "manual" | "auto";
+// The initiator + endpoint shapes are the wire contract (@trevor/session); the host binds to them under
+// its local names so a future field add on one side can't silently diverge from the other.
+export type SwitchInitiator = ModelSwitchInitiator;
+export type SwitchEndpoint = ModelSwitchEndpoint;
 
 /**
  * A mid-turn switch request (plan 09.1): an external initiator asks the in-flight turn to change its
@@ -32,13 +33,6 @@ export interface SwitchCell {
   request(req: SwitchRequest): void;
   /** The pending request (cleared as it is read), or undefined when none is queued. */
   take(): SwitchRequest | undefined;
-}
-
-/** One side of a switch - the model id + reasoning level in effect. Rides the `model.switched` record
- *  and the transcript marker as `from`/`to` so the delta renders, including a reasoning-only change. */
-export interface SwitchEndpoint {
-  readonly model: string;
-  readonly reasoning?: string;
 }
 
 export function createSwitchCell(): SwitchCell {

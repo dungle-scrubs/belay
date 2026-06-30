@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { ElementType } from "react";
 import { parseToolArgs, toolSummary, truncate } from "../../derive";
-import type { AssistantMessage, Message } from "../../transcript";
+import { type AssistantMessage, formatSwitchEndpoint, type Message } from "../../transcript";
 import { type ToolStatus, toolMessageStatus, toolStatusColor } from "./tool-status";
 
 /**
@@ -158,12 +158,10 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         hasDetail: message.items.length > 0,
       };
     case "modelSwitch": {
-      const side = (e: { model: string; reasoning?: string }) =>
-        e.reasoning ? `${e.model} (${e.reasoning})` : e.model;
       const secondary =
         message.outcome === "blocked"
           ? `blocked${message.reason ? `: ${message.reason}` : ""}`
-          : `${side(message.from)} -> ${side(message.to)}`;
+          : `${formatSwitchEndpoint(message.from)} -> ${formatSwitchEndpoint(message.to)}`;
       return marker("modelSwitch", ArrowLeftRight, "Model", secondary);
     }
   }

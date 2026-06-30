@@ -3,6 +3,7 @@ import {
   type ModelRef,
   type ProviderDiagnostic,
   type ProviderPartialCounts,
+  sameModel,
   type TurnStop,
 } from "@trevor/session";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
@@ -399,9 +400,10 @@ export type AgentEvent =
       readonly detail: string;
     }
   | {
-      /** A mid-turn model/reasoning switch applied at this step boundary (09.1): the from/to
-       *  model+reasoning, who asked, and the outcome (Phase 3 adds `blocked`). turn.ts maps it to the
-       *  durable `model.switched` session event, which the web folds into the transcript marker. */
+      /** A mid-turn model/reasoning switch resolved at this step boundary (09.1): applied, or blocked by
+       *  the larger->smaller context guard. Carries the from/to model+reasoning, who asked, and the
+       *  outcome. turn.ts maps it to the durable `model.switched` session event, which the web folds into
+       *  the transcript marker. */
       readonly type: "model_switched";
       readonly from: SwitchEndpoint;
       readonly to: SwitchEndpoint;
@@ -464,6 +466,11 @@ export interface RunAgentOptions {
    *  Returns null when the target is unresolvable, in which case the switch leaves the provider unchanged.
    *  Absent means model changes are not honored (reasoning-only), as in Phase 1. */
   readonly rebuildProvider?: (model: ModelRef) => Provider | null;
+  /** The turn's starting `ModelRef` (09.1 M4): the identity (`sourceId`+`modelId`) a mid-turn switch
+   *  compares against to decide whether the model actually changed - `Provider` only carries a model id,
+   *  not its source, so two sources serving the same id would otherwise be indistinguishable. Absent on a
+   *  turn with no resolved ref (the first switch then always rebuilds). */
+  readonly initialModel?: ModelRef;
 }
 
 export function runAgent(
@@ -527,6 +534,10 @@ export function runAgent(
   // mid-turn switch changes the model (Provider.model is readonly). Every model step, budget derivation,
   // and failure log below reads `currentProvider`, so the swap takes effect at the next step boundary.
   let currentProvider = provider;
+  // The active model's identity (source+id), tracked so a mid-turn switch can tell a real model change
+  // from the UI re-sending the unchanged model on a reasoning-only switch (M4). Undefined until the turn
+  // carries a resolved ref; the first switch then rebuilds unconditionally.
+  let currentRef = opts.initialModel;
   // How many mid-turn switches this turn has applied or blocked (09.1 M8), surfaced in the switch trace.
   let switchCount = 0;
 
@@ -746,7 +757,11 @@ export function runAgent(
   // leaves the active provider unchanged. The carried `conversation` array is untouched, so history
   // continuity across a same-provider swap is automatic.
   const rebuildForModelSwitch = (model: ModelRef): void => {
-    if (model.modelId === currentProvider.model) {
+    // Skip the rebuild only when the target is the SAME model (source + id) - the UI re-sends the
+    // unchanged model on a reasoning-only switch. Comparing source too is load-bearing: two sources can
+    // serve the same model id, and a Provider only carries the id, so a model-id-only check would keep
+    // the wrong source. With no known current ref (turn carried none), rebuild to be safe.
+    if (currentRef && sameModel(currentRef, model)) {
       return;
     }
     const rebuilt = opts.rebuildProvider?.(model);
@@ -761,15 +776,9 @@ export function runAgent(
       conversation.splice(0, conversation.length, ...normalized);
     }
     currentProvider = rebuilt;
+    currentRef = model;
   };
 
-  // The single mid-turn-switch re-resolution boundary (plan 09.1 D-001/D-002): the loop reads the
-  // per-turn switch cell exactly once per step, right before the model stream opens (below), so a switch
-  // requested while the prior step's stream was open lands on this step and never interrupts a request in
-  // flight, and is preserved across a stop/checkpoint that does not open a model step. A model delta
-  // rebuilds the provider; reasoning is then clamped to the (possibly new) provider's surface so a level
-  // the target lacks carries to the nearest supported one. Returns the `model_switched` loop event to emit
-  // ahead of the step, or undefined when none was queued.
   // Structured switch observability behind the `agent` debug scope (plan 09.1 M8): every applied/blocked
   // switch logs from/to model+reasoning, who asked, the running per-turn count, and the guard's context-fit
   // numbers, so /doctor (which reads this scope) can postmortem a turn's model changes. The durable
@@ -790,6 +799,14 @@ export function runAgent(
     });
   };
 
+  // The single mid-turn-switch re-resolution boundary (plan 09.1 D-001/D-002): the loop reads the per-turn
+  // switch cell exactly once per step, right before the model stream opens (below), so a switch requested
+  // while the prior step's stream was open lands on this step and never interrupts a request in flight, and
+  // is preserved across a stop/checkpoint that does not open a model step. A model delta rebuilds the
+  // provider; reasoning is then clamped to the (possibly new) provider's surface so a level the target
+  // lacks carries to the nearest supported one. Returns the `model_switched` loop event to emit ahead of
+  // the step (applied or blocked), or undefined when none was queued. This is the seam the future
+  // auto-router attaches to (D-004).
   const applyPendingSwitch = (): Extract<AgentEvent, { type: "model_switched" }> | undefined => {
     const req = opts.switch?.take();
     if (!req) {
@@ -822,12 +839,17 @@ export function runAgent(
     if (req.model) {
       rebuildForModelSwitch(req.model);
     }
+    // Re-clamp reasoning to the (possibly new) provider's surface. Skip when the request names neither a
+    // model nor a level - there is nothing to carry, and clamping a null request would push an
+    // undefined-reasoning turn onto the provider default rather than leaving it as-is.
     const requested = req.reasoning ?? req.model?.reasoning ?? currentReasoning ?? null;
-    currentReasoning =
-      constrainReasoning(
-        { levels: currentProvider.reasoningLevels, default: currentProvider.defaultReasoning },
-        requested,
-      ) ?? undefined;
+    if (requested !== null || req.model) {
+      currentReasoning =
+        constrainReasoning(
+          { levels: currentProvider.reasoningLevels, default: currentProvider.defaultReasoning },
+          requested,
+        ) ?? undefined;
+    }
     const applied: Extract<AgentEvent, { type: "model_switched" }> = {
       type: "model_switched",
       from,

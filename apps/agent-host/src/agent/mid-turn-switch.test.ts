@@ -156,6 +156,74 @@ test("M4: a model change rebuilds the provider; the next step runs the new model
   );
 });
 
+test("M4: a same-model reasoning re-send does not rebuild, but a cross-source same-id swap does", async () => {
+  // Reasoning-only UI re-send (same source + id): must NOT rebuild the provider.
+  const cellA = createSwitchCell();
+  let rebuilds = 0;
+  const sameModelProvider = recordingProvider(
+    "model-a",
+    (call) =>
+      call === 1
+        ? (cellA.request({
+            model: { sourceId: "s", modelId: "model-a", reasoning: "high" },
+            initiator: "manual",
+          }),
+          [{ type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } }])
+        : [{ type: "text", text: "done" }],
+    () => {},
+  );
+  await Effect.runPromise(
+    Stream.runForEach(
+      runAgent(sameModelProvider, [{ role: "user", content: "go" }], "low", "r1", true, {
+        switch: cellA,
+        runTool: () => Effect.succeed("ok"),
+        initialModel: { sourceId: "s", modelId: "model-a", reasoning: "low" },
+        rebuildProvider: () => {
+          rebuilds += 1;
+          return null;
+        },
+      }),
+      () => Effect.void,
+    ),
+  );
+  assert.equal(rebuilds, 0, "re-sending the unchanged model (reasoning-only) never rebuilds");
+
+  // Cross-SOURCE switch to the SAME model id: a model-id-only check would wrongly skip the rebuild.
+  const cellB = createSwitchCell();
+  let bRan = false;
+  const providerB = recordingProvider(
+    "dup",
+    () => [{ type: "text", text: "b" }],
+    () => {
+      bRan = true;
+    },
+  );
+  const providerA = recordingProvider(
+    "dup",
+    (call) =>
+      call === 1
+        ? (cellB.request({
+            model: { sourceId: "source-b", modelId: "dup", reasoning: "low" },
+            initiator: "manual",
+          }),
+          [{ type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } }])
+        : [{ type: "text", text: "a" }],
+    () => {},
+  );
+  await Effect.runPromise(
+    Stream.runForEach(
+      runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
+        switch: cellB,
+        runTool: () => Effect.succeed("ok"),
+        initialModel: { sourceId: "source-a", modelId: "dup", reasoning: "low" },
+        rebuildProvider: (model) => (model.sourceId === "source-b" ? providerB : null),
+      }),
+      () => Effect.void,
+    ),
+  );
+  assert.ok(bRan, "a cross-source swap to the same model id still rebuilds onto the new source");
+});
+
 test("M6: a cross-provider swap normalizes the carried conversation the new provider replays", async () => {
   const cell = createSwitchCell();
   // providerB (a DIFFERENT source id) captures the conversation it is handed on its first step.

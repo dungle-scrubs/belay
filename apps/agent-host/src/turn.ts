@@ -60,11 +60,15 @@ export function publishTurn(
     /** Rebuilds the provider for a mid-turn MODEL change (09.1 M4): the host wires `buildSourceProvider`
      *  so the loop can swap to a target model. Absent on a turn that only supports reasoning switches. */
     readonly rebuildProvider?: (model: ModelRef) => Provider | null;
+    /** The turn's starting model ref (09.1 M4): the identity a mid-turn switch compares against to tell a
+     *  real model change from a reasoning-only re-send. Absent when the turn carried no resolved ref. */
+    readonly initialModel?: ModelRef;
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
   const switchCell = options.switch;
   const rebuildProvider = options.rebuildProvider;
+  const initialModel = options.initialModel;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -354,6 +358,7 @@ export function publishTurn(
         ...(seedUsage ? { seedUsage } : {}),
         ...(switchCell ? { switch: switchCell } : {}),
         ...(rebuildProvider ? { rebuildProvider } : {}),
+        ...(initialModel ? { initialModel } : {}),
       }),
       handle,
     ).pipe(
