@@ -56,3 +56,12 @@ A UI-selector switch is **sticky** (it also updates the persisted next-turn sele
 a **smaller** context window is **guarded** (refused, `outcome: blocked`, if the conversation would not
 fit). A dedicated plan-25 `ModelChange` hook was considered and **dropped**; per-model prompt guidance,
 if pursued, belongs in the provider/catalog layer, not a user hook.
+
+## Durable follow-up queue vocabulary (`.plans/47-durable-follow-up-queue`)
+
+| Term | Meaning | Notes |
+|---|---|---|
+| **Durable follow-up queue** | The persisted, host-scheduled queue of follow-up `user.message`s submitted while a turn is in flight, each published to the session log at submit time. Replaces the ephemeral browser send queue as the source of truth, so the host drains the whole backlog in order even after the submitting client disconnects. | Drains at 09.1's **switch boundary**. **Not** a workflow/fleet **run** (durable orchestration), and **not** plan 11's local-model **admission queue** - three different "queues"/"durable" things. |
+| **Prompt supersession** | A session event naming one or more prior `user.message` `eventId`s as retracted, with an **optional replacement** prompt. The first event-to-event reference in the protocol. | The append-only-log equivalent of removing from the queue. Catch-up runs "**unanswered AND not superseded**". Two producers: Escape-fold (supersede N with a folded replacement) and unqueue (supersede one, no replacement). |
+| **Steer-fold** | Collapsing the queued prompts into **one** steering prompt on first Escape. | Distinct from CONTEXT's workflow **result fold-back** (subagents folding results to a parent). Two live meanings of "fold" - this is the send-queue one. |
+| **Recall buffer** | A local, capped `localStorage` ring of pulled-out and past prompts, navigated by Up/Down; pulling the newest queued item into the composer emits a durable removal. | **Per-machine, not durable, not roamed across devices.** Pulled items are local-only until re-submitted. Keyed by `sessionId` (pulled slice); a later typed-history follow-on reuses it project-keyed. |
