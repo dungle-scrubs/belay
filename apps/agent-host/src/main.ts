@@ -38,6 +38,7 @@ import {
   RESTART_RESUME_REASON,
   resumeProjection,
 } from "./agent/resume-projection";
+import { createSwitchCell, type SwitchCell } from "./agent/switch-cell";
 import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
 import { describeAgent, discoverAgents } from "./agents";
@@ -313,6 +314,15 @@ const compactionController = new CompactionController(providers[DEFAULT_PROVIDER
  */
 let runningRunId: string | null = null;
 
+/**
+ * The active turn's mid-turn-switch cell (plan 09.1), keyed by its runId. `startTurn` sets it when a
+ * switchable turn forks; the fiber observer clears it. `handleEvent` writes a `model.switch.requested`
+ * into it so the loop re-resolves model+reasoning at its next step boundary. Null when no switchable
+ * turn is in flight, so a switch request with no active turn is a loop no-op (the web keeps its
+ * next-turn selection - today's behavior).
+ */
+let activeSwitch: { readonly runId: string; readonly cell: SwitchCell } | null = null;
+
 /** The live Emit service: the turn program's events go to the Richter log via emit(). A second
  *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
  *  is dropped. */
@@ -569,6 +579,11 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
         background,
       });
   runningRunId = runId;
+  // The per-turn mid-turn-switch cell (09.1): a `/clip` turn is not switchable (restricted surface), an
+  // ordinary turn is. Registered so `handleEvent` can route a `model.switch.requested` for this run into
+  // it; the loop reads it at the next step boundary.
+  const switchCell = restricted ? undefined : createSwitchCell();
+  activeSwitch = switchCell ? { runId, cell: switchCell } : null;
   // Carry the prior turn's measured context forward (03.1 D-002): when compaction has floored out and
   // the turn legitimately starts at/above the fraction, this lets the context-pressure gate synthesize
   // at step 0 instead of opening one doomed tool round. Absent on a session's first turn.
@@ -580,6 +595,7 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       delegate,
       ...(restricted ? { toolNames: CLIPBOARD_TOOL_NAMES } : {}),
       ...(seedUsage ? { seedUsage } : {}),
+      ...(switchCell ? { switch: switchCell } : {}),
     }).pipe(Effect.provide(EmitLive)),
   );
   fiber.addObserver((exit) => {
@@ -587,6 +603,10 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     // a lingering in-flight entry for it as an orphan (its terminal completion may have been lost).
     if (runningRunId === runId) {
       runningRunId = null;
+    }
+    // Drop the switch cell for this run so a late switch request can't write into a dead turn.
+    if (activeSwitch?.runId === runId) {
+      activeSwitch = null;
     }
     // publishTurn handles provider failures internally, so a non-interrupt failure here
     // is an unexpected defect worth surfacing.
@@ -2256,6 +2276,24 @@ function handleEvent(message: SessionEvent): void {
     // cancelled burst for every in-flight run at that point - which is what made each host restart
     // republish a wall of "cancelled" completions. Replay just lets those logged completions stand.
     abortRuns(decoded.runId);
+  } else if (decoded.type === "model.switch.requested" && live && lease.isLeader()) {
+    // LIVE LEADER ONLY (09.1). Route the switch into the in-flight turn's cell; the loop re-resolves at
+    // its next step boundary and the host then emits model.switched. A request whose runId is not the
+    // active switchable turn (or with no active turn) is a loop no-op - the web keeps its next-turn
+    // selection (today's behavior). Like a cancel this is an ACTION, not state to rebuild on replay, so
+    // it is gated live+leader and never re-applied during reconnect.
+    if (
+      decoded.model &&
+      activeSwitch &&
+      (decoded.runId === "" || activeSwitch.runId === decoded.runId)
+    ) {
+      const reasoning = decoded.model.reasoning;
+      activeSwitch.cell.request({
+        model: decoded.model,
+        ...(reasoning != null ? { reasoning } : {}),
+        initiator: decoded.initiator,
+      });
+    }
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
     if (decoded.command === "/compact") {
       compactPending = true; // cleared by its command.result; reaped if a restart interrupts it

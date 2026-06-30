@@ -106,6 +106,91 @@ test("a legacy user.message (no model) decodes with no model key", () => {
   assert.equal(decoded?.type === "user.message" && "model" in decoded, false);
 });
 
+test("events.modelSwitchRequested (the control event) round-trips with its target ModelRef (09.1)", () => {
+  const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
+  const decoded = decodeTrevorEvent(
+    stored(events.modelSwitchRequested({ runId: "r1", model, initiator: "manual" })),
+  );
+  assert.deepEqual(decoded, {
+    type: "model.switch.requested",
+    runId: "r1",
+    model,
+    initiator: "manual",
+  });
+});
+
+test("a garbled modelSwitchRequested model is dropped (decode never throws) (09.1)", () => {
+  const decoded = decodeTrevorEvent(
+    stored({
+      type: "model.switch.requested",
+      payload: { runId: "r1", model: { sourceId: 5 }, initiator: "manual" },
+    }),
+  );
+  assert.equal(decoded?.type, "model.switch.requested");
+  assert.equal(decoded?.type === "model.switch.requested" && "model" in decoded, false);
+});
+
+test("events.modelSwitched records the from/to model+reasoning, initiator, and outcome (09.1)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.modelSwitched({
+        runId: "r1",
+        from: { model: "deepseek-v4", reasoning: "low" },
+        to: { model: "kimi-k2", reasoning: "high" },
+        initiator: "manual",
+        outcome: "applied",
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "model.switched",
+    runId: "r1",
+    from: { model: "deepseek-v4", reasoning: "low" },
+    to: { model: "kimi-k2", reasoning: "high" },
+    initiator: "manual",
+    outcome: "applied",
+    reason: undefined,
+  });
+});
+
+test("a reasoning-only modelSwitched keeps the model equal on both sides (09.1)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.modelSwitched({
+        runId: "r1",
+        from: { model: "deepseek-v4", reasoning: "low" },
+        to: { model: "deepseek-v4", reasoning: "high" },
+        initiator: "manual",
+        outcome: "applied",
+      }),
+    ),
+  );
+  assert.equal(decoded?.type === "model.switched" && decoded.from.model, "deepseek-v4");
+  assert.equal(decoded?.type === "model.switched" && decoded.to.model, "deepseek-v4");
+  assert.equal(decoded?.type === "model.switched" && decoded.from.reasoning, "low");
+  assert.equal(decoded?.type === "model.switched" && decoded.to.reasoning, "high");
+});
+
+test("a blocked modelSwitched carries the user-visible reason (09.1 guard)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.modelSwitched({
+        runId: "r1",
+        from: { model: "big", reasoning: "high" },
+        to: { model: "small", reasoning: "high" },
+        initiator: "manual",
+        outcome: "blocked",
+        reason: "conversation does not fit the smaller context window",
+      }),
+    ),
+  );
+  assert.equal(decoded?.type === "model.switched" && decoded.outcome, "blocked");
+  assert.match(
+    (decoded?.type === "model.switched" && decoded.reason) || "",
+    /smaller context window/,
+  );
+});
+
 test("a garbled user.message model is dropped so the host falls back to provider (D-065)", () => {
   const decoded = decodeTrevorEvent(
     stored({

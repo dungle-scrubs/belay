@@ -31,6 +31,13 @@ export interface SwitchCell {
   take(): SwitchRequest | undefined;
 }
 
+/** One side of a switch - the model id + reasoning level in effect. Rides the `model.switched` record
+ *  and the transcript marker as `from`/`to` so the delta renders, including a reasoning-only change. */
+export interface SwitchEndpoint {
+  readonly model: string;
+  readonly reasoning?: string;
+}
+
 export function createSwitchCell(): SwitchCell {
   let pending: SwitchRequest | undefined;
   return {

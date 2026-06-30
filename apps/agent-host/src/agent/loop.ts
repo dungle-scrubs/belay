@@ -26,7 +26,7 @@ import {
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
-import type { SwitchCell, SwitchRequest } from "./switch-cell";
+import type { SwitchCell, SwitchEndpoint, SwitchInitiator } from "./switch-cell";
 import {
   createToolGuardrails,
   type GuardrailConfig,
@@ -390,6 +390,17 @@ export type AgentEvent =
       readonly threshold: number;
       readonly detail: string;
     }
+  | {
+      /** A mid-turn model/reasoning switch applied at this step boundary (09.1): the from/to
+       *  model+reasoning, who asked, and the outcome (Phase 3 adds `blocked`). turn.ts maps it to the
+       *  durable `model.switched` session event, which the web folds into the transcript marker. */
+      readonly type: "model_switched";
+      readonly from: SwitchEndpoint;
+      readonly to: SwitchEndpoint;
+      readonly initiator: SwitchInitiator;
+      readonly outcome: "applied" | "blocked";
+      readonly reason?: string;
+    }
   | { readonly type: "empty" };
 
 /**
@@ -705,20 +716,33 @@ export function runAgent(
       );
     });
 
+  const endpoint = (): SwitchEndpoint => ({
+    model: provider.model,
+    ...(currentReasoning !== undefined ? { reasoning: currentReasoning } : {}),
+  });
+
   // The single mid-turn-switch re-resolution boundary (plan 09.1 D-001/D-002): the loop reads the
-  // per-turn switch cell exactly here - at each step start, before the model stream opens - so a switch
-  // requested while the prior step's stream was open lands on this step and never interrupts a request
-  // in flight. Phase 1 applies a reasoning-only change to `currentReasoning`; later phases rebuild the
-  // provider on a model delta and record the switch. Returns the applied request, or undefined.
-  const applyPendingSwitch = (): SwitchRequest | undefined => {
+  // per-turn switch cell exactly once per step, right before the model stream opens (below), so a switch
+  // requested while the prior step's stream was open lands on this step and never interrupts a request in
+  // flight, and is preserved across a stop/checkpoint that does not open a model step. Phase 1 applies a
+  // reasoning-only change to `currentReasoning`; later phases rebuild the provider on a model delta.
+  // Returns the `model_switched` loop event to emit ahead of the step, or undefined when none was queued.
+  const applyPendingSwitch = (): Extract<AgentEvent, { type: "model_switched" }> | undefined => {
     const req = opts.switch?.take();
     if (!req) {
       return undefined;
     }
+    const from = endpoint();
     if (req.reasoning !== undefined) {
       currentReasoning = req.reasoning;
     }
-    return req;
+    return {
+      type: "model_switched",
+      from,
+      to: endpoint(),
+      initiator: req.initiator,
+      outcome: "applied",
+    };
   };
 
   // Stream.suspend keeps each step lazy: its provider.stream (which reads `conversation`)
@@ -726,9 +750,6 @@ export function runAgent(
   // step's tools have run and threaded their results - never eagerly while building it.
   const step = (n: number): Stream.Stream<AgentEvent, ProviderError> =>
     Stream.suspend(() => {
-      // Re-resolve model+reasoning from the switch cell before the budget gate, so a mid-turn switch
-      // both drives this step's model stream and sizes its adaptive budget.
-      applyPendingSwitch();
       // Budget gate before opening another tool round: the step backstop OR - the real
       // governor - the prior step's prompt crossing the configured fraction of the window.
       // Either way force a final answer rather than ending on a tool stub. At step 0 both are
@@ -890,7 +911,14 @@ export function runAgent(
           }),
         );
       };
-      const modelStep = connectStep(1);
+      // Apply a pending mid-turn switch now that this step is committed to a model call (past the
+      // stop/checkpoint gates): re-read model+reasoning, then emit the `model_switched` marker ahead of
+      // the step that runs under it. A switch landing on a stopped/checkpointed step stays queued for the
+      // next real step instead of being silently consumed.
+      const switched = applyPendingSwitch();
+      const modelStep = switched
+        ? Stream.concat(Stream.succeed<AgentEvent>(switched), connectStep(1))
+        : connectStep(1);
 
       // Built lazily (Stream.unwrap defers the thunk until the model step has drained), so
       // it reads the now-populated toolCalls/assistantText: run each tool in order, then

@@ -327,6 +327,20 @@ export interface TrevorEventInput {
   readonly payload: Record<string, unknown>;
 }
 
+/** Who asked for a mid-turn model/reasoning switch: `manual` (the UI selector) now, `auto` (the future
+ *  auto-router) later. The single seam both initiators attach to (plan 09.1 D-004). */
+export type ModelSwitchInitiator = "manual" | "auto";
+
+/** Whether a mid-turn switch took effect or was refused by the larger->smaller context guard (D-007). */
+export type ModelSwitchOutcome = "applied" | "blocked";
+
+/** One side of a mid-turn switch - the model id + reasoning level in effect. Rides `model.switched` as
+ *  `from`/`to` so the delta renders, including a reasoning-only change (same model on both sides). */
+export interface ModelSwitchEndpoint {
+  readonly model: string;
+  readonly reasoning?: string;
+}
+
 // --- emit side: typed constructors (single source of names + payload shapes) ---
 
 /**
@@ -409,6 +423,30 @@ export const events = {
       pressure: p.pressure,
       threshold: p.threshold,
       detail: p.detail,
+    },
+  }),
+  /**
+   * A mid-turn model/reasoning switch was applied (or refused) at a step boundary (plan 09.1 D-003): the
+   * durable record of `from`/`to` model+reasoning, who asked (`initiator`), and the `outcome`. Recorded
+   * on the session log so replay reconstructs the active model at every point; the web folds it into the
+   * transcript switch marker, including a reasoning-only change (same model on both sides).
+   */
+  modelSwitched: (p: {
+    runId: string;
+    from: ModelSwitchEndpoint;
+    to: ModelSwitchEndpoint;
+    initiator: ModelSwitchInitiator;
+    outcome: ModelSwitchOutcome;
+    reason?: string;
+  }): TrevorEventInput => ({
+    type: "model.switched",
+    payload: {
+      runId: p.runId,
+      from: p.from,
+      to: p.to,
+      initiator: p.initiator,
+      outcome: p.outcome,
+      ...(p.reason ? { reason: p.reason } : {}),
     },
   }),
   /** A transient provider outage is being auto-retried before any token streamed (D-076…D-079):
@@ -553,6 +591,20 @@ export const events = {
   userCancel: (p: { runId: string }): TrevorEventInput => ({
     type: "user.cancel",
     payload: { runId: p.runId },
+  }),
+  /**
+   * A request to switch the active turn's model/reasoning mid-flight (plan 09.1): the control event the
+   * UI selector (and later the auto-router) sends, keyed to the in-flight `runId`. The host routes it to
+   * that turn's switch cell, which the loop reads at the next step boundary; a request with no matching
+   * active turn is a loop no-op. `model` is the target ref (its `reasoning` is the requested level).
+   */
+  modelSwitchRequested: (p: {
+    runId: string;
+    model: ModelRef;
+    initiator: ModelSwitchInitiator;
+  }): TrevorEventInput => ({
+    type: "model.switch.requested",
+    payload: { runId: p.runId, model: p.model, initiator: p.initiator },
   }),
   /** Browser invokes an immediate host command, bypassing the model/turn queue. */
   userCommand: (p: { command: string; args: string }): TrevorEventInput => ({

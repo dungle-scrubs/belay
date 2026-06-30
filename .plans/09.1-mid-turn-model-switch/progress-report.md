@@ -28,13 +28,13 @@
 
 ### M2 - Switch control event + host routing + `model.switched`
 
-- [ ] RED: Protocol tests for the new switch control event and the new `model.switched` session event (constructor + `DecodedEvent` member + decode).
-- [ ] GREEN: Add `events.modelSwitched` + the control event; wire decode and lifecycle/inventory registration.
-- [ ] RED: Host test that a switch request during an active turn updates the cell and emits `model.switched` (`initiator: manual`, `outcome: applied`); a request with no active turn is a loop no-op.
-- [ ] GREEN: Route the request in `handleEvent` to the active turn's cell; emit the event.
-- [ ] RED: Test a reasoning-only change records from/to reasoning with the model unchanged.
-- [ ] GREEN: Emit from/to with an optional model delta.
-- [ ] REFACTOR: Keep the request -> cell -> event path inspectable and redaction-safe.
+- [x] RED: Protocol tests for the new switch control event and the new `model.switched` session event (constructor + `DecodedEvent` member + decode).
+- [x] GREEN: Add `events.modelSwitched` + the control event; wire decode and lifecycle/inventory registration.
+- [x] RED: Host test that a switch request during an active turn updates the cell and emits `model.switched` (`initiator: manual`, `outcome: applied`); a request with no active turn is a loop no-op.
+- [x] GREEN: Route the request in `handleEvent` to the active turn's cell; emit the event.
+- [x] RED: Test a reasoning-only change records from/to reasoning with the model unchanged.
+- [x] GREEN: Emit from/to with an optional model delta.
+- [x] REFACTOR: Keep the request -> cell -> event path inspectable and redaction-safe.
 
 ### M3 - Transcript marker + sticky web send (reasoning)
 

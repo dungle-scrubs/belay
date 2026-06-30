@@ -6,6 +6,7 @@ import {
   runAgent,
   type TurnLoopConfig,
 } from "./agent/loop";
+import type { SwitchCell } from "./agent/switch-cell";
 import { recordTurnStop } from "./agent/turn-stop-metrics";
 import type { HistoryImageResolver } from "./artifacts";
 import { DeltaBuffer } from "./delta-buffer";
@@ -52,9 +53,14 @@ export function publishTurn(
     /** Carry-forward of the prior turn's measured usage (03.1 D-002), so the context-pressure gate
      *  can fire at step 0 when the turn inherits >= the fraction. Absent on a session's first turn. */
     readonly seedUsage?: { readonly input: number; readonly contextWindow: number };
+    /** The per-turn mid-turn-switch cell (09.1): the host writes a switch request into it when a
+     *  `model.switch.requested` control event lands; the loop reads it at the next step boundary. Absent
+     *  on a subagent turn (not switchable). */
+    readonly switch?: SwitchCell;
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
+  const switchCell = options.switch;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -303,6 +309,21 @@ export function publishTurn(
               detail: event.detail,
             }),
           );
+        } else if (event.type === "model_switched") {
+          // A mid-turn model/reasoning switch applied at a step boundary (09.1): finalize the open
+          // segment and record the durable from/to model+reasoning so replay reconstructs the active
+          // model and the web renders the switch marker; the next step's output streams below it.
+          yield* flushAll;
+          yield* emit.publish(
+            events.modelSwitched({
+              runId,
+              from: event.from,
+              to: event.to,
+              initiator: event.initiator,
+              outcome: event.outcome,
+              ...(event.reason ? { reason: event.reason } : {}),
+            }),
+          );
         } else {
           // input is the prompt size of the latest step (current context); output sums.
           usage = {
@@ -327,6 +348,7 @@ export function publishTurn(
         delegate,
         ...(loop ? { loop } : {}),
         ...(seedUsage ? { seedUsage } : {}),
+        ...(switchCell ? { switch: switchCell } : {}),
       }),
       handle,
     ).pipe(

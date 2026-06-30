@@ -23,6 +23,9 @@ import type {
   GitStatus,
   HandoffMode,
   JobSnapshot,
+  ModelSwitchEndpoint,
+  ModelSwitchInitiator,
+  ModelSwitchOutcome,
   ProviderDiagnostic,
   ProviderIncidentReason,
   ProviderModel,
@@ -442,6 +445,21 @@ export type DecodedEvent =
       readonly diagnostic?: ProviderDiagnostic;
     }
   | {
+      readonly type: "model.switched";
+      readonly runId: string;
+      readonly from: ModelSwitchEndpoint;
+      readonly to: ModelSwitchEndpoint;
+      readonly initiator: ModelSwitchInitiator;
+      readonly outcome: ModelSwitchOutcome;
+      readonly reason?: string;
+    }
+  | {
+      readonly type: "model.switch.requested";
+      readonly runId: string;
+      readonly model?: ModelRef;
+      readonly initiator: ModelSwitchInitiator;
+    }
+  | {
       readonly type: "delegated.to";
       readonly runId: string;
       readonly childSessionId: string;
@@ -701,6 +719,29 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         detail: str(p.detail),
         ...(diagnostic ? { diagnostic } : {}),
       };
+    }
+    case "model.switched": {
+      const decodeEndpoint = (v: unknown): ModelSwitchEndpoint => {
+        const o = (v ?? {}) as Record<string, unknown>;
+        const reasoning = optStr(o.reasoning);
+        return { model: str(o.model), ...(reasoning !== undefined ? { reasoning } : {}) };
+      };
+      const initiator: ModelSwitchInitiator = p.initiator === "auto" ? "auto" : "manual";
+      const outcome: ModelSwitchOutcome = p.outcome === "blocked" ? "blocked" : "applied";
+      return {
+        type: "model.switched",
+        runId,
+        from: decodeEndpoint(p.from),
+        to: decodeEndpoint(p.to),
+        initiator,
+        outcome,
+        reason: optStr(p.reason),
+      };
+    }
+    case "model.switch.requested": {
+      const model = decodeModelRef(p.model);
+      const initiator: ModelSwitchInitiator = p.initiator === "auto" ? "auto" : "manual";
+      return { type: "model.switch.requested", runId, ...(model ? { model } : {}), initiator };
     }
     case "delegated.to":
       return {
