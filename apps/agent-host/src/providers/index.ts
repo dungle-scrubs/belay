@@ -1,3 +1,4 @@
+import type { LocalAdmissionGate } from "../admission/service";
 import { codexProvider } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { PI_KEY_PROVIDERS, piKeyProvider } from "./pi-key";
@@ -52,13 +53,17 @@ export const DEFAULT_PROVIDER = "qwen";
  * the adapter (pi-ai registry / LM Studio). Nothing is duplicated in a shared package - the web
  * renders whatever the host announces.
  */
-export function buildProviders(): ProviderRegistry {
+export function buildProviders(
+  opts: { readonly admissionGate?: LocalAdmissionGate } = {},
+): ProviderRegistry {
+  const admissionGate = opts.admissionGate;
   return {
     // Two qwen3.6-27b quants now coexist in LM Studio, so the bare "qwen3.6-27b-mlx"
     // key is ambiguous - pin each to its org-prefixed id.
     qwen: lmStudioProvider({
       model: process.env.LMSTUDIO_MODEL ?? "unsloth/qwen3.6-27b-mlx",
       label: "Qwen 27B 8-bit (local)",
+      admissionGate,
     }),
     gpt: codexProvider("GPT-5.5"),
     // Loaded at 64k - the working window, and the target compaction (D-036) keeps the prompt under
@@ -69,6 +74,7 @@ export function buildProviders(): ProviderRegistry {
       model: "lmstudio-community/qwen3.6-27b-mlx",
       label: "Qwen 27B 4-bit (local)",
       maxContext: 65536,
+      admissionGate,
     }),
     // The static-key cloud providers (DeepSeek, Z.ai/GLM, MiniMax) come from one registry
     // (pi-key.ts), so adding one is a single row there - not a line here plus a factory body.

@@ -21,6 +21,7 @@ import {
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
+import { createLocalAdmissionGate } from "./admission/service";
 import { CompactionController } from "./agent/compaction-controller";
 import {
   type BackgroundChildInfo,
@@ -149,7 +150,15 @@ const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? serviceUrl("store");
 // Richter speaks the same SessionTransport contract as the local store, so backend selection is just
 // which URL the stream transport points at (no separate adapter until Richter needs real divergence).
 const transport = streamTransport(RICHTER_URL ?? SESSION_STORE_URL);
-const providers = buildProviders();
+// Local-model admission (plan 11): one cross-process gate per host serializes LM Studio generation +
+// reload across projects/subagents, so parallel work shares the runtime without overload or reload
+// races. Conservative default (capacity 1 per resource); foreground priority unless a future per-turn
+// resolver refines it. Fail-open by construction - it never wedges a turn shut.
+const admissionGate = createLocalAdmissionGate({
+  hostId: crypto.randomUUID(),
+  newOwnerId: () => crypto.randomUUID(),
+});
+const providers = buildProviders({ admissionGate });
 const commands = buildCommandRegistry();
 // The host-owned model source + catalog read model (D-065): which provider sources exist, their auth
 // state, and each configured source's live model list. Loaded async (it hits each provider's /models),

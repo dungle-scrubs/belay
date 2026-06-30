@@ -1,0 +1,42 @@
+import { Effect, Exit, Stream } from "effect";
+import type { AdmissionReleaseReason } from "./contract";
+import type { AdmissionHandle } from "./runtime";
+
+/**
+ * The Effect bridge for admission (plan 11 M5/M6): wraps a local-model {@link Stream} so the generation
+ * lease is acquired BEFORE the stream starts and released when the stream's scope closes - on normal
+ * completion, on failure, or on interruption (a cancelled turn). The acquire runs as a scoped resource
+ * (`acquireRelease`), so Effect guarantees the finalizer (release) runs exactly once no matter how the
+ * stream ends. The acquire is interruptible via the AbortSignal Effect hands `Effect.promise`, so
+ * cancelling a queued turn aborts its wait and frees the lease.
+ */
+
+/** Maps a stream-scope exit to the admission release reason: interrupted -> cancelled, failed ->
+ *  provider_failure, otherwise success. */
+export function releaseReason(exit: Exit.Exit<unknown, unknown>): AdmissionReleaseReason {
+  if (Exit.isInterrupted(exit)) {
+    return "cancelled";
+  }
+  if (Exit.isFailure(exit)) {
+    return "provider_failure";
+  }
+  return "success";
+}
+
+/**
+ * Wraps `makeStream` with admission. `acquire` (given an AbortSignal wired to interruption) resolves to
+ * the held handle; the inner stream then runs holding it, and the handle is released with the
+ * exit-derived reason when the scope closes. With a no-op (fail-open) handle this is transparent - the
+ * stream runs and the release does nothing.
+ */
+export function admittedStream<A, E>(
+  acquire: (signal: AbortSignal) => Promise<AdmissionHandle>,
+  makeStream: () => Stream.Stream<A, E>,
+): Stream.Stream<A, E> {
+  return Stream.unwrapScoped(
+    Effect.acquireRelease(
+      Effect.promise((signal) => acquire(signal)),
+      (handle, exit) => Effect.promise(() => handle.release(releaseReason(exit))),
+    ).pipe(Effect.map(() => makeStream())),
+  );
+}

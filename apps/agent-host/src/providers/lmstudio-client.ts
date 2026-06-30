@@ -39,6 +39,9 @@ export interface LmStudioClientConfig {
   readonly lmsBin: string;
   /** Provider id for the typed errors this raises (matches the owning provider). */
   readonly providerId: string;
+  /** Runs the `lms unload`/`load` work under the endpoint lifecycle lease (plan 11 M5), so two host
+   *  processes never run competing reloads against one runtime. Omitted = run reloads directly. */
+  readonly withLifecycleLease?: <T>(fn: () => Promise<T>) => Promise<T>;
 }
 
 export class LmStudioClient {
@@ -170,10 +173,19 @@ export class LmStudioClient {
       });
       try {
         const key = JSON.stringify(this.config.model);
-        if (info.state === "loaded") {
-          await execAsync(`${this.config.lmsBin} unload ${key}`);
-        }
-        await execAsync(`${this.config.lmsBin} load ${key} -c ${target} -y`, { timeout: 300_000 });
+        // The unload+load pair is the endpoint lifecycle operation: hold the lifecycle lease across
+        // BOTH so a peer process can't interleave its own reload between our unload and load (M5).
+        const runReload = async () => {
+          if (info.state === "loaded") {
+            await execAsync(`${this.config.lmsBin} unload ${key}`);
+          }
+          await execAsync(`${this.config.lmsBin} load ${key} -c ${target} -y`, {
+            timeout: 300_000,
+          });
+        };
+        await (this.config.withLifecycleLease
+          ? this.config.withLifecycleLease(runReload)
+          : runReload());
         this.contextWindow = target;
         this.lastError = null;
         this.lastReloadMs = Date.now() - startedAt;

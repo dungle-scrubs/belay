@@ -221,9 +221,15 @@ function mutexPath(key: string, caps: AdmissionCaps): string {
   return join(admissionDir(caps), `${resourceStem(key)}.lock`);
 }
 
-/** Parses + validates a resource file, returning an empty resource for a missing / malformed record. */
-function readResource(key: string, capacity: number, caps: AdmissionCaps): AdmissionResourceFile {
-  const empty: AdmissionResourceFile = { key, capacity, active: [], queue: [] };
+/** Parses + validates a resource file, returning an empty resource (at `fallbackCapacity`) for a
+ *  missing / malformed record. A valid file keeps its STORED capacity so read-only inspect/poll respect
+ *  it; {@link acquireAdmission} overrides it with the current config capacity (config changes win). */
+function readResource(
+  key: string,
+  fallbackCapacity: number,
+  caps: AdmissionCaps,
+): AdmissionResourceFile {
+  const empty: AdmissionResourceFile = { key, capacity: fallbackCapacity, active: [], queue: [] };
   const raw = caps.fs.readFile(resourcePath(key, caps));
   if (!raw) {
     return empty;
@@ -233,9 +239,10 @@ function readResource(key: string, capacity: number, caps: AdmissionCaps): Admis
     if (parsed && Array.isArray(parsed.active) && Array.isArray(parsed.queue)) {
       return {
         key,
-        // The caller's current capacity always wins (config may have changed since the file was
-        // written); the stored value is ignored beyond confirming the shape parsed.
-        capacity,
+        capacity:
+          typeof parsed.capacity === "number" && parsed.capacity > 0
+            ? parsed.capacity
+            : fallbackCapacity,
         active: parsed.active.filter(isRecord),
         queue: parsed.queue.filter(isRecord),
       };
@@ -391,7 +398,11 @@ export async function acquireAdmission(
   const capacity = request.capacity ?? ADMISSION_DEFAULT_CAPACITY;
   return withResourceMutex(request.key, caps, () => {
     const nowMs = caps.now();
-    const reaped = reap(readResource(request.key, capacity, caps), nowMs, caps);
+    // The current config capacity wins over whatever the file was last written with.
+    const reaped = {
+      ...reap(readResource(request.key, capacity, caps), nowMs, caps),
+      capacity,
+    };
     const refusal = refusalFor(reaped.active, request.estimate);
     if (refusal) {
       writeResource(reaped, caps);

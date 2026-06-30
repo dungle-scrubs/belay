@@ -1,5 +1,7 @@
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { Effect, Stream } from "effect";
+import { admittedStream } from "../admission/effect";
+import type { LocalAdmissionGate } from "../admission/service";
 import { envNumber } from "../env";
 import { LmStudioClient } from "./lmstudio-client";
 import { streamPiAiModel } from "./pi-ai";
@@ -27,6 +29,9 @@ export interface LmStudioConfig {
   readonly visionOverride: boolean | null;
   /** LM Studio's CLI binary. */
   readonly lmsBin: string;
+  /** The host's local-admission gate (plan 11), or undefined to run without admission (cloud parity /
+   *  tests). When set, generation streams hold a per-model lease and reloads hold the endpoint lease. */
+  readonly admissionGate?: LocalAdmissionGate;
 }
 
 /** Reads the LMSTUDIO_VISION override into a tri-state: true/false force image support, null
@@ -50,6 +55,8 @@ export function lmStudioProvider(opts: {
   readonly label: string;
   /** Pins this model's load below its native ceiling; takes precedence over LMSTUDIO_MAX_CONTEXT. */
   readonly maxContext?: number;
+  /** The host's local-admission gate; omitted in tests / when admission is disabled. */
+  readonly admissionGate?: LocalAdmissionGate;
 }): LmStudioProvider {
   return new LmStudioProvider({
     url: process.env.LMSTUDIO_URL ?? DEFAULT_LMSTUDIO_URL,
@@ -58,6 +65,7 @@ export function lmStudioProvider(opts: {
     contextCap: opts.maxContext ?? envNumber("LMSTUDIO_MAX_CONTEXT", Number.POSITIVE_INFINITY),
     visionOverride: visionOverride(process.env.LMSTUDIO_VISION),
     lmsBin: process.env.LMS_BIN ?? "lms",
+    admissionGate: opts.admissionGate,
   });
 }
 
@@ -77,11 +85,17 @@ export class LmStudioProvider extends DescribableProvider {
   readonly reasoningLevels = ["off", "on"] as const;
   readonly defaultReasoning = "off";
   private readonly client: LmStudioClient;
+  /** The OpenAI-compatible base URL (the endpoint identity for admission resource keys). */
+  private readonly url: string;
+  /** The host's admission gate, or undefined when admission is disabled. */
+  private readonly gate?: LocalAdmissionGate;
 
   constructor(config: LmStudioConfig) {
     super();
     this.model = config.model;
     this.label = config.label;
+    this.url = config.url;
+    this.gate = config.admissionGate;
     this.client = new LmStudioClient({
       url: config.url,
       model: config.model,
@@ -89,6 +103,14 @@ export class LmStudioProvider extends DescribableProvider {
       visionOverride: config.visionOverride,
       lmsBin: config.lmsBin,
       providerId: this.id,
+      // Serialize `lms load`/`unload` across processes under the endpoint lifecycle lease (M5).
+      withLifecycleLease: config.admissionGate
+        ? (fn) =>
+            config.admissionGate!.withLifecycle(
+              { provider: this.id, baseUrl: config.url, model: config.model },
+              fn,
+            )
+        : undefined,
     });
   }
 
@@ -111,6 +133,29 @@ export class LmStudioProvider extends DescribableProvider {
   }
 
   stream(
+    messages: readonly ChatMessage[],
+    tools: readonly ToolDef[],
+    reasoning?: string,
+  ): Stream.Stream<ProviderEvent, ProviderError> {
+    const inner = () => this.streamModel(messages, tools, reasoning);
+    // Generation admission (M6): hold a per-model lease for the whole stream so two local streams for
+    // the same LM Studio resource serialize by default (D-003); released when the stream scope closes
+    // (completion / failure / cancellation). Without a gate the stream runs unwrapped (cloud parity).
+    if (!this.gate) {
+      return inner();
+    }
+    return admittedStream(
+      (signal) =>
+        this.gate!.acquireGeneration(
+          { provider: this.id, baseUrl: this.url, model: this.model },
+          { signal },
+        ),
+      inner,
+    );
+  }
+
+  /** The raw model stream (no admission): unwrap the best-effort context reload, then stream pi-ai. */
+  private streamModel(
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
     reasoning?: string,
