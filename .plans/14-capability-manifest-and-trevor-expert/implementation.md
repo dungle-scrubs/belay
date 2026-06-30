@@ -4,6 +4,7 @@
 
 - [ ] `03-nested-command-menu` - command families, nested menu choices, and `/style` metadata must have a structured surface the manifest can describe.
 - [ ] `.plans/trevor-v2` D-075 discovery registry current cutoff - skill registry, compact roster, `skills_list`, and `skill_view` must expose deterministic metadata for manifest and `trevor-expert` consumption.
+- [ ] `.plans/09.3-local-catalog-metadata` (lands first) - the M4 provider/source/catalog summary reflects the new `CatalogEntry` quantization/arch fields and live-derived local capabilities, not the id-only/hardcoded shape. <!-- D-005 -->
 
 ## 1. Architecture
 
@@ -92,7 +93,8 @@ Trevor needs a host-generated capability manifest and a built-in `trevor-expert`
 - **Dependencies:** M1-M3
 - **Effort:** L
 - **Tasks:**
-  1. RED: Add tests for MCP, LSP, hooks, docs/web, Doctor areas, provider/source/catalog, runtime, protocol, and workspace summaries.
+  1. RED: Add tests for MCP, LSP, hooks, docs/web, Doctor areas, provider/source/catalog, runtime, protocol, and workspace summaries. The provider/source/catalog summary reflects `.plans/09.3-local-catalog-metadata`'s `CatalogEntry` quantization/arch + live capabilities. <!-- D-005 -->
+
   2. GREEN: Add bounded section providers with counts, status, search/read affordances, and freshness metadata.
   3. RED: Add tests for huge catalogs and corpora proving entries are summarized, not fully inlined.
   4. GREEN: Cap dynamic sections and expose explicit query/read affordances for detail.

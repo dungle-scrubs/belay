@@ -12,6 +12,8 @@
 - [ ] `.plans/09.1-mid-turn-model-switch` lets a turn switch model/reasoning mid-turn and records `model.switched`; Doctor's Session/Run and Providers/Models/Auth areas treat the active model/reasoning as mid-turn-mutable and may summarize a per-turn switch count, without becoming raw telemetry. <!-- D-006 -->
 - [ ] `09.2-web-browser-test-suite` (lands first) - resolves this plan's "If Storybook visual automation is not ready" fallback: 09.2 provides it, so the Doctor state matrix (M7) runs through the automated Storybook visual-regression lane and regenerates committed baselines, rather than the jsdom/layout fallback. <!-- D-007 -->
 - [ ] **Reorg (plan 22.2):** Plan 22.2 splits doctor/snapshot.ts and moves doctorFacts out of main.ts into doctor/. Coordinate this plan's doctor rebaseline with 22.2 so they do not fight; tools/doctor.ts thin-delegates to doctor/. <!-- D-008 -->
+- [ ] `.plans/11.1-local-model-residency` (lands first) - the Providers/Models/Auth area surfaces resident Trevor-loaded local models, their per-model context caps, live cross-instance claim counts, and last eviction. <!-- D-009 -->
+- [ ] `.plans/09.3-local-catalog-metadata` (lands first) - the catalog source/model summaries gain quantization/arch and live-derived (not hardcoded) capabilities; the Providers area reflects quant + real capabilities, not the id-only/hardcoded shape. <!-- D-010 -->
 
 ## Architecture
 
@@ -99,7 +101,7 @@ Doctor is itself a user-visible observability surface. Implementation should mak
 - **Dependencies:** M2
 - **Effort:** M
 - **Tasks:**
-  1. RED: Add tests for the canonical area set: Core, Session/Run, Providers/Models/Auth, Internet, Tools/Search, Web/Docs, MCP, LSP, Hooks, Storage/Roots, Workspace, Updates/Version. Under `.plans/09.1-mid-turn-model-switch` the Providers/Models/Auth active model can change mid-turn and Session/Run may summarize the per-turn switch count. <!-- D-006 -->
+  1. RED: Add tests for the canonical area set: Core, Session/Run, Providers/Models/Auth, Internet, Tools/Search, Web/Docs, MCP, LSP, Hooks, Storage/Roots, Workspace, Updates/Version. Under `.plans/09.1-mid-turn-model-switch` the Providers/Models/Auth active model can change mid-turn and Session/Run may summarize the per-turn switch count. <!-- D-006 --> Per `.plans/11.1-local-model-residency` the Providers/Models/Auth area also reports resident Trevor-loaded models, per-model context caps, live claim counts, and last eviction; per `.plans/09.3-local-catalog-metadata` catalog summaries reflect quantization/arch and live capabilities. <!-- D-009 --> <!-- D-010 -->
   2. GREEN: Fill missing areas or mark them explicitly `not_checked` with a concise reason.
   3. RED: Add representative degraded/error cases for each area that can currently be observed.
   4. GREEN: Emit stable findings with labels, messages, evidence/source where useful, and next actions.
