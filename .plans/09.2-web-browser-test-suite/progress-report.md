@@ -66,11 +66,11 @@
 
 ### M4: Perf-artifact producer (nightly/artifact-only)
 
-- [ ] RED: Add a nightly-only test that produces `VirtualizationPerformanceMetrics` from the real browser run and feeds the artifact sink
-- [ ] GREEN: Capture `bottomDeltaPx`/`keyToPaintSamplesMs`/`mountedRows`/`replayToInteractiveMs`/`totalRows` and call `writeVirtualizationPerformanceArtifacts` on budget failure
-- [ ] REFACTOR: Keep perf metrics off the per-PR gate (nightly workflow + artifact upload); document budget tuning
+- [x] RED: Add a nightly-only test that produces `VirtualizationPerformanceMetrics` from the real browser run and feeds the artifact sink
+- [x] GREEN: Capture `bottomDeltaPx`/`keyToPaintSamplesMs`/`mountedRows`/`replayToInteractiveMs`/`totalRows` and call `writeVirtualizationPerformanceArtifacts` on budget failure
+- [x] REFACTOR: Keep perf metrics off the per-PR gate (nightly workflow + artifact upload); document budget tuning
 
 ### Gate 2 (done)
 
-- [ ] Transcript pin / stick-to-bottom / no-yank / jump-re-pins assertions green against the real app
-- [ ] Perf producer runs nightly/artifact-only, never gates a PR
+- [x] Transcript pin / stick-to-bottom / no-yank / jump-re-pins assertions green against the real app
+- [x] Perf producer runs nightly/artifact-only, never gates a PR

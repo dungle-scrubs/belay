@@ -1,0 +1,40 @@
+name: Nightly virtualization perf
+
+# Perf metrics are machine-variable, so they NEVER gate a PR (plan 09.2 D-006). This is a SEPARATE
+# nightly workflow that produces VirtualizationPerformanceMetrics from the real browser run and uploads
+# the artifacts; a budget breach emits summary/metrics/screenshot but does not fail anything per-PR. Tune
+# the budgets in tests/browser/transcript-perf.spec.ts from these artifacts.
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC nightly
+  workflow_dispatch: {}
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.50.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build web app
+        run: pnpm --filter @trevor/web build
+      - name: Produce virtualization perf metrics
+        env:
+          RUN_PERF: "1"
+          TREVOR_PERF_ARTIFACT_DIR: ${{ github.workspace }}/perf-artifacts
+        run: pnpm test:e2e:browser transcript-perf
+      - name: Upload perf artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: virtualization-perf-artifacts
+          path: perf-artifacts/**
+          if-no-files-found: ignore
+          retention-days: 14
