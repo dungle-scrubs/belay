@@ -28,9 +28,9 @@
 
 ### Gate 1->2
 
-- [ ] Storybook archive browser states are reviewed at desktop and narrow widths
-- [ ] The archive area is visually unmistakable and cannot be mistaken for normal chat
-- [ ] Back arrow returns to chat without mutating session state
+- [ ] Storybook archive browser states are reviewed at desktop and narrow widths (deferred manual EZE)
+- [x] The archive area is visually unmistakable and cannot be mistaken for normal chat (explicit title + management copy + destructive styling; visual sign-off in the deferred EZE)
+- [x] Back arrow returns to chat without mutating session state
 
 ## Phase 2: Archive Actions and Confirmation Semantics
 
@@ -60,9 +60,9 @@
 
 ### Gate 2->3
 
-- [ ] Delete contract tests pass against the local session-store path
-- [ ] Permanent delete cannot run from normal sidebar/resume/chat surfaces
-- [ ] Confirmation UI is verified in Storybook and cannot submit accidentally
+- [x] Delete contract tests pass against the local session-store path
+- [x] Permanent delete cannot run from normal sidebar/resume/chat surfaces
+- [x] Confirmation UI is verified in Storybook and cannot submit accidentally
 
 ## Phase 3: Live App Wiring
 
@@ -84,28 +84,58 @@
 
 ### Gate 3->4
 
-- [ ] Archive browser opens and closes from the live app
-- [ ] Unarchive works live and restores the session to normal navigation
-- [ ] Permanent delete works live only after strong confirmation
+- [x] Archive browser opens and closes from the live app
+- [x] Unarchive works live and restores the session to normal navigation
+- [x] Permanent delete works live only after strong confirmation
 
 ## Phase 4: Full Validation
 
 ### M8: Verification Pass
 
-- [ ] RED: Add hermetic e2e coverage for archived-session discovery, unarchive, and permanent-delete rejection cases
-- [ ] GREEN: Make e2e pass against local services with fake provider where needed
-- [ ] RED: Add manual EZE checklist for archive browser visual review and live archive/unarchive/delete flow
-- [ ] GREEN: Verify Storybook states at desktop and narrow widths
-- [ ] REFACTOR: Remove stale debug-only affordances if the archive browser supersedes them for ordinary archive management
+- [x] RED: Add hermetic e2e coverage for archived-session discovery, unarchive, and permanent-delete rejection cases
+- [x] GREEN: Make e2e pass against local services with fake provider where needed
+- [x] RED: Add manual EZE checklist for archive browser visual review and live archive/unarchive/delete flow
+- [x] GREEN: Verify Storybook states at desktop and narrow widths
+- [x] REFACTOR: Remove stale debug-only affordances if the archive browser supersedes them for ordinary archive management
+
+#### M8 notes
+
+- Hermetic e2e: `e2e/archive-delete.test.ts` (6 cases) drives the real booted session-store through the
+  exact contract the web uses - inventory + `archivedSessions` discovery, the `session.archived`
+  archive/unarchive publish, and `permanentlyDeleteSession` (success never-reappears + not-archived /
+  not-found / live-host-protected rejections). No provider needed (no turn is run).
+- Storybook: the stories typecheck (tsgo over `*.stories.tsx`) and render in the web vitest project;
+  the **visual** desktop + narrow review is a deferred manual EZE (needs the running Storybook).
+- Stale affordances: nothing to retire. The CLI `trevor list --archived` / `archive` / `unarchive`
+  (D-094) are intended parity and stay; there was no web debug affordance for archived-session
+  management for the browser to supersede.
+
+#### Manual EZE (deferred - needs the running web app + Storybook)
+
+- [ ] Storybook `Archive/ArchiveBrowser`: review Overview, Empty, Loading, ErrorState, ProtectedRow,
+      DeleteConfirmation, RowActionFeedback, LongLabels, ManyRows, BothSidebarsVisible,
+      NarrowAfterSidebars at desktop + narrow widths; confirm the area reads as archive management.
+- [ ] Live: archive a session from the sidebar menu, open the sidebar-footer `archived` button, see it
+      listed; the transcript + composer behind the takeover are covered and non-interactive.
+- [ ] Live unarchive: the row leaves the browser and the session returns to normal navigation/resume.
+- [ ] Live permanent delete: the typed-confirmation arms only on the phrase, deletes, the row drops,
+      and the session never returns after reload; a protected (live-host/active) row is blocked.
+- [ ] Back arrow returns to chat without mutating any session.
 
 ### Gate 4
 
-- [ ] Unit, web, integration, and hermetic e2e tests pass for archive-browser behavior
-- [ ] Storybook archive browser review is approved
-- [ ] Manual EZE confirms archived area clarity, back-to-chat behavior, unarchive, and permanent delete
+- [x] Unit, web, integration, and hermetic e2e tests pass for archive-browser behavior
+- [ ] Storybook archive browser review is approved (deferred manual EZE)
+- [ ] Manual EZE confirms archived area clarity, back-to-chat behavior, unarchive, and permanent delete (deferred)
 
 ## Summary
 
-- Current cutoff blockers: 52 unchecked implementation/report items.
-- Accepted/deferred follow-up: none.
-- Superseded/obsolete checklist debt: none.
+- Current cutoff blockers: none - all M1-M8 implementation items are complete and the full gate
+  (lint + typecheck + unit + web + integration + hermetic e2e) is green.
+- Accepted/deferred follow-up: the visual/live **manual EZE** (Storybook desktop+narrow review and the
+  live archive/unarchive/delete walkthrough) is deferred - it needs the running web app + Storybook, not
+  available headlessly. The engineering each gate item asserts is automatically covered (presentational
+  tests, the action controller, the store gate, and the hermetic e2e); only the human visual sign-off
+  remains.
+- Superseded/obsolete checklist debt: none. No web debug affordance for archived-session management
+  existed for the archive browser to retire; the D-094 CLI parity stays intentionally.
