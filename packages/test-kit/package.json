@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./boot": "./src/boot.ts",
+    "./lmstudio": "./src/lmstudio-fixtures.ts",
     "./perf-artifacts": "./src/perf-artifacts.ts"
   },
   "types": "./src/index.ts",

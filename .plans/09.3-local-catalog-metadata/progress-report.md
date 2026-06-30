@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M4 - Disambiguating Display
-- **Completed:** 25 / 37
-- **Current cutoff blockers:** 12
+- **Current focus:** Complete - all milestones implemented and verified
+- **Completed:** 37 / 37
+- **Current cutoff blockers:** 0
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -61,24 +61,24 @@
 
 #### M4: Disambiguating Display
 
-- [ ] RED: Add Storybook/web tests where two same-id local models render distinctly with quantization (and context), e.g. `qwen3.6-27b-mlx · 8bit · 256k` vs `· 4bit · 64k`.
-- [ ] GREEN: Render quantization + context alongside the id in `model-chooser.tsx`, using existing label/Badge patterns.
-- [ ] RED: Add tests proving the existing capability filters (tools/vision/reasoning) now match the live local capabilities.
-- [ ] GREEN: Wire the capability/Vision chips to the live `capabilities`.
-- [ ] REFACTOR: Reuse existing chooser presentation; introduce no new card layout.
+- [x] RED: Add Storybook/web tests where two same-id local models render distinctly with quantization (and context), e.g. `qwen3.6-27b-mlx · 8bit · 256k` vs `· 4bit · 64k`.
+- [x] GREEN: Render quantization + context alongside the id in `model-chooser.tsx`, using existing label/Badge patterns.
+- [x] RED: Add tests proving the existing capability filters (tools/vision/reasoning) now match the live local capabilities.
+- [x] GREEN: Wire the capability/Vision chips to the live `capabilities`.
+- [x] REFACTOR: Reuse existing chooser presentation; introduce no new card layout.
 
 #### M5: End-to-End and Degradation Verification
 
-- [ ] RED: Add an integration/e2e test where a fake LM Studio `/api/v0` makes the catalog show quant + live caps, and a `/api/v0`-down run falls back to id-only with the source marked stale.
-- [ ] GREEN: Make both scenarios pass through the real catalog load path.
-- [ ] REFACTOR: Provide a shared fixture for the native model record reused by unit, web, and e2e tests.
+- [x] RED: Add an integration/e2e test where a fake LM Studio `/api/v0` makes the catalog show quant + live caps, and a `/api/v0`-down run falls back to id-only with the source marked stale.
+- [x] GREEN: Make both scenarios pass through the real catalog load path.
+- [x] REFACTOR: Provide a shared fixture for the native model record reused by unit, web, and e2e tests.
 
 #### Done Gate
 
-- [ ] Unit, web, and integration/e2e tests pass for the local catalog metadata path.
-- [ ] The two `qwen3.6-27b-mlx` quants are visually distinguishable in the chooser.
-- [ ] Local capability/Vision/context reflect the runtime; cloud sources are unchanged.
-- [ ] `/api/v0` failure degrades gracefully (id-only + stale).
+- [x] Unit, web, and integration/e2e tests pass for the local catalog metadata path.
+- [x] The two `qwen3.6-27b-mlx` quants are visually distinguishable in the chooser.
+- [x] Local capability/Vision/context reflect the runtime; cloud sources are unchanged.
+- [x] `/api/v0` failure degrades gracefully (id-only + stale).
 
 ## Accepted/Deferred Follow-Up
 

@@ -620,6 +620,11 @@ function ModelRow({
                 {cap}
               </Badge>
             ))}
+            {/* Quantization (local only) is the disambiguator between two same-id quants, so it sits
+                up front next to the context as a distinct, slightly emphasized label. */}
+            {entry.quantization ? (
+              <span className="font-medium text-foreground/70">{entry.quantization}</span>
+            ) : null}
             {entry.contextLength != null ? <span>{fmtCtx(entry.contextLength)} ctx</span> : null}
             {entry.costTier != null ? <span>· {entry.costTier}</span> : null}
           </span>

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, within } from "@testing-library/react";
 import { type CatalogEntry, type ModelRef, modelRefKey, type SourceSummary } from "@trevor/session";
+import { LM_STUDIO_LOCAL_ENTRIES } from "@trevor/test-kit/lmstudio";
 import { test } from "vitest";
 import { ModelChooser } from "./model-chooser";
 
@@ -162,6 +163,51 @@ test("selecting a model emits a stable { sourceId, modelId, reasoning } ref", ()
   fireEvent.click(getByLabelText("Open LM Studio"));
   fireEvent.click(getByLabelText("Select Qwen3 30B"));
   assert.deepEqual(picked, [{ sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null }]);
+});
+
+// The host-derived local entries (two same-id quants + a VLM) from the shared 09.3 fixture, exactly as
+// the catalog produces them from the LM Studio native record - so the chooser is tested over the real
+// derived shape, not chooser-only data.
+const LOCAL_SOURCE = [source({ sourceId: "lmstudio", label: "LM Studio", type: "local" })];
+const LOCAL_CATALOG: Record<string, readonly CatalogEntry[]> = {
+  lmstudio: LM_STUDIO_LOCAL_ENTRIES,
+};
+
+test("two same-id local quants render distinctly with quantization + context (D-004)", () => {
+  // The two qwen3.6-27b-mlx quants differ only by org prefix in the id; quantization + context make
+  // them tell-apart-able in the row (the motivating bug).
+  const { getByLabelText } = render(
+    <ModelChooser sources={LOCAL_SOURCE} catalogBySource={LOCAL_CATALOG} onSelectModel={noop} />,
+  );
+  fireEvent.click(getByLabelText("Open LM Studio"));
+
+  const row8 = getByLabelText("Select unsloth/qwen3.6-27b-mlx");
+  assert.ok(within(row8).getByText("8bit"), "the 8-bit quant labels its row");
+  assert.ok(within(row8).getByText("262k ctx"), "its native context renders");
+
+  const row4 = getByLabelText("Select lmstudio-community/qwen3.6-27b-mlx");
+  assert.ok(within(row4).getByText("4bit"), "the 4-bit quant labels its row");
+  assert.ok(within(row4).getByText("66k ctx"), "its smaller native context renders");
+});
+
+test("capability filters match the live local capabilities (tools/vision derived from the runtime)", () => {
+  // The fixture carries a VLM (vision, no tools) and tool LLMs (tools, no vision), as the native record
+  // derives them.
+  const { getByLabelText, getByRole, getByText, queryByText } = render(
+    <ModelChooser sources={LOCAL_SOURCE} catalogBySource={LOCAL_CATALOG} onSelectModel={noop} />,
+  );
+  fireEvent.click(getByLabelText("Open LM Studio"));
+
+  // The Vision filter keeps only the VLM (its live vision capability), drops the tool LLM.
+  fireEvent.click(getByRole("button", { name: "vision" }));
+  assert.ok(getByText("qwen/qwen3-vl-8b"), "the VLM stays under the Vision filter");
+  assert.equal(queryByText("unsloth/qwen3.6-27b-mlx"), null, "the non-vision model drops out");
+
+  // Switch to the Tools filter: now only the tool LLM (which lacks vision) remains.
+  fireEvent.click(getByRole("button", { name: "vision" }));
+  fireEvent.click(getByRole("button", { name: "tools" }));
+  assert.ok(getByText("unsloth/qwen3.6-27b-mlx"), "the tool model stays under the Tools filter");
+  assert.equal(queryByText("qwen/qwen3-vl-8b"), null, "the no-tools VLM drops out");
 });
 
 test("the active model is marked selected in the detail list", () => {

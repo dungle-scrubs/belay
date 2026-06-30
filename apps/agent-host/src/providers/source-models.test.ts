@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { LM_STUDIO_NATIVE_LIST } from "@trevor/test-kit/lmstudio";
 import { afterEach, test } from "vitest";
 import { fetchSourceModels } from "./source-models";
 
@@ -31,33 +32,11 @@ function stubFetch(responder: (url: string) => { ok: boolean; status?: number; b
   return calls;
 }
 
-const TWO_QUANTS = {
-  object: "list",
-  data: [
-    {
-      id: "unsloth/qwen3.6-27b-mlx",
-      type: "llm",
-      arch: "qwen3",
-      quantization: "8bit",
-      state: "loaded",
-      max_context_length: 262144,
-      capabilities: ["tool_use"],
-    },
-    {
-      id: "lmstudio-community/qwen3.6-27b-mlx",
-      type: "llm",
-      arch: "qwen3",
-      quantization: "4bit",
-      state: "not-loaded",
-      max_context_length: 65536,
-      capabilities: ["tool_use"],
-    },
-  ],
-};
-
 test("the local source reads /api/v0/models and enriches each model with its native record", async () => {
   const calls = stubFetch((url) =>
-    url.includes("/api/v0/models") ? { ok: true, body: TWO_QUANTS } : { ok: false, status: 404 },
+    url.includes("/api/v0/models")
+      ? { ok: true, body: LM_STUDIO_NATIVE_LIST }
+      : { ok: false, status: 404 },
   );
   const { models, stale } = await fetchSourceModels({ type: "local" }, null);
 
@@ -71,10 +50,11 @@ test("the local source reads /api/v0/models and enriches each model with its nat
     "the local fetch does NOT use the OpenAI /v1/models list",
   );
 
-  // Two same-id quants come back distinct, each carrying its native record.
+  // Every model comes back distinct, each carrying its native record (the two same-id quants differ
+  // by quantization + context; the VLM carries its type).
   assert.deepEqual(
     models.map((m) => m.id),
-    ["unsloth/qwen3.6-27b-mlx", "lmstudio-community/qwen3.6-27b-mlx"],
+    LM_STUDIO_NATIVE_LIST.data.map((m) => m.id),
   );
   assert.equal(models[0]?.native?.quantization, "8bit");
   assert.equal(models[0]?.native?.type, "llm");
@@ -83,6 +63,7 @@ test("the local source reads /api/v0/models and enriches each model with its nat
   assert.deepEqual(models[0]?.native?.capabilities, ["tool_use"]);
   assert.equal(models[1]?.native?.quantization, "4bit");
   assert.equal(models[1]?.native?.maxContextLength, 65536);
+  assert.equal(models[2]?.native?.type, "vlm");
 });
 
 test("an unreachable /api/v0 degrades the local source to id-only + stale, never dropping models", async () => {

@@ -316,3 +316,60 @@ export const SourceDetailOpen: Story = {
     </Panel>
   ),
 };
+
+/**
+ * Local catalog metadata (09.3 D-004): two quants of the SAME model (`qwen3.6-27b-mlx`) that differ
+ * only by org prefix in the id are told apart by the quantization + native context the catalog now
+ * carries (8bit · 262k vs 4bit · 66k), and a VLM finally shows its Vision chip.
+ */
+export const LocalQuantsDisambiguated: Story = {
+  render: () => (
+    <Panel width={620}>
+      <ModelChooser
+        sources={[
+          source({ sourceId: "lmstudio", label: "LM Studio", type: "local", modelCount: 3 }),
+        ]}
+        catalogBySource={{
+          lmstudio: [
+            entry({
+              sourceId: "lmstudio",
+              modelId: "unsloth/qwen3.6-27b-mlx",
+              displayName: "unsloth/qwen3.6-27b-mlx",
+              kind: "local",
+              capabilities: ["tools", "reasoning"],
+              contextLength: 262_144,
+              costTier: null,
+              quantization: "8bit",
+              arch: "qwen3",
+            }),
+            entry({
+              sourceId: "lmstudio",
+              modelId: "lmstudio-community/qwen3.6-27b-mlx",
+              displayName: "lmstudio-community/qwen3.6-27b-mlx",
+              kind: "local",
+              capabilities: ["tools", "reasoning"],
+              contextLength: 65_536,
+              costTier: null,
+              quantization: "4bit",
+              arch: "qwen3",
+            }),
+            entry({
+              sourceId: "lmstudio",
+              modelId: "qwen/qwen3-vl-8b",
+              displayName: "qwen/qwen3-vl-8b",
+              kind: "local",
+              capabilities: ["vision", "reasoning"],
+              contextLength: 128_000,
+              costTier: null,
+              quantization: "4bit",
+              arch: "qwen3-vl",
+            }),
+          ],
+        }}
+        initialSourceId="lmstudio"
+        onSelectModel={noop}
+        className="h-full"
+      />
+    </Panel>
+  ),
+};
