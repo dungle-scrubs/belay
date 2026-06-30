@@ -40,10 +40,10 @@
 
 ### Gate 1 -> 2
 
-- [ ] Lane A green in CI on ubuntu with committed container baselines; lane required
-- [ ] A deliberately broken story is caught by the screenshot diff
-- [ ] A new story with no baseline fails the required pass
-- [ ] The optional a11y pass runs warn-only and does not gate
+- [x] Lane A green in CI on ubuntu with committed container baselines; lane required
+- [x] A deliberately broken story is caught by the screenshot diff
+- [x] A new story with no baseline fails the required pass
+- [x] The optional a11y pass runs warn-only and does not gate
 
 ## Phase 2: App transcript-scroll e2e lane (Lane B)
 
