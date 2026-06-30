@@ -19,6 +19,9 @@ export function useModalState(opts: {
   // The managed-worktree switcher (D-091): a UI affordance / `/worktree` opens it; the host
   // announces the worktrees on host.online, and switching routes the host-owned switch action.
   const [worktreeOpen, setWorktreeOpen] = useState(false);
+  // The archive browser (plan 04): a transcript-takeover for managing archived sessions, opened from
+  // the sidebar footer. It reads the same inventory (its rows are the archived sessions).
+  const [archiveOpen, setArchiveOpen] = useState(false);
   // The left-side session sidebar (D-093) is toggleable; starts collapsed and persists.
   const [sidebarOpen, setSidebarOpen] = useLocalStorageState<boolean>("trevor.sidebar", {
     defaultValue: false,
@@ -28,8 +31,9 @@ export function useModalState(opts: {
     defaultValue: true,
   });
 
-  // The session inventory powers the resume chooser, decorates worktree rows, and backs the sidebar.
-  const inventory = useInventory(resumeOpen || worktreeOpen || Boolean(sidebarOpen));
+  // The session inventory powers the resume chooser, decorates worktree rows, backs the sidebar, and
+  // (plan 04) supplies the archive browser's archived rows.
+  const inventory = useInventory(resumeOpen || worktreeOpen || archiveOpen || Boolean(sidebarOpen));
   const resolvedProject = useMemo(() => {
     return (
       workspaceBasename(opts.host.workspace ?? opts.host.cwd) ??
@@ -63,6 +67,8 @@ export function useModalState(opts: {
     setResumeOpen,
     worktreeOpen,
     setWorktreeOpen,
+    archiveOpen,
+    setArchiveOpen,
     sidebarOpen: Boolean(sidebarOpen),
     setSidebarOpen,
     panelOpen: Boolean(panelOpen),

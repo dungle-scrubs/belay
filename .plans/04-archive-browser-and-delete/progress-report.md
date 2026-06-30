@@ -36,11 +36,11 @@
 
 ### M3: Unarchive Flow
 
-- [ ] RED: Add tests proving unarchive clears the archive flag and removes the row from archive-browser results
-- [ ] GREEN: Wire archive-browser unarchive action to the existing `session.archived({ archived: false })` path
-- [ ] RED: Add tests for unarchive failure, already-unarchived race, and not-found session
-- [ ] GREEN: Render action-local success/failure state without adding transcript messages
-- [ ] REFACTOR: Keep unarchive action code shared with existing archive lifecycle helpers
+- [x] RED: Add tests proving unarchive clears the archive flag and removes the row from archive-browser results
+- [x] GREEN: Wire archive-browser unarchive action to the existing `session.archived({ archived: false })` path
+- [x] RED: Add tests for unarchive failure, already-unarchived race, and not-found session
+- [x] GREEN: Render action-local success/failure state without adding transcript messages
+- [x] REFACTOR: Keep unarchive action code shared with existing archive lifecycle helpers
 
 ### M4: Permanent Delete Domain Contract
 
@@ -52,11 +52,11 @@
 
 ### M5: Strong Confirmation UX
 
-- [ ] RED: Add Storybook interaction tests for typed confirmation and cancel paths
-- [ ] GREEN: Require a deliberate confirmation gesture that includes the session title or a stable delete phrase
-- [ ] RED: Add tests proving Enter/click cannot confirm while the confirmation input is incomplete
-- [ ] GREEN: Show delete progress, success removal, and typed error states inline in the archive area
-- [ ] REFACTOR: Ensure destructive focus handling cannot leak keystrokes to chat, composer, or background surfaces
+- [x] RED: Add Storybook interaction tests for typed confirmation and cancel paths
+- [x] GREEN: Require a deliberate confirmation gesture that includes the session title or a stable delete phrase
+- [x] RED: Add tests proving Enter/click cannot confirm while the confirmation input is incomplete
+- [x] GREEN: Show delete progress, success removal, and typed error states inline in the archive area
+- [x] REFACTOR: Ensure destructive focus handling cannot leak keystrokes to chat, composer, or background surfaces
 
 ### Gate 2->3
 
@@ -68,19 +68,19 @@
 
 ### M6: Entry Point and Takeover Routing
 
-- [ ] RED: Add app-state tests for opening the archive browser and returning to chat through the back arrow
-- [ ] GREEN: Add the archive browser entry point from the appropriate session/navigation management surface
-- [ ] RED: Add tests proving the transcript and composer are not interactive while the archive browser takeover is active
-- [ ] GREEN: Route the live archive read model into the archive browser
-- [ ] REFACTOR: Keep takeover state compatible with the existing model chooser takeover behavior
+- [x] RED: Add app-state tests for opening the archive browser and returning to chat through the back arrow
+- [x] GREEN: Add the archive browser entry point from the appropriate session/navigation management surface
+- [x] RED: Add tests proving the transcript and composer are not interactive while the archive browser takeover is active
+- [x] GREEN: Route the live archive read model into the archive browser
+- [x] REFACTOR: Keep takeover state compatible with the existing model chooser takeover behavior
 
 ### M7: Live Action Wiring
 
-- [ ] RED: Add web tests for unarchive removing a row and restoring normal navigation eligibility
-- [ ] GREEN: Wire live unarchive from the archive browser
-- [ ] RED: Add web tests for permanent-delete success, rejection, and backend error rendering
-- [ ] GREEN: Wire live permanent-delete command and result handling
-- [ ] REFACTOR: Keep action state row-scoped so deleting/unarchiving one row does not blank the whole browser
+- [x] RED: Add web tests for unarchive removing a row and restoring normal navigation eligibility
+- [x] GREEN: Wire live unarchive from the archive browser
+- [x] RED: Add web tests for permanent-delete success, rejection, and backend error rendering
+- [x] GREEN: Wire live permanent-delete command and result handling
+- [x] REFACTOR: Keep action state row-scoped so deleting/unarchiving one row does not blank the whole browser
 
 ### Gate 3->4
 

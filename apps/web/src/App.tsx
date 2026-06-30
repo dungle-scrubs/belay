@@ -7,7 +7,7 @@ import {
   modelRefFromProvider,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { ArrowLeft, RotateCcw } from "lucide-react";
+import { Archive, ArrowLeft, GitBranch, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -17,6 +17,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { ArchiveBrowser } from "@/archive/archive-browser";
+import { buildArchiveRows } from "@/archive/archive-rows";
+import { useArchiveActions } from "@/archive/use-archive-actions";
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { PanelHost } from "@/components/panel/PanelHost";
 import { ControlsPanel } from "@/components/panel/panel-controls";
@@ -60,6 +63,7 @@ import {
   archiveSession,
   deleteSession,
   ensureSession,
+  permanentlyDeleteSession,
   renameSession,
   useSession,
   useSessionActions,
@@ -467,6 +471,14 @@ export function App() {
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();
+  // The archive browser's live actions (plan 04): unarchive reuses the existing `session.archived`
+  // publish; permanent delete calls the store's purge. On success each refreshes the inventory so the
+  // settled row drops on its own; a rejection/error latches a row-scoped message.
+  const archiveActions = useArchiveActions({
+    unarchive: (id) => archiveSession(id, false),
+    remove: permanentlyDeleteSession,
+    refresh: () => modal.inventory.refetch(),
+  });
   // The active model for DISPLAY + SEND: the explicit/persisted selection (a catalog ModelRef, e.g.
   // {zai, glm-5.2}) wins; before any pick it's the legacy provider-derived ref. Routing the send
   // through this is what carries the real modelId to the host (not the legacy provider key). The label
@@ -690,7 +702,8 @@ export function App() {
   // from a ref so it never goes stale and works regardless of which element has focus.
   // A modal/picker/takeover (model chooser, resume, worktree switcher) owns Escape while open -
   // it closes itself, and the turn on the transcript behind it must NOT be cancelled.
-  const modalOpen = chooserOpen || modal.resumeOpen || modal.worktreeOpen || editor.isOpen;
+  const modalOpen =
+    chooserOpen || modal.resumeOpen || modal.worktreeOpen || modal.archiveOpen || editor.isOpen;
   // The latest Escape inputs + handlers, read by the one window listener so it never goes stale. The
   // ref is reassigned every render (below); the seed only types it, so it never carries stale state.
   const escRef = useRef<EscRefShape>(null as unknown as EscRefShape);
@@ -759,7 +772,11 @@ export function App() {
           sourceLabels: selection.sourceLabels,
           modelLabels: selection.modelLabels,
           activeModel: sendModel,
-          onOpenChooser: () => setChooserOpen((open) => !open),
+          // Only one takeover at a time: opening the chooser closes the archive browser.
+          onOpenChooser: () => {
+            modal.setArchiveOpen(false);
+            setChooserOpen((open) => !open);
+          },
           onSelectModel,
         },
         reasoning: {
@@ -820,8 +837,26 @@ export function App() {
     </div>
   ) : undefined;
 
-  // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the session id
-  // for orientation. `restart` is the first; more debug actions slot in beside it. A temporary surface.
+  // The archive browser (plan 04): another takeover of the transcript/composer space (the sidebars stay
+  // visible), opened from the sidebar footer. It lists the archived sessions and runs unarchive +
+  // permanent-delete against the live mutations; row-scoped action state keeps one row's feedback from
+  // blanking the rest. Rendered only while open. Its own back arrow returns to chat.
+  const archiveBrowser = modal.archiveOpen ? (
+    <ArchiveBrowser
+      className="h-full"
+      rows={buildArchiveRows(modal.inventory.sessions)}
+      loading={modal.inventory.loading}
+      error={modal.inventory.error}
+      nowMs={now}
+      actionState={archiveActions.actionState}
+      onUnarchive={archiveActions.onUnarchive}
+      onDelete={archiveActions.onDelete}
+      onBack={() => modal.setArchiveOpen(false)}
+    />
+  ) : undefined;
+
+  // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the archived +
+  // worktree affordances and the session id for orientation. `restart` is a temporary debug surface.
   const panelFooter = (
     <>
       {/* TEMP dev affordance (remove later): restart the host to pick up code changes. /restart is a
@@ -842,7 +877,32 @@ export function App() {
         <RotateCcw className="size-3" />
         restart
       </button>
-      <div className="truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => {
+          setChooserOpen(false); // only one takeover at a time
+          modal.setArchiveOpen(true);
+        }}
+        title="Manage archived sessions"
+        aria-label="Manage archived sessions"
+        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+      >
+        <Archive className="size-3" />
+        archived
+      </button>
+      {modal.worktrees.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => modal.setWorktreeOpen(true)}
+          title="Switch worktree (/worktree)"
+          aria-label="Switch worktree"
+          className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+        >
+          <GitBranch className="size-3" />
+          worktree
+        </button>
+      ) : null}
+      <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
         {target}
       </div>
     </>
@@ -962,7 +1022,7 @@ export function App() {
             onConfirm={editor.confirm}
           />
         ) : (
-          chooser
+          (archiveBrowser ?? chooser)
         )
       }
       archived={archived}

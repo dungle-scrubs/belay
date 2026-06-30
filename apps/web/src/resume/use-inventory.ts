@@ -5,6 +5,9 @@ export interface InventoryState {
   readonly sessions: readonly SessionSummary[];
   readonly loading: boolean;
   readonly error: string | null;
+  /** Forces an immediate re-fetch (e.g. right after an archive/unarchive/delete mutation settles),
+   *  so a surface doesn't wait out the 4s poll to drop or restore a row. */
+  readonly refetch: () => void;
 }
 
 // The inventory rides the same backend as the session transport: same-origin in local dev, or the
@@ -37,5 +40,6 @@ export function useInventory(enabled: boolean): InventoryState {
     sessions: query.data ?? [],
     loading: query.isLoading && enabled,
     error: query.error ? (query.error as Error).message : null,
+    refetch: () => void query.refetch(),
   };
 }

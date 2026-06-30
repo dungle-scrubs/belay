@@ -18,6 +18,7 @@ const mockInventory = vi.hoisted(() => ({
     sessions: [] as readonly SessionSummary[],
     loading: false,
     error: null as string | null,
+    refetch: () => {},
   },
 }));
 
@@ -138,4 +139,16 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
 
   rerender({ sessions: [] });
   assert.equal(result.current.currentProject, "trevorV2");
+});
+
+test("opening the archive browser enables the inventory fetch", () => {
+  const { result } = renderHook(() =>
+    useModalState({ events: [], host, target: "s", sessionId: "s", busy: false }),
+  );
+  assert.equal(result.current.archiveOpen, false);
+  assert.equal(mockInventory.enabledCalls.at(-1), false);
+
+  act(() => result.current.setArchiveOpen(true));
+  assert.equal(result.current.archiveOpen, true);
+  assert.equal(mockInventory.enabledCalls.at(-1), true);
 });

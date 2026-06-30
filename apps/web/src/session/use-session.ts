@@ -4,6 +4,7 @@ import {
   type HostPresence,
   type ModelRef,
   type PastePayload,
+  type PermanentDeleteResult,
   PRODUCER_IDS,
   type ProviderQuestionAnswer,
   type PublishInput,
@@ -136,12 +137,21 @@ export function archiveSession(sessionId: string, archived = true): Promise<void
 }
 
 /** Soft-deletes (or restores) ANY session from the sidebar - a durable `session.deleted` flag that
- *  hides it from EVERY view. The durable log is retained (a hard purge is a future store operation). */
+ *  hides it from EVERY view. The durable log is RETAINED; this only hides. The destructive purge is
+ *  the separate {@link permanentlyDeleteSession} (plan 04), reachable only from the archive browser. */
 export function deleteSession(sessionId: string, deleted = true): Promise<void> {
   return publishEvent(transport, sessionId, {
     producerId: PRODUCER_IDS.web,
     ...sessionEvents.sessionDeleted({ deleted }),
   });
+}
+
+/** Permanently purges an archived session's durable storage (plan 04) - the hard delete distinct from
+ *  the soft-delete `session.deleted` marker above. The store is the authoritative gate, so a
+ *  precondition rejection (not archived, a live host, an active turn) comes back as a typed
+ *  `{ ok: false }` result rather than throwing; it throws only on a transport failure. */
+export function permanentlyDeleteSession(sessionId: string): Promise<PermanentDeleteResult> {
+  return transport.permanentlyDeleteSession(sessionId);
 }
 
 /** Ensures a session with the given id exists (idempotent) and returns it. */
