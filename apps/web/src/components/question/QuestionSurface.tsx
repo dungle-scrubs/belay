@@ -857,7 +857,11 @@ function ChoiceRow({
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="text-sm font-medium">{c.label}</span>
+          {/* Number each option in author order so the user can answer by number ("choose 1 and 3");
+              the ask_user tool description tells the model its choices are presented this way. */}
+          <span className="text-sm font-medium">
+            <span className="text-muted-foreground tabular-nums">{index + 1}.</span> {c.label}
+          </span>
           {c.recommended ? (
             <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
               Recommended

@@ -56,7 +56,9 @@ const DESCRIPTION =
   "not to gather broad preferences. Prefer concrete choices (each with a short label, optional " +
   "description, and which one you recommend) over free-form questions. Use the grouped `questions` form; " +
   "set `multiSelect` for pick-many, `requiresReason` to force a justification, and `allowDefer` to let " +
-  "the user skip one. Choice `preview` is plain ASCII text (e.g. a small layout mock).";
+  "the user skip one. Choice `preview` is plain ASCII text (e.g. a small layout mock). Your `choices` " +
+  "are shown to the user as a NUMBERED list in the order you give them (1, 2, 3…), so the user may " +
+  'answer by number (e.g. "choose 1 and 3") - map any such numbers back to your choices by that position.';
 
 export const askUserTool: Tool<AskUserParams> = {
   name: "ask_user",

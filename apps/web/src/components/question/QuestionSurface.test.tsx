@@ -120,6 +120,16 @@ test("focus return does not steal focus from an in-surface field being typed in 
   assert.equal(document.activeElement, custom, "an active in-surface field keeps focus");
 });
 
+test("choices are numbered in author order so the user can answer by number", () => {
+  renderSurface(fx.singleChoice);
+  // PostgreSQL is choice 1, MySQL is choice 3 (the number renders before the label).
+  assert.match(
+    screen.getByRole("radio", { name: /PostgreSQL/ }).textContent ?? "",
+    /1\.\s*PostgreSQL/,
+  );
+  assert.match(screen.getByRole("radio", { name: /MySQL/ }).textContent ?? "", /3\.\s*MySQL/);
+});
+
 test("focusing the custom-answer row keeps a pre-selected single choice (regression: a stray click cleared it)", () => {
   renderSurface(fx.singleChoice);
   const postgres = screen.getByRole("radio", { name: /PostgreSQL/ });
