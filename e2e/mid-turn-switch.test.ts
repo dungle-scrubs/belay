@@ -67,9 +67,14 @@ test("one turn walks reasoning -> same-provider model -> cross-provider, recordi
   const cell = createSwitchCell();
   let bMessages: readonly ChatMessage[] = [];
   // Step 4 runs on cross-provider B; it captures the carried (normalized) conversation.
-  const providerB = provider("source-b", "model-b", () => answer("final"), (m) => {
-    bMessages = m;
-  });
+  const providerB = provider(
+    "source-b",
+    "model-b",
+    () => answer("final"),
+    (m) => {
+      bMessages = m;
+    },
+  );
   const providerA2 = provider("source-a", "model-a2", (call) => {
     if (call === 1) {
       // Step 3: same-source swap landed; now request a CROSS-provider swap to source-b.
@@ -108,7 +113,14 @@ test("one turn walks reasoning -> same-provider model -> cross-provider, recordi
 
   const switches = events
     .filter((e) => e.type === "model.switched")
-    .map((e) => e.payload as { from: { model: string; reasoning?: string }; to: { model: string; reasoning?: string }; outcome: string });
+    .map(
+      (e) =>
+        e.payload as {
+          from: { model: string; reasoning?: string };
+          to: { model: string; reasoning?: string };
+          outcome: string;
+        },
+    );
   assert.equal(switches.length, 3, "three switches recorded in one turn");
   // Reasoning-only: same model, low -> high.
   assert.deepEqual(switches[0]?.from, { model: "model-a", reasoning: "low" });
@@ -124,14 +136,21 @@ test("one turn walks reasoning -> same-provider model -> cross-provider, recordi
 
   // Continuity: provider B replays the full carried conversation, with cross-provider-normalized tool ids.
   const toolResults = bMessages.filter((m) => m.role === "tool");
-  assert.ok(toolResults.length >= 3, "the cross-provider model sees every prior step's tool result");
+  assert.ok(
+    toolResults.length >= 3,
+    "the cross-provider model sees every prior step's tool result",
+  );
   assert.ok(
     toolResults.every((m) => /^call_\d+$/u.test(m.toolCallId ?? "")),
     "carried tool ids were normalized to the neutral scheme for the new provider",
   );
 
   const final = events.find((e) => e.type === "assistant.completed");
-  assert.equal(String(final?.payload.text ?? ""), "final", "the final answer came from the swapped-in model");
+  assert.equal(
+    String(final?.payload.text ?? ""),
+    "final",
+    "the final answer came from the swapped-in model",
+  );
 });
 
 test("a larger->smaller switch that does not fit is blocked, the turn finishes on the original model", async () => {
@@ -174,5 +193,9 @@ test("a larger->smaller switch that does not fit is blocked, the turn finishes o
   );
   assert.equal(rebuilt, 0, "a blocked switch never rebuilds the provider");
   const final = events.find((e) => e.type === "assistant.completed");
-  assert.equal(String(final?.payload.text ?? ""), "done-on-big", "the turn finished on the original model");
+  assert.equal(
+    String(final?.payload.text ?? ""),
+    "done-on-big",
+    "the turn finished on the original model",
+  );
 });

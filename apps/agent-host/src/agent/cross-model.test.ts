@@ -46,7 +46,11 @@ test("strips an inlined assistant thinking-block signature so the new provider c
     },
   ];
   const out = normalizeConversationForProvider(conversation);
-  assert.equal(out[0]?.content, "The answer is 42.", "the thinking block is stripped, the answer kept");
+  assert.equal(
+    out[0]?.content,
+    "The answer is 42.",
+    "the thinking block is stripped, the answer kept",
+  );
 });
 
 test("a conversation with neutral content + no tools is returned unchanged in shape", () => {

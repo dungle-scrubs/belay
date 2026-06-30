@@ -72,7 +72,15 @@ test("M4: tool results land by call id when tool.completed arrives out of call o
 
 test("09.1 M3: model.switched folds into a modelSwitch marker between the before/after assistant output", () => {
   const log = [
-    ev(1, events.assistantStarted({ runId: "r1", model: "deepseek-v4", provider: "deepseek", warm: true })),
+    ev(
+      1,
+      events.assistantStarted({
+        runId: "r1",
+        model: "deepseek-v4",
+        provider: "deepseek",
+        warm: true,
+      }),
+    ),
     ev(2, events.assistantDelta({ runId: "r1", text: "thinking low..." })),
     ev(
       3,
@@ -107,7 +115,10 @@ test("09.1 M3: model.switched folds into a modelSwitch marker between the before
 
 test("09.1 M3: a blocked model.switched carries its reason into the marker", () => {
   const log = [
-    ev(1, events.assistantStarted({ runId: "r1", model: "big", provider: "anthropic", warm: true })),
+    ev(
+      1,
+      events.assistantStarted({ runId: "r1", model: "big", provider: "anthropic", warm: true }),
+    ),
     ev(
       2,
       events.modelSwitched({
@@ -123,10 +134,7 @@ test("09.1 M3: a blocked model.switched carries its reason into the marker", () 
   ];
   const marker = toTranscript(log).find((m) => m.kind === "modelSwitch");
   assert.equal(marker?.kind === "modelSwitch" && marker.outcome, "blocked");
-  assert.match(
-    (marker?.kind === "modelSwitch" && marker.reason) || "",
-    /smaller context window/,
-  );
+  assert.match((marker?.kind === "modelSwitch" && marker.reason) || "", /smaller context window/);
 });
 
 test("a tool left in flight when the run is cancelled is finalized as aborted, not stuck running", () => {

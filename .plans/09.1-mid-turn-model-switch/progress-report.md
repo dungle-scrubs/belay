@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 51
-- **Completed current work:** 0
-- **Accepted/deferred follow-up:** 0
+- **Current cutoff blockers:** 0
+- **Completed current work:** 51
+- **Accepted/deferred follow-up:** 3
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Switch cell + step-boundary re-read
+- **Current focus:** Done - all milestones (M1-M8) implemented, tested, and green
 
 ## Completed Current State / Hard Dependencies
 

@@ -5,6 +5,9 @@
 // The ask_user pending-question runtime singleton, exposed so cross-service e2e can wire its emitter to
 // the store and drive submitAnswer (the role main.ts's inbound lane plays in the real host).
 export { providerQuestionRuntime } from "../../src/agent/provider-questions";
+// The mid-turn-switch cell + the turn driver (plan 09.1), so cross-service e2e can drive a real turn that
+// changes model/reasoning between steps through the same publishTurn -> runAgent path the host uses.
+export { createSwitchCell, type SwitchCell } from "../../src/agent/switch-cell";
 export { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "../../src/agent/turn-scheduler";
 // Continuation handoff (02): the direct-flow orchestration + the turn-dispatch scheduler and the
 // self-echo predicate, so cross-service e2e can drive a handoff through a real store and replay the
@@ -17,13 +20,10 @@ export {
 // The background-job promotion runtime (plan 09), so cross-service e2e can drive a real promotable shell
 // command through the supervisor (promote -> tracked pN -> kill) the way the bash tool / shell lane do.
 export { ProcessRegistry } from "../../src/process-registry";
+export type { ChatMessage, Provider, ProviderEvent } from "../../src/providers";
 // The typed provider error, so cross-service e2e can drive a retryable transport drop through a real
 // store (the DeepSeek-style thinking-only reconnect path) without reaching into host internals.
 export { ProviderUnavailable } from "../../src/providers/errors";
 export { runPromotable } from "../../src/tools/promote-runner";
-// The mid-turn-switch cell + the turn driver (plan 09.1), so cross-service e2e can drive a real turn that
-// changes model/reasoning between steps through the same publishTurn -> runAgent path the host uses.
-export { createSwitchCell, type SwitchCell } from "../../src/agent/switch-cell";
 export { publishTurn } from "../../src/turn";
-export type { ChatMessage, Provider, ProviderEvent } from "../../src/providers";
 export * from "./fake-provider";

@@ -74,7 +74,11 @@ test("M1: a reasoning switch requested mid-turn is applied at the next step boun
     }
   });
   await drive(provider, cell);
-  assert.deepEqual(seen, ["off", "high"], "step 1 stays at off; the mid-turn switch lands on step 2");
+  assert.deepEqual(
+    seen,
+    ["off", "high"],
+    "step 1 stays at off; the mid-turn switch lands on step 2",
+  );
 });
 
 /** A recording provider for the model-swap tests: it streams `behave(call)` each step and reports the

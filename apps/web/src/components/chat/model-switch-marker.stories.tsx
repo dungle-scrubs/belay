@@ -92,7 +92,9 @@ export const AllStates: Story = {
   render: () => (
     <div className="flex max-w-2xl flex-col gap-4">
       <Row message={marker({ id: "s1" })} />
-      <Row message={marker({ id: "s2", from: { model: "deepseek-v4" }, to: { model: "kimi-k2" } })} />
+      <Row
+        message={marker({ id: "s2", from: { model: "deepseek-v4" }, to: { model: "kimi-k2" } })}
+      />
       <Row
         message={marker({
           id: "s3",

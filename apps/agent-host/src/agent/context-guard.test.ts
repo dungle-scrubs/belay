@@ -9,14 +9,19 @@ import { fitsAfterSwitch } from "./context-guard";
  */
 
 test("smaller->larger is always allowed (even a huge conversation)", () => {
-  const d = fitsAfterSwitch({ conversationTokens: 180_000, currentWindow: 200_000, targetWindow: 1_000_000 });
+  const d = fitsAfterSwitch({
+    conversationTokens: 180_000,
+    currentWindow: 200_000,
+    targetWindow: 1_000_000,
+  });
   assert.equal(d.fits, true);
   assert.equal(d.reason, undefined);
 });
 
 test("equal windows are allowed", () => {
   assert.equal(
-    fitsAfterSwitch({ conversationTokens: 50_000, currentWindow: 128_000, targetWindow: 128_000 }).fits,
+    fitsAfterSwitch({ conversationTokens: 50_000, currentWindow: 128_000, targetWindow: 128_000 })
+      .fits,
     true,
   );
 });
@@ -53,13 +58,21 @@ test("an unknown target window cannot be guarded - allow (overflow recovery stil
 test("an unknown current window still checks fit against the target", () => {
   // currentWindow 0 (not yet measured): can't assert direction, so the raw fit check governs.
   assert.equal(
-    fitsAfterSwitch({ conversationTokens: 5_000, currentWindow: 0, targetWindow: 8_000, replyHeadroom: 1_000 })
-      .fits,
+    fitsAfterSwitch({
+      conversationTokens: 5_000,
+      currentWindow: 0,
+      targetWindow: 8_000,
+      replyHeadroom: 1_000,
+    }).fits,
     true,
   );
   assert.equal(
-    fitsAfterSwitch({ conversationTokens: 9_000, currentWindow: 0, targetWindow: 8_000, replyHeadroom: 1_000 })
-      .fits,
+    fitsAfterSwitch({
+      conversationTokens: 9_000,
+      currentWindow: 0,
+      targetWindow: 8_000,
+      replyHeadroom: 1_000,
+    }).fits,
     false,
   );
 });
