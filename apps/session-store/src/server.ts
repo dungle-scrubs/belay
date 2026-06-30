@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { Server } from "node:http";
 import { createService, json, type Route, readJson } from "@trevor/server-kit";
 import {
+  DELETE_PATTERN,
   decodeStreamParams,
   EVENTS_PATTERN,
   frames,
   type HostPresence,
+  type PermanentDeleteResult,
   type PublishInput,
+  permanentDeleteEligibility,
   RUNTIME_KIND,
   SESSIONS_PATH,
   STREAM_PATTERN,
@@ -184,6 +187,35 @@ export function createSessionStore(dbPath: string): Server {
             json(res, 201, { ok: true, seq: stored.seq });
           })
           .catch(() => json(res, 400, { error: "invalid JSON body" }));
+      },
+    },
+    {
+      // Permanent delete (plan 04): purge an archived session's storage. Gated by the SHARED eligibility
+      // (archived, no live host, no active turn) so the store is the authoritative gate, then the rows
+      // are removed from SQLite for good - distinct from the soft-delete `session.deleted` marker.
+      method: "POST",
+      match: DELETE_PATTERN,
+      handler: ({ res, params }) => {
+        const sessionId = decodeURIComponent(params[0] as string);
+        const summary =
+          log
+            .inventory()
+            .map((row) =>
+              summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 }),
+            )
+            .find((s) => s.sessionId === sessionId) ?? null;
+        const verdict = permanentDeleteEligibility(summary);
+        if (!verdict.ok) {
+          const status = verdict.reason === "not-found" ? 404 : 409;
+          json(res, status, {
+            ok: false,
+            reason: verdict.reason,
+            detail: verdict.detail,
+          } satisfies PermanentDeleteResult);
+          return;
+        }
+        log.deleteSession(sessionId);
+        json(res, 200, { ok: true, sessionId } satisfies PermanentDeleteResult);
       },
     },
   ];

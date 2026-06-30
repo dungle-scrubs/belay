@@ -147,6 +147,20 @@ export class SessionLog {
     }));
   }
 
+  /**
+   * Permanently removes a session and all its events (plan 04). Returns whether the session existed. This
+   * is the destructive purge - distinct from the soft-delete `session.deleted` marker, which only hides a
+   * session while retaining its log. Eligibility (archived, not active) is the caller's gate; this just
+   * deletes. The rows are gone from the SQLite file, so the session never reappears after reload/reconnect.
+   */
+  deleteSession(sessionId: string): boolean {
+    const existed =
+      this.db.prepare("SELECT 1 FROM sessions WHERE sessionId = ?").get(sessionId) != null;
+    this.db.prepare("DELETE FROM events WHERE sessionId = ?").run(sessionId);
+    this.db.prepare("DELETE FROM sessions WHERE sessionId = ?").run(sessionId);
+    return existed;
+  }
+
   /** The most recent event of a type in a session, or null. */
   private latestOfType(sessionId: string, type: string): SessionEvent | null {
     const row = this.db

@@ -17,6 +17,7 @@ export * from "./paste-tokens";
 export * from "./protocol";
 export * from "./provider-question";
 export * from "./recall";
+export * from "./session-delete";
 export * from "./session-routes";
 export * from "./stream-transport";
 export * from "./tools";

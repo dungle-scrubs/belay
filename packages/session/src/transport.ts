@@ -1,6 +1,7 @@
 import type { HostPresence } from "./envelope";
 import type { SessionEvent } from "./event";
 import type { SessionSummary } from "./inventory";
+import type { PermanentDeleteResult } from "./session-delete";
 
 /**
  * The session transport seam: the contract a participant uses to join a session,
@@ -68,4 +69,11 @@ export interface SessionTransport {
    * non-OK response; an optional `AbortSignal` cancels the in-flight request (the web polls it).
    */
   readonly fetchInventory: (signal?: AbortSignal) => Promise<readonly SessionSummary[]>;
+  /**
+   * Permanently deletes an archived session's durable storage (plan 04) - distinct from the soft-delete
+   * `session.deleted` event. Returns a typed {@link PermanentDeleteResult}: the backend is the
+   * authoritative gate (rejecting a non-archived / protected / missing session), so this resolves with
+   * the rejection rather than throwing on a precondition failure; it throws only on a transport error.
+   */
+  readonly permanentlyDeleteSession: (sessionId: string) => Promise<PermanentDeleteResult>;
 }

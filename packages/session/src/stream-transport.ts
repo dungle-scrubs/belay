@@ -2,7 +2,8 @@ import { Either } from "effect";
 import { decodeStreamEnvelope } from "./envelope";
 import { encodeStreamParams } from "./identity";
 import type { SessionSummary } from "./inventory";
-import { eventsPath, SESSIONS_PATH, streamPath } from "./session-routes";
+import type { PermanentDeleteResult } from "./session-delete";
+import { deletePath, eventsPath, SESSIONS_PATH, streamPath } from "./session-routes";
 import type {
   ConnectSessionOptions,
   PublishInput,
@@ -135,6 +136,24 @@ async function fetchStreamInventory(
 }
 
 /**
+ * Permanently deletes an archived session (plan 04) via `POST /sessions/<id>/delete`. The store is the
+ * authoritative gate, so a precondition rejection (not-found / not-archived / protected) comes back as a
+ * typed `{ ok: false }` body (HTTP 404/409) and is RETURNED, not thrown; only a transport failure (no
+ * body, network error) throws.
+ */
+async function permanentlyDeleteStreamSession(
+  serviceUrl: string,
+  sessionId: string,
+): Promise<PermanentDeleteResult> {
+  const response = await fetch(`${serviceUrl}${deletePath(sessionId)}`, { method: "POST" });
+  const body = (await response.json().catch(() => null)) as PermanentDeleteResult | null;
+  if (body && typeof (body as { ok?: unknown }).ok === "boolean") {
+    return body;
+  }
+  throw new Error(`permanent delete failed: HTTP ${response.status}`);
+}
+
+/**
  * Builds a `SessionTransport` bound to one service URL (a local store or Richter).
  * The host and web depend on the `SessionTransport` contract; this is the concrete
  * client that carries it over the wire.
@@ -145,5 +164,6 @@ export function streamTransport(serviceUrl: string): SessionTransport {
     publishEvent: (sessionId, input) => publishStream(serviceUrl, sessionId, input),
     connectSession: (options) => connectStream(serviceUrl, options),
     fetchInventory: (signal) => fetchStreamInventory(serviceUrl, signal),
+    permanentlyDeleteSession: (sessionId) => permanentlyDeleteStreamSession(serviceUrl, sessionId),
   };
 }

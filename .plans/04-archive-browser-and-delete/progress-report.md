@@ -12,11 +12,11 @@
 
 ### M1: Read Model and Fixtures
 
-- [ ] RED: Add tests or fixture assertions for an `ArchivedSessionRow` read model with title, cwd/project, last activity, event count or summary metadata, active/protected flags, and deletion eligibility
-- [ ] GREEN: Define shared Storybook fixtures for archived rows, empty state, active/protected rows, stale/not-found rows, and long labels
-- [ ] RED: Add tests proving non-archived sessions are excluded from archive-browser rows
-- [ ] GREEN: Implement the pure projection that derives archive-browser rows from session inventory
-- [ ] REFACTOR: Keep archive-browser display projection separate from default sidebar/resume projection
+- [x] RED: Add tests or fixture assertions for an `ArchivedSessionRow` read model with title, cwd/project, last activity, event count or summary metadata, active/protected flags, and deletion eligibility
+- [x] GREEN: Define shared Storybook fixtures for archived rows, empty state, active/protected rows, stale/not-found rows, and long labels
+- [x] RED: Add tests proving non-archived sessions are excluded from archive-browser rows
+- [x] GREEN: Implement the pure projection that derives archive-browser rows from session inventory
+- [x] REFACTOR: Keep archive-browser display projection separate from default sidebar/resume projection
 
 ### M2: Storybook Takeover Surface
 
@@ -44,11 +44,11 @@
 
 ### M4: Permanent Delete Domain Contract
 
-- [ ] RED: Add protocol/store tests that define what permanent delete means for session inventory, event replay, blobs/artifacts if applicable, and reconnect behavior
-- [ ] GREEN: Add the minimum host/store command boundary needed to permanently delete an archived session
-- [ ] RED: Add tests proving permanent delete is rejected for non-archived, active/protected, missing-confirmation, and currently-running sessions
-- [ ] GREEN: Implement typed failure results for delete rejection and backend failures
-- [ ] REFACTOR: Keep permanent delete separate from the existing `session.deleted` soft-delete marker
+- [x] RED: Add protocol/store tests that define what permanent delete means for session inventory, event replay, blobs/artifacts if applicable, and reconnect behavior
+- [x] GREEN: Add the minimum host/store command boundary needed to permanently delete an archived session
+- [x] RED: Add tests proving permanent delete is rejected for non-archived, active/protected, missing-confirmation, and currently-running sessions
+- [x] GREEN: Implement typed failure results for delete rejection and backend failures
+- [x] REFACTOR: Keep permanent delete separate from the existing `session.deleted` soft-delete marker
 
 ### M5: Strong Confirmation UX
 

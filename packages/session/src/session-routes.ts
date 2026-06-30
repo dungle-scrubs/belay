@@ -22,8 +22,17 @@ export function streamPath(sessionId: string): string {
   return `${SESSIONS_PATH}/${sessionId}/stream`;
 }
 
+/** The per-session PERMANENT-delete route (plan 04): POSTed to purge an archived session's storage.
+ *  A dedicated path (not the soft-delete `session.deleted` event) so the destructive op is distinct. */
+export function deletePath(sessionId: string): string {
+  return `${SESSIONS_PATH}/${sessionId}/delete`;
+}
+
 /** The server-side matcher for {@link eventsPath}, capturing the (encoded) session id. */
 export const EVENTS_PATTERN = /^\/sessions\/([^/]+)\/events$/;
 
 /** The server-side matcher for {@link streamPath}, capturing the (encoded) session id. */
 export const STREAM_PATTERN = /^\/sessions\/([^/]+)\/stream$/;
+
+/** The server-side matcher for {@link deletePath}, capturing the (encoded) session id. */
+export const DELETE_PATTERN = /^\/sessions\/([^/]+)\/delete$/;

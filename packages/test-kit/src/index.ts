@@ -84,6 +84,8 @@ export interface RecordingTransport {
   setInventory(summaries: readonly SessionSummary[]): void;
   /** Makes `fetchInventory` reject with `error` (the "inventory unavailable" path). */
   failInventory(error: unknown): void;
+  /** The sessionIds `permanentlyDeleteSession` was called with, in order. */
+  readonly permanentlyDeleted: readonly string[];
 }
 
 /**
@@ -100,6 +102,7 @@ export function recordingTransport(): RecordingTransport {
   const published = new Map<string, PublishInput[]>();
   const allPublished: PublishInput[] = [];
   const logs = new Map<string, readonly SessionEvent[]>();
+  const permanentlyDeleted: string[] = [];
   let inventory: readonly SessionSummary[] = [];
   let inventoryError: unknown;
 
@@ -129,6 +132,10 @@ export function recordingTransport(): RecordingTransport {
     },
     fetchInventory: () =>
       inventoryError ? Promise.reject(inventoryError) : Promise.resolve(inventory),
+    permanentlyDeleteSession: (sessionId) => {
+      permanentlyDeleted.push(sessionId);
+      return Promise.resolve({ ok: true, sessionId });
+    },
   };
 
   return {
@@ -146,6 +153,7 @@ export function recordingTransport(): RecordingTransport {
     failInventory: (error) => {
       inventoryError = error;
     },
+    permanentlyDeleted,
   };
 }
 
