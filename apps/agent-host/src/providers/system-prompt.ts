@@ -112,6 +112,20 @@ export interface SystemPromptContext {
   readonly workspaceRoot?: string;
   /** Host working directory read and bash run from. Defaults to process.cwd(). */
   readonly cwd?: string;
+  /**
+   * The active output style's response-shape guidance (plan 03, M6). PRESENTATION ONLY: it shapes how
+   * the answer reads and nothing else - it never changes the tool inventory, model, reasoning, agents,
+   * or execution. Empty (the default style) contributes no block. Threaded in by the caller from the
+   * persisted style preference; the builder stays unaware of how a style is chosen or stored.
+   */
+  readonly styleGuidance?: string;
+}
+
+/** The presentation-only style block, or "" for the default style (no guidance). */
+function styleBlock(guidance: string | undefined): string {
+  return guidance
+    ? `Response style (presentation only, does not change tools or behavior): ${guidance}`
+    : "";
 }
 
 interface PromptRegistrySnapshot {
@@ -178,10 +192,13 @@ export class SystemPromptBuilder {
     const cwd = context.cwd ?? process.cwd();
     const snapshot = this.registrySnapshot(cwd, workspaceRoot);
 
+    const style = styleBlock(context.styleGuidance);
+
     if (tools.length === 0) {
       return renderBlocks([
         { render: () => IDENTITY },
         { render: () => executionContext(workspaceRoot, cwd) },
+        { enabled: style.length > 0, render: () => style },
         { render: () => RESPONSE_CALIBRATION_GUIDANCE.join("\n") },
         { render: () => "No tools are available on this route; answer directly in ordinary text." },
       ]);
@@ -201,6 +218,7 @@ export class SystemPromptBuilder {
       { render: () => toolInventory(tools) },
       { enabled: snapshot.contextBlock.length > 0, render: () => snapshot.contextBlock },
       { render: () => guidance },
+      { enabled: style.length > 0, render: () => style },
       { enabled: snapshot.checklist.length > 0, render: () => snapshot.checklist },
     ]);
   }

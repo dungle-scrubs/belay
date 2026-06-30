@@ -54,6 +54,8 @@ export interface DoctorRuntimeFacts {
   readonly catalog?: readonly SourceSummary[];
   /** Cwd advisory-lock state for this host's working directory (plan 01), surfaced in the Workspace area. */
   readonly cwdLock?: CwdLockDoctorFact;
+  /** The active output style (plan 03) - run attribution: which style shapes this session's answers. */
+  readonly activeStyle?: { readonly id: string; readonly source: string };
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
@@ -177,6 +179,9 @@ async function doctorText(input: DoctorCommandInput): Promise<string> {
     lines.push(`cwd lock: ${cwdLockSummary(input.cwdLock)}`);
   }
   lines.push(`host: ${input.instanceId} (${input.role})`);
+  if (input.activeStyle) {
+    lines.push(`style: ${input.activeStyle.id} (${input.activeStyle.source})`);
+  }
   if (input.host) {
     lines.push(`turn: ${fmtFields(input.host)}`);
   }

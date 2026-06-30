@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { warn } from "../log";
 import { USER_STYLE_JSON } from "../paths";
-import { DEFAULT_STYLE_ID, findStyle } from "./styles";
+import { DEFAULT_STYLE_ID, findStyle, resolveStyle } from "./styles";
 
 /**
  * The active output-style preference store (plan 03, M5). The selected style id persists as a small
@@ -56,7 +56,8 @@ export function loadStylePref(
   }
 }
 
-/** Persists the active style id, creating the config dir as needed. */
+/** Persists the active style id, creating the config dir as needed. Clears the per-turn cache so the
+ *  next turn (and `/doctor`) sees the new style without a host restart. */
 export function saveStylePref(
   styleId: string,
   path: string = USER_STYLE_JSON,
@@ -66,4 +67,25 @@ export function saveStylePref(
   },
 ): void {
   write(path, `${JSON.stringify({ activeStyle: styleId }, null, 2)}\n`);
+  cache = undefined;
+}
+
+/**
+ * The active style preference, read once and cached for the host's lifetime so the per-step system-prompt
+ * build never re-reads disk (matching the model-overrides cache). {@link saveStylePref} clears the cache
+ * on a `/style` change, so a selection takes effect on the next turn without a restart.
+ */
+let cache: StylePreference | undefined;
+
+export function activeStylePref(): StylePreference {
+  if (cache === undefined) {
+    cache = loadStylePref();
+  }
+  return cache;
+}
+
+/** The active style's presentation-only response-shape guidance (empty for the default style), threaded
+ *  into the system prompt. Reads through the cache. */
+export function activeStyleGuidance(): string {
+  return resolveStyle(activeStylePref().activeStyle).guidance;
 }

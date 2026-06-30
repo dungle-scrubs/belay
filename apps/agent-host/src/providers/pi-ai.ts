@@ -15,6 +15,7 @@ import {
 import { Effect, Stream } from "effect";
 import { debug } from "../log";
 import { msg } from "../messages";
+import { activeStyleGuidance } from "../style/style-store";
 import {
   classifyResponseOverflow,
   isAuthFailure,
@@ -404,7 +405,8 @@ export function streamPiAiModel<TApi extends Api>(
           ...streamOptions,
           provider,
           signal: controller.signal,
-          systemPrompt: systemPrompt ?? buildSystemPrompt(tools),
+          systemPrompt:
+            systemPrompt ?? buildSystemPrompt(tools, { styleGuidance: activeStyleGuidance() }),
         }),
         // A classified auth failure (see error-classifier) rides through as-is; anything else is
         // normalized into the failure taxonomy (D-076 M1/M2) -> ProviderUnavailable carrying its

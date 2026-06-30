@@ -189,3 +189,32 @@ test("a fresh SystemPromptBuilder defaults to the module registries (same prompt
   // instance assembles the byte-identical prompt the shared singleton does.
   assert.equal(new SystemPromptBuilder().build(TOOLS, opts), buildSystemPrompt(TOOLS, opts));
 });
+
+/**
+ * Output-style guidance (plan 03, M6): a selected style threads ONLY a presentation-only response-shape
+ * block into the prompt - it never changes the tool inventory, identity, execution context, or any other
+ * behavior. These pin that invariant.
+ */
+
+test("style guidance is threaded into the prompt as a presentation-only block (03 M6)", () => {
+  const prompt = buildSystemPrompt(TOOLS, { styleGuidance: "Lead with the result." });
+  assert.match(prompt, /Response style \(presentation only/);
+  assert.match(prompt, /Lead with the result\./);
+});
+
+test("the default style (no guidance) adds no style block and equals the no-style prompt", () => {
+  const prompt = buildSystemPrompt(TOOLS, { styleGuidance: "" });
+  assert.ok(!prompt.includes("Response style"));
+  assert.equal(prompt, buildSystemPrompt(TOOLS));
+});
+
+test("style affects ONLY its block - tools, identity, and execution are unchanged across styles (03 M6)", () => {
+  const a = buildSystemPrompt(TOOLS, { styleGuidance: "Be concise." });
+  const b = buildSystemPrompt(TOOLS, { styleGuidance: "Teach as you go." });
+  const stripStyle = (s: string): string =>
+    s.replace(/Response style \(presentation only[^\n]*/g, "");
+  assert.equal(stripStyle(a), stripStyle(b), "everything but the style sentence is identical");
+  // The advertised tool inventory is present and unchanged regardless of the active style.
+  assert.match(a, /- edit: Edit a file\./);
+  assert.match(b, /- edit: Edit a file\./);
+});

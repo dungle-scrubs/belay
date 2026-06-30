@@ -101,6 +101,7 @@ import {
   stopSession,
 } from "./session-lifecycle";
 import { ensureSessionWithRetry } from "./startup";
+import { activeStylePref } from "./style/style-store";
 import { taskRegistry } from "./tasks";
 import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
@@ -2015,6 +2016,7 @@ async function worktreeReconcile(): Promise<void> {
  */
 function doctorFacts(): DoctorRuntimeFacts {
   const cwdLock = workspaceCwdLockFact();
+  const style = activeStylePref();
   return {
     cwd: abbrevHome(process.cwd()),
     workspace: abbrevHome(WORKSPACE_ROOT),
@@ -2024,6 +2026,7 @@ function doctorFacts(): DoctorRuntimeFacts {
     internet: internet.current(),
     branch: currentGit().branch,
     catalog: catalog.sources,
+    activeStyle: { id: style.activeStyle, source: style.source },
     ...(cwdLock ? { cwdLock } : {}),
   };
 }
