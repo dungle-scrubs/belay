@@ -34,6 +34,7 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
+import { jobsToSupport, runningSubagents } from "@/support-panel/support-panel";
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
@@ -47,6 +48,7 @@ import {
   hostStatus,
   isHostlessPendingPrompt,
   isSessionArchived,
+  jobsFrom,
   lastUserModelFrom,
   latestSessionSwitch,
   parseBangShell,
@@ -358,6 +360,10 @@ export function App() {
   // Stale = the model hasn't touched the checklist since the user's last message (it may have moved on
   // to a new topic); drives the panel's "stale" badge + dismiss nudge (09.1).
   const staleTasks = useMemo(() => tasksStale(events), [events]);
+  // The support panel's background work (plan 09): promoted jobs the host announces live, and the
+  // running subagent delegations from the transcript. Both derived from the live session, never cached.
+  const jobs = useMemo(() => jobsToSupport(jobsFrom(events)), [events]);
+  const subagents = useMemo(() => runningSubagents(transcript), [transcript]);
   // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
   const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);
   // The pending generated handoff (02.10): a `/handoff` draft awaiting approve/edit/reject. Like a
@@ -1077,6 +1083,8 @@ export function App() {
         tasks={tasks}
         tasksStale={staleTasks}
         onClearTasks={() => void command("/tasks-clear", "")}
+        subagents={subagents}
+        jobs={jobs}
         panel={{
           // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
           // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.

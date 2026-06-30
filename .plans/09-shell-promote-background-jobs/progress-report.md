@@ -86,11 +86,11 @@
 
 ### M7: Live Support Panel Wiring
 
-- [ ] RED: Add web tests for live tasks plus background job snapshots rendering in the support panel
-- [ ] GREEN: Wire task snapshots, background subagent snapshots, and process job snapshots into the panel
-- [ ] RED: Add tests for live job exit/failure/kill updates without stale rows
-- [ ] GREEN: Update rows as session events arrive
-- [ ] REFACTOR: Keep panel state derived from session snapshots rather than local stale copies
+- [x] RED: Add web tests for live tasks plus background job snapshots rendering in the support panel
+- [x] GREEN: Wire task snapshots, background subagent snapshots, and process job snapshots into the panel
+- [x] RED: Add tests for live job exit/failure/kill updates without stale rows
+- [x] GREEN: Update rows as session events arrive
+- [x] REFACTOR: Keep panel state derived from session snapshots rather than local stale copies
 
 ### M8: Job Detail and Controls
 

@@ -35,7 +35,8 @@ import type { SessionStream } from "@/session/use-session";
 import type { HostStatus, PendingHandoff, PendingQuestion } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
-import { TasksPanel } from "../../TasksPanel";
+import type { SupportJob, SupportSubagent } from "../../support-panel/support-panel";
+import { SupportPanel } from "../../support-panel/support-panel-view";
 import type { Message, PanelModel, readOnlyToolBatches, toTranscript } from "../../transcript";
 import { buildTranscriptRows } from "../../transcript-rows";
 import { WORKTREE_CHOOSER } from "../../worktrees";
@@ -188,6 +189,14 @@ export function PanelHost(props: {
   tasksStale?: boolean;
   /** Dismiss the whole checklist (the abandoned-list escape hatch). */
   onClearTasks?: () => void;
+  /** Background subagents (running delegations) for the support panel (plan 09). */
+  subagents?: readonly SupportSubagent[];
+  /** Promoted background jobs for the support panel (plan 09). */
+  jobs?: readonly SupportJob[];
+  /** Open a promoted job's detail takeover (plan 09 M8). */
+  onOpenJobDetail?: (jobId: string) => void;
+  /** Stop a running promoted job (plan 09 M8). */
+  onKillJob?: (jobId: string) => void;
   panel: PanelBinding;
   choosers: ChooserBinding;
   sidebar: SidebarBinding;
@@ -222,6 +231,10 @@ export function PanelHost(props: {
     tasks,
     tasksStale,
     onClearTasks,
+    subagents,
+    jobs,
+    onOpenJobDetail,
+    onKillJob,
     panel,
     choosers,
   } = props;
@@ -381,7 +394,15 @@ export function PanelHost(props: {
         </div>
 
         {/* Live task checklist, above the composer. */}
-        <TasksPanel tasks={tasks} stale={tasksStale} onClear={onClearTasks} />
+        <SupportPanel
+          tasks={tasks}
+          subagents={subagents ?? []}
+          jobs={jobs ?? []}
+          stale={tasksStale}
+          onClearTasks={onClearTasks}
+          onOpenJobDetail={onOpenJobDetail}
+          onKillJob={onKillJob}
+        />
 
         <QueuedPrompts queue={queue} />
 

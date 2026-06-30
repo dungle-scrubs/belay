@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
-import type { TaskSnapshot } from "@trevor/session";
+import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
 import { test } from "vitest";
-import { buildSupportPanel, type SupportJob, type SupportSubagent } from "./support-panel";
+import type { Message } from "@/transcript";
+import {
+  buildSupportPanel,
+  jobsToSupport,
+  runningSubagents,
+  type SupportJob,
+  type SupportSubagent,
+} from "./support-panel";
 
 /**
  * M5: the pure support-panel projection. Sections: tasks only / background only / both / empty; in the
@@ -89,6 +96,51 @@ test("job status -> tone + label: running / done (exit 0) / killed / non-zero ex
       ["error", "killed"],
       ["error", "exit 2"],
     ],
+  );
+});
+
+test("jobsToSupport maps the host job snapshot to the panel's minimal job row (M7)", () => {
+  const snap: JobSnapshot = {
+    id: "p1",
+    command: "pnpm dev",
+    source: "bash",
+    cwd: "/w",
+    startedAt: 1,
+    status: "running",
+    exitCode: null,
+    stdoutTotal: 5,
+    stderrTotal: 0,
+  };
+  assert.deepEqual(jobsToSupport([snap]), [
+    { id: "p1", command: "pnpm dev", status: "running", exitCode: null },
+  ]);
+});
+
+test("runningSubagents keeps only non-terminal delegation rows from the transcript (M7)", () => {
+  const messages: Message[] = [
+    {
+      kind: "delegation",
+      id: "d1",
+      childSessionId: "c1",
+      agent: "explorer",
+      task: "scan",
+      mode: "m",
+      status: "running",
+    },
+    {
+      kind: "delegation",
+      id: "d2",
+      childSessionId: "c2",
+      agent: "reviewer",
+      task: "review",
+      mode: "m",
+      status: "done",
+    },
+    { kind: "user", id: "u1", text: "hi", artifacts: [], pastes: [] },
+  ];
+  assert.deepEqual(
+    runningSubagents(messages).map((s) => s.agent),
+    ["explorer"],
   );
 });
 

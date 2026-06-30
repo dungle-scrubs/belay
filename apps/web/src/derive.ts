@@ -8,6 +8,7 @@ import {
   type GitStatus,
   HOST_ROLE,
   type HostPresence,
+  type JobSnapshot,
   type ModelRef,
   type ProviderModel,
   type ProviderQuestionAnswer,
@@ -345,6 +346,12 @@ export function defaultProviderFrom(events: readonly SessionEvent[]): string | u
  */
 export function vimEnabledFrom(events: readonly SessionEvent[]): boolean {
   return latest(events, (d) => (d.type === "host.online" ? d.vimEnabled : undefined)) ?? false;
+}
+
+/** The host's latest tracked background jobs (plan 09): the freshest `host.online` job snapshots (the
+ *  host re-announces on every job change), empty when none / no host. */
+export function jobsFrom(events: readonly SessionEvent[]): readonly JobSnapshot[] {
+  return latest(events, (d) => (d.type === "host.online" ? d.jobs : undefined)) ?? [];
 }
 
 /**

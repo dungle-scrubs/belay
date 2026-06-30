@@ -1054,9 +1054,17 @@ function announceOnline(): void {
       // The host-owned Vim-mode prompt preference (plan 06), so the web gates its opt-in composer
       // motions on this machine's vim.json config rather than per-tab browser state.
       vimEnabled: vimEnabled(),
+      // The tracked background jobs (plan 09): promoted bash/shell commands + `process` jobs, so the
+      // support panel renders them. The supervisor re-announces on every job change (below).
+      jobs: supervisor.snapshots(),
     }),
   ).catch(() => {});
 }
+
+// Re-announce host.online whenever a tracked job changes (start / exit / kill / promote / remove), so the
+// support panel reflects promoted jobs + their lifecycle live without polling (plan 09 M7). announceOnline
+// is latched + idempotent, so a burst of changes coalesces harmlessly.
+supervisor.onChange = announceOnline;
 
 /** On go-live: start the lease (once), announce presence, and report online. */
 function goLive(): void {

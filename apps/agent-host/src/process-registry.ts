@@ -113,6 +113,13 @@ export interface JobInfo {
 export class ProcessRegistry {
   private readonly processes = new Map<string, ManagedProcess>();
   private seq = 0;
+  /** Called after any job state change (start / exit / kill / promote / remove), so the host can
+   *  re-announce its job snapshots and the support panel updates live (plan 09 M7). */
+  onChange: (() => void) | undefined;
+
+  private changed(): void {
+    this.onChange?.();
+  }
 
   start(command: string, cwd: string, meta?: JobMeta): { id: string; status: ProcessStatus } {
     const blocked = classifyAlwaysPreventedBashCommand(command, { workspaceRoot: process.cwd() });
@@ -162,6 +169,7 @@ export class ProcessRegistry {
       proc.exitCode = code;
       proc.signal = signal;
       markDone();
+      this.changed();
     });
     child.on("error", (error) => {
       proc.stderr.append(`\n[spawn error] ${error.message}\n`);
@@ -169,8 +177,10 @@ export class ProcessRegistry {
         proc.status = "exited";
       }
       markDone();
+      this.changed();
     });
     this.processes.set(id, proc);
+    this.changed();
     return { id, status: "running" };
   }
 
@@ -195,6 +205,9 @@ export class ProcessRegistry {
       }
     }
     this.processes.delete(id);
+    if (proc) {
+      this.changed();
+    }
   }
 
   poll(
@@ -237,6 +250,7 @@ export class ProcessRegistry {
       } catch {
         // already gone
       }
+      this.changed();
     }
     return { id, status: proc.status };
   }
@@ -258,6 +272,7 @@ export class ProcessRegistry {
     const proc = this.processes.get(id);
     if (proc && proc.promotedAt === undefined) {
       proc.promotedAt = at;
+      this.changed();
     }
   }
 

@@ -22,6 +22,7 @@ import type {
   CompactionManifest,
   GitStatus,
   HandoffMode,
+  JobSnapshot,
   ProviderDiagnostic,
   ProviderIncidentReason,
   ProviderModel,
@@ -312,6 +313,48 @@ function coercePastes(value: unknown): PastePayload[] {
   return coerceArray(value, (p) => (typeof p.text === "string" ? { text: p.text } : null));
 }
 
+/** Coerces the announced background jobs (plan 09), tolerant of junk: keeps each entry with a string id
+ *  + command + a known lifecycle, normalizing the optional/origin fields the support panel reads. */
+function coerceJobs(value: unknown): readonly JobSnapshot[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const lifecycles = new Set(["running", "exited", "killed"]);
+  const sources = new Set(["process", "bash", "shell"]);
+  const jobs: JobSnapshot[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const j = raw as Record<string, unknown>;
+    if (typeof j.id !== "string" || typeof j.command !== "string") {
+      continue;
+    }
+    const status = lifecycles.has(j.status as string)
+      ? (j.status as JobSnapshot["status"])
+      : "running";
+    const source = sources.has(j.source as string)
+      ? (j.source as JobSnapshot["source"])
+      : "process";
+    jobs.push({
+      id: j.id,
+      command: j.command,
+      source,
+      ...(typeof j.runId === "string" ? { runId: j.runId } : {}),
+      ...(typeof j.callId === "string" ? { callId: j.callId } : {}),
+      ...(typeof j.requestId === "string" ? { requestId: j.requestId } : {}),
+      cwd: typeof j.cwd === "string" ? j.cwd : "",
+      startedAt: typeof j.startedAt === "number" ? j.startedAt : 0,
+      ...(typeof j.promotedAt === "number" ? { promotedAt: j.promotedAt } : {}),
+      status,
+      exitCode: typeof j.exitCode === "number" ? j.exitCode : null,
+      stdoutTotal: typeof j.stdoutTotal === "number" ? j.stdoutTotal : 0,
+      stderrTotal: typeof j.stderrTotal === "number" ? j.stderrTotal : 0,
+    });
+  }
+  return jobs;
+}
+
 /** Coerces the announced per-source catalog (D-065): `{ sourceId: CatalogEntry[] }`, tolerant of junk. */
 function coerceCatalog(value: unknown): Record<string, readonly CatalogEntry[]> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -531,6 +574,8 @@ export type DecodedEvent =
       readonly catalog: Readonly<Record<string, readonly CatalogEntry[]>>;
       /** Whether the host's Vim-mode prompt preference is on (plan 06); false when unannounced. */
       readonly vimEnabled: boolean;
+      /** The host's tracked background jobs (plan 09); empty when none announced. */
+      readonly jobs: readonly JobSnapshot[];
     }
   | {
       readonly type: "provider.question.requested";
@@ -813,6 +858,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         sources: Array.isArray(p.sources) ? p.sources.map(decodeSourceSummary) : [],
         catalog: coerceCatalog(p.catalog),
         vimEnabled: p.vimEnabled === true,
+        jobs: coerceJobs(p.jobs),
       };
     case "provider.question.requested":
       return {

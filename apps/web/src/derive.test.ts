@@ -16,6 +16,7 @@ import {
   hostStatus,
   isHostlessPendingPrompt,
   isSessionArchived,
+  jobsFrom,
   lastUserModelFrom,
   latestSessionSwitch,
   parseBangShell,
@@ -141,6 +142,28 @@ test("vimEnabledFrom reflects the latest host.online preference (plan 06), false
     vimEnabledFrom([online("h1", { vimEnabled: true }), online("h1", { vimEnabled: false })]),
     false,
   );
+});
+
+test("jobsFrom returns the latest host.online job snapshots, empty with no host (plan 09)", () => {
+  assert.deepEqual(jobsFrom([]), [], "no host -> no jobs");
+  const running = {
+    id: "p1",
+    command: "sleep 9",
+    source: "bash",
+    cwd: "/w",
+    startedAt: 1,
+    status: "running",
+    exitCode: null,
+    stdoutTotal: 0,
+    stderrTotal: 0,
+  };
+  assert.equal(jobsFrom([online("h1", { jobs: [running] })])[0]?.id, "p1");
+  // A newer host.online with the job exited supersedes the older running snapshot - no stale row.
+  const live = jobsFrom([
+    online("h1", { jobs: [running] }),
+    online("h1", { jobs: [{ ...running, status: "exited", exitCode: 0 }] }),
+  ]);
+  assert.equal(live[0]?.status, "exited");
 });
 
 test("isSessionArchived reflects the latest session.archived event (D-094)", () => {

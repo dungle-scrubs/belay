@@ -1,4 +1,5 @@
-import type { TaskSnapshot, TaskStatus } from "@trevor/session";
+import type { JobSnapshot, TaskSnapshot, TaskStatus } from "@trevor/session";
+import type { Message } from "@/transcript";
 
 /**
  * The thread support-panel read model (plan 09 M5): the pure projection of a thread's support surfaces -
@@ -81,6 +82,28 @@ export function buildSupportPanel(input: {
     taskCount: tasks.length,
     backgroundCount: background.length,
   };
+}
+
+/** Maps the host's announced job snapshots to the panel's job rows (plan 09 M7). */
+export function jobsToSupport(jobs: readonly JobSnapshot[]): SupportJob[] {
+  return jobs.map((j) => ({
+    id: j.id,
+    command: j.command,
+    status: j.status,
+    exitCode: j.exitCode,
+  }));
+}
+
+/** The live background subagents (plan 09 M7): the non-terminal `delegation` rows from the transcript -
+ *  a finished/failed child is no longer "background work" and stays in the transcript instead. */
+export function runningSubagents(messages: readonly Message[]): SupportSubagent[] {
+  const out: SupportSubagent[] = [];
+  for (const m of messages) {
+    if (m.kind === "delegation" && m.status !== "done" && m.status !== "failed") {
+      out.push({ id: m.childSessionId, agent: m.agent, task: m.task, status: m.status });
+    }
+  }
+  return out;
 }
 
 function subagentRow(s: SupportSubagent): SupportBackgroundRow {

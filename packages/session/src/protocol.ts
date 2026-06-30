@@ -260,6 +260,32 @@ export interface TaskSnapshot {
   readonly blocks: readonly string[];
 }
 
+/** How a tracked background job came to exist (plan 09): a direct `process` start, or a promoted bash /
+ *  prompt-shell command. */
+export type JobSource = "process" | "bash" | "shell";
+export type JobLifecycle = "running" | "exited" | "killed";
+
+/**
+ * A promoted background job snapshot (plan 09), announced on `host.online` so the support panel + detail
+ * takeover see the host's tracked jobs without a model round-trip. Structurally identical to the host's
+ * supervisor snapshot, so the host announces it directly.
+ */
+export interface JobSnapshot {
+  readonly id: string;
+  readonly command: string;
+  readonly source: JobSource;
+  readonly runId?: string;
+  readonly callId?: string;
+  readonly requestId?: string;
+  readonly cwd: string;
+  readonly startedAt: number;
+  readonly promotedAt?: number;
+  readonly status: JobLifecycle;
+  readonly exitCode: number | null;
+  readonly stdoutTotal: number;
+  readonly stderrTotal: number;
+}
+
 /** The revision a `tasks.current` event without freshness metadata decodes to (a legacy/pre-09 log). */
 export const LEGACY_TASK_REVISION = 0;
 
@@ -729,6 +755,8 @@ export const events = {
     /** Whether the host's Vim-mode prompt preference is enabled (plan 06), so the web gates the
      *  composer's opt-in Vim motions on a host-owned setting instead of browser state. */
     vimEnabled?: boolean;
+    /** The host's tracked background jobs (plan 09), so the support panel renders promoted jobs live. */
+    jobs?: readonly JobSnapshot[];
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
@@ -747,6 +775,7 @@ export const events = {
       ...(p.sources ? { sources: p.sources } : {}),
       ...(p.catalog ? { catalog: p.catalog } : {}),
       ...(p.vimEnabled !== undefined ? { vimEnabled: p.vimEnabled } : {}),
+      ...(p.jobs ? { jobs: p.jobs } : {}),
     },
   }),
   /**
