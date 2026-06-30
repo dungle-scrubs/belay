@@ -14,11 +14,11 @@
 
 ### M1: Detail Eligibility Contract
 
-- [ ] RED: Add tests or fixture assertions for detail eligibility on bash, read, write, edit, multi_edit, grep, glob, web search, docs/web fetch, MCP, session recall, shell lane, and unknown tool rows
-- [ ] GREEN: Define a `ToolDetailModel` contract with id, source row key, tool name, status, args, result/output, error, timing, stream/progress, artifacts, and redaction metadata where available
-- [ ] RED: Add tests proving user prompts and ordinary final assistant responses are not first-cut detail targets
-- [ ] GREEN: Implement a pure projection from transcript tool rows/events to generic detail models
-- [ ] REFACTOR: Keep detail projection independent from compact row summaries
+- [x] RED: Add tests or fixture assertions for detail eligibility on bash, read, write, edit, multi_edit, grep, glob, web search, docs/web fetch, MCP, session recall, shell lane, and unknown tool rows
+- [x] GREEN: Define a `ToolDetailModel` contract with id, source row key, tool name, status, args, result/output, error, timing, stream/progress, artifacts, and redaction metadata where available
+- [x] RED: Add tests proving user prompts and ordinary final assistant responses are not first-cut detail targets
+- [x] GREEN: Implement a pure projection from transcript tool rows/events to generic detail models
+- [x] REFACTOR: Keep detail projection independent from compact row summaries
 
 ### M2: Takeover Shell Stories
 
