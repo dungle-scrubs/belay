@@ -57,9 +57,28 @@ export function sameModel(
 }
 
 /**
+ * The canonical low->high ordering of graduated reasoning-effort levels (`off` is the disabled floor;
+ * `minimal`..`xhigh` are increasing thinking effort). It exists to carry a chosen effort across a
+ * model switch (the owner's "keep my effort level" rule) instead of resetting it to the model default.
+ * Binary surfaces (e.g. `["off","on"]`) and any level off this ladder are not comparable and fall back
+ * to the default.
+ */
+const REASONING_LADDER: readonly string[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
+/** A level's position on {@link REASONING_LADDER}, or -1 when it is not a graduated ladder level. */
+function ladderRank(level: string): number {
+  return REASONING_LADDER.indexOf(level);
+}
+
+/**
  * Clamps a requested reasoning to a model's detected surface: the request when the surface lists it
- * (so `off` works only when the surface offers it), else the surface default when valid, else the
- * first declared level, else null for a model with no reasoning surface at all.
+ * (so `off` works only when the surface offers it). Otherwise, when carrying a graduated THINKING
+ * effort (a non-`off` ladder level) onto a model whose levels are all on the ladder, it maintains a
+ * comparable thinking level rather than resetting to the default: the highest offered thinking level
+ * at or below the request (so `xhigh` -> a high-capped model becomes `high`, not `medium`), and when
+ * every offered thinking level is above the request, the lowest one (so the effort is never silently
+ * dropped to `off`). An `off` request, an off-ladder level, or a binary on/off surface is not
+ * comparable, so it falls to the surface default when valid, else the first declared level, else null.
  */
 export function constrainReasoning(
   surface: ReasoningSurface,
@@ -70,6 +89,19 @@ export function constrainReasoning(
   }
   if (requested != null && surface.levels.includes(requested)) {
     return requested;
+  }
+  // wantRank >= 1 is a non-off thinking level (off is rank 0); only those carry across a switch.
+  const wantRank = requested == null ? -1 : ladderRank(requested);
+  if (wantRank >= 1 && surface.levels.every((level) => ladderRank(level) >= 0)) {
+    const thinking = surface.levels.filter((level) => level !== "off");
+    if (thinking.length > 0) {
+      const atOrBelow = thinking.filter((level) => ladderRank(level) <= wantRank);
+      // Highest thinking level at or below the request; if all exceed it, the lowest (never off).
+      const pool = atOrBelow.length > 0 ? atOrBelow : thinking;
+      const pick = atOrBelow.length > 0 ? Math.max : Math.min;
+      const targetRank = pick(...pool.map(ladderRank));
+      return pool.find((level) => ladderRank(level) === targetRank) ?? null;
+    }
   }
   if (surface.levels.includes(surface.default)) {
     return surface.default;

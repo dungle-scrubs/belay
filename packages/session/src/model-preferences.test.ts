@@ -37,16 +37,52 @@ test("constrainReasoning clamps a request to the model's surface, honoring off o
   assert.equal(
     constrainReasoning(full, "ultra"),
     "low",
-    "an unsupported level falls to the default",
+    "a level off the graduated ladder falls to the default",
   );
   assert.equal(constrainReasoning(full, null), "low", "no request -> the surface default");
 
-  // A model without "off" cannot be turned off; the request is clamped to the default.
-  const noOff = surface(["low", "high"], "high");
-  assert.equal(constrainReasoning(noOff, "off"), "high", "off is dropped when unsupported");
-
   // A model with no reasoning surface yields null (reasoning simply does not apply).
   assert.equal(constrainReasoning(surface([], "x"), "high"), null);
+});
+
+test("constrainReasoning carries a thinking effort across a switch, never dropping it to off", () => {
+  // The owner's rule: keep the chosen effort when switching models. xhigh onto a model that caps at
+  // high clamps to high (the highest offered thinking level at or below it), never medium or default.
+  const capHigh = surface(["off", "low", "medium", "high"], "medium");
+  assert.equal(
+    constrainReasoning(capHigh, "xhigh"),
+    "high",
+    "xhigh -> high (cap), not medium/default",
+  );
+
+  // A missing mid level clamps DOWN to the next offered thinking level, never up past the request.
+  const skipsMedium = surface(["off", "low", "high", "xhigh"], "low");
+  assert.equal(
+    constrainReasoning(skipsMedium, "medium"),
+    "low",
+    "medium -> low when medium is absent",
+  );
+
+  // When every offered thinking level is ABOVE the request, take the lowest one - a thinking effort is
+  // never silently turned off just because the model has no level at or below it.
+  const minHigh = surface(["off", "high", "xhigh"], "high");
+  assert.equal(
+    constrainReasoning(minHigh, "low"),
+    "high",
+    "low -> high (lowest thinking level), not off",
+  );
+
+  // An explicit `off` request a model cannot honor falls to the default (off is not a thinking effort).
+  const noOff = surface(["low", "high"], "high");
+  assert.equal(
+    constrainReasoning(noOff, "off"),
+    "high",
+    "off -> the surface default when unsupported",
+  );
+
+  // Binary on/off surfaces are off the ladder, so a graduated request still uses the model default.
+  const binary = surface(["off", "on"], "on");
+  assert.equal(constrainReasoning(binary, "high"), "on", "a binary surface is not ladder-clamped");
 });
 
 test("selectModel sets active, clamps reasoning, and fronts the deduped recent list", () => {

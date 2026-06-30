@@ -441,18 +441,6 @@ export function App() {
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();
-  // A pick from the quick picker OR the full chooser: record it (recents + persisted active, reasoning
-  // clamped to the model's surface), sync the legacy provider + reasoning so the rest of the UI and the
-  // send path follow, and close the chooser.
-  const onSelectModel = (ref: ModelRef) => {
-    selection.select(ref);
-    setProvider(ref.sourceId);
-    const clamped = constrainReasoning(selection.reasoningSurface(ref), ref.reasoning);
-    if (clamped != null) {
-      setReasoningMap({ ...(reasoningMap ?? {}), [ref.sourceId]: clamped });
-    }
-    setChooserOpen(false);
-  };
   // The active model for DISPLAY + SEND: the explicit/persisted selection (a catalog ModelRef, e.g.
   // {zai, glm-5.2}) wins; before any pick it's the legacy provider-derived ref. Routing the send
   // through this is what carries the real modelId to the host (not the legacy provider key). The label
@@ -487,6 +475,24 @@ export function App() {
     sourceId: sendModel.sourceId,
     modelId: sendModel.modelId,
     reasoning: activeReasoning || null,
+  };
+
+  // A pick from the quick picker OR the full chooser: record it (recents + persisted active), then
+  // MAINTAIN the chosen reasoning effort across the switch - carry the level we're on now into the new
+  // model, clamped to what it supports (xhigh -> a model that caps at high becomes high, not the model
+  // default). The chooser emits reasoning=null, so without this the effort would reset on every switch.
+  // Sync the legacy provider + reasoning so the rest of the UI and the send path follow, and close.
+  const onSelectModel = (ref: ModelRef) => {
+    const carried = constrainReasoning(
+      selection.reasoningSurface(ref),
+      activeReasoning || ref.reasoning,
+    );
+    selection.select({ ...ref, reasoning: carried });
+    setProvider(ref.sourceId);
+    if (carried != null) {
+      setReasoningMap({ ...(reasoningMap ?? {}), [ref.sourceId]: carried });
+    }
+    setChooserOpen(false);
   };
 
   const hostCommand =
