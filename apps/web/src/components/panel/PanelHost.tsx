@@ -101,6 +101,8 @@ export interface ComposeWiring {
   readonly placeholder: string;
   /** Open the current draft in the full-surface prompt editor (02.12). */
   readonly onExpand: () => void;
+  /** Whether the host-owned Vim prompt mode is enabled (plan 06); gates the composer's Vim layer. */
+  readonly vimEnabled: boolean;
 }
 
 /**
@@ -436,6 +438,7 @@ export function PanelHost(props: {
                 disabled={compose.disabled}
                 placeholder={compose.placeholder}
                 onExpand={compose.onExpand}
+                vimEnabled={compose.vimEnabled}
               />
             </>
           )}

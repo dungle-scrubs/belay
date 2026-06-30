@@ -8,7 +8,7 @@ import { PromptSurfaceEditor } from "./prompt-surface-editor";
  * large textarea and confirms (hands the text back) on back / Escape / Cmd-Enter / Done.
  */
 
-function renderEditor(text = "the prompt", title?: string) {
+function renderEditor(text = "the prompt", title?: string, vimEnabled = false) {
   const onTextChange = vi.fn<(t: string) => void>();
   const onConfirm = vi.fn();
   render(
@@ -17,6 +17,7 @@ function renderEditor(text = "the prompt", title?: string) {
       title={title}
       onTextChange={onTextChange}
       onConfirm={onConfirm}
+      vimEnabled={vimEnabled}
     />,
   );
   return { onTextChange, onConfirm };
@@ -64,4 +65,35 @@ test("the Done button confirms", () => {
   const { onConfirm } = renderEditor();
   fireEvent.click(screen.getByRole("button", { name: /done/i }));
   assert.equal(onConfirm.mock.calls.length, 1);
+});
+
+test("with Vim disabled there is no mode indicator (the editor is unchanged)", () => {
+  renderEditor("x", undefined, false);
+  assert.equal(screen.queryByRole("status"), null);
+});
+
+test("with Vim enabled the header shows the mode indicator (starts in insert)", () => {
+  renderEditor("x", undefined, true);
+  assert.ok(screen.getByLabelText("Vim mode: insert"));
+});
+
+test("Vim Escape enters normal-mode and does NOT close the editor; a second Escape closes", () => {
+  const { onConfirm } = renderEditor("hello", undefined, true);
+  const ta = screen.getByRole("textbox") as HTMLTextAreaElement;
+  ta.setSelectionRange(3, 3);
+
+  fireEvent.keyDown(ta, { key: "Escape" });
+  assert.equal(onConfirm.mock.calls.length, 0, "first Escape enters normal, does not close");
+  assert.ok(screen.getByLabelText("Vim mode: normal"), "the indicator shows normal");
+
+  fireEvent.keyDown(ta, { key: "Escape" });
+  assert.equal(onConfirm.mock.calls.length, 1, "a second Escape (in normal) closes");
+});
+
+test("Cmd/Ctrl-Enter confirms even in Vim mode, regardless of mode", () => {
+  const { onConfirm } = renderEditor("hello", undefined, true);
+  const ta = screen.getByRole("textbox") as HTMLTextAreaElement;
+  fireEvent.keyDown(ta, { key: "Escape" }); // -> normal
+  fireEvent.keyDown(ta, { key: "Enter", metaKey: true });
+  assert.equal(onConfirm.mock.calls.length, 1, "Cmd-Enter confirms from normal mode too");
 });

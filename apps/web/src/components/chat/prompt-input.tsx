@@ -1,9 +1,11 @@
 import { Maximize2, Plus, Terminal, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type SubmitEvent, useEffect } from "react";
 import { ArtifactThumb } from "@/ArtifactThumb";
+import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { Button } from "@/components/ui/button";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
+import { useVim } from "@/vim/use-vim";
 
 /**
  * The production prompt composer: the bordered textarea + attach button, the pending-attachment
@@ -50,6 +52,9 @@ export interface PromptInputProps {
   readonly placeholder: string;
   /** Open the current draft in the full-surface prompt editor (02.12) for a larger writing area. */
   readonly onExpand?: () => void;
+  /** Whether the host-owned Vim prompt mode is enabled (plan 06). When on, the composer gains the Vim
+   *  layer + a mode indicator; when off it is exactly the plain composer. */
+  readonly vimEnabled?: boolean;
 }
 
 export function PromptInput({
@@ -59,6 +64,7 @@ export function PromptInput({
   disabled,
   placeholder,
   onExpand,
+  vimEnabled = false,
 }: PromptInputProps) {
   const {
     draft,
@@ -74,6 +80,9 @@ export function PromptInput({
     handleKeyDown,
     removeAttachment,
   } = composer;
+  // The opt-in Vim layer (plan 06): attaches the controller to this textarea. Disabled -> a no-op
+  // (onKeyDown returns false for every key), so the composer behaves exactly as before.
+  const vim = useVim(inputRef, vimEnabled);
   // The prompt shell lane is triggered by the RAW first character being `!` (a space before it stays
   // an ordinary prompt) - mirrors `parseBangShell`, so the visual state and the submit routing agree.
   const shellMode = draft[0] === "!";
@@ -148,13 +157,19 @@ export function PromptInput({
             ref={inputRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onFocus={vim.onFocus}
             onKeyDown={(event) => {
-              // Composer token-delete runs first and may swallow the key; otherwise App's handler
-              // (Enter submit, slash menu, history) runs.
+              // Precedence: composer token-delete (D-092) first; then the Vim layer (in normal/visual it
+              // consumes motions/edits + enters/leaves modes; in insert it only catches Escape, yielding
+              // everything else); then App's handler (slash menu, Enter submit, Up/Down history).
               handleKeyDown(event);
-              if (!event.defaultPrevented) {
-                onKeyDown(event);
+              if (event.defaultPrevented) {
+                return;
               }
+              if (vim.onKeyDown(event)) {
+                return;
+              }
+              onKeyDown(event);
             }}
             onPaste={onPaste}
             placeholder={placeholder}
@@ -205,6 +220,14 @@ export function PromptInput({
               >
                 <Maximize2 className="size-4" />
               </Button>
+            ) : null}
+            {/* The Vim mode indicator sits at the right of the bottom row when Vim mode is on; its
+              stable width keeps the row from reflowing as the mode changes. */}
+            {vim.enabled ? (
+              <>
+                <span className="flex-1" />
+                <VimModeIndicator mode={vim.mode} />
+              </>
             ) : null}
           </div>
         </div>

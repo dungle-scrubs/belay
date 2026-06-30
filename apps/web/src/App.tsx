@@ -49,6 +49,7 @@ import {
   tasksFrom,
   tasksStale,
   truncate,
+  vimEnabledFrom,
   workspaceBasename,
 } from "./derive";
 import { type EscState, escapeAction } from "./esc-action";
@@ -350,6 +351,8 @@ export function App() {
   // Immediate host commands the host announced, plus the set of names used to tell a
   // command from an ordinary prompt at submit time.
   const commands = useMemo(() => commandsFrom(events), [events]);
+  // The host-owned Vim prompt preference (plan 06): gates the composer + full-surface editor Vim layer.
+  const vimEnabled = useMemo(() => vimEnabledFrom(events), [events]);
   const commandSpecs = useMemo(() => {
     const announced = new Set(commands.map((c) => c.name));
     return [...BUILT_IN_COMMANDS.filter((c) => !announced.has(c.name)), ...commands];
@@ -942,6 +945,7 @@ export function App() {
         disabled: !sessionId,
         placeholder: `message ${activeLabel}… (/ for commands, ! for shell)`,
         onExpand: () => editor.open({ text: draft, onConfirm: setDraft }),
+        vimEnabled,
       }}
       stream={stream}
       host={host}
@@ -1024,6 +1028,7 @@ export function App() {
             title={editor.title}
             onTextChange={editor.setText}
             onConfirm={editor.confirm}
+            vimEnabled={vimEnabled}
           />
         ) : (
           (archiveBrowser ?? chooser)

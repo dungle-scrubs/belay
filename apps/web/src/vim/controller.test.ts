@@ -83,13 +83,30 @@ test("Escape and v collapse visual back to normal at the selection head", () => 
   }
 });
 
-test("Escape in normal stays normal and is consumed (does not bubble to cancel/menus)", () => {
+test("a second Escape in normal mode passes through (so it can cancel a turn / clear the draft)", () => {
   assert.deepEqual(handleVimKey(st("normal"), snap("hello", 2), k("Escape")), {
-    handled: true,
+    handled: false,
     state: { mode: "normal" },
-    selStart: 2,
-    selEnd: 2,
   });
+});
+
+test("Enter and OS/clipboard chords pass through in normal + visual (composer keeps submit/copy/paste)", () => {
+  for (const mode of ["normal", "visual"] as VimMode[]) {
+    const state = st(mode, mode === "visual" ? { anchor: 0 } : {});
+    const s = snap("hello", 1, mode === "visual" ? 3 : 1);
+    // Enter -> submit; Cmd+a select-all; Cmd+c copy; Cmd+v paste; Cmd+Enter confirm.
+    for (const key of [
+      k("Enter"),
+      k("a", { meta: true }),
+      k("c", { meta: true }),
+      k("v", { meta: true }),
+    ]) {
+      const r = handleVimKey(state, s, key);
+      assert.equal(r.handled, false, `${mode}: ${key.key}${key.meta ? "+meta" : ""} stays native`);
+    }
+    // Ctrl-V is the exception: it enters visual-block (handled) rather than passing through.
+    assert.equal(handleVimKey(st("normal"), s, k("v", { ctrl: true })).handled, true);
+  }
 });
 
 test("an unsupported printable key in normal/visual is swallowed, never typed", () => {

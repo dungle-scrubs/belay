@@ -1,6 +1,8 @@
 import { ArrowLeftIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { cn } from "@/lib/utils";
+import { useVim } from "@/vim/use-vim";
 
 /**
  * The full-surface prompt editor (02.12): a takeover that fills the transcript + composer column with
@@ -8,20 +10,28 @@ import { cn } from "@/lib/utils";
  * back button, Escape, or Cmd/Ctrl-Enter - all of which confirm (hand the current text back to the
  * opener). Purely presentational: open/close + text state live in `usePromptEditor`, and PanelHost
  * renders this through the same overlay slot the model chooser uses.
+ *
+ * It hosts the SAME Vim controller as the inline composer (plan 06, D-007): when Vim mode is enabled,
+ * Escape enters normal-mode here (it does NOT close the editor); a second Escape in normal-mode closes;
+ * Cmd/Ctrl-Enter always confirms regardless of mode. A mode indicator rides the header row.
  */
 export function PromptSurfaceEditor({
   text,
   title,
   onTextChange,
   onConfirm,
+  vimEnabled = false,
 }: {
   readonly text: string;
   readonly title?: string;
   readonly onTextChange: (text: string) => void;
   /** Back / Escape / Cmd-Enter / Done - confirms the current text and closes. */
   readonly onConfirm: () => void;
+  /** Whether the host-owned Vim prompt mode is enabled (plan 06). */
+  readonly vimEnabled?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const vim = useVim(ref, vimEnabled);
 
   // Focus the textarea on open with the caret at the end, so the user can keep typing immediately.
   useEffect(() => {
@@ -47,15 +57,33 @@ export function PromptSurfaceEditor({
         <span className="text-label tracking-wider text-muted-foreground/80">
           {title ?? "Edit prompt"}
         </span>
+        {vim.enabled ? (
+          <>
+            <span className="flex-1" />
+            <VimModeIndicator mode={vim.mode} />
+          </>
+        ) : null}
       </header>
 
       <textarea
         ref={ref}
         value={text}
         onChange={(e) => onTextChange(e.target.value)}
+        onFocus={vim.onFocus}
         onKeyDown={(e) => {
-          // Escape (save and close) and Cmd/Ctrl-Enter (save) both confirm; plain Enter is a newline.
-          if (e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key === "Enter")) {
+          // Cmd/Ctrl-Enter always confirms (save + close), regardless of Vim mode.
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            onConfirm();
+            return;
+          }
+          // The Vim layer: in insert, Escape enters normal-mode (consumed, does NOT close); in
+          // normal/visual it owns motions/edits. An Escape NOT consumed by Vim (mode off, or a second
+          // Escape already in normal) closes - preserving the editor's save-and-close.
+          if (vim.onKeyDown(e)) {
+            return;
+          }
+          if (e.key === "Escape") {
             e.preventDefault();
             onConfirm();
           }

@@ -209,6 +209,22 @@ function insertKey(snap: TextSnapshot, key: VimKey): VimResult {
   return { handled: false, state: { mode: "insert" } };
 }
 
+/**
+ * Keys that pass THROUGH the controller even in normal/visual mode, so the composer's own behaviors
+ * keep working: Enter (submit), and the OS / clipboard chords (Cmd+anything, and Ctrl chords other than
+ * Ctrl-V, which is vim visual-block). Insert-mode typing is already native, so this only matters for
+ * normal/visual. In insert mode, Cmd/Ctrl-V paste and Enter pass through here too.
+ */
+function nativeChord(key: VimKey): boolean {
+  if (key.meta) {
+    return true;
+  }
+  if (key.ctrl) {
+    return key.key !== "v";
+  }
+  return key.key === "Enter";
+}
+
 function normalKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult {
   const pending = state.pending;
   // A pending `g` consumes exactly the next key: `gg` jumps to the start, anything else cancels.
@@ -218,8 +234,10 @@ function normalKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult 
       ? handled({ mode: "normal" }, snap.selStart, snap.selEnd)
       : handled({ mode: "normal" }, target, target);
   }
-  if (isEscape(key)) {
-    return handled({ mode: "normal" }, snap.selStart, snap.selEnd);
+  // Enter-submit + OS chords stay native; a SECOND Escape (already normal) bubbles so it can cancel a
+  // running turn / clear the draft (the composer's existing Escape semantics).
+  if (nativeChord(key) || isEscape(key)) {
+    return { handled: false, state: { mode: "normal" } };
   }
   if (isPlain(key, "g")) {
     return handled({ mode: "normal", pending: "g" }, snap.selStart, snap.selEnd);
@@ -256,6 +274,10 @@ function normalKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult 
 }
 
 function visualKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult {
+  // Enter + OS chords (incl. native Cmd/Ctrl-C copying the live selection) stay native.
+  if (nativeChord(key)) {
+    return { handled: false, state };
+  }
   if (isEscape(key) || isPlain(key, "v")) {
     return handled({ mode: "normal" }, snap.selStart, snap.selStart);
   }
