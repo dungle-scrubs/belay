@@ -27,9 +27,9 @@
 
 ### Gate 1->2
 
-- [ ] Storybook compact row states are reviewed at desktop and narrow widths
-- [ ] Long labels and paths do not overflow or resize rows
-- [ ] The compact language is consistent across non-primary row types
+- [ ] Storybook compact row states are reviewed at desktop and narrow widths (deferred manual EZE)
+- [x] Long labels and paths do not overflow or resize rows
+- [x] The compact language is consistent across non-primary row types
 
 ## Phase 2: Transcript-Level Compact Mode
 
@@ -51,9 +51,9 @@
 
 ### Gate 2->3
 
-- [ ] Full transcript Storybook fixture toggles cleanly
-- [ ] Compact rows stay one line across supported tool types
-- [ ] Running tools update compact status without row-height churn
+- [x] Full transcript Storybook fixture toggles cleanly
+- [x] Compact rows stay one line across supported tool types
+- [x] Running tools update compact status without row-height churn
 
 ## Phase 3: Live App Toggle
 
@@ -67,21 +67,28 @@
 
 ### M6: Scroll and Accessibility
 
-- [ ] RED: Add scroll tests for compact toggle at bottom, scrolled up, and during live streaming
-- [ ] GREEN: Preserve live-bottom behavior and unseen-message state when compact mode changes row heights
-- [ ] RED: Add keyboard/screen-reader tests for compact rows and row actions
-- [ ] GREEN: Add accessible names that describe compact row status without verbose transcript duplication
-- [ ] REFACTOR: Keep compact row focus targets stable and predictable
+- [x] RED: Add scroll tests for compact toggle at bottom, scrolled up, and during live streaming
+- [x] GREEN: Preserve live-bottom behavior and unseen-message state when compact mode changes row heights
+- [x] RED: Add keyboard/screen-reader tests for compact rows and row actions
+- [x] GREEN: Add accessible names that describe compact row status without verbose transcript duplication
+- [x] REFACTOR: Keep compact row focus targets stable and predictable
 
 ### Gate 3
 
-- [ ] Storybook compact transcript review is approved
-- [ ] Web tests cover idle, streaming, tool-running, and scroll states
-- [ ] Compact mode does not mutate transcript semantics or prompt history
+- [ ] Storybook compact transcript review is approved (deferred manual EZE)
+- [x] Web tests cover idle, streaming, tool-running, and scroll states
+- [x] Compact mode does not mutate transcript semantics or prompt history
 
 ## Summary
 
-- Current cutoff blockers: 39 unchecked implementation/report items.
-- Accepted/deferred follow-up: none.
+- Current cutoff blockers: none - all M1-M6 implementation items are complete (compact display
+  contract + classification, the shared one-line CompactRow, the transcript-level toggle + recursive
+  detail, per-tool summaries, the live panel-controls toggle threaded through PanelHost/VirtualTranscript,
+  and scroll/accessibility), and the full gate is green.
+- Accepted/deferred follow-up: the Storybook **visual** review (compact row states + the
+  regular/compact transcript at desktop and narrow widths) is a deferred manual EZE - it needs the
+  running Storybook. Every gate item's engineering is automatically covered (the CompactRow/transcript
+  tests, the scroll-preservation tests, the no-mutation test). Toggle-state persistence is intentionally
+  deferred to a later settings/keyboard plan (the toggle is session-local per the plan's escape hatch).
 - Superseded/obsolete checklist debt: none.
 

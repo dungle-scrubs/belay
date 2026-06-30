@@ -357,4 +357,50 @@ describe("VirtualTranscript", () => {
       "running tool compacts to its summary",
     );
   });
+
+  test("toggling compact while scrolled up does not yank the viewport to the bottom", async () => {
+    const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const scrollCalls = () => vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
+    // Tool rows are compact-eligible, so toggling compact really changes their heights.
+    const rows = Array.from({ length: 100 }, (_, index) => toolRow(index, false));
+    const { container, rerender } = render(<Harness rows={rows} pinned={false} compact={false} />);
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+    const before = scrollCalls();
+
+    await act(async () => {
+      rerender(<Harness rows={rows} pinned={false} compact={true} />);
+      await raf();
+      await raf();
+    });
+
+    assert.equal(
+      scrollCalls(),
+      before,
+      "a compact toggle while unpinned must not force the viewport to the bottom",
+    );
+  });
+
+  test("toggling compact while pinned keeps the view anchored to the live edge", async () => {
+    const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const scrollCalls = () => vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
+    const rows = Array.from({ length: 100 }, (_, index) => toolRow(index, false));
+    const { container, rerender } = render(<Harness rows={rows} pinned={true} compact={false} />);
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+    const before = scrollCalls();
+
+    await act(async () => {
+      rerender(<Harness rows={rows} pinned={true} compact={true} />);
+      await raf();
+      await raf();
+    });
+
+    assert.ok(
+      scrollCalls() > before,
+      "a compact toggle while pinned re-anchors to the live edge as heights change",
+    );
+  });
 });

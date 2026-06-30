@@ -95,3 +95,25 @@ test("the interactive row carries an accessible label describing it", () => {
   assert.match(label, /grep/);
   assert.match(label, /running/);
 });
+
+test("the expand control is a focusable button with a concise status-describing name (keyboard/SR)", () => {
+  const { getByRole } = render(
+    <CompactRow
+      display={display({
+        status: "error",
+        primary: "edit",
+        secondary: "error: no match",
+        hasDetail: true,
+      })}
+      onToggle={() => {}}
+    />,
+  );
+  const button = getByRole("button");
+  button.focus();
+  assert.equal(document.activeElement, button, "the compact row action is keyboard-focusable");
+  const name = button.getAttribute("aria-label") ?? "";
+  assert.match(name, /edit/);
+  assert.match(name, /error/);
+  // The accessible name summarizes the row; it does not duplicate the whole transcript detail.
+  assert.ok(name.length < 120, `accessible name stays concise (was ${name.length})`);
+});
