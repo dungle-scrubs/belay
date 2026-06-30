@@ -1348,6 +1348,12 @@ async function switchToWorkspace(opts: {
  * approval for an id not in this map is stale (host restarted past the draft) and is refused. <!-- D-003 -->
  */
 const pendingHandoffs = new Map<string, { readonly prompt: string }>();
+/** The in-flight handoff-draft generation fiber (one at a time), so a reject/cancel can interrupt it
+ *  instead of letting an abandoned draft keep streaming into a `handoff.generated` nobody awaits. */
+let handoffDraftFiber: Fiber.RuntimeFiber<string, unknown> | null = null;
+/** A hung provider must not hang the draft forever: the generation fails (and the surface clears via
+ *  handoff.failed) after this, so the handoff is never permanently stuck on a live host. */
+const HANDOFF_GENERATION_TIMEOUT = "90 seconds";
 
 /**
  * The real transport/mint/spawn/switch effects a handoff orchestrates, shared by direct mode and
@@ -1585,19 +1591,30 @@ async function runGeneratedHandoff(request: string): Promise<void> {
   );
   await emit(events.handoffGenerating({ handoffId }));
 
-  const exit = await Effect.runPromiseExit(
+  // Run the draft as a tracked fiber (not runPromiseExit) so a reject during drafting can interrupt it,
+  // bounded by a timeout so a hung provider can't hang it forever.
+  const fiber = Effect.runFork(
     generateHandoffPrompt(provider, {
       history: history.slice(),
       cwd: process.cwd(),
       workspace: WORKSPACE_ROOT,
       ...(request.trim() ? { request: request.trim() } : {}),
-    }),
+    }).pipe(Effect.timeout(HANDOFF_GENERATION_TIMEOUT)),
   );
+  handoffDraftFiber = fiber;
+  const exit = await Effect.runPromise(Fiber.await(fiber));
+  handoffDraftFiber = null;
+
   if (Exit.isFailure(exit)) {
+    // Interruption = the user cancelled mid-draft (rejectHandoff already acknowledged + cleared the
+    // surface), so emit nothing further. Any other failure (provider error / timeout) fails the handoff.
+    if (Cause.isInterruptedOnly(exit.cause)) {
+      return;
+    }
     warn("host", "handoff generation failed", { cause: Cause.pretty(exit.cause) });
     await fail(
       "generation_failed",
-      "The provider failed while generating the handoff.",
+      "The provider failed or timed out while generating the handoff.",
       "Could not generate a handoff prompt — try again, or /handoff --direct <prompt>.",
     );
     return;
@@ -1663,9 +1680,15 @@ async function approveHandoff(handoffId: string, editedPrompt: string | undefine
   }
 }
 
-/** The user rejected a generated handoff: drop the pending draft and acknowledge; source stays active. */
+/** The user rejected/cancelled a handoff: interrupt any in-flight draft, drop the pending draft, and
+ *  acknowledge; the source session stays active. Works while drafting (interrupt) or after (no-op). */
 async function rejectHandoff(handoffId: string): Promise<void> {
   pendingHandoffs.delete(handoffId);
+  if (handoffDraftFiber) {
+    const fiber = handoffDraftFiber;
+    handoffDraftFiber = null;
+    Effect.runFork(Fiber.interrupt(fiber));
+  }
   await emit(
     events.commandResult({
       command: "/handoff",

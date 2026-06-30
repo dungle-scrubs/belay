@@ -17,6 +17,9 @@ export interface EscState {
   readonly draft: string;
   /** A modal, picker, or full-screen takeover is open and owns Escape. */
   readonly modalOpen: boolean;
+  /** A `/handoff` draft is pending (the approval/generating surface replaces the composer); Escape
+   *  dismisses it - which also escapes a host-died-mid-draft "Drafting…" that has no live host. */
+  readonly handoffPending: boolean;
   /**
    * How many prompts are queued behind the in-progress work (the local send queue, excluding the
    * already-published pending row). With work in progress and a non-empty queue, the FIRST Escape
@@ -26,7 +29,12 @@ export interface EscState {
   readonly queued: number;
 }
 
-export type EscAction = "flush-queued-steer" | "cancel" | "clear-draft" | "none";
+export type EscAction =
+  | "flush-queued-steer"
+  | "cancel"
+  | "clear-draft"
+  | "dismiss-handoff"
+  | "none";
 
 /**
  * Resolves one Escape press. Precedence: an open overlay wins (the transcript is left alone);
@@ -38,6 +46,11 @@ export type EscAction = "flush-queued-steer" | "cancel" | "clear-draft" | "none"
 export function escapeAction(s: EscState): EscAction {
   if (s.modalOpen) {
     return "none";
+  }
+  // The handoff approval/generating surface is a composer takeover that owns Escape: dismiss it before
+  // anything else (it has no live run to cancel, and a stuck draft would otherwise be unescapable).
+  if (s.handoffPending) {
+    return "dismiss-handoff";
   }
   const inProgress = s.active !== null || s.awaiting || s.compacting;
   if (inProgress) {

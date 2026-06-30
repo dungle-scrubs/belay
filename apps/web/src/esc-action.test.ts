@@ -7,6 +7,7 @@ const base: EscState = {
   compacting: false,
   draft: "",
   modalOpen: false,
+  handoffPending: false,
   queued: 0,
 };
 
@@ -29,6 +30,14 @@ describe("escapeAction", () => {
     expect(escapeAction({ ...base, active: "run-1" })).toBe("cancel");
     expect(escapeAction({ ...base, awaiting: true })).toBe("cancel");
     expect(escapeAction({ ...base, compacting: true })).toBe("cancel");
+  });
+
+  // The handoff approval/generating surface is a composer takeover; Escape dismisses it (which also
+  // escapes a stuck "Drafting…" whose host died), but a modal over it still wins.
+  it("dismisses a pending handoff, ahead of cancel/draft but behind a modal", () => {
+    expect(escapeAction({ ...base, handoffPending: true })).toBe("dismiss-handoff");
+    expect(escapeAction({ ...base, handoffPending: true, draft: "x" })).toBe("dismiss-handoff");
+    expect(escapeAction({ ...base, handoffPending: true, modalOpen: true })).toBe("none");
   });
 
   // D-001: queued steering wins over cancel on the first press. With work in progress and a

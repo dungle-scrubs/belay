@@ -54,13 +54,17 @@ export function HandoffApprovalSurface({
       </header>
 
       {handoff.status === "generating" ? (
-        <p
-          role="status"
-          className="flex items-center gap-2 rounded-md bg-smui-surface-2 px-3 py-2 text-xs text-muted-foreground"
-        >
-          <Loader2 className="size-3.5 animate-spin" />
-          Drafting a handoff prompt from this session…
-        </p>
+        <div className="flex items-center justify-between gap-2 rounded-md bg-smui-surface-2 px-3 py-2">
+          <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            Drafting a handoff prompt from this session…
+          </p>
+          {/* Cancel during drafting (publishes handoff.rejected). It clears the surface client-side even
+              if the host died mid-draft - the previously-unescapable "stuck Drafting…" case. */}
+          <Button type="button" variant="ghost" size="sm" onClick={onReject}>
+            Cancel
+          </Button>
+        </div>
       ) : (
         <>
           <p className="text-xs text-muted-foreground">

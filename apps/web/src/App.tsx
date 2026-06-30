@@ -114,6 +114,7 @@ interface EscRefShape extends EscState {
   readonly setDraft: (value: string) => void;
   readonly onCancel: () => void;
   readonly onFlushQueuedSteer: () => void;
+  readonly onDismissHandoff: () => void;
   readonly resetHistory: () => void;
 }
 
@@ -699,11 +700,17 @@ export function App() {
     compacting,
     draft,
     modalOpen,
+    handoffPending: pendingHandoff !== null,
     // The queue length (excluding the already-published pending row) decides queued-steer vs cancel.
     queued: queue.length,
     setDraft,
     onCancel,
     onFlushQueuedSteer,
+    onDismissHandoff: () => {
+      if (pendingHandoff) {
+        rejectHandoff(pendingHandoff.handoffId);
+      }
+    },
     resetHistory: history.resetNavigation,
   };
   useEffect(() => {
@@ -718,11 +725,15 @@ export function App() {
         compacting: s.compacting,
         draft: s.draft,
         modalOpen: s.modalOpen,
+        handoffPending: s.handoffPending,
         queued: s.queued,
       });
       // First Escape with queued prompts folds them into one steering prompt (no cancel); a turn to
       // cancel or a manual fold to abort routes through onCancel; otherwise clear a non-empty draft.
-      if (action === "flush-queued-steer") {
+      if (action === "dismiss-handoff") {
+        event.preventDefault();
+        s.onDismissHandoff();
+      } else if (action === "flush-queued-steer") {
         event.preventDefault();
         s.onFlushQueuedSteer();
       } else if (action === "cancel") {
