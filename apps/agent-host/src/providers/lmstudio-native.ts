@@ -1,3 +1,5 @@
+import { asPositiveInt } from "../coerce";
+
 /**
  * The LM Studio native `/api/v0` model-record shape + its tolerant parser - the ONE place `/api/v0`
  * model JSON is decoded, shared by the catalog's local list fetch ({@link ./source-models}) and the
@@ -34,10 +36,6 @@ export interface LmStudioModelRecord {
 
 function asCleanString(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
-}
-
-function asPositiveInt(v: unknown): number | undefined {
-  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : undefined;
 }
 
 /**

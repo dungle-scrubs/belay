@@ -8,6 +8,7 @@ import {
 } from "./contract";
 import {
   ADMISSION_HEARTBEAT_MS,
+  ADMISSION_POLL_MS,
   type AdmissionCaps,
   AdmissionStoreUnavailable,
   acquireAdmission,
@@ -98,12 +99,28 @@ function notify(opts: AdmitOptions, update: StatusCore): void {
   });
 }
 
+/** A poll-interval sleep that wakes IMMEDIATELY on abort (it races the injected sleep against the abort
+ *  event), so cancelling a queued turn frees its slot at once instead of one poll interval later. */
 function sleep(caps: AdmissionCaps, ms: number, signal?: AbortSignal): Promise<void> {
-  // The caps clock advances via caps.sleep; honor an abort so a cancelled wait wakes immediately.
   if (signal?.aborted) {
     return Promise.resolve();
   }
-  return caps.sleep(ms);
+  if (!signal) {
+    return caps.sleep(ms);
+  }
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const done = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    signal.addEventListener("abort", done, { once: true });
+    void caps.sleep(ms).then(done);
+  });
 }
 
 /**
@@ -118,7 +135,7 @@ export async function admit(
   report: AdmissionReporter = () => {},
 ): Promise<AdmissionHandle> {
   const { key, owner } = opts;
-  const pollIntervalMs = opts.pollIntervalMs ?? ADMISSION_HEARTBEAT_MS;
+  const pollIntervalMs = opts.pollIntervalMs ?? ADMISSION_POLL_MS;
   const heartbeatIntervalMs = opts.heartbeatIntervalMs ?? ADMISSION_HEARTBEAT_MS;
 
   let outcome: Awaited<ReturnType<typeof acquireAdmission>>;
@@ -158,7 +175,7 @@ export async function admit(
 
   if (outcome.status === "queued") {
     notify(opts, { phase: "queued", position: outcome.position });
-    const acquired = await waitForSlot(opts, caps, pollIntervalMs, report);
+    const acquired = await waitForSlot(opts, caps, pollIntervalMs, outcome.position, report);
     if (!acquired) {
       // Aborted while queued: the queue entry was released; proceed with nothing held.
       return NOOP_HANDLE;
@@ -169,14 +186,17 @@ export async function admit(
   return heldHandle(key, owner.ownerId, caps, heartbeatIntervalMs);
 }
 
-/** The queue wait loop: poll until acquired, gone, or aborted. Returns whether the slot was granted. */
+/** The queue wait loop: poll until acquired, gone, or aborted. Returns whether the slot was granted.
+ *  `lastPosition` seeds the dedup so a re-emitted "queued" status only fires when the position changes. */
 async function waitForSlot(
   opts: AdmitOptions,
   caps: AdmissionCaps,
   pollIntervalMs: number,
+  lastPosition: number,
   report: AdmissionReporter,
 ): Promise<boolean> {
   const { key, owner, signal } = opts;
+  let position = lastPosition;
   for (;;) {
     if (signal?.aborted) {
       await releaseAdmission(key, owner.ownerId, caps).catch(() => {});
@@ -202,7 +222,8 @@ async function waitForSlot(
       return true;
     }
     if (poll.status === "gone") {
-      // Reaped out from under us (our own heartbeat lapsed) - re-queue rather than silently proceed.
+      // Reaped out from under us (our own heartbeat lapsed) - re-queue. If the re-acquire can't enqueue
+      // us (refused / store blip), FAIL OPEN rather than spin forever on gone->refused->gone.
       const re = await acquireAdmission(
         {
           key,
@@ -216,9 +237,16 @@ async function waitForSlot(
       if (re?.status === "acquired") {
         return true;
       }
-      // Still queued (or refused) - keep waiting on the next loop.
-    } else {
-      notify(opts, { phase: "queued", position: poll.position });
+      if (!re || re.status === "refused") {
+        return false;
+      }
+      position = re.position;
+      // re-queued: keep polling.
+    } else if (poll.position !== position) {
+      // Only re-emit the waiting status when our place in line actually moved (avoids spamming the event
+      // log + forking a status fiber on every poll of an unchanged position).
+      position = poll.position;
+      notify(opts, { phase: "queued", position });
     }
   }
 }

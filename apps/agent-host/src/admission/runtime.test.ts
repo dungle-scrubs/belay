@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { makeAdmissionHarness as harness } from "../../test/support/admission-harness";
 import type { AdmissionEstimate, AdmissionOwner } from "./contract";
 import { generationResourceKey } from "./contract";
 import { type AdmissionStatusUpdate, admit } from "./runtime";
-import { type AdmissionCaps, type AdmissionFs, acquireAdmission, inspectResource } from "./store";
+import { acquireAdmission, inspectResource } from "./store";
 
 /**
  * The admission runtime facade (plan 11 M5/M6): the wait-then-hold handle the provider wraps. Pins the
@@ -11,46 +12,7 @@ import { type AdmissionCaps, type AdmissionFs, acquireAdmission, inspectResource
  * the same in-memory fs harness as the store, so no real processes/timers are needed.
  */
 
-const DIR = "/state/admission";
 const KEY = generationResourceKey("lmstudio", "http://localhost:1234/v1", "qwen3.6-27b-mlx");
-
-function harness() {
-  const files = new Map<string, string>();
-  const mtimes = new Map<string, number>();
-  const alive = new Set<number>();
-  let clock = 1_700_000_000_000;
-  const fs: AdmissionFs = {
-    readFile: (p) => files.get(p) ?? null,
-    writeFile: (p, c) => {
-      files.set(p, c);
-      mtimes.set(p, clock);
-    },
-    remove: (p) => {
-      files.delete(p);
-      mtimes.delete(p);
-    },
-    createExclusive: (p) => {
-      if (files.has(p)) {
-        return false;
-      }
-      files.set(p, "");
-      mtimes.set(p, clock);
-      return true;
-    },
-    mtimeMs: (p) => mtimes.get(p) ?? null,
-    listResources: () => [],
-  };
-  const caps: AdmissionCaps = {
-    fs,
-    now: () => clock,
-    processAlive: (pid) => alive.has(pid),
-    sleep: async (ms) => {
-      clock += ms;
-    },
-    dir: DIR,
-  };
-  return { caps, spawn: (pid: number) => alive.add(pid) };
-}
 
 function owner(ownerId: string, pid: number): AdmissionOwner {
   return { ownerId, hostId: `host-${pid}`, pid, provider: "lmstudio", model: "qwen3.6-27b-mlx" };

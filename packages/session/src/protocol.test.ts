@@ -83,6 +83,22 @@ test("events.admissionStatus round-trips queued + refused admission status (plan
     refused?.type === "admission.status" && refused.refusal,
     "estimated_tokens_exceed_context_window",
   );
+
+  // The terminal phases (released / cancelled) decode too, so the read model covers the full lifecycle.
+  for (const phase of ["released", "cancelled"] as const) {
+    const decoded = decodeTrevorEvent(
+      stored(
+        events.admissionStatus({
+          runId: "run-1",
+          phase,
+          provider: "lmstudio",
+          model: "qwen3.6-27b-mlx",
+          priority: "foreground",
+        }),
+      ),
+    );
+    assert.equal(decoded?.type === "admission.status" && decoded.phase, phase);
+  }
 });
 
 test("events.userMessage round-trips through decodeTrevorEvent", () => {

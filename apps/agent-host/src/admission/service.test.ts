@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { makeAdmissionHarness as caps } from "../../test/support/admission-harness";
 import { generationResourceKey, lifecycleResourceKey } from "./contract";
 import { createLocalAdmissionGate, type LocalAdmissionContext } from "./service";
-import { type AdmissionCaps, type AdmissionFs, inspectResource } from "./store";
+import { type AdmissionCaps, inspectResource } from "./store";
 
 /**
  * The host-facing admission gate (plan 11 M5/M6): generation admission serializes streams per model,
@@ -10,52 +11,11 @@ import { type AdmissionCaps, type AdmissionFs, inspectResource } from "./store";
  * config/context. Driven over the same in-memory fs harness as the store.
  */
 
-const DIR = "/state/admission";
 const TARGET = {
   provider: "lmstudio",
   baseUrl: "http://localhost:1234/v1",
   model: "qwen3.6-27b-mlx",
 };
-
-function caps(): { caps: AdmissionCaps; spawn: (pid: number) => void } {
-  const files = new Map<string, string>();
-  const mtimes = new Map<string, number>();
-  const alive = new Set<number>();
-  let clock = 1_700_000_000_000;
-  const fs: AdmissionFs = {
-    readFile: (p) => files.get(p) ?? null,
-    writeFile: (p, c) => {
-      files.set(p, c);
-      mtimes.set(p, clock);
-    },
-    remove: (p) => {
-      files.delete(p);
-      mtimes.delete(p);
-    },
-    createExclusive: (p) => {
-      if (files.has(p)) {
-        return false;
-      }
-      files.set(p, "");
-      mtimes.set(p, clock);
-      return true;
-    },
-    mtimeMs: (p) => mtimes.get(p) ?? null,
-    listResources: () => [],
-  };
-  return {
-    caps: {
-      fs,
-      now: () => clock,
-      processAlive: (pid) => alive.has(pid),
-      sleep: async (ms) => {
-        clock += ms;
-      },
-      dir: DIR,
-    },
-    spawn: (pid) => alive.add(pid),
-  };
-}
 
 let ownerSeq = 0;
 function gate(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { makeAdmissionHarness as harness } from "../../test/support/admission-harness";
 import {
   type AdmissionOwner,
   type AdmissionPriority,
@@ -8,7 +9,6 @@ import {
 } from "./contract";
 import {
   type AdmissionCaps,
-  type AdmissionFs,
   acquireAdmission,
   inspectResource,
   pollAdmission,
@@ -22,46 +22,7 @@ import {
  * in-memory store harness; the cross-process flavor is the M9 e2e.
  */
 
-const DIR = "/state/admission";
 const KEY = generationResourceKey("lmstudio", "http://localhost:1234/v1", "qwen3.6-27b-mlx");
-
-function harness() {
-  const files = new Map<string, string>();
-  const mtimes = new Map<string, number>();
-  const alive = new Set<number>();
-  let clock = 1_700_000_000_000;
-  const fs: AdmissionFs = {
-    readFile: (p) => files.get(p) ?? null,
-    writeFile: (p, c) => {
-      files.set(p, c);
-      mtimes.set(p, clock);
-    },
-    remove: (p) => {
-      files.delete(p);
-      mtimes.delete(p);
-    },
-    createExclusive: (p) => {
-      if (files.has(p)) {
-        return false;
-      }
-      files.set(p, "");
-      mtimes.set(p, clock);
-      return true;
-    },
-    mtimeMs: (p) => mtimes.get(p) ?? null,
-    listResources: () => [],
-  };
-  const caps: AdmissionCaps = {
-    fs,
-    now: () => clock,
-    processAlive: (pid) => alive.has(pid),
-    sleep: async (ms) => {
-      clock += ms;
-    },
-    dir: DIR,
-  };
-  return { caps, advance: (ms: number) => (clock += ms), spawn: (pid: number) => alive.add(pid) };
-}
 
 function owner(ownerId: string, pid: number, agentId?: string): AdmissionOwner {
   return {

@@ -64,6 +64,31 @@ test("releases with cancelled when the stream scope is interrupted", async () =>
   assert.equal(log.at(-1), "release:cancelled", "interruption releases as cancelled");
 });
 
+test("interrupting the fiber while acquire is still WAITING aborts the acquire signal (cancel works)", async () => {
+  // The acquire models a turn parked in the admission queue: it resolves only when its signal aborts.
+  // With an uninterruptible acquire (the acquireRelease default) the signal would never fire here and a
+  // cancel would hang until the slot was won; the uninterruptibleMask+restore makes acquire interruptible
+  // so the cancel aborts the wait at once.
+  let abortSeen = false;
+  const stream = admittedStream(
+    Effect.promise(
+      (signal) =>
+        new Promise<AdmissionHandle>((resolve) => {
+          signal.addEventListener("abort", () => {
+            abortSeen = true;
+            resolve({ held: false, ownerId: null, release: async () => {} });
+          });
+        }),
+    ),
+    () => Stream.never,
+  );
+  const fiber = Effect.runFork(Stream.runDrain(stream));
+  await new Promise((r) => setTimeout(r, 10)); // let the acquire start waiting
+  await Effect.runPromise(fiber.interruptAsFork(fiber.id()));
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(abortSeen, true, "interruption aborted the still-waiting acquire's signal");
+});
+
 test("releaseReason maps exits", async () => {
   const ok = await Effect.runPromiseExit(Effect.succeed(1));
   assert.equal(releaseReason(ok), "success");

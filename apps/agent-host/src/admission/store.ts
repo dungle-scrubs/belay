@@ -4,6 +4,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -11,6 +12,7 @@ import {
 import { dirname, join } from "node:path";
 import { idSlug } from "@trevor/session";
 import { storagePathByName } from "@trevor/session/node-paths";
+import { processAlive } from "../process-liveness";
 import {
   type AdmissionAcquireOutcome,
   type AdmissionEstimate,
@@ -45,8 +47,14 @@ import {
  *  but live generation is never reaped out from under itself. */
 export const ADMISSION_STALE_MS = 120_000;
 
-/** How often an active holder / queued waiter should refresh its heartbeat (far below the stale window). */
-export const ADMISSION_HEARTBEAT_MS = 5_000;
+/** How often an ACTIVE holder refreshes its heartbeat - a quarter of the stale window, so a long
+ *  generation stays comfortably fresh (~4 refreshes per window) without a tight RMW loop. */
+export const ADMISSION_HEARTBEAT_MS = 30_000;
+
+/** How often a QUEUED waiter polls for a freed slot. Fast (sub-second) so a foreground turn picks up a
+ *  background turn's released slot promptly; each poll doubles as the waiter's heartbeat, so a snappy
+ *  poll costs nothing in safety (and the per-resource mutex keeps the file I/O cheap + local). */
+export const ADMISSION_POLL_MS = 500;
 
 /** Default active capacity per local resource (D-003): one generation/reload at a time unless config
  *  raises it for a runtime that is proven to handle more. */
@@ -55,11 +63,13 @@ export const ADMISSION_DEFAULT_CAPACITY = 1;
 /** The inventory name of the state-home dir holding admission lease/queue files (node-paths). */
 export const ADMISSION_STORAGE_NAME = "admission";
 
-/** Max wall time (ms) to wait for the per-resource mutex before declaring the store unavailable. The
- *  mutex is held only for one sub-millisecond read-modify-write, so real contention clears fast. */
-const MUTEX_MAX_WAIT_MS = 4_000;
 /** A mutex sidecar older than this was orphaned by a holder that crashed mid-RMW; break it. */
 const MUTEX_STALE_MS = 5_000;
+/** Max wall time (ms) to wait for the per-resource mutex before declaring the store unavailable. Kept
+ *  ABOVE {@link MUTEX_STALE_MS} so any contending waiter survives long enough to break an orphaned
+ *  mutex and proceed, instead of giving up (fail-open, losing serialization) while the orphan ages. The
+ *  mutex is held only for one sub-millisecond read-modify-write, so real contention clears fast. */
+const MUTEX_MAX_WAIT_MS = 8_000;
 /** Backoff between mutex attempts under contention. */
 const MUTEX_RETRY_MS = 15;
 
@@ -104,6 +114,10 @@ export interface AdmissionFs {
   /** Atomically create the file IFF it does not exist (O_EXCL); false when it already exists. The
    *  cross-process mutex primitive. */
   createExclusive(path: string): boolean;
+  /** Atomically rename `from` to `to`, returning true on success and false when `from` is gone - the
+   *  atomic CLAIM used to break an orphaned mutex without a remove+recreate TOCTOU (only one racer can
+   *  win the rename). */
+  renameIfExists(from: string, to: string): boolean;
   /** The file's mtime in epoch-ms, or null when it does not exist - for breaking a stale mutex. */
   mtimeMs(path: string): number | null;
   /** The `.json` resource filenames (basenames) in the admission dir, for an aggregate snapshot. */
@@ -142,8 +156,14 @@ export const nodeAdmissionFs: AdmissionFs = {
     }
   },
   writeFile(path, content) {
+    // Write-then-rename so a reader (the unlocked /doctor snapshot) or a mid-write crash never sees a
+    // TRUNCATED resource file - a torn read would parse-fail to the empty resource and silently drop
+    // every active holder + queued waiter (an over-admit). rename is atomic on one filesystem; the
+    // mutex serializes writers per resource, so one tmp name per process never collides.
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, content);
+    const tmp = `${path}.${process.pid}.tmp`;
+    writeFileSync(tmp, content);
+    renameSync(tmp, path);
   },
   remove(path) {
     try {
@@ -156,6 +176,14 @@ export const nodeAdmissionFs: AdmissionFs = {
     try {
       mkdirSync(dirname(path), { recursive: true });
       closeSync(openSync(path, "wx"));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  renameIfExists(from, to) {
+    try {
+      renameSync(from, to);
       return true;
     } catch {
       return false;
@@ -176,16 +204,6 @@ export const nodeAdmissionFs: AdmissionFs = {
     }
   },
 };
-
-/** Whether a pid maps to a live process (`kill(pid, 0)`; EPERM = alive, owned by another user). */
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
 
 /** The real node-backed capabilities, with optional overrides for wiring/tests. */
 export function nodeAdmissionCaps(over: Partial<AdmissionCaps> = {}): AdmissionCaps {
@@ -345,7 +363,12 @@ async function withResourceMutex<T>(key: string, caps: AdmissionCaps, fn: () => 
     }
     const mtime = caps.fs.mtimeMs(path);
     if (mtime != null && caps.now() - mtime > MUTEX_STALE_MS) {
-      caps.fs.remove(path);
+      // Break an orphaned mutex by ATOMICALLY claiming it (rename to a per-attempt token), so two racing
+      // breakers can't both delete-and-recreate it (the remove+create TOCTOU that would double-grant);
+      // only the racer that wins the rename proceeds, and it drops the token before retrying create.
+      if (caps.fs.renameIfExists(path, `${path}.broken.${process.pid}`)) {
+        caps.fs.remove(`${path}.broken.${process.pid}`);
+      }
       continue;
     }
     if (caps.now() >= deadline) {
@@ -395,7 +418,10 @@ export async function acquireAdmission(
   request: AdmissionRequest,
   caps: AdmissionCaps,
 ): Promise<AdmissionAcquireOutcome> {
-  const capacity = request.capacity ?? ADMISSION_DEFAULT_CAPACITY;
+  // A non-positive capacity would wedge the resource shut (nothing ever admits), so fall back to the
+  // default rather than trust a 0 / negative override.
+  const capacity =
+    request.capacity && request.capacity > 0 ? request.capacity : ADMISSION_DEFAULT_CAPACITY;
   return withResourceMutex(request.key, caps, () => {
     const nowMs = caps.now();
     // The current config capacity wins over whatever the file was last written with.

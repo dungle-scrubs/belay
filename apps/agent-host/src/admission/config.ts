@@ -1,3 +1,4 @@
+import { asPositiveInt } from "../coerce";
 import { loadJsonConfig } from "../config-file";
 import { envNumber } from "../env";
 import { USER_ADMISSION_JSON } from "../paths";
@@ -26,12 +27,6 @@ export const DEFAULT_ADMISSION_CONFIG: AdmissionConfig = {
   staleAfterMs: ADMISSION_STALE_MS,
   capacityByResource: {},
 };
-
-function asPositiveInt(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.floor(value)
-    : undefined;
-}
 
 /**
  * Tolerantly decodes a raw `admission.json` value, keeping only well-formed fields (a positive integer

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import {
+  ADMISSION_TEST_DIR,
+  makeAdmissionHarness as harness,
+} from "../../test/support/admission-harness";
 import type { AdmissionEstimate, AdmissionOwner, AdmissionPriority } from "./contract";
 import { generationResourceKey } from "./contract";
 import {
@@ -23,76 +27,12 @@ import {
  * host processes contending for one resource.
  */
 
-const DIR = "/state/admission";
 const KEY = generationResourceKey("lmstudio", "http://localhost:1234/v1", "qwen3.6-27b-mlx");
 const NO_BUDGET: AdmissionEstimate = {
   estimatedTokens: 0,
   maxOutputTokens: 0,
   contextWindowTokens: 0,
 };
-
-interface Harness {
-  /** Two caps over one shared fs/clock - two "processes". */
-  readonly a: AdmissionCaps;
-  readonly b: AdmissionCaps;
-  readonly setClock: (ms: number) => void;
-  readonly advance: (ms: number) => void;
-  readonly kill: (pid: number) => void;
-  readonly spawn: (pid: number) => void;
-}
-
-function harness(): Harness {
-  const files = new Map<string, string>();
-  const mtimes = new Map<string, number>();
-  const alive = new Set<number>();
-  let clock = 1_700_000_000_000;
-  const fs: AdmissionFs = {
-    readFile: (p) => files.get(p) ?? null,
-    writeFile: (p, c) => {
-      files.set(p, c);
-      mtimes.set(p, clock);
-    },
-    remove: (p) => {
-      files.delete(p);
-      mtimes.delete(p);
-    },
-    createExclusive: (p) => {
-      if (files.has(p)) {
-        return false;
-      }
-      files.set(p, "");
-      mtimes.set(p, clock);
-      return true;
-    },
-    mtimeMs: (p) => mtimes.get(p) ?? null,
-    listResources: (dir) =>
-      [...files.keys()]
-        .filter((k) => k.startsWith(`${dir}/`) && k.endsWith(".json"))
-        .map((k) => k.slice(dir.length + 1)),
-  };
-  const caps = (): AdmissionCaps => ({
-    fs,
-    now: () => clock,
-    processAlive: (pid) => alive.has(pid),
-    sleep: async (ms) => {
-      clock += ms;
-    },
-    dir: DIR,
-    staleAfterMs: ADMISSION_STALE_MS,
-  });
-  return {
-    a: caps(),
-    b: caps(),
-    setClock: (ms) => {
-      clock = ms;
-    },
-    advance: (ms) => {
-      clock += ms;
-    },
-    kill: (pid) => alive.delete(pid),
-    spawn: (pid) => alive.add(pid),
-  };
-}
 
 function owner(ownerId: string, pid: number): AdmissionOwner {
   return { ownerId, hostId: `host-${pid}`, pid, provider: "lmstudio", model: "qwen3.6-27b-mlx" };
@@ -358,6 +298,7 @@ test("a permanently contended mutex surfaces AdmissionStoreUnavailable rather th
     writeFile: () => {},
     remove: () => {},
     createExclusive: () => false,
+    renameIfExists: () => false, // never able to break the (always-fresh) mutex either
     mtimeMs: () => clock, // always "fresh" -> never broken as stale
     listResources: () => [],
   };
@@ -368,7 +309,7 @@ test("a permanently contended mutex surfaces AdmissionStoreUnavailable rather th
     sleep: async (ms) => {
       clock += ms;
     },
-    dir: DIR,
+    dir: ADMISSION_TEST_DIR,
   };
   await assert.rejects(
     () => acquireAdmission(req("a1", 100), caps),
