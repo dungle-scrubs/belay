@@ -285,6 +285,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
       "Per-cwd-path advisory lock files: workspace path ownership across sessions (plan 01).",
   },
   {
+    name: "admission",
+    category: "state",
+    relativePath: "admission",
+    description:
+      "Per-resource local-model admission lease + queue files: cross-process LM Studio capacity (plan 11).",
+  },
+  {
     name: "projects-map",
     category: "state",
     relativePath: "projects.json",
