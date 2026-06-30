@@ -41,36 +41,34 @@
 - [ ] GREEN: Route only normal/visual-mode keys through Vim handling; leave insert-mode typing native
 - [ ] REFACTOR: Keep the controller independent of React rendering so it is testable without jsdom where possible
 
-## M5: Motion and Editing Subset
-
-- [ ] RED: Add tests for first-cut motions: `h/j/k/l`, `w`, `b`, `0`, `$`, `gg`, `G`, and line-aware movement in a textarea
-- [ ] GREEN: Implement the approved first-cut normal-mode movement subset
-- [ ] RED: Add tests for visual selection, yanking/copy semantics if included, deletion/change commands if included, and unsupported-key no-ops
-- [ ] GREEN: Implement the smallest useful visual-mode subset without breaking native clipboard shortcuts
-- [ ] REFACTOR: Keep destructive edit commands conservative and explicit; defer ambiguous Vim features
+- [x] RED: Add tests for first-cut motions: `h/j/k/l`, `w`, `b`, `0`, `$`, `gg`, `G`, and line-aware movement in a textarea
+- [x] GREEN: Implement the approved first-cut normal-mode movement subset
+- [x] RED: Add tests for visual selection, yanking/copy semantics if included, deletion/change commands if included, and unsupported-key no-ops
+- [x] GREEN: Implement the smallest useful visual-mode subset without breaking native clipboard shortcuts
+- [x] REFACTOR: Keep destructive edit commands conservative and explicit; defer ambiguous Vim features
 
 ## M6: Prompt-Surface Integration (composer + full-surface editor)
 
-- [ ] RED: Add web tests proving Vim mode is inactive when the preference is disabled
-- [ ] GREEN: Wire enabled preference into `PromptInput` and the composer keydown path
-- [ ] RED: Add tests for slash menu, prompt shell lane, Enter submit, Shift+Enter newline, Up/Down history recall, and image-token atomic delete under Vim mode
-- [ ] GREEN: Resolve key precedence so mode handling never swallows existing composer behaviors incorrectly
-- [ ] RED: Add tests proving the SAME controller drives Vim mode in the full-surface editor (mode + motions in its textarea, indicator in its header, and Escape enters normal-mode rather than closing the editor) (D-007)
-- [ ] GREEN: Attach the controller + indicator in the full-surface editor and resolve Escape precedence (Vim normal-mode entry vs the editor's save-and-close)
-- [ ] REFACTOR: Keep App-owned slash/submit/history wiring and the editor's confirm contract outside the surface-agnostic Vim controller
+- [x] RED: Add web tests proving Vim mode is inactive when the preference is disabled
+- [x] GREEN: Wire enabled preference into `PromptInput` and the composer keydown path
+- [x] RED: Add tests for slash menu, prompt shell lane, Enter submit, Shift+Enter newline, Up/Down history recall, and image-token atomic delete under Vim mode
+- [x] GREEN: Resolve key precedence so mode handling never swallows existing composer behaviors incorrectly
+- [x] RED: Add tests proving the SAME controller drives Vim mode in the full-surface editor (mode + motions in its textarea, indicator in its header, and Escape enters normal-mode rather than closing the editor) (D-007)
+- [x] GREEN: Attach the controller + indicator in the full-surface editor and resolve Escape precedence (Vim normal-mode entry vs the editor's save-and-close)
+- [x] REFACTOR: Keep App-owned slash/submit/history wiring and the editor's confirm contract outside the surface-agnostic Vim controller
 
 ## M7: Accessibility and Conflict Handling
 
-- [ ] RED: Add tests for screen-reader labels and keyboard accessibility of the mode indicator
-- [ ] GREEN: Give the indicator accessible text without adding visible instructional copy
-- [ ] RED: Add tests for browser/system shortcuts: Cmd/Ctrl+C, Cmd/Ctrl+V, Cmd/Ctrl+A, Escape behavior around modals/menus, and IME composition
-- [ ] GREEN: Preserve platform shortcuts and menu/modal Escape ownership
-- [ ] REFACTOR: Document conflict precedence between slash menu, command menus, shell lane, and Vim mode
+- [x] RED: Add tests for screen-reader labels and keyboard accessibility of the mode indicator
+- [x] GREEN: Give the indicator accessible text without adding visible instructional copy
+- [x] RED: Add tests for browser/system shortcuts: Cmd/Ctrl+C, Cmd/Ctrl+V, Cmd/Ctrl+A, Escape behavior around modals/menus, and IME composition
+- [x] GREEN: Preserve platform shortcuts and menu/modal Escape ownership
+- [x] REFACTOR: Document conflict precedence between slash menu, command menus, shell lane, and Vim mode
 
 ## M8: Storybook and E2E Verification
 
-- [ ] RED: Add Storybook interaction tests for mode transitions and indicator updates
-- [ ] GREEN: Make Storybook states pass for insert, normal, visual, shell, slash, image tokens, upload, and narrow/mobile widths
-- [ ] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (Escape enters normal-mode there without closing it)
-- [ ] GREEN: Verify live behavior with preference enabled and disabled, on both prompt surfaces
-- [ ] REFACTOR: Update user-facing config docs and AGENTS guidance for the Vim preference
+- [x] RED: Add Storybook interaction tests for mode transitions and indicator updates
+- [x] GREEN: Make Storybook states pass for insert, normal, visual, shell, slash, image tokens, upload, and narrow/mobile widths
+- [x] RED: Add manual EZE script for enabling the config, opening Trevor, typing in insert, Esc to normal, selecting visual text, returning to insert, and submitting - in BOTH the composer and the full-surface editor (Escape enters normal-mode there without closing it)
+- [x] GREEN: Verify live behavior with preference enabled and disabled, on both prompt surfaces
+- [x] REFACTOR: Update user-facing config docs and AGENTS guidance for the Vim preference

@@ -3,16 +3,19 @@ import type { VimMode } from "./mode";
 /**
  * The prompt-local Vim controller (plan 06, M4/M5): a small, framework-agnostic state machine over a
  * textarea snapshot, chosen over `vimeejs/vimee` (decision D-008) so it yields cleanly to native typing
- * and the composer's existing key precedence. It is pure - it takes the current mode + a `{ value,
- * selStart, selEnd }` snapshot + a key, and returns either "not handled" (let the textarea / App handle
- * it natively: insert typing, Enter-submit, the slash menu, history recall, IME) or "handled" with the
- * next mode + selection (+ optional value) for the caller to apply and `preventDefault`. No DOM, no
- * React - so it is unit-tested without jsdom (M4 REFACTOR).
+ * and the composer's existing key precedence. Pure - no DOM, no React - so it is unit-tested without
+ * jsdom (M4 REFACTOR).
  *
- * Mode model: a focused prompt starts in `insert` (native typing); Escape enters `normal`; `v`/`V`/
- * Ctrl-V enter `visual` from `normal`; Escape leaves `visual`/`normal` back to `normal`. In `normal`
- * and `visual` the controller SWALLOWS every otherwise-unhandled printable key, so pressing `j` never
- * types a "j" - the defining Vim behavior. Motions + edits (M5) fill in the specific keys.
+ * It takes the current {@link VimState} (mode + a one-key pending prefix + the visual anchor) and a
+ * `{ value, selStart, selEnd }` snapshot and a key, and returns either "not handled" (let the textarea /
+ * App handle it natively: insert typing, Enter-submit, the slash menu, history recall, IME) or "handled"
+ * with the next state + selection (+ optional value) for the caller to apply and `preventDefault`.
+ *
+ * Modes: a focused prompt starts in `insert` (native typing); Escape -> `normal`; `i`/`a` -> insert;
+ * `v`/`V`/Ctrl-V -> `visual`; Escape/`v` leave visual. In normal/visual every otherwise-unhandled
+ * printable key is SWALLOWED (so `j` never types a "j"). Editing is deliberately conservative (M5
+ * REFACTOR): normal `x` deletes a char, visual `d`/`x` delete the selection; yank is left to the native
+ * clipboard (Cmd/Ctrl-C copies the live visual selection), and ambiguous Vim features are deferred.
  */
 
 export interface TextSnapshot {
@@ -29,22 +32,32 @@ export interface VimKey {
   readonly shift?: boolean;
 }
 
+export interface VimState {
+  readonly mode: VimMode;
+  /** A pending prefix awaiting its second key (only `g`, for `gg`); cleared after the next key. */
+  readonly pending?: "g";
+  /** The fixed end of the visual selection; the moving cursor is the snapshot's other end. */
+  readonly anchor?: number;
+}
+
 /**
- * The controller's verdict for a key. `handled: false` -> the caller does nothing (native textarea /
- * App handling proceeds); the mode is unchanged. `handled: true` -> the caller applies `selStart`/
- * `selEnd` (and `value` if present) to the textarea, sets `mode`, and calls `preventDefault`.
+ * The controller's verdict. `handled: false` -> the caller does nothing native handling proceeds.
+ * `handled: true` -> apply `selStart`/`selEnd` (and `value` if present) to the textarea, set `state`,
+ * `preventDefault`. `state` is always the next controller state to store.
  */
 export type VimResult =
-  | { readonly handled: false; readonly mode: VimMode }
+  | { readonly handled: false; readonly state: VimState }
   | {
       readonly handled: true;
-      readonly mode: VimMode;
+      readonly state: VimState;
       readonly selStart: number;
       readonly selEnd: number;
       readonly value?: string;
     };
 
-/** A modifier-free single character key (e.g. `i`, `j`), not a chord or named key. */
+/** The initial state for a freshly-focused Vim-enabled prompt: insert mode. */
+export const INITIAL_VIM_STATE: VimState = { mode: "insert" };
+
 function isPlain(key: VimKey, char: string): boolean {
   return key.key === char && !key.ctrl && !key.meta && !key.alt;
 }
@@ -59,96 +72,203 @@ export function lineStart(value: string, pos: number): number {
   return nl === -1 ? 0 : nl + 1;
 }
 
-/** The index just past the last character of the line containing `pos` (the position of the newline,
- *  or the end of the value). */
+/** The index of the newline ending the line containing `pos`, or the value length. */
 export function lineEnd(value: string, pos: number): number {
   const nl = value.indexOf("\n", pos);
   return nl === -1 ? value.length : nl;
 }
 
-/** A collapsed caret at `pos`, handled. */
-function caret(mode: VimMode, pos: number): VimResult {
-  return { handled: true, mode, selStart: pos, selEnd: pos };
+// --- character-class word motions (vim `w`/`b`: a word is a run of word-chars OR of punctuation) ---
+
+type CharClass = "space" | "word" | "punct";
+function classOf(ch: string): CharClass {
+  if (/\s/.test(ch)) {
+    return "space";
+  }
+  return /[A-Za-z0-9_]/.test(ch) ? "word" : "punct";
 }
 
-/** Swallow a key with no effect (normal/visual mode never types text), keeping the current selection. */
-function swallow(mode: VimMode, snap: TextSnapshot): VimResult {
-  return { handled: true, mode, selStart: snap.selStart, selEnd: snap.selEnd };
+/** The start of the next word at or after `pos` (vim `w`). */
+function wordForward(value: string, pos: number): number {
+  const n = value.length;
+  let i = pos;
+  if (i >= n) {
+    return n;
+  }
+  const cls = classOf(value[i] as string);
+  if (cls !== "space") {
+    while (i < n && classOf(value[i] as string) === cls) {
+      i++;
+    }
+  }
+  while (i < n && classOf(value[i] as string) === "space") {
+    i++;
+  }
+  return i;
 }
 
-/** Dispatches a key against the current mode. The entry point both surfaces (composer + editor) call. */
-export function handleVimKey(mode: VimMode, snap: TextSnapshot, key: VimKey): VimResult {
-  if (mode === "insert") {
+/** The start of the current/previous word before `pos` (vim `b`). */
+function wordBack(value: string, pos: number): number {
+  let i = pos;
+  if (i <= 0) {
+    return 0;
+  }
+  i--;
+  while (i > 0 && classOf(value[i] as string) === "space") {
+    i--;
+  }
+  const cls = classOf(value[i] as string);
+  while (i > 0 && classOf(value[i - 1] as string) === cls) {
+    i--;
+  }
+  return i;
+}
+
+/** Vertical move by `delta` lines, keeping the column (clamped to the target line's length). */
+function verticalMove(value: string, pos: number, delta: -1 | 1): number {
+  const start = lineStart(value, pos);
+  const col = pos - start;
+  if (delta === 1) {
+    const end = lineEnd(value, pos);
+    if (end >= value.length) {
+      return pos; // last line, no line below
+    }
+    const nextStart = end + 1;
+    return Math.min(nextStart + col, lineEnd(value, nextStart));
+  }
+  if (start === 0) {
+    return pos; // first line, no line above
+  }
+  const prevStart = lineStart(value, start - 1);
+  return Math.min(prevStart + col, lineEnd(value, prevStart));
+}
+
+/** The caret position a motion key moves to, or null if the key is not a (cursor) motion. */
+function motionTarget(
+  value: string,
+  pos: number,
+  key: VimKey,
+  pending: "g" | undefined,
+): number | null {
+  if (pending === "g") {
+    return isPlain(key, "g") ? 0 : null; // gg -> document start
+  }
+  if (isPlain(key, "h") || key.key === "ArrowLeft") {
+    return Math.max(lineStart(value, pos), pos - 1);
+  }
+  if (isPlain(key, "l") || key.key === "ArrowRight") {
+    return Math.min(lineEnd(value, pos), pos + 1);
+  }
+  if (isPlain(key, "j") || key.key === "ArrowDown") {
+    return verticalMove(value, pos, 1);
+  }
+  if (isPlain(key, "k") || key.key === "ArrowUp") {
+    return verticalMove(value, pos, -1);
+  }
+  if (isPlain(key, "0")) {
+    return lineStart(value, pos);
+  }
+  if (isPlain(key, "$")) {
+    return lineEnd(value, pos);
+  }
+  if (isPlain(key, "w")) {
+    return wordForward(value, pos);
+  }
+  if (isPlain(key, "b")) {
+    return wordBack(value, pos);
+  }
+  if (key.key === "G" && !key.ctrl && !key.meta && !key.alt) {
+    return value.length; // last line / document end
+  }
+  return null;
+}
+
+function handled(state: VimState, selStart: number, selEnd: number, value?: string): VimResult {
+  return value === undefined
+    ? { handled: true, state, selStart, selEnd }
+    : { handled: true, state, selStart, selEnd, value };
+}
+
+/** Dispatches a key against the current state. The entry point both surfaces (composer + editor) call. */
+export function handleVimKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult {
+  if (state.mode === "insert") {
     return insertKey(snap, key);
   }
-  if (mode === "normal") {
-    return normalKey(snap, key);
+  if (state.mode === "normal") {
+    return normalKey(state, snap, key);
   }
-  return visualKey(snap, key);
+  return visualKey(state, snap, key);
 }
 
 /** Insert mode is native typing, EXCEPT Escape -> normal (with the vim cursor-left-on-exit nudge). */
 function insertKey(snap: TextSnapshot, key: VimKey): VimResult {
   if (isEscape(key)) {
-    // Vim nudges the caret one left when leaving insert, clamped to the line start.
     const pos = Math.max(lineStart(snap.value, snap.selStart), snap.selStart - 1);
-    return caret("normal", pos);
+    return handled({ mode: "normal" }, pos, pos);
   }
-  return { handled: false, mode: "insert" };
+  return { handled: false, state: { mode: "insert" } };
 }
 
-/** Normal mode: transitions to insert/visual; otherwise swallow (M5 fills in motions + edits). */
-function normalKey(snap: TextSnapshot, key: VimKey): VimResult {
-  if (isEscape(key)) {
-    return swallow("normal", snap); // already normal; consume Escape so it doesn't bubble
+function normalKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult {
+  const pending = state.pending;
+  // A pending `g` consumes exactly the next key: `gg` jumps to the start, anything else cancels.
+  if (pending === "g") {
+    const target = motionTarget(snap.value, snap.selStart, key, "g");
+    return target === null
+      ? handled({ mode: "normal" }, snap.selStart, snap.selEnd)
+      : handled({ mode: "normal" }, target, target);
   }
-  // Enter insert at / after the caret (the first-cut insert commands).
+  if (isEscape(key)) {
+    return handled({ mode: "normal" }, snap.selStart, snap.selEnd);
+  }
+  if (isPlain(key, "g")) {
+    return handled({ mode: "normal", pending: "g" }, snap.selStart, snap.selEnd);
+  }
   if (isPlain(key, "i")) {
-    return caretInsert(snap.selStart);
+    return handled({ mode: "insert" }, snap.selStart, snap.selStart);
   }
   if (isPlain(key, "a")) {
-    return caretInsert(Math.min(lineEnd(snap.value, snap.selStart), snap.selStart + 1));
+    const pos = Math.min(lineEnd(snap.value, snap.selStart), snap.selStart + 1);
+    return handled({ mode: "insert" }, pos, pos);
   }
-  // Enter visual: v (charwise), V (linewise selects the line), Ctrl-V (treated as charwise in the first
-  // cut). Selection starts as the single char at the caret (empty line -> collapsed).
+  if (isPlain(key, "x")) {
+    // Delete the char under the caret (never across a line break or past the end).
+    const at = snap.selStart;
+    if (at >= snap.value.length || snap.value[at] === "\n") {
+      return handled({ mode: "normal" }, at, at);
+    }
+    const value = snap.value.slice(0, at) + snap.value.slice(at + 1);
+    return handled({ mode: "normal" }, at, at, value);
+  }
   if (isPlain(key, "v") || (key.key === "v" && key.ctrl && !key.meta && !key.alt)) {
     const end = Math.min(snap.value.length, snap.selStart + 1);
-    return { handled: true, mode: "visual", selStart: snap.selStart, selEnd: end };
+    return handled({ mode: "visual", anchor: snap.selStart }, snap.selStart, end);
   }
   if (key.key === "V" && !key.ctrl && !key.meta && !key.alt) {
-    return {
-      handled: true,
-      mode: "visual",
-      selStart: lineStart(snap.value, snap.selStart),
-      selEnd: lineEnd(snap.value, snap.selStart),
-    };
+    const start = lineStart(snap.value, snap.selStart);
+    return handled({ mode: "visual", anchor: start }, start, lineEnd(snap.value, snap.selStart));
   }
-  return normalMotion(snap, key) ?? swallow("normal", snap);
+  const target = motionTarget(snap.value, snap.selStart, key, undefined);
+  if (target !== null) {
+    return handled({ mode: "normal" }, target, target);
+  }
+  return handled({ mode: "normal" }, snap.selStart, snap.selEnd); // swallow
 }
 
-/** Visual mode: Escape / v collapse back to normal; otherwise swallow (M5 extends the selection). */
-function visualKey(snap: TextSnapshot, key: VimKey): VimResult {
+function visualKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult {
   if (isEscape(key) || isPlain(key, "v")) {
-    // Collapse the selection to its head and return to normal.
-    return caret("normal", snap.selStart);
+    return handled({ mode: "normal" }, snap.selStart, snap.selStart);
   }
-  return visualMotion(snap, key) ?? swallow("visual", snap);
-}
-
-/** Enter insert mode with a collapsed caret at `pos`. */
-function caretInsert(pos: number): VimResult {
-  return caret("insert", pos);
-}
-
-/**
- * Normal-mode motions (M5). Returns a result, or null to fall through to the swallow default. M4 leaves
- * this empty (every motion swallows); M5 implements h/j/k/l/w/b/0/$/gg/G + edits here.
- */
-function normalMotion(_snap: TextSnapshot, _key: VimKey): VimResult | null {
-  return null;
-}
-
-/** Visual-mode motions (M5): same motion keys, but they extend the selection rather than move a caret. */
-function visualMotion(_snap: TextSnapshot, _key: VimKey): VimResult | null {
-  return null;
+  if (isPlain(key, "d") || isPlain(key, "x")) {
+    const value = snap.value.slice(0, snap.selStart) + snap.value.slice(snap.selEnd);
+    return handled({ mode: "normal" }, snap.selStart, snap.selStart, value);
+  }
+  // Motions move the cursor (the end that is NOT the anchor) and re-form the selection.
+  const anchor = state.anchor ?? snap.selStart;
+  const cursor = anchor === snap.selStart ? snap.selEnd : snap.selStart;
+  const target = motionTarget(snap.value, cursor, key, undefined);
+  if (target === null) {
+    return handled({ mode: "visual", anchor }, snap.selStart, snap.selEnd); // swallow
+  }
+  return handled({ mode: "visual", anchor }, Math.min(anchor, target), Math.max(anchor, target));
 }
