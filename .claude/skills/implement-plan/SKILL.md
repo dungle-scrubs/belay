@@ -153,6 +153,11 @@ mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts check-conv
 - The hermetic e2e lane (`pnpm test:e2e`) is **required**. The live-model e2e lane is gated: when a
   prerequisite (LM Studio, `~/.pi/auth.json`) is absent it must **skip with a stated reason**, never
   fail the run - record which lanes ran vs. skipped.
+- **Real-browser e2e** (driving the actual web app in a browser, not the hermetic vitest lane) goes
+  through the **tool-proxy `browser-tools`** MCP integration, run **headless** - never direct
+  browser-control CLIs or ad hoc automation scripts (per global `CLAUDE.md`). If tool-proxy is **not
+  available** and the current plan needs to be tested in a browser, **stop and tell the owner** rather
+  than substituting another driver or silently skipping the browser verification.
 - If the plan ends with a **Manual EZE** step, attempt it. If it genuinely needs interactive or live
   resources that aren't available headlessly, record it as a **deferred manual EZE** in the report
   rather than silently dropping it - and surface it to the owner.
