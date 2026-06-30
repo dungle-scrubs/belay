@@ -67,6 +67,41 @@ test("a tool row exposes the inspect affordance, which opens its detail (plan 08
   assert.equal(onOpenDetail.mock.calls[0]?.[0]?.id, "c1");
 });
 
+const switchRow = (over: Partial<Extract<Message, { kind: "modelSwitch" }>>): TranscriptRow => ({
+  kind: "message",
+  id: "message:sw1",
+  compactAbove: false,
+  message: {
+    kind: "modelSwitch",
+    id: "sw1",
+    from: { model: "deepseek-v4", reasoning: "high" },
+    to: { model: "deepseek-v4", reasoning: "medium" },
+    initiator: "manual",
+    outcome: "applied",
+    ...over,
+  },
+});
+
+test("09.1 M3: a reasoning-only switch renders the from -> to delta", () => {
+  renderRow(switchRow({}));
+  assert.match(
+    screen.getByText(/deepseek-v4/).textContent ?? "",
+    /deepseek-v4 \(high\) -> deepseek-v4 \(medium\)/,
+  );
+});
+
+test("09.1 M3: a blocked switch renders its reason instead of a delta", () => {
+  renderRow(
+    switchRow({
+      outcome: "blocked",
+      to: { model: "haiku-4-5", reasoning: "high" },
+      reason: "conversation does not fit the smaller context window",
+    }),
+  );
+  assert.ok(screen.getByText(/blocked/));
+  assert.ok(screen.getByText(/smaller context window/));
+});
+
 test("a compact tool row also exposes the inspect affordance without expanding first (plan 08 M5)", () => {
   const onOpenDetail = vi.fn();
   render(

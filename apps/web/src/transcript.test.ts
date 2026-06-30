@@ -70,6 +70,65 @@ test("M4: tool results land by call id when tool.completed arrives out of call o
   );
 });
 
+test("09.1 M3: model.switched folds into a modelSwitch marker between the before/after assistant output", () => {
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "deepseek-v4", provider: "deepseek", warm: true })),
+    ev(2, events.assistantDelta({ runId: "r1", text: "thinking low..." })),
+    ev(
+      3,
+      events.modelSwitched({
+        runId: "r1",
+        from: { model: "deepseek-v4", reasoning: "low" },
+        to: { model: "deepseek-v4", reasoning: "high" },
+        initiator: "manual",
+        outcome: "applied",
+      }),
+    ),
+    ev(4, events.assistantDelta({ runId: "r1", text: "now high." })),
+    ev(5, events.assistantCompleted({ runId: "r1", text: "thinking low...now high." })),
+  ];
+  const messages = toTranscript(log);
+  const marker = messages.find((m) => m.kind === "modelSwitch");
+  assert.ok(marker, "a modelSwitch marker is folded from model.switched");
+  assert.equal(marker?.kind === "modelSwitch" && marker.outcome, "applied");
+  assert.equal(marker?.kind === "modelSwitch" && marker.from.reasoning, "low");
+  assert.equal(marker?.kind === "modelSwitch" && marker.to.reasoning, "high");
+  assert.equal(marker?.kind === "modelSwitch" && marker.from.model, "deepseek-v4");
+  // The switch finalizes the open assistant segment, so the post-switch output is a fresh segment below
+  // the marker (two assistant blocks split by the breadcrumb), not one merged block.
+  const order = messages.map((m) => m.kind);
+  const assistants = order.filter((k) => k === "assistant").length;
+  assert.equal(assistants, 2, "the marker splits the turn into before/after assistant segments");
+  assert.ok(
+    order.indexOf("modelSwitch") > order.indexOf("assistant"),
+    "the marker sits after the first assistant segment",
+  );
+});
+
+test("09.1 M3: a blocked model.switched carries its reason into the marker", () => {
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "big", provider: "anthropic", warm: true })),
+    ev(
+      2,
+      events.modelSwitched({
+        runId: "r1",
+        from: { model: "big", reasoning: "high" },
+        to: { model: "small", reasoning: "high" },
+        initiator: "manual",
+        outcome: "blocked",
+        reason: "conversation does not fit the smaller context window",
+      }),
+    ),
+    ev(3, events.assistantCompleted({ runId: "r1", text: "stayed on big" })),
+  ];
+  const marker = toTranscript(log).find((m) => m.kind === "modelSwitch");
+  assert.equal(marker?.kind === "modelSwitch" && marker.outcome, "blocked");
+  assert.match(
+    (marker?.kind === "modelSwitch" && marker.reason) || "",
+    /smaller context window/,
+  );
+});
+
 test("a tool left in flight when the run is cancelled is finalized as aborted, not stuck running", () => {
   // ESC cancels mid-tool: the host publishes assistant.completed{cancelled} and interrupts the fiber,
   // so a concurrently-dispatched read-only tool (session_recall) never gets its own tool.completed.

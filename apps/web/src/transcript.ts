@@ -4,6 +4,9 @@ import {
   type CommandMenuPayload,
   decodeTrevorEvent,
   inputEstimateTokens,
+  type ModelSwitchEndpoint,
+  type ModelSwitchInitiator,
+  type ModelSwitchOutcome,
   type PastePayload,
   type ProviderDiagnostic,
   type ProviderQuestionAnswer,
@@ -174,6 +177,19 @@ export type QuestionMessage = {
   items: readonly { readonly id: string; readonly question: string; readonly answer: string }[];
   summary: string;
 };
+// A mid-turn model/reasoning switch (plan 09.1), rendered inline as a quiet breadcrumb: the active turn
+// changed model and/or reasoning at a step boundary. `from`/`to` carry the model id + reasoning so the
+// delta renders, including a reasoning-only change (same model on both sides). A `blocked` outcome (the
+// larger->smaller context guard refused) renders the reason instead of a delta.
+export type ModelSwitchMessage = {
+  kind: "modelSwitch";
+  id: string;
+  from: ModelSwitchEndpoint;
+  to: ModelSwitchEndpoint;
+  initiator: ModelSwitchInitiator;
+  outcome: ModelSwitchOutcome;
+  reason?: string;
+};
 export type Message =
   | {
       kind: "user";
@@ -194,7 +210,8 @@ export type Message =
   | CompactingMessage
   | DelegationMessage
   | ShellMessage
-  | QuestionMessage;
+  | QuestionMessage
+  | ModelSwitchMessage;
 
 /**
  * Finds the concurrent read-only batches in a transcript: each run of 2+ consecutive read-only tool
@@ -535,6 +552,25 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           steps: decoded.steps,
           pressure: decoded.pressure,
           detail: decoded.detail,
+        });
+        break;
+      }
+      case "model.switched": {
+        // A mid-turn model/reasoning switch applied (or was blocked) at a step boundary (09.1): finalize
+        // the open segment so the post-switch output starts fresh below the inline breadcrumb.
+        const open = openByRun.get(decoded.runId);
+        if (open) {
+          open.done = true;
+          openByRun.delete(decoded.runId);
+        }
+        messages.push({
+          kind: "modelSwitch",
+          id: event.eventId,
+          from: decoded.from,
+          to: decoded.to,
+          initiator: decoded.initiator,
+          outcome: decoded.outcome,
+          ...(decoded.reason ? { reason: decoded.reason } : {}),
         });
         break;
       }

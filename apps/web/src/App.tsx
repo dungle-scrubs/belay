@@ -211,6 +211,7 @@ export function App() {
   const {
     publish,
     cancel,
+    switchModel,
     command,
     shell,
     openInEditor,
@@ -575,10 +576,17 @@ export function App() {
       selection.reasoningSurface(ref),
       activeReasoning || ref.reasoning,
     );
-    selection.select({ ...ref, reasoning: carried });
+    const target: ModelRef = { ...ref, reasoning: carried };
+    // Sticky always (09.1 D-005): the persisted selection updates so the model does not snap back when
+    // the turn ends. When a turn is in flight, ALSO send a mid-turn switch keyed to it, so the active
+    // turn re-resolves model+reasoning at its next step boundary instead of only the next turn.
+    selection.select(target);
     setProvider(ref.sourceId);
     if (carried != null) {
       setReasoningMap({ ...(reasoningMap ?? {}), [ref.sourceId]: carried });
+    }
+    if (active) {
+      void switchModel(active, target);
     }
     setChooserOpen(false);
   };

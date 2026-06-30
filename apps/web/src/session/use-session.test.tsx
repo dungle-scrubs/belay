@@ -72,6 +72,11 @@ test("createSessionActions maps user intents to Trevor events", async () => {
     },
   );
   await actions.cancel("r1");
+  await actions.switchModel("r1", {
+    sourceId: "deepseek",
+    modelId: "deepseek-v4",
+    reasoning: "high",
+  });
   await actions.command("/doctor", "refresh");
   await actions.shell("shell-1", "pwd");
   await actions.openInEditor("/tmp/a.ts", 3, 4);
@@ -93,6 +98,7 @@ test("createSessionActions maps user intents to Trevor events", async () => {
     [
       "user.message",
       "user.cancel",
+      "model.switch.requested",
       "user.command",
       "user.shell",
       "editor.open",
@@ -106,11 +112,17 @@ test("createSessionActions maps user intents to Trevor events", async () => {
       "assistant.completed",
     ],
   );
+  // The mid-turn switch control event (09.1): keyed to the active run, carrying the target ref + initiator.
+  assert.deepEqual(built[2]?.payload, {
+    runId: "r1",
+    model: { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" },
+    initiator: "manual",
+  });
   // The web stall guard's recovery: an interrupted (not user-cancelled) terminal event for the run.
-  assert.equal(built[12]?.payload.runId, "r9");
-  assert.equal(built[12]?.payload.interrupted, true);
-  assert.equal((built[12]?.payload.stop as { cause: string } | undefined)?.cause, "interrupted");
-  assert.deepEqual(built[11]?.payload, {
+  assert.equal(built[13]?.payload.runId, "r9");
+  assert.equal(built[13]?.payload.interrupted, true);
+  assert.equal((built[13]?.payload.stop as { cause: string } | undefined)?.cause, "interrupted");
+  assert.deepEqual(built[12]?.payload, {
     questionId: "q-1",
     answer: {
       action: "accept",
@@ -125,7 +137,7 @@ test("createSessionActions maps user intents to Trevor events", async () => {
     model: { sourceId: "qwen", modelId: "coder", reasoning: "high" },
     artifacts: [{ kind: "image", hash: "h", mimeType: "image/png", size: 1 }],
   });
-  assert.deepEqual(built[5]?.payload, { command: "/internet-refresh", args: "" });
-  assert.deepEqual(built[7]?.payload, { command: "/source-signin", args: "openai" });
-  assert.deepEqual(built[10]?.payload, { archived: false });
+  assert.deepEqual(built[6]?.payload, { command: "/internet-refresh", args: "" });
+  assert.deepEqual(built[8]?.payload, { command: "/source-signin", args: "openai" });
+  assert.deepEqual(built[11]?.payload, { archived: false });
 });

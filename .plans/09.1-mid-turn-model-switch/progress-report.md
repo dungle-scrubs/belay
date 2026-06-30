@@ -38,17 +38,17 @@
 
 ### M3 - Transcript marker + sticky web send (reasoning)
 
-- [ ] RED: Transcript-reducer test folding `model.switched` into a new `modelSwitch` `Message` variant; row-view renders `from X (high) -> X (medium)`.
-- [ ] GREEN: Add the `Message` variant + `toTranscript` case + `transcript-row-view` branch (+ grouping in `transcript-rows.ts`).
-- [ ] RED: Web test that picking a reasoning level while a turn is active sends the switch event AND updates the persisted selection (sticky); idle only updates the selection.
-- [ ] GREEN: Wire the chooser to turn-active state; send the switch when active, sticky-persist always.
-- [ ] REFACTOR: Storybook states for the marker (reasoning-only, plus placeholders for model-only / both / blocked).
+- [x] RED: Transcript-reducer test folding `model.switched` into a new `modelSwitch` `Message` variant; row-view renders `from X (high) -> X (medium)`.
+- [x] GREEN: Add the `Message` variant + `toTranscript` case + `transcript-row-view` branch (+ grouping in `transcript-rows.ts`).
+- [x] RED: Web test that picking a reasoning level while a turn is active sends the switch event AND updates the persisted selection (sticky); idle only updates the selection.
+- [x] GREEN: Wire the chooser to turn-active state; send the switch when active, sticky-persist always.
+- [x] REFACTOR: Storybook states for the marker (reasoning-only, plus placeholders for model-only / both / blocked).
 
 ### Gate 1-2
 
-- [ ] A reasoning switch mid-turn works end to end: control event -> cell -> `model.switched` -> marker.
-- [ ] An in-flight model stream is never interrupted by a switch.
-- [ ] A UI switch is sticky (persisted selection updated); an idle switch behaves as today.
+- [x] A reasoning switch mid-turn works end to end: control event -> cell -> `model.switched` -> marker.
+- [x] An in-flight model stream is never interrupted by a switch.
+- [x] A UI switch is sticky (persisted selection updated); an idle switch behaves as today.
 
 ### M4 - Rebuild provider on model change (same source)
 

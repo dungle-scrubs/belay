@@ -295,6 +295,10 @@ export interface SessionActions {
     pastes?: readonly PastePayload[],
   ) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
+  /** Switch the in-flight turn's model/reasoning mid-flight (plan 09.1): publish a
+   *  `model.switch.requested` keyed to the active runId, which the host routes to that turn's switch
+   *  cell. A no-op on the host when `runId` is not the active turn. */
+  readonly switchModel: (runId: string, model: ModelRef) => Promise<void>;
   readonly command: (command: string, args: string) => Promise<void>;
   /** The prompt shell lane (D-082): publish a `user.shell` so the leader runs the command now,
    *  bypassing the send queue, the model, and the provider flow. */
@@ -343,6 +347,8 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
         sessionEvents.userMessage({ text, provider, reasoning, model, artifacts, pastes }),
       ),
     cancel: (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
+    switchModel: (runId: string, model: ModelRef) =>
+      publishVia(sessionEvents.modelSwitchRequested({ runId, model, initiator: "manual" })),
     command,
     shell: (requestId: string, command: string) =>
       publishVia(sessionEvents.userShell({ requestId, command })),

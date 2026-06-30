@@ -1,4 +1,5 @@
 import {
+  ArrowLeftRight,
   ChevronRight,
   CircleX,
   CornerDownRight,
@@ -156,6 +157,15 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         secondary: firstLine(message.summary),
         hasDetail: message.items.length > 0,
       };
+    case "modelSwitch": {
+      const side = (e: { model: string; reasoning?: string }) =>
+        e.reasoning ? `${e.model} (${e.reasoning})` : e.model;
+      const secondary =
+        message.outcome === "blocked"
+          ? `blocked${message.reason ? `: ${message.reason}` : ""}`
+          : `${side(message.from)} -> ${side(message.to)}`;
+      return marker("modelSwitch", ArrowLeftRight, "Model", secondary);
+    }
   }
 }
 

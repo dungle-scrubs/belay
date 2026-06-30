@@ -1,5 +1,6 @@
 import { estimateTokens, isContextOverflowText } from "@trevor/session";
 import {
+  ArrowLeftRight,
   CircleX,
   CornerDownRight,
   PanelRight,
@@ -259,6 +260,23 @@ export function TranscriptRowView({
         <CornerDownRight className="size-3 shrink-0" />
         continued at step {message.steps} · {(message.pressure * 100).toFixed(1)}% context, room
         left
+      </div>
+    );
+  }
+
+  if (message.kind === "modelSwitch") {
+    // A quiet inline breadcrumb (09.1): the turn changed model and/or reasoning at a step boundary. Each
+    // side shows `model (reasoning)`, so a reasoning-only change reads `X (high) -> X (medium)`; a blocked
+    // larger->smaller switch shows the guard's reason instead of a delta. Understated like the checkpoint
+    // breadcrumb, not an alarming card.
+    const side = (e: { model: string; reasoning?: string }) =>
+      e.reasoning ? `${e.model} (${e.reasoning})` : e.model;
+    return (
+      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+        <ArrowLeftRight className="size-3 shrink-0" />
+        {message.outcome === "blocked"
+          ? `switch to ${side(message.to)} blocked${message.reason ? ` · ${message.reason}` : ""}`
+          : `model ${side(message.from)} -> ${side(message.to)}`}
       </div>
     );
   }
