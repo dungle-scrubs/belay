@@ -21,7 +21,9 @@ import {
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
+import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
+import { nodeAdmissionCaps } from "./admission/store";
 import { CompactionController } from "./agent/compaction-controller";
 import {
   type BackgroundChildInfo,
@@ -154,9 +156,12 @@ const transport = streamTransport(RICHTER_URL ?? SESSION_STORE_URL);
 // reload across projects/subagents, so parallel work shares the runtime without overload or reload
 // races. Conservative default (capacity 1 per resource); foreground priority unless a future per-turn
 // resolver refines it. Fail-open by construction - it never wedges a turn shut.
+const admissionConfig = loadAdmissionConfig();
 const admissionGate = createLocalAdmissionGate({
   hostId: crypto.randomUUID(),
   newOwnerId: () => crypto.randomUUID(),
+  caps: nodeAdmissionCaps({ staleAfterMs: admissionConfig.staleAfterMs }),
+  capacityFor: capacityResolver(admissionConfig),
 });
 const providers = buildProviders({ admissionGate });
 const commands = buildCommandRegistry();

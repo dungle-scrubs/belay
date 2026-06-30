@@ -252,6 +252,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     relativePath: "vim.json",
     description: "Vim-mode prompt preference (plan 06): { enabled }.",
   },
+  {
+    name: "admission-config",
+    category: "config",
+    relativePath: "admission.json",
+    description:
+      "Local-model admission concurrency/TTL overrides (plan 11): { defaultCapacity, staleAfterMs, capacityByResource }.",
+  },
   // state (TREVOR_STATE_HOME) - all machine-local runtime state
   {
     name: "sessions-db",

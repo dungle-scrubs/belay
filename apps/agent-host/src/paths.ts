@@ -57,6 +57,13 @@ export const USER_STYLE_JSON = join(TREVOR_HOME, "style.json");
 export const USER_VIM_JSON = join(TREVOR_HOME, "vim.json");
 
 /**
+ * The user's local-admission config (plan 11): an optional `{ defaultCapacity, staleAfterMs,
+ * capacityByResource }` JSON under the config home, read at host startup to size local-model concurrency.
+ * Absent means the conservative default (one active generation per resource). Host-owned + portable.
+ */
+export const USER_ADMISSION_JSON = join(TREVOR_HOME, "admission.json");
+
+/**
  * The directory the workspace-confined tools operate inside. Point the agent at a
  * target repo with TREVOR_WORKSPACE; defaults to the host's working directory.
  * Confinement is a path-escape guard (no `../` or absolute path may leave the
