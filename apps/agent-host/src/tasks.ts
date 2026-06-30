@@ -426,8 +426,12 @@ const UpdateParams = Schema.Struct({
   }),
 });
 
-/** task_list takes no arguments - it returns the whole current checklist. */
-const ListParams = Schema.Struct({});
+/** task_list takes no arguments - it returns the whole current checklist. The explicit `jsonSchema`
+ *  annotation is load-bearing: a bare `Schema.Struct({})` emits an `anyOf` carrying a relative `$id`
+ *  URL that OpenAI-compatible providers reject (same fix as the `doctor` tool). */
+const ListParams = Schema.Struct({}).annotations({
+  jsonSchema: { type: "object", properties: {}, additionalProperties: false },
+});
 
 /**
  * The model-facing checklist tools: create, update, and list. The checklist is ALSO rendered into the
@@ -509,6 +513,7 @@ export function buildTaskTools(
     description:
       "List your working checklist - the single task list for this session (the one shown in the user's task panel) - returning each task's id, status, and title. This is the SAME checklist already in your prompt, returned on demand. Use it to see what exists, what's in progress, or what's stale (e.g. before cleaning up) rather than asking the user to paste it.",
     params: ListParams,
+    readOnly: true,
     execute: () =>
       Effect.sync(() => {
         const tasks = registry.list();

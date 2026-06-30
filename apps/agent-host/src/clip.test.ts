@@ -168,9 +168,9 @@ test("clip adds no /doctor area: the /doctor summary still enumerates only its e
   assert.equal(/clip/i.test(`${doctor.summary} ${doctor.usage ?? ""}`), false, "no clipboard area");
 });
 
-test("clip adds no task tools: the task surface is still exactly task_create + task_update", () => {
+test("clip adds no task tools: the task surface is exactly task_create + task_update + task_list", () => {
   const names = buildTaskTools().map((tool) => tool.name);
-  assert.deepEqual(names, ["task_create", "task_update"]);
+  assert.deepEqual(names, ["task_create", "task_update", "task_list"]);
 });
 
 test("there is no persisted special clipboard event or state in the protocol", () => {

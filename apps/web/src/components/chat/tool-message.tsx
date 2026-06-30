@@ -322,6 +322,8 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   process: renderGeneric,
   task_create: renderGeneric,
   task_update: renderGeneric,
+  // task_list returns the checklist as flat text on demand, so it renders like other text-output tools.
+  task_list: renderOutput,
   skill: renderGeneric,
   skills_list: renderOutput,
   skill_view: renderGeneric,

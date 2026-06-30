@@ -40,6 +40,7 @@ export const TOOL_DESCRIPTORS = [
   { name: "process", readOnly: false },
   { name: "task_create", readOnly: false },
   { name: "task_update", readOnly: false },
+  { name: "task_list", readOnly: true },
   { name: "skill", readOnly: false },
   { name: "skills_list", readOnly: true },
   { name: "skill_view", readOnly: true },
