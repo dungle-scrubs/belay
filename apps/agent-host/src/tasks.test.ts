@@ -3,7 +3,7 @@ import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { test } from "vitest";
 import { contextRegistry } from "./context/registry";
 import { SystemPromptBuilder } from "./providers/system-prompt";
-import { TaskRegistry } from "./tasks";
+import { buildTaskTools, TaskRegistry } from "./tasks";
 
 /**
  * The task registry is the live, model-owned checklist (apps/agent-host/src/tasks.ts). These
@@ -32,8 +32,36 @@ test("a task created before the prompt build appears in the rendered system prom
 
   const prompt = promptFor(registry);
 
-  assert.match(prompt, /Your current task checklist/);
+  assert.match(prompt, /Your task checklist/);
   assert.match(prompt, /\[in progress\] task_1: wiring the API/);
+});
+
+test("the checklist prompt frames itself as the single, user-visible task list (09.1)", () => {
+  // The framing must tie the checklist to ONE canonical list (the task tools + the user's panel) so a
+  // model treats it as the authority when asked about tasks - and must NOT dissociate it from the user
+  // (the old "this is your plan, not the user's" made MiniMax ask the user to paste the list instead).
+  const registry = new TaskRegistry();
+  registry.create({ subject: "do the thing" });
+
+  const prompt = promptFor(registry);
+
+  assert.match(prompt, /single task list for this session/);
+  assert.match(prompt, /task panel/, "ties the checklist to what the user sees");
+  assert.doesNotMatch(
+    prompt,
+    /not the user's/,
+    "no longer dissociates the checklist from the user",
+  );
+});
+
+test("the task tool descriptions name the single canonical list (so a tool-first model converges on it)", () => {
+  // Co-locating the identity at the tool level (not just the prompt block) means a model that reads
+  // tool descriptions over the ambient prompt still routes to the one list shown in the user's panel.
+  const [create, update] = buildTaskTools(new TaskRegistry());
+  for (const tool of [create, update]) {
+    assert.match(tool.description, /single task list for this session/);
+    assert.match(tool.description, /task panel/);
+  }
 });
 
 test("a task updated before the prompt build is rendered at its new status", () => {

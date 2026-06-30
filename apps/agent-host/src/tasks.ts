@@ -310,7 +310,7 @@ export class TaskRegistry {
     });
 
     return [
-      "Your current task checklist (keep it current as you work; this is your plan, not the user's):",
+      "Your task checklist - the single task list for this session. You own it (task_create / task_update), and it is exactly what the user sees in their task panel. Keep it current as you work. When the user asks about tasks - what exists, what's left, what's stale, cleaning up - THIS list is the authority; read and report it directly rather than asking them to paste it:",
       ...rows,
     ].join("\n");
   }
@@ -364,7 +364,7 @@ export function buildTaskTools(
   const create: Tool<typeof CreateParams.Type> = {
     name: "task_create",
     description:
-      "Add a task to your working checklist (shown back to you every turn). Use it to plan and track multi-step work; skip it for trivial one-step requests, and never create fake or demo tasks. Keep exactly one task in_progress at a time.",
+      "Add a task to your working checklist - the single task list for this session, shown live in the user's task panel and back to you in the prompt every turn. Use it to plan and track multi-step work; skip it for trivial one-step requests, and never create fake or demo tasks. Keep exactly one task in_progress at a time.",
     params: CreateParams,
     execute: (args) =>
       Effect.try({
@@ -392,7 +392,7 @@ export function buildTaskTools(
   const update: Tool<typeof UpdateParams.Type> = {
     name: "task_update",
     description:
-      "Update a checklist task by id: set status to in_progress when you start it, completed when done, failed/cancelled if it won't be done, or deleted to retire a stale one. Completing the last open task auto-clears the whole checklist; on a new topic, delete stale tasks and create a fresh list.",
+      "Update a task on your working checklist - the single task list for this session, shown in the user's task panel - by id: set status to in_progress when you start it, completed when done, failed/cancelled if it won't be done, or deleted to retire a stale one. Completing the last open task auto-clears the whole checklist; on a new topic, delete stale tasks and create a fresh list.",
     params: UpdateParams,
     execute: (args) =>
       Effect.try({
