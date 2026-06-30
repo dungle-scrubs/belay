@@ -43,11 +43,11 @@
 
 ### M4: Tool-by-Tool Summaries
 
-- [ ] RED: Add compact summary tests for bash, read, write, edit, multi_edit, grep, glob, web search, session recall, docs/web fetch, MCP, and unknown tools
-- [ ] GREEN: Implement compact summaries incrementally, starting with generic fallback and then high-value tool-specific summaries
-- [ ] RED: Add tests for running/progress states per supported tool type
-- [ ] GREEN: Render action/progress indicators appropriate to each tool type
-- [ ] REFACTOR: Keep tool-specific summary logic near tool renderers or a dedicated display registry, not scattered through `TranscriptRowView`
+- [x] RED: Add compact summary tests for bash, read, write, edit, multi_edit, grep, glob, web search, session recall, docs/web fetch, MCP, and unknown tools
+- [x] GREEN: Implement compact summaries incrementally, starting with generic fallback and then high-value tool-specific summaries
+- [x] RED: Add tests for running/progress states per supported tool type
+- [x] GREEN: Render action/progress indicators appropriate to each tool type
+- [x] REFACTOR: Keep tool-specific summary logic near tool renderers or a dedicated display registry, not scattered through `TranscriptRowView`
 
 ### Gate 2->3
 
