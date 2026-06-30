@@ -33,6 +33,7 @@ import {
   hostStatus,
   isHostlessPendingPrompt,
   isSessionArchived,
+  lastUserModelFrom,
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
@@ -246,6 +247,9 @@ export function App() {
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
   const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
+  // The model/effort this session last ran a turn on (a handoff stamps it onto the first prompt); a
+  // fresh session inherits it instead of falling to the host default - the qwen-on-handoff fix (09.1).
+  const lastUserModel = useMemo(() => lastUserModelFrom(events), [events]);
   const active = useMemo(() => activeTurnRunId(events), [events]);
   const busy = active !== null || awaitingResponse;
   // Modal, drawer, inventory, and project scoping state are one App-owned view boundary shared by
@@ -411,7 +415,13 @@ export function App() {
   const visibleQueue = pending ? [pending, ...queue] : queue;
 
   const firstAnnouncedProvider = Object.keys(hostModels)[0];
-  const activeProvider = provider ?? hostDefault ?? firstAnnouncedProvider ?? "default";
+  // Stored per-session pick wins; else inherit this session's last-used model (handoff carry-over);
+  // else the host default. This is what keeps a handoff target on the source's model, not the default.
+  const activeProvider =
+    provider ?? lastUserModel?.provider ?? hostDefault ?? firstAnnouncedProvider ?? "default";
+  // Inherit the effort from that last turn too, but only when it belongs to the provider we resolved to.
+  const seededReasoning =
+    lastUserModel?.provider === activeProvider ? lastUserModel.reasoning : undefined;
   // Before any host has announced (empty hostModels), there's no roster to show: fall back
   // to a neutral descriptor keyed by the active provider, so the picker renders one inert
   // entry and no reasoning control until host.online arrives and supplies the real roster.
@@ -427,7 +437,7 @@ export function App() {
   // Keep a stale stored level from showing as selected if the model's options changed.
   const reasoning = resolveReasoning(
     modelMeta.reasoningLevels,
-    reasoningMap?.[activeProvider],
+    reasoningMap?.[activeProvider] ?? seededReasoning,
     modelMeta.defaultReasoning,
   );
   const showThinkingOn = showThinking ?? true;
@@ -481,7 +491,7 @@ export function App() {
       : modelMeta.reasoningLevels;
   const activeReasoning = resolveReasoning(
     activeReasoningLevels,
-    reasoningMap?.[activeProvider],
+    reasoningMap?.[activeProvider] ?? seededReasoning,
     activeEntry?.defaultReasoning ?? modelMeta.defaultReasoning,
   );
   // The ModelRef sent with the turn: the active model + the live reasoning (so changing the toggle

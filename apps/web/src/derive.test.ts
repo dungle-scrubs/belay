@@ -16,6 +16,7 @@ import {
   hostStatus,
   isHostlessPendingPrompt,
   isSessionArchived,
+  lastUserModelFrom,
   latestSessionSwitch,
   parseBangShell,
   parseCommand,
@@ -253,6 +254,35 @@ test("tasksStale: no checklist (or an empty/cleared one) is never stale", () => 
     tasksStale([evt("tasks.current", { tasks: [], rev: 2 }), userMsg()]),
     false,
     "a cleared (empty) checklist is not stale - the panel already hides",
+  );
+});
+
+// 09.1: a session inherits the model/effort from its last user turn (a handoff stamps it on the first
+// prompt), so the picker doesn't fall back to the host default on a fresh handoff target.
+test("lastUserModelFrom returns the most recent user-message model + effort", () => {
+  assert.equal(lastUserModelFrom([]), null, "no user turn yet -> null");
+
+  const got = lastUserModelFrom([
+    evt("user.message", {
+      text: "audit this",
+      provider: "zai",
+      model: { sourceId: "zai", modelId: "glm-5.2", reasoning: "high" },
+      reasoning: "high",
+    }),
+    evt("assistant.completed", { runId: "r1" }),
+  ]);
+  assert.equal(got?.provider, "zai");
+  assert.equal(got?.reasoning, "high");
+  assert.equal(got?.model?.modelId, "glm-5.2");
+});
+
+test("lastUserModelFrom takes the LATEST user message that carries a provider", () => {
+  assert.equal(
+    lastUserModelFrom([
+      evt("user.message", { text: "first", provider: "qwen" }),
+      evt("user.message", { text: "second", provider: "minimax" }),
+    ])?.provider,
+    "minimax",
   );
 });
 

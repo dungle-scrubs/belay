@@ -8,6 +8,7 @@ import {
   type GitStatus,
   HOST_ROLE,
   type HostPresence,
+  type ModelRef,
   type ProviderModel,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
@@ -375,6 +376,34 @@ export function tasksStale(events: readonly SessionEvent[]): boolean {
   });
 
   return lastTasksAt >= 0 && !lastTasksEmpty && lastUserMessageAt > lastTasksAt;
+}
+
+/** The provider/model/effort the session last ran a user turn on. */
+export interface LastUserModel {
+  readonly provider: string;
+  readonly model?: ModelRef;
+  readonly reasoning?: string;
+}
+
+/**
+ * The model + effort the session last ran a user turn on - the most recent `user.message` carrying a
+ * provider. For a freshly handed-off session that's the model the handoff stamped onto its first
+ * prompt (handoff-flow.ts), so the picker can INHERIT it instead of falling back to the host default
+ * (which is how a handoff target silently landed on the wrong model). Null until a user turn exists.
+ */
+export function lastUserModelFrom(events: readonly SessionEvent[]): LastUserModel | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    const decoded = event ? decodeTrevorEvent(event) : null;
+    if (decoded?.type === "user.message" && decoded.provider) {
+      return {
+        provider: decoded.provider,
+        ...(decoded.model ? { model: decoded.model } : {}),
+        ...(decoded.reasoning ? { reasoning: decoded.reasoning } : {}),
+      };
+    }
+  }
+  return null;
 }
 
 /** A pending ask_user question projected from the log: the contract to render + its lifecycle ids. */
