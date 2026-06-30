@@ -41,8 +41,9 @@ export function loadVimPref(
   return loadJsonConfig(path, parseVimPref, DEFAULT_PREF, read);
 }
 
-/** Persists the Vim-enabled preference, creating the config dir as needed. Clears the read-once cache so
- *  a `/doctor` or restart-free re-read reflects the change. */
+/** Persists the Vim-enabled preference, creating the config dir as needed, and clears the read-once
+ *  cache so a restart-free re-read reflects the change. The write counterpart to {@link loadVimPref};
+ *  the host toggle command that drives it lands with the keyboard-shortcuts work. */
 export function saveVimPref(
   enabled: boolean,
   path: string = USER_VIM_JSON,

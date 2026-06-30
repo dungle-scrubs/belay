@@ -3,7 +3,7 @@ import { handleVimKey, INITIAL_VIM_STATE, type VimKey, type VimState } from "./c
 import type { VimMode } from "./mode";
 
 /**
- * The React adapter for the pure Vim {@link handleVimKey} controller (plan 06, M6). It binds the
+ * The React adapter for the pure Vim {@link handleVimKey} controller (plan 06). It binds the
  * controller to a textarea ref + the host-owned `enabled` preference, holds the mode/anchor/pending
  * state, and exposes:
  *   - `onKeyDown(event)` -> boolean: read the textarea snapshot, run the controller, apply the result
@@ -17,7 +17,7 @@ import type { VimMode } from "./mode";
  * Surface-agnostic: the inline composer and the full-surface editor both attach the same hook to their
  * textarea, so Vim mode is identical on both (D-007).
  *
- * Conflict precedence (plan 06, M7), highest first:
+ * Conflict precedence (plan 06), highest first:
  *   1. Composer token-delete (D-092) - Backspace/Delete adjacent to an image/paste token.
  *   2. The slash command menu while open - it owns arrows/Enter/Escape, so the composer SUSPENDS the
  *      Vim layer while `menuOpen` (a `/`-draft is typed in insert anyway).
@@ -49,12 +49,19 @@ export function useVim(
   enabled: boolean,
 ): VimController {
   const [state, setState] = useState<VimState>(INITIAL_VIM_STATE);
-  // The controller is stateless-per-key but threads {mode,pending,anchor}; a ref keeps the latest so a
-  // burst of keydowns in one frame never reads a stale (not-yet-committed) state.
+  // The controller is stateless-per-key but threads {mode,pending,anchor}; a ref is the source of truth
+  // (commit updates it), so a burst of keydowns in one frame never reads a stale, not-yet-committed
+  // state. The React state only mirrors it to drive the indicator.
   const stateRef = useRef(state);
-  stateRef.current = state;
 
+  // Commit only when the state actually changes. The caret is applied to the DOM directly (below), so a
+  // pure motion (`j` in normal, or any insert-mode typing -> mode unchanged) must NOT force a re-render
+  // of the composer on every keystroke; only a mode/pending/anchor change re-renders.
   const commit = useCallback((next: VimState) => {
+    const prev = stateRef.current;
+    if (prev.mode === next.mode && prev.pending === next.pending && prev.anchor === next.anchor) {
+      return;
+    }
     stateRef.current = next;
     setState(next);
   }, []);

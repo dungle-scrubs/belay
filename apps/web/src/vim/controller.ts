@@ -1,10 +1,10 @@
 import type { VimMode } from "./mode";
 
 /**
- * The prompt-local Vim controller (plan 06, M4/M5): a small, framework-agnostic state machine over a
+ * The prompt-local Vim controller (plan 06): a small, framework-agnostic state machine over a
  * textarea snapshot, chosen over `vimeejs/vimee` (decision D-008) so it yields cleanly to native typing
  * and the composer's existing key precedence. Pure - no DOM, no React - so it is unit-tested without
- * jsdom (M4 REFACTOR).
+ * jsdom.
  *
  * It takes the current {@link VimState} (mode + a one-key pending prefix + the visual anchor) and a
  * `{ value, selStart, selEnd }` snapshot and a key, and returns either "not handled" (let the textarea /
@@ -13,9 +13,9 @@ import type { VimMode } from "./mode";
  *
  * Modes: a focused prompt starts in `insert` (native typing); Escape -> `normal`; `i`/`a` -> insert;
  * `v`/`V`/Ctrl-V -> `visual`; Escape/`v` leave visual. In normal/visual every otherwise-unhandled
- * printable key is SWALLOWED (so `j` never types a "j"). Editing is deliberately conservative (M5
- * REFACTOR): normal `x` deletes a char, visual `d`/`x` delete the selection; yank is left to the native
- * clipboard (Cmd/Ctrl-C copies the live visual selection), and ambiguous Vim features are deferred.
+ * printable key is SWALLOWED (so `j` never types a "j"). Editing is deliberately conservative: normal
+ * `x` deletes a char, visual `d`/`x` delete the selection; yank is left to the native clipboard
+ * (Cmd/Ctrl-C copies the live visual selection), and ambiguous Vim features are deferred.
  */
 
 export interface TextSnapshot {
@@ -212,8 +212,8 @@ function insertKey(snap: TextSnapshot, key: VimKey): VimResult {
 /**
  * Keys that pass THROUGH the controller even in normal/visual mode, so the composer's own behaviors
  * keep working: Enter (submit), and the OS / clipboard chords (Cmd+anything, and Ctrl chords other than
- * Ctrl-V, which is vim visual-block). Insert-mode typing is already native, so this only matters for
- * normal/visual. In insert mode, Cmd/Ctrl-V paste and Enter pass through here too.
+ * Ctrl-V, which is vim visual-block). Only consulted in normal/visual; insert-mode typing (incl. paste
+ * and Enter) is already native via `insertKey`, which yields everything but Escape.
  */
 function nativeChord(key: VimKey): boolean {
   if (key.meta) {
