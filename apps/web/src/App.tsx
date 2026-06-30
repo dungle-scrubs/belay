@@ -81,6 +81,11 @@ const BUILT_IN_COMMANDS = [
   { name: "/worktree", summary: "Switch a Trevor-managed worktree" },
 ] as const;
 
+/** Commands that still WORK when typed but are hidden from the slash autocomplete menu (a dev toggle
+ *  the host always announces; we don't want it cluttering the picker). Stays in `commandNames` so
+ *  `parseCommand` routes it as a command, just filtered out of the menu list. */
+const HIDDEN_COMMANDS: ReadonlySet<string> = new Set(["/debug"]);
+
 function targetFromLocation(): string {
   return new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
 }
@@ -336,7 +341,13 @@ export function App() {
     return [...BUILT_IN_COMMANDS.filter((c) => !announced.has(c.name)), ...commands];
   }, [commands]);
   const commandNames = useMemo(() => new Set(commandSpecs.map((c) => c.name)), [commandSpecs]);
-  const slashMenu = useSlashMenu({ draft, commandSpecs, inputRef, setDraft });
+  // The autocomplete menu shows everything EXCEPT hidden commands (e.g. /debug); they stay typeable
+  // because `commandNames` (the parseCommand allow-set) is built from the full `commandSpecs`.
+  const menuSpecs = useMemo(
+    () => commandSpecs.filter((c) => !HIDDEN_COMMANDS.has(c.name)),
+    [commandSpecs],
+  );
+  const slashMenu = useSlashMenu({ draft, commandSpecs: menuSpecs, inputRef, setDraft });
   // Focus the composer on load, once the session resolves and the input is enabled.
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
