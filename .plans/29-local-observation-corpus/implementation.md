@@ -5,6 +5,7 @@
 - [ ] `03-filesystem-root-taxonomy` - storage-root policy must be the source of truth before expanding observation persistence.
 - [x] `.plans/trevor-v2` D-076-D-079 provider-outage recovery - existing provider observations are the first producer to migrate.
 - [x] `apps/agent-host/src/paths.ts` exposes `TREVOR_STATE_HOME` - diagnostic state already has an XDG-backed root.
+- [ ] **Reorg (plan 22.1):** Plan 22.1 moves src/paths.ts to boot/paths.ts (providers/observation-store.ts stays in providers/). Update the paths reference and choose the observation-corpus home consistent with the new layout. <!-- D-006 -->
 
 ## 1. Architecture
 

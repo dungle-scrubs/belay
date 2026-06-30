@@ -7,6 +7,7 @@
 - [x] The prompt shell lane is distinct from interpolation; leading `!` in the composer is a user-owned immediate command, not prompt/file expansion.
 - [x] `.plans/14-capability-manifest-and-trevor-expert` keeps general interpolation separate from `trevor-export` and `trevor-expert`.
 - [x] Runtime secret resolution has been dropped from V2; this plan must not reintroduce `op://` or secret-command interpolation.
+- [ ] **Reorg (plan 22.1):** Plan 22.1 moves src/skills.ts to skills/ and src/commands.ts to commands/ (src/tools/run-shell.ts stays in tools/). The shared interpolation engine must live where both skills/ and commands/ can import it via @host/*. <!-- D-004 -->
 
 ## 1. Architecture
 

@@ -6,6 +6,7 @@
 - [x] `.plans/13-telemetry-observability` owns telemetry and diagnostic artifacts.
 - [x] Provider/run events carry enough lifecycle context to attach usage data when available.
 - [ ] `.plans/09.1-mid-turn-model-switch` lets one turn span multiple models/reasoning levels and records each change as a `model.switched` event; usage must be attributed per model segment within a turn, not one model per turn. <!-- D-002 -->
+- [ ] **Reorg (plan 22.1):** Plan 22.1 renames src/usage/ to metrics/. Build host usage aggregation under metrics/. <!-- D-003 -->
 
 ## Scope
 

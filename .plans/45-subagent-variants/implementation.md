@@ -5,6 +5,7 @@
 - [x] D-045-D-049 define the existing general-purpose, explorer, inline/background read-only, isolated-session, and ephemeral-agent model.
 - [x] `.plans/12-bounded-child-takeover` now owns bounded-child.
 - [x] `.plans/01-managed-worktree-hardening` owns cwd lock hardening needed before mutating background agents.
+- [ ] **Reorg (plan 22.1):** Plan 22.1 renames src/agents.ts to subagents/. The verifier variant lands under subagents/; delegation stays in agent/delegate.ts. <!-- D-003 -->
 
 ## Scope
 

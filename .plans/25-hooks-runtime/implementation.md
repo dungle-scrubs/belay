@@ -4,6 +4,7 @@
 
 - [ ] `01-ask-user-tool` - project/user hook approval requires an explicit user approval surface before trusted execution.
 - [ ] `03-filesystem-root-taxonomy` - hook trust/approval state uses the approved Trevor config/state roots.
+- [ ] **Reorg (plan 22.2):** Plan 22.2 splits agent/loop.ts and extracts main.ts handler bodies into events/. PreToolUse wires at the loop/tool boundary; Stop dispatch wires into events/. <!-- D-010 -->
 
 ## Architecture
 

@@ -9,6 +9,7 @@
 - [x] Existing V1 archive integration found in `media-processors.ts`, `core-archive.test.ts`, and the TUI archive/video history fixture.
 - [x] `20-archive-tools` keeps archive media dispatch separate from direct `video_inspect` behavior.
 - [x] `08-tool-detail-takeover` defines the transcript-detail pattern for inspecting richer tool output.
+- [ ] **Reorg (plan 22.2):** Plan 22.2 splits agent/loop.ts. The loop-finalization direct-answer behavior lands in the post-22.2 loop modules. <!-- D-004 -->
 
 ## 1. Architecture
 

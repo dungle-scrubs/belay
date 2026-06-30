@@ -15,6 +15,7 @@
 - [x] Existing worktree commands `/worktree-new|switch|merge|delete|reconcile`
   (`apps/agent-host/src/main.ts`) - reused by the disposition step.
 - [x] Existing `planner` skill (`~/.agents/skills/planner`) - each worker runs it in **implement mode**.
+- [ ] **Reorg (plan 22.1):** Plan 22.1 moves src/handoff-flow.ts to handoff/ (worktree slash commands move out of main.ts in plan 22.2). Target post-22.1 handoff/ paths. <!-- D-008 -->
 
 ## 1. Architecture
 

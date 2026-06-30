@@ -24,6 +24,7 @@ plan ships the queue-recall slice; full Claude-Code-style typed history is a fol
   (`SessionEvent`), `packages/session/src/protocol.ts` (`events.userMessage`, carrying `text`/`provider`/`reasoning`/`model`/`artifacts`/`pastes`), `packages/session/src/protocol-decode.ts`.
 - [x] Per-item model snapshot already on `QueuedPrompt` (umbrella D-065): `apps/web/src/send-queue.ts` snapshots `provider`/`reasoning`/`model` at submit.
 - [x] Compatibility anchors held by tests, not changed here: `.plans/34-transcript-image-rendering` (queued/steered prompts preserve artifacts through replay), `.plans/37-tangents` (parent send queue must not bleed into tangent state), `.plans/31-action-shimmer-status` (the "steering" status label).
+- [ ] **Reorg (plan 22.2):** Plan 22.2 decomposes main.ts: the leader/turn wiring functions this plan edits (noteTurn, onBecomeLeader, goLive, reapOrphans) relocate out of main.ts (the composition root keeps a visible routing table; handler bodies move to events/). agent/turn-scheduler.ts and agent/history-projection.ts do NOT move. Target the post-22.2 wiring locations. <!-- D-009 -->
 
 ## 1. Architecture
 
