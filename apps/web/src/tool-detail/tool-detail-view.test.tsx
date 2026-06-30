@@ -23,11 +23,11 @@ function model(over: Partial<ToolDetailModel> = {}): ToolDetailModel {
   };
 }
 
-test("renders the tool name, status, arguments, and output", () => {
+test("renders the header (tool name + status) and dispatches the per-tool body", () => {
   render(<ToolDetailView model={model()} onBack={vi.fn()} />);
-  assert.ok(screen.getByText("bash"));
-  assert.ok(screen.getByText("Done"));
-  assert.ok(screen.getByText('{"command":"ls"}'));
+  assert.ok(screen.getByText("bash"), "the tool name is in the header");
+  assert.ok(screen.getByText("Done"), "the status pill is in the header");
+  assert.ok(screen.getByText("ls"), "the bash body renders the command");
   assert.ok(
     screen.getByText(/a\.ts\s+b\.ts/),
     "the multi-line output renders in the Output section",

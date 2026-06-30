@@ -56,6 +56,57 @@ export const Completed: Story = {
   ),
 };
 
+export const ReadWithOpen: Story = {
+  render: () => (
+    <Panel>
+      <ToolDetailView
+        model={model({
+          toolName: "read",
+          args: '{"path":"apps/web/src/App.tsx","offset":120,"limit":40}',
+          output: "import { useQuery } from ...\nexport function App() {\n  ...\n}",
+        })}
+        onBack={noop}
+        onOpenPath={noop}
+        className="h-full"
+      />
+    </Panel>
+  ),
+};
+
+export const WriteDiff: Story = {
+  render: () => (
+    <Panel>
+      <ToolDetailView
+        model={model({
+          toolName: "write",
+          args: '{"path":"apps/web/src/new-file.ts","content":"export const answer = 42;\\nexport const next = answer + 1;"}',
+          output: "wrote 2 lines",
+        })}
+        onBack={noop}
+        onOpenPath={noop}
+        className="h-full"
+      />
+    </Panel>
+  ),
+};
+
+export const MultiEditChanges: Story = {
+  render: () => (
+    <Panel>
+      <ToolDetailView
+        model={model({
+          toolName: "multi_edit",
+          args: '{"path":"apps/web/src/App.tsx","edits":[{"old":"const a = 1","new":"const a = 2"},{"old":"return a","new":"return a + 1"}]}',
+          output: "applied 2 edits",
+        })}
+        onBack={noop}
+        onOpenPath={noop}
+        className="h-full"
+      />
+    </Panel>
+  ),
+};
+
 export const Running: Story = {
   render: () => (
     <Panel>

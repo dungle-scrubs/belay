@@ -2,13 +2,14 @@ import { useEffect, useRef } from "react";
 import type { ToolStatus } from "@/components/chat/tool-status";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { cn } from "@/lib/utils";
+import { DetailBody } from "./detail-body";
 import type { ToolDetailModel } from "./detail-model";
 
 /**
  * The tool detail takeover shell (plan 08 M2): a focused inspection surface that replaces the chat
  * transcript/composer (not a modal/overlay - the sidebars stay visible), with a top-left "Back to chat"
- * arrow and a stable header/status area. M2 is the GENERIC shell over any {@link ToolDetailModel}
- * (arguments, status, output, error); per-tool richer bodies land in M3/M4.
+ * arrow and a stable header/status area. The per-tool body is dispatched by {@link DetailBody} (M3/M4);
+ * the shell here owns the chrome (back, header, status, Escape) that is identical across every tool.
  *
  * Escape returns to chat: the view is a frontmost surface, so the global Escape is already suppressed
  * (escapeAction's modalOpen guard), and this owns Escape locally. It auto-focuses on mount so Escape +
@@ -17,10 +18,13 @@ import type { ToolDetailModel } from "./detail-model";
 export function ToolDetailView({
   model,
   onBack,
+  onOpenPath,
   className,
 }: {
   readonly model: ToolDetailModel;
   readonly onBack: () => void;
+  /** Opens a file path in the editor (read/write/edit/multi_edit detail), when the host can. */
+  readonly onOpenPath?: (path: string) => void;
   readonly className?: string;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -52,31 +56,7 @@ export function ToolDetailView({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
-        <DetailSection title="Arguments">
-          <pre className="overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">
-            {model.args || "(none)"}
-          </pre>
-        </DetailSection>
-
-        {model.error ? (
-          <DetailSection title="Error">
-            <pre className="overflow-x-auto rounded bg-smui-red/10 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-smui-red">
-              {model.error}
-            </pre>
-          </DetailSection>
-        ) : null}
-
-        <DetailSection title="Output">
-          {model.output ? (
-            <pre className="overflow-x-auto rounded bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">
-              {model.output}
-            </pre>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {model.status === "running" ? "Running - no output yet." : "No output."}
-            </p>
-          )}
-        </DetailSection>
+        <DetailBody model={model} onOpenPath={onOpenPath} />
       </div>
     </section>
   );
@@ -102,20 +82,5 @@ function StatusPill({
     >
       {aborted ? "Aborted" : pill.label}
     </span>
-  );
-}
-
-function DetailSection({
-  title,
-  children,
-}: {
-  readonly title: string;
-  readonly children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-1.5">
-      <h3 className="text-label tracking-wider uppercase text-muted-foreground">{title}</h3>
-      {children}
-    </section>
   );
 }

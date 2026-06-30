@@ -38,11 +38,11 @@
 
 ### M3: Filesystem and Shell Details
 
-- [ ] RED: Add detail adapter tests for bash, read, write, edit, and multi_edit
-- [ ] GREEN: Show bash command, cwd, status, streaming output, exit/error state, truncation, and timing when available
-- [ ] GREEN: Show read path/range, rendered snippet/full output boundary, and open-in-editor action where available
-- [ ] GREEN: Show write/edit/multi_edit file paths, diff/full patch detail, result, and failures
-- [ ] REFACTOR: Share file/path/open-in-editor detail primitives across filesystem tools
+- [x] RED: Add detail adapter tests for bash, read, write, edit, and multi_edit
+- [x] GREEN: Show bash command, cwd, status, streaming output, exit/error state, truncation, and timing when available
+- [x] GREEN: Show read path/range, rendered snippet/full output boundary, and open-in-editor action where available
+- [x] GREEN: Show write/edit/multi_edit file paths, diff/full patch detail, result, and failures
+- [x] REFACTOR: Share file/path/open-in-editor detail primitives across filesystem tools
 
 ### M4: Search, Web, Docs, MCP, and Unknown Details
 
