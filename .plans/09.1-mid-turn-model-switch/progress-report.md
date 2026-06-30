@@ -71,11 +71,11 @@
 
 ### M6 - Cross-model normalization
 
-- [ ] RED: Tests that provider A's assistant thinking blocks / signatures are stripped or normalized so provider B can replay the carried conversation.
-- [ ] GREEN: Apply a normalization pass at the cross-provider swap boundary.
-- [ ] RED: Tests for tool-use id / tool-result encoding differences across providers.
-- [ ] GREEN: Normalize tool-call/tool-result encodings for the target provider.
-- [ ] REFACTOR: Keep normalization a pure, well-tested boundary; expose a per-model system-prompt seam.
+- [x] RED: Tests that provider A's assistant thinking blocks / signatures are stripped or normalized so provider B can replay the carried conversation.
+- [x] GREEN: Apply a normalization pass at the cross-provider swap boundary.
+- [x] RED: Tests for tool-use id / tool-result encoding differences across providers.
+- [x] GREEN: Normalize tool-call/tool-result encodings for the target provider.
+- [x] REFACTOR: Keep normalization a pure, well-tested boundary; expose a per-model system-prompt seam.
 
 ### M7 - Larger->smaller context guard
 

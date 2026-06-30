@@ -30,6 +30,7 @@ import {
   type ProviderProtocolDiagnostic,
 } from "../providers/protocol-anomaly";
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
+import { normalizeConversationForProvider } from "./cross-model";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
 import type { SwitchCell, SwitchEndpoint, SwitchInitiator } from "./switch-cell";
@@ -746,9 +747,17 @@ export function runAgent(
       return;
     }
     const rebuilt = opts.rebuildProvider?.(model);
-    if (rebuilt) {
-      currentProvider = rebuilt;
+    if (!rebuilt) {
+      return;
     }
+    // A cross-PROVIDER swap (different source) carries provider A's encodings onto provider B, which can
+    // reject them, so normalize the conversation in place before B replays it (M6). A same-provider model
+    // swap keeps the encodings, so the carried array is untouched (intra-provider continuity, M4).
+    if (rebuilt.id !== currentProvider.id) {
+      const normalized = normalizeConversationForProvider(conversation);
+      conversation.splice(0, conversation.length, ...normalized);
+    }
+    currentProvider = rebuilt;
   };
 
   // The single mid-turn-switch re-resolution boundary (plan 09.1 D-001/D-002): the loop reads the

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
-import type { Provider, ProviderEvent } from "../providers";
+import type { ChatMessage, Provider, ProviderEvent } from "../providers";
 import { type AgentEvent, runAgent } from "./loop";
 import { createSwitchCell } from "./switch-cell";
 
@@ -150,6 +150,74 @@ test("M4: a model change rebuilds the provider; the next step runs the new model
     ran[1] !== undefined && ran[1].messages > (ran[0]?.messages ?? 0),
     "the rebuilt model sees the carried conversation (history + step 1 + its tool result), not a reset",
   );
+});
+
+test("M6: a cross-provider swap normalizes the carried conversation the new provider replays", async () => {
+  const cell = createSwitchCell();
+  // providerB (a DIFFERENT source id) captures the conversation it is handed on its first step.
+  let bReceived: readonly ChatMessage[] = [];
+  const base = (id: string, model: string): Provider => ({
+    id,
+    label: model,
+    model,
+    reasoningLevels: ["off", "low", "high"],
+    defaultReasoning: "off",
+    kind: "cloud",
+    describe: () => ({
+      label: model,
+      model,
+      reasoningLevels: ["off", "low", "high"],
+      defaultReasoning: "off",
+      kind: "cloud",
+    }),
+    readiness: () => Effect.succeed({ ready: true, warm: true }),
+    capabilities: () => Effect.succeed({ images: false, tools: true, contextLength: 0 }),
+    warm: () => Effect.void,
+    stream: () => Stream.fromIterable<ProviderEvent>([{ type: "text", text: "done" }]),
+  });
+  const providerB: Provider = {
+    ...base("source-b", "model-b"),
+    stream: (messages) => {
+      bReceived = messages;
+      return Stream.fromIterable<ProviderEvent>([{ type: "text", text: "done-b" }]);
+    },
+  };
+  let calls = 0;
+  const providerA: Provider = {
+    ...base("source-a", "model-a"),
+    stream: () => {
+      calls += 1;
+      if (calls === 1) {
+        cell.request({
+          model: { sourceId: "source-b", modelId: "model-b", reasoning: "low" },
+          initiator: "manual",
+        });
+        // A tool call carrying a provider-A-style id, which the cross-provider normalization must re-id.
+        return Stream.fromIterable<ProviderEvent>([
+          { type: "tool_call", call: { id: "toolu_A1", name: "noop", arguments: "{}" } },
+        ]);
+      }
+      return Stream.fromIterable<ProviderEvent>([{ type: "text", text: "from-a" }]);
+    },
+  };
+  await Effect.runPromise(
+    Stream.runForEach(
+      runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
+        switch: cell,
+        runTool: () => Effect.succeed("ok"),
+        rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+      }),
+      () => Effect.void,
+    ),
+  );
+  const assistantCall = bReceived.find((m) => m.role === "assistant" && m.toolCalls?.length);
+  const toolResult = bReceived.find((m) => m.role === "tool");
+  assert.equal(
+    assistantCall?.toolCalls?.[0]?.id,
+    "call_1",
+    "provider B sees the carried tool call re-id'd to a neutral scheme",
+  );
+  assert.equal(toolResult?.toolCallId, "call_1", "the tool result still pairs with its call");
 });
 
 test("M1: an in-flight model stream is never interrupted by a switch", async () => {
