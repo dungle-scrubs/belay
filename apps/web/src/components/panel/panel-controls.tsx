@@ -33,10 +33,15 @@ export interface ControlsPanelConfig {
     readonly show: boolean;
     readonly onShowChange: (on: boolean) => void;
   };
+  /** Compact transcript layout (plan 05): collapse non-primary rows to one line. */
+  readonly compact: {
+    readonly on: boolean;
+    readonly onChange: (on: boolean) => void;
+  };
 }
 
 export function ControlsPanel({ config }: { readonly config: ControlsPanelConfig }) {
-  const { model, reasoning, thinking } = config;
+  const { model, reasoning, thinking, compact } = config;
 
   return (
     <>
@@ -81,18 +86,33 @@ export function ControlsPanel({ config }: { readonly config: ControlsPanelConfig
         </div>
       ) : null}
 
-      <div className="flex items-center gap-1.5">
-        <Checkbox
-          id="show-thinking"
-          checked={thinking.show}
-          onCheckedChange={(checked) => thinking.onShowChange(checked === true)}
-        />
-        <Label
-          htmlFor="show-thinking"
-          className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
-        >
-          show thinking
-        </Label>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="show-thinking"
+            checked={thinking.show}
+            onCheckedChange={(checked) => thinking.onShowChange(checked === true)}
+          />
+          <Label
+            htmlFor="show-thinking"
+            className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
+          >
+            show thinking
+          </Label>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Checkbox
+            id="compact-layout"
+            checked={compact.on}
+            onCheckedChange={(checked) => compact.onChange(checked === true)}
+          />
+          <Label
+            htmlFor="compact-layout"
+            className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
+          >
+            compact
+          </Label>
+        </div>
       </div>
     </>
   );

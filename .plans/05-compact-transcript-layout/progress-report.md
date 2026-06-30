@@ -59,11 +59,11 @@
 
 ### M5: Toggle Surface
 
-- [ ] RED: Add web tests for toggling compact mode while idle, while streaming assistant text, and while tools are running
-- [ ] GREEN: Add the compact-layout toggle to the chosen app control surface
-- [ ] RED: Add tests proving user prompts and final assistant responses remain full rendering in compact mode
-- [ ] GREEN: Wire compact mode into `PanelHost`/`VirtualTranscript`
-- [ ] REFACTOR: Keep toggle state local unless a separate decision chooses persistence
+- [x] RED: Add web tests for toggling compact mode while idle, while streaming assistant text, and while tools are running
+- [x] GREEN: Add the compact-layout toggle to the chosen app control surface
+- [x] RED: Add tests proving user prompts and final assistant responses remain full rendering in compact mode
+- [x] GREEN: Wire compact mode into `PanelHost`/`VirtualTranscript`
+- [x] REFACTOR: Keep toggle state local unless a separate decision chooses persistence
 
 ### M6: Scroll and Accessibility
 

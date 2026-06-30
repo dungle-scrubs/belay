@@ -23,6 +23,7 @@ type ConfigOverride = {
   readonly model?: Partial<ControlsPanelConfig["model"]>;
   readonly reasoning?: Partial<ControlsPanelConfig["reasoning"]>;
   readonly thinking?: Partial<ControlsPanelConfig["thinking"]>;
+  readonly compact?: Partial<ControlsPanelConfig["compact"]>;
 };
 
 function config(over: ConfigOverride = {}): ControlsPanelConfig {
@@ -48,6 +49,11 @@ function config(over: ConfigOverride = {}): ControlsPanelConfig {
       onShowChange: noop,
       ...over.thinking,
     },
+    compact: {
+      on: false,
+      onChange: noop,
+      ...over.compact,
+    },
   };
 }
 
@@ -61,6 +67,17 @@ test("renders the split model control with the active label and the reasoning/th
   assert.ok(getByLabelText("Recent models"), "the right chevron opens the quick picker");
   assert.ok(getByText("DeepSeek V4 Pro"), "the active model label shows");
   assert.ok(getByText("show thinking"), "the show-thinking control still rides alongside");
+});
+
+test("the compact toggle reflects state and fires onChange", () => {
+  let next: boolean | null = null;
+  const { getByLabelText } = renderControls({
+    compact: { on: false, onChange: (on) => (next = on) },
+  });
+  const checkbox = getByLabelText("compact");
+  assert.equal(checkbox.getAttribute("aria-checked"), "false");
+  fireEvent.click(checkbox);
+  assert.equal(next, true);
 });
 
 test("the larger left region opens the full chooser", () => {

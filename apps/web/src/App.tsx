@@ -168,6 +168,10 @@ export function App() {
     sessionScopedKey(SHOW_THINKING_KEY, sessionId),
     { defaultValue: true },
   );
+  // Compact transcript layout (plan 05): a display-only toggle that collapses non-primary rows to one
+  // line. Kept session-local (plain state, not persisted) - a persisted preference is deferred to the
+  // settings/keyboard plan per the plan's escape hatch.
+  const [compact, setCompact] = useState(false);
   // The composer's local state as one boundary: draft, pending attachments + upload state, refs, and
   // the file-intake handlers. App keeps the submit/steer/slash-menu wiring (send queue + commands)
   // and passes the whole `composer` object to PanelHost; it also reads a few fields here for that
@@ -789,6 +793,10 @@ export function App() {
           show: showThinkingOn,
           onShowChange: setShowThinking,
         },
+        compact: {
+          on: compact,
+          onChange: setCompact,
+        },
       }}
     />
   );
@@ -944,6 +952,7 @@ export function App() {
         onDoctorRefresh: () => void command("/doctor", "refresh"),
         onMenuAction: (cmd: string, args: string) => void command(cmd, args),
         showThinking: showThinkingOn,
+        compact,
         active,
         // Suppress the "Working" row when the trailing prompt is stranded with no host (02.14); the
         // no-host status line carries the affordance instead. `busy`/the send queue are unchanged, so a

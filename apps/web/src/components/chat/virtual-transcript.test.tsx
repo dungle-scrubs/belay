@@ -42,10 +42,12 @@ function Harness({
   rows,
   pinned = true,
   scrollToBottomRequest = 0,
+  compact = false,
 }: {
   readonly rows: readonly TranscriptRow[];
   readonly pinned?: boolean;
   readonly scrollToBottomRequest?: number;
+  readonly compact?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   return (
@@ -60,12 +62,65 @@ function Harness({
         pinned={pinned}
         scrollToBottomRequest={scrollToBottomRequest}
         showThinking
+        compact={compact}
         onOpenPath={noop}
         onDoctorRefresh={noop}
         testInitialRect={{ width: 900, height: 600 }}
       />
     </div>
   );
+}
+
+/** A mixed live transcript: a user prompt, a streaming assistant (thinking, not done), a running tool,
+ *  a completed tool, a final response, and the trailing working row. */
+function liveRows(): TranscriptRow[] {
+  return [
+    userRow(1),
+    {
+      kind: "message",
+      id: "message:a-stream",
+      compactAbove: false,
+      message: {
+        kind: "assistant",
+        id: "a-stream",
+        runId: "r1",
+        text: "",
+        thinking: "deciding what to read first",
+        done: false,
+        warm: false,
+        model: "glm",
+      },
+    },
+    {
+      kind: "message",
+      id: "message:t-run",
+      compactAbove: false,
+      message: {
+        kind: "tool",
+        id: "t-run",
+        name: "bash",
+        args: JSON.stringify({ command: "pnpm build" }),
+        done: false,
+      },
+    },
+    toolRow(2),
+    {
+      kind: "message",
+      id: "message:a-final",
+      compactAbove: false,
+      message: {
+        kind: "assistant",
+        id: "a-final",
+        runId: "r1",
+        text: "All done.",
+        thinking: "",
+        done: true,
+        warm: false,
+        model: "glm",
+      },
+    },
+    { kind: "working", id: "working:live", interruptible: true, startedAt: 0 },
+  ];
 }
 
 describe("VirtualTranscript", () => {
@@ -254,5 +309,52 @@ describe("VirtualTranscript", () => {
     });
 
     assert.equal(container.querySelector(".-mt-6"), null);
+  });
+
+  test("toggling compact mode mid-stream (streaming + running rows) keeps every row mounted", async () => {
+    const rows = liveRows();
+    const { container, rerender } = render(<Harness rows={rows} compact={false} />);
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+    const regularCount = container
+      .querySelector("[data-transcript-virtual-list]")
+      ?.getAttribute("data-transcript-row-count");
+    assert.equal(regularCount, String(rows.length));
+
+    // Toggle compact ON while a turn streams + a tool runs - no crash, same row count/keys.
+    rerender(<Harness rows={rows} compact={true} />);
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+    assert.equal(
+      container
+        .querySelector("[data-transcript-virtual-list]")
+        ?.getAttribute("data-transcript-row-count"),
+      String(rows.length),
+      "compact mode does not add or drop rows",
+    );
+
+    // And back to regular while still live.
+    rerender(<Harness rows={rows} compact={false} />);
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+  });
+
+  test("user prompts and the final response stay full while compact, tools/thinking collapse", async () => {
+    const rows = liveRows();
+    const { container } = render(<Harness rows={rows} compact={true} />);
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+    // The user prompt and the final assistant response render their full text.
+    assert.ok(container.textContent?.includes("prompt 1"), "user prompt stays full");
+    assert.ok(container.textContent?.includes("All done."), "final response stays full");
+    // A compact-eligible row (the running bash tool) shows its one-line summary, not the full block.
+    assert.ok(
+      container.textContent?.includes("pnpm build"),
+      "running tool compacts to its summary",
+    );
   });
 });

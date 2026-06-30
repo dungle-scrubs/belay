@@ -58,6 +58,8 @@ export interface TranscriptView {
   /** Dispatch a nested command-menu row selection as a host command (plan 03), e.g. `/style concise`. */
   readonly onMenuAction?: (command: string, args: string) => void;
   readonly showThinking: boolean;
+  /** Compact transcript layout (plan 05): collapse non-primary rows to one line. */
+  readonly compact: boolean;
   /** The running run id, or null once the turn ends; drives the persistent "Working" pulse. */
   readonly active: string | null;
   readonly awaitingResponse: boolean;
@@ -228,6 +230,7 @@ export function PanelHost(props: {
     onDoctorRefresh,
     onMenuAction,
     showThinking,
+    compact,
     queue,
   } = tv;
   const { active, awaitingResponse, turnStartedAt } = tv;
@@ -344,6 +347,7 @@ export function PanelHost(props: {
                 pinned={scroll.atBottom}
                 scrollToBottomRequest={scroll.bottomRequestId}
                 showThinking={showThinking}
+                compact={compact}
                 onOpenPath={onOpenPath}
                 onDoctorRefresh={onDoctorRefresh}
                 onMenuAction={onMenuAction}
