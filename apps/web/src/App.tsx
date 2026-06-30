@@ -794,8 +794,8 @@ export function App() {
           onShowChange: setShowThinking,
         },
         compact: {
-          on: compact,
-          onChange: setCompact,
+          show: compact,
+          onShowChange: setCompact,
         },
       }}
     />

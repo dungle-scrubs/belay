@@ -11,9 +11,9 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ElementType } from "react";
-import { toolSummary, truncate } from "../../derive";
+import { parseToolArgs, toolSummary, truncate } from "../../derive";
 import type { AssistantMessage, Message } from "../../transcript";
-import { toolMessageStatus } from "./tool-status";
+import { type ToolStatus, toolMessageStatus, toolStatusColor } from "./tool-status";
 
 /**
  * The compact transcript display contract (plan 05): a pure, presentation-only projection that maps a
@@ -29,21 +29,13 @@ import { toolMessageStatus } from "./tool-status";
  * delegation, questions) collapses to a `CompactDisplay`.
  */
 
-/** A compact row's lifecycle, reusing the tool `ToolStatus` axis plus a neutral `info` for quiet markers. */
-export type CompactStatus = "running" | "done" | "error" | "info";
+/** A compact row's lifecycle: the tool `ToolStatus` axis plus a neutral `info` for quiet markers. */
+export type CompactStatus = ToolStatus | "info";
 
-/** The one status -> icon color map for compact rows (the SMUI palette), so every compact row tints its
- *  leading icon the same way. Extends the tool `running/done/error` colors with a muted `info`. */
-const COMPACT_STATUS_COLOR: Record<CompactStatus, string> = {
-  running: "text-smui-yellow",
-  done: "text-smui-frost-3",
-  error: "text-smui-red",
-  info: "text-muted-foreground",
-};
-
-/** The leading-icon color class for a compact status. */
+/** The leading-icon color class for a compact status: the shared tool palette (running/done/error),
+ *  plus a muted tone for the neutral `info` markers - so the compact and tool rows can't drift. */
 export function compactStatusColor(status: CompactStatus): string {
-  return COMPACT_STATUS_COLOR[status];
+  return status === "info" ? "text-muted-foreground" : toolStatusColor(status);
 }
 
 /** The one-line display descriptor for a compacted transcript row. */
@@ -93,7 +85,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
       return {
         kind: "tool",
         status,
-        icon: status === "running" ? LoaderIcon : Wrench,
+        icon: runningIcon(status, Wrench),
         primary: message.name,
         secondary: compactToolSummary(message.name, message.args),
         hasDetail: Boolean(message.result),
@@ -113,7 +105,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
       return {
         kind: "shell",
         status,
-        icon: status === "running" ? LoaderIcon : Terminal,
+        icon: runningIcon(status, Terminal),
         primary: message.command,
         secondary: firstLine(message.output ?? ""),
         hasDetail: Boolean(message.output),
@@ -149,7 +141,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
       return {
         kind: "delegation",
         status,
-        icon: status === "running" ? LoaderIcon : CornerDownRight,
+        icon: runningIcon(status, CornerDownRight),
         primary: message.agent,
         secondary: firstLine(message.task),
         hasDetail: Boolean(message.result),
@@ -220,7 +212,7 @@ function marker(
 }
 
 /**
- * The per-tool compact summary registry (M4): the arg whose value is the one-line summary for a tool
+ * The per-tool compact summary registry (plan 05): the arg whose value is the one-line summary for a tool
  * whose primary arg `toolSummary` doesn't pick up. `toolSummary` keys on command (bash) / pattern
  * (grep, glob) / path (read, write, edit, ...); the search + fetch tools instead key on query/url, so
  * without this they fall back to raw args JSON.
@@ -239,16 +231,17 @@ const TOOL_SUMMARY_ARG: Record<string, string> = {
  * (a no-arg tool). Lives here (the compact display module), not scattered through `TranscriptRowView`.
  */
 function compactToolSummary(name: string, args: string): string | null {
+  const parsed = parseToolArgs(args);
   const key = TOOL_SUMMARY_ARG[name];
   if (key) {
-    const value = argString(args, key);
-    if (value) {
+    const value = parsed[key];
+    if (typeof value === "string" && value) {
       return truncate(value, 80);
     }
   }
   if (name === "multi_edit") {
-    const path = argString(args, "path") ?? argString(args, "file_path");
-    const edits = argArrayLength(args, "edits");
+    const path = str(parsed.path) ?? str(parsed.file_path);
+    const edits = Array.isArray(parsed.edits) ? parsed.edits.length : 0;
     const parts = [path, edits > 0 ? `${edits} edits` : null].filter(Boolean);
     if (parts.length > 0) {
       return parts.join(" · ");
@@ -257,24 +250,15 @@ function compactToolSummary(name: string, args: string): string | null {
   return toolSummary(name, args) || null;
 }
 
-/** A string-valued arg from a tool's JSON args, or null. */
-function argString(args: string, key: string): string | null {
-  const value = parseArgs(args)[key];
-  return typeof value === "string" ? value : null;
+/** The running spinner while in flight, else the row's settled icon - so a running row always reads as
+ *  the spinner regardless of kind. */
+function runningIcon(status: CompactStatus, settled: ElementType): ElementType {
+  return status === "running" ? LoaderIcon : settled;
 }
 
-/** The length of an array-valued arg (e.g. multi_edit's `edits`), or 0. */
-function argArrayLength(args: string, key: string): number {
-  const value = parseArgs(args)[key];
-  return Array.isArray(value) ? value.length : 0;
-}
-
-function parseArgs(args: string): Record<string, unknown> {
-  try {
-    return JSON.parse(args || "{}") as Record<string, unknown>;
-  } catch {
-    return {};
-  }
+/** A value as a non-empty string, or null. */
+function str(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
 }
 
 /** The first non-empty line of a blob, truncated for a one-line summary; null when empty. */

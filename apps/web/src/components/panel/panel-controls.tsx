@@ -35,9 +35,34 @@ export interface ControlsPanelConfig {
   };
   /** Compact transcript layout (plan 05): collapse non-primary rows to one line. */
   readonly compact: {
-    readonly on: boolean;
-    readonly onChange: (on: boolean) => void;
+    readonly show: boolean;
+    readonly onShowChange: (on: boolean) => void;
   };
+}
+
+/** A `Checkbox` + `Label` display toggle - the shared shape for the show-thinking + compact controls. */
+function LabeledCheckbox({
+  id,
+  checked,
+  onChange,
+  label,
+}: {
+  readonly id: string;
+  readonly checked: boolean;
+  readonly onChange: (on: boolean) => void;
+  readonly label: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
+      <Label
+        htmlFor={id}
+        className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
+      >
+        {label}
+      </Label>
+    </div>
+  );
 }
 
 export function ControlsPanel({ config }: { readonly config: ControlsPanelConfig }) {
@@ -87,32 +112,18 @@ export function ControlsPanel({ config }: { readonly config: ControlsPanelConfig
       ) : null}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-        <div className="flex items-center gap-1.5">
-          <Checkbox
-            id="show-thinking"
-            checked={thinking.show}
-            onCheckedChange={(checked) => thinking.onShowChange(checked === true)}
-          />
-          <Label
-            htmlFor="show-thinking"
-            className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
-          >
-            show thinking
-          </Label>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Checkbox
-            id="compact-layout"
-            checked={compact.on}
-            onCheckedChange={(checked) => compact.onChange(checked === true)}
-          />
-          <Label
-            htmlFor="compact-layout"
-            className="cursor-pointer text-label tracking-wider uppercase text-muted-foreground"
-          >
-            compact
-          </Label>
-        </div>
+        <LabeledCheckbox
+          id="show-thinking"
+          checked={thinking.show}
+          onChange={thinking.onShowChange}
+          label="show thinking"
+        />
+        <LabeledCheckbox
+          id="compact-layout"
+          checked={compact.show}
+          onChange={compact.onShowChange}
+          label="compact"
+        />
       </div>
     </>
   );

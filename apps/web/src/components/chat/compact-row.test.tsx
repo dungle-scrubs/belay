@@ -1,21 +1,9 @@
 import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
-import { LoaderIcon, Wrench } from "lucide-react";
+import { LoaderIcon } from "lucide-react";
 import { test } from "vitest";
-import type { CompactDisplay } from "./compact-display";
+import { compactDisplay as display } from "./compact-fixtures";
 import { CompactRow } from "./compact-row";
-
-function display(over: Partial<CompactDisplay>): CompactDisplay {
-  return {
-    kind: "tool",
-    status: "done",
-    icon: Wrench,
-    primary: "bash",
-    secondary: "ls -la /tmp",
-    hasDetail: false,
-    ...over,
-  };
-}
 
 test("renders the primary label and secondary summary on one line", () => {
   const { getByText } = render(<CompactRow display={display({})} />);

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ChevronRight, LoaderIcon, ShieldAlert, Terminal, Wrench } from "lucide-react";
+import { ChevronRight, LoaderIcon, ShieldAlert, Terminal } from "lucide-react";
 import { useState } from "react";
-import type { CompactDisplay } from "./compact-display";
+import { compactDisplay as display } from "./compact-fixtures";
 import { CompactRow } from "./compact-row";
 
 /**
@@ -19,18 +19,6 @@ const meta: Meta<typeof CompactRow> = {
 
 export default meta;
 type Story = StoryObj<typeof CompactRow>;
-
-function display(over: Partial<CompactDisplay>): CompactDisplay {
-  return {
-    kind: "tool",
-    status: "done",
-    icon: Wrench,
-    primary: "bash",
-    secondary: "ls -la /tmp",
-    hasDetail: false,
-    ...over,
-  };
-}
 
 function Panel({ children, width = 520 }: { children: React.ReactNode; width?: number }) {
   return (

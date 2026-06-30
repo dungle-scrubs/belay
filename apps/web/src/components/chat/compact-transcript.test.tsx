@@ -131,3 +131,23 @@ test("the row's message id (key) is the same whether compact or not", () => {
   assert.ok(full.container.querySelector('[data-message-id="t1"]'), "full keeps the id");
   assert.ok(compact.container.querySelector('[data-message-id="t1"]'), "compact keeps the id");
 });
+
+test("exactly one element carries the message id in every compact state (selection integrity)", () => {
+  const row = messageRow(toolMsg);
+  const collapsed = renderRow(row, { compact: true, expandedRows: new Set(), onToggleRow: noop });
+  assert.equal(
+    collapsed.container.querySelectorAll('[data-message-id="t1"]').length,
+    1,
+    "collapsed: one id (the compact wrapper)",
+  );
+  const expanded = renderRow(row, {
+    compact: true,
+    expandedRows: new Set(["t1"]),
+    onToggleRow: noop,
+  });
+  assert.equal(
+    expanded.container.querySelectorAll('[data-message-id="t1"]').length,
+    1,
+    "expanded: one id (the inner full render, not a duplicate)",
+  );
+});

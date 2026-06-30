@@ -1,6 +1,6 @@
 import { decodeRecallResult, type ToolName } from "@trevor/session";
 import type { ReactElement } from "react";
-import { toolSummary } from "@/derive";
+import { parseToolArgs, toolSummary } from "@/derive";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { DocsResult, parseDocsResult } from "./docs";
 import { ToolCall } from "./message";
@@ -12,15 +12,9 @@ import { type ToolStatus, toolMessageStatus } from "./tool-status";
 import { parseWebFetchResult, WebFetchResult } from "./web-fetch";
 import { type WebSearchResultItem, WebSearchResults } from "./web-search";
 
-// Tool-call arguments arrive as a JSON string; parse defensively (a streaming or
-// malformed call yields {}).
-export function parseToolArgs(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
+// `parseToolArgs` now lives in `@/derive` (its single owner, beside `toolSummary`); re-exported here so
+// the existing tool-renderer importers keep their import path.
+export { parseToolArgs } from "@/derive";
 
 const FRESHNESS_WINDOWS = ["day", "week", "month", "year"] as const;
 type FreshnessWindow = (typeof FRESHNESS_WINDOWS)[number];

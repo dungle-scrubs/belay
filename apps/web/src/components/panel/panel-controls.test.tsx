@@ -50,8 +50,8 @@ function config(over: ConfigOverride = {}): ControlsPanelConfig {
       ...over.thinking,
     },
     compact: {
-      on: false,
-      onChange: noop,
+      show: false,
+      onShowChange: noop,
       ...over.compact,
     },
   };
@@ -72,7 +72,7 @@ test("renders the split model control with the active label and the reasoning/th
 test("the compact toggle reflects state and fires onChange", () => {
   let next: boolean | null = null;
   const { getByLabelText } = renderControls({
-    compact: { on: false, onChange: (on) => (next = on) },
+    compact: { show: false, onShowChange: (on) => (next = on) },
   });
   const checkbox = getByLabelText("compact");
   assert.equal(checkbox.getAttribute("aria-checked"), "false");

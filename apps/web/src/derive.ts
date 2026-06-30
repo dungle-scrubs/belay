@@ -128,6 +128,16 @@ export function workspaceBasename(path: string | null | undefined): string | nul
 }
 
 /** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
+/** Tool-call arguments arrive as a JSON string; parse defensively (a streaming or malformed call yields
+ *  `{}`). The single owner of this parse, shared by the tool renderers and the compact display. */
+export function parseToolArgs(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 export function toolSummary(name: string, argsJson: string): string {
   let args: Record<string, unknown> = {};
 

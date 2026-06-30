@@ -1,13 +1,5 @@
 import { elementScroll, type Rect, useVirtualizer } from "@tanstack/react-virtual";
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isCompactEligible } from "@/components/chat/compact-display";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
@@ -33,8 +25,9 @@ function estimateRowSize(
   compact: boolean,
   expandedRows: ReadonlySet<string>,
 ): number {
-  // A collapsed compact row is one line; an expanded one falls through to the full estimate (its
-  // detail is the full renderer, then measureElement corrects it anyway).
+  // A collapsed compact row is one line (~CompactRow's h-6 = 24px + the row's bottom padding); an
+  // expanded one falls through to the full estimate (its detail is the full renderer, then
+  // measureElement corrects it anyway).
   if (
     compact &&
     row.kind === "message" &&
@@ -95,10 +88,6 @@ export function VirtualTranscript({
       return next;
     });
   }, []);
-  const estimatedTotalSize = useMemo(
-    () => rows.reduce((total, row) => total + estimateRowSize(row, compact, expandedRows), 0),
-    [rows, compact, expandedRows],
-  );
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -123,8 +112,15 @@ export function VirtualTranscript({
     // followOnAppend: let tanstack auto-stick to a newly appended row ONLY while pinned; never while
     // unpinned (an append below the fold must not pull the viewport down).
     followOnAppend: pinned ? "auto" : false,
-    initialOffset: () =>
-      pinned ? Math.max(0, estimatedTotalSize - (testInitialRect?.height ?? 0)) : 0,
+    // The virtualizer reads initialOffset only at mount, so compute the estimated total lazily HERE
+    // rather than as a live memo that the streaming `rows` would otherwise recompute every token.
+    initialOffset: () => {
+      if (!pinned) {
+        return 0;
+      }
+      const total = rows.reduce((sum, row) => sum + estimateRowSize(row, compact, expandedRows), 0);
+      return Math.max(0, total - (testInitialRect?.height ?? 0));
+    },
     initialRect: testInitialRect,
     scrollEndThreshold: 40,
     // useAnimationFrameWithResizeObserver: batch row re-measurement to an animation frame so a row
@@ -279,16 +275,21 @@ export function VirtualTranscript({
         if (!row) {
           return null;
         }
+        // Tight spacing for collapsed compact rows (so a compact transcript reads dense, not just
+        // stacked one-liners with full gaps) and for the existing consecutive-tool case.
+        const tight =
+          (compact &&
+            row.kind === "message" &&
+            isCompactEligible(row.message) &&
+            !expandedRows.has(row.message.id)) ||
+          (row.kind === "message" && row.compactAbove);
         return (
           <div
             key={item.key}
             ref={virtualizer.measureElement}
             data-index={item.index}
             data-transcript-virtual-row={row.kind}
-            className={cn(
-              "absolute top-0 left-0 flow-root w-full",
-              row.kind === "message" && row.compactAbove ? "pb-2" : "pb-8",
-            )}
+            className={cn("absolute top-0 left-0 flow-root w-full", tight ? "pb-2" : "pb-8")}
             style={{ transform: `translateY(${item.start}px)` }}
           >
             <TranscriptRowView

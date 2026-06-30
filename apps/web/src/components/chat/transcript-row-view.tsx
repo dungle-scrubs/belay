@@ -115,8 +115,11 @@ export function TranscriptRowView({
     const display = compactDisplayFor(row.message);
     if (display) {
       const expanded = expandedRows?.has(row.message.id) ?? false;
+      // Carry the selection segment id on the wrapper only while COLLAPSED; when expanded, the recursive
+      // full render below owns it, so exactly one element holds each message id (a duplicate would split
+      // the transcript-selection capture vs. resolve and misplace the persistent highlight).
       return (
-        <div data-message-id={row.message.id} className="pl-3.5">
+        <div data-message-id={expanded ? undefined : row.message.id} className="pl-3.5">
           <CompactRow
             display={display}
             expanded={expanded}
