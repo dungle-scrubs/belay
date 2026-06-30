@@ -2292,11 +2292,18 @@ function handleEvent(message: SessionEvent): void {
       activeSwitch &&
       (decoded.runId === "" || activeSwitch.runId === decoded.runId)
     ) {
-      const reasoning = decoded.model.reasoning;
+      const target = decoded.model;
+      const reasoning = target.reasoning;
+      // The target model's context window from the catalog (09.1 M7), so the loop can run the
+      // larger->smaller fit guard; absent when the source/model is not in the catalog (guard then off).
+      const targetWindow = catalog.catalogBySource[target.sourceId]?.find(
+        (entry) => entry.modelId === target.modelId,
+      )?.contextLength;
       activeSwitch.cell.request({
-        model: decoded.model,
+        model: target,
         ...(reasoning != null ? { reasoning } : {}),
         initiator: decoded.initiator,
+        ...(targetWindow != null ? { targetWindow } : {}),
       });
     }
   } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {

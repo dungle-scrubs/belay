@@ -21,4 +21,9 @@ export { ProcessRegistry } from "../../src/process-registry";
 // store (the DeepSeek-style thinking-only reconnect path) without reaching into host internals.
 export { ProviderUnavailable } from "../../src/providers/errors";
 export { runPromotable } from "../../src/tools/promote-runner";
+// The mid-turn-switch cell + the turn driver (plan 09.1), so cross-service e2e can drive a real turn that
+// changes model/reasoning between steps through the same publishTurn -> runAgent path the host uses.
+export { createSwitchCell, type SwitchCell } from "../../src/agent/switch-cell";
+export { publishTurn } from "../../src/turn";
+export type { ChatMessage, Provider, ProviderEvent } from "../../src/providers";
 export * from "./fake-provider";

@@ -79,28 +79,28 @@
 
 ### M7 - Larger->smaller context guard
 
-- [ ] RED: Fit-decision tests - smaller->larger always allowed; larger->smaller that fits allowed; that does not fit blocked with a reason.
-- [ ] GREEN: Compute current conversation tokens + response headroom vs the target window (reuse `Usage`); refuse with a recorded reason on `model.switched` (`outcome: blocked`).
-- [ ] RED: Test that a blocked switch renders in the marker and leaves the active provider unchanged.
-- [ ] GREEN: Implement the blocked path with no provider mutation on refusal.
-- [ ] REFACTOR: Keep the guard pure and reusable by the future auto-router.
+- [x] RED: Fit-decision tests - smaller->larger always allowed; larger->smaller that fits allowed; that does not fit blocked with a reason.
+- [x] GREEN: Compute current conversation tokens + response headroom vs the target window (reuse `Usage`); refuse with a recorded reason on `model.switched` (`outcome: blocked`).
+- [x] RED: Test that a blocked switch renders in the marker and leaves the active provider unchanged.
+- [x] GREEN: Implement the blocked path with no provider mutation on refusal.
+- [x] REFACTOR: Keep the guard pure and reusable by the future auto-router.
 
 ### M8 - Observability + end-to-end
 
-- [ ] RED: Assert structured switch events (`requested` / `applied` / `blocked`) carry from/to model+reasoning, `initiator`, and context-fit numbers; a per-turn switch count surfaces to telemetry/Doctor.
-- [ ] GREEN: Emit the observability and surface the count where turn data already appears.
-- [ ] RED: Hermetic e2e - one turn that switches reasoning, then same-provider model, then cross-provider, asserting markers + continuity, plus a blocked larger->smaller case.
-- [ ] GREEN: Make the e2e pass on a fake multi-provider harness.
-- [ ] REFACTOR: Document the switch boundary as the single seam the future auto-router attaches to.
+- [x] RED: Assert structured switch events (`requested` / `applied` / `blocked`) carry from/to model+reasoning, `initiator`, and context-fit numbers; a per-turn switch count surfaces to telemetry/Doctor.
+- [x] GREEN: Emit the observability and surface the count where turn data already appears.
+- [x] RED: Hermetic e2e - one turn that switches reasoning, then same-provider model, then cross-provider, asserting markers + continuity, plus a blocked larger->smaller case.
+- [x] GREEN: Make the e2e pass on a fake multi-provider harness.
+- [x] REFACTOR: Document the switch boundary as the single seam the future auto-router attaches to.
 
 ### Done Gate
 
-- [ ] All three switch kinds (reasoning, same-provider model, cross-provider model) work within one turn.
-- [ ] A switch never interrupts an in-flight model request.
-- [ ] A UI switch is sticky; an idle selection still rides the next `user.message`.
-- [ ] The larger->smaller guard refuses unfitting switches predictably with a recorded reason.
-- [ ] Cross-provider continuity is proven (thinking blocks + tool encodings normalized).
-- [ ] Unit, integration, web, and hermetic e2e pass; observability for switch requested/applied/blocked is in place.
+- [x] All three switch kinds (reasoning, same-provider model, cross-provider model) work within one turn.
+- [x] A switch never interrupts an in-flight model request.
+- [x] A UI switch is sticky; an idle selection still rides the next `user.message`.
+- [x] The larger->smaller guard refuses unfitting switches predictably with a recorded reason.
+- [x] Cross-provider continuity is proven (thinking blocks + tool encodings normalized).
+- [x] Unit, integration, web, and hermetic e2e pass; observability for switch requested/applied/blocked is in place.
 
 ## Accepted / Deferred Follow-Up
 

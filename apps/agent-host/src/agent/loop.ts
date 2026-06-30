@@ -30,6 +30,7 @@ import {
   type ProviderProtocolDiagnostic,
 } from "../providers/protocol-anomaly";
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
+import { fitsAfterSwitch } from "./context-guard";
 import { normalizeConversationForProvider } from "./cross-model";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
@@ -526,6 +527,8 @@ export function runAgent(
   // mid-turn switch changes the model (Provider.model is readonly). Every model step, budget derivation,
   // and failure log below reads `currentProvider`, so the swap takes effect at the next step boundary.
   let currentProvider = provider;
+  // How many mid-turn switches this turn has applied or blocked (09.1 M8), surfaced in the switch trace.
+  let switchCount = 0;
 
   // The latest model step's prompt size + window, captured from its usage event (like
   // overflowReason). Drives the context-pressure budget (D-053): when the prompt that fed
@@ -767,12 +770,55 @@ export function runAgent(
   // rebuilds the provider; reasoning is then clamped to the (possibly new) provider's surface so a level
   // the target lacks carries to the nearest supported one. Returns the `model_switched` loop event to emit
   // ahead of the step, or undefined when none was queued.
+  // Structured switch observability behind the `agent` debug scope (plan 09.1 M8): every applied/blocked
+  // switch logs from/to model+reasoning, who asked, the running per-turn count, and the guard's context-fit
+  // numbers, so /doctor (which reads this scope) can postmortem a turn's model changes. The durable
+  // `model.switched` event + the transcript marker are the user-visible surfaces; this is the trace.
+  const observeSwitch = (
+    event: Extract<AgentEvent, { type: "model_switched" }>,
+    targetWindow: number | undefined,
+  ): void => {
+    debug("agent", "model-switch", {
+      from: `${event.from.model}/${event.from.reasoning ?? "-"}`,
+      to: `${event.to.model}/${event.to.reasoning ?? "-"}`,
+      initiator: event.initiator,
+      outcome: event.outcome,
+      switchCount,
+      conversationTokens: lastInputTokens,
+      currentWindow: lastContextWindow,
+      targetWindow: targetWindow ?? 0,
+    });
+  };
+
   const applyPendingSwitch = (): Extract<AgentEvent, { type: "model_switched" }> | undefined => {
     const req = opts.switch?.take();
     if (!req) {
       return undefined;
     }
+    switchCount += 1;
     const from = endpoint();
+    // Larger->smaller context guard (M7, D-007): refuse a model switch whose target window cannot hold the
+    // conversation - leave the active provider + reasoning untouched and record the refusal so the marker
+    // shows why nothing changed. smaller->larger and unknown targets pass through.
+    if (req.model && req.targetWindow !== undefined) {
+      const fit = fitsAfterSwitch({
+        conversationTokens: lastInputTokens,
+        currentWindow: lastContextWindow,
+        targetWindow: req.targetWindow,
+      });
+      if (!fit.fits) {
+        const blocked: Extract<AgentEvent, { type: "model_switched" }> = {
+          type: "model_switched",
+          from,
+          to: from,
+          initiator: req.initiator,
+          outcome: "blocked",
+          ...(fit.reason ? { reason: fit.reason } : {}),
+        };
+        observeSwitch(blocked, req.targetWindow);
+        return blocked;
+      }
+    }
     if (req.model) {
       rebuildForModelSwitch(req.model);
     }
@@ -782,13 +828,15 @@ export function runAgent(
         { levels: currentProvider.reasoningLevels, default: currentProvider.defaultReasoning },
         requested,
       ) ?? undefined;
-    return {
+    const applied: Extract<AgentEvent, { type: "model_switched" }> = {
       type: "model_switched",
       from,
       to: endpoint(),
       initiator: req.initiator,
       outcome: "applied",
     };
+    observeSwitch(applied, req.targetWindow);
+    return applied;
   };
 
   // Stream.suspend keeps each step lazy: its provider.stream (which reads `conversation`)

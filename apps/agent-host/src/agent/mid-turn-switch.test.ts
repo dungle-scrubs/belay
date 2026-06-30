@@ -220,6 +220,60 @@ test("M6: a cross-provider swap normalizes the carried conversation the new prov
   assert.equal(toolResult?.toolCallId, "call_1", "the tool result still pairs with its call");
 });
 
+test("M7: a larger->smaller switch that doesn't fit is blocked, leaving the provider unchanged", async () => {
+  const cell = createSwitchCell();
+  const ran: string[] = [];
+  let rebuildCalls = 0;
+  const events: AgentEvent[] = [];
+  const usage = { input: 50_000, output: 1, contextWindow: 200_000, genMs: 1 };
+  const providerA = recordingProvider(
+    "model-a",
+    (call) => {
+      if (call === 1) {
+        // Request a swap to a small-window model; the 50k conversation can't fit its 8k window.
+        cell.request({
+          model: { sourceId: "s", modelId: "model-b", reasoning: "low" },
+          initiator: "manual",
+          targetWindow: 8_000,
+        });
+        return [
+          { type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } },
+          { type: "usage", usage },
+        ];
+      }
+      return [{ type: "text", text: "stayed-on-a" }];
+    },
+    (model) => ran.push(model),
+  );
+  await Effect.runPromise(
+    Stream.runForEach(
+      runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
+        switch: cell,
+        runTool: () => Effect.succeed("ok"),
+        rebuildProvider: () => {
+          rebuildCalls += 1;
+          return null;
+        },
+      }),
+      (e) => Effect.sync(() => void events.push(e)),
+    ),
+  );
+  const switched = events.find((e) => e.type === "model_switched");
+  assert.equal(switched?.type === "model_switched" && switched.outcome, "blocked");
+  assert.match(
+    (switched?.type === "model_switched" && switched.reason) || "",
+    /context window/,
+    "the marker carries the user-visible refusal reason",
+  );
+  assert.equal(rebuildCalls, 0, "a blocked switch never rebuilds the provider");
+  assert.deepEqual(ran, ["model-a", "model-a"], "both steps stayed on the original model");
+  // The blocked switch records from == to (nothing changed).
+  assert.deepEqual(
+    switched?.type === "model_switched" ? switched.from : null,
+    switched?.type === "model_switched" ? switched.to : undefined,
+  );
+});
+
 test("M1: an in-flight model stream is never interrupted by a switch", async () => {
   // Step 1 emits text BEFORE its tool call; a switch requested between them must not truncate the open
   // stream - every event of step 1 still rides out, and the switch only affects step 2.

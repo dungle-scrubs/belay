@@ -16,6 +16,9 @@ export interface SwitchRequest {
   /** The target reasoning level; absent leaves reasoning unchanged. */
   readonly reasoning?: string;
   readonly initiator: SwitchInitiator;
+  /** The target model's context window (plan 09.1 M7): the host fills it from the catalog so the loop can
+   *  run the larger->smaller fit guard. Absent when unknown - the guard then cannot fire. */
+  readonly targetWindow?: number;
 }
 
 /**
