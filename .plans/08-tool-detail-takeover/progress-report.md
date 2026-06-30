@@ -46,11 +46,11 @@
 
 ### M4: Search, Web, Docs, MCP, and Unknown Details
 
-- [ ] RED: Add detail adapter tests for grep, glob, web search, docs/web fetch, MCP, session recall, and unknown tools
-- [ ] GREEN: Show search query/pattern, scope, match counts, result groups, truncation, and errors
-- [ ] GREEN: Show web/docs request metadata, normalized results, fetch status, citations/URLs, and sanitized errors
-- [ ] GREEN: Show MCP server/tool name, args summary, streaming/progress output where available, result, and failure details
-- [ ] REFACTOR: Keep unknown-tool fallback useful without requiring tool-specific code
+- [x] RED: Add detail adapter tests for grep, glob, web search, docs/web fetch, MCP, session recall, and unknown tools
+- [x] GREEN: Show search query/pattern, scope, match counts, result groups, truncation, and errors
+- [x] GREEN: Show web/docs request metadata, normalized results, fetch status, citations/URLs, and sanitized errors
+- [x] GREEN: Show MCP server/tool name, args summary, streaming/progress output where available, result, and failure details
+- [x] REFACTOR: Keep unknown-tool fallback useful without requiring tool-specific code
 
 ### Gate 2->3
 

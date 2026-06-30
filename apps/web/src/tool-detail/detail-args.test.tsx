@@ -3,9 +3,12 @@ import { test } from "vitest";
 import {
   bashDetailArgs,
   editDetailArgs,
+  matchCount,
   multiEditDetailArgs,
   readDetailArgs,
   readRangeLabel,
+  requestDetailArgs,
+  searchDetailArgs,
   truncationLabel,
   writeDetailArgs,
 } from "./detail-args";
@@ -66,4 +69,24 @@ test("truncationLabel reports the hidden-line count only past the cap", () => {
   assert.equal(truncationLabel("a\nb\nc\nd\ne", 3), "2 more lines below the fold");
   assert.equal(truncationLabel("a\nb", 3), "");
   assert.equal(truncationLabel(undefined, 3), "");
+});
+
+test("search extracts the pattern + scope; request prefers query/url/subject", () => {
+  assert.deepEqual(searchDetailArgs('{"pattern":"TODO","path":"apps/web"}'), {
+    pattern: "TODO",
+    path: "apps/web",
+  });
+  assert.deepEqual(searchDetailArgs('{"pattern":"*.ts"}'), { pattern: "*.ts" });
+  assert.deepEqual(requestDetailArgs('{"query":"effect schema"}'), { request: "effect schema" });
+  assert.deepEqual(requestDetailArgs('{"url":"https://x.com"}'), { request: "https://x.com" });
+  assert.deepEqual(requestDetailArgs('{"action":"read","subject":"react"}'), {
+    request: "react",
+    action: "read",
+  });
+});
+
+test("matchCount counts non-blank result lines only on a done search", () => {
+  assert.equal(matchCount("a.ts:1: x\nb.ts:2: y\n\n", "done"), 2);
+  assert.equal(matchCount("partial", "running"), undefined, "no count while running");
+  assert.equal(matchCount("error: bad regex", "error"), undefined, "no count on error");
 });

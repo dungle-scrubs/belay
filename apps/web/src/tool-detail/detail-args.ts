@@ -73,6 +73,48 @@ export function multiEditDetailArgs(args: string): MultiEditDetailArgs {
   return { path: str(a.path), edits };
 }
 
+export interface SearchDetailArgs {
+  /** The grep regex / glob pattern. */
+  readonly pattern: string;
+  /** The search scope (a path), when given. */
+  readonly path?: string;
+}
+
+export function searchDetailArgs(args: string): SearchDetailArgs {
+  const a = parseToolArgs(args);
+  const path = str(a.path);
+  // grep uses `pattern`; glob uses `pattern` too (its glob expression).
+  return { pattern: str(a.pattern), ...(path ? { path } : {}) };
+}
+
+export interface RequestDetailArgs {
+  /** A human label for the request: the search query, fetched URL, or docs subject/corpus. */
+  readonly request: string;
+  /** The request kind, when the tool carries an explicit action (docs). */
+  readonly action?: string;
+}
+
+export function requestDetailArgs(args: string): RequestDetailArgs {
+  const a = parseToolArgs(args);
+  const request = [a.query, a.url, a.subject, a.corpusId].find(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+  const action = str(a.action);
+  return { request: str(request), ...(action ? { action } : {}) };
+}
+
+/** The match count for a line-oriented search result (grep/glob): non-blank output lines. Undefined
+ *  while still running or on an error result. */
+export function matchCount(
+  output: string | undefined,
+  status: "running" | "done" | "error",
+): number | undefined {
+  if (!output || status !== "done") {
+    return undefined;
+  }
+  return output.split("\n").filter((line) => line.trim().length > 0).length;
+}
+
 /** A human range label for a read offset/limit (`L20-39`), or empty when the whole file was read. */
 export function readRangeLabel(offset?: number, limit?: number): string {
   if (offset === undefined && limit === undefined) {

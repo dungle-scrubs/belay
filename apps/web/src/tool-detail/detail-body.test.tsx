@@ -83,6 +83,51 @@ test("multi_edit shows the file and a per-edit change count", () => {
   assert.ok(screen.getByText("Changes (2)"));
 });
 
+test("grep shows the pattern, scope, and match count", () => {
+  render(
+    <DetailBody
+      model={model({
+        toolName: "grep",
+        args: '{"pattern":"export","path":"apps/web/src"}',
+        output: "a.ts:1: export x\nb.ts:2: export y",
+      })}
+    />,
+  );
+  assert.ok(screen.getByText("Pattern"));
+  assert.ok(screen.getByText("export"));
+  assert.ok(screen.getByText("apps/web/src"));
+  assert.ok(screen.getByText("Matches"));
+  assert.ok(screen.getByText("2"));
+});
+
+test("web_search shows the query as the request and its results", () => {
+  render(
+    <DetailBody
+      model={model({
+        toolName: "web_search",
+        args: '{"query":"effect schema"}',
+        output: "1 result",
+      })}
+    />,
+  );
+  assert.ok(screen.getByText("Request"));
+  assert.ok(screen.getByText("effect schema"));
+  assert.ok(screen.getByText("1 result"));
+});
+
+test("docs shows the action + subject request", () => {
+  render(
+    <DetailBody
+      model={model({
+        toolName: "docs",
+        args: '{"action":"read","subject":"react"}',
+        output: "...",
+      })}
+    />,
+  );
+  assert.ok(screen.getByText("read react"));
+});
+
 test("an unknown / MCP tool falls back to the generic Arguments + Output body", () => {
   render(
     <DetailBody model={model({ toolName: "mcp__server__do", args: '{"x":1}', output: "ok" })} />,

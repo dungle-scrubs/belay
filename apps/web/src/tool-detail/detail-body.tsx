@@ -5,9 +5,12 @@ import { ToolDiff } from "@/components/chat/tool-diff";
 import {
   bashDetailArgs,
   editDetailArgs,
+  matchCount,
   multiEditDetailArgs,
   readDetailArgs,
   readRangeLabel,
+  requestDetailArgs,
+  searchDetailArgs,
   truncationLabel,
   writeDetailArgs,
 } from "./detail-args";
@@ -41,9 +44,54 @@ export function DetailBody({
       return <DiffDetail model={model} onOpenPath={onOpenPath} />;
     case "multi_edit":
       return <MultiEditDetail model={model} onOpenPath={onOpenPath} />;
+    case "grep":
+    case "glob":
+      return <SearchDetail model={model} />;
+    case "web_search":
+    case "web_fetch":
+    case "docs":
+    case "session_recall":
+      return <RequestDetail model={model} />;
     default:
       return <GenericDetail model={model} />;
   }
+}
+
+function SearchDetail({ model }: { readonly model: ToolDetailModel }) {
+  const { pattern, path } = searchDetailArgs(model.args);
+  const matches = matchCount(model.output, model.status);
+  return (
+    <>
+      <DetailSection title={model.toolName === "glob" ? "Glob" : "Pattern"}>
+        <Mono>{pattern || "(none)"}</Mono>
+      </DetailSection>
+      {path ? (
+        <DetailSection title="Scope">
+          <Mono>{path}</Mono>
+        </DetailSection>
+      ) : null}
+      {matches !== undefined ? (
+        <DetailSection title="Matches">
+          <p className="text-xs text-muted-foreground">{matches}</p>
+        </DetailSection>
+      ) : null}
+      <ErrorSection model={model} />
+      <OutputSection model={model} title="Results" />
+    </>
+  );
+}
+
+function RequestDetail({ model }: { readonly model: ToolDetailModel }) {
+  const { request, action } = requestDetailArgs(model.args);
+  return (
+    <>
+      <DetailSection title="Request">
+        <Mono>{action ? `${action} ${request}` : request || "(none)"}</Mono>
+      </DetailSection>
+      <ErrorSection model={model} />
+      <OutputSection model={model} title="Results" />
+    </>
+  );
 }
 
 function BashDetail({ model }: { readonly model: ToolDetailModel }) {
