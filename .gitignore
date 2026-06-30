@@ -1,6 +1,12 @@
 node_modules/
 dist/
 storybook-static/
+# Playwright / Storybook test-runner generated output (browser lane, plan 09.2). Committed screenshot
+# baselines live under __snapshots__ dirs; these are the transient run artifacts (reports, traces, diffs).
+test-results/
+playwright-report/
+blob-report/
+.playwright/
 *.log
 .DS_Store
 .turbo/

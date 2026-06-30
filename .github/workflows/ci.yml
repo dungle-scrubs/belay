@@ -30,3 +30,49 @@ jobs:
       # Hermetic e2e only; the live-model lane skips with a reason (no LMSTUDIO_URL in CI).
       - name: E2E tests
         run: pnpm test:e2e
+
+  # The browser lane (plan 09.2): runs INSIDE the pinned Playwright container so screenshots render the
+  # same fonts/antialiasing as the committed baselines (D-002). Kept separate from the `check` job's
+  # jsdom/node `test:*` steps. Lane A (Storybook visual regression) is the required per-PR pass; Lane B
+  # drives the real app's transcript-scroll behavior. The perf producer is a separate nightly workflow
+  # (never gates a PR, D-006).
+  browser:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.50.0-noble
+      # --ipc=host avoids Chromium running out of shared memory in the container (Playwright's guidance).
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Match the `check` job: node:sqlite (the store Lane B boots) is stable on Node 24.
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The container pre-bakes the matching browsers; this is a fast no-op that guards a version drift.
+      - name: Ensure browser present
+        run: pnpm exec playwright install chromium
+      # Lane A: build the static Storybook, then screenshot-diff every story against committed baselines.
+      - name: Build Storybook
+        run: pnpm --filter @trevor/web build-storybook
+      - name: Lane A - Storybook visual regression
+        run: pnpm test-storybook
+      # Lane B: build the web app, then drive its transcript pin/stick/no-yank/jump behavior on real layout.
+      - name: Build web app
+        run: pnpm --filter @trevor/web build
+      - name: Lane B - app transcript-scroll e2e
+        run: pnpm test:e2e:browser
+      # On any lane failure, upload the expected/actual/diff PNGs + Playwright traces so the regression is
+      # eyeballable without re-running locally.
+      - name: Upload diff/trace artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-artifacts
+          path: |
+            apps/web/__snapshots__/**
+            test-results/**
+            playwright-report/**
+          retention-days: 7

@@ -22,11 +22,11 @@
 
 ### M0: Shared Playwright + Docker + CI foundation
 
-- [ ] RED: Add a smoke Playwright test that fails until headless Chromium runs in the pinned `mcr.microsoft.com/playwright` container
-- [ ] GREEN: Add `@playwright/test`, a shared Playwright config (container, viewport, `animations: 'disabled'`), pin the Docker image, add a pnpm script
-- [ ] RED: Add a CI assertion that fails if the browser lane does not run in the container on `ubuntu-latest`
-- [ ] GREEN: Add the browser CI job to `.github/workflows/ci.yml` (install browsers `--with-deps`, run in container, upload diff/trace artifacts on failure), separate from existing `test:*` steps
-- [ ] REFACTOR: Factor the shared config so Lane A and Lane B reuse container/viewport/animations settings
+- [x] RED: Add a smoke Playwright test that fails until headless Chromium runs in the pinned `mcr.microsoft.com/playwright` container
+- [x] GREEN: Add `@playwright/test`, a shared Playwright config (container, viewport, `animations: 'disabled'`), pin the Docker image, add a pnpm script
+- [x] RED: Add a CI assertion that fails if the browser lane does not run in the container on `ubuntu-latest`
+- [x] GREEN: Add the browser CI job to `.github/workflows/ci.yml` (install browsers `--with-deps`, run in container, upload diff/trace artifacts on failure), separate from existing `test:*` steps
+- [x] REFACTOR: Factor the shared config so Lane A and Lane B reuse container/viewport/animations settings
 
 ### M1: Storybook visual-regression lane
 

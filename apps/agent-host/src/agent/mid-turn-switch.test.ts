@@ -162,14 +162,16 @@ test("M4: a same-model reasoning re-send does not rebuild, but a cross-source sa
   let rebuilds = 0;
   const sameModelProvider = recordingProvider(
     "model-a",
-    (call) =>
-      call === 1
-        ? (cellA.request({
-            model: { sourceId: "s", modelId: "model-a", reasoning: "high" },
-            initiator: "manual",
-          }),
-          [{ type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } }])
-        : [{ type: "text", text: "done" }],
+    (call) => {
+      if (call === 1) {
+        cellA.request({
+          model: { sourceId: "s", modelId: "model-a", reasoning: "high" },
+          initiator: "manual",
+        });
+        return [{ type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } }];
+      }
+      return [{ type: "text", text: "done" }];
+    },
     () => {},
   );
   await Effect.runPromise(
@@ -200,14 +202,16 @@ test("M4: a same-model reasoning re-send does not rebuild, but a cross-source sa
   );
   const providerA = recordingProvider(
     "dup",
-    (call) =>
-      call === 1
-        ? (cellB.request({
-            model: { sourceId: "source-b", modelId: "dup", reasoning: "low" },
-            initiator: "manual",
-          }),
-          [{ type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } }])
-        : [{ type: "text", text: "a" }],
+    (call) => {
+      if (call === 1) {
+        cellB.request({
+          model: { sourceId: "source-b", modelId: "dup", reasoning: "low" },
+          initiator: "manual",
+        });
+        return [{ type: "tool_call", call: { id: "c1", name: "noop", arguments: "{}" } }];
+      }
+      return [{ type: "text", text: "a" }];
+    },
     () => {},
   );
   await Effect.runPromise(
