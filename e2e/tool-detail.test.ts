@@ -56,8 +56,9 @@ test("a running tool's started/completed events carry the fields the detail take
   );
   assert.notEqual(started?.payload.arguments, undefined, "carries arguments for the detail body");
   assert.ok(completed, "the tool emitted a completed event");
+  // `started`/`completed` are narrowed non-null by the assert.ok guards above.
   assert.ok(
-    viewer.events.indexOf(started!) < viewer.events.indexOf(completed!),
+    viewer.events.indexOf(started) < viewer.events.indexOf(completed),
     "started precedes completed (the running -> done transition)",
   );
 
