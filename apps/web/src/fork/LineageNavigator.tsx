@@ -35,16 +35,16 @@ function LineageRow({
   const navigable = !isCurrent && !node.missing;
   const className = [
     "flex flex-col gap-0.5 rounded-md px-2 py-1 text-left text-sm",
-    isCurrent ? "bg-orange-500/15 font-medium text-orange-200" : "text-neutral-300",
+    isCurrent ? "bg-card font-medium text-foreground" : "text-muted-foreground",
     node.missing ? "opacity-50" : "",
-    navigable ? "hover:bg-neutral-800" : "",
+    navigable ? "hover:bg-card/60 hover:text-foreground" : "",
   ]
     .filter(Boolean)
     .join(" ");
   const content = (
     <>
       <span className="truncate">{node.title}</span>
-      {subtitle ? <span className="text-xs text-neutral-500">{subtitle}</span> : null}
+      {subtitle ? <span className="text-muted-foreground/60 text-xs">{subtitle}</span> : null}
     </>
   );
   if (!navigable) {
@@ -70,7 +70,7 @@ export function LineageNavigator({ lineage, onNavigate }: LineageNavigatorProps)
       ))}
       <LineageRow node={current} kind="current" onNavigate={onNavigate} />
       {children.length > 0 ? (
-        <div className="ml-3 flex flex-col gap-1 border-neutral-800 border-l pl-2">
+        <div className="ml-3 flex flex-col gap-1 border-border border-l pl-2">
           {children.map((node) => (
             <LineageRow key={node.sessionId} node={node} kind="child" onNavigate={onNavigate} />
           ))}

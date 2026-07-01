@@ -52,14 +52,14 @@ describe("stable per-message identity (M1)", () => {
 });
 
 describe("forkable event classification (M1)", () => {
-  it("copies durable conversation/turn/model/task/context state, not session-local control", () => {
+  it("copies durable conversation/turn/model/task state + the /clear boundary, not session-local control", () => {
     for (const t of [
       "user.message",
+      "user.command", // the /clear baseline boundary replay consumes
       "assistant.completed",
       "tool.started",
       "tool.completed",
       "model.switched",
-      "context.compacted",
       "tasks.current",
     ]) {
       expect(isForkableEvent(t)).toBe(true);
@@ -75,6 +75,7 @@ describe("forkable event classification (M1)", () => {
       "handoff.requested",
       "delegated.to",
       "assistant.delta", // ephemeral streaming - superseded by assistant.completed
+      "context.compacted", // NOT copied: its throughSeq is a stale parent seq in the re-numbered child
     ]) {
       expect(isForkableEvent(t)).toBe(false);
     }
@@ -199,24 +200,46 @@ describe("active model reconstruction across a fork (M4, D-002)", () => {
       outcome,
     });
 
-  it("seeds from the last user.message model when no switch occurred", () => {
+  it("seeds source+model from a structured ModelRef user.message", () => {
+    const withRef = ev(1, "user.message", {
+      text: "q",
+      model: { sourceId: "openai", modelId: "gpt-4o", reasoning: "high" },
+    });
+    expect(reconstructActiveModel([withRef])).toEqual({
+      sourceId: "openai",
+      modelId: "gpt-4o",
+      reasoning: "high",
+    });
+  });
+
+  it("seeds from a legacy bare-provider user.message (provider stands in for both ids)", () => {
     expect(reconstructActiveModel([userMsg(1, "qwen", "low")])).toEqual({
-      model: "qwen",
+      sourceId: "qwen",
+      modelId: "qwen",
       reasoning: "low",
     });
   });
 
-  it("resumes on the ACTIVE post-switch model, not the pre-switch or a reset default", () => {
+  it("resumes on the post-switch MODEL, keeping the active source, not a reset default", () => {
     const prefix = [
       userMsg(1, "qwen", "low"),
       switched(2, { model: "opus", reasoning: "high" }, "applied"),
     ];
-    expect(reconstructActiveModel(prefix)).toEqual({ model: "opus", reasoning: "high" });
+    // The switch moves the model id + reasoning; the source stays the active "qwen".
+    expect(reconstructActiveModel(prefix)).toEqual({
+      sourceId: "qwen",
+      modelId: "opus",
+      reasoning: "high",
+    });
   });
 
   it("ignores a BLOCKED switch (the active model stays the pre-switch selection)", () => {
     const prefix = [userMsg(1, "qwen", "low"), switched(2, { model: "opus" }, "blocked")];
-    expect(reconstructActiveModel(prefix)).toEqual({ model: "qwen", reasoning: "low" });
+    expect(reconstructActiveModel(prefix)).toEqual({
+      sourceId: "qwen",
+      modelId: "qwen",
+      reasoning: "low",
+    });
   });
 
   it("a later user.message re-establishes the baseline over an earlier switch", () => {
@@ -225,7 +248,11 @@ describe("active model reconstruction across a fork (M4, D-002)", () => {
       switched(2, { model: "opus" }, "applied"),
       userMsg(3, "deepseek", "medium"),
     ];
-    expect(reconstructActiveModel(prefix)).toEqual({ model: "deepseek", reasoning: "medium" });
+    expect(reconstructActiveModel(prefix)).toEqual({
+      sourceId: "deepseek",
+      modelId: "deepseek",
+      reasoning: "medium",
+    });
   });
 
   it("returns null for a legacy prefix carrying no model information", () => {
@@ -249,7 +276,8 @@ describe("participant inheritance is opt-in + dedupes by origin (M4)", () => {
       }),
     ];
     expect(MODEL_SELECTION_INHERITANCE.inherit(prefix)).toEqual({
-      model: "opus",
+      sourceId: "qwen",
+      modelId: "opus",
       reasoning: "high",
     });
   });

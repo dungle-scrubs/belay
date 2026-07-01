@@ -1,10 +1,10 @@
 import {
   type ActiveModel,
+  isForkReady,
   MODEL_SELECTION_INHERITANCE,
   type PublishInput,
   planFork,
   type SessionEvent,
-  selectForkPrefix,
 } from "@trevor/session";
 
 /**
@@ -58,7 +58,6 @@ export async function forkSession(
 ): Promise<ForkResult> {
   const parentEvents = await deps.readSession(args.parentSessionId);
   const childSessionId = deps.newSessionId();
-  const prefix = selectForkPrefix(parentEvents, args.forkSeq);
   const plan = planFork({
     parentSessionId: args.parentSessionId,
     parentEvents,
@@ -74,8 +73,11 @@ export async function forkSession(
     parentSessionId: args.parentSessionId,
     forkSeq: args.forkSeq,
     copied: plan.copied,
-    forkReady: true,
-    // The model selection is the one inherited stateful participant (D-002); seed it from the fork point.
-    inheritedModel: MODEL_SELECTION_INHERITANCE.inherit(prefix),
+    // Derived from the plan (which ends with the forkedFrom marker), not hardcoded: a plan without the
+    // marker would be reported not-ready rather than falsely ready.
+    forkReady: isForkReady(plan.events),
+    // The model selection is the one inherited stateful participant (D-002); seed it from the fork point's
+    // active value, reconstructed from the SAME prefix the plan selected (no second pass).
+    inheritedModel: MODEL_SELECTION_INHERITANCE.inherit(plan.sourceEvents),
   };
 }

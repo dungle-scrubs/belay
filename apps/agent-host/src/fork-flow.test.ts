@@ -87,6 +87,23 @@ describe("host fork operation over the normal append API (M2)", () => {
     ]);
   });
 
+  it("preserves a /clear boundary so a fork does not resurrect explicitly-cleared context", async () => {
+    // The parent cleared its context mid-session; the fork must NOT replay the pre-clear turn.
+    const withClear: SessionEvent[] = [
+      ev(1, "user.message", "trevor-web", { text: "secret old context" }),
+      ev(2, "assistant.completed", "trevor-host", { runId: "r1", text: "old answer" }),
+      ev(3, "user.command", "trevor-web", { command: "/clear", args: "" }),
+      ev(4, "user.message", "trevor-web", { text: "fresh question" }),
+      ev(5, "assistant.completed", "trevor-host", { runId: "r2", text: "fresh answer" }),
+    ];
+    const { deps, child } = makeStore(withClear);
+    await forkSession(deps, { parentSessionId: "parent", forkSeq: 5 });
+    const history = buildHistory(child);
+    // Only the post-/clear turn survives the projection - the cleared context is gone.
+    expect(history.map((m) => m.content)).toEqual(["fresh question", "fresh answer"]);
+    expect(JSON.stringify(history)).not.toContain("secret old context");
+  });
+
   it("carries the ACTIVE post-switch model as the child's inherited resume model (M4, D-002)", async () => {
     // A parent whose turn switched model mid-flight: the fork must resume on the switched-to model.
     const withSwitch: SessionEvent[] = [
@@ -102,6 +119,7 @@ describe("host fork operation over the normal append API (M2)", () => {
     ];
     const { deps } = makeStore(withSwitch);
     const result = await forkSession(deps, { parentSessionId: "parent", forkSeq: 3 });
-    expect(result.inheritedModel).toEqual({ model: "opus", reasoning: "high" });
+    // The switch moved the model id to opus; the source stays qwen (the active source at the switch).
+    expect(result.inheritedModel).toEqual({ sourceId: "qwen", modelId: "opus", reasoning: "high" });
   });
 });
