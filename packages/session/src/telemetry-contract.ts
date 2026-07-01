@@ -159,6 +159,85 @@ export type SpanName = (typeof SPAN_NAMES)[keyof typeof SPAN_NAMES];
 /** A telemetry metric name (one of the contract's {@link METRIC_NAMES}). */
 export type MetricName = (typeof METRIC_NAMES)[keyof typeof METRIC_NAMES];
 
+/** A completed span's terminal status. */
+export type SpanStatus = "ok" | "error";
+
+/** One finished span, ready for export: a contract name, sanitized attributes, timing, and status. */
+export interface SpanRecord {
+  readonly name: SpanName;
+  readonly attributes: TelemetryAttributes;
+  readonly status: SpanStatus;
+  readonly durationMs: number;
+  /** A redacted one-line failure summary when `status === "error"`. */
+  readonly error?: string;
+}
+
+/**
+ * The sink runtime apps push finished spans (and later metrics) into. This is the seam the OTel SDK, the
+ * local file exporter, or a test's in-memory recorder plug into (escape hatch: local JSONL first, SDK
+ * later) - the instrumentation only ever sees this interface, never an exporter. `span` must be
+ * best-effort and never throw (a telemetry failure must not fail user work).
+ */
+export interface TelemetrySink {
+  span(record: SpanRecord): void;
+}
+
+/** The no-op sink: telemetry is disabled by default, so instrumentation runs against this and emits nothing. */
+export const NOOP_SINK: TelemetrySink = { span: () => {} };
+
+/**
+ * Times `fn`, then pushes a finished span for it into `sink` with the sanitized attributes and an
+ * ok/error status. A throw is recorded as an `error` span (with a redacted message) and RE-THROWN - the
+ * span is observability, never flow control. The sink call is guarded so a telemetry failure can't fail
+ * the wrapped work. `now` is injectable for deterministic tests.
+ */
+export async function withSpan<T>(
+  sink: TelemetrySink,
+  name: SpanName,
+  attributes: Readonly<Record<string, unknown>>,
+  fn: () => Promise<T>,
+  now: () => number = Date.now,
+): Promise<T> {
+  const startedAt = now();
+  try {
+    const result = await fn();
+    emitSpan(sink, name, safeAttributes(attributes), "ok", now() - startedAt);
+    return result;
+  } catch (error) {
+    emitSpan(
+      sink,
+      name,
+      safeAttributes(attributes),
+      "error",
+      now() - startedAt,
+      redactAttributeValue(error instanceof Error ? error.message : String(error)),
+    );
+    throw error;
+  }
+}
+
+/** Pushes one span into the sink, swallowing any sink error so telemetry never fails the caller. */
+function emitSpan(
+  sink: TelemetrySink,
+  name: SpanName,
+  attributes: TelemetryAttributes,
+  status: SpanStatus,
+  durationMs: number,
+  error?: string,
+): void {
+  try {
+    sink.span({
+      name,
+      attributes,
+      status,
+      durationMs: Math.max(0, durationMs),
+      ...(error ? { error } : {}),
+    });
+  } catch {
+    // A telemetry sink failure must never propagate into user work.
+  }
+}
+
 /** One of Trevor's telemetry-emitting services (the OTel `service.name` + Sentry project scope). */
 export type TelemetryService = "agent-host" | "session-store" | "blob-store" | "trevor-cli" | "web";
 

@@ -3,13 +3,33 @@ import { test } from "vitest";
 import {
   isDisallowedTelemetryKey,
   METRIC_NAMES,
+  NOOP_SINK,
   REDACTED,
   redactAttributeValue,
   redactSecrets,
   resourceAttributes,
   SPAN_NAMES,
+  type SpanRecord,
   safeAttributes,
+  type TelemetrySink,
+  withSpan,
 } from "./telemetry-contract";
+
+/** A recording sink for the span-core tests (the app-facing one lives in @trevor/test-kit). */
+function recordingSink(): { sink: TelemetrySink; spans: SpanRecord[] } {
+  const spans: SpanRecord[] = [];
+  return { sink: { span: (r) => spans.push(r) }, spans };
+}
+
+/** A deterministic clock: each read advances by `step` ms. */
+function fakeClock(step = 5): () => number {
+  let t = 1000;
+  return () => {
+    const v = t;
+    t += step;
+    return v;
+  };
+}
 
 /**
  * The shared observability contract (plan 13 M2): redaction + safe-envelope helpers and the
@@ -113,4 +133,58 @@ test("span + metric names are namespaced under trevor.* and resource attributes 
     "no disallowed key in resource attributes",
   );
   assert.equal(resourceAttributes("web", null)["service.version"], "dev", "missing version -> dev");
+});
+
+test("withSpan records an ok span with sanitized attributes and timing", async () => {
+  const { sink, spans } = recordingSink();
+  const result = await withSpan(
+    sink,
+    SPAN_NAMES.tool,
+    { tool: "read", duration_hint: 3, prompt: "secret", file_path: "/Users/x/secret.txt" },
+    async () => "value",
+    fakeClock(),
+  );
+  assert.equal(result, "value");
+  assert.equal(spans.length, 1);
+  const [span] = spans;
+  assert.equal(span?.name, SPAN_NAMES.tool);
+  assert.equal(span?.status, "ok");
+  assert.equal(span?.durationMs, 5, "timed via the injected clock");
+  assert.deepEqual(span?.attributes, { tool: "read", duration_hint: 3 }, "prompt + path dropped");
+});
+
+test("withSpan records an error span (redacted) and re-throws", async () => {
+  const { sink, spans } = recordingSink();
+  await assert.rejects(
+    withSpan(
+      sink,
+      SPAN_NAMES.providerAttempt,
+      { provider: "lmstudio" },
+      async () => {
+        throw new Error("boom with key sk-abcdefgh12345678");
+      },
+      fakeClock(),
+    ),
+    /boom/,
+  );
+  const [span] = spans;
+  assert.equal(span?.status, "error");
+  assert.ok(span?.error?.includes(REDACTED), "the error message is redacted");
+  assert.ok(!span?.error?.includes("sk-abcdefgh"), "no secret in the error span");
+});
+
+test("a throwing sink never propagates into the wrapped work (telemetry is best-effort)", async () => {
+  const brokenSink: TelemetrySink = {
+    span: () => {
+      throw new Error("sink down");
+    },
+  };
+  // The wrapped fn's value still returns even though the sink throws.
+  assert.equal(await withSpan(brokenSink, SPAN_NAMES.turn, {}, async () => 42), 42);
+});
+
+test("NOOP_SINK accepts spans and emits nothing", () => {
+  assert.doesNotThrow(() =>
+    NOOP_SINK.span({ name: SPAN_NAMES.turn, attributes: {}, status: "ok", durationMs: 1 }),
+  );
 });
