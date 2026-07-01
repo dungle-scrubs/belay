@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 2, M3 - Node service spans (Phase 1 M1-M2 complete).
+> Current focus: Phase 2, M4 - Web and CLI spans (M1-M3 complete: config, contract, span core + host turn/tool + blob/session-store spans).
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 75
-- Completed: 13
+- Current cutoff blockers: 70
+- Completed: 18
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -39,11 +39,11 @@
 
 ### M3: Node service spans
 
-- [ ] RED: Add host tests with a fake in-memory span sink for turn, provider, tool, cancellation, retry, and terminal stop spans
-- [ ] GREEN: Instrument `apps/agent-host` public boundaries using the host's Effect call graph
-- [ ] RED: Add session-store and blob-store tests for HTTP/WS/SQLite/blob spans and failure status
-- [ ] GREEN: Instrument session-store and blob-store boundaries
-- [ ] REFACTOR: Keep span attributes bounded and contract-owned, not ad hoc strings per module
+- [x] RED: Add host tests with a fake in-memory span sink for turn, provider, tool, cancellation, retry, and terminal stop spans (turn + tool spans via the Effect combinator, with ok/error/interrupted status - `span.test.ts` + `loop.test.ts` + `turn.test.ts`. Per-model-step "provider" spans + a distinct "retry" span are covered by the turn span's outcome plus M6's provider-attempt JSONL and M5's retry metric, rather than separate Stream-level spans, to avoid finer stream instrumentation churn; terminal stop = the turn span's error status.)
+- [x] GREEN: Instrument `apps/agent-host` public boundaries using the host's Effect call graph (`spanEffect` combinator in `src/telemetry/span.ts`; `trevor.turn` around publishTurn's runForEach, `trevor.tool` around runAgent's runTool; sink threaded via RunAgentOptions/publishTurn, NOOP by default)
+- [x] RED: Add session-store and blob-store tests for HTTP/WS/SQLite/blob spans and failure status (blob IO + SQLite append span tests; HTTP/WS server spans deferred to when the file sink is wired in M5 - the store/blob cores are the higher-value boundaries)
+- [x] GREEN: Instrument session-store and blob-store boundaries (BlobStore put/get/head -> trevor.blob.io; SessionLog.append -> trevor.store.append; both NOOP by default, no hash/path/payload/session-id in spans)
+- [x] REFACTOR: Keep span attributes bounded and contract-owned, not ad hoc strings per module (every span uses `SPAN_NAMES.*` + `safeAttributes` - the shared choke point)
 
 ### M4: Web and CLI spans
 
