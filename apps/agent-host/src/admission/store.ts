@@ -575,6 +575,19 @@ export function inspectResource(key: string, caps: AdmissionCaps): AdmissionReso
   };
 }
 
+/** The live active holders on `key`: each alive (pid up) and heartbeated within `staleAfterMs`. The one
+ *  definition of "still holding" the residency claim count (M3) and the generation-liveness guard (M4)
+ *  share, so a crashed or wedged holder is excluded identically everywhere. */
+export function liveActiveRecords(
+  key: string,
+  caps: AdmissionCaps,
+  staleAfterMs: number = ADMISSION_STALE_MS,
+): readonly AdmissionRecordView[] {
+  return inspectResource(key, caps).active.filter(
+    (r) => r.alive && r.heartbeatAgeMs <= staleAfterMs,
+  );
+}
+
 /** Reads EVERY known resource's admission state (for the /doctor aggregate) without mutating. Resources
  *  with neither active nor queued records are omitted (their files are removed on release). */
 export function snapshotAdmission(caps: AdmissionCaps): readonly AdmissionResourceView[] {

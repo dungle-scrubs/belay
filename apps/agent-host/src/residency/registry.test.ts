@@ -8,6 +8,7 @@ import { LocalResidencyRegistry } from "./registry";
  */
 
 const EP = "http://localhost:1234/v1";
+const PROVIDER = "lmstudio";
 
 function reg() {
   let t = 1_700_000_000_000;
@@ -16,7 +17,7 @@ function reg() {
 
 test("recordLoad marks a model Trevor-loaded; an untouched model is absent", () => {
   const r = reg();
-  r.recordLoad(EP, "unsloth/qwen3.6-27b-mlx", 65_536);
+  r.recordLoad(PROVIDER, EP, "unsloth/qwen3.6-27b-mlx", 65_536);
   assert.equal(r.isTrevorLoaded(EP, "unsloth/qwen3.6-27b-mlx"), true);
   // A model Trevor never loaded (externally loaded / another app) is NOT in the registry.
   assert.equal(
@@ -31,18 +32,19 @@ test("recordLoad marks a model Trevor-loaded; an untouched model is absent", () 
   assert.equal(resident.length, 1);
   assert.deepEqual(
     {
+      provider: resident[0]?.provider,
       endpoint: resident[0]?.endpoint,
       model: resident[0]?.model,
       contextLength: resident[0]?.contextLength,
     },
-    { endpoint: EP, model: "unsloth/qwen3.6-27b-mlx", contextLength: 65_536 },
+    { provider: PROVIDER, endpoint: EP, model: "unsloth/qwen3.6-27b-mlx", contextLength: 65_536 },
   );
 });
 
 test("the resident set updates on load and on unload", () => {
   const r = reg();
-  r.recordLoad(EP, "a", 65_536);
-  r.recordLoad(EP, "b", 32_768);
+  r.recordLoad(PROVIDER, EP, "a", 65_536);
+  r.recordLoad(PROVIDER, EP, "b", 32_768);
   assert.deepEqual(
     r
       .resident()
@@ -65,9 +67,9 @@ test("the resident set updates on load and on unload", () => {
 
 test("recordLoad refreshes a model's context + load time rather than duplicating it", () => {
   const r = reg();
-  r.recordLoad(EP, "a", 32_768);
+  r.recordLoad(PROVIDER, EP, "a", 32_768);
   const first = r.resident()[0]?.loadedAt;
-  r.recordLoad(EP, "a", 65_536); // reloaded at a bigger window
+  r.recordLoad(PROVIDER, EP, "a", 65_536); // reloaded at a bigger window
   assert.equal(r.resident().length, 1, "a reload updates in place, not a second entry");
   assert.equal(r.resident()[0]?.contextLength, 65_536);
   assert.notEqual(r.resident()[0]?.loadedAt, first, "the load time refreshes");

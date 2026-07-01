@@ -204,7 +204,12 @@ export class LmStudioClient {
         this.lastReloadMs = Date.now() - startedAt;
         // Record the load into the host residency registry ONLY here - the path where THIS instance
         // actually ran `lms load` - so a model loaded outside Trevor is never eviction-eligible (D-004).
-        this.config.residency?.recordLoad(this.config.url, this.config.model, target);
+        this.config.residency?.recordLoad(
+          this.config.providerId,
+          this.config.url,
+          this.config.model,
+          target,
+        );
         log("lmstudio", "model loaded", {
           model: this.config.model,
           context: target,

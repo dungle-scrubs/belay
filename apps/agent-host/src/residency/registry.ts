@@ -15,8 +15,10 @@
  * lives above it (M3-M5) on plan 11's shared store.
  */
 
-/** One local model this instance loaded: the endpoint it lives on, its id, and the context it loaded at. */
+/** One local model this instance loaded: the provider + endpoint it lives on, its id, and the context it
+ *  loaded at. `provider` is carried so residency claim keys can be rebuilt without a hardcoded id. */
 export interface ResidentModel {
+  readonly provider: string;
   /** The LM Studio endpoint (base URL) the model is resident on. */
   readonly endpoint: string;
   readonly model: string;
@@ -29,7 +31,7 @@ export interface ResidentModel {
 /** The write surface the LM Studio client uses to record its own loads/unloads into the registry, so
  *  the client depends only on this narrow contract, not the whole registry. */
 export interface ResidencyRecorder {
-  recordLoad(endpoint: string, model: string, contextLength: number): void;
+  recordLoad(provider: string, endpoint: string, model: string, contextLength: number): void;
   recordUnload(endpoint: string, model: string): void;
 }
 
@@ -44,8 +46,9 @@ export class LocalResidencyRegistry implements ResidencyRecorder {
   constructor(private readonly now: () => number = () => Date.now()) {}
 
   /** Records (or refreshes) that this instance loaded `model` on `endpoint` at `contextLength`. */
-  recordLoad(endpoint: string, model: string, contextLength: number): void {
+  recordLoad(provider: string, endpoint: string, model: string, contextLength: number): void {
     this.loaded.set(residentKey(endpoint, model), {
+      provider,
       endpoint,
       model,
       contextLength,

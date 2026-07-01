@@ -61,7 +61,7 @@ export function makeFakeLmStudioResidency(opts: {
       residency,
       unloaded,
       load: (target: ResidencyClaimTarget, contextLength = 65_536) =>
-        residency.recorder.recordLoad(target.baseUrl, target.model, contextLength),
+        residency.recorder.recordLoad(target.provider, target.baseUrl, target.model, contextLength),
       startGeneration: async (target: ResidencyClaimTarget) => {
         const handle = await gate.acquireGeneration(target);
         return { release: () => handle.release("success") };

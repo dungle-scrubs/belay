@@ -15,9 +15,6 @@ import { LocalResidencyRegistry, type ResidencyRecorder } from "./registry";
  * `shutdown` releases + sweeps on a clean stop; `summary` is the /doctor projection (M6).
  */
 
-/** LM Studio is the only local provider today, so a resident model's claim key uses its id. */
-const LOCAL_RESIDENCY_PROVIDER = "lmstudio";
-
 export interface HostResidencyDeps {
   /** Plan 11's shared-store caps (fs + clock + liveness) the claims + generation inspect run over. */
   readonly caps: AdmissionCaps;
@@ -76,12 +73,7 @@ export function createHostResidency(deps: HostResidencyDeps): HostResidency {
     summary: () =>
       residencyDoctorSummary(
         registry.resident(),
-        (m) =>
-          claims.liveClaims({
-            provider: LOCAL_RESIDENCY_PROVIDER,
-            baseUrl: m.endpoint,
-            model: m.model,
-          }),
+        (m) => claims.liveClaims({ provider: m.provider, baseUrl: m.endpoint, model: m.model }),
         eviction.lastEviction(),
       ),
   };

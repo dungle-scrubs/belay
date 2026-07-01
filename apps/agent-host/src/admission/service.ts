@@ -2,6 +2,7 @@ import {
   type AdmissionEstimate,
   type AdmissionPriority,
   generationResourceKey,
+  type LocalModelTarget,
   lifecycleResourceKey,
 } from "./contract";
 import {
@@ -26,11 +27,7 @@ import { ADMISSION_DEFAULT_CAPACITY, type AdmissionCaps, nodeAdmissionCaps } fro
  */
 
 /** The concrete local target a request is for (the generation key is per model, lifecycle per endpoint). */
-export interface LocalAdmissionTarget {
-  readonly provider: string;
-  readonly baseUrl: string;
-  readonly model: string;
-}
+export type LocalAdmissionTarget = LocalModelTarget;
 
 /** The per-turn context the host resolves at acquire time: priority + best-effort attribution. */
 export interface LocalAdmissionContext {

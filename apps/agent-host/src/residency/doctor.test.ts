@@ -14,7 +14,7 @@ const EP = "http://localhost:1234/v1";
 const QWEN = "unsloth/qwen3.6-27b-mlx";
 
 function resident(model: string, contextLength: number, loadedAt: string): ResidentModel {
-  return { endpoint: EP, model, contextLength, loadedAt };
+  return { provider: "lmstudio", endpoint: EP, model, contextLength, loadedAt };
 }
 
 test("an empty resident set is an idle residency summary", () => {

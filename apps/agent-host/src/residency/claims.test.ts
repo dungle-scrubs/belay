@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { makeAdmissionHarness } from "../../test/support/admission-harness";
-import type { AdmissionOwner } from "../admission/contract";
+import {
+  type AdmissionOwner,
+  generationResourceKey,
+  isResidencyResourceKey,
+  NO_ESTIMATE,
+} from "../admission/contract";
+import { admissionDoctorSummary } from "../admission/doctor";
+import { acquireAdmission, snapshotAdmission } from "../admission/store";
 import { LocalResidencyClaims, type ResidencyClaimTarget } from "./claims";
 
 /**
@@ -98,4 +105,37 @@ test("a claim whose heartbeat ages past the TTL is excluded even if its pid is a
   assert.equal(a.liveClaims(TARGET), 1);
   h.advance(STALE + 1_000); // A stopped heartbeating (wedged); pid still alive
   assert.equal(a.liveClaims(TARGET), 0, "an aged-out claim is not live even with a live pid");
+});
+
+test("a residency claim shares the store but is filtered OUT of the admission /doctor summary", async () => {
+  const h = makeAdmissionHarness({ staleAfterMs: STALE });
+  h.spawn(100);
+  // A residency claim AND a real generation lease coexist in the one admission store.
+  const a = new LocalResidencyClaims(h.a, () => owner("host-a", 100), STALE);
+  await a.claim(TARGET);
+  await acquireAdmission(
+    {
+      key: generationResourceKey(TARGET.provider, TARGET.baseUrl, TARGET.model),
+      owner: owner("gen-a", 100),
+      priority: "foreground",
+      estimate: NO_ESTIMATE,
+      capacity: 1,
+    },
+    h.a,
+  );
+
+  // The raw snapshot sees both resources; the admission summary must be built from the NON-residency
+  // subset so a resident model is never double-counted as an admission lease holder (plan 11.1).
+  const all = snapshotAdmission(h.a);
+  assert.equal(all.length, 2, "both the residency claim and the generation lease are on disk");
+  const summary = admissionDoctorSummary(
+    all.filter((v) => !isResidencyResourceKey(v.key)),
+    Date.now(),
+  );
+  assert.equal(summary.resources, 1, "only the generation lease counts as admission");
+  assert.equal(summary.activeOwners, 1);
+  assert.ok(
+    summary.rows.every((r) => !isResidencyResourceKey(r.key)),
+    "no residency claim leaks into the admission rows",
+  );
 });

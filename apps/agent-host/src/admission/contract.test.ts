@@ -4,9 +4,11 @@ import {
   ADMISSION_PRIORITIES,
   type AdmissionPriority,
   generationResourceKey,
+  isResidencyResourceKey,
   lifecycleResourceKey,
   normalizeBaseUrl,
   priorityRank,
+  residencyResourceKey,
   resourceKeyHash,
 } from "./contract";
 
@@ -30,6 +32,24 @@ test("generation keys are per provider/baseUrl/model; the lifecycle key is per e
   assert.equal(
     lifecycleResourceKey("lmstudio", "http://localhost:1234/v1"),
     lifecycleResourceKey("lmstudio", "http://localhost:1234/v1"),
+  );
+});
+
+test("residency keys are distinct from generation/lifecycle and identified by isResidencyResourceKey", () => {
+  const res = residencyResourceKey("lmstudio", "http://localhost:1234/v1", "qwen3.6-27b-mlx");
+  assert.equal(res, "local-residency:lmstudio:http://localhost:1234/v1:qwen3.6-27b-mlx");
+  // The predicate distinguishes a residency claim from the admission leases sharing the store, so the
+  // admission /doctor summary can exclude residency claims (plan 11.1) - no double-count.
+  assert.equal(isResidencyResourceKey(res), true);
+  assert.equal(
+    isResidencyResourceKey(generationResourceKey("lmstudio", "http://localhost:1234/v1", "m")),
+    false,
+    "a generation lease is not a residency claim",
+  );
+  assert.equal(
+    isResidencyResourceKey(lifecycleResourceKey("lmstudio", "http://localhost:1234/v1")),
+    false,
+    "a lifecycle lease is not a residency claim",
   );
 });
 

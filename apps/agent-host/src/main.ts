@@ -23,6 +23,7 @@ import {
 import { serviceUrl } from "@trevor/session/ports";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
+import { isResidencyResourceKey } from "./admission/contract";
 import { admissionDoctorSummary } from "./admission/doctor";
 import { createLocalAdmissionGate } from "./admission/service";
 import { ADMISSION_HEARTBEAT_MS, nodeAdmissionCaps, snapshotAdmission } from "./admission/store";
@@ -86,6 +87,7 @@ import {
   buildProviders,
   type ChatMessage,
   DEFAULT_PROVIDER,
+  lmsBin,
   type ProviderError,
   pickProvider,
 } from "./providers";
@@ -171,7 +173,7 @@ const execFileAsync = promisify(execFile);
 /** Unloads a local model from the LM Studio runtime (`lms unload <model>`), used by residency eviction.
  *  execFile (not a shell) so an org-prefixed model id never needs quoting. */
 async function unloadLocalModel(model: string): Promise<void> {
-  await execFileAsync(process.env.LMS_BIN ?? "lms", ["unload", model]);
+  await execFileAsync(lmsBin(), ["unload", model]);
 }
 // Local-model residency (plan 11.1): track which local models THIS instance loaded, claim the active one
 // cross-process, and evict a model once no live instance still claims it (reference-counted, lease-safe).
@@ -2163,7 +2165,12 @@ function doctorFacts(): DoctorRuntimeFacts {
     catalog: catalog.sources,
     activeStyle: { id: style.activeStyle, source: style.source },
     ...(cwdLock ? { cwdLock } : {}),
-    admission: admissionDoctorSummary(snapshotAdmission(admissionCaps), Date.now()),
+    // Residency claims share the admission store, so exclude them from the admission summary (they have
+    // their own `residency` projection) - otherwise a resident model would double-count as a lease holder.
+    admission: admissionDoctorSummary(
+      snapshotAdmission(admissionCaps).filter((v) => !isResidencyResourceKey(v.key)),
+      Date.now(),
+    ),
     residency: residency.summary(),
   };
 }

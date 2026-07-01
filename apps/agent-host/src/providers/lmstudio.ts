@@ -1,5 +1,6 @@
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { Effect, FiberRef, Stream } from "effect";
+import type { LocalModelTarget } from "../admission/contract";
 import { admittedStream } from "../admission/effect";
 import type { LocalAdmissionGate } from "../admission/service";
 import { AdmissionTurnRef } from "../admission/turn-ref";
@@ -49,6 +50,12 @@ export interface LmStudioConfig {
  */
 export const DEFAULT_LOCAL_CONTEXT_CAP = 65_536;
 
+/** The LM Studio CLI binary (`lms`), overridable via LMS_BIN. Resolved here so the provider factory and
+ *  the host-level residency unload agree on the binary rather than each re-reading the env. */
+export function lmsBin(): string {
+  return process.env.LMS_BIN ?? "lms";
+}
+
 /** Reads the LMSTUDIO_VISION override into a tri-state: true/false force image support, null
  *  auto-detects from the loaded model type. */
 function visionOverride(value: string | undefined): boolean | null {
@@ -84,7 +91,7 @@ export function lmStudioProvider(opts: {
     // (so every local slot is capped consistently, not left at the model's native ceiling).
     contextCap: opts.maxContext ?? envNumber("LMSTUDIO_MAX_CONTEXT", DEFAULT_LOCAL_CONTEXT_CAP),
     visionOverride: visionOverride(process.env.LMSTUDIO_VISION),
-    lmsBin: process.env.LMS_BIN ?? "lms",
+    lmsBin: lmsBin(),
     admissionGate: opts.admissionGate,
     residency: opts.residency,
   });
@@ -130,18 +137,12 @@ export class LmStudioProvider extends DescribableProvider {
         ? (fn) =>
             gate.withLifecycle({ provider: this.id, baseUrl: config.url, model: config.model }, fn)
         : undefined,
-      // Record this slot's loads into the host residency registry so only models THIS instance loaded
-      // are eviction-eligible (plan 11.1 D-004).
       residency: config.residency,
     });
   }
 
   /** This slot's residency target (plan 11.1): the endpoint + model the host claims + evicts against. */
-  residencyTarget(): {
-    readonly provider: string;
-    readonly baseUrl: string;
-    readonly model: string;
-  } {
+  residencyTarget(): LocalModelTarget {
     return { provider: this.id, baseUrl: this.url, model: this.model };
   }
 

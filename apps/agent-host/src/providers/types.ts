@@ -1,5 +1,6 @@
 import type { ArtifactRef, PastePayload, ProviderModel, Usage } from "@trevor/session";
 import type { Effect, Stream } from "effect";
+import type { LocalModelTarget } from "../admission/contract";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
 
 // Wire types owned in @trevor/session, re-exported so importers can reach them through the
@@ -137,11 +138,7 @@ export interface Provider {
    * cloud provider that loads nothing. The host reconciles residency claims + eviction off this when
    * a turn resolves its provider, so a local model is claimed while selected and evicted once orphaned.
    */
-  residencyTarget?(): {
-    readonly provider: string;
-    readonly baseUrl: string;
-    readonly model: string;
-  };
+  residencyTarget?(): LocalModelTarget;
 }
 
 /**

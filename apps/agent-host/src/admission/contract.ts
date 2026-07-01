@@ -39,6 +39,31 @@ export function lifecycleResourceKey(providerId: string, baseUrl: string): strin
   return `local-provider-lifecycle:${providerId}:${normalizeBaseUrl(baseUrl)}`;
 }
 
+/**
+ * The RESIDENCY resource an instance's active-model claim holds: `local-residency:{providerId}:
+ * {normalizedBaseUrl}:{modelId}`. Distinct from the generation and lifecycle keys because a claim
+ * persists across the instance's active-model lifetime (not one turn); its live COUNT across instances
+ * is the reference count the eviction sweep reads (plan 11.1 M3).
+ */
+export function residencyResourceKey(providerId: string, baseUrl: string, modelId: string): string {
+  return `local-residency:${providerId}:${normalizeBaseUrl(baseUrl)}:${modelId}`;
+}
+
+/** Whether a resource key is a residency claim rather than a generation/lifecycle admission lease. Both
+ *  live in the one shared store, so the admission /doctor summary excludes residency claims (they have
+ *  their own projection) to avoid double-counting a resident model as an admission holder (plan 11.1). */
+export function isResidencyResourceKey(key: string): boolean {
+  return key.startsWith("local-residency:");
+}
+
+/** A concrete local model target: its provider id, endpoint base URL, and model id. The generation key
+ *  is per model, lifecycle per endpoint, residency per model. */
+export interface LocalModelTarget {
+  readonly provider: string;
+  readonly baseUrl: string;
+  readonly model: string;
+}
+
 /** Trims trailing slashes + whitespace so `http://x:1234/v1` and `http://x:1234/v1/` key identically. */
 export function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/, "");

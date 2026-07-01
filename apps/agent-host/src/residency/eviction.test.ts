@@ -61,7 +61,7 @@ function startGeneration(caps: AdmissionCaps, o: AdmissionOwner, model = MODEL) 
 test("an orphaned Trevor-loaded model (no claim, no generation) is unloaded under the lifecycle lease", async () => {
   const { h, registry, eviction, unloaded, leaseCalls } = setup();
   h.spawn(100);
-  registry.recordLoad(EP, MODEL, 65_536);
+  registry.recordLoad(PROVIDER, EP, MODEL, 65_536);
 
   const outcomes = await eviction.sweep(PROVIDER, EP);
   assert.deepEqual(outcomes, [{ model: MODEL, unloaded: true }]);
@@ -74,7 +74,7 @@ test("a model another live instance still claims is NOT unloaded (D-002)", async
   const { h, registry, eviction, unloaded } = setup();
   h.spawn(100);
   h.spawn(200);
-  registry.recordLoad(EP, MODEL, 65_536);
+  registry.recordLoad(PROVIDER, EP, MODEL, 65_536);
   // Instance B (a different live instance) claims the model; this instance switched away.
   const b = new LocalResidencyClaims(h.b, () => owner("host-b", 200), STALE);
   await b.claim(TARGET);
@@ -89,7 +89,7 @@ test("a model under an active generation is NOT unloaded (cross-instance: A gene
   const { h, registry, eviction, unloaded } = setup();
   h.spawn(100);
   h.spawn(300);
-  registry.recordLoad(EP, MODEL, 65_536);
+  registry.recordLoad(PROVIDER, EP, MODEL, 65_536);
   // Instance A is mid-generation on the model (holds its generation resource); no residency claim.
   await startGeneration(h.b, owner("gen-a", 300));
 
@@ -101,7 +101,7 @@ test("a model under an active generation is NOT unloaded (cross-instance: A gene
 test("only Trevor-loaded models are candidates; an externally-loaded model is never touched (D-004)", async () => {
   const { h, registry, eviction, unloaded } = setup();
   h.spawn(100);
-  registry.recordLoad(EP, "trevor-loaded-model", 65_536);
+  registry.recordLoad(PROVIDER, EP, "trevor-loaded-model", 65_536);
   // "external-model" is NOT recorded (loaded outside Trevor) -> never a candidate.
 
   const outcomes = await eviction.sweep(PROVIDER, EP);
@@ -120,7 +120,7 @@ test("only Trevor-loaded models are candidates; an externally-loaded model is ne
 test("a model resident on a DIFFERENT endpoint is not swept for this endpoint", async () => {
   const { h, registry, eviction, unloaded } = setup();
   h.spawn(100);
-  registry.recordLoad("http://other:1234/v1", MODEL, 65_536);
+  registry.recordLoad(PROVIDER, "http://other:1234/v1", MODEL, 65_536);
 
   const outcomes = await eviction.sweep(PROVIDER, EP);
   assert.deepEqual(outcomes, [], "nothing on this endpoint to sweep");

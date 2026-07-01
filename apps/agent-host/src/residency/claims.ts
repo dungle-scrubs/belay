@@ -1,10 +1,16 @@
-import { type AdmissionOwner, NO_ESTIMATE, normalizeBaseUrl } from "../admission/contract";
+import {
+  type AdmissionOwner,
+  type LocalModelTarget,
+  NO_ESTIMATE,
+  residencyResourceKey,
+} from "../admission/contract";
 import {
   ADMISSION_STALE_MS,
   type AdmissionCaps,
   acquireAdmission,
   heartbeatAdmission,
   inspectResource,
+  liveActiveRecords,
   releaseAdmission,
 } from "../admission/store";
 
@@ -22,19 +28,8 @@ import {
  * unbounded capacity: every live instance's claim is admitted immediately and none ever queue.
  */
 
-/** The residency resource an instance's active-model claim holds: `local-residency:{providerId}:
- *  {normalizedBaseUrl}:{modelId}` - the lifecycle endpoint plus the model (distinct from the generation
- *  and lifecycle keys, since a claim persists across the instance's active-model lifetime, not one turn). */
-export function residencyResourceKey(provider: string, baseUrl: string, model: string): string {
-  return `local-residency:${provider}:${normalizeBaseUrl(baseUrl)}:${model}`;
-}
-
-/** The concrete local model an instance claims residency on. */
-export interface ResidencyClaimTarget {
-  readonly provider: string;
-  readonly baseUrl: string;
-  readonly model: string;
-}
+/** The concrete local model an instance claims residency on (the shared local-model target). */
+export type ResidencyClaimTarget = LocalModelTarget;
 
 /** Effectively unbounded: a residency claim is a counted registration, so all instances' claims are
  *  admitted at once and never queue. */
@@ -88,15 +83,11 @@ export class LocalResidencyClaims {
   /** The number of LIVE claims (across instances) on `target` - a dead-pid or heartbeat-aged claim is
    *  excluded, matching what the eviction sweep treats as "still wanted". */
   liveClaims(target: ResidencyClaimTarget): number {
-    return inspectResource(this.key(target), this.caps).active.filter(
-      (a) => a.alive && a.heartbeatAgeMs <= this.staleAfterMs,
-    ).length;
+    return liveActiveRecords(this.key(target), this.caps, this.staleAfterMs).length;
   }
 
   /** The live claim owners on `target` (for /doctor attribution). */
   claimants(target: ResidencyClaimTarget): readonly AdmissionOwner[] {
-    return inspectResource(this.key(target), this.caps)
-      .active.filter((a) => a.alive && a.heartbeatAgeMs <= this.staleAfterMs)
-      .map((a) => a.owner);
+    return liveActiveRecords(this.key(target), this.caps, this.staleAfterMs).map((r) => r.owner);
   }
 }

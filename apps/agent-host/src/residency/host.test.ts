@@ -38,7 +38,7 @@ function setup() {
 
 test("a recorded load shows up as a resident model in the /doctor summary with its claim count", async () => {
   const { residency } = setup();
-  residency.recorder.recordLoad(EP, X, 65_536);
+  residency.recorder.recordLoad(PROVIDER, EP, X, 65_536);
   await residency.onActiveModelChanged(target(X));
 
   const summary = residency.summary();
@@ -49,10 +49,10 @@ test("a recorded load shows up as a resident model in the /doctor summary with i
 
 test("switching the active local model evicts the orphaned prior model and records it in the summary", async () => {
   const { residency, unloaded } = setup();
-  residency.recorder.recordLoad(EP, X, 65_536);
+  residency.recorder.recordLoad(PROVIDER, EP, X, 65_536);
   await residency.onActiveModelChanged(target(X));
 
-  residency.recorder.recordLoad(EP, Y, 65_536);
+  residency.recorder.recordLoad(PROVIDER, EP, Y, 65_536);
   await residency.onActiveModelChanged(target(Y));
 
   assert.deepEqual(unloaded, [X], "the prior model was unloaded on the switch");
@@ -67,7 +67,7 @@ test("switching the active local model evicts the orphaned prior model and recor
 
 test("a cloud turn (null target) releases the local claim and sweeps it", async () => {
   const { residency, unloaded } = setup();
-  residency.recorder.recordLoad(EP, X, 65_536);
+  residency.recorder.recordLoad(PROVIDER, EP, X, 65_536);
   await residency.onActiveModelChanged(target(X));
 
   await residency.onActiveModelChanged(null); // resolved a cloud provider
@@ -78,7 +78,7 @@ test("a cloud turn (null target) releases the local claim and sweeps it", async 
 
 test("shutdown releases the current claim and sweeps", async () => {
   const { residency, unloaded } = setup();
-  residency.recorder.recordLoad(EP, X, 65_536);
+  residency.recorder.recordLoad(PROVIDER, EP, X, 65_536);
   await residency.onActiveModelChanged(target(X));
 
   await residency.shutdown();

@@ -1,5 +1,5 @@
 import { generationResourceKey } from "../admission/contract";
-import { ADMISSION_STALE_MS, type AdmissionCaps, inspectResource } from "../admission/store";
+import { ADMISSION_STALE_MS, type AdmissionCaps, liveActiveRecords } from "../admission/store";
 import type { LocalResidencyClaims, ResidencyClaimTarget } from "./claims";
 import type { LocalResidencyRegistry } from "./registry";
 
@@ -63,9 +63,7 @@ export class LocalResidencyEviction {
   private hasActiveGeneration(target: ResidencyClaimTarget): boolean {
     const stale = this.deps.staleAfterMs ?? ADMISSION_STALE_MS;
     const key = generationResourceKey(target.provider, target.baseUrl, target.model);
-    return inspectResource(key, this.deps.caps).active.some(
-      (a) => a.alive && a.heartbeatAgeMs <= stale,
-    );
+    return liveActiveRecords(key, this.deps.caps, stale).length > 0;
   }
 
   /** Whether `target` is currently evictable: Trevor-loaded, no live claim, no active generation. Returns
@@ -97,11 +95,15 @@ export class LocalResidencyEviction {
         outcomes.push({ model: candidate.model, unloaded: false, skipped: blocked });
         continue;
       }
-      let unloaded = false;
+      // Decide inside the lease and CAPTURE the outcome there, so the skip reason isn't recomputed (a
+      // third store read) and can't disagree with what the under-lease re-check actually saw.
+      let outcome: EvictionOutcome | undefined;
       await this.deps.withLifecycleLease(target, async () => {
         // Re-check under the lease: a claim or a generation may have arrived since the pre-check, and a
         // concurrent sweep may already have unloaded this model (registry no longer Trevor-loaded).
-        if (this.blockedReason(target)) {
+        const reblocked = this.blockedReason(target);
+        if (reblocked) {
+          outcome = { model: candidate.model, unloaded: false, skipped: reblocked };
           return;
         }
         await this.deps.unload(candidate.model);
@@ -111,17 +113,9 @@ export class LocalResidencyEviction {
           model: candidate.model,
           at: new Date(this.deps.caps.now()).toISOString(),
         };
-        unloaded = true;
+        outcome = { model: candidate.model, unloaded: true };
       });
-      outcomes.push(
-        unloaded
-          ? { model: candidate.model, unloaded: true }
-          : {
-              model: candidate.model,
-              unloaded: false,
-              skipped: this.blockedReason(target) ?? "other-claim",
-            },
-      );
+      outcomes.push(outcome ?? { model: candidate.model, unloaded: false, skipped: "other-claim" });
     }
     return outcomes;
   }

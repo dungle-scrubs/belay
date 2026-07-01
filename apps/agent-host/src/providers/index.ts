@@ -1,7 +1,7 @@
 import type { LocalAdmissionGate } from "../admission/service";
 import type { ResidencyRecorder } from "../residency/registry";
 import { codexProvider } from "./codex";
-import { lmStudioProvider } from "./lmstudio";
+import { lmStudioProvider, lmsBin } from "./lmstudio";
 import { PI_KEY_PROVIDERS, piKeyProvider } from "./pi-key";
 import type { Provider } from "./types";
 
@@ -39,6 +39,9 @@ export type {
   ToolDef,
   Usage,
 } from "./types";
+
+// The LM Studio CLI binary resolver, so the host's residency unload uses the same `lms` as the provider.
+export { lmsBin };
 
 /** The selectable providers, keyed by the id the browser sends (user.message.provider). */
 export type ProviderRegistry = Record<string, Provider>;

@@ -653,55 +653,47 @@ function admissionArea(input: DoctorProbeInput): DoctorArea {
     };
     return area("admission", "Local admission", finding.message, [finding]);
   }
-  const stale = !!a && a.staleOwners > 0;
-  const admissionVerdict = a
-    ? `${a.activeOwners} active, ${a.queued} queued` +
-      (a.queued > 0 ? ` (oldest wait ${Math.round(a.oldestWaitMs / 1000)}s)` : "")
-    : null;
-  const findings: DoctorFinding[] = [
-    ...(hasAdmission && admissionVerdict
-      ? [
-          {
-            id: "admission.summary",
-            status: stale ? ("warn" as const) : ("ok" as const),
-            title: "Local admission",
-            message: admissionVerdict,
-          },
-          ...(stale
-            ? [
-                {
-                  id: "admission.stale",
-                  status: "warn" as const,
-                  title: "Stale local-model owner",
-                  message: `${a.staleOwners} active owner(s) have no live process; reclaimed on the next acquire`,
-                },
-              ]
-            : []),
-        ]
-      : []),
-    ...residency.findings,
-  ];
-  const facts: DoctorArea["facts"] = [
-    ...(hasAdmission && a
-      ? [
-          { label: "resources", value: String(a.resources) },
-          { label: "active owners", value: String(a.activeOwners) },
-          {
-            label: "queued",
-            value: String(a.queued),
-            ...(a.queued > 0 ? { status: "warn" as const } : {}),
-          },
-          ...a.rows.map((row) => ({
-            label: row.key,
-            value:
-              `${row.active}/${row.capacity} active, ${row.queued} queued` +
-              (row.staleActive > 0 ? `, ${row.staleActive} stale` : ""),
-            ...(row.staleActive > 0 ? { status: "warn" as const } : {}),
-          })),
-        ]
-      : []),
-    ...residency.facts,
-  ];
+  const findings: DoctorFinding[] = [];
+  const facts: DoctorFact[] = [];
+  let admissionVerdict: string | null = null;
+  if (hasAdmission && a) {
+    const stale = a.staleOwners > 0;
+    admissionVerdict =
+      `${a.activeOwners} active, ${a.queued} queued` +
+      (a.queued > 0 ? ` (oldest wait ${Math.round(a.oldestWaitMs / 1000)}s)` : "");
+    findings.push({
+      id: "admission.summary",
+      status: stale ? "warn" : "ok",
+      title: "Local admission",
+      message: admissionVerdict,
+    });
+    if (stale) {
+      findings.push({
+        id: "admission.stale",
+        status: "warn",
+        title: "Stale local-model owner",
+        message: `${a.staleOwners} active owner(s) have no live process; reclaimed on the next acquire`,
+      });
+    }
+    facts.push(
+      { label: "resources", value: String(a.resources) },
+      { label: "active owners", value: String(a.activeOwners) },
+      {
+        label: "queued",
+        value: String(a.queued),
+        ...(a.queued > 0 ? { status: "warn" as const } : {}),
+      },
+      ...a.rows.map((row) => ({
+        label: row.key,
+        value:
+          `${row.active}/${row.capacity} active, ${row.queued} queued` +
+          (row.staleActive > 0 ? `, ${row.staleActive} stale` : ""),
+        ...(row.staleActive > 0 ? { status: "warn" as const } : {}),
+      })),
+    );
+  }
+  findings.push(...residency.findings);
+  facts.push(...residency.facts);
   const verdict = [admissionVerdict, residency.verdict].filter(Boolean).join("; ");
   return area("admission", "Local admission", verdict, findings, facts);
 }

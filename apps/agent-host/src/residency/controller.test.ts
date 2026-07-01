@@ -56,12 +56,12 @@ test("switching the active model releases the prior claim and evicts the now-orp
   const self = instance(h.a, "host-a", 100);
 
   // Load + claim model X.
-  self.registry.recordLoad(EP, X, 65_536);
+  self.registry.recordLoad(PROVIDER, EP, X, 65_536);
   await self.controller.onActiveModelChanged(target(X));
   assert.equal(self.claims.liveClaims(target(X)), 1, "X is claimed");
 
   // Load Y, then switch active model X -> Y.
-  self.registry.recordLoad(EP, Y, 65_536);
+  self.registry.recordLoad(PROVIDER, EP, Y, 65_536);
   await self.controller.onActiveModelChanged(target(Y));
 
   assert.equal(self.claims.liveClaims(target(Y)), 1, "Y is now claimed (cap 1)");
@@ -78,14 +78,14 @@ test("a model another instance still uses is NOT evicted when this instance swit
   const b = instance(h.b, "host-b", 200);
 
   // Both instances are on X (shared model); each records it resident locally.
-  a.registry.recordLoad(EP, X, 65_536);
-  b.registry.recordLoad(EP, X, 65_536);
+  a.registry.recordLoad(PROVIDER, EP, X, 65_536);
+  b.registry.recordLoad(PROVIDER, EP, X, 65_536);
   await a.controller.onActiveModelChanged(target(X));
   await b.controller.onActiveModelChanged(target(X));
   assert.equal(a.claims.liveClaims(target(X)), 2, "both instances claim X");
 
   // A switches away to Y; B still wants X.
-  a.registry.recordLoad(EP, Y, 65_536);
+  a.registry.recordLoad(PROVIDER, EP, Y, 65_536);
   await a.controller.onActiveModelChanged(target(Y));
 
   assert.deepEqual(a.unloaded, [], "A does not evict X - B still claims it");
@@ -97,7 +97,7 @@ test("re-selecting the same model just heartbeats the existing claim (no release
   const h = makeAdmissionHarness({ staleAfterMs: STALE });
   h.spawn(100);
   const self = instance(h.a, "host-a", 100);
-  self.registry.recordLoad(EP, X, 65_536);
+  self.registry.recordLoad(PROVIDER, EP, X, 65_536);
   await self.controller.onActiveModelChanged(target(X));
 
   h.advance(1_000);
@@ -111,7 +111,7 @@ test("shutdown releases the current claim and evicts the model if it was the las
   const h = makeAdmissionHarness({ staleAfterMs: STALE });
   h.spawn(100);
   const self = instance(h.a, "host-a", 100);
-  self.registry.recordLoad(EP, X, 65_536);
+  self.registry.recordLoad(PROVIDER, EP, X, 65_536);
   await self.controller.onActiveModelChanged(target(X));
 
   await self.controller.shutdown();
@@ -124,7 +124,7 @@ test("heartbeat keeps the current claim alive across more than a full TTL window
   const h = makeAdmissionHarness({ staleAfterMs: STALE });
   h.spawn(100);
   const self = instance(h.a, "host-a", 100);
-  self.registry.recordLoad(EP, X, 65_536);
+  self.registry.recordLoad(PROVIDER, EP, X, 65_536);
   await self.controller.onActiveModelChanged(target(X));
 
   for (let i = 0; i < 3; i++) {
