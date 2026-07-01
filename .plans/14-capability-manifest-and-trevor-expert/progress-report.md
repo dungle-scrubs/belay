@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M9: Expert Safety and Answer Quality
+> Current focus: M10: End-to-End Verification
 
 ## Summary
 
-- Current cutoff blockers: 10
+- Current cutoff blockers: 5
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -79,11 +79,11 @@
 
 ## M9: Expert Safety and Answer Quality
 
-- [ ] RED: Add tests/evals proving `trevor-expert` does not mutate state, grant permissions, start work, or bypass authority
-- [ ] GREEN: Clamp `trevor-expert` to read-only deterministic host exports and bounded explanation output
-- [ ] RED: Add evals for tools, commands, skills, providers, Doctor, project rules, protocol/version, and unavailable sections
-- [ ] GREEN: Answer from exports with provenance and explicit unknown/unavailable states
-- [ ] REFACTOR: Keep default turns aware only that `trevor-expert` exists, with detail loaded on demand
+- [x] RED: Add tests/evals proving `trevor-expert` does not mutate state, grant permissions, start work, or bypass authority
+- [x] GREEN: Clamp `trevor-expert` to read-only deterministic host exports and bounded explanation output
+- [x] RED: Add evals for tools, commands, skills, providers, Doctor, project rules, protocol/version, and unavailable sections
+- [x] GREEN: Answer from exports with provenance and explicit unknown/unavailable states
+- [x] REFACTOR: Keep default turns aware only that `trevor-expert` exists, with detail loaded on demand
 
 ## M10: End-to-End Verification
 

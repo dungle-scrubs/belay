@@ -64,6 +64,12 @@ const ROUTES: readonly Route[] = [
 /** The small default overview for a question that matches no route. */
 const DEFAULT_SECTIONS: readonly ManifestSectionId[] = ["commands", "tools"];
 
+/** Footer listing the areas trevor-expert can answer about, so an unrouted/unknown topic gets an explicit
+ *  pointer instead of a fabricated answer (M9: explicit unknown states). */
+const EXPERT_AREAS_FOOTER =
+  "Ask trevor-expert about: tools, commands, styles, skills, agents, mcp, lsp, hooks, docs, doctor, " +
+  "providers/catalog, runtime, protocol, or workspace.";
+
 /**
  * Routes a question to the bounded set of section ids it needs. Matches keyword routes (deduped, canonical
  * order), falls back to a small core overview when nothing matches, and never returns more than
@@ -116,5 +122,5 @@ export async function answerExpertQuery(
     return "trevor-expert: the capability manifest is unavailable (no live host on this session).";
   }
   const body = slices.map((s) => s.text ?? `## ${s.section}: unavailable`).join("\n\n");
-  return `trevor-expert (from the live capability manifest):\n\n${body}`;
+  return `trevor-expert (from the live capability manifest):\n\n${body}\n\n${EXPERT_AREAS_FOOTER}`;
 }

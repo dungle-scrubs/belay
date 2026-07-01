@@ -97,17 +97,28 @@ function selectSection(manifest: CapabilityManifest, id: ManifestSectionId): Cap
   return { ...manifest, sections: manifest.sections.filter((s) => s.id === id) };
 }
 
-/** Renders one section as a human-readable block: a header with count/status, then one line per item. */
+/** The provenance suffix for a section header, e.g. " · source: skill-registry (stale)". */
+function provenanceSuffix(section: ManifestSection): string {
+  if (!section.provenance) {
+    return "";
+  }
+  const stale = section.provenance.fresh === false ? " (stale)" : "";
+  return ` · source: ${section.provenance.source}${stale}`;
+}
+
+/** Renders one section as a human-readable block: a header with count/status/provenance, then one line
+ *  per item - so every export (and the expert answers built on it) carries where the facts came from. */
 function renderSectionBlock(section: ManifestSection): string {
   const shown = section.items.length;
   const total = section.total ?? shown;
   const countLabel = total > shown ? `${total}, showing ${shown}` : `${total}`;
   const pointer = section.detail && total > shown ? ` [more via ${section.detail}]` : "";
+  const prov = provenanceSuffix(section);
   if (section.status === "unavailable" || section.status === "error") {
-    return `## ${section.title}: ${section.status}${section.note ? ` (${section.note})` : ""}`;
+    return `## ${section.title}: ${section.status}${section.note ? ` (${section.note})` : ""}${prov}`;
   }
   if (shown === 0) {
-    return `## ${section.title}: none`;
+    return `## ${section.title}: none${prov}`;
   }
   const lines = section.items.map((item) => {
     const flags = item.meta
@@ -119,7 +130,7 @@ function renderSectionBlock(section: ManifestSection): string {
     const scope = item.scope ? ` (${item.scope})` : "";
     return `- ${item.label}${scope}${summary}${flags ? ` [${flags}]` : ""}`;
   });
-  return `## ${section.title} (${countLabel})${pointer}\n${lines.join("\n")}`;
+  return `## ${section.title} (${countLabel})${pointer}${prov}\n${lines.join("\n")}`;
 }
 
 /** Renders the full human-readable manifest, capped at {@link MAX_TEXT_CHARS} with an explicit cut note. */
