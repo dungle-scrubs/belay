@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 10
+- **Current cutoff blockers:** 0
 - **Completed current work:** 5
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M7 - Hermetic Multi-Instance E2E
+- **Current focus:** Done - gate + simplify + merge
 - **Note:** Phases 2-4 are gated on `.plans/11-local-admission-control` (shared store, lifecycle lease, generation registry); Phase 1 (context cap) has no plan 11 dependency. See implementation.md §0 for the full hard-dependency list.
 
 ## Completed Current State / Hard Dependencies
@@ -94,19 +94,19 @@
 
 #### M7: Hermetic Multi-Instance E2E
 
-- [ ] RED: Add a hermetic e2e with two instances against an isolated fake LM Studio: two models → both resident, no thrash.
-- [ ] GREEN: Prove a model is evicted only after its last claim is released.
-- [ ] RED: Add a case proving a non-Trevor-loaded model is never unloaded, and a model under active generation is never evicted.
-- [ ] GREEN: Implement robust cleanup across instance boundaries.
-- [ ] REFACTOR: Keep the fake-LM-Studio residency fixture reusable for future local-provider tests.
+- [x] RED: Add a hermetic e2e with two instances against an isolated fake LM Studio: two models → both resident, no thrash.
+- [x] GREEN: Prove a model is evicted only after its last claim is released.
+- [x] RED: Add a case proving a non-Trevor-loaded model is never unloaded, and a model under active generation is never evicted.
+- [x] GREEN: Implement robust cleanup across instance boundaries.
+- [x] REFACTOR: Keep the fake-LM-Studio residency fixture reusable for future local-provider tests.
 
 #### Done Gate
 
-- [ ] Unit, integration, and hermetic e2e tests pass for residency + eviction.
-- [ ] The 8-bit local slot is context-capped consistently.
-- [ ] Eviction is reference-counted, lease-safe, and never touches externally-loaded or in-generation models.
-- [ ] Two instances on two models stay resident; orphaned models are reclaimed.
-- [ ] `/doctor` shows resident models, caps, claim counts, and last eviction.
+- [x] Unit, integration, and hermetic e2e tests pass for residency + eviction.
+- [x] The 8-bit local slot is context-capped consistently.
+- [x] Eviction is reference-counted, lease-safe, and never touches externally-loaded or in-generation models.
+- [x] Two instances on two models stay resident; orphaned models are reclaimed.
+- [x] `/doctor` shows resident models, caps, claim counts, and last eviction.
 
 ## Accepted/Deferred Follow-Up
 

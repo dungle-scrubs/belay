@@ -27,3 +27,10 @@ export { ProviderUnavailable } from "../../src/providers/errors";
 export { runPromotable } from "../../src/tools/promote-runner";
 export { publishTurn } from "../../src/turn";
 export * from "./fake-provider";
+// The hermetic fake-LM-Studio residency fixture (plan 11.1 M7), so cross-service e2e can drive two host
+// instances reference-counting residency claims over one real cross-process admission store.
+export {
+  type FakeLmStudioResidency,
+  type FakeResidencyInstance,
+  makeFakeLmStudioResidency,
+} from "./residency-fixture";
