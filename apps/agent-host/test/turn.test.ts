@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import type { TrevorEventInput } from "@trevor/session";
 import { METRIC_NAMES, SPAN_NAMES } from "@trevor/session/telemetry";
+import type {
+  ProviderAttemptRecord,
+  ProviderTraceWriter,
+} from "@trevor/session/telemetry-provider-trace";
 import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
@@ -331,6 +335,42 @@ test("a terminal provider stream failure publishes structured diagnostic data wi
     toolCalls: 0,
     toolResults: 0,
   });
+});
+
+test("a terminal provider failure writes a provider-attempt trace record when tracing is enabled", async () => {
+  const records: ProviderAttemptRecord[] = [];
+  const traceWriter: ProviderTraceWriter = {
+    record: (r) => records.push(r),
+    stats: () => ({ written: records.length, dropped: 0 }),
+  };
+  // A NON-retryable terminal failure (auth), so the loop terminates at once instead of running the
+  // reconnect backoff budget.
+  const provider = fakeProvider({
+    id: "deepseek",
+    stream: () =>
+      Stream.fail(
+        new ProviderUnavailable({
+          provider: "deepseek",
+          detail: "invalid api key",
+          retryable: false,
+          classification: "auth",
+        }),
+      ),
+  });
+  const { layer } = collectingEmit();
+  await Effect.runPromise(
+    publishTurn(provider, history, { runId: "r1", providerTrace: traceWriter }).pipe(
+      Effect.provide(layer),
+    ),
+  );
+
+  assert.equal(records.length, 1, "one provider-attempt record for the terminal failure");
+  const [rec] = records;
+  assert.equal(rec?.provider, "deepseek");
+  assert.equal(rec?.model, "fake-1");
+  assert.equal(rec?.outcome, "error");
+  assert.ok(typeof rec?.failureClass === "string", "carries the failure taxonomy class");
+  assert.ok((rec?.attempt ?? 0) >= 1, "carries the attempt/retry state");
 });
 
 /**

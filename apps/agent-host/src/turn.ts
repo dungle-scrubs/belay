@@ -6,6 +6,7 @@ import {
   SPAN_NAMES,
   type TelemetrySink,
 } from "@trevor/session/telemetry";
+import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
 import type { AdmissionPriority } from "./admission/contract";
 import {
@@ -83,6 +84,9 @@ export function publishTurn(
     /** The telemetry sink for the turn span + per-tool spans (plan 13 M3); NOOP (disabled) unless the
      *  host wires an exporter. Spans carry provider/model + status only, never prompt or tool content. */
     readonly telemetry?: TelemetrySink;
+    /** The opt-in provider-attempt trace writer (plan 13 M6); absent = tracing disabled. Records a bounded,
+     *  redacted record on a terminal provider failure (the deep debugging evidence for a flaky provider). */
+    readonly providerTrace?: ProviderTraceWriter;
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
@@ -90,6 +94,7 @@ export function publishTurn(
   const rebuildProvider = options.rebuildProvider;
   const initialModel = options.initialModel;
   const sink = options.telemetry ?? NOOP_SINK;
+  const traceWriter = options.providerTrace;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -462,6 +467,21 @@ export function publishTurn(
                   shapeFields: evidence.shapeFields,
                   detail: error.message,
                   at: new Date().toISOString(),
+                }),
+              );
+              // The opt-in deep provider-attempt trace (plan 13 M6): the terminal failure's class + retry
+              // state + redacted detail, for debugging a flaky provider. A no-op writer when disabled.
+              yield* Effect.sync(() =>
+                traceWriter?.record({
+                  provider: provider.id,
+                  model: provider.model,
+                  attemptId: runId,
+                  outcome: "error",
+                  failureClass: evidence.classification,
+                  retryable: evidence.retryable,
+                  attempt: reconnectAttempts + 1,
+                  durationMs: 0,
+                  detail: error.message,
                 }),
               );
             }
