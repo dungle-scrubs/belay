@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { recordingTelemetrySink } from "@trevor/test-kit";
 import { afterEach, beforeEach, test } from "vitest";
 import { BlobStore, HEX64 } from "./store";
 
@@ -56,4 +58,31 @@ test("head returns meta without bytes", async () => {
   assert.ok(meta);
   assert.equal(meta.mimeType, "image/png");
   assert.equal(meta.size, 3);
+});
+
+test("blob IO emits an ok span per op (put/get/head) carrying no hash, path, or bytes", async () => {
+  const recorder = recordingTelemetrySink();
+  const instrumented = new BlobStore(dir, recorder.sink);
+  const bytes = new TextEncoder().encode("telemetry blob");
+  const { hash } = await instrumented.put(bytes, "text/plain");
+  await instrumented.get(hash);
+  await instrumented.head(hash);
+  await instrumented.get("a".repeat(64)); // a miss is still an ok span, not an error
+
+  const spans = recorder.named(SPAN_NAMES.blobIo);
+  assert.equal(spans.length, 4, "one span per blob operation");
+  assert.deepEqual(
+    spans.map((s) => s.attributes.op),
+    ["put", "get", "head", "get"],
+  );
+  assert.ok(
+    spans.every((s) => s.status === "ok"),
+    "reads/writes + a miss are ok; only a throw is an error span",
+  );
+  // The put span carries the byte size but never the content hash, path, or bytes.
+  const put = spans[0];
+  assert.equal(put?.attributes.bytes, bytes.byteLength);
+  const serialized = JSON.stringify(spans);
+  assert.ok(!serialized.includes(hash), "the content hash never enters a span");
+  assert.ok(!serialized.includes(dir), "the on-disk path never enters a span");
 });

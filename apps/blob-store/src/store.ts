@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { HEX64, type PutBlobResult } from "@trevor/session/blob-contract";
+import { NOOP_SINK, SPAN_NAMES, type TelemetrySink, withSpan } from "@trevor/session/telemetry";
 
 /**
  * The content-addressed blob store on disk (D-028). Bytes are named by their
@@ -33,7 +34,12 @@ export interface BlobMeta {
 export type StoredBlob = PutBlobResult;
 
 export class BlobStore {
-  constructor(private readonly root: string) {}
+  /** Telemetry is disabled by default (NOOP_SINK); `main.ts` wires the real exporter, tests a recorder.
+   *  Spans carry only the operation, byte size, and hit/miss outcome - never the hash, path, or bytes. */
+  constructor(
+    private readonly root: string,
+    private readonly sink: TelemetrySink = NOOP_SINK,
+  ) {}
 
   private pathFor(hash: string): string {
     return join(this.root, hash.slice(0, 2), hash);
@@ -46,51 +52,62 @@ export class BlobStore {
 
   /** Stores bytes (idempotently); identical content returns the same hash, marked deduped. */
   async put(bytes: Uint8Array, mimeType: string): Promise<StoredBlob> {
-    const hash = this.hashOf(bytes);
-    const path = this.pathFor(hash);
-    const result = { hash, size: bytes.byteLength, mimeType };
-    await mkdir(dirname(path), { recursive: true });
-    try {
-      // wx writes only if absent; content-addressed, so an existing blob is byte-identical
-      // and EEXIST is the dedup case - race-free, one syscall in the common path.
-      await writeFile(path, bytes, { flag: "wx" });
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code === "EEXIST") {
-        return { ...result, deduped: true };
-      }
-      throw cause;
-    }
-    const meta: BlobMeta = { size: result.size, mimeType };
-    await writeFile(`${path}.meta`, JSON.stringify(meta), "utf8");
-    return { ...result, deduped: false };
+    return withSpan(
+      this.sink,
+      SPAN_NAMES.blobIo,
+      { op: "put", bytes: bytes.byteLength },
+      async () => {
+        const hash = this.hashOf(bytes);
+        const path = this.pathFor(hash);
+        const result = { hash, size: bytes.byteLength, mimeType };
+        await mkdir(dirname(path), { recursive: true });
+        try {
+          // wx writes only if absent; content-addressed, so an existing blob is byte-identical
+          // and EEXIST is the dedup case - race-free, one syscall in the common path.
+          await writeFile(path, bytes, { flag: "wx" });
+        } catch (cause) {
+          if ((cause as NodeJS.ErrnoException).code === "EEXIST") {
+            return { ...result, deduped: true };
+          }
+          throw cause;
+        }
+        const meta: BlobMeta = { size: result.size, mimeType };
+        await writeFile(`${path}.meta`, JSON.stringify(meta), "utf8");
+        return { ...result, deduped: false };
+      },
+    );
   }
 
   /** Reads a blob's bytes + meta, or null if the hash is malformed or absent. */
   async get(hash: string): Promise<{ bytes: Uint8Array; meta: BlobMeta } | null> {
-    if (!HEX64.test(hash)) {
-      return null;
-    }
-    const path = this.pathFor(hash);
-    try {
-      const [bytes, metaRaw] = await Promise.all([
-        readFile(path),
-        readFile(`${path}.meta`, "utf8"),
-      ]);
-      return { bytes, meta: JSON.parse(metaRaw) as BlobMeta };
-    } catch {
-      return null;
-    }
+    return withSpan(this.sink, SPAN_NAMES.blobIo, { op: "get" }, async () => {
+      if (!HEX64.test(hash)) {
+        return null;
+      }
+      const path = this.pathFor(hash);
+      try {
+        const [bytes, metaRaw] = await Promise.all([
+          readFile(path),
+          readFile(`${path}.meta`, "utf8"),
+        ]);
+        return { bytes, meta: JSON.parse(metaRaw) as BlobMeta };
+      } catch {
+        return null;
+      }
+    });
   }
 
   /** Reads only a blob's meta (for HEAD), or null if the hash is malformed or absent. */
   async head(hash: string): Promise<BlobMeta | null> {
-    if (!HEX64.test(hash)) {
-      return null;
-    }
-    try {
-      return JSON.parse(await readFile(`${this.pathFor(hash)}.meta`, "utf8")) as BlobMeta;
-    } catch {
-      return null;
-    }
+    return withSpan(this.sink, SPAN_NAMES.blobIo, { op: "head" }, async () => {
+      if (!HEX64.test(hash)) {
+        return null;
+      }
+      try {
+        return JSON.parse(await readFile(`${this.pathFor(hash)}.meta`, "utf8")) as BlobMeta;
+      } catch {
+        return null;
+      }
+    });
   }
 }
