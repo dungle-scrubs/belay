@@ -1,6 +1,7 @@
 import { DEFAULT_TOOL_SCRIPT_BUDGETS, type ToolScriptResult } from "@trevor/session";
 import { describe, expect, it } from "vitest";
 import { manageToolScriptRun, type ToolScriptBridge } from "../../src/tool-script/host-manager";
+import { resolveRunnerLaunch } from "../../src/tool-script/launch";
 import { defaultRunnerCommand, spawnRunner } from "../../src/tool-script/spawn";
 
 /**
@@ -54,5 +55,27 @@ describe("tool_script real child-runner integration (M3)", () => {
   it("reports a runtime throw from the real child as a failed result", async () => {
     const result = await runReal("throw new Error('kaboom');");
     expect(result.status === "failed" && result.failureClass).toBe("runtime_error");
+  });
+
+  it("resolves a launch on the real host and runs to completion under the effective mode (M4)", async () => {
+    // Real sandbox probe: on a host where the Seatbelt profile cannot boot Node this degrades to
+    // child-process; either way the resolved command must run the script to completion.
+    const launch = await resolveRunnerLaunch({ scratchDir: process.cwd() });
+    expect(["sandbox-exec", "child-process"]).toContain(launch.sandboxMode);
+    const child = spawnRunner({ command: launch.command, cwd: process.cwd() });
+    const result = await manageToolScriptRun(
+      child,
+      { call: () => Promise.resolve({ status: "ok", output: "" }) },
+      {
+        script: "return 1 + 1;",
+        context: { cwd: process.cwd() },
+        budgets: DEFAULT_TOOL_SCRIPT_BUDGETS,
+        sandboxMode: launch.sandboxMode,
+      },
+    ).result;
+    expect(result.status).toBe("completed");
+    if (result.status === "completed") {
+      expect(result.result).toBe(2);
+    }
   });
 }, 30_000);

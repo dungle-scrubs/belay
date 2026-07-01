@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M4 - Safehouse / OS Sandbox Integration
-- **Completed:** 22 / 68
-- **Current cutoff blockers:** 46
+- **Current focus:** M5 - Toolset Capability Matrix
+- **Completed:** 27 / 68
+- **Current cutoff blockers:** 41
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -56,11 +56,11 @@
 
 #### M4: Safehouse / OS Sandbox Integration
 
-- [ ] RED: Add tests for selecting Safehouse/sandbox-exec mode on macOS and fallback mode elsewhere.
-- [ ] GREEN: Launch the child runner through Agent Safehouse or equivalent sandbox profile when configured and available.
-- [ ] RED: Add integration tests proving direct filesystem reads/writes, network calls, env access, process spawning, and imports are denied.
-- [ ] GREEN: Generate a deny-first profile with only the minimum pipes/temp access needed for the bridge.
-- [ ] REFACTOR: Expose sandbox mode and policy hash in diagnostics without leaking sensitive paths.
+- [x] RED: Add tests for selecting Safehouse/sandbox-exec mode on macOS and fallback mode elsewhere.
+- [x] GREEN: Launch the child runner through Agent Safehouse or equivalent sandbox profile when configured and available.
+- [x] RED: Add integration tests proving direct filesystem reads/writes, network calls, env access, process spawning, and imports are denied.
+- [x] GREEN: Generate a deny-first profile with only the minimum pipes/temp access needed for the bridge.
+- [x] REFACTOR: Expose sandbox mode and policy hash in diagnostics without leaking sensitive paths.
 
 #### Gate 2->3
 
