@@ -1,4 +1,5 @@
 import type { LocalAdmissionGate } from "../admission/service";
+import type { ResidencyRecorder } from "../residency/registry";
 import { codexProvider } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { PI_KEY_PROVIDERS, piKeyProvider } from "./pi-key";
@@ -54,9 +55,14 @@ export const DEFAULT_PROVIDER = "qwen";
  * renders whatever the host announces.
  */
 export function buildProviders(
-  opts: { readonly admissionGate?: LocalAdmissionGate } = {},
+  opts: {
+    readonly admissionGate?: LocalAdmissionGate;
+    /** The host residency registry both local slots record their loads into (plan 11.1). */
+    readonly residency?: ResidencyRecorder;
+  } = {},
 ): ProviderRegistry {
   const admissionGate = opts.admissionGate;
+  const residency = opts.residency;
   return {
     // Two qwen3.6-27b quants now coexist in LM Studio, so the bare "qwen3.6-27b-mlx"
     // key is ambiguous - pin each to its org-prefixed id.
@@ -64,6 +70,7 @@ export function buildProviders(
       model: process.env.LMSTUDIO_MODEL ?? "unsloth/qwen3.6-27b-mlx",
       label: "Qwen 27B 8-bit (local)",
       admissionGate,
+      residency,
     }),
     gpt: codexProvider("GPT-5.5"),
     // Both local qwen slots load at the bounded DEFAULT_LOCAL_CONTEXT_CAP (64k) - the working window -
@@ -75,6 +82,7 @@ export function buildProviders(
       model: "lmstudio-community/qwen3.6-27b-mlx",
       label: "Qwen 27B 4-bit (local)",
       admissionGate,
+      residency,
     }),
     // The static-key cloud providers (DeepSeek, Z.ai/GLM, MiniMax) come from one registry
     // (pi-key.ts), so adding one is a single row there - not a line here plus a factory body.

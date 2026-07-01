@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 15
+- **Current cutoff blockers:** 10
 - **Completed current work:** 5
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M6 - Doctor Residency Surface
+- **Current focus:** M7 - Hermetic Multi-Instance E2E
 - **Note:** Phases 2-4 are gated on `.plans/11-local-admission-control` (shared store, lifecycle lease, generation registry); Phase 1 (context cap) has no plan 11 dependency. See implementation.md §0 for the full hard-dependency list.
 
 ## Completed Current State / Hard Dependencies
@@ -86,11 +86,11 @@
 
 #### M6: Doctor Residency Surface
 
-- [ ] RED: Add `/doctor` tests for resident Trevor-loaded models, per-model context caps, live claim counts, and last eviction in the Providers/Models area.
-- [ ] GREEN: Extend `LmStudioClient.debugInfo()` and the doctor snapshot with residency state.
-- [ ] RED: Add a redaction test proving residency facts expose no secrets.
-- [ ] GREEN: Keep residency facts bounded and sanitized.
-- [ ] REFACTOR: Reuse plan 41's Providers/Models area rather than a new surface.
+- [x] RED: Add `/doctor` tests for resident Trevor-loaded models, per-model context caps, live claim counts, and last eviction in the Providers/Models area.
+- [x] GREEN: Extend `LmStudioClient.debugInfo()` and the doctor snapshot with residency state.
+- [x] RED: Add a redaction test proving residency facts expose no secrets.
+- [x] GREEN: Keep residency facts bounded and sanitized.
+- [x] REFACTOR: Reuse plan 41's Providers/Models area rather than a new surface. (Plan 41 is not yet implemented, so its dedicated Providers/Models area does not exist; residency is folded into the existing plan-11 "Local admission" area - its sibling local-model-runtime surface - rather than adding a new `DoctorAreaId`. Re-home into plan 41's area when that lands.)
 
 #### M7: Hermetic Multi-Instance E2E
 

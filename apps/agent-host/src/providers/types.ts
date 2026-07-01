@@ -132,6 +132,16 @@ export interface Provider {
    * whatever the adapter hides that an operator would otherwise have to read source for.
    */
   debugInfo?(): Record<string, unknown>;
+  /**
+   * The local-model residency target this provider keeps resident (plan 11.1), or undefined for a
+   * cloud provider that loads nothing. The host reconciles residency claims + eviction off this when
+   * a turn resolves its provider, so a local model is claimed while selected and evicted once orphaned.
+   */
+  residencyTarget?(): {
+    readonly provider: string;
+    readonly baseUrl: string;
+    readonly model: string;
+  };
 }
 
 /**

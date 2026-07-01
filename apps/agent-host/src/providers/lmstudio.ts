@@ -4,6 +4,7 @@ import { admittedStream } from "../admission/effect";
 import type { LocalAdmissionGate } from "../admission/service";
 import { AdmissionTurnRef } from "../admission/turn-ref";
 import { envNumber } from "../env";
+import type { ResidencyRecorder } from "../residency/registry";
 import { LmStudioClient } from "./lmstudio-client";
 import { streamPiAiModel } from "./pi-ai";
 import {
@@ -33,6 +34,9 @@ export interface LmStudioConfig {
   /** The host's local-admission gate (plan 11), or undefined to run without admission (cloud parity /
    *  tests). When set, generation streams hold a per-model lease and reloads hold the endpoint lease. */
   readonly admissionGate?: LocalAdmissionGate;
+  /** Records this slot's `lms load`/unload into the host residency registry (plan 11.1), so only models
+   *  THIS instance loaded are eviction-eligible. Omitted = residency tracking disabled (tests). */
+  readonly residency?: ResidencyRecorder;
 }
 
 /**
@@ -69,6 +73,8 @@ export function lmStudioProvider(opts: {
   readonly maxContext?: number;
   /** The host's local-admission gate; omitted in tests / when admission is disabled. */
   readonly admissionGate?: LocalAdmissionGate;
+  /** The host residency registry to record this slot's loads into (plan 11.1); omitted in tests. */
+  readonly residency?: ResidencyRecorder;
 }): LmStudioProvider {
   return new LmStudioProvider({
     url: process.env.LMSTUDIO_URL ?? DEFAULT_LMSTUDIO_URL,
@@ -80,6 +86,7 @@ export function lmStudioProvider(opts: {
     visionOverride: visionOverride(process.env.LMSTUDIO_VISION),
     lmsBin: process.env.LMS_BIN ?? "lms",
     admissionGate: opts.admissionGate,
+    residency: opts.residency,
   });
 }
 
@@ -123,7 +130,19 @@ export class LmStudioProvider extends DescribableProvider {
         ? (fn) =>
             gate.withLifecycle({ provider: this.id, baseUrl: config.url, model: config.model }, fn)
         : undefined,
+      // Record this slot's loads into the host residency registry so only models THIS instance loaded
+      // are eviction-eligible (plan 11.1 D-004).
+      residency: config.residency,
     });
+  }
+
+  /** This slot's residency target (plan 11.1): the endpoint + model the host claims + evicts against. */
+  residencyTarget(): {
+    readonly provider: string;
+    readonly baseUrl: string;
+    readonly model: string;
+  } {
+    return { provider: this.id, baseUrl: this.url, model: this.model };
   }
 
   readiness(): Effect.Effect<Readiness> {

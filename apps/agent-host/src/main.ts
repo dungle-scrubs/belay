@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import {
   type ArtifactRef,
   catalogEntryFor,
@@ -24,7 +25,7 @@ import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { admissionDoctorSummary } from "./admission/doctor";
 import { createLocalAdmissionGate } from "./admission/service";
-import { nodeAdmissionCaps, snapshotAdmission } from "./admission/store";
+import { ADMISSION_HEARTBEAT_MS, nodeAdmissionCaps, snapshotAdmission } from "./admission/store";
 import { CompactionController } from "./agent/compaction-controller";
 import {
   type BackgroundChildInfo,
@@ -92,6 +93,7 @@ import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./provid
 import { parseOverflowWindow } from "./providers/error-classifier";
 import { recordLearnedWindow } from "./providers/model-metadata-overrides";
 import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
+import { createHostResidency } from "./residency/host";
 import { disposeCurrentPlan, serialNext } from "./serial-run/driver";
 import { startSerialRun } from "./serial-run/entry";
 import {
@@ -165,7 +167,25 @@ const admissionGate = createLocalAdmissionGate({
   caps: admissionCaps,
   capacityFor: capacityResolver(admissionConfig),
 });
-const providers = buildProviders({ admissionGate });
+const execFileAsync = promisify(execFile);
+/** Unloads a local model from the LM Studio runtime (`lms unload <model>`), used by residency eviction.
+ *  execFile (not a shell) so an org-prefixed model id never needs quoting. */
+async function unloadLocalModel(model: string): Promise<void> {
+  await execFileAsync(process.env.LMS_BIN ?? "lms", ["unload", model]);
+}
+// Local-model residency (plan 11.1): track which local models THIS instance loaded, claim the active one
+// cross-process, and evict a model once no live instance still claims it (reference-counted, lease-safe).
+// Its recorder is handed to the LM Studio slots; the turn loop reconciles it as each turn resolves its
+// provider. Shares plan 11's caps + lifecycle lease so residency and admission never race the runtime.
+const residency = createHostResidency({
+  caps: admissionCaps,
+  hostId: crypto.randomUUID(),
+  pid: process.pid,
+  withLifecycleLease: (target, fn) => admissionGate.withLifecycle(target, fn),
+  unload: unloadLocalModel,
+  staleAfterMs: admissionConfig.staleAfterMs,
+});
+const providers = buildProviders({ admissionGate, residency: residency.recorder });
 const commands = buildCommandRegistry();
 // The host-owned model source + catalog read model (D-065): which provider sources exist, their auth
 // state, and each configured source's live model list. Loaded async (it hits each provider's /models),
@@ -550,6 +570,10 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     pickProvider(providers, turnModel.sourceId);
   // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
   compactionController.noteProvider(provider);
+  // Reconcile local-model residency for this turn's provider (plan 11.1): claim the local model it holds
+  // (releasing + sweeping the prior one), or release the current claim when the turn goes to the cloud.
+  // Fire-and-forget: residency is best-effort and must never gate a turn.
+  void residency.onActiveModelChanged(provider.residencyTarget?.() ?? null);
   // A cloud turn may want fresh connectivity for the advisory (D-060): refresh if stale, never block
   // the turn on it (fire-and-forget; the result rides a later host.internet).
   if (provider.kind === "cloud") {
@@ -1134,6 +1158,11 @@ function goLive(): void {
         }
       }
     }, CWD_LOCK_HEARTBEAT_MS);
+    // Keep this instance's local-model residency claim fresh so it doesn't age into stale + get
+    // reclaimed while we still hold the model (plan 11.1). A no-op when no local model is claimed.
+    setInterval(() => {
+      void residency.heartbeat();
+    }, ADMISSION_HEARTBEAT_MS);
   }
   emit(events.hostHello({ instanceId: INSTANCE_ID })).catch(() => {});
   announceOnline();
@@ -1999,6 +2028,11 @@ async function restartHost(args: string): Promise<void> {
 function performGracefulStop(): StopOutcome {
   // Free the cwd advisory lock for the next owner before we tear the session down (plan 01).
   releaseWorkspaceCwdLock();
+  // Release this instance's local-model residency claim so a peer can reclaim/evict promptly instead of
+  // waiting out the TTL (plan 11.1). The claim release flushes synchronously on the uncontended store
+  // fast path; the follow-on unload sweep is best-effort and may be cut short by the imminent exit -
+  // that's fine, a peer sweeps it. Fire-and-forget so teardown ordering is unchanged.
+  void residency.shutdown();
   return stopSession({
     abortActive: () => abortRuns(""),
     clearQueue: () => scheduler.clearPending(),
@@ -2130,6 +2164,7 @@ function doctorFacts(): DoctorRuntimeFacts {
     activeStyle: { id: style.activeStyle, source: style.source },
     ...(cwdLock ? { cwdLock } : {}),
     admission: admissionDoctorSummary(snapshotAdmission(admissionCaps), Date.now()),
+    residency: residency.summary(),
   };
 }
 
