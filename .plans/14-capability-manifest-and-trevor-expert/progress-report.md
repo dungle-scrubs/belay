@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M4: Runtime and Integration Sections
+> Current focus: M5: Compact Manifest for Prompts and Subagents
 
 ## Summary
 
-- Current cutoff blockers: 35
+- Current cutoff blockers: 30
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -39,11 +39,11 @@
 
 ## M4: Runtime and Integration Sections
 
-- [ ] RED: Add tests for MCP, LSP, hooks, docs/web, Doctor areas, provider/source/catalog, runtime, protocol, and workspace summaries
-- [ ] GREEN: Add bounded section providers with counts, status, search/read affordances, and freshness metadata
-- [ ] RED: Add tests for huge catalogs and corpora proving entries are summarized, not fully inlined
-- [ ] GREEN: Cap dynamic sections and expose explicit query/read affordances
-- [ ] REFACTOR: Share freshness/truncation/provenance helpers
+- [x] RED: Add tests for MCP, LSP, hooks, docs/web, Doctor areas, provider/source/catalog, runtime, protocol, and workspace summaries
+- [x] GREEN: Add bounded section providers with counts, status, search/read affordances, and freshness metadata
+- [x] RED: Add tests for huge catalogs and corpora proving entries are summarized, not fully inlined
+- [x] GREEN: Cap dynamic sections and expose explicit query/read affordances
+- [x] REFACTOR: Share freshness/truncation/provenance helpers
 
 ## M5: Compact Manifest for Prompts and Subagents
 

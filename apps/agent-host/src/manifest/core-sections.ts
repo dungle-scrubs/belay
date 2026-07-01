@@ -8,7 +8,8 @@ import type { AgentDescriptor } from "../agents";
 import type { SkillEntry } from "../skills";
 import { splitDescription } from "../skills";
 import type { OutputStyle } from "../style/styles";
-import { scopeItemCap, scopeShowsHidden, sectionBody } from "./scope";
+import { scopeItemCap, scopeShowsHidden } from "./scope";
+import { sectionBody } from "./section-helpers";
 
 /**
  * The core registry-derived section adapters (plan 14, M3). Each one turns a source-of-truth registry
