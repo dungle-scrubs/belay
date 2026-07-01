@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M2 - Threat Model and Sandbox Contract
-- **Completed:** 12 / 68
-- **Current cutoff blockers:** 56
+- **Current focus:** M3 - Child Runner Protocol
+- **Completed:** 17 / 68
+- **Current cutoff blockers:** 51
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -32,11 +32,11 @@
 
 #### M2: Threat Model and Sandbox Contract
 
-- [ ] RED: Add tests or policy fixtures for denied filesystem, network, environment, process, import, package, and shell access.
-- [ ] GREEN: Define deny-first sandbox contract and host-bridge-only authority model.
-- [ ] RED: Add tests for Safehouse available, Safehouse unavailable, non-macOS fallback, and sandbox launch failure.
-- [ ] GREEN: Define sandbox mode reporting and fallback behavior without weakening bridge policy.
-- [ ] REFACTOR: Keep OS sandbox policy separate from host bridge permission policy.
+- [x] RED: Add tests or policy fixtures for denied filesystem, network, environment, process, import, package, and shell access.
+- [x] GREEN: Define deny-first sandbox contract and host-bridge-only authority model.
+- [x] RED: Add tests for Safehouse available, Safehouse unavailable, non-macOS fallback, and sandbox launch failure.
+- [x] GREEN: Define sandbox mode reporting and fallback behavior without weakening bridge policy.
+- [x] REFACTOR: Keep OS sandbox policy separate from host bridge permission policy.
 
 #### Gate 1->2
 
