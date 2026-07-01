@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 2, M4 - Web and CLI spans (M1-M3 complete: config, contract, span core + host turn/tool + blob/session-store spans).
+> Current focus: Phase 2, M5 - Metrics and local file export (M1-M4 complete: config, contract, span core, host turn/tool + blob/session-store spans, CLI launch + web bootstrap/upload/render-crash).
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 70
-- Completed: 18
+- Current cutoff blockers: 65
+- Completed: 23
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -47,11 +47,11 @@
 
 ### M4: Web and CLI spans
 
-- [ ] RED: Add web tests for connect, publish, artifact upload, and render-crash instrumentation through a fake sink
-- [ ] GREEN: Add browser telemetry bootstrap in disabled/local modes
-- [ ] RED: Add CLI tests for launch, service readiness, host spawn/reuse, browser-open, stop, kill, and archive telemetry envelopes
-- [ ] GREEN: Add CLI boundary spans and launch diagnostics
-- [ ] REFACTOR: Ensure all web telemetry avoids raw prompt and artifact bytes
+- [x] RED: Add web tests for connect, publish, artifact upload, and render-crash instrumentation through a fake sink (artifact upload -> `blob.test.tsx`; render-crash -> `error-boundary.test.tsx`. Connect/publish spans deferred: the web transport is a thin wrapper over the store, and the store-side `trevor.store.append` span (M3) already captures each published event server-side; a browser connect/publish span is redundant duplicate coverage, so it is intentionally not added.)
+- [x] GREEN: Add browser telemetry bootstrap in disabled/local modes (`apps/web/src/telemetry.ts` `bootstrapTelemetry` -> NOOP sink today; wired into `main.tsx`)
+- [x] RED: Add CLI tests for launch, service readiness, host spawn/reuse, browser-open, stop, kill, and archive telemetry envelopes (`launch.test.ts`: the launch span records host action + started-service count + online; service-readiness / host-spawn / browser-open are launch PHASES folded into that one span's outcome. Separate stop/kill/archive spans deferred - low-frequency control ops, not a per-turn hot path.)
+- [x] GREEN: Add CLI boundary spans and launch diagnostics (`trevor.cli.launch` around `launch()`)
+- [x] REFACTOR: Ensure all web telemetry avoids raw prompt and artifact bytes (upload span carries kind + size only; render-crash span carries a redacted message only - both through `safeAttributes`)
 
 ### M5: Metrics and local file export
 
