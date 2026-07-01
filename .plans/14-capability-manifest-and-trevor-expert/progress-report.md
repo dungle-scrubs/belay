@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M7: Interpolation Boundary
+> Current focus: M8: Expert Built-In Surface
 
 ## Summary
 
-- Current cutoff blockers: 20
+- Current cutoff blockers: 15
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -63,11 +63,11 @@
 
 ## M7: Interpolation Boundary
 
-- [ ] RED: Add tests proving general interpolation inside skill/command files defaults disabled
-- [ ] GREEN: Define env/trust gate for general command interpolation without enabling it by default
-- [ ] RED: Add tests proving `trevor-export` can be used as a bounded read-only interpolation target only when interpolation is enabled
-- [ ] GREEN: Document and enforce command allow-listing, output caps, timeout, cwd policy, and redaction for interpolated export calls
-- [ ] REFACTOR: Keep built-in `trevor-expert` direct export path independent from the global interpolation gate
+- [x] RED: Add tests proving general interpolation inside skill/command files defaults disabled
+- [x] GREEN: Define env/trust gate for general command interpolation without enabling it by default
+- [x] RED: Add tests proving `trevor-export` can be used as a bounded read-only interpolation target only when interpolation is enabled
+- [x] GREEN: Document and enforce command allow-listing, output caps, timeout, cwd policy, and redaction for interpolated export calls
+- [x] REFACTOR: Keep built-in `trevor-expert` direct export path independent from the global interpolation gate
 
 ## M8: Expert Built-In Surface
 

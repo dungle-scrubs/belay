@@ -36,8 +36,9 @@ export function redactSecrets(text: string): string {
 
 /** Collapses absolute filesystem paths to a bounded `<path>` placeholder so raw paths never leak, while
  *  keeping the tail segment for a hint. Matches 2+ segments, so even a short path like `/etc/passwd` or
- *  `/tmp/secret` collapses (e.g. `/Users/x/dev/repo/file.ts` -> `<path>/file.ts`). */
-function collapsePaths(text: string): string {
+ *  `/tmp/secret` collapses (e.g. `/Users/x/dev/repo/file.ts` -> `<path>/file.ts`). Exported for callers
+ *  that redact longer free text than a telemetry attribute (e.g. interpolation output, plan 14 M7). */
+export function collapsePaths(text: string): string {
   return text.replace(/(?:\/[^\s/:"]+)+(\/[^\s/:"]+)/g, `<path>$1`);
 }
 
