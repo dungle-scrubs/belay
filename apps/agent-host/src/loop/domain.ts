@@ -1,33 +1,15 @@
-import type { LoopSpec } from "@trevor/session";
+import type { LoopLifecycle, LoopSpec, LoopStopReason } from "@trevor/session";
 
 /**
  * The `/loop` DOMAIN + lifecycle (plan 17, M4): a pure, side-effect-free state machine for one recurring
- * loop. It owns the states, the legal transitions, the stop reasons, and the bounded-work rule (D-004/
- * D-009) - and NOTHING about scheduling, execution, or persistence (those are M5/M6, layered on top). Every
- * transition is a total function returning either the next state or a rejection reason, so the runtime can
- * never drive a loop into an illegal state and every rejection is explainable.
+ * loop. It owns the legal transitions, the stop reasons, and the bounded-work rule (D-004/D-009) - and
+ * NOTHING about scheduling, execution, or persistence (those are M5/M6, layered on top). Every transition
+ * is a total function returning either the next state or a rejection reason, so the runtime can never drive
+ * a loop into an illegal state and every rejection is explainable. The status/stop-reason vocabulary is the
+ * shared {@link LoopLifecycle}/{@link LoopStopReason}, re-exported for callers that only touch the domain.
  */
 
-/**
- * The full lifecycle status. `draft` -> `pending` (awaiting confirmation) -> `running` is the activation
- * path; `running`/`paused` are the active pair; `stopped`/`completed`/`failed`/`deleted` are terminal.
- * (The client-facing `LoopStatus` in the shared contract omits `pending`/`deleted`, which are host-internal
- * transitional/soft-delete states; a mapping to the client status lives with the inventory read-model.)
- */
-export type LoopLifecycle =
-  | "draft"
-  | "pending"
-  | "running"
-  | "paused"
-  | "stopped"
-  | "completed"
-  | "failed"
-  | "deleted";
-
-/** Why a loop left `running` (D-009): a hit bound, a satisfied condition, a timeout, an explicit stop, or an
- *  execution error. `completed` carries `max_iterations`/`until_satisfied`/`timeout`; `stopped` carries
- *  `stopped`; `failed` carries `error`. */
-export type LoopStopReason = "max_iterations" | "until_satisfied" | "timeout" | "stopped" | "error";
+export type { LoopLifecycle, LoopStopReason } from "@trevor/session";
 
 /** The immutable runtime state of one loop. Transitions return a NEW state; nothing here mutates. */
 export interface LoopState {

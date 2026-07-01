@@ -1,6 +1,7 @@
 import type { UsageBreakdown } from "./breakdown";
 import type { CommandMenuPayload } from "./command-menu";
 import type { InternetSnapshot } from "./connectivity";
+import type { LoopSnapshot } from "./loop-command";
 import type { CatalogEntry, ModelRef, SourceSignInState, SourceSummary } from "./model-source";
 import type { PastePayload } from "./paste-tokens";
 import type { DecodedEvent } from "./protocol-decode";
@@ -987,6 +988,16 @@ export const events = {
   }): TrevorEventInput => ({
     type: "handoff.accepted",
     payload: { handoffId: p.handoffId, targetSessionId: p.targetSessionId, prompt: p.prompt },
+  }),
+  /**
+   * A loop lifecycle STATUS event (plan 17): the host publishes one whenever a loop transitions, carrying
+   * the full {@link LoopSnapshot} the client renders. A `pending` snapshot IS the confirmation request; a
+   * terminal snapshot carries the stop reason/error. The client drives create/confirm/edit/cancel/controls
+   * back through the command surface, and the host re-publishes the resulting status.
+   */
+  loopStatus: (p: { snapshot: LoopSnapshot }): TrevorEventInput => ({
+    type: "loop.status",
+    payload: { snapshot: p.snapshot },
   }),
   /**
    * Escape hatch for an arbitrary `{ type, payload }`: the same envelope every typed builder

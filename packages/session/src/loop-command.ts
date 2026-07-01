@@ -14,8 +14,49 @@ export type LoopRunner = "current_session_prompt" | "background_agent" | "proces
 /** Whether a loop survives only the current session or persists across sessions. */
 export type LoopDurability = "session" | "durable";
 
-/** Lifecycle state of a loop. */
+/** Lifecycle state of a loop (the client-facing subset the inventory row shows). */
 export type LoopStatus = "draft" | "running" | "paused" | "stopped" | "completed" | "failed";
+
+/**
+ * The FULL loop lifecycle status, including the host-internal `pending` (awaiting confirmation) and
+ * `deleted` (soft-deleted) states the domain state machine drives and the status events ride with. `draft`
+ * -> `pending` -> `running` is activation; `running`/`paused` are active; the last four are terminal.
+ */
+export type LoopLifecycle =
+  | "draft"
+  | "pending"
+  | "running"
+  | "paused"
+  | "stopped"
+  | "completed"
+  | "failed"
+  | "deleted";
+
+/** Why a loop left `running` (D-009): a hit bound, a satisfied condition, a timeout, an explicit stop, or
+ *  an execution error. */
+export type LoopStopReason = "max_iterations" | "until_satisfied" | "timeout" | "stopped" | "error";
+
+/**
+ * The host->client STATUS SNAPSHOT of one loop (the payload of a `loop.status` event and the atom the
+ * inventory renders). A `pending` snapshot IS the confirmation request - the client offers confirm/edit/
+ * cancel. UI-neutral: a human `summary`, the counters, and the terminal reason/error, never rendered rows.
+ */
+export interface LoopSnapshot {
+  readonly loopId: string;
+  readonly status: LoopLifecycle;
+  readonly runner: LoopRunner;
+  readonly durability: LoopDurability;
+  /** A human, one-line description of the action + its bounds (e.g. `max 5 · do "run tests"`). */
+  readonly summary: string;
+  /** Iterations completed so far. */
+  readonly completed: number;
+  /** The `max` bound, when set (for a `completed/N` progress display). */
+  readonly max?: number;
+  /** Set once terminal: why the loop ended. */
+  readonly stopReason?: LoopStopReason;
+  /** Set only for `failed`: the execution error. */
+  readonly error?: string;
+}
 
 /** A manual control a client may offer for a loop in its current state. */
 export type LoopControl = "pause" | "resume" | "stop" | "run-now" | "delete";

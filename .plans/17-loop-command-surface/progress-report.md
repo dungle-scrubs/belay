@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M4: Loop Domain And Lifecycle
-- Current cutoff blockers: 38 unchecked
+> Current focus: M5: Runner Execution
+- Current cutoff blockers: 36 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -47,8 +47,8 @@
 - [x] GREEN: Implement the loop domain model, lifecycle transitions, stop reasons, and state guards.
 - [x] RED: Add validation tests requiring an action plus `max`, `until`, `every`, or `timeout`.
 - [x] GREEN: Enforce bounded recurring work before activation.
-- [ ] RED: Add tests for confirm/edit/cancel before activation.
-- [ ] GREEN: Implement confirmation flow through structured command/session protocol events.
+- [x] RED: Add tests for confirm/edit/cancel before activation.
+- [x] GREEN: Implement confirmation flow through structured command/session protocol events.
 - [x] REFACTOR: Keep draft validation separate from execution scheduling.
 
 ### M5: Runner Execution
