@@ -197,6 +197,7 @@ export function sessionSummary(over?: Partial<SessionSummary>): SessionSummary {
     activity: "settled",
     archived: false,
     deleted: false,
+    forkedFrom: null,
     ...over,
   };
 }

@@ -185,6 +185,7 @@ export class SessionLog {
       archived: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionArchived),
       rename: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionTitle),
       deleted: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionDeleted),
+      forkedFrom: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionForkedFrom),
     };
   }
 

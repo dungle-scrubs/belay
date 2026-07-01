@@ -22,6 +22,7 @@ function summary(over: Partial<SessionSummary>): SessionSummary {
     activity: "settled",
     archived: true,
     deleted: false,
+    forkedFrom: null,
     ...over,
   };
 }

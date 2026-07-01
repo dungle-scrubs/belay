@@ -22,6 +22,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   activity: "idle",
   archived: false,
   deleted: false,
+  forkedFrom: null,
   ...over,
 });
 

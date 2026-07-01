@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 8
-- **Completed current work:** 9
+- **Current cutoff blockers:** 5
+- **Completed current work:** 12
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M3 - Web Branch and Lineage UI
+- **Current focus:** M4 - Participant Inheritance
 
 ## Completed Current State / Hard Dependencies
 
@@ -22,9 +22,9 @@
 - [x] RED: Cover `session.forkedFrom`, origin tags, `forkReady`, and self-contained child replay.
 - [x] GREEN: Implement host fork operation over normal session append APIs.
 - [x] REFACTOR: Keep Richter generic.
-- [ ] RED: Storybook/test branch-from-here and lineage states.
-- [ ] GREEN: Add explicit branch affordance and lineage navigator.
-- [ ] REFACTOR: Preserve session navigation/resume semantics.
+- [x] RED: Storybook/test branch-from-here and lineage states.
+- [x] GREEN: Add explicit branch affordance and lineage navigator.
+- [x] REFACTOR: Preserve session navigation/resume semantics.
 - [ ] RED: Cover opt-in inheritance and dedupe by origin/id.
 - [ ] GREEN: Implement inheritance contracts only where needed.
 - [ ] RED: Cover a mid-turn fork resuming its next turn on the active (post-switch) model+reasoning reconstructed from the prefix's `model.switched` events, not a reset default (`.plans/09.1-mid-turn-model-switch`).

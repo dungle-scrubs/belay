@@ -56,6 +56,7 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
   archived: null,
   rename: null,
   deleted: null,
+  forkedFrom: null,
   hostPresent: false,
   ...over,
 });
@@ -212,6 +213,7 @@ test("sortInventory puts the current project first, each block by recency desc",
     activity: "idle",
     archived: false,
     deleted: false,
+    forkedFrom: null,
   });
   const list = [
     mk("a", "other", "2026-06-26T05:00:00.000Z"),
@@ -331,4 +333,17 @@ test("summarizeSession derives deleted (newest wins); deleted hides from active 
     [],
     "deleted excluded from the archive too",
   );
+});
+
+test("summarizeSession surfaces fork lineage from a session.forkedFrom event", () => {
+  const s = summarizeSession(
+    baseRow({
+      forkedFrom: ev("session.forkedFrom", { parentSessionId: "sess-parent", forkSeq: 7 }),
+    }),
+  );
+  assert.deepEqual(s.forkedFrom, { parentSessionId: "sess-parent", forkSeq: 7 });
+});
+
+test("summarizeSession leaves forkedFrom null for a root (non-forked) session", () => {
+  assert.equal(summarizeSession(baseRow()).forkedFrom, null);
 });

@@ -33,6 +33,14 @@ export interface SessionSummary {
   readonly archived: boolean;
   /** Whether the session is soft-deleted (sidebar Delete): hidden from EVERY view (log retained). */
   readonly deleted: boolean;
+  /** Lineage: the parent this session was forked from (plan 15), or null for a root session. */
+  readonly forkedFrom: SessionLineage | null;
+}
+
+/** A session's fork lineage: the parent it branched from and the parent seq it branched at. */
+export interface SessionLineage {
+  readonly parentSessionId: string;
+  readonly forkSeq: number;
 }
 
 export type HostPresenceState = "live" | "stale" | "none";
@@ -67,6 +75,8 @@ export interface InventoryRow {
   readonly rename: SessionEvent | null;
   /** The latest session.deleted event (sidebar Delete), if any - the newest wins (delete/undo). */
   readonly deleted: SessionEvent | null;
+  /** The session.forkedFrom lineage marker (plan 15), if this session is a fork; else null. */
+  readonly forkedFrom: SessionEvent | null;
   /** Whether a host socket is connected to this session right now. */
   readonly hostPresent: boolean;
 }
@@ -179,6 +189,11 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
   const archived = archivedEvent?.type === "session.archived" ? archivedEvent.archived : false;
   const deletedEvent = row.deleted ? decodeTrevorEvent(row.deleted) : null;
   const deleted = deletedEvent?.type === "session.deleted" ? deletedEvent.deleted : false;
+  const forkedEvent = row.forkedFrom ? decodeTrevorEvent(row.forkedFrom) : null;
+  const forkedFrom: SessionLineage | null =
+    forkedEvent?.type === "session.forkedFrom"
+      ? { parentSessionId: forkedEvent.parentSessionId, forkSeq: forkedEvent.forkSeq }
+      : null;
 
   return {
     sessionId: row.sessionId,
@@ -195,6 +210,7 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     activity: activityFromLog(row.lifecycle),
     archived,
     deleted,
+    forkedFrom,
   };
 }
 
