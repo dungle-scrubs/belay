@@ -2,7 +2,7 @@
 
 ## Summary
 
-> Current focus: M4: confirmation flow (draft->pending->running via protocol events) + loop store
+> Current focus: M4: Loop Domain And Lifecycle
 - Current cutoff blockers: 38 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
