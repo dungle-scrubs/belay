@@ -1,5 +1,10 @@
 import { isAuthFailure, isContextOverflow, isRetryable } from "./error-classifier";
 
+// The secret redactor now lives in the shared telemetry contract (plan 13); re-export it here so the
+// provider callsites (provider-diagnostic, lmstudio-client, failure-record-schema, pi-ai) keep importing
+// it from the taxonomy module. The shared version is a strict superset (it also redacts `dsn:` values).
+export { redactSecrets } from "@trevor/session/telemetry";
+
 /**
  * The normalized provider-failure taxonomy (D-076 M1). One vocabulary across every provider shape -
  * OAuth subscription, SDK, gateway catalog, direct API key, and local runtime - so the agent loop,
@@ -166,21 +171,4 @@ export function classifyProviderFailure(
   }
 
   return verdict("unknown", "none");
-}
-
-/**
- * Strips secrets from a provider failure string so the typed error payload, logs, and the observation
- * store never carry a key, token, or auth header (D-076 M1/M5). Redacts bearer tokens, `sk-…` / `pi-…`
- * API keys, `Authorization`/`x-api-key` header values, `?key=`/`?token=` query params, and standalone
- * long opaque tokens. Deterministic and idempotent - re-redacting a redacted string is a no-op.
- */
-export function redactSecrets(text: string): string {
-  return text
-    .replace(/(bearer\s+)[A-Za-z0-9._-]+/gi, "$1«redacted»")
-    .replace(/\b(sk|pi|rk|key|tok|ghp|gho)-[A-Za-z0-9._-]{8,}/gi, "«redacted»")
-    .replace(
-      /("?(?:authorization|x-api-key|api[_-]?key|token|secret|password)"?\s*[:=]\s*"?)[^\s",}]+/gi,
-      "$1«redacted»",
-    )
-    .replace(/([?&](?:key|token|access_token|api_key)=)[^&\s]+/gi, "$1«redacted»");
 }

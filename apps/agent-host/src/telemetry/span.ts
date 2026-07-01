@@ -3,6 +3,7 @@ import {
   type SpanName,
   type SpanStatus,
   safeAttributes,
+  safeEmitSpan,
   type TelemetrySink,
 } from "@trevor/session/telemetry";
 import { Cause, Clock, Effect, Exit } from "effect";
@@ -25,17 +26,13 @@ export function spanEffect<A, E, R>(
 ): (effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R> {
   const attrs = safeAttributes(attributes);
   const record = (status: SpanStatus, durationMs: number, error?: string): void => {
-    try {
-      sink.span({
-        name,
-        attributes: attrs,
-        status,
-        durationMs: Math.max(0, durationMs),
-        ...(error ? { error } : {}),
-      });
-    } catch {
-      // A telemetry sink failure must never propagate into user work.
-    }
+    safeEmitSpan(sink, {
+      name,
+      attributes: attrs,
+      status,
+      durationMs,
+      ...(error ? { error } : {}),
+    });
   };
   const recordExit = (exit: Exit.Exit<unknown, unknown>, durationMs: number): void => {
     if (Exit.isSuccess(exit)) {

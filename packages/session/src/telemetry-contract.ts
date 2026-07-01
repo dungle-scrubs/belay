@@ -35,9 +35,10 @@ export function redactSecrets(text: string): string {
 }
 
 /** Collapses absolute filesystem paths to a bounded `<path>` placeholder so raw paths never leak, while
- *  keeping the tail segment for a hint (e.g. `/Users/x/dev/repo/file.ts` -> `<path>/file.ts`). */
+ *  keeping the tail segment for a hint. Matches 2+ segments, so even a short path like `/etc/passwd` or
+ *  `/tmp/secret` collapses (e.g. `/Users/x/dev/repo/file.ts` -> `<path>/file.ts`). */
 function collapsePaths(text: string): string {
-  return text.replace(/(?:\/[^\s/:"]+){2,}(\/[^\s/:"]+)/g, `<path>$1`);
+  return text.replace(/(?:\/[^\s/:"]+)+(\/[^\s/:"]+)/g, `<path>$1`);
 }
 
 /**
@@ -90,6 +91,13 @@ const DISALLOWED_KEYS: ReadonlySet<string> = new Set(
     "filepath",
     "cwd",
     "projectroot",
+    // Host / network / user identity - deanonymizing, so dropped wholesale (defense in depth).
+    "hostname",
+    "host",
+    "ip",
+    "email",
+    "user",
+    "username",
   ].map(normalizeKey),
 );
 
@@ -127,32 +135,24 @@ export function safeAttributes(attributes: Readonly<Record<string, unknown>>): T
   return safe;
 }
 
-/** The span names Trevor emits at public module boundaries (contract-owned, not ad-hoc per module). */
+/** The span names Trevor emits at public module boundaries (contract-owned, not ad-hoc per module). Kept
+ *  to the set instrumentation actually produces; a new boundary adds its name here when it is wired. */
 export const SPAN_NAMES = {
   turn: "trevor.turn",
   providerAttempt: "trevor.provider.attempt",
   tool: "trevor.tool",
-  recovery: "trevor.recovery",
-  storeRequest: "trevor.store.request",
-  storeSocket: "trevor.store.socket",
   storeAppend: "trevor.store.append",
   blobIo: "trevor.blob.io",
   cliLaunch: "trevor.cli.launch",
-  webConnect: "trevor.web.connect",
   webRender: "trevor.web.render",
 } as const;
 
-/** The low-cardinality metric names Trevor records (contract-owned). */
+/** The low-cardinality metric names Trevor records (contract-owned; only the emitted set). */
 export const METRIC_NAMES = {
   turnDuration: "trevor.turn.duration",
   turnStop: "trevor.turn.stop",
   modelSwitch: "trevor.turn.model_switch",
-  providerLatency: "trevor.provider.latency",
-  toolDuration: "trevor.tool.duration",
-  exporterDrops: "trevor.exporter.drops",
   retryCount: "trevor.provider.retries",
-  contextPressure: "trevor.turn.context_pressure",
-  serviceErrors: "trevor.service.errors",
   blobOutcome: "trevor.blob.outcome",
 } as const;
 
@@ -278,7 +278,20 @@ export function withSpanSync<T>(
   }
 }
 
-/** Pushes one span into the sink, swallowing any sink error so telemetry never fails the caller. */
+/**
+ * Pushes one finished span into the sink, clamping the duration and swallowing any sink error so
+ * telemetry never fails the caller. The one guarded emit both this module's timing helpers and the app
+ * boundaries (the host Effect combinator, the CLI launch span, the web error boundary) push through.
+ */
+export function safeEmitSpan(sink: TelemetrySink, record: SpanRecord): void {
+  try {
+    sink.span({ ...record, durationMs: Math.max(0, record.durationMs) });
+  } catch {
+    // A telemetry sink failure must never propagate into user work.
+  }
+}
+
+/** Builds a {@link SpanRecord} from timing parts and pushes it via {@link safeEmitSpan}. */
 function emitSpan(
   sink: TelemetrySink,
   name: SpanName,
@@ -287,17 +300,7 @@ function emitSpan(
   durationMs: number,
   error?: string,
 ): void {
-  try {
-    sink.span({
-      name,
-      attributes,
-      status,
-      durationMs: Math.max(0, durationMs),
-      ...(error ? { error } : {}),
-    });
-  } catch {
-    // A telemetry sink failure must never propagate into user work.
-  }
+  safeEmitSpan(sink, { name, attributes, status, durationMs, ...(error ? { error } : {}) });
 }
 
 /** One of Trevor's telemetry-emitting services (the OTel `service.name` + Sentry project scope). */

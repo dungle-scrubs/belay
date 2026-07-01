@@ -3,6 +3,7 @@ import {
   redactAttributeValue,
   SPAN_NAMES,
   safeAttributes,
+  safeEmitSpan,
   type TelemetrySink,
 } from "@trevor/session/telemetry";
 import type { LauncherFs } from "./fs";
@@ -125,19 +126,15 @@ function emitLaunchSpan(
   attributes: Readonly<Record<string, unknown>>,
   error?: unknown,
 ): void {
-  try {
-    sink.span({
-      name: SPAN_NAMES.cliLaunch,
-      attributes: safeAttributes(attributes),
-      status,
-      durationMs: Math.max(0, durationMs),
-      ...(error
-        ? { error: redactAttributeValue(error instanceof Error ? error.message : String(error)) }
-        : {}),
-    });
-  } catch {
-    // telemetry is best-effort
-  }
+  safeEmitSpan(sink, {
+    name: SPAN_NAMES.cliLaunch,
+    attributes: safeAttributes(attributes),
+    status,
+    durationMs,
+    ...(error
+      ? { error: redactAttributeValue(error instanceof Error ? error.message : String(error)) }
+      : {}),
+  });
 }
 
 async function launchInner(

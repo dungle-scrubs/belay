@@ -1,7 +1,7 @@
-import { appendFileSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { storagePathByName } from "./node-paths";
 import { redactAttributeValue } from "./telemetry-contract";
+import { createCappedJsonlWriter } from "./telemetry-jsonl";
 
 /**
  * Opt-in LOCAL provider-attempt tracing (plan 13 M6). When `TREVOR_PROVIDER_TRACE=1`, each provider
@@ -19,7 +19,8 @@ import { redactAttributeValue } from "./telemetry-contract";
 export interface ProviderAttemptRecord {
   readonly provider: string;
   readonly model: string;
-  /** A short id correlating this attempt (never a run/session id). */
+  /** An id correlating this attempt to its turn. The trace is LOCAL-ONLY (under TREVOR_STATE_HOME), so a
+   *  run id is acceptable here - unlike a metric label, this file never leaves the machine. */
   readonly attemptId: string;
   readonly outcome: "ok" | "error";
   /** The failure taxonomy class when `outcome === "error"` (e.g. auth, quota, transport_loss). */
@@ -28,7 +29,9 @@ export interface ProviderAttemptRecord {
   readonly retryable?: boolean;
   /** 1-based attempt number within the turn's retry budget. */
   readonly attempt: number;
+  /** Attempt wall-clock ms; 0 at the terminal-failure boundary until a finer per-attempt hook lands. */
   readonly durationMs: number;
+  /** Prompt/completion token counts when the finer per-attempt hook provides them (else omitted). */
   readonly inputTokens?: number;
   readonly outputTokens?: number;
   /** An already-boundary-redacted one-line summary; re-redacted here defensively. */
@@ -62,52 +65,19 @@ export function createProviderTraceWriter(opts: ProviderTraceOptions): ProviderT
     return NOOP_WRITER;
   }
   const dir = opts.dir ?? storagePathByName("otel");
-  const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
-  const now = opts.now ?? Date.now;
-  const path = join(dir, "provider-attempts.jsonl");
-  let written = 0;
-  let dropped = 0;
-  let dirReady = false;
-  let bytes = currentSize(path);
-
+  const writer = createCappedJsonlWriter({
+    path: join(dir, "provider-attempts.jsonl"),
+    dir,
+    maxBytes: opts.maxBytes ?? DEFAULT_MAX_BYTES,
+    now: opts.now ?? Date.now,
+  });
   return {
-    record(attempt: ProviderAttemptRecord): void {
-      let line = "";
-      try {
-        line = `${JSON.stringify({
-          ...attempt,
-          ...(attempt.detail !== undefined ? { detail: redactAttributeValue(attempt.detail) } : {}),
-          at: new Date(now()).toISOString(),
-        })}\n`;
-      } catch {
-        dropped += 1;
-        return;
-      }
-      if (bytes + line.length > maxBytes) {
-        dropped += 1;
-        return;
-      }
-      try {
-        if (!dirReady) {
-          mkdirSync(dir, { recursive: true });
-          dirReady = true;
-        }
-        appendFileSync(path, line);
-        bytes += line.length;
-        written += 1;
-      } catch {
-        dropped += 1;
-      }
-    },
-    stats: () => ({ written, dropped }),
+    record: (attempt: ProviderAttemptRecord) =>
+      writer.append({
+        ...attempt,
+        // Re-redact the free-text detail defensively (the caller already redacts at the boundary).
+        ...(attempt.detail !== undefined ? { detail: redactAttributeValue(attempt.detail) } : {}),
+      }),
+    stats: () => writer.stats(),
   };
-}
-
-/** The current size of `path` in bytes, or 0 when it does not exist yet. */
-function currentSize(path: string): number {
-  try {
-    return statSync(path).size;
-  } catch {
-    return 0;
-  }
 }

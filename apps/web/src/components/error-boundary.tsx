@@ -1,4 +1,9 @@
-import { redactAttributeValue, SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
+import {
+  redactAttributeValue,
+  SPAN_NAMES,
+  safeEmitSpan,
+  type TelemetrySink,
+} from "@trevor/session/telemetry";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { captureRenderCrash } from "../sentry";
 import { telemetrySink } from "../telemetry";
@@ -31,16 +36,16 @@ export class TelemetryErrorBoundary extends Component<Props, State> {
 
   override componentDidCatch(error: Error, _info: ErrorInfo): void {
     const sink = this.props.sink ?? telemetrySink();
+    safeEmitSpan(sink, {
+      name: SPAN_NAMES.webRender,
+      attributes: {},
+      status: "error",
+      durationMs: 0,
+      error: redactAttributeValue(error.message),
+    });
+    // Report the render crash to Sentry too (a no-op unless the browser sink is enabled). A React
+    // render error never reaches window.onerror, so the boundary must forward it explicitly.
     try {
-      sink.span({
-        name: SPAN_NAMES.webRender,
-        attributes: {},
-        status: "error",
-        durationMs: 0,
-        error: redactAttributeValue(error.message),
-      });
-      // Report the render crash to Sentry too (a no-op unless the browser sink is enabled). A React
-      // render error never reaches window.onerror, so the boundary must forward it explicitly.
       captureRenderCrash(error);
     } catch {
       // telemetry is best-effort; a reporting failure must never mask the crash fallback

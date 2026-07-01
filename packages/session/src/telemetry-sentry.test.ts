@@ -8,9 +8,11 @@ import { type SanitizableSentryEvent, scrubSentryEvent } from "./telemetry-sentr
  * output, env values, auth headers, raw provider bodies, and raw paths must never reach it.
  */
 
-test("scrubSentryEvent drops the request (auth headers + body) entirely", () => {
+test("scrubSentryEvent drops the request, server_name, and user (auth + host + identity)", () => {
   const scrubbed = scrubSentryEvent({
     message: "boom",
+    server_name: "kevin-macbook.local",
+    user: { id: "u-1", email: "kevin@example.com", ip_address: "10.0.0.1" },
     request: {
       url: "https://api.example.com/v1?token=deadbeefcafe",
       headers: { authorization: "Bearer sk-abcdefgh12345678" },
@@ -19,6 +21,8 @@ test("scrubSentryEvent drops the request (auth headers + body) entirely", () => 
     },
   });
   assert.equal(scrubbed.request, undefined, "the whole request block is dropped");
+  assert.equal(scrubbed.server_name, undefined, "the host name never reaches Sentry");
+  assert.equal(scrubbed.user, undefined, "user identity never reaches Sentry");
 });
 
 test("scrubSentryEvent strips sensitive/high-cardinality keys from extra/tags/contexts", () => {

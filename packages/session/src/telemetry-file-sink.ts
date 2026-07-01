@@ -1,4 +1,3 @@
-import { appendFileSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { storagePathByName } from "./node-paths";
 import { resolveTelemetryConfig, type TelemetryEnv } from "./telemetry";
@@ -9,6 +8,7 @@ import {
   type TelemetryService,
   type TelemetrySink,
 } from "./telemetry-contract";
+import { createCappedJsonlWriter } from "./telemetry-jsonl";
 
 /**
  * The local FILE telemetry exporter (plan 13 M5). When `TREVOR_OTEL_EXPORTER=file`, a service installs
@@ -49,58 +49,21 @@ const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
 
 export function createFileSink(opts: FileSinkOptions): FileSink {
   const dir = opts.dir ?? storagePathByName("otel");
-  const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
-  const now = opts.now ?? Date.now;
   const path = join(dir, `${opts.service}.jsonl`);
-  let written = 0;
-  let dropped = 0;
-  let dirReady = false;
-  // Track the file size in-process so the cap check is a comparison, not a stat per write. Seed from the
-  // existing file (a prior run's artifacts count toward the cap) and grow by each written line's length.
-  let bytes = currentSize(path);
-
-  const append = (record: object): void => {
-    let line = "";
-    try {
-      line = `${JSON.stringify({ ...record, service: opts.service, at: new Date(now()).toISOString() })}\n`;
-    } catch {
-      dropped += 1;
-      return;
-    }
-    if (bytes + line.length > maxBytes) {
-      dropped += 1;
-      return;
-    }
-    try {
-      if (!dirReady) {
-        mkdirSync(dir, { recursive: true });
-        dirReady = true;
-      }
-      appendFileSync(path, line);
-      bytes += line.length;
-      written += 1;
-    } catch {
-      // A telemetry write failure (full disk, permissions) must never fail user work.
-      dropped += 1;
-    }
-  };
-
+  const writer = createCappedJsonlWriter({
+    path,
+    dir,
+    maxBytes: opts.maxBytes ?? DEFAULT_MAX_BYTES,
+    now: opts.now ?? Date.now,
+  });
   return {
     // `t` discriminates the record TYPE (span vs metric); a metric's own `kind` (counter/histogram) is
     // preserved by the spread, so the two must not share a field name.
-    span: (record: SpanRecord) => append({ t: "span", ...record }),
-    metric: (record: MetricRecord) => append({ t: "metric", ...record }),
-    stats: () => ({ written, dropped, path }),
+    span: (record: SpanRecord) => writer.append({ t: "span", service: opts.service, ...record }),
+    metric: (record: MetricRecord) =>
+      writer.append({ t: "metric", service: opts.service, ...record }),
+    stats: () => ({ ...writer.stats(), path }),
   };
-}
-
-/** The current size of `path` in bytes, or 0 when it does not exist yet. */
-function currentSize(path: string): number {
-  try {
-    return statSync(path).size;
-  } catch {
-    return 0;
-  }
 }
 
 /**

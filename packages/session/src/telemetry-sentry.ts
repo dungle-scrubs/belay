@@ -1,4 +1,8 @@
-import { isDisallowedTelemetryKey, redactAttributeValue } from "./telemetry-contract";
+import {
+  redactAttributeValue,
+  safeAttributes,
+  type TelemetryAttributes,
+} from "./telemetry-contract";
 
 /**
  * The shared Sentry PRIVACY contract (plan 13 M9/M10). This is a pure, SDK-free module: it defines what a
@@ -23,25 +27,17 @@ export interface SanitizableSentryEvent {
   exception?: {
     values?: Array<{ type?: string; value?: string }>;
   };
-}
-
-/** Filters a string-keyed record to the allowed keys, secret-redacting each surviving string value. */
-function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(record)) {
-    if (isDisallowedTelemetryKey(key) || value === undefined || value === null) {
-      continue;
-    }
-    safe[key] =
-      typeof value === "number" || typeof value === "boolean" ? value : redactAttributeValue(value);
-  }
-  return safe;
+  /** `@sentry/node` populates this with `os.hostname()` by default - deanonymizing, so it is dropped. */
+  server_name?: string;
+  /** User identity (id/email/ip) - dropped; Trevor never attaches a user, but defend anyway. */
+  user?: Record<string, unknown>;
 }
 
 /**
  * `beforeSend`: sanitizes a Sentry error event in place-ish (returns a scrubbed copy). Drops the whole
- * request headers/cookies/body (auth + payloads), strips disallowed keys from extra/tags/contexts,
- * secret-redacts the message + each exception value + each breadcrumb. Returns the scrubbed event.
+ * request headers/cookies/body (auth + payloads), strips disallowed keys from extra/tags/contexts (via
+ * the shared {@link safeAttributes} choke point), secret-redacts the message + each exception value +
+ * each breadcrumb. Returns the scrubbed event.
  */
 export function scrubSentryEvent<E extends SanitizableSentryEvent>(event: E): E {
   const scrubbed: SanitizableSentryEvent = { ...event };
@@ -49,16 +45,16 @@ export function scrubSentryEvent<E extends SanitizableSentryEvent>(event: E): E 
     scrubbed.message = redactAttributeValue(scrubbed.message);
   }
   if (scrubbed.extra) {
-    scrubbed.extra = sanitizeRecord(scrubbed.extra);
+    scrubbed.extra = safeAttributes(scrubbed.extra);
   }
   if (scrubbed.tags) {
-    scrubbed.tags = sanitizeRecord(scrubbed.tags) as Record<string, string>;
+    scrubbed.tags = safeAttributes(scrubbed.tags) as Record<string, string>;
   }
   if (scrubbed.contexts) {
-    const contexts: Record<string, Record<string, unknown>> = {};
+    const contexts: Record<string, TelemetryAttributes> = {};
     for (const [name, ctx] of Object.entries(scrubbed.contexts)) {
       if (ctx) {
-        contexts[name] = sanitizeRecord(ctx);
+        contexts[name] = safeAttributes(ctx);
       }
     }
     scrubbed.contexts = contexts;
@@ -67,7 +63,7 @@ export function scrubSentryEvent<E extends SanitizableSentryEvent>(event: E): E 
     scrubbed.breadcrumbs = scrubbed.breadcrumbs.map((crumb) => ({
       ...crumb,
       ...(crumb.message !== undefined ? { message: redactAttributeValue(crumb.message) } : {}),
-      ...(crumb.data ? { data: sanitizeRecord(crumb.data) } : {}),
+      ...(crumb.data ? { data: safeAttributes(crumb.data) } : {}),
     }));
   }
   if (scrubbed.exception?.values) {
@@ -78,7 +74,10 @@ export function scrubSentryEvent<E extends SanitizableSentryEvent>(event: E): E 
       })),
     };
   }
-  // The request carries a URL + auth headers + the raw body - none of it is safe, so drop it entirely.
+  // The request (URL + auth headers + raw body), the host name, and any user identity are never safe -
+  // drop them entirely.
   scrubbed.request = undefined;
+  scrubbed.server_name = undefined;
+  scrubbed.user = undefined;
   return scrubbed as E;
 }
