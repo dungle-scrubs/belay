@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M9 - Transcript, Compact Row, and E2E
-- **Completed:** 47 / 68
-- **Current cutoff blockers:** 21
+- **Current focus:** DONE - all milestones + gates; running full gate + simplify + merge
+- **Completed:** 68 / 68
+- **Current cutoff blockers:** 0
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -40,9 +40,9 @@
 
 #### Gate 1->2
 
-- [ ] V2 contract is explicit and distinct from V1 in-process implementation.
-- [ ] Threat model states what `tool_script` cannot do directly.
-- [ ] Safehouse is treated as an OS isolation layer, not the sole boundary.
+- [x] V2 contract is explicit and distinct from V1 in-process implementation.
+- [x] Threat model states what `tool_script` cannot do directly.
+- [x] Safehouse is treated as an OS isolation layer, not the sole boundary.
 
 ### Phase 2: Sandboxed Runner Process
 
@@ -64,9 +64,9 @@
 
 #### Gate 2->3
 
-- [ ] Script code never runs inside the agent-host process.
-- [ ] Direct ambient access is denied or visibly unavailable.
-- [ ] Runner launch, crash, cancellation, and cleanup are deterministic.
+- [x] Script code never runs inside the agent-host process.
+- [x] Direct ambient access is denied or visibly unavailable.
+- [x] Runner launch, crash, cancellation, and cleanup are deterministic.
 
 ### Phase 3: Host Bridge, Toolsets, and Budgets
 
@@ -88,9 +88,9 @@
 
 #### Gate 3->4
 
-- [ ] Only approved toolsets are available to scripts.
-- [ ] Every bridge call is counted, capped, and auditable.
-- [ ] Final output and intermediate output cannot flood transcript or context.
+- [x] Only approved toolsets are available to scripts.
+- [x] Every bridge call is counted, capped, and auditable.
+- [x] Final output and intermediate output cannot flood transcript or context.
 
 ### Phase 4: Host Tool Integration and Observability
 
@@ -112,26 +112,26 @@
 
 #### Gate 4->5
 
-- [ ] `tool_script` is model-facing as a normal visible tool.
-- [ ] Prompt guidance tells the model when to use direct tools versus `tool_script`.
-- [ ] Observability and detail payloads make every script run inspectable.
+- [x] `tool_script` is model-facing as a normal visible tool.
+- [x] Prompt guidance tells the model when to use direct tools versus `tool_script`.
+- [x] Observability and detail payloads make every script run inspectable.
 
 ### Phase 5: UI, E2E, and Guidance
 
 #### M9: Transcript, Compact Row, and E2E
 
-- [ ] RED: Add web fixtures/tests for completed, timed out, cancelled, denied, syntax error, runtime error, budget exhausted, and oversized output rows.
-- [ ] GREEN: Render concise transcript and compact rows with status, duration, toolsets, bridge-call count, and failure class.
-- [ ] RED: Add hermetic e2e for a model using `tool_script` to batch scan multiple files through `read`/`rg`.
-- [ ] GREEN: Validate full tool loop, bridge calls, budget display, and detail takeover.
-- [ ] REFACTOR: Add model guidance examples: use `tool_script` for repeated read-only operations across many inputs; prefer direct tools for one-off reads/searches.
+- [x] RED: Add web fixtures/tests for completed, timed out, cancelled, denied, syntax error, runtime error, budget exhausted, and oversized output rows.
+- [x] GREEN: Render concise transcript and compact rows with status, duration, toolsets, bridge-call count, and failure class.
+- [x] RED: Add hermetic e2e for a model using `tool_script` to batch scan multiple files through `read`/`rg`.
+- [x] GREEN: Validate full tool loop, bridge calls, budget display, and detail takeover.
+- [x] REFACTOR: Add model guidance examples: use `tool_script` for repeated read-only operations across many inputs; prefer direct tools for one-off reads/searches.
 
 #### Gate 5
 
-- [ ] Unit, web, integration, and hermetic e2e tests pass.
-- [ ] Script execution is out-of-process and deny-first where supported.
-- [ ] `tool_script` remains read-only and bounded through host bridge policy.
-- [ ] Users can inspect source, permissions, bridge calls, budgets, output, and failures.
+- [x] Unit, web, integration, and hermetic e2e tests pass.
+- [x] Script execution is out-of-process and deny-first where supported.
+- [x] `tool_script` remains read-only and bounded through host bridge policy.
+- [x] Users can inspect source, permissions, bridge calls, budgets, output, and failures.
 
 ## Accepted/Deferred Follow-Up
 

@@ -196,3 +196,34 @@ test("status is derived once from `done`: a running call tints the wrench yellow
     "a not-done call derives the running status",
   );
 });
+
+test("tool_script (completed) dispatches to the text-output renderer and shows its result (16 M9)", () => {
+  const { container } = render(
+    <ToolRenderer
+      message={toolMsg({
+        name: "tool_script",
+        args: JSON.stringify({ script: "return { files: 3 };", toolsets: ["safe_read"] }),
+        result: '{"files":3}',
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  const text = container.textContent ?? "";
+  assert.ok(text.includes("tool_script"), "the tool name renders");
+  assert.ok(text.includes('{"files":3}'), "the compact result renders in the row");
+});
+
+test("tool_script (failed) surfaces its typed failure line in the row (16 M9)", () => {
+  const { container } = render(
+    <ToolRenderer
+      message={toolMsg({
+        name: "tool_script",
+        args: JSON.stringify({ script: "throw 1;", toolsets: ["safe_read"] }),
+        result: "error: tool_script runtime_error: boom",
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  const text = container.textContent ?? "";
+  assert.ok(text.includes("runtime_error"), "the failure class is visible in the transcript row");
+});
