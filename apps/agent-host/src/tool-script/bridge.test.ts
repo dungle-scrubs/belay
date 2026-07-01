@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { allowedTools, type BridgeExecute, createToolScriptBridge } from "./bridge";
 
 /** Records which tools were actually executed (to prove a denied tool never reaches the registry). */
@@ -121,5 +124,59 @@ describe("tool_script bridge workspace confinement (M4 hardening)", () => {
     // A regex that looks path-like is not a path; the glob stays inside, so the call runs.
     expect((await bridge.call("grep", { pattern: "../foo", glob: "src/**" })).status).toBe("ok");
     expect(calls).toEqual(["grep"]);
+  });
+});
+
+describe("tool_script bridge SYMLINK confinement (M4 hardening)", () => {
+  // A symlink inside the workspace pointing OUTSIDE it must not become a read escape: bridge reads run in
+  // the privileged host and follow symlinks, so a lexical check would be bypassable (the merge-blocking
+  // finding). The confinement realpath-resolves each path, so a symlinked path is denied by its true target.
+  let workspace: string;
+  let outside: string;
+
+  beforeAll(() => {
+    workspace = mkdtempSync(join(tmpdir(), "trevor-ts-ws-"));
+    outside = mkdtempSync(join(tmpdir(), "trevor-ts-secret-"));
+    writeFileSync(join(outside, "id_rsa"), "TOP SECRET KEY");
+    mkdirSync(join(workspace, "src"));
+    writeFileSync(join(workspace, "src", "a.ts"), "export const a = 1;");
+    // A planted symlink inside the workspace whose target is the outside secret directory.
+    symlinkSync(outside, join(workspace, "link"));
+  });
+
+  afterAll(() => {
+    rmSync(workspace, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  function bridgeFor(root: string): {
+    bridge: ReturnType<typeof createToolScriptBridge>;
+    calls: string[];
+  } {
+    const { execute, calls } = spyExecute("body");
+    return {
+      calls,
+      bridge: createToolScriptBridge({ toolsets: ["safe_read"], execute, workspaceRoot: root }),
+    };
+  }
+
+  it("DENIES a read that reaches outside via an in-workspace symlink - before it executes", async () => {
+    const { bridge, calls } = bridgeFor(workspace);
+    const response = await bridge.call("read", { path: "link/id_rsa" });
+    expect(response.status).toBe("denied");
+    expect(response.error).toContain("escapes the workspace root");
+    // The privileged host read never ran.
+    expect(calls).toEqual([]);
+  });
+
+  it("DENIES a glob whose pattern reaches outside via the symlinked directory", async () => {
+    const { bridge } = bridgeFor(workspace);
+    expect((await bridge.call("glob", { pattern: "link/*" })).status).toBe("denied");
+  });
+
+  it("still ALLOWS a genuine file inside the workspace", async () => {
+    const { bridge, calls } = bridgeFor(workspace);
+    expect((await bridge.call("read", { path: "src/a.ts" })).status).toBe("ok");
+    expect(calls).toEqual(["read"]);
   });
 });

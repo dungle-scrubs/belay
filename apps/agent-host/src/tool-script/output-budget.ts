@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import type { ToolScriptArtifact } from "@trevor/session";
+import { shortSha16 } from "./hash";
 
 /**
  * Output bounding for `tool_script` (plan 16, M6). A bridge tool can return a LOT (a big file, a wide
@@ -49,7 +49,7 @@ export function summarizeToolOutput(output: string, maxBytes: number): Summarize
   }
   const artifact: ToolScriptArtifact = {
     kind: "artifact",
-    artifactId: `script_art_${createHash("sha256").update(output).digest("hex").slice(0, 16)}`,
+    artifactId: `script_art_${shortSha16(output)}`,
     originalBytes: bytes,
     preview: sliceToBytes(output, Math.min(ARTIFACT_PREVIEW_BYTES, maxBytes)),
   };

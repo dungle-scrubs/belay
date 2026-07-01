@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   type ToolScriptResult,
   type ToolScriptToolset,
@@ -13,6 +12,7 @@ import {
 import { Effect, Schema } from "effect";
 import type { Tool, ToolContext } from "../tools/types";
 import { type BridgeExecute, createToolScriptBridge } from "./bridge";
+import { shortSha16 } from "./hash";
 import { type ManagedChild, manageToolScriptRun } from "./host-manager";
 import { type LaunchResolution, resolveRunnerLaunch } from "./launch";
 import { toolScriptSink } from "./sink";
@@ -114,7 +114,7 @@ async function runToolScript(
   deps: ToolScriptToolDeps,
 ): Promise<string> {
   const sink = deps.sink ?? toolScriptSink();
-  const scriptHash = createHash("sha256").update(args.script).digest("hex").slice(0, 16);
+  const scriptHash = shortSha16(args.script);
   const toolsets = args.toolsets.join(",");
   const validated = validateToolScriptRequest({
     language: "typescript",

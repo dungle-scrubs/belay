@@ -69,8 +69,3 @@ export function selectSandboxMode(env: SandboxEnvironment): SandboxMode {
 export function fallbackSandboxMode(_chosen: SandboxMode): SandboxMode {
   return "child-process";
 }
-
-/** Whether a mode applies an OS-level isolation profile (vs the plain process boundary / none). */
-export function isOsSandboxMode(mode: SandboxMode): boolean {
-  return mode === "safehouse" || mode === "sandbox-exec";
-}

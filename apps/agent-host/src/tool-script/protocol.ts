@@ -43,7 +43,6 @@ export const RUNNER_PROTOCOL_VERSION = 1;
 /** The bounded context handed to a script (never secrets/env). */
 export interface RunnerContext {
   readonly cwd: string;
-  readonly sessionId?: string;
   readonly runId?: string;
   readonly toolCallId?: string;
 }
@@ -122,9 +121,6 @@ export function decodeHostToRunner(line: string): HostToRunner | null {
             script: o.script,
             context: {
               cwd: context.cwd,
-              ...(asMaybeString(context.sessionId) !== undefined
-                ? { sessionId: asMaybeString(context.sessionId) }
-                : {}),
               ...(asMaybeString(context.runId) !== undefined
                 ? { runId: asMaybeString(context.runId) }
                 : {}),

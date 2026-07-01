@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DENIED_CAPABILITIES,
-  fallbackSandboxMode,
-  isOsSandboxMode,
-  selectSandboxMode,
-} from "./tool-script-sandbox";
+import { DENIED_CAPABILITIES, fallbackSandboxMode, selectSandboxMode } from "./tool-script-sandbox";
 
 describe("tool_script deny-first threat model (M2)", () => {
   it("denies every ambient capability - a script reaches power ONLY through the host bridge", () => {
@@ -67,12 +62,5 @@ describe("tool_script sandbox mode selection + fallback (M2)", () => {
     expect(fallbackSandboxMode("sandbox-exec")).toBe("child-process");
     // Already at the floor: it stays there (there is no weaker safe mode).
     expect(fallbackSandboxMode("child-process")).toBe("child-process");
-  });
-
-  it("distinguishes OS-sandbox modes from the plain process boundary", () => {
-    expect(isOsSandboxMode("safehouse")).toBe(true);
-    expect(isOsSandboxMode("sandbox-exec")).toBe(true);
-    expect(isOsSandboxMode("child-process")).toBe(false);
-    expect(isOsSandboxMode("none")).toBe(false);
   });
 });

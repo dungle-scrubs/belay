@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import type { SandboxEnvironment } from "@trevor/session";
+import { shortSha16 } from "./hash";
 
 /**
  * The macOS `sandbox-exec` (Seatbelt) profile generator + launcher wrapping for the `tool_script` child
@@ -112,7 +112,7 @@ export function sandboxExecCommand(profile: string, innerCommand: readonly strin
 
 /** A short, path-free hash of a profile - safe to surface in diagnostics (/doctor) to identify the policy. */
 export function sandboxPolicyHash(profile: string): string {
-  return createHash("sha256").update(profile).digest("hex").slice(0, 16);
+  return shortSha16(profile);
 }
 
 /** Probes the host for the sandbox facts M2's {@link selectSandboxMode} consumes. */

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   isRetryableFailure,
   type SandboxMode,
@@ -8,6 +7,7 @@ import {
   type ToolScriptFailureClass,
   type ToolScriptResult,
 } from "@trevor/session";
+import { shortSha16 } from "./hash";
 import { resultWithinBudget, summarizeToolOutput } from "./output-budget";
 import type { HostToRunner, RunnerContext, RunnerToHost } from "./protocol";
 
@@ -64,11 +64,9 @@ const defaultTimer = (ms: number, cb: () => void): (() => void) => {
   return () => clearTimeout(t);
 };
 
+/** Hashes a bridge-call input to a short, content-free correlator (never carries the raw args). */
 function shortHash(input: unknown): string {
-  return createHash("sha256")
-    .update(JSON.stringify(input) ?? "")
-    .digest("hex")
-    .slice(0, 16);
+  return shortSha16(JSON.stringify(input) ?? "");
 }
 
 /** Drives one child runner to a single result. */
