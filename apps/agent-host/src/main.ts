@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import * as Sentry from "@sentry/node";
 import {
   type ArtifactRef,
   catalogEntryFor,
@@ -117,6 +118,7 @@ import {
 import { ensureSessionWithRetry } from "./startup";
 import { activeStylePref } from "./style/style-store";
 import { taskRegistry } from "./tasks";
+import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
 import { DEFAULT_PROMOTION_CONFIG } from "./tools/promote-policy";
@@ -169,6 +171,12 @@ const hostTelemetry = createTelemetrySink("agent-host");
 const providerTrace = createProviderTraceWriter({
   enabled: resolveTelemetryConfig().providerTrace,
 });
+// Node Sentry error sink (plan 13 M9): initializes ONLY when a DSN is configured (never under test/CI),
+// errors-only, every event scrubbed by the shared beforeSend. A no-op on a bare checkout. The
+// `as NodeOptions` cast bridges the SDK-free option shape to the SDK's.
+if (bootstrapNodeSentry({ init: (options) => Sentry.init(options as Sentry.NodeOptions) })) {
+  log("host", "sentry error sink enabled (errors-only, scrubbed)");
+}
 // Local-model admission (plan 11): one cross-process gate per host serializes LM Studio generation +
 // reload across projects/subagents, so parallel work shares the runtime without overload or reload
 // races. Conservative default (capacity 1 per resource); foreground priority unless a future per-turn
