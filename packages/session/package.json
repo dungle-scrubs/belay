@@ -10,6 +10,7 @@
     "./node-paths": "./src/node-paths.ts",
     "./legacy-migration": "./src/legacy-migration.ts",
     "./async": "./src/async.ts",
+    "./telemetry": "./src/telemetry.ts",
     "./conformance": "./test/transport-conformance.ts"
   },
   "types": "./src/index.ts",

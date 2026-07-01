@@ -6,8 +6,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 88
-- Completed: 0
+- Current cutoff blockers: 83
+- Completed: 5
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -15,11 +15,11 @@
 
 ### M1: State-root correction and telemetry config
 
-- [ ] RED: Add tests proving detached service logs resolve under `TREVOR_STATE_HOME/logs`, not `TREVOR_HOME/logs`
-- [ ] GREEN: Update `apps/trevor-cli` log redirection to use the local state root
-- [ ] RED: Add tests for telemetry config defaults: no remote telemetry, no Sentry, no traces, no logs, no replay
-- [ ] GREEN: Implement config parsing for `TREVOR_OTEL_EXPORTER`, `TREVOR_SENTRY_DSN`/`SENTRY_DSN`, `VITE_TREVOR_SENTRY_DSN`, `TREVOR_TELEMETRY_REMOTE`, and test/CI disable guards
-- [ ] REFACTOR: Centralize root/config helpers so apps do not hand-roll home/state paths
+- [x] RED: Add tests proving detached service logs resolve under `TREVOR_STATE_HOME/logs`, not `TREVOR_HOME/logs`
+- [x] GREEN: Update `apps/trevor-cli` log redirection to use the local state root (already correct - the plan-03 XDG state-home split moved `platform.ts` log redirection to `TREVOR_STATE_HOME/logs`; locked in with a characterization test on `storagePathByName("logs")`)
+- [x] RED: Add tests for telemetry config defaults: no remote telemetry, no Sentry, no traces, no logs, no replay
+- [x] GREEN: Implement config parsing for `TREVOR_OTEL_EXPORTER`, `TREVOR_SENTRY_DSN`/`SENTRY_DSN`, `VITE_TREVOR_SENTRY_DSN`, `TREVOR_TELEMETRY_REMOTE`, and test/CI disable guards (`packages/session/src/telemetry.ts`, `@trevor/session/telemetry`)
+- [x] REFACTOR: Centralize root/config helpers so apps do not hand-roll home/state paths (paths via `node-paths` `storagePathByName`; telemetry config via the one `resolveTelemetryConfig`)
 
 ### M2: Shared observability contract
 
