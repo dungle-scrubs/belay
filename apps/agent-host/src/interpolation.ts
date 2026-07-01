@@ -9,7 +9,7 @@ import { collapsePaths, redactSecrets } from "@trevor/session/telemetry";
  * interpolation runtime (escape hatch 2: that stays a later plan).
  *
  * The built-in `trevor-expert` is INDEPENDENT of this gate (D-004): it reads the capability manifest
- * through a direct host export path (`manifest/expert-access.ts`), so it works whether or not general
+ * through the direct host seam (`manifest/source.ts` `currentManifest`), so it works whether or not general
  * interpolation is enabled. This module governs ONLY untrusted `!command` expansion inside skill/command
  * files.
  */

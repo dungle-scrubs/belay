@@ -1,22 +1,23 @@
 import {
-  type ManifestExportRequest,
+  type CapabilityManifest,
   type ManifestScope,
   type ManifestSectionId,
   orderSections,
+  renderManifestSections,
 } from "@trevor/session";
-import { expertManifestExport } from "./expert-access";
+import { currentManifest } from "./source";
 
 /**
  * The built-in `trevor-expert` QUERY ORCHESTRATION (plan 14, M8/M9). trevor-expert explains THIS host from
- * its own deterministic capability exports: given a question, it routes to the few relevant sections, loads
- * ONLY those export slices on demand (never the whole manifest, never every prompt), and composes a bounded
- * answer with provenance and explicit unknown/unavailable states.
+ * its own deterministic capability manifest: given a question, it reads the manifest ON DEMAND (never dumped
+ * into every prompt), routes to the few relevant sections, and RENDERS only those - a bounded answer with
+ * provenance and explicit unknown/unavailable states.
  *
- * It is deliberately SEPARATE from manifest generation (M8/M9 REFACTOR): this module decides WHICH slices a
- * question needs and how to present them; the builder decides what a section contains. And it reads through
- * the gate-independent {@link expertManifestExport} (D-004), so it works whether or not general
- * interpolation is enabled. It is read-only end to end: it never mutates state, grants a permission, or
- * starts work - it composes a description slice and returns it.
+ * It is deliberately SEPARATE from manifest generation (M8/M9 REFACTOR): this module decides WHICH sections
+ * a question needs and how to present them; the builder decides what a section contains. And it reads the
+ * manifest through the gate-independent {@link currentManifest} host seam (D-004), so it works whether or
+ * not general interpolation is enabled. It is read-only end to end: it never mutates state, grants a
+ * permission, or starts work - it reads a description and renders it.
  */
 
 /** The model-facing tool name (its def is the discovery metadata - discoverable, but not dumped). */
@@ -71,56 +72,55 @@ const EXPERT_AREAS_FOOTER =
   "providers/catalog, runtime, protocol, or workspace.";
 
 /**
- * Routes a question to the bounded set of section ids it needs. Matches keyword routes (deduped, canonical
- * order), falls back to a small core overview when nothing matches, and never returns more than
- * {@link MAX_EXPERT_SECTIONS} - so an expert answer can never balloon into a full-manifest dump.
+ * Routes a question to the bounded set of section ids it needs. Collects matches in ROUTE PRIORITY order
+ * (ROUTES is ordered by priority), falls back to a small core overview when nothing matches, caps to
+ * {@link MAX_EXPERT_SECTIONS} BY PRIORITY (so the highest-priority routes survive), then presents the
+ * survivors in canonical order. An expert answer can never balloon into a full-manifest dump.
  */
 export function selectExpertSections(question: string): ManifestSectionId[] {
   const q = question.toLowerCase();
-  const matched = new Set<ManifestSectionId>();
+  const matched: ManifestSectionId[] = [];
+  const seen = new Set<ManifestSectionId>();
   for (const route of ROUTES) {
     if (route.keywords.some((kw) => q.includes(kw))) {
       for (const section of route.sections) {
-        matched.add(section);
+        if (!seen.has(section)) {
+          seen.add(section);
+          matched.push(section);
+        }
       }
     }
   }
-  const chosen = matched.size > 0 ? [...matched] : [...DEFAULT_SECTIONS];
-  const ordered = orderSections(chosen.map((id) => ({ id }))).map((s) => s.id);
-  return ordered.slice(0, MAX_EXPERT_SECTIONS);
+  // Cap by priority FIRST (keep the highest-priority routes), then order canonically for display.
+  const chosen = (matched.length > 0 ? matched : [...DEFAULT_SECTIONS]).slice(
+    0,
+    MAX_EXPERT_SECTIONS,
+  );
+  return orderSections(chosen.map((id) => ({ id }))).map((s) => s.id);
 }
 
-/** The loader signature (injectable for tests); defaults to the gate-independent direct export access. */
-export type ExpertLoad = (
-  scope: ManifestScope,
-  request: ManifestExportRequest,
-) => Promise<string | null>;
+/** The manifest getter (injectable for tests); defaults to the gate-independent direct host read. */
+export type ManifestGetter = (scope: ManifestScope) => Promise<CapabilityManifest | null>;
 
 export interface ExpertQueryOptions {
-  readonly load?: ExpertLoad;
+  readonly getManifest?: ManifestGetter;
 }
 
 /**
- * Answers a question about the host by loading only the routed section slices (expert scope, section-scoped,
- * human-readable) and composing them with provenance. Returns an explicit "unavailable" answer when there is
- * no live manifest to read. Read-only: it loads descriptions, it never acts.
+ * Answers a question about the host by reading the manifest ONCE (expert scope, gate-independent - D-004),
+ * then rendering ONLY the routed sections with provenance (a single coherent header, not one per section).
+ * Returns an explicit "unavailable" answer when there is no live manifest. Read-only: it reads a
+ * description and renders it, it never acts.
  */
 export async function answerExpertQuery(
   question: string,
   options: ExpertQueryOptions = {},
 ): Promise<string> {
-  const load = options.load ?? expertManifestExport;
-  const sections = selectExpertSections(question);
-  const slices = await Promise.all(
-    sections.map(async (section) => {
-      const text = await load("expert", { format: "text", detail: "full", section });
-      return { section, text };
-    }),
-  );
-  // A null from the very first load means no live host - report it once, plainly.
-  if (slices.every((s) => s.text === null)) {
+  const getManifest = options.getManifest ?? currentManifest;
+  const manifest = await getManifest("expert");
+  if (!manifest) {
     return "trevor-expert: the capability manifest is unavailable (no live host on this session).";
   }
-  const body = slices.map((s) => s.text ?? `## ${s.section}: unavailable`).join("\n\n");
+  const body = renderManifestSections(manifest, selectExpertSections(question));
   return `trevor-expert (from the live capability manifest):\n\n${body}\n\n${EXPERT_AREAS_FOOTER}`;
 }

@@ -2246,6 +2246,15 @@ registerDoctorSnapshotSource(async () =>
 // load and doctor snapshot are best-effort - a failed read degrades that one section to unavailable, never
 // the whole export.
 registerManifestSource(async (scope) => {
+  // Each eager registry read is best-effort: a throw degrades ONLY its section (to empty/unavailable),
+  // never the whole export - matching the per-provider guard buildManifest already applies.
+  const readOr = <T>(read: () => T, fallback: T): T => {
+    try {
+      return read();
+    } catch {
+      return fallback;
+    }
+  };
   let catalog: CatalogSnapshot | null = null;
   try {
     catalog = await loadCatalog();
@@ -2263,8 +2272,8 @@ registerManifestSource(async (scope) => {
       debugCommands: debugCommandSpecs(true),
       commandFamilies: [buildStyleMenu(DEFAULT_STYLE_ID)],
       styles: BUILTIN_STYLES,
-      skills: skillRegistry(),
-      agents: discoverAgents().map(describeAgent),
+      skills: readOr(() => skillRegistry(), []),
+      agents: readOr(() => discoverAgents().map(describeAgent), []),
       doctorAreas: doctor?.areas ?? [],
       catalog,
       runtime: {

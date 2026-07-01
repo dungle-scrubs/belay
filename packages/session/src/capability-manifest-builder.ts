@@ -34,7 +34,6 @@ import { redactAttributeValue } from "./telemetry-contract";
 /** The read-only context a provider sees when asked to summarize itself. */
 export interface ManifestBuildContext {
   readonly scope: ManifestScope;
-  readonly generatedAt: string;
 }
 
 /** What a provider returns: a section WITHOUT id/title (the builder stamps those from the registration). */
@@ -68,8 +67,6 @@ export interface ManifestBuildOptions {
   readonly generatedAt: string;
   readonly host?: ManifestHostInfo;
   readonly workspace?: ManifestWorkspace;
-  /** Section ids intentionally omitted for this scope (recorded on the manifest, explicit not silent). */
-  readonly omitted?: readonly ManifestSectionId[];
   /** Per-provider time budget in ms; a provider slower than this yields an `error` section. Default 2000. */
   readonly providerTimeoutMs?: number;
 }
@@ -134,7 +131,9 @@ async function runProvider(
 ): Promise<ManifestSection> {
   try {
     const body = await withTimeout(() => Promise.resolve(provider.provide(ctx)), timeoutMs);
-    return { id: provider.id, title: provider.title, ...body };
+    // Stamp id/title AFTER the spread so a provider that returns an object carrying its own id/title
+    // (a whole ManifestSection is structurally a SectionBody) can never claim another id or retitle.
+    return { ...body, id: provider.id, title: provider.title };
   } catch (error) {
     return {
       id: provider.id,
@@ -155,11 +154,10 @@ export async function buildManifest(
   providers: readonly SectionProvider[],
   options: ManifestBuildOptions,
 ): Promise<CapabilityManifest> {
-  const ctx: ManifestBuildContext = { scope: options.scope, generatedAt: options.generatedAt };
+  const ctx: ManifestBuildContext = { scope: options.scope };
   const timeoutMs = options.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
   const composed = await Promise.all(providers.map((p) => runProvider(p, ctx, timeoutMs)));
   const sections = orderSections(composed);
-  const omitted = options.omitted && options.omitted.length > 0 ? options.omitted : undefined;
   return {
     version: MANIFEST_VERSION,
     scope: options.scope,
@@ -168,6 +166,5 @@ export async function buildManifest(
     truncated: computeTruncated(sections),
     ...(options.host ? { host: options.host } : {}),
     ...(options.workspace ? { workspace: options.workspace } : {}),
-    ...(omitted ? { omitted } : {}),
   };
 }

@@ -14,7 +14,7 @@ const AT = "2026-07-01T00:00:00.000Z";
 const run = (
   section: ReturnType<typeof protocolSection>,
   scope: ManifestScope = "human",
-): ReturnType<typeof section.provide> => section.provide({ scope, generatedAt: AT });
+): ReturnType<typeof section.provide> => section.provide({ scope });
 
 describe("peripheral sections (MCP / LSP / hooks / docs) - explicit when no backend (M4)", () => {
   it("reports an unavailable status with a note when the runtime is not configured", async () => {

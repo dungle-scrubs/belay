@@ -3,8 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SkillEntry } from "../skills";
 import { assembleManifest, type ManifestDeps } from "./build";
 import { answerExpertQuery } from "./expert";
-import { expertManifestExport } from "./expert-access";
-import { registerManifestSource } from "./source";
+import { currentManifest, registerManifestSource } from "./source";
 
 const AT = "2026-07-01T00:00:00.000Z";
 
@@ -113,23 +112,20 @@ describe("capability manifest end-to-end: registries -> manifest -> export (M10)
 describe("capability manifest end-to-end: manifest -> trevor-expert answer (M10)", () => {
   it("answers a capability question through the registered live source, redacted", async () => {
     registerManifestSource((scope) => assembleManifest(leakyDeps(), scope, AT));
-    // The expert routes "skills" -> the skills section and reads it via the direct export path.
-    const answer = await answerExpertQuery("what skills do you have?", {
-      load: expertManifestExport,
-    });
+    // The expert routes "skills" -> the skills section and reads the live manifest (default getManifest).
+    const answer = await answerExpertQuery("what skills do you have?");
     expect(answer).toContain("Skills");
     expectScrubbed(answer);
   });
 
   it("serves an expert-scoped section slice end to end", async () => {
     registerManifestSource((scope) => assembleManifest(leakyDeps(), scope, AT));
-    const slice = await expertManifestExport("expert", {
-      format: "json",
-      detail: "full",
-      section: "commands",
-    });
-    expect(slice).not.toBeNull();
-    expect(JSON.parse(slice ?? "{}").sections[0].id).toBe("commands");
-    expectScrubbed(slice ?? "");
+    const manifest = await currentManifest("expert");
+    expect(manifest).not.toBeNull();
+    const slice = manifest
+      ? renderManifestExport(manifest, { format: "json", detail: "full", section: "commands" })
+      : "";
+    expect(JSON.parse(slice).sections[0].id).toBe("commands");
+    expectScrubbed(slice);
   });
 });

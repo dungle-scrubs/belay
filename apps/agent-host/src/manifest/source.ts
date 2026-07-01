@@ -19,11 +19,6 @@ export function registerManifestSource(fn: ManifestSource): void {
   source = fn;
 }
 
-/** Whether a live manifest source is wired (false on a follower / not-yet-started host). */
-export function manifestSourceReady(): boolean {
-  return source !== undefined;
-}
-
 /** Composes the current manifest at `scope`, or null when no source is wired (not the live host). */
 export async function currentManifest(scope: ManifestScope): Promise<CapabilityManifest | null> {
   if (!source) {

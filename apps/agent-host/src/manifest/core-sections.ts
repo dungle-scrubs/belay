@@ -9,7 +9,7 @@ import type { SkillEntry } from "../skills";
 import { splitDescription } from "../skills";
 import type { OutputStyle } from "../style/styles";
 import { scopeItemCap, scopeShowsHidden } from "./scope";
-import { sectionBody } from "./section-helpers";
+import { elide, sectionBody } from "./section-helpers";
 
 /**
  * The core registry-derived section adapters (plan 14, M3). Each one turns a source-of-truth registry
@@ -104,12 +104,10 @@ export function commandFamiliesSection(input: CommandFamiliesInput): SectionProv
       const items: ManifestItem[] = input.families.map((family) => {
         // Surface the top-level choice LABELS (bounded), so a reader knows what the family offers
         // without the manifest carrying the full row payload (ids, disabled reasons, children).
-        const choices = family.rows.map((row) => row.label);
-        const shown = choices.slice(0, CHOICE_PREVIEW);
-        const summary =
-          choices.length > CHOICE_PREVIEW
-            ? `${shown.join(", ")}, +${choices.length - CHOICE_PREVIEW} more`
-            : shown.join(", ");
+        const summary = elide(
+          family.rows.map((row) => row.label),
+          CHOICE_PREVIEW,
+        );
         return {
           id: family.family,
           label: family.title,

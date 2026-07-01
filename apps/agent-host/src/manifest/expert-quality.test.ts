@@ -1,17 +1,12 @@
-import type {
-  CapabilityManifest,
-  ManifestExportRequest,
-  ManifestScope,
-  ManifestSection,
-} from "@trevor/session";
-import { MANIFEST_VERSION, renderManifestExport } from "@trevor/session";
+import type { CapabilityManifest, ManifestScope, ManifestSection } from "@trevor/session";
+import { MANIFEST_VERSION } from "@trevor/session";
 import { describe, expect, it } from "vitest";
 import { READ_ONLY_TOOLS } from "../tools";
-import { answerExpertQuery, TREVOR_EXPERT_NAME } from "./expert";
+import { answerExpertQuery, MAX_EXPERT_SECTIONS, TREVOR_EXPERT_NAME } from "./expert";
 
 /**
  * A rich fake manifest covering every topic, plus one unavailable section, so the expert evals exercise
- * real routing + rendering without a live host. The `load` used below renders a section slice from this.
+ * real routing + rendering without a live host. The `getManifest` below returns it for any scope.
  */
 const SECTIONS: ManifestSection[] = [
   {
@@ -71,41 +66,38 @@ function fakeManifest(scope: ManifestScope): CapabilityManifest {
   };
 }
 
-/** A load that renders a real section slice from the fake manifest (mirrors the live path). */
-const load = (scope: ManifestScope, request: ManifestExportRequest): Promise<string | null> =>
-  Promise.resolve(renderManifestExport(fakeManifest(scope), request));
+/** A manifest getter over the fake, mirroring the live host seam. */
+const getManifest = (scope: ManifestScope): Promise<CapabilityManifest> =>
+  Promise.resolve(fakeManifest(scope));
 
 describe("trevor-expert safety - read-only, no authority, bounded (M9)", () => {
   it("is classified read-only in the shared tool vocabulary", () => {
     expect(READ_ONLY_TOOLS.has(TREVOR_EXPERT_NAME)).toBe(true);
   });
 
-  it("only ever issues read requests (text/json exports), never a mutating action", async () => {
-    const formats = new Set<string>();
-    const details = new Set<string>();
-    const spy = (_s: ManifestScope, r: ManifestExportRequest): Promise<string | null> => {
-      formats.add(r.format);
-      details.add(r.detail);
-      return Promise.resolve("slice");
-    };
-    await answerExpertQuery("what tools and commands exist?", { load: spy });
-    // Every request is a bounded export read - there is no field through which it could mutate or grant.
-    expect([...formats].every((f) => f === "text" || f === "json")).toBe(true);
-    expect([...details].every((d) => d === "full" || d === "compact")).toBe(true);
+  it("only READS the manifest at the expert scope - its sole external call is a manifest read", async () => {
+    const scopes: ManifestScope[] = [];
+    let calls = 0;
+    await answerExpertQuery("what tools and commands exist?", {
+      getManifest: (scope) => {
+        calls++;
+        scopes.push(scope);
+        return getManifest(scope);
+      },
+    });
+    // One read, at the expert scope - there is no field through which it could mutate or grant.
+    expect(calls).toBe(1);
+    expect(scopes).toEqual(["expert"]);
   });
 
   it("bounds its answer to a small number of sections", async () => {
-    const requested: string[] = [];
-    const spy = (_s: ManifestScope, r: ManifestExportRequest): Promise<string | null> => {
-      if (r.section) {
-        requested.push(r.section);
-      }
-      return Promise.resolve("slice");
-    };
-    await answerExpertQuery("tools commands skills agents providers doctor protocol workspace", {
-      load: spy,
-    });
-    expect(requested.length).toBeLessThanOrEqual(4);
+    const answer = await answerExpertQuery(
+      "tools commands skills agents providers doctor protocol workspace",
+      { getManifest },
+    );
+    // At most MAX_EXPERT_SECTIONS "## <section>" blocks in the rendered answer.
+    const blocks = answer.match(/^## /gm) ?? [];
+    expect(blocks.length).toBeLessThanOrEqual(MAX_EXPERT_SECTIONS);
   });
 });
 
@@ -121,7 +113,7 @@ describe("trevor-expert answer quality across topics (M9 evals)", () => {
 
   for (const [question, expected] of cases) {
     it(`answers "${question}" from the manifest with provenance`, async () => {
-      const answer = await answerExpertQuery(question, { load });
+      const answer = await answerExpertQuery(question, { getManifest });
       expect(answer).toContain(expected);
       // Provenance is surfaced - the answer says where the facts came from.
       expect(answer).toContain("source:");
@@ -129,14 +121,16 @@ describe("trevor-expert answer quality across topics (M9 evals)", () => {
   }
 
   it("reports an unavailable section explicitly rather than inventing an answer", async () => {
-    const answer = await answerExpertQuery("what MCP servers are connected?", { load });
+    const answer = await answerExpertQuery("what MCP servers are connected?", { getManifest });
     expect(answer.toLowerCase()).toContain("unavailable");
     expect(answer).toContain("not configured");
   });
 
   it("gives a general overview + an explicit area list for an unrecognized topic", async () => {
     // "rules and policies" matches no route (that is a later plan) - it must not fabricate.
-    const answer = await answerExpertQuery("tell me about your rules and policies", { load });
+    const answer = await answerExpertQuery("tell me about your rules and policies", {
+      getManifest,
+    });
     expect(answer.toLowerCase()).toContain("ask trevor-expert about");
     // Falls back to the core overview (commands/tools), not a made-up rules list.
     expect(answer).toContain("/help");

@@ -13,6 +13,15 @@ export interface FreshnessLike {
   readonly stale: boolean;
 }
 
+/** Joins `values` into a preview string, showing the first `cap` and eliding the rest as "+N more". Empty
+ *  input yields "". The one place the "first N, then +K more" shape lives, shared by every section. */
+export function elide(values: readonly string[], cap: number): string {
+  const shown = values.slice(0, cap);
+  return values.length > cap
+    ? `${shown.join(", ")}, +${values.length - cap} more`
+    : shown.join(", ");
+}
+
 /** Whether a freshness record counts as current: refreshed at least once and not marked stale. */
 export function isFresh(freshness: FreshnessLike): boolean {
   return freshness.refreshedAt !== null && !freshness.stale;

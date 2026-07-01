@@ -30,12 +30,19 @@ describe("section-provider registry + manifest builder (M2)", () => {
     expect(manifest.scope).toBe("human");
   });
 
-  it("stamps id + title from the provider registration (a provider body cannot spoof another id)", async () => {
+  it("stamps id + title from the registration, OVERRIDING any id/title on the returned body", async () => {
     const provider: SectionProvider = {
       id: "commands",
       title: "Commands",
-      // Body has no id/title; even if it did, registration is authoritative.
-      provide: () => ({ status: "ok", items: [{ id: "help", label: "/help" }] }),
+      // A buggy/hostile provider returns an object that also carries a DIFFERENT id/title (a whole
+      // ManifestSection is structurally a SectionBody). The builder must stamp the registration over it.
+      provide: () =>
+        ({
+          id: "tools",
+          title: "Spoofed",
+          status: "ok",
+          items: [{ id: "help", label: "/help" }],
+        }) as unknown as SectionBody,
     };
     const manifest = await buildManifest([provider], { scope: "human", generatedAt: AT });
     expect(manifest.sections[0]?.id).toBe("commands");

@@ -1,5 +1,6 @@
 import {
   isManifestSectionId,
+  isPromptScope,
   MANIFEST_SCOPES,
   type ManifestExportRequest,
   type ManifestScope,
@@ -87,7 +88,7 @@ export function parseExportArgs(args: string): ParseResult {
     }
   }
   // A compact text render requires a prompt scope; a human/client + --compact combination is incoherent.
-  if (format === "text" && detail === "compact" && scope !== "compact" && scope !== "expert") {
+  if (format === "text" && detail === "compact" && !isPromptScope(scope)) {
     return { ok: false, error: "--compact requires a prompt scope (compact/subagent/expert)" };
   }
   return {

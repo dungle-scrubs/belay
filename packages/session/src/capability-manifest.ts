@@ -82,7 +82,7 @@ export const MANIFEST_SECTION_ORDER: readonly ManifestSectionId[] = [
  */
 export type SectionStatus = "ok" | "empty" | "unavailable" | "truncated" | "error";
 
-export const SECTION_STATUSES: readonly SectionStatus[] = [
+const SECTION_STATUSES: readonly SectionStatus[] = [
   "ok",
   "empty",
   "unavailable",
@@ -144,8 +144,8 @@ export interface ManifestWorkspace {
 }
 
 /**
- * The full capability manifest. A `compact` manifest is the SAME type at `scope: "compact"` with capped
- * sections, so section ids stay stable across the full and compact forms (see {@link CompactManifest}).
+ * The full capability manifest. A `compact` manifest is the SAME type at a prompt scope (`compact`/
+ * `subagent`/`expert`) with capped sections, so section ids stay stable across the full and compact forms.
  */
 export interface CapabilityManifest {
   readonly version: number;
@@ -155,17 +155,9 @@ export interface CapabilityManifest {
   readonly host?: ManifestHostInfo;
   readonly workspace?: ManifestWorkspace;
   readonly sections: readonly ManifestSection[];
-  /** Section ids requested but omitted for this scope - explicit, never silent. */
-  readonly omitted?: readonly ManifestSectionId[];
   /** True when any section was capped/truncated. */
   readonly truncated: boolean;
 }
-
-/**
- * The compact manifest is not a separate schema: it is a {@link CapabilityManifest} at a compact/subagent/
- * expert scope with capped sections. The alias documents intent at call sites (plan 14 M5).
- */
-export type CompactManifest = CapabilityManifest;
 
 const SECTION_ID_SET: ReadonlySet<string> = new Set(MANIFEST_SECTION_ORDER);
 const SECTION_ORDER_INDEX: ReadonlyMap<ManifestSectionId, number> = new Map(
@@ -296,7 +288,6 @@ export function decodeCapabilityManifest(v: unknown): CapabilityManifest | null 
     : undefined;
   const workspaceRec = asOptRecord(o.workspace);
   const workspaceRoot = workspaceRec ? asMaybeString(workspaceRec.root) : undefined;
-  const omitted = Array.isArray(o.omitted) ? o.omitted.filter(isManifestSectionId) : undefined;
   return {
     version: o.version,
     scope,
@@ -305,6 +296,5 @@ export function decodeCapabilityManifest(v: unknown): CapabilityManifest | null 
     truncated: typeof o.truncated === "boolean" ? o.truncated : computeTruncated(sections),
     ...(host && Object.keys(host).length > 0 ? { host } : {}),
     ...(workspaceRoot !== undefined ? { workspace: { root: workspaceRoot } } : {}),
-    ...(omitted && omitted.length > 0 ? { omitted } : {}),
   };
 }

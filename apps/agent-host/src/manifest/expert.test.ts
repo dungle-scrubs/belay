@@ -1,5 +1,7 @@
-import type { ManifestExportRequest, ManifestScope, ManifestSectionId } from "@trevor/session";
+import type { CapabilityManifest, ManifestScope, ManifestSection } from "@trevor/session";
+import { MANIFEST_VERSION } from "@trevor/session";
 import { describe, expect, it } from "vitest";
+import { resolveInterpolationConfig } from "../interpolation";
 import {
   answerExpertQuery,
   MAX_EXPERT_SECTIONS,
@@ -7,6 +9,33 @@ import {
   TREVOR_EXPERT_DESCRIPTION,
   TREVOR_EXPERT_NAME,
 } from "./expert";
+
+/** A manifest with a few named sections, for the routing/rendering assertions. */
+function manifestWith(
+  sections: ManifestSection[],
+): (scope: ManifestScope) => Promise<CapabilityManifest> {
+  return (scope) =>
+    Promise.resolve({
+      version: MANIFEST_VERSION,
+      scope,
+      generatedAt: "2026-07-01T00:00:00.000Z",
+      sections,
+      truncated: false,
+    });
+}
+
+const TOOLS_SECTION: ManifestSection = {
+  id: "tools",
+  title: "Tools",
+  status: "ok",
+  items: [{ id: "read", label: "read" }],
+};
+const CATALOG_SECTION: ManifestSection = {
+  id: "catalog",
+  title: "Model catalog",
+  status: "ok",
+  items: [{ id: "lmstudio", label: "lmstudio" }],
+};
 
 describe("trevor-expert discovery metadata (M8)", () => {
   it("has a stable name and a description that states what it does + when to use it (triggers)", () => {
@@ -42,39 +71,37 @@ describe("trevor-expert routes a question to a BOUNDED set of sections (M8)", ()
   });
 });
 
-describe("trevor-expert loads ONLY the sections a question needs (M8)", () => {
-  it("requests just the routed section slices, not the full manifest", async () => {
-    const requested: ManifestSectionId[] = [];
-    const load = (
-      _scope: ManifestScope,
-      request: ManifestExportRequest,
-    ): Promise<string | null> => {
-      if (request.section) {
-        requested.push(request.section);
-      }
-      return Promise.resolve(`slice for ${request.section}`);
-    };
-    const answer = await answerExpertQuery("what tools can you run?", { load });
-    expect(requested).toEqual(["tools"]);
-    // Never loaded an unrelated section.
-    expect(requested).not.toContain("catalog");
-    expect(answer).toContain("slice for tools");
+describe("trevor-expert renders ONLY the sections a question needs (M8)", () => {
+  it("renders just the routed section, not unrelated ones, from a single manifest read", async () => {
+    const getManifest = manifestWith([TOOLS_SECTION, CATALOG_SECTION]);
+    const answer = await answerExpertQuery("what tools can you run?", { getManifest });
+    expect(answer).toContain("Tools");
+    // The catalog section was in the manifest but not routed, so it is not in the answer.
+    expect(answer).not.toContain("Model catalog");
   });
 
-  it("uses the expert scope + section-scoped requests", async () => {
+  it("reads the manifest at the expert scope", async () => {
     const scopes = new Set<ManifestScope>();
-    const load = (scope: ManifestScope, request: ManifestExportRequest): Promise<string | null> => {
+    const getManifest = (scope: ManifestScope): Promise<CapabilityManifest> => {
       scopes.add(scope);
-      expect(request.section).toBeDefined();
-      return Promise.resolve("slice");
+      return manifestWith([TOOLS_SECTION])(scope);
     };
-    await answerExpertQuery("what providers exist?", { load });
+    await answerExpertQuery("what providers exist?", { getManifest });
     expect([...scopes]).toEqual(["expert"]);
   });
 
   it("reports an explicit unavailable answer when there is no live manifest", async () => {
-    const load = (): Promise<string | null> => Promise.resolve(null);
-    const answer = await answerExpertQuery("what tools exist?", { load });
+    const answer = await answerExpertQuery("what tools exist?", {
+      getManifest: () => Promise.resolve(null),
+    });
     expect(answer.toLowerCase()).toContain("unavailable");
+  });
+
+  it("reads the manifest directly, so it works while general interpolation is DISABLED (D-004)", async () => {
+    expect(resolveInterpolationConfig({}).enabled).toBe(false);
+    const answer = await answerExpertQuery("what tools exist?", {
+      getManifest: manifestWith([TOOLS_SECTION]),
+    });
+    expect(answer).toContain("Tools");
   });
 });

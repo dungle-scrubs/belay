@@ -50,7 +50,8 @@ function redactMeta(
 function redactItem(item: ManifestItem): ManifestItem {
   const meta = redactMeta(item.meta);
   return {
-    // id is a stable registry identifier (tool/command/skill name), not sensitive - kept verbatim.
+    // id is a CLOSED slug - a tool/command/style/agent/doctor id, or a skill/agent directory basename that
+    // is already surfaced to the model elsewhere (the `skill` tool). Kept verbatim; never a secret path.
     id: item.id,
     label: redactAttributeValue(item.label),
     ...(item.summary !== undefined ? { summary: redactAttributeValue(item.summary) } : {}),
@@ -161,4 +162,23 @@ export function renderManifestExport(
     return JSON.stringify(safe, null, 2);
   }
   return request.detail === "compact" ? renderCompactManifest(safe) : renderFullManifest(safe);
+}
+
+/**
+ * Renders a chosen subset of a manifest's sections as redacted human-readable blocks WITHOUT the top
+ * manifest header - the primitive the built-in `trevor-expert` uses to assemble a multi-section answer from
+ * ONE manifest read (so the answer carries a single coherent header, not one per section). Ids not present
+ * in the manifest are ignored; an empty selection yields an explicit note.
+ */
+export function renderManifestSections(
+  manifest: CapabilityManifest,
+  sectionIds: readonly ManifestSectionId[],
+): string {
+  const wanted = new Set(sectionIds);
+  const chosen = manifest.sections.filter((s) => wanted.has(s.id));
+  const safe = redactManifest({ ...manifest, sections: chosen });
+  if (safe.sections.length === 0) {
+    return "(no matching capability sections)";
+  }
+  return safe.sections.map(renderSectionBlock).join("\n\n");
 }

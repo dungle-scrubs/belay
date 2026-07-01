@@ -10,7 +10,7 @@ import {
 } from "@trevor/session";
 import type { CatalogSnapshot } from "../providers/catalog";
 import { scopeItemCap } from "./scope";
-import { isFresh, sectionBody, unavailableBody } from "./section-helpers";
+import { elide, isFresh, sectionBody, unavailableBody } from "./section-helpers";
 
 /**
  * The dynamic runtime + integration section adapters (plan 14, M4): MCP / LSP / hooks / docs, the Doctor
@@ -30,12 +30,7 @@ const AGGREGATE_PREVIEW = 6;
 /** A peripheral runtime's state: not yet configured (no backend), or ready with summarized items. */
 export type PeripheralState =
   | { readonly kind: "unconfigured"; readonly note?: string }
-  | {
-      readonly kind: "ready";
-      readonly items: readonly ManifestItem[];
-      readonly total?: number;
-      readonly detail?: string;
-    };
+  | { readonly kind: "ready"; readonly items: readonly ManifestItem[]; readonly detail?: string };
 
 /**
  * A generic adapter for a peripheral runtime (MCP servers, LSP servers, hooks, docs corpora). Until its
@@ -93,16 +88,10 @@ export function doctorSection(input: {
   };
 }
 
-/** Joins a set of distinct values into a bounded preview string ("a, b, +N more"), or undefined if empty. */
+/** Distinct + sorted + bounded preview of a set of values ("a, b, +N more"), or undefined if empty. */
 function aggregate(values: Iterable<string>): string | undefined {
   const distinct = [...new Set([...values].filter((v) => v.length > 0))].sort();
-  if (distinct.length === 0) {
-    return undefined;
-  }
-  const shown = distinct.slice(0, AGGREGATE_PREVIEW);
-  return distinct.length > AGGREGATE_PREVIEW
-    ? `${shown.join(", ")}, +${distinct.length - AGGREGATE_PREVIEW} more`
-    : shown.join(", ");
+  return distinct.length === 0 ? undefined : elide(distinct, AGGREGATE_PREVIEW);
 }
 
 /**

@@ -12,11 +12,10 @@ import {
   toolsSection,
 } from "./core-sections";
 
-const AT = "2026-07-01T00:00:00.000Z";
 const provide = (
   section: ReturnType<typeof toolsSection>,
   scope: ManifestScope,
-): ReturnType<typeof section.provide> => section.provide({ scope, generatedAt: AT });
+): ReturnType<typeof section.provide> => section.provide({ scope });
 
 describe("tools section (M3)", () => {
   const defs = [
