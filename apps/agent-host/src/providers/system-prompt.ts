@@ -73,6 +73,7 @@ const TOOL_SELECTION_GUIDANCE = [
   "Independent read-only lookups (read, glob, grep, web_search) run in parallel when you request several in a single step, so batch them together instead of one at a time; edits, writes, and bash run sequentially, so issue those one per step.",
   "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
   "Use ask_user ONLY when a concrete missing decision blocks useful progress - it pauses the turn until the user answers. Offer concrete choices and mark the one you recommend; do not use it to gather broad open-ended preferences or to ask what you can determine yourself by reading the code.",
+  "Recurring or scheduled work is the user's explicit /loop command, never something you start yourself. If the user wants an action repeated on a cadence or until a condition, point them at /loop (e.g. '/loop max 5 do \"run the tests\"' or '/loop every 5m do \"check CI\"'); do NOT invent hidden loops, background schedules, or self-repeating turns - a loop only runs when the user explicitly creates one.",
   CONFINEMENT_GUIDANCE,
   "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
 ];

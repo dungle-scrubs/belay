@@ -55,6 +55,23 @@ export type LoopResult =
   | { readonly ok: true; readonly snapshot: LoopSnapshot }
   | { readonly ok: false; readonly error: string };
 
+/**
+ * The control surface the `/loop` command routes to (the {@link LoopStore} implements it). Keeping the
+ * command handler to this narrow interface lets it drive loops headlessly without depending on the store's
+ * scheduling/persistence internals - the SAME surface a web helper's inventory controls submit through.
+ */
+export interface LoopController {
+  submit(input: string): LoopResult;
+  confirm(loopId: string): LoopResult;
+  list(): LoopState[];
+  get(loopId: string): LoopState | undefined;
+  pause(loopId: string): LoopResult;
+  resume(loopId: string): LoopResult;
+  stop(loopId: string): LoopResult;
+  delete(loopId: string): LoopResult;
+  runNow(loopId: string): LoopResult;
+}
+
 /** Compact `NNN{unit}` for a millisecond bound, preferring the largest whole unit. */
 function formatMs(ms: number): string {
   if (ms % 3_600_000 === 0) {

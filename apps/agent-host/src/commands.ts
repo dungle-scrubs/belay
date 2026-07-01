@@ -7,6 +7,7 @@ import type {
 import { buildInitProposal } from "./context/init-agents";
 import { buildDoctorCommandResult } from "./doctor/build";
 import { buildLoopCommands } from "./loop/command";
+import type { LoopController } from "./loop/store";
 import { buildTrevorExportCommand } from "./manifest/export-command";
 import { msg } from "./messages";
 import { supervisor } from "./processes";
@@ -55,6 +56,9 @@ export interface CommandContext {
   /** Forces one cross-turn compaction fold now and resolves with a human-readable result line
    *  (D-040), for /compact. Absent when the host cannot compact (e.g. not the live leader). */
   readonly compact?: () => Promise<string>;
+  /** The live loop runtime the `/loop` family drives (plan 17). Absent when loops are unavailable (e.g.
+   *  not the live leader); the command then answers with a parse preview instead of executing. */
+  readonly loops?: LoopController;
 }
 
 /** The /doctor slice: the host-health facts it reports (no compaction hook). */

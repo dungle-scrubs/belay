@@ -67,6 +67,23 @@ test("buildSystemPrompt guides the model to use doctor only as a diagnostic, not
   );
 });
 
+// --- Plan 17 M8: recurring work is the explicit /loop command, never model-invented ---
+
+test("buildSystemPrompt points recurring work at /loop and forbids hidden self-repeating work", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  // It steers the user to the explicit command...
+  assert.ok(prompt.includes("/loop"), "the prompt names the /loop command for recurring work");
+  // ...and pins that the model must not start recurring work on its own.
+  assert.ok(
+    prompt.includes("do NOT invent hidden loops"),
+    "the prompt forbids model-invented recurring work",
+  );
+  assert.ok(
+    prompt.includes("only runs when the user explicitly creates one"),
+    "the prompt requires explicit user creation for a loop to run",
+  );
+});
+
 // --- Plan 04 M7: web_search (discovery) vs web_fetch (reading) guidance ---
 
 test("buildSystemPrompt distinguishes web_search for discovery from web_fetch for reading", () => {

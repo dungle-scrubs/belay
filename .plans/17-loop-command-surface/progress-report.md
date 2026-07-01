@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M8: Evals And End-To-End Coverage
-- Current cutoff blockers: 12 unchecked
+> Current focus: Gate 3 to Done
+- Current cutoff blockers: 0 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -89,18 +89,18 @@
 
 ### M8: Evals And End-To-End Coverage
 
-- [ ] RED: Add hermetic e2e coverage for headless create, confirm, list, pause, resume, stop, delete, and run-now flows.
-- [ ] GREEN: Make the command/session protocol drive all loop controls without web-only paths.
-- [ ] RED: Add e2e coverage for process/current/background runner behavior with fake or hermetic dependencies.
-- [ ] GREEN: Stabilize runner behavior and lifecycle events under deterministic test timing.
-- [ ] RED: Add evals or prompt tests proving the model does not invent hidden recurring work and points users to explicit `/loop` commands.
-- [ ] GREEN: Add prompt guidance for explicit command use and deferred natural-language drafting boundaries.
-- [ ] REFACTOR: Keep natural-language draft tests skipped or absent until that deferred layer is intentionally picked up.
+- [x] RED: Add hermetic e2e coverage for headless create, confirm, list, pause, resume, stop, delete, and run-now flows.
+- [x] GREEN: Make the command/session protocol drive all loop controls without web-only paths.
+- [x] RED: Add e2e coverage for process/current/background runner behavior with fake or hermetic dependencies.
+- [x] GREEN: Stabilize runner behavior and lifecycle events under deterministic test timing.
+- [x] RED: Add evals or prompt tests proving the model does not invent hidden recurring work and points users to explicit `/loop` commands.
+- [x] GREEN: Add prompt guidance for explicit command use and deferred natural-language drafting boundaries.
+- [x] REFACTOR: Keep natural-language draft tests skipped or absent until that deferred layer is intentionally picked up.
 
 ### Gate 3 to Done
 
-- [ ] `pnpm test --project unit` passes for parser and domain tests.
-- [ ] `pnpm test --project integration` passes for host runtime and persistence tests.
-- [ ] `pnpm test --project web` passes for helper behavior.
-- [ ] `pnpm test --project e2e` passes for hermetic loop command flows.
-- [ ] No natural-language loop creation ships in the first command-surface implementation.
+- [x] `pnpm test --project unit` passes for parser and domain tests.
+- [x] `pnpm test --project integration` passes for host runtime and persistence tests.
+- [x] `pnpm test --project web` passes for helper behavior.
+- [x] `pnpm test --project e2e` passes for hermetic loop command flows.
+- [x] No natural-language loop creation ships in the first command-surface implementation.

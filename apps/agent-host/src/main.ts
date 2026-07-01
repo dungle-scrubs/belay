@@ -85,6 +85,9 @@ import { type DirectHandoffDeps, executeFinalizedHandoff, runDirectHandoff } fro
 import { generateHandoffPrompt, hasGenerableContext } from "./handoff-generate";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
+import { createLoopPersistence } from "./loop/persistence";
+import { createLoopIterationRunner, defaultProcessSeam } from "./loop/runner";
+import { LoopStore } from "./loop/store";
 import { assembleManifest } from "./manifest/build";
 import { registerManifestSource } from "./manifest/source";
 import { msg } from "./messages";
@@ -217,6 +220,32 @@ const residency = createHostResidency({
 });
 const providers = buildProviders({ admissionGate, residency: residency.recorder });
 const commands = buildCommandRegistry();
+// The `/loop` runtime (plan 17): the command surface drives a durable-loop store. Process loops run through
+// the real command boundary; current-session + background prompt loops inject a control prompt into the
+// session (a first cut - a dedicated background-agent spawn + a full turn-completion await are later
+// refinements). Durable loops rehydrate from the state root at boot; status rides `loop.status` events.
+const loopPersistence = createLoopPersistence();
+const loops = new LoopStore({
+  emit: (snapshot) => {
+    void emit(events.loopStatus({ snapshot }));
+  },
+  makeId: () => `loop_${crypto.randomUUID().slice(0, 8)}`,
+  runner: createLoopIterationRunner({
+    runProcess: defaultProcessSeam,
+    runPrompt: async (prompt) => {
+      await publishControlPrompt(prompt);
+      return { ok: true, summary: "prompt injected into the session" };
+    },
+    runBackground: async (prompt) => {
+      await publishControlPrompt(prompt);
+      return { ok: true, summary: "background prompt injected" };
+    },
+  }),
+  persist: (record) => {
+    loopPersistence.save(record);
+  },
+});
+loops.hydrate(loopPersistence.load());
 // The host-owned model source + catalog read model (D-065): which provider sources exist, their auth
 // state, and each configured source's live model list. Loaded async (it hits each provider's /models),
 // cached here, and announced on host.online; a re-announce fills it in once the first load resolves.
@@ -2302,6 +2331,7 @@ async function runCommand(name: string, args: string): Promise<void> {
     providers,
     lease: lease.debugInfo(Date.now()),
     compact: forceCompact,
+    loops,
   });
   await emit(events.commandResult({ command: name, text, ok, ...(menu ? { menu } : {}) }));
   // `/vim` flips the Vim-motions preference that host.online carries; re-announce so every client's
