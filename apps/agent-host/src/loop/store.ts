@@ -135,7 +135,12 @@ export class LoopStore {
 
   constructor(deps: LoopStoreDeps) {
     this.emit = deps.emit;
-    this.makeId = deps.makeId ?? (() => `loop_${(this.counter += 1)}`);
+    this.makeId =
+      deps.makeId ??
+      (() => {
+        this.counter += 1;
+        return `loop_${this.counter}`;
+      });
     this.runner = deps.runner;
     this.scheduler = deps.scheduler ?? new LoopScheduler();
     this.persist = deps.persist;

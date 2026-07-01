@@ -81,7 +81,10 @@ function makeStore(
   let n = 0;
   const store = new LoopStore({
     emit: (snapshot) => events.push(snapshot),
-    makeId: () => `loop_${(n += 1)}`,
+    makeId: () => {
+      n += 1;
+      return `loop_${n}`;
+    },
     runner,
     scheduler: new LoopScheduler(clock),
   });

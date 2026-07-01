@@ -20,7 +20,10 @@ function harness() {
   let n = 0;
   const store = new LoopStore({
     emit: (snapshot) => events.push({ loopId: snapshot.loopId, status: snapshot.status }),
-    makeId: () => `loop_${(n += 1)}`,
+    makeId: () => {
+      n += 1;
+      return `loop_${n}`;
+    },
     runner: idleRunner,
   });
   const registry = buildCommandRegistry();
