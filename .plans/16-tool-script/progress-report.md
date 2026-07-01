@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M3 - Child Runner Protocol
-- **Completed:** 17 / 68
-- **Current cutoff blockers:** 51
+- **Current focus:** M4 - Safehouse / OS Sandbox Integration
+- **Completed:** 22 / 68
+- **Current cutoff blockers:** 46
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -48,11 +48,11 @@
 
 #### M3: Child Runner Protocol
 
-- [ ] RED: Add runner protocol tests for start, execute, bridge request, bridge response, complete, fail, cancel, and timeout messages.
-- [ ] GREEN: Implement a dedicated child runner process with a minimal JSON/RPC protocol.
-- [ ] RED: Add tests proving host crashes, child crashes, malformed child messages, and stderr spam are contained.
-- [ ] GREEN: Implement lifecycle cleanup, stderr/stdout caps, child termination, and correlation identifiers.
-- [ ] REFACTOR: Keep child runner code isolated from agent-host tool registry code.
+- [x] RED: Add runner protocol tests for start, execute, bridge request, bridge response, complete, fail, cancel, and timeout messages.
+- [x] GREEN: Implement a dedicated child runner process with a minimal JSON/RPC protocol.
+- [x] RED: Add tests proving host crashes, child crashes, malformed child messages, and stderr spam are contained.
+- [x] GREEN: Implement lifecycle cleanup, stderr/stdout caps, child termination, and correlation identifiers.
+- [x] REFACTOR: Keep child runner code isolated from agent-host tool registry code.
 
 #### M4: Safehouse / OS Sandbox Integration
 

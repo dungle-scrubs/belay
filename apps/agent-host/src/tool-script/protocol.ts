@@ -1,7 +1,24 @@
-import { TOOL_SCRIPT_FAILURE_CLASSES, type ToolScriptFailureClass } from "@trevor/session";
+import type { ToolScriptFailureClass } from "@trevor/session";
+
+// The failure classes are inlined (not imported as a value) + `satisfies`-checked against the session
+// contract, so this module - and the child runner that imports it - has ZERO runtime dependency on
+// @trevor/session. That is load-bearing: the child runs in an OS sandbox with a foreign cwd where the
+// monorepo's workspace packages do not resolve. The `satisfies` catches any drift (a new class) at compile.
+const TOOL_SCRIPT_FAILURE_CLASSES = [
+  "timeout",
+  "cancelled",
+  "syntax_error",
+  "runtime_error",
+  "validation",
+  "sandbox_launch",
+  "bridge_denied",
+  "bridge_failed",
+  "output_too_large",
+  "budget_exhausted",
+] as const satisfies readonly ToolScriptFailureClass[];
 
 // Local coercion helpers (kept inline so the child runner imports only this protocol + the session
-// contract - never the heavier coerce/registry modules).
+// contract types - never the heavier coerce/registry modules).
 const asOptRecord = (v: unknown): Record<string, unknown> | null =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 const asMaybeString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
