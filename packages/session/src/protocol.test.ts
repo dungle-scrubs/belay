@@ -101,6 +101,24 @@ test("events.admissionStatus round-trips queued + refused admission status (plan
   }
 });
 
+test("events.loopStatus round-trips through decodeTrevorEvent", () => {
+  const snapshot = {
+    completed: 2,
+    durability: "durable" as const,
+    loopId: "loop_1",
+    max: 5,
+    nextRun: 1_800_000_000_000,
+    runner: "background_agent" as const,
+    status: "running" as const,
+    summary: "run the suite",
+  };
+
+  assert.deepEqual(decodeTrevorEvent(stored(events.loopStatus({ snapshot }))), {
+    snapshot,
+    type: "loop.status",
+  });
+});
+
 test("events.userMessage round-trips through decodeTrevorEvent", () => {
   const decoded = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
   assert.equal(decoded?.type, "user.message");

@@ -1,6 +1,7 @@
 import type { CommandToken } from "@trevor/session";
 import type { KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
+import { commandTokenSegments } from "./command-token-segments";
 
 /**
  * A single-line composer input with live syntax highlighting driven by command
@@ -8,43 +9,6 @@ import { cn } from "@/lib/utils";
  * (the app's monospace font makes the two align character-for-character), so
  * keywords light up in the prompt as you type without a contenteditable.
  */
-
-const KIND_CLASS: Record<CommandToken["kind"], string> = {
-  command: "text-muted-foreground",
-  flag: "rounded-[2px] bg-smui-frost-3/20 font-semibold text-smui-frost-3",
-  keyword: "rounded-[2px] bg-smui-frost-3/20 font-semibold text-smui-frost-3",
-  subcommand: "rounded-[2px] bg-smui-frost-3/20 font-semibold text-smui-frost-3",
-  unknown: "text-smui-red",
-  value: "text-foreground",
-};
-
-interface Segment {
-  readonly key: number;
-  readonly text: string;
-  readonly className?: string;
-}
-
-/** Cover the whole string with colored token spans and plain text in the gaps. */
-function toSegments(value: string, tokens: readonly CommandToken[]): Segment[] {
-  const sorted = [...tokens].sort((a, b) => a.start - b.start);
-  const segments: Segment[] = [];
-  let cursor = 0;
-  for (const token of sorted) {
-    if (token.start > cursor) {
-      segments.push({ key: cursor, text: value.slice(cursor, token.start) });
-    }
-    segments.push({
-      className: KIND_CLASS[token.kind],
-      key: token.start,
-      text: value.slice(token.start, token.end),
-    });
-    cursor = token.end;
-  }
-  if (cursor < value.length) {
-    segments.push({ key: cursor, text: value.slice(cursor) });
-  }
-  return segments;
-}
 
 // Shared box model so the overlay and the input occupy the exact same geometry.
 const FIELD = "block w-full border px-3 py-2.5 text-ui leading-6";
@@ -59,7 +23,7 @@ export function CommandInput(props: {
   className?: string;
 }) {
   const { value, tokens, onChange, onKeyDown, placeholder, autoFocus, className } = props;
-  const segments = toSegments(value, tokens);
+  const segments = commandTokenSegments(value, tokens);
 
   return (
     <div className={cn("relative", className)}>

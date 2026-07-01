@@ -1,9 +1,16 @@
 import { HEX64 } from "./blob";
 import { BREAKDOWN_CATEGORIES, emptyBreakdown, type UsageBreakdown } from "./breakdown";
-import { asAnyNumber, asMaybeString, asString, asStringArray } from "./coerce";
+import { asAnyNumber, asMaybeString, asString, asStringArray, oneOf } from "./coerce";
 import { type CommandMenuPayload, decodeCommandMenu } from "./command-menu";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
+import type { LoopSnapshot } from "./loop-command";
+import {
+  LOOP_DURABILITIES,
+  LOOP_LIFECYCLES,
+  LOOP_RUNNERS,
+  LOOP_STOP_REASONS,
+} from "./loop-command";
 import {
   type CatalogEntry,
   decodeCatalogEntry,
@@ -191,6 +198,29 @@ const TASK_STATUSES: readonly TaskStatus[] = [
   "failed",
   "cancelled",
 ];
+
+function coerceLoopSnapshot(value: unknown): LoopSnapshot {
+  const raw =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const max = typeof raw.max === "number" ? raw.max : undefined;
+  const nextRun = typeof raw.nextRun === "number" ? raw.nextRun : undefined;
+  const stopReason = oneOf(LOOP_STOP_REASONS, raw.stopReason, "stopped");
+  const error = optStr(raw.error);
+  return {
+    completed: num(raw.completed),
+    durability: oneOf(LOOP_DURABILITIES, raw.durability, "session"),
+    ...(error ? { error } : {}),
+    loopId: str(raw.loopId),
+    ...(max !== undefined ? { max } : {}),
+    ...(nextRun !== undefined ? { nextRun } : {}),
+    runner: oneOf(LOOP_RUNNERS, raw.runner, "current_session_prompt"),
+    status: oneOf(LOOP_LIFECYCLES, raw.status, "draft"),
+    ...(raw.stopReason !== undefined ? { stopReason } : {}),
+    summary: str(raw.summary),
+  };
+}
 
 function coerceCommands(value: unknown): CommandSpec[] {
   return coerceArray(value, (c) => {
@@ -655,6 +685,7 @@ export type DecodedEvent =
     }
   | { readonly type: "host.internet"; readonly internet: InternetSnapshot }
   | { readonly type: "host.sourceAuth"; readonly auth: SourceSignInState }
+  | { readonly type: "loop.status"; readonly snapshot: LoopSnapshot }
   | { readonly type: "host.hello"; readonly instanceId?: string }
   | { readonly type: "host.beat"; readonly instanceId?: string }
   | { readonly type: "host.role"; readonly instanceId?: string; readonly role?: string }
@@ -1000,6 +1031,8 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       return { type: "host.internet", internet: coerceInternetSnapshot(p.internet) };
     case "host.sourceAuth":
       return { type: "host.sourceAuth", auth: decodeSourceSignIn(p) };
+    case "loop.status":
+      return { type: "loop.status", snapshot: coerceLoopSnapshot(p.snapshot) };
     case "host.hello":
       return { type: "host.hello", instanceId: optStr(p.instanceId) };
     case "host.beat":

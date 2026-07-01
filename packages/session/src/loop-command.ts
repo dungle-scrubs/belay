@@ -36,6 +36,30 @@ export type LoopLifecycle =
  *  an execution error. */
 export type LoopStopReason = "max_iterations" | "until_satisfied" | "timeout" | "stopped" | "error";
 
+export const LOOP_DURABILITIES: readonly LoopDurability[] = ["durable", "session"];
+export const LOOP_LIFECYCLES: readonly LoopLifecycle[] = [
+  "completed",
+  "deleted",
+  "draft",
+  "failed",
+  "paused",
+  "pending",
+  "running",
+  "stopped",
+];
+export const LOOP_RUNNERS: readonly LoopRunner[] = [
+  "background_agent",
+  "current_session_prompt",
+  "process",
+];
+export const LOOP_STOP_REASONS: readonly LoopStopReason[] = [
+  "error",
+  "max_iterations",
+  "stopped",
+  "timeout",
+  "until_satisfied",
+];
+
 /**
  * The host->client STATUS SNAPSHOT of one loop (the payload of a `loop.status` event and the atom the
  * inventory renders). A `pending` snapshot IS the confirmation request - the client offers confirm/edit/
@@ -188,8 +212,68 @@ export interface LoopInventoryRow {
   readonly durability: LoopDurability;
   readonly summary: string;
   readonly progress: { readonly completed: number; readonly max?: number };
-  readonly nextRun?: string;
+  readonly nextRun?: number;
   /** False for process loops (no agent); true for prompt/background-agent loops. */
   readonly agentBacked: boolean;
   readonly controls: readonly LoopControl[];
+}
+
+function loopControlsForSnapshot(snapshot: LoopSnapshot): readonly LoopControl[] {
+  const controls: LoopControl[] = [];
+  const terminal =
+    snapshot.status === "completed" ||
+    snapshot.status === "stopped" ||
+    snapshot.status === "failed" ||
+    snapshot.status === "deleted";
+  if (snapshot.status === "running") {
+    controls.push("pause", "stop");
+  } else if (snapshot.status === "paused") {
+    controls.push("resume", "stop");
+  }
+  if (snapshot.nextRun !== undefined && !terminal) {
+    controls.push("run-now");
+  }
+  if (snapshot.durability === "durable" && !terminal) {
+    controls.push("delete");
+  }
+  return controls;
+}
+
+function loopInventoryStatus(status: LoopLifecycle): LoopStatus {
+  switch (status) {
+    case "pending":
+    case "draft":
+      return "draft";
+    case "running":
+      return "running";
+    case "paused":
+      return "paused";
+    case "stopped":
+      return "stopped";
+    case "completed":
+      return "completed";
+    case "failed":
+    case "deleted":
+      return "failed";
+  }
+}
+
+export function loopSnapshotToInventoryRow(snapshot: LoopSnapshot): LoopInventoryRow | null {
+  if (snapshot.status === "deleted") {
+    return null;
+  }
+  return {
+    agentBacked: snapshot.runner !== "process",
+    controls: loopControlsForSnapshot(snapshot),
+    durability: snapshot.durability,
+    loopId: snapshot.loopId,
+    nextRun: snapshot.nextRun,
+    progress: {
+      completed: snapshot.completed,
+      ...(snapshot.max !== undefined ? { max: snapshot.max } : {}),
+    },
+    runner: snapshot.runner,
+    status: loopInventoryStatus(snapshot.status),
+    summary: snapshot.summary,
+  };
 }

@@ -4,6 +4,7 @@ import {
   catalogEntryFor,
   constrainReasoning,
   DEFAULT_SESSION_ID,
+  type LoopControl,
   type ModelRef,
   modelRefFromProvider,
 } from "@trevor/session";
@@ -30,6 +31,7 @@ import {
   resetArtifactPanelPreference,
   resizeArtifactPanel,
 } from "@/artifact-panel/artifact-panel-state";
+import { useLoopInventory } from "@/components/chat/loop/use-loop-inventory";
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import type { PaletteCommand } from "@/components/command-palette/palette-commands";
@@ -415,6 +417,7 @@ export function App() {
   // The pending generated handoff (02.10): a `/handoff` draft awaiting approve/edit/reject. Like a
   // question, it takes over the composer until resolved.
   const pendingHandoff = useMemo(() => pendingHandoffFrom(events), [events]);
+  const loopInventoryRows = useLoopInventory(events);
 
   // The SidePanel's whole view-model in one pure selector: live-vs-completed precedence
   // for the Request data (ctx meter + treemap) and the per-category context aggregation,
@@ -709,6 +712,10 @@ export function App() {
     // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
     // new item (the prompt when its event round-trips, then the streaming answer) and holds there.
     scroll.pinToBottom();
+  };
+
+  const onLoopControl = (loopId: string, controlVerb: LoopControl) => {
+    void command("/loop", `${controlVerb} ${loopId}`);
   };
 
   // Slash-menu key handling on the composer, active only while the menu is open:
@@ -1168,6 +1175,7 @@ export function App() {
         }}
         scroll={scroll}
         tasks={tasks}
+        loopInventory={{ rows: loopInventoryRows, onControl: onLoopControl }}
         tasksStale={staleTasks}
         onClearTasks={() => void command("/tasks-clear", "")}
         subagents={subagents}

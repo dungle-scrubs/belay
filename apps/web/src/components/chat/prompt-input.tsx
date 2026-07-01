@@ -1,6 +1,15 @@
 import { Maximize2, Plus, Terminal, X } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, type SubmitEvent, useEffect } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type SubmitEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { ArtifactThumb } from "@/artifact-thumb";
+import { commandTokenSegments } from "@/components/chat/loop/command-token-segments";
+import { LoopHelper } from "@/components/chat/loop/loop-helper";
+import { useLoopPreview } from "@/components/chat/loop/use-loop-preview";
 import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { Button } from "@/components/ui/button";
 import type { Composer } from "@/hooks/use-composer";
@@ -90,6 +99,16 @@ export function PromptInput({
   // The prompt shell lane is triggered by the RAW first character being `!` (a space before it stays
   // an ordinary prompt) - mirrors `parseBangShell`, so the visual state and the submit routing agree.
   const shellMode = draft[0] === "!";
+  const [caret, setCaret] = useState(() => draft.length);
+  const loopPreview = useLoopPreview(draft, caret);
+  const loopSegments = useMemo(
+    () => (loopPreview ? commandTokenSegments(loopPreview.line, loopPreview.tokens) : []),
+    [loopPreview],
+  );
+  const updateCaretFromInput = () => {
+    const nextCaret = inputRef.current?.selectionStart ?? draft.length;
+    setCaret((prev) => (prev === nextCaret ? prev : nextCaret));
+  };
 
   // Auto-grow the textarea to fit multi-line prompts and quoted blocks, capped by its max-height
   // (then it scrolls). Reset to "auto" first so it also shrinks back down. `draft` drives the
@@ -148,6 +167,8 @@ export function PromptInput({
         </div>
       ) : null}
 
+      {loopPreview ? <LoopHelper view={loopPreview.view} className="mb-2" /> : null}
+
       <form onSubmit={onSubmit}>
         <div
           className={cn(
@@ -157,34 +178,68 @@ export function PromptInput({
               : "border-input focus-within:border-ring",
           )}
         >
-          <textarea
-            ref={inputRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onFocus={vim.onFocus}
-            onKeyDown={(event) => {
-              // Precedence: composer token-delete (D-092) first; then the Vim layer - SUSPENDED while
-              // the slash menu is open so the menu keeps owning arrows/Enter/Escape; then App's handler
-              // (slash menu, Enter submit, Up/Down history). In insert the Vim layer only catches Escape,
-              // yielding everything else; in normal/visual it consumes motions/edits + mode changes.
-              handleKeyDown(event);
-              if (event.defaultPrevented) {
-                return;
-              }
-              if (!menuOpen && vim.onKeyDown(event)) {
-                return;
-              }
-              onKeyDown(event);
-            }}
-            onPaste={onPaste}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className={cn(
-              "max-h-48 w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 pb-1.5 text-sm outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed",
-              shellMode ? "font-mono text-smui-orange" : "text-foreground",
-            )}
-          />
+          <div className="relative">
+            {loopPreview ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 max-h-48 overflow-hidden px-3 pt-2.5 pb-1.5 font-mono text-sm whitespace-pre-wrap"
+              >
+                {draft.slice(0, loopPreview.lineStart)}
+                {loopSegments.map((segment) => (
+                  <span
+                    key={segment.key}
+                    className={segment.className}
+                    data-testid={
+                      segment.kind !== undefined ? `loop-token-${segment.kind}` : undefined
+                    }
+                  >
+                    {segment.text}
+                  </span>
+                ))}
+                {draft.slice(loopPreview.lineEnd)}
+              </div>
+            ) : null}
+            <textarea
+              ref={inputRef}
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setCaret(event.target.selectionStart ?? event.target.value.length);
+              }}
+              onClick={updateCaretFromInput}
+              onFocus={() => {
+                updateCaretFromInput();
+                vim.onFocus();
+              }}
+              onKeyDown={(event) => {
+                // Precedence: composer token-delete (D-092) first; then the Vim layer - SUSPENDED while
+                // the slash menu is open so the menu keeps owning arrows/Enter/Escape; then App's handler
+                // (slash menu, Enter submit, Up/Down history). In insert the Vim layer only catches Escape,
+                // yielding everything else; in normal/visual it consumes motions/edits + mode changes.
+                handleKeyDown(event);
+                if (event.defaultPrevented) {
+                  return;
+                }
+                if (!menuOpen && vim.onKeyDown(event)) {
+                  return;
+                }
+                onKeyDown(event);
+              }}
+              onKeyUp={updateCaretFromInput}
+              onPaste={onPaste}
+              onSelect={updateCaretFromInput}
+              placeholder={placeholder}
+              disabled={disabled}
+              rows={1}
+              className={cn(
+                "relative max-h-48 w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 pb-1.5 text-sm outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed",
+                shellMode ? "font-mono text-smui-orange" : "text-foreground",
+                loopPreview
+                  ? "font-mono text-transparent caret-foreground placeholder:text-transparent"
+                  : null,
+              )}
+            />
+          </div>
           <div className="flex items-center gap-2 px-2 pb-2">
             <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
             {/* In shell mode the attach `+` is replaced in place by a shell glyph - same footprint, so

@@ -3,6 +3,8 @@ import type {
   CommandSpec,
   GitStatus,
   JobSnapshot,
+  LoopControl,
+  LoopInventoryRow,
   ProviderQuestionAnswer,
   SessionActivity,
   SessionSummary,
@@ -23,6 +25,7 @@ import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state"
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { CommandMenu } from "@/components/chat/command-menu";
+import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
@@ -199,6 +202,10 @@ export function PanelHost(props: {
   transcript: TranscriptView;
   scroll: TranscriptScroll;
   tasks: readonly TaskSnapshot[];
+  loopInventory: {
+    readonly rows: readonly LoopInventoryRow[];
+    readonly onControl: (loopId: string, control: LoopControl) => void;
+  };
   /** The checklist is stale (the user spoke after the model last touched it); drives the panel badge. */
   tasksStale?: boolean;
   /** Dismiss the whole checklist (the abandoned-list escape hatch). */
@@ -244,6 +251,7 @@ export function PanelHost(props: {
     transcript: tv,
     scroll,
     tasks,
+    loopInventory,
     tasksStale,
     onClearTasks,
     subagents,
@@ -421,6 +429,14 @@ export function PanelHost(props: {
           onOpenJobDetail={onOpenJobDetail}
           onKillJob={onKillJob}
         />
+
+        {loopInventory.rows.length > 0 ? (
+          <LoopInventory
+            className="mb-2"
+            rows={loopInventory.rows}
+            onControl={loopInventory.onControl}
+          />
+        ) : null}
 
         <QueuedPrompts queue={queue} />
 

@@ -7,6 +7,7 @@ import {
   LOOP_PROTOCOL_ACTIONS,
   LOOP_RUNNER_ALIASES,
   loopGrammar,
+  loopSnapshotToInventoryRow,
 } from "./index";
 
 /**
@@ -52,6 +53,61 @@ describe("loop command family contract (M1)", () => {
     const grammar = loopGrammar();
     expect(grammar.legend).toEqual(LOOP_FAMILY.keywords.map((keyword) => keyword.keyword));
     expect(grammar.controlVerbs.has("stop")).toBe(true);
+  });
+});
+
+describe("loop snapshot inventory projection", () => {
+  it("maps running snapshots to client inventory rows", () => {
+    const row = loopSnapshotToInventoryRow({
+      completed: 3,
+      durability: "durable",
+      loopId: "loop_1",
+      max: 10,
+      nextRun: 1_800_000_000_000,
+      runner: "background_agent",
+      status: "running",
+      summary: "triage issues",
+    });
+
+    expect(row).toMatchObject({
+      agentBacked: true,
+      controls: ["pause", "stop", "run-now", "delete"],
+      durability: "durable",
+      loopId: "loop_1",
+      progress: { completed: 3, max: 10 },
+      runner: "background_agent",
+      status: "running",
+      summary: "triage issues",
+    });
+    expect(row?.nextRun).toBe(1_800_000_000_000);
+  });
+
+  it("maps pending to draft, process to not agent-backed, and deleted to null", () => {
+    expect(
+      loopSnapshotToInventoryRow({
+        completed: 0,
+        durability: "session",
+        loopId: "loop_pending",
+        runner: "process",
+        status: "pending",
+        summary: "curl health",
+      }),
+    ).toMatchObject({
+      agentBacked: false,
+      controls: [],
+      status: "draft",
+    });
+
+    expect(
+      loopSnapshotToInventoryRow({
+        completed: 0,
+        durability: "session",
+        loopId: "loop_deleted",
+        runner: "current_session_prompt",
+        status: "deleted",
+        summary: "old loop",
+      }),
+    ).toBeNull();
   });
 });
 

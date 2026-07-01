@@ -31,6 +31,12 @@ function progressText(row: LoopInventoryRow): string {
   return max === undefined ? `${completed} run` : `${completed}/${max}`;
 }
 
+function nextRunText(row: LoopInventoryRow): string | null {
+  return row.nextRun === undefined
+    ? null
+    : `next ${new Date(row.nextRun).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 /**
  * The loop inventory: one row per loop with its status, runner, progress, next
  * run, and the lifecycle controls valid in its current state. Presentational -
@@ -60,6 +66,7 @@ export function LoopInventory(props: {
     <div className={cn("flex flex-col gap-1.5", className)}>
       {rows.map((row) => {
         const status = STATUS_STYLE[row.status];
+        const nextRun = nextRunText(row);
         return (
           <div
             key={row.loopId}
@@ -76,7 +83,7 @@ export function LoopInventory(props: {
               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-4 text-label text-muted-foreground">
                 <span>{loopRunnerLabel(row.runner)}</span>
                 <span>{progressText(row)}</span>
-                {row.nextRun ? <span>{row.nextRun}</span> : null}
+                {nextRun ? <span>{nextRun}</span> : null}
                 {row.durability === "durable" ? <span>durable</span> : null}
               </div>
             </div>

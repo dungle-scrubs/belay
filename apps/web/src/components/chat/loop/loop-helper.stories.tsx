@@ -66,7 +66,7 @@ const INVENTORY: LoopInventoryRow[] = [
     controls: ["resume", "stop", "run-now", "delete"],
     durability: "durable",
     loopId: "loop_2",
-    nextRun: "every 30s",
+    nextRun: 1_800_000_030_000,
     progress: { completed: 42 },
     runner: "process",
     status: "paused",
