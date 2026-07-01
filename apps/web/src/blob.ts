@@ -1,5 +1,7 @@
 import { type ArtifactRef, artifactRef, blobUrl, errorMessage, putBlob } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
+import { SPAN_NAMES, type TelemetrySink, withSpan } from "@trevor/session/telemetry";
+import { telemetrySink } from "./telemetry";
 
 /**
  * Web binding for the content-addressed blob store (D-028): resolves the store URL
@@ -19,18 +21,25 @@ function kindOf(mimeType: string): ArtifactRef["kind"] {
   return "file";
 }
 
-/** Uploads a picked File to the blob store, returning its ArtifactRef for a user.message. */
-export async function uploadArtifact(file: File): Promise<ArtifactRef> {
+/** Uploads a picked File to the blob store, returning its ArtifactRef for a user.message. The upload is a
+ *  `trevor.blob.io` span carrying the artifact KIND + byte size only - never the file name or bytes. */
+export async function uploadArtifact(
+  file: File,
+  sink: TelemetrySink = telemetrySink(),
+): Promise<ArtifactRef> {
   const mimeType = file.type || "application/octet-stream";
-  try {
-    // The File is a Blob - pass it straight through (no arrayBuffer/Uint8Array copy).
-    const result = await putBlob(BLOB_STORE_URL, file, mimeType);
-    return artifactRef(result, kindOf(mimeType), file.name || undefined);
-  } catch (cause) {
-    // A network/fetch failure here almost always means the store isn't running; turn the
-    // opaque "Failed to fetch" into something actionable so the composer can show it.
-    throw new Error(`blob store unreachable at ${BLOB_STORE_URL} (${errorMessage(cause)})`);
-  }
+  const kind = kindOf(mimeType);
+  return withSpan(sink, SPAN_NAMES.blobIo, { op: "upload", kind, bytes: file.size }, async () => {
+    try {
+      // The File is a Blob - pass it straight through (no arrayBuffer/Uint8Array copy).
+      const result = await putBlob(BLOB_STORE_URL, file, mimeType);
+      return artifactRef(result, kind, file.name || undefined);
+    } catch (cause) {
+      // A network/fetch failure here almost always means the store isn't running; turn the
+      // opaque "Failed to fetch" into something actionable so the composer can show it.
+      throw new Error(`blob store unreachable at ${BLOB_STORE_URL} (${errorMessage(cause)})`);
+    }
+  });
 }
 
 /** The GET url for a stored artifact - usable directly as an `<img>` src. */
