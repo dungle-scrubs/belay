@@ -4,6 +4,7 @@ export * from "./breakdown";
 export * from "./capability-manifest";
 export * from "./capability-manifest-builder";
 export * from "./capability-manifest-compact";
+export * from "./capability-manifest-export";
 export * from "./command-menu";
 export * from "./connectivity";
 export * from "./context-overflow";

@@ -6,6 +6,7 @@ import type {
 } from "@trevor/session";
 import { buildInitProposal } from "./context/init-agents";
 import { buildDoctorCommandResult } from "./doctor/build";
+import { buildTrevorExportCommand } from "./manifest/export-command";
 import { msg } from "./messages";
 import { supervisor } from "./processes";
 import type { ProviderRegistry } from "./providers";
@@ -338,6 +339,9 @@ export function buildCommandRegistry(): CommandRegistry {
   // /skills is owned by skills.ts (it knows skill discovery); registered here as one line.
   add(buildSkillCommand());
   add(buildStyleCommand());
+  // /trevor-export owns the capability manifest export (plan 14); it reads the live manifest through a
+  // source seam registered by main.ts, so it needs no CommandContext.
+  add(buildTrevorExportCommand());
   add(buildVimCommand());
   add(buildJobsCommand());
   add(buildJobsStopCommand());

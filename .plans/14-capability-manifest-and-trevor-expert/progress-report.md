@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M6: Export Command/API Variants
+> Current focus: M7: Interpolation Boundary
 
 ## Summary
 
-- Current cutoff blockers: 25
+- Current cutoff blockers: 20
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -55,11 +55,11 @@
 
 ## M6: Export Command/API Variants
 
-- [ ] RED: Add command tests for `trevor-export` full, compact, json, section, and expert-scoped variants
-- [ ] GREEN: Implement host-owned export command/API with stable JSON and human-readable summaries
-- [ ] RED: Add tests for output caps, redaction, unavailable sections, and deterministic ordering
-- [ ] GREEN: Apply caps/redaction/scope metadata to every export variant
-- [ ] REFACTOR: Keep export formatting separate from manifest construction
+- [x] RED: Add command tests for `trevor-export` full, compact, json, section, and expert-scoped variants
+- [x] GREEN: Implement host-owned export command/API with stable JSON and human-readable summaries
+- [x] RED: Add tests for output caps, redaction, unavailable sections, and deterministic ordering
+- [x] GREEN: Apply caps/redaction/scope metadata to every export variant
+- [x] REFACTOR: Keep export formatting separate from manifest construction
 
 ## M7: Interpolation Boundary
 

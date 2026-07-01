@@ -77,7 +77,7 @@ import {
   type DoctorRuntimeFacts,
 } from "./doctor/build";
 import type { TelemetryDoctorSummary } from "./doctor/snapshot";
-import { registerDoctorSnapshotSource } from "./doctor/source";
+import { currentDoctorSnapshot, registerDoctorSnapshotSource } from "./doctor/source";
 import { envNumber } from "./env";
 import { nodeGitRunner, readGitStatus } from "./git-status";
 import { parseHandoff } from "./handoff";
@@ -85,6 +85,8 @@ import { type DirectHandoffDeps, executeFinalizedHandoff, runDirectHandoff } fro
 import { generateHandoffPrompt, hasGenerableContext } from "./handoff-generate";
 import { Lease } from "./lease";
 import { log, warn } from "./log";
+import { assembleManifest } from "./manifest/build";
+import { registerManifestSource } from "./manifest/source";
 import { msg } from "./messages";
 import { abbrevHome, TREVOR_STATE_HOME, WORKSPACE_ROOT } from "./paths";
 import { supervisor } from "./processes";
@@ -115,10 +117,13 @@ import {
   type StopOutcome,
   stopSession,
 } from "./session-lifecycle";
+import { skillRegistry } from "./skills";
 import { ensureSessionWithRetry } from "./startup";
 import { activeStylePref } from "./style/style-store";
+import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "./style/styles";
 import { taskRegistry } from "./tasks";
 import { bootstrapNodeSentry } from "./telemetry/sentry";
+import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
 import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
 import { DEFAULT_PROMOTION_CONFIG } from "./tools/promote-policy";
@@ -2235,6 +2240,44 @@ registerDoctorSnapshotSource(async () =>
     probes: await collectDoctorProbeResults(providers),
   }),
 );
+
+// The capability manifest (plan 14) reads the SAME live registries the announced inventory, /help, and
+// /doctor read, so `/trevor-export` and the built-in trevor-expert never disagree with them. The catalog
+// load and doctor snapshot are best-effort - a failed read degrades that one section to unavailable, never
+// the whole export.
+registerManifestSource(async (scope) => {
+  let catalog: CatalogSnapshot | null = null;
+  try {
+    catalog = await loadCatalog();
+  } catch {
+    catalog = null;
+  }
+  const doctor = await currentDoctorSnapshot().catch(() => null);
+  return assembleManifest(
+    {
+      toolDefs: TOOL_DEFS,
+      readOnlyTools: READ_ONLY_TOOLS,
+      commands: commands.specs,
+      // The full debug capability surface, regardless of the runtime toggle - the manifest DESCRIBES what
+      // the host can do; scope filtering (compact/subagent/expert) drops debug for prompt-facing readers.
+      debugCommands: debugCommandSpecs(true),
+      commandFamilies: [buildStyleMenu(DEFAULT_STYLE_ID)],
+      styles: BUILTIN_STYLES,
+      skills: skillRegistry(),
+      agents: discoverAgents().map(describeAgent),
+      doctorAreas: doctor?.areas ?? [],
+      catalog,
+      runtime: {
+        role: lease.isLeader() ? "leader" : "standby",
+        instanceId: INSTANCE_ID.slice(0, 8),
+      },
+      host: {},
+      workspace: { root: WORKSPACE_ROOT, cwd: WORKSPACE_ROOT },
+    },
+    scope,
+    new Date().toISOString(),
+  );
+});
 
 /**
  * Runs an immediate host command and publishes its result. Unlike a user.message
