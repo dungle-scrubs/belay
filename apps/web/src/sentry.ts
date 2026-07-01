@@ -13,6 +13,8 @@ import { type SanitizableSentryEvent, scrubSentryEvent } from "@trevor/session/t
 export interface BrowserSentryInitOptions {
   readonly dsn: string;
   readonly environment: string;
+  /** The release tag (`VITE_TREVOR_RELEASE` / `SENTRY_RELEASE`) when configured, for issue grouping (M11). */
+  readonly release?: string;
   readonly tracesSampleRate: 0;
   readonly replaysSessionSampleRate: 0;
   readonly replaysOnErrorSampleRate: 0;
@@ -42,9 +44,11 @@ export function bootstrapBrowserSentry(
     captureFn = null;
     return false;
   }
+  const release = env.VITE_TREVOR_RELEASE ?? env.SENTRY_RELEASE;
   api.init({
     dsn: config.webSentryDsn,
     environment: env.MODE ?? env.NODE_ENV ?? "production",
+    ...(release ? { release } : {}),
     tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,

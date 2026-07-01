@@ -67,3 +67,15 @@ Sentry, when a DSN is configured, receives **error events only** - traces, logs,
 metrics stay off. Expected typed provider/tool/session failures are **not** captured as Sentry
 exceptions; only unexpected exceptions, unhandled rejections, invariant breaches, and fatal service
 failures are, always sanitized.
+
+Sentry runs are **maintainer-configured**, never a public OSS default: no DSN or auth token is embedded
+in the build; they come from the environment only (`TREVOR_SENTRY_DSN` / `VITE_TREVOR_SENTRY_DSN`).
+
+### Release & source maps
+
+Events are tagged with `service.name`, `environment`, and, when set, a bounded `release`
+(`SENTRY_RELEASE` / `VITE_TREVOR_RELEASE`). **Source-map upload is opt-in and never runs in default CI**:
+it happens only when a build explicitly runs Sentry's uploader with **both** `SENTRY_AUTH_TOKEN` and an
+explicit release set. Without those, readable stack traces fall back to the local stack + the release tag.
+Keep `SENTRY_AUTH_TOKEN` out of the repo and out of the default pipeline - it belongs only in a
+maintainer's release job.

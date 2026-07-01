@@ -44,3 +44,19 @@ test("with a DSN, Sentry initializes errors-only with the scrubbing beforeSend",
   const scrubbed = opts?.beforeSend({ request: { headers: { authorization: "Bearer x" } } });
   assert.equal(scrubbed?.request, undefined, "beforeSend scrubs the event");
 });
+
+test("release + environment tags are bounded and present when configured (M11)", () => {
+  const { api, inits } = recordingApi();
+  bootstrapNodeSentry(api, {
+    NODE_ENV: "production",
+    TREVOR_SENTRY_DSN: "https://a@x/1",
+    SENTRY_RELEASE: "trevor@2.0.1",
+  });
+  assert.equal(inits[0]?.environment, "production");
+  assert.equal(inits[0]?.release, "trevor@2.0.1");
+
+  // With no release env, the tag is simply absent (never a raw path or high-cardinality value).
+  const bare = recordingApi();
+  bootstrapNodeSentry(bare.api, { NODE_ENV: "production", TREVOR_SENTRY_DSN: "https://a@x/1" });
+  assert.equal(bare.inits[0]?.release, undefined);
+});

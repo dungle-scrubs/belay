@@ -23,6 +23,8 @@ export interface SentryApi {
 export interface SentryInitOptions {
   readonly dsn: string;
   readonly environment: string;
+  /** The release tag (`SENTRY_RELEASE` / package version) when configured, for issue grouping (M11). */
+  readonly release?: string;
   /** 0 = no performance tracing (errors only). */
   readonly tracesSampleRate: 0;
   /** 0 = no profiling. */
@@ -41,9 +43,11 @@ export function bootstrapNodeSentry(api: SentryApi, env: TelemetryEnv = process.
   if (config.sentryDsn === null) {
     return false;
   }
+  const release = env.SENTRY_RELEASE ?? env.npm_package_version;
   api.init({
     dsn: config.sentryDsn,
     environment: env.NODE_ENV ?? "production",
+    ...(release ? { release } : {}),
     tracesSampleRate: 0,
     profilesSampleRate: 0,
     enableLogs: false,
