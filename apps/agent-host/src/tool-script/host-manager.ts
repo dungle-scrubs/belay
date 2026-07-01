@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import {
   isRetryableFailure,
   type SandboxMode,
+  type ToolScriptArtifact,
   type ToolScriptBridgeCall,
   type ToolScriptBudgets,
   type ToolScriptFailureClass,
   type ToolScriptResult,
 } from "@trevor/session";
+import { resultWithinBudget, summarizeToolOutput } from "./output-budget";
 import type { HostToRunner, RunnerContext, RunnerToHost } from "./protocol";
 
 /**
@@ -79,6 +81,7 @@ export function manageToolScriptRun(
   const now = options.now ?? Date.now;
   const startedAt = now();
   const bridgeCalls: ToolScriptBridgeCall[] = [];
+  const artifacts: ToolScriptArtifact[] = [];
   let outputBytes = 0;
   let settled = false;
 
@@ -108,10 +111,16 @@ export function manageToolScriptRun(
   }
 
   function finishComplete(scriptResult: unknown): void {
+    // Final-output bound: a script cannot return an unbounded blob into the transcript/context.
+    if (!resultWithinBudget(scriptResult, options.budgets.maxResultBytes)) {
+      finishFail("output_too_large", `result exceeds ${options.budgets.maxResultBytes} bytes`);
+      return;
+    }
     settle({
       status: "completed",
       result: scriptResult,
       bridgeCalls,
+      artifacts,
       counters: counters(),
       sandboxMode: options.sandboxMode,
     });
@@ -124,6 +133,7 @@ export function manageToolScriptRun(
       retryable: isRetryableFailure(failureClass),
       error,
       bridgeCalls,
+      artifacts,
       counters: counters(),
       sandboxMode: options.sandboxMode,
     });
@@ -161,7 +171,14 @@ export function manageToolScriptRun(
     if (settled) {
       return;
     }
-    const bytes = response.output ? Buffer.byteLength(response.output) : 0;
+    // A large tool output is summarized to a bounded artifact ref before the script (or transcript) sees it.
+    const summarized = response.output
+      ? summarizeToolOutput(response.output, options.budgets.maxToolOutputBytes)
+      : { output: undefined, artifact: undefined };
+    if (summarized.artifact) {
+      artifacts.push(summarized.artifact);
+    }
+    const bytes = summarized.output ? Buffer.byteLength(summarized.output) : 0;
     outputBytes += bytes;
     bridgeCalls.push({
       tool,
@@ -177,7 +194,7 @@ export function manageToolScriptRun(
       type: "bridge_response",
       callId,
       status: response.status,
-      ...(response.output !== undefined ? { output: response.output } : {}),
+      ...(summarized.output !== undefined ? { output: summarized.output } : {}),
       ...(response.error !== undefined ? { error: response.error } : {}),
     });
   }

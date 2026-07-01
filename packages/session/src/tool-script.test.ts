@@ -99,6 +99,7 @@ describe("tool_script V2 result decoder (M1)", () => {
     bridgeCalls: [
       { tool: "read", inputHash: "abc", outputBytes: 120, status: "ok", durationMs: 4 },
     ],
+    artifacts: [],
     counters: { bridgeCalls: 1, outputBytes: 120, durationMs: 12 },
     sandboxMode: "child-process",
   };
@@ -117,6 +118,7 @@ describe("tool_script V2 result decoder (M1)", () => {
       retryable: true,
       error: "script exceeded 30000ms",
       bridgeCalls: [],
+      artifacts: [],
       counters: { bridgeCalls: 0, outputBytes: 0, durationMs: 30000 },
       sandboxMode: "child-process",
     };

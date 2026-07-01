@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M6 - Budgets and Output Bounding
-- **Completed:** 32 / 68
-- **Current cutoff blockers:** 36
+- **Current focus:** M7 - Tool Runtime Integration
+- **Completed:** 37 / 68
+- **Current cutoff blockers:** 31
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -80,11 +80,11 @@
 
 #### M6: Budgets and Output Bounding
 
-- [ ] RED: Add tests for timeout, cancellation, max bridge calls, max per-tool output bytes, max final JSON bytes, and max artifact bytes.
-- [ ] GREEN: Enforce all budgets at the host bridge and final output boundary.
-- [ ] RED: Add tests for large intermediate output summarization and no sensitive full-content leakage in summarized output.
-- [ ] GREEN: Summarize large outputs as detail/artifact refs with previews and byte counts.
-- [ ] REFACTOR: Make budget counters visible to transcript/detail views.
+- [x] RED: Add tests for timeout, cancellation, max bridge calls, max per-tool output bytes, max final JSON bytes, and max artifact bytes.
+- [x] GREEN: Enforce all budgets at the host bridge and final output boundary.
+- [x] RED: Add tests for large intermediate output summarization and no sensitive full-content leakage in summarized output.
+- [x] GREEN: Summarize large outputs as detail/artifact refs with previews and byte counts.
+- [x] REFACTOR: Make budget counters visible to transcript/detail views.
 
 #### Gate 3->4
 

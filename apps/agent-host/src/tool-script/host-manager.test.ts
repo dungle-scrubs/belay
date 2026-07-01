@@ -132,6 +132,48 @@ describe("tool_script host manager lifecycle (M3)", () => {
     expect(result.status).toBe("failed");
   });
 
+  it("summarizes a large bridge output to an artifact ref before the script sees it (M6)", async () => {
+    const child = new FakeChild();
+    const big = "SECRET_TAIL".padStart(5000, "x");
+    const handle = manageToolScriptRun(
+      child,
+      bridge(() => ({ status: "ok", output: big })),
+      {
+        ...OPTS,
+        budgets: { ...DEFAULT_TOOL_SCRIPT_BUDGETS, maxToolOutputBytes: 1024 },
+      },
+    );
+    child.emit({ type: "start", protocol: 1 });
+    child.emit({ type: "bridge_request", callId: 1, tool: "read", input: {} });
+    await new Promise((r) => setTimeout(r, 0));
+    const response = child.sent.find((m) => m.type === "bridge_response");
+    // The script received a bounded artifact ref, not the full 5kB (and not the tail secret).
+    expect(response?.type === "bridge_response" && (response.output?.length ?? 0)).toBeLessThan(
+      1024,
+    );
+    expect(response?.type === "bridge_response" && response.output).not.toContain("SECRET_TAIL");
+    child.emit({ type: "complete", result: { ok: 1 } });
+    const result = await handle.result;
+    expect(result.artifacts).toHaveLength(1);
+    expect(result.artifacts[0]?.originalBytes).toBe(Buffer.byteLength(big));
+  });
+
+  it("fails a run whose final result exceeds the result-byte budget (M6)", async () => {
+    const child = new FakeChild();
+    const handle = manageToolScriptRun(
+      child,
+      bridge(() => ({ status: "ok" })),
+      {
+        ...OPTS,
+        budgets: { ...DEFAULT_TOOL_SCRIPT_BUDGETS, maxResultBytes: 100 },
+      },
+    );
+    child.emit({ type: "start", protocol: 1 });
+    child.emit({ type: "complete", result: { blob: "z".repeat(500) } });
+    const result = await handle.result;
+    expect(result.status === "failed" && result.failureClass).toBe("output_too_large");
+  });
+
   it("stops a runaway script at the max-bridge-calls budget", async () => {
     const child = new FakeChild();
     const handle = manageToolScriptRun(

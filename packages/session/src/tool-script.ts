@@ -127,6 +127,18 @@ export interface ToolScriptCounters {
   readonly durationMs: number;
 }
 
+/**
+ * A large bridge output SUMMARIZED into a bounded reference (plan 16, M6): the script (and the detail view)
+ * see a preview + byte count, never the full content - so a huge read/search result cannot flood the
+ * script's context or the transcript. The full content is not carried anywhere.
+ */
+export interface ToolScriptArtifact {
+  readonly kind: "artifact";
+  readonly artifactId: string;
+  readonly originalBytes: number;
+  readonly preview: string;
+}
+
 /** How the child runner was isolated. Refined in M2/M4; `none` means no OS sandbox was applied. */
 export type SandboxMode = "sandbox-exec" | "safehouse" | "child-process" | "none";
 
@@ -141,6 +153,8 @@ interface ToolScriptResultBase {
   readonly bridgeCalls: readonly ToolScriptBridgeCall[];
   readonly counters: ToolScriptCounters;
   readonly sandboxMode: SandboxMode;
+  /** Summarized large bridge outputs (M6), for the detail view; empty when nothing was summarized. */
+  readonly artifacts: readonly ToolScriptArtifact[];
 }
 
 /** The V2 tool_script result read model (discriminated by `status`). */
@@ -236,6 +250,19 @@ function decodeBridgeCall(v: unknown): ToolScriptBridgeCall | null {
   };
 }
 
+function decodeArtifact(v: unknown): ToolScriptArtifact | null {
+  const o = asOptRecord(v);
+  if (!o || o.kind !== "artifact" || typeof o.artifactId !== "string") {
+    return null;
+  }
+  return {
+    kind: "artifact",
+    artifactId: o.artifactId,
+    originalBytes: typeof o.originalBytes === "number" ? o.originalBytes : 0,
+    preview: asMaybeString(o.preview) ?? "",
+  };
+}
+
 function decodeCounters(v: unknown): ToolScriptCounters {
   const o = asOptRecord(v);
   const num = (k: string): number => (typeof o?.[k] === "number" ? (o[k] as number) : 0);
@@ -255,8 +282,12 @@ export function decodeToolScriptResult(v: unknown): ToolScriptResult | null {
   const bridgeCalls = Array.isArray(o.bridgeCalls)
     ? o.bridgeCalls.map(decodeBridgeCall).filter((c): c is ToolScriptBridgeCall => c !== null)
     : [];
+  const artifacts = Array.isArray(o.artifacts)
+    ? o.artifacts.map(decodeArtifact).filter((a): a is ToolScriptArtifact => a !== null)
+    : [];
   const base = {
     bridgeCalls,
+    artifacts,
     counters: decodeCounters(o.counters),
     sandboxMode: oneOf(SANDBOX_MODES, o.sandboxMode, "none"),
   };
