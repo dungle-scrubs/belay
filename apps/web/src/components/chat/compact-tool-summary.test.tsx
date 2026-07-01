@@ -48,6 +48,12 @@ test("search and fetch tools summarize on query / url (not raw JSON)", () => {
     summary("web_fetch", { url: "https://example.com/post" }),
     "https://example.com/post",
   );
+  assert.equal(summary("archive_read", { path: "/tmp/evidence.zip" }), "/tmp/evidence.zip");
+  assert.equal(
+    summary("archive_read", { url: "https://example.com/evidence.zip" }),
+    "https://example.com/evidence.zip",
+  );
+  assert.equal(summary("archive_unpack", { path: "/tmp/evidence.zip" }), "/tmp/evidence.zip");
 });
 
 test("multi_edit summarizes the file and the edit count", () => {

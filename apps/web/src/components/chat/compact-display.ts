@@ -230,6 +230,8 @@ const TOOL_SUMMARY_ARG: Record<string, string> = {
   session_recall: "query",
   docs: "query",
   web_fetch: "url",
+  archive_read: "path",
+  archive_unpack: "path",
   ast_grep: "pattern",
 };
 
@@ -242,7 +244,7 @@ function compactToolSummary(name: string, args: string): string | null {
   const parsed = parseToolArgs(args);
   const key = TOOL_SUMMARY_ARG[name];
   if (key) {
-    const value = parsed[key];
+    const value = parsed[key] ?? (name === "archive_read" ? parsed.url : undefined);
     if (typeof value === "string" && value) {
       return truncate(value, 80);
     }

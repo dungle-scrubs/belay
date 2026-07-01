@@ -9,6 +9,7 @@ import type { ToolDef } from "../providers";
 import { buildSkillTool, discoverSkills } from "../skills";
 import { buildTaskTools } from "../tasks";
 import { buildToolScriptTool } from "../tool-script/tool";
+import { archiveReadTool, archiveUnpackTool } from "./archive/tool";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
@@ -54,6 +55,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   grepTool,
   webSearchTool,
   webFetchTool,
+  archiveReadTool,
   docsTool,
   sessionRecallTool,
   skillsListTool,
@@ -77,6 +79,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
     },
   }),
   clipboardWriteTool,
+  archiveUnpackTool,
   supervisor.buildTool(),
   ...buildTaskTools(),
   // ast_grep is registered only when its project-managed binary resolves (skipped on a platform

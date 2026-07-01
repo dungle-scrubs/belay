@@ -5,6 +5,7 @@ import { supervisor } from "../processes";
 import { buildSkillTool } from "../skills";
 import { buildTaskTools } from "../tasks";
 import { buildToolScriptTool } from "../tool-script/tool";
+import { archiveReadTool, archiveUnpackTool } from "./archive/tool";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { buildBashTool } from "./bash";
@@ -45,6 +46,7 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     grepTool,
     webSearchTool,
     webFetchTool,
+    archiveReadTool,
     docsTool,
     sessionRecallTool,
     astGrepTool,
@@ -56,7 +58,7 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
 });
 
 test("a tool without the readOnly flag is absent from READ_ONLY_TOOLS", () => {
-  for (const tool of [editTool, writeTool, multiEditTool, bashTool]) {
+  for (const tool of [editTool, writeTool, multiEditTool, archiveUnpackTool, bashTool]) {
     assert.equal(tool.readOnly, undefined, `${tool.name} should leave readOnly unset`);
     assert.ok(
       !READ_ONLY_TOOLS.has(tool.name),
@@ -88,6 +90,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     grepTool,
     webSearchTool,
     webFetchTool,
+    archiveReadTool,
     docsTool,
     sessionRecallTool,
     skillsListTool,
@@ -102,6 +105,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
       cleanupScratchDir: () => {},
     }),
     clipboardWriteTool,
+    archiveUnpackTool,
     supervisor.buildTool(),
     ...buildTaskTools(),
     buildSkillTool([]),

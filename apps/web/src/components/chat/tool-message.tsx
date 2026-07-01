@@ -2,6 +2,7 @@ import { decodeRecallResult, type ToolName } from "@trevor/session";
 import type { ReactElement } from "react";
 import { parseToolArgs, toolSummary } from "@/derive";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
+import { ArchiveResult, parseArchiveResult } from "./archive";
 import { DocsResult, parseDocsResult } from "./docs";
 import { ToolCall } from "./message";
 import { MultiEditDiff } from "./multi-edit-diff";
@@ -166,6 +167,22 @@ const renderWebFetch: RenderArm = ({ message, status, className }) => {
   );
 };
 
+const renderArchive: RenderArm = ({ message, status, className }) => {
+  const a = parseToolArgs(message.args);
+  const source =
+    typeof a.path === "string" ? a.path : typeof a.url === "string" ? a.url : "archive";
+
+  return (
+    <ArchiveResult
+      className={className}
+      name={message.name === "archive_unpack" ? "archive_unpack" : "archive_read"}
+      args={source}
+      parsed={parseArchiveResult(message.result)}
+      status={status}
+    />
+  );
+};
+
 // docs renders its result envelope as structured source-backed documentation: a corpus summary,
 // ranked cited excerpts (resolve/refresh preview or search matches), a bounded page read, or the
 // corpus inventory, with visible stale/partial/error states (or the looking-up indicator while
@@ -302,6 +319,8 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   grep: renderOutput,
   web_search: renderWebSearch,
   web_fetch: renderWebFetch,
+  archive_read: renderArchive,
+  archive_unpack: renderArchive,
   docs: renderDocs,
   session_recall: renderRecall,
   ast_grep: renderGeneric,
