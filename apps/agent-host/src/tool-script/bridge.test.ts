@@ -82,7 +82,13 @@ describe("tool_script bridge workspace confinement (M4 hardening)", () => {
     const { execute, calls } = spyExecute("body");
     return {
       calls,
-      bridge: createToolScriptBridge({ toolsets: ["safe_read"], execute, workspaceRoot: ROOT }),
+      // read resolves relative paths against its cwd; in an aligned deployment that IS the workspace.
+      bridge: createToolScriptBridge({
+        toolsets: ["safe_read"],
+        execute,
+        workspaceRoot: ROOT,
+        readCwd: () => ROOT,
+      }),
     };
   }
 
@@ -125,6 +131,23 @@ describe("tool_script bridge workspace confinement (M4 hardening)", () => {
     expect((await bridge.call("grep", { pattern: "../foo", glob: "src/**" })).status).toBe("ok");
     expect(calls).toEqual(["grep"]);
   });
+
+  it("resolves a relative READ against its OWN cwd, not the region, so a cwd outside the region can't escape", async () => {
+    // read resolves relative paths against process.cwd(), NOT the workspace region. If the host cwd is
+    // OUTSIDE the region, a bare relative read must be denied (it would open a file outside the workspace).
+    const { execute, calls } = spyExecute("body");
+    const bridge = createToolScriptBridge({
+      toolsets: ["safe_read"],
+      execute,
+      workspaceRoot: "/work/repo",
+      readCwd: () => "/somewhere/else",
+    });
+    // "secret" resolves to /somewhere/else/secret (what readFile opens) - outside /work/repo -> denied.
+    expect((await bridge.call("read", { path: "secret" })).status).toBe("denied");
+    // A relative glob still resolves against the region (its own base), so it is unaffected.
+    expect((await bridge.call("glob", { pattern: "src/*.ts" })).status).toBe("ok");
+    expect(calls).toEqual(["glob"]);
+  });
 });
 
 describe("tool_script bridge SYMLINK confinement (M4 hardening)", () => {
@@ -156,7 +179,12 @@ describe("tool_script bridge SYMLINK confinement (M4 hardening)", () => {
     const { execute, calls } = spyExecute("body");
     return {
       calls,
-      bridge: createToolScriptBridge({ toolsets: ["safe_read"], execute, workspaceRoot: root }),
+      bridge: createToolScriptBridge({
+        toolsets: ["safe_read"],
+        execute,
+        workspaceRoot: root,
+        readCwd: () => root,
+      }),
     };
   }
 

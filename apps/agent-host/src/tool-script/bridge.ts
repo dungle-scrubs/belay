@@ -49,6 +49,15 @@ const CONFINED_PATH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   ast_grep: ["paths", "globs"],
 };
 
+/**
+ * Tools that resolve a RELATIVE path against the host's live `process.cwd()` rather than `WORKSPACE_ROOT`.
+ * Only `read` does (`readFile(args.path)` uses the process cwd; see paths.ts - read is a "host cwd" tool);
+ * `glob`/`grep`/`ast_grep` run rooted at `WORKSPACE_ROOT`. The confinement must resolve each candidate
+ * against the SAME base the tool will, or a host launched with cwd outside `WORKSPACE_ROOT` could let a
+ * relative `read` escape the region. The confinement REGION stays `WORKSPACE_ROOT` for every tool.
+ */
+const HOST_CWD_BASE_TOOLS: ReadonlySet<string> = new Set(["read"]);
+
 /** A symlink-follow cap: past this the path is a cycle (or pathologically deep); resolve to `/` so any
  *  non-root workspace treats it as an escape (deny) rather than looping forever. */
 const MAX_SYMLINK_HOPS = 40;
@@ -100,18 +109,20 @@ function resolveLikeKernel(absolute: string): string {
   return current;
 }
 
-/** True when `path` (as the read tool will actually open it) points OUTSIDE the canonical workspace root.
- *  `canonicalRoot` is precomputed once (root is fixed for a run). The candidate is made absolute against
- *  `root` by STRING concatenation - never `resolve`/`join`, which would collapse `..` before symlinks. */
-function escapesRoot(root: string, canonicalRoot: string, path: string): boolean {
-  const absolute = isAbsolute(path) ? path : `${root}${sep}${path}`;
+/** True when `path` (as the tool will actually open it, resolving a relative path against `base`) points
+ *  OUTSIDE the canonical workspace region. `canonicalRoot` is precomputed once. The candidate is made
+ *  absolute against `base` by STRING concatenation - never `resolve`/`join`, which would collapse `..`
+ *  before symlinks. */
+function escapesRoot(base: string, canonicalRoot: string, path: string): boolean {
+  const absolute = isAbsolute(path) ? path : `${base}${sep}${path}`;
   const canonical = resolveLikeKernel(absolute);
   return canonical !== canonicalRoot && !canonical.startsWith(canonicalRoot + sep);
 }
 
-/** The first confined path field whose value escapes the workspace root, or null when every path stays in. */
+/** The first confined path field whose value escapes the workspace region, or null when every path stays
+ *  in. Relative paths resolve against `base` (the tool's real resolution base); the region is `canonicalRoot`. */
 function findPathEscape(
-  root: string,
+  base: string,
   canonicalRoot: string,
   tool: string,
   input: unknown,
@@ -125,7 +136,7 @@ function findPathEscape(
     const value = record[field];
     const candidates = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
     for (const candidate of candidates) {
-      if (typeof candidate === "string" && escapesRoot(root, canonicalRoot, candidate)) {
+      if (typeof candidate === "string" && escapesRoot(base, canonicalRoot, candidate)) {
         return candidate;
       }
     }
@@ -149,9 +160,13 @@ export interface ToolScriptBridgeOptions {
   readonly execute: BridgeExecute;
   readonly runId?: string;
   readonly callId?: string;
-  /** The confinement root every path-bearing bridge argument must stay within. Defaults to the host's
+  /** The confinement REGION every path-bearing bridge argument must stay within. Defaults to the host's
    *  `WORKSPACE_ROOT`; injectable so the confinement is unit-testable without touching the real cwd. */
   readonly workspaceRoot?: string;
+  /** The base a `read` relative path resolves against - the host's LIVE cwd, matching `readFile`. Injectable
+   *  (a thunk, read per call) so tests can pin it; defaults to `process.cwd()`. `glob`/`grep`/`ast_grep`
+   *  always resolve against `workspaceRoot` (their own root), never this. */
+  readonly readCwd?: () => string;
 }
 
 /**
@@ -162,14 +177,18 @@ export interface ToolScriptBridgeOptions {
 export function createToolScriptBridge(options: ToolScriptBridgeOptions): ToolScriptBridge {
   const allowed = allowedTools(options.toolsets);
   const root = options.workspaceRoot ?? WORKSPACE_ROOT;
-  // Resolve the root ONCE (same kernel-faithful walk) - the confinement compares each candidate against it.
+  const readCwd = options.readCwd ?? (() => process.cwd());
+  // Resolve the region ONCE (same kernel-faithful walk) - the confinement compares each candidate against it.
   const canonicalRoot = resolveLikeKernel(root);
   return {
     async call(tool, input) {
       if (!allowed.has(tool)) {
         return { status: "denied", error: `tool "${tool}" is not in the permitted toolsets` };
       }
-      const escapingPath = findPathEscape(root, canonicalRoot, tool, input);
+      // Resolve relative paths against the base the tool ACTUALLY uses: `read` -> the host's live cwd,
+      // everything else -> the workspace root. Using the wrong base would desync the check from the read.
+      const base = HOST_CWD_BASE_TOOLS.has(tool) ? readCwd() : root;
+      const escapingPath = findPathEscape(base, canonicalRoot, tool, input);
       if (escapingPath !== null) {
         return { status: "denied", error: `path "${escapingPath}" escapes the workspace root` };
       }
