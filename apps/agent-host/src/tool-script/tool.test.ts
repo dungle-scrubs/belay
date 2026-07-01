@@ -1,4 +1,5 @@
 import type { ToolScriptResult } from "@trevor/session";
+import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { buildToolScriptTool, formatToolScriptResult, type ToolScriptToolDeps } from "./tool";
@@ -63,5 +64,22 @@ describe("tool_script result formatting (M7)", () => {
       ...base,
     };
     expect(formatToolScriptResult(failed)).toBe("error: tool_script timeout: timed out");
+  });
+});
+
+describe("tool_script observability span (M8)", () => {
+  it("emits a trevor.tool_script span with script hash, toolsets, and failure class - no script source", async () => {
+    const rec = recordingTelemetrySink();
+    const tool = buildToolScriptTool({ ...NOOP_DEPS, sink: rec.sink });
+    // A validation failure still emits an observability span (no spawn needed to exercise it).
+    await Effect.runPromise(tool.execute({ script: "x", toolsets: ["bash"] }, undefined));
+    const spans = rec.named("trevor.tool_script");
+    expect(spans).toHaveLength(1);
+    const span = spans[0];
+    expect(span?.status).toBe("error");
+    expect(span?.attributes.failure_class).toBe("validation");
+    expect(String(span?.attributes.script_hash)).toMatch(/^[0-9a-f]{16}$/);
+    // The span never carries the raw script source.
+    expect(JSON.stringify(span?.attributes)).not.toContain('"x"');
   });
 });

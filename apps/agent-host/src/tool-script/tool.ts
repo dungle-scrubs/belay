@@ -1,13 +1,21 @@
+import { createHash } from "node:crypto";
 import {
   type ToolScriptResult,
   type ToolScriptToolset,
   validateToolScriptRequest,
 } from "@trevor/session";
+import {
+  SPAN_NAMES,
+  safeAttributes,
+  safeEmitSpan,
+  type TelemetrySink,
+} from "@trevor/session/telemetry";
 import { Effect, Schema } from "effect";
 import type { Tool, ToolContext } from "../tools/types";
 import { type BridgeExecute, createToolScriptBridge } from "./bridge";
 import { type ManagedChild, manageToolScriptRun } from "./host-manager";
 import { type ResolvedLaunch, resolveRunnerLaunch } from "./launch";
+import { toolScriptSink } from "./sink";
 import { spawnRunner } from "./spawn";
 
 /**
@@ -48,9 +56,43 @@ export interface ToolScriptToolDeps {
   readonly makeScratchDir: () => string;
   /** Removes a scratch dir after the run (best-effort). */
   readonly cleanupScratchDir: (dir: string) => void;
+  /** Telemetry sink for the observability span (default NOOP). */
+  readonly sink?: TelemetrySink;
   /** Overridable for tests. */
   readonly resolveLaunch?: (scratchDir: string) => Promise<ResolvedLaunch>;
   readonly spawn?: (command: readonly string[], cwd: string) => ManagedChild;
+}
+
+/** Emits the `trevor.tool_script` observability span - script hash, sandbox mode, toolsets, bounded counts,
+ *  and failure class. All attributes are low-cardinality + safeAttributes-gated (no script source, paths). */
+function emitToolScriptSpan(
+  sink: TelemetrySink,
+  attrs: {
+    readonly scriptHash: string;
+    readonly toolsets: string;
+    readonly sandboxMode: string;
+    readonly bridgeCalls: number;
+    readonly outputBytes: number;
+    readonly artifacts: number;
+    readonly durationMs: number;
+    readonly ok: boolean;
+    readonly failureClass?: string;
+  },
+): void {
+  safeEmitSpan(sink, {
+    name: SPAN_NAMES.toolScript,
+    attributes: safeAttributes({
+      script_hash: attrs.scriptHash,
+      toolsets: attrs.toolsets,
+      sandbox_mode: attrs.sandboxMode,
+      bridge_calls: attrs.bridgeCalls,
+      output_bytes: attrs.outputBytes,
+      artifacts: attrs.artifacts,
+      ...(attrs.failureClass ? { failure_class: attrs.failureClass } : {}),
+    }),
+    status: attrs.ok ? "ok" : "error",
+    durationMs: attrs.durationMs,
+  });
 }
 
 /** Formats a result into the tool's string output: the result for a success, a typed error line otherwise. */
@@ -66,12 +108,26 @@ async function runToolScript(
   ctx: ToolContext | undefined,
   deps: ToolScriptToolDeps,
 ): Promise<string> {
+  const sink = deps.sink ?? toolScriptSink();
+  const scriptHash = createHash("sha256").update(args.script).digest("hex").slice(0, 16);
+  const toolsets = args.toolsets.join(",");
   const validated = validateToolScriptRequest({
     language: "typescript",
     script: args.script,
     permissions: { toolsets: args.toolsets },
   });
   if (!validated.ok) {
+    emitToolScriptSpan(sink, {
+      scriptHash,
+      toolsets,
+      sandboxMode: "none",
+      bridgeCalls: 0,
+      outputBytes: 0,
+      artifacts: 0,
+      durationMs: 0,
+      ok: false,
+      failureClass: validated.failureClass,
+    });
     return `error: tool_script ${validated.failureClass}: ${validated.error}`;
   }
   const request = validated.request;
@@ -98,8 +154,30 @@ async function runToolScript(
       budgets: request.budgets,
       sandboxMode: launch.sandboxMode,
     }).result;
+    emitToolScriptSpan(sink, {
+      scriptHash,
+      toolsets,
+      sandboxMode: result.sandboxMode,
+      bridgeCalls: result.counters.bridgeCalls,
+      outputBytes: result.counters.outputBytes,
+      artifacts: result.artifacts.length,
+      durationMs: result.counters.durationMs,
+      ok: result.status === "completed",
+      ...(result.status === "failed" ? { failureClass: result.failureClass } : {}),
+    });
     return formatToolScriptResult(result);
   } catch (error) {
+    emitToolScriptSpan(sink, {
+      scriptHash,
+      toolsets,
+      sandboxMode: "none",
+      bridgeCalls: 0,
+      outputBytes: 0,
+      artifacts: 0,
+      durationMs: 0,
+      ok: false,
+      failureClass: "runtime_error",
+    });
     return `error: tool_script runtime_error: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
     deps.cleanupScratchDir(scratchDir);

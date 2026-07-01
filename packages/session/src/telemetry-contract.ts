@@ -142,6 +142,7 @@ export const SPAN_NAMES = {
   turn: "trevor.turn",
   providerAttempt: "trevor.provider.attempt",
   tool: "trevor.tool",
+  toolScript: "trevor.tool_script",
   storeAppend: "trevor.store.append",
   blobIo: "trevor.blob.io",
   cliLaunch: "trevor.cli.launch",

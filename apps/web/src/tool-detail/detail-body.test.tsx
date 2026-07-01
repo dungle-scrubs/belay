@@ -136,3 +136,25 @@ test("an unknown / MCP tool falls back to the generic Arguments + Output body", 
   assert.ok(screen.getByText('{"x":1}'));
   assert.ok(screen.getByText("ok"));
 });
+
+test("tool_script shows the script source, permitted toolsets, and the result", () => {
+  render(
+    <DetailBody
+      model={model({
+        toolName: "tool_script",
+        args: '{"script":"return await tools.read({path:\'a\'});","toolsets":["safe_read"]}',
+        output: '{"files":3}',
+      })}
+    />,
+  );
+  assert.ok(screen.getByText("Script"));
+  assert.ok(screen.getByText("return await tools.read({path:'a'});"));
+  assert.ok(screen.getByText("Permitted toolsets"));
+  assert.ok(screen.getByText("safe_read"));
+  assert.ok(screen.getByText('{"files":3}'));
+});
+
+test("tool_script defaults the toolsets label to safe_read when none were sent", () => {
+  render(<DetailBody model={model({ toolName: "tool_script", args: '{"script":"return 1;"}' })} />);
+  assert.ok(screen.getByText("safe_read"));
+});

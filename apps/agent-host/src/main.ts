@@ -123,6 +123,7 @@ import { activeStylePref } from "./style/style-store";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "./style/styles";
 import { taskRegistry } from "./tasks";
 import { bootstrapNodeSentry } from "./telemetry/sentry";
+import { registerToolScriptSink } from "./tool-script/sink";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
 import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
@@ -171,6 +172,8 @@ const transport = streamTransport(RICHTER_URL ?? SESSION_STORE_URL);
 // The host telemetry sink (plan 13 M5): NOOP unless TREVOR_OTEL_EXPORTER=file selects the local file
 // exporter. Threaded into every turn (publishTurn) so turn/tool spans are emitted when enabled.
 const hostTelemetry = createTelemetrySink("agent-host");
+// Wire the host telemetry sink into tool_script's observability span (plan 16 M8).
+registerToolScriptSink(hostTelemetry);
 // The opt-in provider-attempt trace (plan 13 M6): a no-op unless TREVOR_PROVIDER_TRACE is set. Records
 // a redacted terminal-failure record per turn for debugging a flaky provider, local-only.
 const providerTrace = createProviderTraceWriter({

@@ -136,3 +136,17 @@ export function truncationLabel(output: string | undefined, cap: number): string
   const lines = output.split("\n").length;
   return lines > cap ? `${lines - cap} more lines below the fold` : "";
 }
+
+export interface ToolScriptDetailArgs {
+  readonly script: string;
+  readonly toolsets: readonly string[];
+}
+
+/** Extracts a `tool_script` row's source + requested toolsets (plan 16 M8). */
+export function toolScriptDetailArgs(args: string): ToolScriptDetailArgs {
+  const a = parseToolArgs(args);
+  const toolsets = Array.isArray(a.toolsets)
+    ? a.toolsets.filter((t): t is string => typeof t === "string")
+    : [];
+  return { script: str(a.script), toolsets };
+}

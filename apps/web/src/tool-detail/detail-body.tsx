@@ -14,6 +14,7 @@ import {
   readRangeLabel,
   requestDetailArgs,
   searchDetailArgs,
+  toolScriptDetailArgs,
   truncationLabel,
   writeDetailArgs,
 } from "./detail-args";
@@ -57,6 +58,8 @@ export function DetailBody({
     case "docs":
     case "session_recall":
       return <RequestDetail model={model} onOpenPath={onOpenPath} />;
+    case "tool_script":
+      return <ToolScriptDetail model={model} />;
     default:
       return <GenericDetail model={model} />;
   }
@@ -137,6 +140,22 @@ function BashDetail({ model }: { readonly model: ToolDetailModel }) {
       ) : null}
       <ErrorSection model={model} />
       <OutputSection model={model} />
+    </>
+  );
+}
+
+function ToolScriptDetail({ model }: { readonly model: ToolDetailModel }) {
+  const { script, toolsets } = toolScriptDetailArgs(model.args);
+  return (
+    <>
+      <DetailSection title="Script">
+        <Mono>{script || "(none)"}</Mono>
+      </DetailSection>
+      <DetailSection title="Permitted toolsets">
+        <Mono>{toolsets.length > 0 ? toolsets.join(", ") : "safe_read"}</Mono>
+      </DetailSection>
+      <ErrorSection model={model} />
+      <OutputSection model={model} title="Result" />
     </>
   );
 }

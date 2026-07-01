@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M8 - Observability and Detail Payloads
-- **Completed:** 42 / 68
-- **Current cutoff blockers:** 26
+- **Current focus:** M9 - Transcript, Compact Row, and E2E
+- **Completed:** 47 / 68
+- **Current cutoff blockers:** 21
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -104,11 +104,11 @@
 
 #### M8: Observability and Detail Payloads
 
-- [ ] RED: Add observability tests for script start, bridge call, bridge denied, finish, timeout, cancel, and failure events.
-- [ ] GREEN: Add structured spans/events with script hash, sandbox mode, toolsets, budgets, and bridge-call summaries.
-- [ ] RED: Add detail payload tests for source, permissions, context, sandbox mode, budget counters, bridge calls, output, and failures.
-- [ ] GREEN: Store/render bounded detail payloads without exposing oversized intermediate content.
-- [ ] REFACTOR: Reuse generic tool-detail primitives from `08-tool-detail-takeover`.
+- [x] RED: Add observability tests for script start, bridge call, bridge denied, finish, timeout, cancel, and failure events.
+- [x] GREEN: Add structured spans/events with script hash, sandbox mode, toolsets, budgets, and bridge-call summaries.
+- [x] RED: Add detail payload tests for source, permissions, context, sandbox mode, budget counters, bridge calls, output, and failures.
+- [x] GREEN: Store/render bounded detail payloads without exposing oversized intermediate content.
+- [x] REFACTOR: Reuse generic tool-detail primitives from `08-tool-detail-takeover`.
 
 #### Gate 4->5
 
