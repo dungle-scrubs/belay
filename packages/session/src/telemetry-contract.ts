@@ -139,6 +139,7 @@ export const SPAN_NAMES = {
   blobIo: "trevor.blob.io",
   cliLaunch: "trevor.cli.launch",
   webConnect: "trevor.web.connect",
+  webRender: "trevor.web.render",
 } as const;
 
 /** The low-cardinality metric names Trevor records (contract-owned). */

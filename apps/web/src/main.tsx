@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { TelemetryErrorBoundary } from "./components/error-boundary";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { bootstrapTelemetry } from "./telemetry";
 
@@ -23,10 +24,12 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <App />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <TelemetryErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <App />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </TelemetryErrorBoundary>
   </StrictMode>,
 );
