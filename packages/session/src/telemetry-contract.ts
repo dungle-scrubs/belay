@@ -135,6 +135,7 @@ export const SPAN_NAMES = {
   recovery: "trevor.recovery",
   storeRequest: "trevor.store.request",
   storeSocket: "trevor.store.socket",
+  storeAppend: "trevor.store.append",
   blobIo: "trevor.blob.io",
   cliLaunch: "trevor.cli.launch",
   webConnect: "trevor.web.connect",
@@ -201,6 +202,35 @@ export async function withSpan<T>(
   const startedAt = now();
   try {
     const result = await fn();
+    emitSpan(sink, name, safeAttributes(attributes), "ok", now() - startedAt);
+    return result;
+  } catch (error) {
+    emitSpan(
+      sink,
+      name,
+      safeAttributes(attributes),
+      "error",
+      now() - startedAt,
+      redactAttributeValue(error instanceof Error ? error.message : String(error)),
+    );
+    throw error;
+  }
+}
+
+/**
+ * The synchronous sibling of {@link withSpan} for sync boundaries (e.g. a SQLite write): times `fn`,
+ * records an ok/error span, and re-throws on failure. Same best-effort sink guarantee.
+ */
+export function withSpanSync<T>(
+  sink: TelemetrySink,
+  name: SpanName,
+  attributes: Readonly<Record<string, unknown>>,
+  fn: () => T,
+  now: () => number = Date.now,
+): T {
+  const startedAt = now();
+  try {
+    const result = fn();
     emitSpan(sink, name, safeAttributes(attributes), "ok", now() - startedAt);
     return result;
   } catch (error) {

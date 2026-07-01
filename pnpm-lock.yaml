@@ -115,6 +115,9 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
     devDependencies:
+      '@trevor/test-kit':
+        specifier: workspace:*
+        version: link:../../packages/test-kit
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0

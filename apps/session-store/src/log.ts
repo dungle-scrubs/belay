@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { InventoryRow, PublishInput, SessionEvent, StreamEnvelope } from "@trevor/session";
 import { frames, INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@trevor/session";
+import { NOOP_SINK, SPAN_NAMES, type TelemetrySink, withSpanSync } from "@trevor/session/telemetry";
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
@@ -56,8 +57,12 @@ function rowToEvent(r: EventRow): SessionEvent {
 export class SessionLog {
   private readonly db: DatabaseSync;
 
-  /** Opens (creating if absent) the SQLite log at `path`, or `:memory:` for tests. */
-  constructor(path: string) {
+  /** Opens (creating if absent) the SQLite log at `path`, or `:memory:` for tests. Telemetry is off by
+   *  default (NOOP_SINK); the append span carries only the event type, never the session id or payload. */
+  constructor(
+    path: string,
+    private readonly sink: TelemetrySink = NOOP_SINK,
+  ) {
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
     }
@@ -93,27 +98,34 @@ export class SessionLog {
 
   /** Appends one event, assigning the next per-session seq; returns the stored row. */
   append(sessionId: string, input: PublishInput, eventId: string, nowIso: string): SessionEvent {
-    this.ensureSession(sessionId, nowIso);
-    const row = this.db
-      .prepare("SELECT COALESCE(MAX(seq), 0) AS maxSeq FROM events WHERE sessionId = ?")
-      .get(sessionId) as { maxSeq: number };
-    const seq = Number(row.maxSeq) + 1;
-    const payload = JSON.stringify(input.payload ?? {});
-    this.db
-      .prepare(
-        `INSERT INTO events (sessionId, seq, eventId, type, producerId, payload, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(sessionId, seq, eventId, input.type, input.producerId, payload, nowIso);
-    return {
-      sessionId,
-      seq,
-      eventId,
-      type: input.type,
-      producerId: input.producerId,
-      payload: input.payload ?? {},
-      createdAt: nowIso,
-    };
+    return withSpanSync(
+      this.sink,
+      SPAN_NAMES.storeAppend,
+      { event_type: input.type, producer: input.producerId },
+      () => {
+        this.ensureSession(sessionId, nowIso);
+        const row = this.db
+          .prepare("SELECT COALESCE(MAX(seq), 0) AS maxSeq FROM events WHERE sessionId = ?")
+          .get(sessionId) as { maxSeq: number };
+        const seq = Number(row.maxSeq) + 1;
+        const payload = JSON.stringify(input.payload ?? {});
+        this.db
+          .prepare(
+            `INSERT INTO events (sessionId, seq, eventId, type, producerId, payload, createdAt)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(sessionId, seq, eventId, input.type, input.producerId, payload, nowIso);
+        return {
+          sessionId,
+          seq,
+          eventId,
+          type: input.type,
+          producerId: input.producerId,
+          payload: input.payload ?? {},
+          createdAt: nowIso,
+        };
+      },
+    );
   }
 
   /**

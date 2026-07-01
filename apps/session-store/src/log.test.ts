@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { frames } from "@trevor/session";
+import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { recordingTelemetrySink } from "@trevor/test-kit";
 import { test } from "vitest";
 import { SessionLog } from "./log";
 
@@ -146,4 +148,25 @@ test("inventory() lifecycle slice picks exactly the protocol's LIFECYCLE_TYPES, 
     s1?.lifecycle.map((e) => e.seq),
     [2, 5, 7],
   );
+});
+
+test("append emits a store.append span carrying the event type + producer, never the session id or payload", () => {
+  const recorder = recordingTelemetrySink();
+  const log = new SessionLog(":memory:", recorder.sink);
+  log.append(
+    "secret-session-id",
+    { type: "user.message", producerId: "web", payload: { text: "private prompt body" } },
+    "e1",
+    at,
+  );
+
+  const spans = recorder.named(SPAN_NAMES.storeAppend);
+  assert.equal(spans.length, 1);
+  const [span] = spans;
+  assert.equal(span?.status, "ok");
+  assert.equal(span?.attributes.event_type, "user.message");
+  assert.equal(span?.attributes.producer, "web");
+  const serialized = JSON.stringify(spans);
+  assert.ok(!serialized.includes("secret-session-id"), "the session id never enters a span");
+  assert.ok(!serialized.includes("private prompt body"), "the payload never enters a span");
 });
