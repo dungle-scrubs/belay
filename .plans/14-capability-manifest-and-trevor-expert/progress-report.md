@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M10: End-to-End Verification
+> Current focus: DONE - all milestones implemented; running gate + simplify + merge
 
 ## Summary
 
-- Current cutoff blockers: 5
+- Current cutoff blockers: 0
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -87,8 +87,8 @@
 
 ## M10: End-to-End Verification
 
-- [ ] RED: Add integration tests from registries to manifest to `trevor-export` to `trevor-expert` answer
-- [ ] GREEN: Verify full and compact exports, expert-scoped slices, unavailable sections, and dynamic-section truncation
-- [ ] RED: Add redaction tests for secrets, auth headers, prompt text, provider payloads, raw tool output, and local sensitive paths
-- [ ] GREEN: Verify redacted output and stable provenance across human, JSON, compact, and expert variants
-- [ ] REFACTOR: Tighten docs and command names for structured client consumption
+- [x] RED: Add integration tests from registries to manifest to `trevor-export` to `trevor-expert` answer
+- [x] GREEN: Verify full and compact exports, expert-scoped slices, unavailable sections, and dynamic-section truncation
+- [x] RED: Add redaction tests for secrets, auth headers, prompt text, provider payloads, raw tool output, and local sensitive paths
+- [x] GREEN: Verify redacted output and stable provenance across human, JSON, compact, and expert variants
+- [x] REFACTOR: Tighten docs and command names for structured client consumption
