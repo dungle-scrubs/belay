@@ -18,6 +18,29 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
   ...args: string[]
 ) => (...fnArgs: unknown[]) => Promise<unknown>;
 
+/**
+ * Ambient-authority identifiers SHADOWED to `undefined` inside the script's scope (defense in depth): each
+ * is a formal parameter of the script function bound to `undefined`, so both bare (`fetch`) and
+ * `globalThis`-prefixed (`globalThis.fetch`) access resolves to undefined - including `globalThis` itself,
+ * so `globalThis.process` throws rather than reaching the real object. This is NOT the safety boundary (the
+ * OS sandbox in M4 and the host bridge in M5 are): the `Function`-constructor and dynamic-`import()` routes
+ * run in the real global scope and are the sandbox's job, covered by the deferred deep-isolation review.
+ */
+const SHADOWED_GLOBALS = [
+  "process",
+  "Bun",
+  "Deno",
+  "require",
+  "module",
+  "exports",
+  "fetch",
+  "XMLHttpRequest",
+  "WebSocket",
+  "EventSource",
+  "global",
+  "globalThis",
+] as const;
+
 /** An error from a bridge call, carrying the failure class the host should report. */
 class BridgeError extends Error {
   constructor(
@@ -80,25 +103,30 @@ export function createRunnerCore(send: (message: RunnerToHost) => void): RunnerC
     let fn: (...args: unknown[]) => Promise<unknown>;
     try {
       // Build FIRST so a syntax error is reported distinctly, before any execution.
-      fn = new AsyncFunction(
-        "tools",
-        "context",
-        "process",
-        "Bun",
-        "require",
-        "fetch",
-        `"use strict";\n${script}`,
-      );
+      fn = new AsyncFunction("tools", "context", ...SHADOWED_GLOBALS, `"use strict";\n${script}`);
     } catch (error) {
       send({ type: "fail", failureClass: "syntax_error", error: messageOf(error) });
       return;
     }
-    // Ambient globals passed `undefined` (defense in depth): the script sees no process/require/fetch.
-    fn(tools, context, undefined, undefined, undefined, undefined).then(
+    // Every shadowed global is passed `undefined` (defense in depth): the script sees no ambient authority.
+    fn(tools, context, ...SHADOWED_GLOBALS.map(() => undefined)).then(
       (result) => {
-        if (!cancelled) {
-          send({ type: "complete", result });
+        if (cancelled) {
+          return;
         }
+        // Probe serializability FIRST: a circular (or BigInt) result would throw inside `send` and crash
+        // the child, surfacing as an opaque "exited before completing". Turn it into a clean typed failure.
+        try {
+          JSON.stringify(result);
+        } catch (error) {
+          send({
+            type: "fail",
+            failureClass: "runtime_error",
+            error: `script result is not serializable: ${messageOf(error)}`,
+          });
+          return;
+        }
+        send({ type: "complete", result });
       },
       (error) => {
         send({ type: "fail", failureClass: classify(error), error: messageOf(error) });

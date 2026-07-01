@@ -1,42 +1,85 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import type { SandboxEnvironment } from "@trevor/session";
 
 /**
  * The macOS `sandbox-exec` (Seatbelt) profile generator + launcher wrapping for the `tool_script` child
  * runner (plan 16, M4). This turns the "deny-first, host-bridge-only" contract (M2) into a concrete OS
- * profile: DENY by default, allow only the broad file-READS the runtime needs to boot, exec of ONLY the
- * runtime binary, and file-WRITES ONLY under the runner's own scratch dir - so even if a script escaped the
- * in-process JS boundary, it still cannot write outside scratch, reach the network, or exec anything else.
+ * profile: DENY by default, allow file-READS only under the roots the runtime needs to boot plus the
+ * workspace the read tools operate in, exec of ONLY the runtime binary, and file-WRITES ONLY under the
+ * runner's own scratch dir - so even if a script escaped the in-process JS boundary, it still cannot read
+ * the user's secrets outside the workspace, write outside scratch, reach the network, or exec anything else.
+ *
+ * READ CONFINEMENT (plan 16 M4 hardening): reads are DENY-BY-DEFAULT. A blanket `(allow file-read*)` would
+ * let an escaped script read the user's secrets under `$HOME` (SSH keys, provider auth tokens, the host's
+ * own env files), defeating the confidentiality boundary; instead reads are allowed only under an explicit
+ * allowlist. Whether a
+ * Node/tsx child actually boots under this tightened read policy across pnpm/store layouts is exactly what
+ * the deep-isolation re-review validates before merge; where it cannot boot, the launch probe fails and the
+ * run FAILS CLOSED (never silently unsandboxed).
  *
  * The OS sandbox is blast-radius reduction, NOT the authoritative control - the host bridge (M5) is - so a
- * profile that cannot launch degrades to the child-process boundary (M2 `fallbackSandboxMode`) without
- * weakening the bridge. The policy hash lets `/doctor` report WHICH profile ran without leaking its paths.
+ * profile that cannot launch degrades per the launch policy without weakening the bridge. The policy hash
+ * lets `/doctor` report WHICH profile ran without leaking its paths.
  */
 
 /** The macOS sandbox launcher. */
 export const SANDBOX_EXEC_PATH = "/usr/bin/sandbox-exec";
+
+/**
+ * System directories a macOS Node/tsx child must READ to boot: the OS frameworks + dyld shared cache, the
+ * per-user temp/dyld-closure trees under `/private/var`, and the common runtime install prefixes. None hold
+ * user secrets, so allowing reads here is not a confidentiality concern; the point is to NOT allow reads
+ * everywhere else (notably `$HOME`).
+ */
+const SYSTEM_READ_ROOTS: readonly string[] = [
+  "/usr",
+  "/System",
+  "/Library",
+  "/private/var/db/dyld",
+  "/private/var/folders",
+  "/private/tmp",
+  "/private/etc",
+  "/dev",
+  "/bin",
+  "/sbin",
+  "/opt/homebrew",
+  "/opt/local",
+];
 
 export interface SandboxProfileInput {
   /** The runtime binary the profile permits exec of (e.g. the Node executable). */
   readonly runtimePath: string;
   /** The one directory the child may WRITE to (its pipe/scratch dir under the temp root). */
   readonly scratchDir: string;
+  /** Extra absolute directories reads are allowed under: the workspace the read tools operate in, and any
+   *  loader/module trees (Node prefix, tsx/node_modules, the entry dir) the child must read to boot.
+   *  Everything outside the allowlist - the user's secrets under `$HOME` - stays deny-read. */
+  readonly readRoots?: readonly string[];
 }
 
 /**
- * Builds a deny-first Seatbelt profile. `deny default` blocks everything; the allows are the minimum for a
- * Node/tsx child to boot and talk to the host over stdio - broad reads, fork, exec of the runtime only, the
- * mach/sysctl lookups Node needs, and writes confined to the scratch dir. Network and writes elsewhere stay
- * denied by default.
+ * Builds a deny-first Seatbelt profile. `deny default` blocks everything; reads are allowed ONLY under the
+ * system boot roots + the runtime's own prefix + the caller's `readRoots` (workspace, loader trees) + the
+ * scratch dir. Fork, exec of the runtime only, the mach/sysctl lookups Node needs, and writes confined to
+ * scratch are allowed. Network, writes elsewhere, and reads outside the allowlist stay denied by default.
  */
 export function buildDenyFirstProfile(input: SandboxProfileInput): string {
+  // The runtime's install prefix (e.g. `.../node-vXX` from `.../bin/node`) must be readable to boot.
+  const runtimePrefix = dirname(dirname(input.runtimePath));
+  const readRoots = dedupePaths([
+    ...SYSTEM_READ_ROOTS,
+    runtimePrefix,
+    ...(input.readRoots ?? []),
+    input.scratchDir,
+  ]);
   return [
     "(version 1)",
     "(deny default)",
-    // Node needs broad READ access to boot (system frameworks, dyld cache, its own tree). Reads are not a
-    // blast-radius concern - the script has no fs module, and denying reads just prevents Node from starting.
-    "(allow file-read*)",
+    // Reads are DENY-BY-DEFAULT: allow content reads ONLY under the boot/workspace roots below, so an
+    // escaped script cannot read secrets under $HOME. Bare metadata (stat) of any path is content-free.
+    ...readRoots.map((root) => `(allow file-read* (subpath ${sbplString(root)}))`),
     "(allow file-read-metadata)",
     // Threads/child boot, but exec ONLY the runtime binary - never an arbitrary spawned process.
     "(allow process-fork)",
@@ -50,6 +93,11 @@ export function buildDenyFirstProfile(input: SandboxProfileInput): string {
     '(allow file-write-data (literal "/dev/null"))',
     // No `(allow network*)` line: network is denied by the default.
   ].join("\n");
+}
+
+/** De-duplicates paths, preserving order (a profile with repeated allow lines is valid but noisy). */
+function dedupePaths(paths: readonly string[]): string[] {
+  return [...new Set(paths)];
 }
 
 /** Escapes a path for an SBPL string literal. */

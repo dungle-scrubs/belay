@@ -8,7 +8,11 @@ import {
   sandboxPolicyHash,
 } from "./sandbox-profile";
 
-const PROFILE_INPUT = { runtimePath: "/usr/local/bin/node", scratchDir: "/tmp/trevor-ts-abc" };
+const PROFILE_INPUT = {
+  runtimePath: "/usr/local/bin/node",
+  scratchDir: "/tmp/trevor-ts-abc",
+  readRoots: ["/work/repo"],
+};
 
 describe("deny-first sandbox profile (M4)", () => {
   const profile = buildDenyFirstProfile(PROFILE_INPUT);
@@ -31,8 +35,33 @@ describe("deny-first sandbox profile (M4)", () => {
     expect(profile).not.toMatch(/\(allow file-write\*\)\s*$/m);
   });
 
-  it("allows the broad reads Node needs to boot (reads are not a blast-radius concern)", () => {
-    expect(profile).toContain("(allow file-read*)");
+  it("DENY-reads by default: no blanket file-read*, only allowlisted subpaths", () => {
+    // The old blanket read is gone - a script that escaped the JS boundary cannot read $HOME secrets.
+    expect(profile).not.toMatch(/\(allow file-read\*\)\s*$/m);
+    // Reads are confined to explicit roots: system boot dirs, the runtime prefix, workspace, and scratch.
+    expect(profile).toContain('(allow file-read* (subpath "/usr"))');
+    expect(profile).toContain('(allow file-read* (subpath "/System"))');
+    // The runtime install prefix (dirname(dirname(runtimePath))) is readable so Node can boot.
+    expect(profile).toContain('(allow file-read* (subpath "/usr/local"))');
+    // The workspace the read tools operate in is allowed.
+    expect(profile).toContain('(allow file-read* (subpath "/work/repo"))');
+    // The scratch dir is readable + writable.
+    expect(profile).toContain('(allow file-read* (subpath "/tmp/trevor-ts-abc"))');
+    // Metadata (stat) stays broadly allowed - it carries no file content.
+    expect(profile).toContain("(allow file-read-metadata)");
+  });
+
+  it("does NOT allow reading the user's home secrets outside the allowlist", () => {
+    // No allow line covers $HOME broadly - the crown jewels (~/.ssh, ~/.pi, ~/.trevorV2) stay deny-read.
+    const allowedReadRoots = [
+      ...profile.matchAll(/\(allow file-read\* \(subpath "([^"]+)"\)\)/g),
+    ].map((m) => m[1]);
+    for (const root of allowedReadRoots) {
+      expect(root).not.toMatch(/\/\.ssh(\/|$)/);
+      expect(root).not.toMatch(/\/\.pi(\/|$)/);
+    }
+    // And the home directory itself is never a blanket read root.
+    expect(allowedReadRoots).not.toContain(process.env.HOME ?? "~");
   });
 });
 

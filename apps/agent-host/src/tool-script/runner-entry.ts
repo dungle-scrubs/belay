@@ -18,12 +18,38 @@ import { createRunnerCore } from "./runner-core";
 
 const MAX_LINE_BYTES = 1_000_000;
 
+/**
+ * Network/runtime primitives blunted on the child's `globalThis` (defense in depth): even code that reaches
+ * the real global object - e.g. `Function("return fetch")()`, which the runner's lexical shadowing cannot
+ * cover - then finds no egress primitive. Node internals never read these off `globalThis`, so nulling them
+ * does not disturb the runner's own IO. This is NOT the safety boundary (the OS sandbox in M4 is); dynamic
+ * `import()` and `process` stay the sandbox's job, covered by the deferred deep-isolation review.
+ */
+const NEUTRALIZED_GLOBALS = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "Bun", "Deno"];
+
+function neutralizeNetworkGlobals(): void {
+  for (const name of NEUTRALIZED_GLOBALS) {
+    // Reflect returns false (never throws) if a global is non-configurable; the OS sandbox is the backstop.
+    Reflect.defineProperty(globalThis, name, {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+  }
+}
+
 function main(): void {
-  const core = createRunnerCore((message) => process.stdout.write(encodeMessage(message)));
+  // Capture the stdio handles the runner needs BEFORE neutralizing globals, so scrubbing does not affect
+  // the runner's own IO (the neutralization targets only what a later-running user script could reach).
+  const stdin = process.stdin;
+  const stdout = process.stdout;
+  const exit = process.exit.bind(process);
+
+  const core = createRunnerCore((message) => stdout.write(encodeMessage(message)));
   const reader = createLineReader({ maxLineBytes: MAX_LINE_BYTES });
 
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (chunk: string) => {
+  stdin.setEncoding("utf8");
+  stdin.on("data", (chunk: string) => {
     for (const line of reader.push(chunk)) {
       const message = decodeHostToRunner(line);
       if (message) {
@@ -32,9 +58,11 @@ function main(): void {
     }
   });
   // When the host closes the pipe, the run is over - exit cleanly.
-  process.stdin.on("end", () => process.exit(0));
+  stdin.on("end", () => exit(0));
 
-  process.stdout.write(encodeMessage({ type: "start", protocol: RUNNER_PROTOCOL_VERSION }));
+  stdout.write(encodeMessage({ type: "start", protocol: RUNNER_PROTOCOL_VERSION }));
+
+  neutralizeNetworkGlobals();
 }
 
 main();

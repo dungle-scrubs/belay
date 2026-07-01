@@ -47,6 +47,34 @@ describe("tool_script tool - metadata + validation (M7)", () => {
   });
 });
 
+describe("tool_script fail-closed launch (M4 hardening)", () => {
+  it("returns a sandbox_launch failure (no spawn) when the launch is refused", async () => {
+    const rec = recordingTelemetrySink();
+    let spawned = false;
+    const tool = buildToolScriptTool({
+      execute: () => Promise.resolve(""),
+      cwd: "/w",
+      makeScratchDir: () => "/tmp/scratch",
+      cleanupScratchDir: () => {},
+      sink: rec.sink,
+      resolveLaunch: () => Promise.resolve({ ok: false, reason: "no OS sandbox available" }),
+      spawn: () => {
+        spawned = true;
+        throw new Error("must not spawn when the launch is refused");
+      },
+    });
+    const out = await Effect.runPromise(
+      tool.execute({ script: "return 1;", toolsets: ["safe_read"] }, undefined),
+    );
+    expect(out).toContain("tool_script sandbox_launch");
+    expect(out).toContain("no OS sandbox available");
+    expect(spawned).toBe(false);
+    const span = rec.named("trevor.tool_script")[0];
+    expect(span?.status).toBe("error");
+    expect(span?.attributes.failure_class).toBe("sandbox_launch");
+  });
+});
+
 describe("tool_script result formatting (M7)", () => {
   it("returns the raw string result verbatim, and stringifies a structured result", () => {
     expect(formatToolScriptResult({ status: "completed", result: "hello", ...base })).toBe("hello");

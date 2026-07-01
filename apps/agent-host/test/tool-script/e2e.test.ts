@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { WORKSPACE_ROOT } from "../../src/paths";
 import { executeTool } from "../../src/tools/index";
 
 /**
@@ -13,15 +13,29 @@ import { executeTool } from "../../src/tools/index";
  */
 
 let dir: string;
+let priorAllow: string | undefined;
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "trevor-ts-e2e-"));
+  // Inside the workspace root: the bridge confines tool_script reads to the workspace, so the fixtures
+  // (which the script reads by absolute path) must live under it. mkdtemp keeps the run hermetic.
+  dir = mkdtempSync(join(WORKSPACE_ROOT, "trevor-ts-e2e-"));
   writeFileSync(join(dir, "a.txt"), "alpha\nalpha");
   writeFileSync(join(dir, "b.txt"), "beta");
   writeFileSync(join(dir, "c.txt"), "gammagamma");
+  // On a host where the Seatbelt profile cannot boot Node, tool_script fails closed by default. This
+  // e2e legitimately exercises the reduced-isolation child-process path, so it opts in explicitly.
+  priorAllow = process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED;
+  process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED = "1";
 });
 
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+afterAll(() => {
+  rmSync(dir, { recursive: true, force: true });
+  if (priorAllow === undefined) {
+    delete process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED;
+  } else {
+    process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED = priorAllow;
+  }
+});
 
 describe("tool_script hermetic e2e (M9)", () => {
   it("batch-scans multiple files through the real read bridge and returns an aggregate", async () => {

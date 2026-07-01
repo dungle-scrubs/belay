@@ -31,11 +31,16 @@ export const TOOL_SCRIPT_TOOLSETS: readonly ToolScriptToolset[] = [
  * The concrete read-only bridge tools each toolset exposes (V2). All route through the normal host tool
  * registry + metadata policy - never ambient access. Some are empty until their own plans land
  * (source_recall/code_search, archive_read/video_inspect); mutation/shell tools are never listed.
+ *
+ * CONFIDENTIALITY (plan 16 M4 hardening): NO toolset may grant NETWORK EGRESS. A script can read local
+ * files (some sensitive), so any outbound-capable tool - `web_fetch`, `docs` (which fetches remote pages) -
+ * would let a script exfiltrate what it read by smuggling it into a request URL. `docs_read` is therefore
+ * empty until an egress-free page-read path exists; egress tools are never listed.
  */
 export const TOOLSET_TOOLS: Readonly<Record<ToolScriptToolset, readonly string[]>> = {
   safe_read: ["read", "glob", "grep", "ast_grep"],
   retrieval: ["session_recall"],
-  docs_read: ["docs", "web_fetch"],
+  docs_read: [],
   media_read: [],
 };
 

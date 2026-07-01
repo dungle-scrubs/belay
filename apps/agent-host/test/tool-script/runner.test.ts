@@ -52,6 +52,19 @@ describe("tool_script real child-runner integration (M3)", () => {
     }
   });
 
+  it("closes the globalThis + Function-constructor escapes to ambient authority (DiD)", async () => {
+    const result = await runReal(
+      // globalThis itself is lexically shadowed; the network primitives are also nulled on the real
+      // global object, so even the Function-constructor route (which runs in global scope) finds nothing.
+      "return { g: typeof globalThis, ff: (new Function('return typeof fetch'))(), " +
+        "gp: (new Function('return typeof (globalThis && globalThis.process)'))() };",
+    );
+    expect(result.status).toBe("completed");
+    if (result.status === "completed") {
+      expect(result.result).toEqual({ g: "undefined", ff: "undefined", gp: "object" });
+    }
+  });
+
   it("reports a runtime throw from the real child as a failed result", async () => {
     const result = await runReal("throw new Error('kaboom');");
     expect(result.status === "failed" && result.failureClass).toBe("runtime_error");
@@ -59,8 +72,15 @@ describe("tool_script real child-runner integration (M3)", () => {
 
   it("resolves a launch on the real host and runs to completion under the effective mode (M4)", async () => {
     // Real sandbox probe: on a host where the Seatbelt profile cannot boot Node this degrades to
-    // child-process; either way the resolved command must run the script to completion.
-    const launch = await resolveRunnerLaunch({ scratchDir: process.cwd() });
+    // child-process; either way the resolved command must run the script to completion. This
+    // integration path legitimately exercises the reduced-isolation fallback, so it opts in.
+    const launch = await resolveRunnerLaunch({
+      scratchDir: process.cwd(),
+      allowUnsandboxed: true,
+    });
+    if (!launch.ok) {
+      throw new Error(`expected a launch, got refusal: ${launch.reason}`);
+    }
     expect(["sandbox-exec", "child-process"]).toContain(launch.sandboxMode);
     const child = spawnRunner({ command: launch.command, cwd: process.cwd() });
     const result = await manageToolScriptRun(

@@ -84,6 +84,10 @@ export function manageToolScriptRun(
   const artifacts: ToolScriptArtifact[] = [];
   let outputBytes = 0;
   let settled = false;
+  // Slots RESERVED synchronously at request entry (counts in-flight calls too). The budget must gate on
+  // this, not on `bridgeCalls.length` - which only grows AFTER each `await`, so a script that fires many
+  // bridge_requests concurrently would otherwise slip every one of them past a length check.
+  let reservedBridgeCalls = 0;
 
   let resolve!: (result: ToolScriptResult) => void;
   const result = new Promise<ToolScriptResult>((r) => {
@@ -140,9 +144,14 @@ export function manageToolScriptRun(
   }
 
   async function handleBridgeRequest(callId: number, tool: string, input: unknown): Promise<void> {
+    // The run may have already settled (timeout/cancel/crash) while this request was queued: do no work.
+    if (settled) {
+      return;
+    }
     const callStart = now();
-    // Hard stop for a runaway script (no hidden autonomy): past the budget, deny + fail the run.
-    if (bridgeCalls.length >= options.budgets.maxBridgeCalls) {
+    // Hard stop for a runaway script (no hidden autonomy): past the budget, deny + fail the run. Gate on
+    // the reserved count so concurrently-issued requests cannot collectively overrun the budget.
+    if (reservedBridgeCalls >= options.budgets.maxBridgeCalls) {
       child.send({
         type: "bridge_response",
         callId,
@@ -159,6 +168,8 @@ export function manageToolScriptRun(
       finishFail("budget_exhausted", `exceeded ${options.budgets.maxBridgeCalls} bridge calls`);
       return;
     }
+    // Reserve the slot BEFORE awaiting, so a burst of concurrent requests is bounded by the budget.
+    reservedBridgeCalls += 1;
     let response: Awaited<ReturnType<ToolScriptBridge["call"]>>;
     try {
       response = await bridge.call(tool, input);

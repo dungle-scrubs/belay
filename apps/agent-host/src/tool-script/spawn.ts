@@ -70,10 +70,26 @@ export function spawnRunner(config: RunnerSpawnConfig): ManagedChild {
   });
   child.on("exit", () => onExitCb?.());
   child.on("error", () => onExitCb?.());
+  // A dead child makes its pipes emit `error` (EPIPE on stdin, ECONNRESET on the read side). Without a
+  // listener Node re-throws those as an unhandled stream error and CRASHES THE HOST, so absorb them: a
+  // stdin break means the child is gone (treat as exit); read-side errors just end that stream.
+  child.stdin?.on("error", () => onExitCb?.());
+  child.stdout?.on("error", () => {});
+  child.stderr?.on("error", () => {});
 
   return {
     send(message) {
-      child.stdin?.write(encodeMessage(message));
+      // Guard the write: after the child dies `writable` is false and a stray write would throw EPIPE
+      // synchronously. Swallow it - the exit path already settles the run.
+      const stdin = child.stdin;
+      if (!stdin?.writable) {
+        return;
+      }
+      try {
+        stdin.write(encodeMessage(message));
+      } catch {
+        // Broken pipe raced the exit handler; the run settles via onExit.
+      }
     },
     onMessage(cb) {
       onMessageCb = cb;

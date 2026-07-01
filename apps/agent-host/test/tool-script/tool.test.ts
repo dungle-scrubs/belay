@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
+import { resolveRunnerLaunch } from "../../src/tool-script/launch";
 import { buildToolScriptTool, type ToolScriptToolDeps } from "../../src/tool-script/tool";
 
 /**
@@ -17,6 +18,9 @@ function toolWith(execute: ToolScriptToolDeps["execute"]) {
     cwd: process.cwd(),
     makeScratchDir: () => mkdtempSync(join(tmpdir(), "trevor-ts-it-")),
     cleanupScratchDir: (dir) => rmSync(dir, { recursive: true, force: true }),
+    // This integration path legitimately exercises the reduced-isolation child-process fallback (the OS
+    // sandbox cannot boot Node on many hosts), so it opts in rather than failing closed.
+    resolveLaunch: (scratchDir) => resolveRunnerLaunch({ scratchDir, allowUnsandboxed: true }),
   });
 }
 

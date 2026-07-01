@@ -69,3 +69,57 @@ describe("tool_script toolset capability matrix (M5)", () => {
     expect(response.error).toContain("registry blew up");
   });
 });
+
+describe("tool_script bridge workspace confinement (M4 hardening)", () => {
+  const ROOT = "/work/repo";
+  function confinedBridge(): {
+    bridge: ReturnType<typeof createToolScriptBridge>;
+    calls: string[];
+  } {
+    const { execute, calls } = spyExecute("body");
+    return {
+      calls,
+      bridge: createToolScriptBridge({ toolsets: ["safe_read"], execute, workspaceRoot: ROOT }),
+    };
+  }
+
+  it("allows a read within the workspace root", async () => {
+    const { bridge, calls } = confinedBridge();
+    expect((await bridge.call("read", { path: "src/a.ts" })).status).toBe("ok");
+    expect((await bridge.call("read", { path: `${ROOT}/src/a.ts` })).status).toBe("ok");
+    expect(calls).toEqual(["read", "read"]);
+  });
+
+  it("DENIES a read of an absolute path outside the workspace - before it executes", async () => {
+    const { bridge, calls } = confinedBridge();
+    const response = await bridge.call("read", { path: "/etc/passwd" });
+    expect(response.status).toBe("denied");
+    expect(response.error).toContain("escapes the workspace root");
+    expect(calls).toEqual([]);
+  });
+
+  it("DENIES a read that climbs out with ../", async () => {
+    const { bridge, calls } = confinedBridge();
+    expect((await bridge.call("read", { path: "../../secrets.txt" })).status).toBe("denied");
+    expect(calls).toEqual([]);
+  });
+
+  it("DENIES an escaping glob pattern and an escaping ast_grep path/glob", async () => {
+    const { bridge } = confinedBridge();
+    expect((await bridge.call("glob", { pattern: "../../**/*.ts" })).status).toBe("denied");
+    expect((await bridge.call("grep", { pattern: "x", glob: "../../**" })).status).toBe("denied");
+    expect((await bridge.call("ast_grep", { pattern: "$X", paths: ["/etc"] })).status).toBe(
+      "denied",
+    );
+    expect((await bridge.call("ast_grep", { pattern: "$X", globs: ["../../**"] })).status).toBe(
+      "denied",
+    );
+  });
+
+  it("does NOT confine the grep REGEX pattern (only its file glob)", async () => {
+    const { bridge, calls } = confinedBridge();
+    // A regex that looks path-like is not a path; the glob stays inside, so the call runs.
+    expect((await bridge.call("grep", { pattern: "../foo", glob: "src/**" })).status).toBe("ok");
+    expect(calls).toEqual(["grep"]);
+  });
+});

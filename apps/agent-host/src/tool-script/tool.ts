@@ -14,7 +14,7 @@ import { Effect, Schema } from "effect";
 import type { Tool, ToolContext } from "../tools/types";
 import { type BridgeExecute, createToolScriptBridge } from "./bridge";
 import { type ManagedChild, manageToolScriptRun } from "./host-manager";
-import { type ResolvedLaunch, resolveRunnerLaunch } from "./launch";
+import { type LaunchResolution, resolveRunnerLaunch } from "./launch";
 import { toolScriptSink } from "./sink";
 import { spawnRunner } from "./spawn";
 
@@ -59,7 +59,7 @@ export interface ToolScriptToolDeps {
   /** Telemetry sink for the observability span (default NOOP). */
   readonly sink?: TelemetrySink;
   /** Overridable for tests. */
-  readonly resolveLaunch?: (scratchDir: string) => Promise<ResolvedLaunch>;
+  readonly resolveLaunch?: (scratchDir: string) => Promise<LaunchResolution>;
   readonly spawn?: (command: readonly string[], cwd: string) => ManagedChild;
 }
 
@@ -98,7 +98,12 @@ function emitToolScriptSpan(
 /** Formats a result into the tool's string output: the result for a success, a typed error line otherwise. */
 export function formatToolScriptResult(result: ToolScriptResult): string {
   if (result.status === "completed") {
-    return typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+    if (typeof result.result === "string") {
+      return result.result;
+    }
+    // `JSON.stringify` returns the value `undefined` (not a string) for an undefined/function/symbol
+    // result; normalize that to "" so a `return;` script yields empty output, not the literal "undefined".
+    return JSON.stringify(result.result) ?? "";
   }
   return `error: tool_script ${result.failureClass}: ${result.error}`;
 }
@@ -136,6 +141,21 @@ async function runToolScript(
     const launch = await (deps.resolveLaunch ?? ((s) => resolveRunnerLaunch({ scratchDir: s })))(
       scratchDir,
     );
+    if (!launch.ok) {
+      // Fail closed: no OS sandbox could confine the child, so the run is refused before any spawn (M4).
+      emitToolScriptSpan(sink, {
+        scriptHash,
+        toolsets,
+        sandboxMode: "none",
+        bridgeCalls: 0,
+        outputBytes: 0,
+        artifacts: 0,
+        durationMs: 0,
+        ok: false,
+        failureClass: "sandbox_launch",
+      });
+      return `error: tool_script sandbox_launch: ${launch.reason}`;
+    }
     const spawn = deps.spawn ?? ((command, cwd) => spawnRunner({ command, cwd }));
     const child = spawn(launch.command, deps.cwd);
     const bridge = createToolScriptBridge({
