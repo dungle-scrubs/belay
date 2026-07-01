@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M7: Existing Web Helper Integration
-- Current cutoff blockers: 19 unchecked
+> Current focus: M8: Evals And End-To-End Coverage
+- Current cutoff blockers: 12 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -79,13 +79,13 @@
 
 ### M7: Existing Web Helper Integration
 
-- [ ] RED: Audit existing web loop parser/helper tests and add failing coverage only for missing slash menu, committed helper, or preview states.
-- [ ] GREEN: Preserve the existing helper while routing it through the shared command contract/preview output.
-- [ ] RED: Add regression tests for existing syntax highlighting, used/available keyword guide, missing-field hints, ready state, and inventory controls if any are story-only.
-- [ ] GREEN: Fill only the missing UI behavior around runner/max/every/until/timeout/action/durability rows.
-- [ ] RED: Add tests proving inventory controls submit structured command/session protocol events instead of mutating local fixture state.
-- [ ] GREEN: Replace fixture-only inventory control behavior with live protocol wiring.
-- [ ] REFACTOR: Keep the existing helper accessible and responsive while removing duplicated validation rules from web-only code.
+- [x] RED: Audit existing web loop parser/helper tests and add failing coverage only for missing slash menu, committed helper, or preview states.
+- [x] GREEN: Preserve the existing helper while routing it through the shared command contract/preview output.
+- [x] RED: Add regression tests for existing syntax highlighting, used/available keyword guide, missing-field hints, ready state, and inventory controls if any are story-only.
+- [x] GREEN: Fill only the missing UI behavior around runner/max/every/until/timeout/action/durability rows.
+- [x] RED: Add tests proving inventory controls submit structured command/session protocol events instead of mutating local fixture state.
+- [x] GREEN: Replace fixture-only inventory control behavior with live protocol wiring.
+- [x] REFACTOR: Keep the existing helper accessible and responsive while removing duplicated validation rules from web-only code.
 
 ### M8: Evals And End-To-End Coverage
 
