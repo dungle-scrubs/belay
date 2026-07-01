@@ -1,4 +1,6 @@
 import type { SessionEvent } from "./event";
+import { PRODUCER_IDS } from "./identity";
+import { events } from "./protocol";
 import type { PublishInput } from "./transport";
 
 /**
@@ -94,4 +96,59 @@ export function buildForkPrefix(args: {
       [FORK_ORIGIN_KEY]: { sessionId: args.parentSessionId, seq: event.seq },
     },
   }));
+}
+
+/** The ordered append plan for creating a forked child session (plan 15, M2). */
+export interface ForkPlan {
+  readonly childSessionId: string;
+  readonly parentSessionId: string;
+  readonly forkSeq: number;
+  /** Events to append to the child in order: the copied prefix, THEN the `session.forkedFrom` marker. */
+  readonly events: readonly PublishInput[];
+  /** Count of copied conversation events (excludes the trailing `session.forkedFrom` record). */
+  readonly copied: number;
+}
+
+/**
+ * Plans a fork as a list of appends over the NORMAL session API - no store-specific fork operation. The
+ * copied prefix comes FIRST, then a single `session.forkedFrom` marker LAST: appending the lineage record
+ * only after the whole prefix is copied means its presence signals a COMPLETE fork (a crash mid-copy leaves
+ * a child with no marker, which a resumer ignores) - so the marker doubles as the fork-ready signal.
+ */
+export function planFork(args: {
+  readonly parentSessionId: string;
+  readonly parentEvents: readonly SessionEvent[];
+  readonly forkSeq: number;
+  readonly childSessionId: string;
+}): ForkPlan {
+  const seeds = buildForkPrefix({
+    parentSessionId: args.parentSessionId,
+    parentEvents: args.parentEvents,
+    forkSeq: args.forkSeq,
+  });
+  const forkedFrom = events.sessionForkedFrom({
+    parentSessionId: args.parentSessionId,
+    forkSeq: args.forkSeq,
+  });
+  const marker: PublishInput = {
+    type: forkedFrom.type,
+    producerId: PRODUCER_IDS.host,
+    payload: forkedFrom.payload,
+  };
+  return {
+    childSessionId: args.childSessionId,
+    parentSessionId: args.parentSessionId,
+    forkSeq: args.forkSeq,
+    events: [...seeds, marker],
+    copied: seeds.length,
+  };
+}
+
+/**
+ * Whether a child session's log shows a COMPLETED fork: the `session.forkedFrom` marker is present. Because
+ * the marker is appended after the copied prefix, its presence means the copy finished and the child is
+ * safe to resume.
+ */
+export function isForkReady(childEvents: readonly Pick<SessionEvent, "type">[]): boolean {
+  return childEvents.some((e) => e.type === "session.forkedFrom");
 }

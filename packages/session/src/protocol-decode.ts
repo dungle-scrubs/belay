@@ -522,6 +522,11 @@ export type DecodedEvent =
   | { readonly type: "session.archived"; readonly archived: boolean }
   | { readonly type: "session.title"; readonly title: string }
   | { readonly type: "session.deleted"; readonly deleted: boolean }
+  | {
+      readonly type: "session.forkedFrom";
+      readonly parentSessionId: string;
+      readonly forkSeq: number;
+    }
   | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
   | {
       readonly type: "shell.result";
@@ -835,6 +840,12 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       return { type: "session.title", title: str(p.title) };
     case "session.deleted":
       return { type: "session.deleted", deleted: p.deleted === true };
+    case "session.forkedFrom":
+      return {
+        type: "session.forkedFrom",
+        parentSessionId: str(p.parentSessionId),
+        forkSeq: asAnyNumber(p.forkSeq),
+      };
     case "user.shell":
       // A missing requestId falls back to the event's own id, so a forward-compat event still
       // pairs with its result rather than collapsing distinct shell runs together.

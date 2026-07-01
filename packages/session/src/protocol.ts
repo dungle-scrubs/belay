@@ -664,6 +664,16 @@ export const events = {
     payload: { deleted: p.deleted },
   }),
   /**
+   * The lineage record for a FORKED session (plan 15): the child's log records the parent it branched from
+   * and the parent seq it branched at ("branch from here"). Emitted ONCE on the CHILD session as its first
+   * event, so replaying the child alone recovers its origin and the inventory can surface parent→child
+   * lineage - all through the generic append API, with no fork columns in the store.
+   */
+  sessionForkedFrom: (p: { parentSessionId: string; forkSeq: number }): TrevorEventInput => ({
+    type: "session.forkedFrom",
+    payload: { parentSessionId: p.parentSessionId, forkSeq: p.forkSeq },
+  }),
+  /**
    * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately
    * through the live leader's protected `runShell` path, bypassing the model and the turn queue.
    * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
@@ -1011,6 +1021,7 @@ export const INVENTORY_EVENT_TYPES = {
   sessionArchived: "session.archived",
   sessionTitle: "session.title",
   sessionDeleted: "session.deleted",
+  sessionForkedFrom: "session.forkedFrom",
 } as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;
 
 export type { DecodedEvent } from "./protocol-decode";

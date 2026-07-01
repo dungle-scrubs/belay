@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 11
-- **Completed current work:** 6
+- **Current cutoff blockers:** 8
+- **Completed current work:** 9
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M2 - Fork Protocol and Host Operation
+- **Current focus:** M3 - Web Branch and Lineage UI
 
 ## Completed Current State / Hard Dependencies
 
@@ -19,9 +19,9 @@
 - [x] RED: Cover stable per-message ids and prefix selection.
 - [x] GREEN: Implement a clean "fresh linear session from prefix" builder.
 - [x] REFACTOR: Keep existing linear replay behavior unchanged.
-- [ ] RED: Cover `session.forkedFrom`, origin tags, `forkReady`, and self-contained child replay.
-- [ ] GREEN: Implement host fork operation over normal session append APIs.
-- [ ] REFACTOR: Keep Richter generic.
+- [x] RED: Cover `session.forkedFrom`, origin tags, `forkReady`, and self-contained child replay.
+- [x] GREEN: Implement host fork operation over normal session append APIs.
+- [x] REFACTOR: Keep Richter generic.
 - [ ] RED: Storybook/test branch-from-here and lineage states.
 - [ ] GREEN: Add explicit branch affordance and lineage navigator.
 - [ ] REFACTOR: Preserve session navigation/resume semantics.

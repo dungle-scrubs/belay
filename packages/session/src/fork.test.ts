@@ -5,9 +5,14 @@ import {
   FORK_ORIGIN_KEY,
   forkOriginOf,
   isForkableEvent,
+  isForkReady,
   messageId,
+  planFork,
   selectForkPrefix,
 } from "./fork";
+import { PRODUCER_IDS } from "./identity";
+import { events } from "./protocol";
+import { decodeTrevorEvent } from "./protocol-decode";
 
 /** Builds a minimal SessionEvent for the prefix tests. */
 function ev(seq: number, type: string, payload: Record<string, unknown> = {}): SessionEvent {
@@ -124,5 +129,53 @@ describe("fork prefix builder (M1)", () => {
     const child = { ...childEvent, sessionId: "child" };
     const seeds = buildForkPrefix({ parentSessionId: "child", parentEvents: [child], forkSeq: 2 });
     expect(seeds[0]?.payload[FORK_ORIGIN_KEY]).toEqual({ sessionId: "child", seq: 2 });
+  });
+});
+
+describe("session.forkedFrom lineage event (M2)", () => {
+  it("round-trips through the event constructor + decoder", () => {
+    const input = events.sessionForkedFrom({ parentSessionId: "parent", forkSeq: 5 });
+    expect(input.type).toBe("session.forkedFrom");
+    const decoded = decodeTrevorEvent(ev(1, "session.forkedFrom", input.payload));
+    expect(decoded).toEqual({ type: "session.forkedFrom", parentSessionId: "parent", forkSeq: 5 });
+  });
+});
+
+describe("fork plan over normal append APIs (M2)", () => {
+  it("appends the copied prefix FIRST, then the forkedFrom marker LAST", () => {
+    const plan = planFork({
+      parentSessionId: "parent",
+      parentEvents: PARENT,
+      forkSeq: 5,
+      childSessionId: "child",
+    });
+    expect(plan.childSessionId).toBe("child");
+    expect(plan.copied).toBe(4); // seq 1,2,4,5 forkable
+    // The last event is the lineage marker; everything before it is the copied prefix.
+    const types = plan.events.map((e) => e.type);
+    expect(types[types.length - 1]).toBe("session.forkedFrom");
+    expect(types.slice(0, -1)).toEqual([
+      "user.message",
+      "assistant.completed",
+      "model.switched",
+      "user.message",
+    ]);
+    // The marker records the parent + fork point and is host-produced.
+    const marker = plan.events[plan.events.length - 1];
+    expect(marker?.producerId).toBe(PRODUCER_IDS.host);
+    expect(marker?.payload).toEqual({ parentSessionId: "parent", forkSeq: 5 });
+  });
+
+  it("marks a child fork-ready only once the forkedFrom marker is present", () => {
+    const plan = planFork({
+      parentSessionId: "parent",
+      parentEvents: PARENT,
+      forkSeq: 5,
+      childSessionId: "child",
+    });
+    // A partial copy (prefix only, no marker yet) is NOT ready; the full plan IS.
+    const partial = plan.events.slice(0, -1).map((e) => ({ type: e.type }));
+    expect(isForkReady(partial)).toBe(false);
+    expect(isForkReady(plan.events.map((e) => ({ type: e.type })))).toBe(true);
   });
 });
