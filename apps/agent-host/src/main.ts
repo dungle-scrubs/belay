@@ -21,6 +21,7 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
+import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { isResidencyResourceKey } from "./admission/contract";
@@ -157,6 +158,9 @@ const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? serviceUrl("store");
 // Richter speaks the same SessionTransport contract as the local store, so backend selection is just
 // which URL the stream transport points at (no separate adapter until Richter needs real divergence).
 const transport = streamTransport(RICHTER_URL ?? SESSION_STORE_URL);
+// The host telemetry sink (plan 13 M5): NOOP unless TREVOR_OTEL_EXPORTER=file selects the local file
+// exporter. Threaded into every turn (publishTurn) so turn/tool spans are emitted when enabled.
+const hostTelemetry = createTelemetrySink("agent-host");
 // Local-model admission (plan 11): one cross-process gate per host serializes LM Studio generation +
 // reload across projects/subagents, so parallel work shares the runtime without overload or reload
 // races. Conservative default (capacity 1 per resource); foreground priority unless a future per-turn
@@ -636,6 +640,7 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       runId,
       reasoning: decoded.reasoning,
       delegate,
+      telemetry: hostTelemetry,
       ...(restricted ? { toolNames: CLIPBOARD_TOOL_NAMES } : {}),
       ...(seedUsage ? { seedUsage } : {}),
       ...(switchCell ? { switch: switchCell } : {}),

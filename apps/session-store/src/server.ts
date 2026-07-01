@@ -17,6 +17,7 @@ import {
   STREAM_PATTERN,
   summarizeSession,
 } from "@trevor/session";
+import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { type WebSocket, WebSocketServer } from "ws";
 import { SessionLog } from "./log";
 
@@ -49,7 +50,8 @@ const CORS_METHODS = "GET, POST, OPTIONS";
 
 /** Creates the session-store server backed by the SQLite log at `dbPath` (not listening). */
 export function createSessionStore(dbPath: string): Server {
-  const log = new SessionLog(dbPath);
+  // Telemetry is off (NOOP) unless TREVOR_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
+  const log = new SessionLog(dbPath, createTelemetrySink("session-store"));
 
   // Live subscribers per session, fed by appends; a socket is removed on close.
   const subscribers = new Map<string, Set<WebSocket>>();

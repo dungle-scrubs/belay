@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import { createService, json, type Route, readBody } from "@trevor/server-kit";
 import { BLOB_PATH_PATTERN, BLOBS_PATH } from "@trevor/session/blob-contract";
+import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { BlobStore } from "./store";
 import { heicToJpeg, isHeicMime, looksLikeHeic } from "./transcode";
 
@@ -17,7 +18,8 @@ import { heicToJpeg, isHeicMime, looksLikeHeic } from "./transcode";
  *   GET  /health           -> { ok: true }   (served by createService)
  */
 export function createBlobServer(root: string, maxBytes: number): Server {
-  const store = new BlobStore(root);
+  // Telemetry is off (NOOP) unless TREVOR_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
+  const store = new BlobStore(root, createTelemetrySink("blob-store"));
   // The `/blobs/<hash>` matcher (anchors already stripped for mid-pattern embedding) comes from the
   // shared contract, so the route can't drift from the client's path builder.
   const blobPath = BLOB_PATH_PATTERN;
