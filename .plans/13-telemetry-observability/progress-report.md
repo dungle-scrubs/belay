@@ -1,7 +1,7 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 1, M1 - state-root correction and telemetry config.
+> Current focus: Phase 2, M3 - Node service spans (Phase 1 M1-M2 complete).
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
@@ -717,6 +719,31 @@ const toolEnds = (events: readonly AgentEvent[]): string[] =>
   events
     .filter((e): e is Extract<AgentEvent, { type: "tool_end" }> => e.type === "tool_end")
     .map((e) => e.result);
+
+test("each tool execution emits a trevor.tool span (tool name + ok status, no args/output)", async () => {
+  const recorder = recordingTelemetrySink();
+  const events = await collect(
+    repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "secret.ts" }), rounds: 2 }),
+    {
+      telemetry: recorder.sink,
+      runTool: () => Effect.succeed("private tool output body"),
+    },
+  );
+  assert.ok(
+    events.some((e) => e.type === "text"),
+    "the turn still answers",
+  );
+
+  const spans = recorder.named(SPAN_NAMES.tool);
+  assert.equal(spans.length, 2, "one tool span per executed tool call");
+  assert.ok(
+    spans.every((s) => s.attributes.tool === "read" && s.status === "ok"),
+    "each span carries the tool name and an ok status",
+  );
+  const serialized = JSON.stringify(spans);
+  assert.ok(!serialized.includes("secret.ts"), "tool arguments never enter a span");
+  assert.ok(!serialized.includes("private tool output body"), "tool output never enters a span");
+});
 
 test("M4: repeated exact failures append concise guidance to the current tool result", async () => {
   // `read` is a registry read-only tool, but the injected runner makes it FAIL identically each round;

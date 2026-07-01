@@ -6,6 +6,7 @@ import {
   sameModel,
   type TurnStop,
 } from "@trevor/session";
+import { NOOP_SINK, SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
 import { envNumber } from "../env";
 import { debug, warn } from "../log";
@@ -30,6 +31,7 @@ import {
   classifyProviderProtocolAnomaly,
   type ProviderProtocolDiagnostic,
 } from "../providers/protocol-anomaly";
+import { spanEffect } from "../telemetry/span";
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
 import { fitsAfterSwitch } from "./context-guard";
 import { normalizeConversationForProvider } from "./cross-model";
@@ -471,6 +473,9 @@ export interface RunAgentOptions {
    *  not its source, so two sources serving the same id would otherwise be indistinguishable. Absent on a
    *  turn with no resolved ref (the first switch then always rebuilds). */
   readonly initialModel?: ModelRef;
+  /** The telemetry sink for per-tool spans (plan 13 M3); NOOP (disabled) unless the host wires an
+   *  exporter. Tool spans carry the tool name + ok/error/interrupted status, never args or output. */
+  readonly telemetry?: TelemetrySink;
 }
 
 export function runAgent(
@@ -495,6 +500,7 @@ export function runAgent(
     readOnly: READ_ONLY_TOOLS,
     ...(opts.guardrails ? { config: opts.guardrails } : {}),
   });
+  const sink = opts.telemetry ?? NOOP_SINK;
   const executeOne =
     opts.runTool ??
     ((name: string, args: string, callId: string): Effect.Effect<string> =>
@@ -503,13 +509,17 @@ export function runAgent(
     // A delegation tool-call is routed to the injected runner (it has the provider + transport the
     // generic executor lacks); everything else goes to the executor, gated by the allow-list. `callId`
     // is forwarded so a tool that needs the active tool-call id (ask_user) can correlate its UI events.
-    if (delegate?.names.has(name)) {
-      return Effect.promise(() => delegate.run(name, args));
-    }
-    if (opts.toolNames && !opts.toolNames.has(name)) {
-      return Effect.succeed(`error: tool "${name}" is not available to this agent`);
-    }
-    return executeOne(name, args, callId);
+    // Each execution is wrapped in a `trevor.tool` span (tool name + status only, never args/output).
+    const execute = (): Effect.Effect<string> => {
+      if (delegate?.names.has(name)) {
+        return Effect.promise(() => delegate.run(name, args));
+      }
+      if (opts.toolNames && !opts.toolNames.has(name)) {
+        return Effect.succeed(`error: tool "${name}" is not available to this agent`);
+      }
+      return executeOne(name, args, callId);
+    };
+    return execute().pipe(spanEffect(sink, SPAN_NAMES.tool, { tool: name }));
   };
   // One retry budget for an empty answer (the model ending a turn with no text and no
   // tool calls). A single nudge often gets it to synthesize; if it stays empty we
