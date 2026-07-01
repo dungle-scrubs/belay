@@ -425,6 +425,14 @@ export function publishTurn(
             provider: provider.id,
             model: provider.model,
           });
+          // The turn's provider reconnect count (plan 13 M5), recorded only when it retried at all, so a
+          // clean turn adds no noise. Bounded provider/model labels only.
+          if (reconnectAttempts > 0) {
+            recordMetric(sink, METRIC_NAMES.retryCount, reconnectAttempts, {
+              provider: provider.id,
+              model: provider.model,
+            });
+          }
 
           if (Exit.isSuccess(exit)) {
             // A clean end OR a malformed-protocol anomaly (which ends the stream successfully with a

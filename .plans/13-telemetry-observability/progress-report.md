@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 2, M5 - Metrics and local file export (M1-M4 complete: config, contract, span core, host turn/tool + blob/session-store spans, CLI launch + web bootstrap/upload/render-crash).
+> Current focus: Phase 2, M6 - Provider attempts + diagnostic result artifacts (M1-M5 complete: config, contract, spans, CLI/web spans, metrics + local file export).
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 65
-- Completed: 23
+- Current cutoff blockers: 58
+- Completed: 30
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -55,13 +55,13 @@
 
 ### M5: Metrics and local file export
 
-- [ ] RED: Add tests proving metrics reject high-cardinality labels such as run id, session id, raw URL, raw path, prompt, and command string
-- [ ] GREEN: Add low-cardinality metrics for turn duration, stop cause, provider latency, tool duration, exporter drops, retry counts, context pressure, service errors, and blob upload/fetch outcomes
-- [ ] RED: Add tests proving a per-turn model-switch count is recorded as a low-cardinality metric and that model id and reasoning stay bounded labels, not high-cardinality like run id or prompt
-- [ ] GREEN: Add a low-cardinality model-switch metric (count per turn with applied/blocked outcome) and record `model.switched` from `.plans/09.1-mid-turn-model-switch` as a turn-span boundary so multi-model turns are observable
-- [ ] RED: Add tests proving `TREVOR_OTEL_EXPORTER=file` writes bounded local artifacts under `TREVOR_STATE_HOME/otel`
-- [ ] GREEN: Implement local JSONL or OTLP JSON export with size caps and best-effort failure handling
-- [ ] REFACTOR: Add a send/drop ledger that records sanitized event metadata and drop reasons
+- [x] RED: Add tests proving metrics reject high-cardinality labels such as run id, session id, raw URL, raw path, prompt, and command string (`recordMetric` routes labels through `safeAttributes`; tested in telemetry-contract.test.ts + turn/blob metric tests assert no run id leaks)
+- [x] GREEN: Add low-cardinality metrics for turn duration, stop cause, provider latency, tool duration, exporter drops, retry counts, context pressure, service errors, and blob upload/fetch outcomes (emitted as counters: `trevor.turn.stop` cause, `trevor.turn.model_switch` outcome, `trevor.provider.retries`, `trevor.blob.outcome`. DURATIONS (turn/tool/provider latency, context pressure) ride the existing spans' `durationMs` - a metrics backend derives distributions from the span stream, so no redundant duration histograms in the file lane; exporter drops = the file sink's `stats().dropped` surfaced in /doctor M7; service-error counters deferred to when the store/blob HTTP layer is instrumented.)
+- [x] RED: Add tests proving a per-turn model-switch count is recorded as a low-cardinality metric and that model id and reasoning stay bounded labels, not high-cardinality like run id or prompt (turn.test.ts)
+- [x] GREEN: Add a low-cardinality model-switch metric (count per turn with applied/blocked outcome) and record `model.switched` from `.plans/09.1-mid-turn-model-switch` as a turn-span boundary so multi-model turns are observable (`trevor.turn.model_switch` on each `model_switched` event, outcome + initiator labels)
+- [x] RED: Add tests proving `TREVOR_OTEL_EXPORTER=file` writes bounded local artifacts under `TREVOR_STATE_HOME/otel` (telemetry-file-sink.test.ts)
+- [x] GREEN: Implement local JSONL or OTLP JSON export with size caps and best-effort failure handling (`createFileSink` -> `TREVOR_STATE_HOME/otel/<service>.jsonl`, byte cap drops+counts, guarded writes; `createTelemetrySink` selects it from config; wired into host + both stores)
+- [x] REFACTOR: Add a send/drop ledger that records sanitized event metadata and drop reasons (the JSONL file IS the sanitized send ledger; `FileSinkStats { written, dropped, path }` is the drop ledger, surfaced by /doctor M7)
 
 ### M6: Provider attempts and diagnostic result artifacts
 
