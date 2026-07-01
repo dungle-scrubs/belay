@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
+import { recordingTelemetrySink } from "@trevor/test-kit";
 import { test } from "vitest";
 import type { LauncherFs } from "../src/fs";
 import { recordHost } from "../src/host-registry";
@@ -34,6 +36,7 @@ interface FakeOpts {
   processAlive?: (pid: number) => boolean;
   hostPresent?: boolean;
   lockHeldByLive?: number; // a concurrent live launcher already holding the session lock
+  telemetry?: TelemetrySink;
 }
 
 interface Spy {
@@ -83,6 +86,7 @@ function makePlatform(opts: FakeOpts = {}): Spy {
       opened.push(url);
       return Promise.resolve();
     },
+    ...(opts.telemetry ? { telemetry: opts.telemetry } : {}),
   };
   // Pre-seat a concurrent live lock holder if requested.
   if (opts.lockHeldByLive) {
@@ -95,6 +99,45 @@ function makePlatform(opts: FakeOpts = {}): Spy {
   }
   return { platform, started, spawned, opened };
 }
+
+test("a launch emits a trevor.cli.launch span with host action + counts, no paths/session ids/urls", async () => {
+  const recorder = recordingTelemetrySink();
+  const spy = makePlatform({
+    gitRoot: "/work/app",
+    telemetry: recorder.sink,
+    probes: {
+      web: { reachable: true, ours: true },
+      blob: { reachable: false, ours: false },
+      store: { reachable: false, ours: false },
+    },
+  });
+  const outcome = await launch(spy.platform);
+
+  const [span] = recorder.named(SPAN_NAMES.cliLaunch);
+  assert.ok(span, "a launch span was recorded");
+  assert.equal(span?.status, "ok");
+  assert.equal(span?.attributes.host_action, outcome.hostAction);
+  assert.equal(span?.attributes.started_services, outcome.startedServices.length);
+  assert.equal(span?.attributes.online, outcome.online);
+  const serialized = JSON.stringify(span);
+  assert.ok(!serialized.includes(outcome.sessionId), "the session id never enters the span");
+  assert.ok(!serialized.includes("/work/app"), "the project path never enters the span");
+  assert.ok(!serialized.includes(outcome.url), "the session URL never enters the span");
+});
+
+test("a launch failure records an error launch span and rethrows", async () => {
+  const recorder = recordingTelemetrySink();
+  const spy = makePlatform({ gitRoot: "/work/app", telemetry: recorder.sink });
+  // Force a failure deep in the lifecycle: waitForStore rejects.
+  const platform: LaunchPlatform = {
+    ...spy.platform,
+    waitForStore: () => Promise.reject(new Error("store never came up")),
+  };
+  await assert.rejects(launch(platform), /store never came up/);
+  const [span] = recorder.named(SPAN_NAMES.cliLaunch);
+  assert.equal(span?.status, "error");
+  assert.ok(span?.error?.includes("store never came up"));
+});
 
 test("a fresh launch starts missing services, spawns the host, and opens the session URL", async () => {
   const spy = makePlatform({

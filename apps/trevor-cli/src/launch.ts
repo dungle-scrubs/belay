@@ -1,3 +1,10 @@
+import {
+  NOOP_SINK,
+  redactAttributeValue,
+  SPAN_NAMES,
+  safeAttributes,
+  type TelemetrySink,
+} from "@trevor/session/telemetry";
 import type { LauncherFs } from "./fs";
 import {
   acquireLock,
@@ -44,6 +51,9 @@ export interface LaunchPlatform {
   /** This launcher process's pid (for the lock owner). */
   readonly pid: number;
   readonly reporter: Reporter;
+  /** Telemetry sink for the launch span (plan 13 M4); NOOP (disabled) unless an exporter is wired. The
+   *  span carries only debug + host action + counts, never paths, session ids, or URLs. */
+  readonly telemetry?: TelemetrySink;
   now(): string;
   processAlive(pid: number): boolean;
   probeService(name: ServiceName, port: number): Promise<ServiceProbe>;
@@ -81,7 +91,56 @@ export function sessionUrl(sessionId: string): string {
   return `${serviceUrl("web")}/?session=${sessionId}`;
 }
 
+/** Launches (or attaches to) a session, wrapped in a `trevor.cli.launch` span: the span times the whole
+ *  lifecycle and records the host action + started-service count + online outcome (no paths / session
+ *  ids / URLs). Delegates to {@link launchInner}, which owns the actual orchestration. */
 export async function launch(
+  platform: LaunchPlatform,
+  options: {
+    readonly debug?: boolean;
+    readonly session?: { readonly sessionId: string; readonly root: string };
+  } = {},
+): Promise<LaunchOutcome> {
+  const sink = platform.telemetry ?? NOOP_SINK;
+  const startedAt = Date.now();
+  try {
+    const outcome = await launchInner(platform, options);
+    emitLaunchSpan(sink, "ok", Date.now() - startedAt, {
+      host_action: outcome.hostAction,
+      started_services: outcome.startedServices.length,
+      online: outcome.online,
+    });
+    return outcome;
+  } catch (error) {
+    emitLaunchSpan(sink, "error", Date.now() - startedAt, { debug: options.debug ?? false }, error);
+    throw error;
+  }
+}
+
+/** Records the launch span, best-effort (a telemetry failure must never fail a launch). */
+function emitLaunchSpan(
+  sink: TelemetrySink,
+  status: "ok" | "error",
+  durationMs: number,
+  attributes: Readonly<Record<string, unknown>>,
+  error?: unknown,
+): void {
+  try {
+    sink.span({
+      name: SPAN_NAMES.cliLaunch,
+      attributes: safeAttributes(attributes),
+      status,
+      durationMs: Math.max(0, durationMs),
+      ...(error
+        ? { error: redactAttributeValue(error instanceof Error ? error.message : String(error)) }
+        : {}),
+    });
+  } catch {
+    // telemetry is best-effort
+  }
+}
+
+async function launchInner(
   platform: LaunchPlatform,
   options: {
     readonly debug?: boolean;
