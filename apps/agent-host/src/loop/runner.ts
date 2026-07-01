@@ -18,6 +18,10 @@ export interface IterationOutcome {
   readonly summary: string;
   /** Set only when `ok` is false. */
   readonly error?: string;
+  /** For an `until` loop: the runner judged the stop CONDITION satisfied this iteration, so the loop should
+   *  complete (`until_satisfied`). Only the prompt/background paths can judge it; a process path leaves it
+   *  unset (an `until` process loop relies on max/timeout/stop instead). */
+  readonly conditionMet?: boolean;
 }
 
 /** The per-runner-type execution seams. Injected; main.ts binds them to the real host paths. */
@@ -26,14 +30,15 @@ export interface LoopRunnerSeams {
   readonly runProcess: (
     command: string,
   ) => Promise<{ readonly ok: boolean; readonly output: string }>;
-  /** Injects a prompt into the CURRENT session's turn and resolves when it completes. */
+  /** Injects a prompt into the CURRENT session's turn and resolves when it completes. `conditionMet` lets
+   *  an `until` loop signal its stop condition was judged satisfied this iteration. */
   readonly runPrompt: (
     prompt: string,
-  ) => Promise<{ readonly ok: boolean; readonly summary: string }>;
+  ) => Promise<{ readonly ok: boolean; readonly summary: string; readonly conditionMet?: boolean }>;
   /** Spawns a BACKGROUND agent for the prompt without blocking the active session, resolving on completion. */
   readonly runBackground: (
     prompt: string,
-  ) => Promise<{ readonly ok: boolean; readonly summary: string }>;
+  ) => Promise<{ readonly ok: boolean; readonly summary: string; readonly conditionMet?: boolean }>;
 }
 
 /** Runs one iteration of a loop's body. */
@@ -65,13 +70,21 @@ export function createLoopIterationRunner(seams: LoopRunnerSeams): LoopIteration
         case "current_session_prompt": {
           const result = await seams.runPrompt(spec.action);
           return result.ok
-            ? { ok: true, summary: result.summary }
+            ? {
+                ok: true,
+                summary: result.summary,
+                ...(result.conditionMet ? { conditionMet: true } : {}),
+              }
             : { ok: false, summary: result.summary, error: result.summary };
         }
         case "background_agent": {
           const result = await seams.runBackground(spec.action);
           return result.ok
-            ? { ok: true, summary: result.summary }
+            ? {
+                ok: true,
+                summary: result.summary,
+                ...(result.conditionMet ? { conditionMet: true } : {}),
+              }
             : { ok: false, summary: result.summary, error: result.summary };
         }
       }

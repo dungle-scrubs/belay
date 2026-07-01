@@ -52,6 +52,8 @@ export interface LoopSnapshot {
   readonly completed: number;
   /** The `max` bound, when set (for a `completed/N` progress display). */
   readonly max?: number;
+  /** Epoch-ms time the next cadence iteration is scheduled to fire, when the loop is running on a timer. */
+  readonly nextRun?: number;
   /** Set once terminal: why the loop ended. */
   readonly stopReason?: LoopStopReason;
   /** Set only for `failed`: the execution error. */

@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M6: Scheduling, Persistence, And Controls
-- Current cutoff blockers: 29 unchecked
+> Current focus: M7: Existing Web Helper Integration
+- Current cutoff blockers: 19 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -63,19 +63,19 @@
 
 ### M6: Scheduling, Persistence, And Controls
 
-- [ ] RED: Add tests for `every` cadence with exactly one active timer per loop.
-- [ ] GREEN: Implement loop scheduling and next-run calculation.
-- [ ] RED: Add tests for `run-now`, pause, resume, stop, delete, and list controls.
-- [ ] GREEN: Implement control commands and status events.
-- [ ] RED: Add restart tests proving durable loops retain last-known status and next-run time.
-- [ ] GREEN: Persist durable loop state in the approved Trevor storage root.
-- [ ] REFACTOR: Keep transient and durable loop state clearly separated.
+- [x] RED: Add tests for `every` cadence with exactly one active timer per loop.
+- [x] GREEN: Implement loop scheduling and next-run calculation.
+- [x] RED: Add tests for `run-now`, pause, resume, stop, delete, and list controls.
+- [x] GREEN: Implement control commands and status events.
+- [x] RED: Add restart tests proving durable loops retain last-known status and next-run time.
+- [x] GREEN: Persist durable loop state in the approved Trevor storage root.
+- [x] REFACTOR: Keep transient and durable loop state clearly separated.
 
 ### Gate 2 to 3
 
-- [ ] Host loop lifecycle, runner, persistence, and control integration tests pass.
-- [ ] Every loop has a visible bound/cadence and explicit controls.
-- [ ] Durable loop restart behavior is covered by tests.
+- [x] Host loop lifecycle, runner, persistence, and control integration tests pass.
+- [x] Every loop has a visible bound/cadence and explicit controls.
+- [x] Durable loop restart behavior is covered by tests.
 
 ### M7: Existing Web Helper Integration
 

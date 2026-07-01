@@ -6,22 +6,33 @@ import {
 } from "@trevor/session";
 import {
   cancelLoop,
+  completeLoop,
   confirmLoop,
   createLoop,
+  deleteLoop,
+  failLoop,
   type LoopState,
   type LoopTransition,
+  pauseLoop,
+  recordIteration,
   requestConfirmation,
+  resumeLoop,
+  stopLoop,
 } from "./domain";
+import type { PersistedLoop } from "./persistence";
+import type { LoopIterationRunner } from "./runner";
+import { LoopScheduler } from "./scheduler";
 
 /**
- * The runtime `/loop` STORE (plan 17, M4 tasks 5-6): the in-memory registry that holds every loop by id and
- * drives the CONFIRMATION FLOW - a ready `/loop` submission becomes a `pending` draft awaiting the user's
- * confirm/edit/cancel, and only an explicit confirm activates recurring work (D-004: never start work
- * directly). Every transition publishes a structured {@link LoopSnapshot} through the injected sink, so a
- * client - the rich web helper or a headless one - drives and observes loops entirely over the protocol.
+ * The runtime `/loop` STORE (plan 17, M4-M6): the in-memory registry that holds every loop by id, drives the
+ * CONFIRMATION FLOW (D-004: a ready submission parks `pending`, only confirm activates), and once activated
+ * SCHEDULES + RUNS iterations - a cadence (`every`) loop on its interval, a continuous loop back-to-back -
+ * through the injected {@link LoopIterationRunner}, applying the pure domain transitions and publishing a
+ * structured {@link LoopSnapshot} on every change. It exposes the full control surface (pause/resume/stop/
+ * delete/run-now/list) and a persistence seam for durable loops.
  *
- * The store owns lifecycle + the confirmation flow ONLY. Scheduling, runner execution, and durable
- * persistence layer on top in M5/M6; the pure transitions live in `domain.ts`.
+ * Transient state (the in-memory map + timers) is kept separate from durability: the store calls `persist`
+ * on each durable-loop change and rehydrates via {@link LoopStore.hydrate} at startup; it never does file IO.
  */
 
 /** The sink the store publishes each loop's status snapshot to (wired to `emit(events.loopStatus(...))`). */
@@ -31,6 +42,12 @@ export interface LoopStoreDeps {
   readonly emit: LoopEventSink;
   /** Mints a fresh loop id (injectable for deterministic tests); defaults to a monotonic `loop_N`. */
   readonly makeId?: () => string;
+  /** Runs one iteration's body. When present (with `scheduler`), confirmed loops actually execute. */
+  readonly runner?: LoopIterationRunner;
+  /** The timer owner. Defaults to a real-clock scheduler; a manual clock makes cadence deterministic. */
+  readonly scheduler?: LoopScheduler;
+  /** Called on every DURABLE loop change with its latest record (state + next-run), for persistence (M6). */
+  readonly persist?: (record: PersistedLoop) => void;
 }
 
 /** A store operation result: the affected loop's snapshot, or an explainable rejection. */
@@ -71,7 +88,7 @@ export function summarizeLoopSpec(spec: LoopSpec): string {
 }
 
 /** The read-model snapshot of one loop state (the payload of a `loop.status` event). */
-export function loopSnapshot(state: LoopState): LoopSnapshot {
+export function loopSnapshot(state: LoopState, nextRun?: number): LoopSnapshot {
   return {
     loopId: state.id,
     status: state.status,
@@ -80,6 +97,7 @@ export function loopSnapshot(state: LoopState): LoopSnapshot {
     summary: summarizeLoopSpec(state.spec),
     completed: state.completed,
     ...(state.spec.max !== undefined ? { max: state.spec.max } : {}),
+    ...(nextRun !== undefined ? { nextRun } : {}),
     ...(state.stopReason !== undefined ? { stopReason: state.stopReason } : {}),
     ...(state.error !== undefined ? { error: state.error } : {}),
   };
@@ -101,13 +119,25 @@ export function toClientStatus(status: LoopState["status"]): LoopStatus | "hidde
 
 export class LoopStore {
   private readonly loops = new Map<string, LoopState>();
+  private readonly deadlines = new Map<string, number>();
   private readonly emit: LoopEventSink;
   private readonly makeId: () => string;
+  private readonly runner?: LoopIterationRunner;
+  private readonly scheduler: LoopScheduler;
+  private readonly persist?: (record: PersistedLoop) => void;
   private counter = 0;
 
   constructor(deps: LoopStoreDeps) {
     this.emit = deps.emit;
     this.makeId = deps.makeId ?? (() => `loop_${(this.counter += 1)}`);
+    this.runner = deps.runner;
+    this.scheduler = deps.scheduler ?? new LoopScheduler();
+    this.persist = deps.persist;
+  }
+
+  /** Whether this store actually executes iterations (both a runner and its scheduler are wired). */
+  private get driving(): boolean {
+    return this.runner !== undefined;
   }
 
   /** All non-deleted loops, oldest first (insertion order). */
@@ -117,6 +147,17 @@ export class LoopStore {
 
   get(loopId: string): LoopState | undefined {
     return this.loops.get(loopId);
+  }
+
+  /**
+   * Restore loops (durable ones) at startup WITHOUT re-running any effects or re-emitting. A loop that was
+   * `running`/`paused` when the host stopped is restored as-is (its last-known status + counters); the
+   * caller decides whether to resume driving. Kept side-effect-free so hydration is idempotent.
+   */
+  hydrate(states: readonly LoopState[]): void {
+    for (const state of states) {
+      this.loops.set(state.id, state);
+    }
   }
 
   /**
@@ -135,15 +176,25 @@ export class LoopStore {
     return this.commit(pending.state);
   }
 
-  /** Confirm a `pending` loop: activation. Recurring work begins (execution/scheduling land in M5/M6). */
+  /** Confirm a `pending` loop: activation. Sets any timeout deadline and starts driving iterations. The
+   *  timer is scheduled BEFORE the snapshot is published so the running snapshot carries its `nextRun`. */
   confirm(loopId: string): LoopResult {
-    return this.transition(loopId, confirmLoop);
+    const loop = this.loops.get(loopId);
+    if (loop === undefined) {
+      return { ok: false, error: `unknown loop ${loopId}` };
+    }
+    const next = confirmLoop(loop);
+    if (!next.ok) {
+      return { ok: false, error: next.reason };
+    }
+    if (next.state.spec.timeoutMs !== undefined) {
+      this.deadlines.set(loopId, this.scheduler.now() + next.state.spec.timeoutMs);
+    }
+    this.scheduleNext(next.state);
+    return this.commit(next.state);
   }
 
-  /**
-   * Replace a still-`pending` loop's definition with a re-parsed submission, keeping it `pending` (D-012:
-   * edit before activation). Rejected once the loop is running or terminal.
-   */
+  /** Replace a still-`pending` loop's definition with a re-parsed submission, keeping it `pending`. */
   edit(loopId: string, input: string): LoopResult {
     const loop = this.loops.get(loopId);
     if (loop === undefined) {
@@ -168,6 +219,61 @@ export class LoopStore {
     return this.transition(loopId, cancelLoop);
   }
 
+  /** Pause a running loop: cancel its timer, keep its progress. */
+  pause(loopId: string): LoopResult {
+    const result = this.transition(loopId, pauseLoop);
+    if (result.ok) {
+      this.scheduler.cancel(loopId);
+    }
+    return result;
+  }
+
+  /** Resume a paused loop: reschedule its next iteration (before publishing, so `nextRun` is present). */
+  resume(loopId: string): LoopResult {
+    const loop = this.loops.get(loopId);
+    if (loop === undefined) {
+      return { ok: false, error: `unknown loop ${loopId}` };
+    }
+    const next = resumeLoop(loop);
+    if (!next.ok) {
+      return { ok: false, error: next.reason };
+    }
+    this.scheduleNext(next.state);
+    return this.commit(next.state);
+  }
+
+  /** Stop a running/paused loop: cancel its timer and mark it stopped. */
+  stop(loopId: string): LoopResult {
+    const result = this.transition(loopId, stopLoop);
+    if (result.ok) {
+      this.clearTiming(loopId);
+    }
+    return result;
+  }
+
+  /** Soft-delete a loop from any state: cancel its timer and hide it. */
+  delete(loopId: string): LoopResult {
+    const result = this.transition(loopId, deleteLoop);
+    if (result.ok) {
+      this.clearTiming(loopId);
+    }
+    return result;
+  }
+
+  /** Run one iteration NOW (a running loop), pre-empting the cadence wait; the cadence then continues. */
+  runNow(loopId: string): LoopResult {
+    const loop = this.loops.get(loopId);
+    if (loop === undefined) {
+      return { ok: false, error: `unknown loop ${loopId}` };
+    }
+    if (loop.status !== "running") {
+      return { ok: false, error: `cannot run-now a ${loop.status} loop` };
+    }
+    // Fire immediately (delay 0), replacing the pending cadence timer (one-timer invariant preserved).
+    this.scheduler.schedule(loopId, 0, () => this.tick(loopId));
+    return { ok: true, snapshot: this.snapshotOf(loop) };
+  }
+
   /** Applies a domain transition to a stored loop, committing + publishing the result. */
   private transition(loopId: string, step: (state: LoopState) => LoopTransition): LoopResult {
     const loop = this.loops.get(loopId);
@@ -181,10 +287,100 @@ export class LoopStore {
     return this.commit(next.state);
   }
 
-  /** Stores the new state and publishes its snapshot. */
+  /** Schedule the next iteration of a running loop, honoring the cadence and any timeout deadline. */
+  private scheduleNext(state: LoopState): void {
+    if (!this.driving || state.status !== "running") {
+      return;
+    }
+    const cadence = state.spec.everyMs ?? 0;
+    const deadline = this.deadlines.get(state.id);
+    if (deadline === undefined) {
+      this.scheduler.schedule(state.id, cadence, () => this.tick(state.id));
+      return;
+    }
+    const remaining = deadline - this.scheduler.now();
+    if (remaining <= 0) {
+      this.finishTimeout(state);
+      return;
+    }
+    this.scheduler.schedule(state.id, Math.min(cadence, remaining), () => this.tick(state.id));
+  }
+
+  /** A scheduled fire: complete on a reached deadline, else run one iteration. */
+  private tick(loopId: string): void {
+    const loop = this.loops.get(loopId);
+    if (loop === undefined || loop.status !== "running") {
+      return;
+    }
+    const deadline = this.deadlines.get(loopId);
+    if (deadline !== undefined && this.scheduler.now() >= deadline) {
+      this.finishTimeout(loop);
+      return;
+    }
+    void this.runIteration(loopId);
+  }
+
+  /** Run one iteration's body, apply the resulting transition, and reschedule while still running. */
+  private async runIteration(loopId: string): Promise<void> {
+    const before = this.loops.get(loopId);
+    if (this.runner === undefined || before === undefined || before.status !== "running") {
+      return;
+    }
+    const outcome = await this.runner.run(before.spec);
+    // The loop may have been paused/stopped/deleted while the body ran; re-read and bail if so.
+    const current = this.loops.get(loopId);
+    if (current === undefined || current.status !== "running") {
+      return;
+    }
+    let next: LoopTransition;
+    if (!outcome.ok) {
+      next = failLoop(current, outcome.error ?? "iteration failed");
+    } else if (outcome.conditionMet && current.spec.until !== undefined) {
+      next = completeLoop(current, "until_satisfied");
+    } else {
+      next = recordIteration(current); // increments; auto-completes at max
+    }
+    if (!next.ok) {
+      return;
+    }
+    // Schedule/clear the timer BEFORE committing so the published + persisted snapshot carries a fresh
+    // next-run (the just-fired timer cleared the old one).
+    if (next.state.status === "running") {
+      this.scheduleNext(next.state);
+    } else {
+      this.clearTiming(loopId);
+    }
+    this.commit(next.state);
+  }
+
+  /** Complete a loop because its wall-clock timeout elapsed. */
+  private finishTimeout(state: LoopState): void {
+    const done = completeLoop(state, "timeout");
+    if (done.ok) {
+      this.commit(done.state);
+    }
+    this.clearTiming(state.id);
+  }
+
+  /** Drop a loop's timer + deadline (a terminal loop keeps neither). */
+  private clearTiming(loopId: string): void {
+    this.scheduler.cancel(loopId);
+    this.deadlines.delete(loopId);
+  }
+
+  /** Builds a snapshot with the loop's live next-run time (when scheduled). */
+  private snapshotOf(state: LoopState): LoopSnapshot {
+    return loopSnapshot(state, this.scheduler.nextRunAt(state.id));
+  }
+
+  /** Stores the new state, persists it when durable, and publishes its snapshot. */
   private commit(state: LoopState): LoopResult {
     this.loops.set(state.id, state);
-    const snapshot = loopSnapshot(state);
+    const nextRun = this.scheduler.nextRunAt(state.id);
+    if (state.spec.durability === "durable" && this.persist !== undefined) {
+      this.persist({ ...state, ...(nextRun !== undefined ? { nextRun } : {}) });
+    }
+    const snapshot = loopSnapshot(state, nextRun);
     this.emit(snapshot);
     return { ok: true, snapshot };
   }
