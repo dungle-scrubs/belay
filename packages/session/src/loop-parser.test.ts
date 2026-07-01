@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { LOOP_CONTROL_VERBS, LOOP_FAMILY, loopGrammar } from "./loop-command";
-import { classifyLoopCommand, parseDurationMs, parseLoopCommand } from "./loop-parser";
+import {
+  classifyLoopCommand,
+  extractLoopSpec,
+  parseDurationMs,
+  parseLoopCommand,
+} from "./loop-parser";
 
 test("the legend derives from the descriptor keywords - no separate hand-maintained list (D-016)", () => {
   const { legend } = loopGrammar();
@@ -244,4 +249,35 @@ test("an unknown token is an info diagnostic and does not block a valid loop", (
   assert.ok(result.diagnostics.some((diagnostic) => diagnostic.code === "unknown_token"));
   // unknown_token is info severity, so a bounded + actioned loop is still ready.
   assert.equal(result.ready, true);
+});
+
+// --- M4: typed spec extraction from a ready creation ---
+
+test("extractLoopSpec compiles a ready creation into a typed, ms-normalized spec", () => {
+  const spec = extractLoopSpec('/loop background durable every 5m timeout 1h do "sweep"');
+  assert.deepEqual(spec, {
+    runner: "background_agent",
+    durability: "durable",
+    action: "sweep",
+    everyMs: 300_000,
+    timeoutMs: 3_600_000,
+  });
+});
+
+test("extractLoopSpec normalizes max to a number and keeps until text", () => {
+  assert.deepEqual(extractLoopSpec('/loop max 5 do "run tests"'), {
+    runner: "current_session_prompt",
+    durability: "session",
+    action: "run tests",
+    max: 5,
+  });
+  assert.equal(extractLoopSpec('/loop until "green" do "fix"')?.until, "green");
+});
+
+test("extractLoopSpec returns undefined for a control line, a draft, or an error", () => {
+  assert.equal(extractLoopSpec("/loop stop loop_1"), undefined); // control, not create
+  assert.equal(extractLoopSpec("/loop list"), undefined); // list
+  assert.equal(extractLoopSpec('/loop do "x"'), undefined); // no bound
+  assert.equal(extractLoopSpec("/loop max 5"), undefined); // no action
+  assert.equal(extractLoopSpec('/loop max 0 do "x"'), undefined); // invalid_max error
 });

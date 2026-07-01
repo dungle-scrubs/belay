@@ -21,6 +21,7 @@ import {
   type LoopDurability,
   type LoopProtocolAction,
   type LoopRunner,
+  type LoopSpec,
   loopGrammar,
   loopRunnerLabel,
 } from "./loop-command";
@@ -163,6 +164,45 @@ export function classifyLoopCommand(input: string): {
   return { action: "create" };
 }
 
+/**
+ * The typed {@link LoopSpec} a READY `/loop` creation compiles to, or undefined when the input is not a
+ * ready creation (a control/list line, an incomplete draft, or any error-severity diagnostic). Reuses the
+ * SAME validated token-walk as the parser - durations normalize to milliseconds, `max` to a number - so the
+ * host's authoritative create path never re-derives the grammar. This is the create-side bridge D-002 needs.
+ */
+export function extractLoopSpec(input: string): LoopSpec | undefined {
+  const raw = tokenize(input);
+  const head = raw[0];
+  if (head === undefined || !LOOP_COMMAND_NAMES.includes(head.value as "/loop" | "/loops")) {
+    return undefined;
+  }
+  const second = raw[1];
+  if (second !== undefined && (CONTROL_VERBS.has(second.value) || second.value === "list")) {
+    return undefined;
+  }
+  const { fields, diagnostics } = walkCreation(raw, input);
+  const hasBound =
+    fields.max !== undefined ||
+    fields.every !== undefined ||
+    fields.until !== undefined ||
+    fields.timeout !== undefined;
+  const hasAction = fields.action !== undefined && fields.action.trim().length > 0;
+  if (!hasBound || !hasAction || diagnostics.some((d) => d.severity === "error")) {
+    return undefined;
+  }
+  const everyMs = fields.every !== undefined ? parseDurationMs(fields.every) : undefined;
+  const timeoutMs = fields.timeout !== undefined ? parseDurationMs(fields.timeout) : undefined;
+  return {
+    runner: fields.runner,
+    durability: fields.durability,
+    action: fields.action as string,
+    ...(fields.max !== undefined ? { max: Number(fields.max) } : {}),
+    ...(everyMs !== undefined ? { everyMs } : {}),
+    ...(fields.until !== undefined ? { until: fields.until } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  };
+}
+
 /** Build the parse result for a control/list command (no builder rows). */
 function controlResult(raw: readonly RawToken[], mode: "control" | "list"): CommandParseResult {
   const head = raw[0];
@@ -190,12 +230,16 @@ function controlResult(raw: readonly RawToken[], mode: "control" | "list"): Comm
   };
 }
 
-/** Walk a `/loop` creation line into the full create-mode parse result. */
-function createResult(
-  raw: readonly RawToken[],
-  command: string,
-  input: string,
-): CommandParseResult {
+interface CreationWalk {
+  readonly tokens: CommandToken[];
+  readonly fields: CreationFields;
+  readonly diagnostics: CommandDiagnostic[];
+  readonly sawDo: boolean;
+}
+
+/** Walk a `/loop` creation line's tokens into the structured fields, tokens, and diagnostics shared by the
+ *  UI parse result ({@link createResult}) and the host's typed spec extraction ({@link extractLoopSpec}). */
+function walkCreation(raw: readonly RawToken[], input: string): CreationWalk {
   const head = raw[0];
   const tokens: CommandToken[] = head
     ? [{ end: head.end, kind: "command", start: head.start }]
@@ -293,7 +337,17 @@ function createResult(
     index += 1;
   }
 
-  return finalizeCreate(command, tokens, fields, diagnostics, sawDo);
+  return { tokens, fields, diagnostics, sawDo };
+}
+
+/** Walk a `/loop` creation line into the full create-mode parse result. */
+function createResult(
+  raw: readonly RawToken[],
+  command: string,
+  input: string,
+): CommandParseResult {
+  const walk = walkCreation(raw, input);
+  return finalizeCreate(command, walk.tokens, walk.fields, walk.diagnostics, walk.sawDo);
 }
 
 interface TakenValue {

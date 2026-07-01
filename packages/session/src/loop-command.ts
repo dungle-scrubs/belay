@@ -124,6 +124,22 @@ export function loopGrammar(): {
   };
 }
 
+/**
+ * The structured, validated definition a READY `/loop` creation compiles to: the work plus its bounds.
+ * The host domain builds its loop state around this; durations are normalized to milliseconds and `max` to
+ * a number, so a runtime never re-parses text. `runner`/`durability`/`action` are always present; a valid
+ * spec carries at least one of `max`, `everyMs`, `until`, `timeoutMs` (the deterministic-bound rule, D-004).
+ */
+export interface LoopSpec {
+  readonly runner: LoopRunner;
+  readonly durability: LoopDurability;
+  readonly action: string;
+  readonly max?: number;
+  readonly everyMs?: number;
+  readonly until?: string;
+  readonly timeoutMs?: number;
+}
+
 /** A client-facing inventory row (mirrors the host read model). */
 export interface LoopInventoryRow {
   readonly loopId: string;

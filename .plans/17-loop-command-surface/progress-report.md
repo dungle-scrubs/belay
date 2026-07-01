@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M4: Loop Domain And Lifecycle
-- Current cutoff blockers: 43 unchecked
+> Current focus: M4: confirmation flow (draft->pending->running via protocol events) + loop store
+- Current cutoff blockers: 38 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -43,13 +43,13 @@
 
 ### M4: Loop Domain And Lifecycle
 
-- [ ] RED: Add host-domain tests for draft/pending confirmation, running, paused, stopped, completed, failed, and deleted states.
-- [ ] GREEN: Implement the loop domain model, lifecycle transitions, stop reasons, and state guards.
-- [ ] RED: Add validation tests requiring an action plus `max`, `until`, `every`, or `timeout`.
-- [ ] GREEN: Enforce bounded recurring work before activation.
+- [x] RED: Add host-domain tests for draft/pending confirmation, running, paused, stopped, completed, failed, and deleted states.
+- [x] GREEN: Implement the loop domain model, lifecycle transitions, stop reasons, and state guards.
+- [x] RED: Add validation tests requiring an action plus `max`, `until`, `every`, or `timeout`.
+- [x] GREEN: Enforce bounded recurring work before activation.
 - [ ] RED: Add tests for confirm/edit/cancel before activation.
 - [ ] GREEN: Implement confirmation flow through structured command/session protocol events.
-- [ ] REFACTOR: Keep draft validation separate from execution scheduling.
+- [x] REFACTOR: Keep draft validation separate from execution scheduling.
 
 ### M5: Runner Execution
 
