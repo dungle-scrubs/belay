@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 28
+- **Current cutoff blockers:** 15
 - **Completed current work:** 5
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M4 - Evict-on-Last-Release
+- **Current focus:** M6 - Doctor Residency Surface
 - **Note:** Phases 2-4 are gated on `.plans/11-local-admission-control` (shared store, lifecycle lease, generation registry); Phase 1 (context cap) has no plan 11 dependency. See implementation.md §0 for the full hard-dependency list.
 
 ## Completed Current State / Hard Dependencies
@@ -62,25 +62,25 @@
 
 #### M4: Evict-on-Last-Release Under the Lifecycle Lease
 
-- [ ] RED: Add a test where an instance switches its active local model, releases the prior claim, and the model is unloaded ONLY if no other live claim and no active generation lease reference it.
-- [ ] GREEN: Implement the eviction sweep - acquire the `local-provider-lifecycle` resource, then unload a Trevor-loaded model whose live claim count is zero and which has no active generation lease.
-- [ ] RED: Add a cross-instance test: instance A mid-generation on model X; instance B switching away from X must NOT unload X.
-- [ ] GREEN: Gate eviction on no-active-generation (11 M6) AND Trevor-loaded (M2), serialized by the lifecycle lease.
-- [ ] REFACTOR: Keep the sweep idempotent and lease-serialized so concurrent sweeps cannot double-unload or race a load.
+- [x] RED: Add a test where an instance switches its active local model, releases the prior claim, and the model is unloaded ONLY if no other live claim and no active generation lease reference it.
+- [x] GREEN: Implement the eviction sweep - acquire the `local-provider-lifecycle` resource, then unload a Trevor-loaded model whose live claim count is zero and which has no active generation lease.
+- [x] RED: Add a cross-instance test: instance A mid-generation on model X; instance B switching away from X must NOT unload X.
+- [x] GREEN: Gate eviction on no-active-generation (11 M6) AND Trevor-loaded (M2), serialized by the lifecycle lease.
+- [x] REFACTOR: Keep the sweep idempotent and lease-serialized so concurrent sweeps cannot double-unload or race a load.
 
 #### M5: Per-Instance Keep-Current Policy (cap 1)
 
-- [ ] RED: Add a test that, by default, an instance claims only its current active local model (cap 1) and releases the prior one on switch.
-- [ ] GREEN: Implement keep-only-current claim reconciliation on active-local-model change, wired to the eviction trigger (turn provider resolution + mid-turn `model.switched`).
-- [ ] RED: Add a test that a model still claimed by another live instance survives this instance's switch (no global cap-1 thrash).
-- [ ] GREEN: Ensure release decrements the shared claim count and only the last release triggers a sweep.
-- [ ] REFACTOR: Isolate the policy behind a small seam so an LRU/keep-N variant could replace cap-1 later without touching the eviction core.
+- [x] RED: Add a test that, by default, an instance claims only its current active local model (cap 1) and releases the prior one on switch.
+- [x] GREEN: Implement keep-only-current claim reconciliation on active-local-model change, wired to the eviction trigger (turn provider resolution + mid-turn `model.switched`).
+- [x] RED: Add a test that a model still claimed by another live instance survives this instance's switch (no global cap-1 thrash).
+- [x] GREEN: Ensure release decrements the shared claim count and only the last release triggers a sweep.
+- [x] REFACTOR: Isolate the policy behind a small seam so an LRU/keep-N variant could replace cap-1 later without touching the eviction core.
 
 #### Gate 3-4
 
-- [ ] Switching an instance's active local model evicts the prior model only when it becomes orphaned.
-- [ ] Eviction never unloads a model under an active generation lease or one Trevor did not load.
-- [ ] Two instances on two different models both stay resident; no evict/reload thrash.
+- [x] Switching an instance's active local model evicts the prior model only when it becomes orphaned.
+- [x] Eviction never unloads a model under an active generation lease or one Trevor did not load.
+- [x] Two instances on two different models both stay resident; no evict/reload thrash.
 
 ### Phase 4: Visibility and Multi-Instance Verification
 
