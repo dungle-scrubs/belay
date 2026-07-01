@@ -16,12 +16,52 @@ test("the default telemetry config is fully local: nothing remote, no Sentry, no
   const config = resolveTelemetryConfig({ ...BASE });
   assert.deepEqual(config, {
     otelExporter: "none",
+    otlpEndpoint: null,
     remoteEnabled: false,
     sentryDsn: null,
     webSentryDsn: null,
     providerTrace: false,
     suppressedReason: null,
   });
+});
+
+test("a loopback OTLP endpoint is honored, but a remote one needs TREVOR_ALLOW_REMOTE_OTEL", () => {
+  const loopback = resolveTelemetryConfig({
+    ...BASE,
+    TREVOR_OTEL_EXPORTER: "otlp",
+    TREVOR_OTEL_ENDPOINT: "http://localhost:4318",
+  });
+  assert.equal(loopback.otelExporter, "otlp");
+  assert.equal(loopback.otlpEndpoint, "http://localhost:4318");
+
+  // A NON-loopback endpoint without the opt-in is downgraded to none (never ships remotely by accident).
+  const blocked = resolveTelemetryConfig({
+    ...BASE,
+    TREVOR_OTEL_EXPORTER: "otlp",
+    TREVOR_OTEL_ENDPOINT: "https://collector.example.com",
+  });
+  assert.equal(blocked.otelExporter, "none", "a remote OTLP endpoint is refused without opt-in");
+  assert.equal(blocked.otlpEndpoint, null);
+
+  // With the explicit opt-in, the remote endpoint is honored.
+  const allowed = resolveTelemetryConfig({
+    ...BASE,
+    TREVOR_OTEL_EXPORTER: "otlp",
+    TREVOR_OTEL_ENDPOINT: "https://collector.example.com",
+    TREVOR_ALLOW_REMOTE_OTEL: "1",
+  });
+  assert.equal(allowed.otelExporter, "otlp");
+  assert.equal(allowed.otlpEndpoint, "https://collector.example.com");
+});
+
+test("even with the opt-in, a remote OTLP endpoint is refused under test/CI", () => {
+  const config = resolveTelemetryConfig({
+    NODE_ENV: "test",
+    TREVOR_OTEL_EXPORTER: "otlp",
+    TREVOR_OTEL_ENDPOINT: "https://collector.example.com",
+    TREVOR_ALLOW_REMOTE_OTEL: "1",
+  });
+  assert.equal(config.otelExporter, "none", "the suite never ships to a remote collector");
 });
 
 test("provider tracing is opt-in via TREVOR_PROVIDER_TRACE and local-only (on even under test/CI)", () => {

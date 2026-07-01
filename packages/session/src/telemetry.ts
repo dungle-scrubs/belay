@@ -35,6 +35,10 @@ export interface TelemetryConfig {
   /** Opt-in LOCAL provider-attempt JSONL tracing (`TREVOR_PROVIDER_TRACE`). Off by default; local-only
    *  (under `TREVOR_STATE_HOME`), so it is NOT force-disabled under test/CI - a test opts in explicitly. */
   readonly providerTrace: boolean;
+  /** The OTLP collector endpoint (`TREVOR_OTEL_ENDPOINT`) when `otelExporter === "otlp"`, else null. A
+   *  NON-loopback endpoint is only honored with `TREVOR_ALLOW_REMOTE_OTEL=1`; without it the exporter is
+   *  downgraded to `none` (a bare checkout never ships traces to a remote collector by accident). */
+  readonly otlpEndpoint: string | null;
   /** Why remote telemetry is force-disabled (`test`/`ci`), or null when not suppressed. */
   readonly suppressedReason: TelemetrySuppressedReason | null;
 }
@@ -75,6 +79,16 @@ function parseExporter(value: string | undefined): OtelExporter {
   return mode === "file" || mode === "otlp" ? mode : "none";
 }
 
+/** Whether an OTLP endpoint targets this machine (loopback), so it needs no remote-export opt-in. */
+export function isLoopbackEndpoint(endpoint: string): boolean {
+  try {
+    const host = new URL(endpoint).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolves the telemetry configuration from `env` (defaults to `process.env`). Pure over its input, so
  * both service processes and the browser bootstrap resolve identically and the parsing is unit-testable.
@@ -82,8 +96,19 @@ function parseExporter(value: string | undefined): OtelExporter {
 export function resolveTelemetryConfig(env: TelemetryEnv = process.env): TelemetryConfig {
   const suppressedReason = telemetrySuppressedReason(env);
   const suppressed = suppressedReason !== null;
+  const requestedExporter = parseExporter(env.TREVOR_OTEL_EXPORTER);
+  const otlpEndpoint = nonEmpty(env.TREVOR_OTEL_ENDPOINT);
+  // A remote (non-loopback) OTLP endpoint is only honored with an explicit opt-in, and never under
+  // test/CI - otherwise the exporter is downgraded to `none` so nothing is shipped to a remote collector.
+  const otlpRemoteBlocked =
+    requestedExporter === "otlp" &&
+    otlpEndpoint !== null &&
+    !isLoopbackEndpoint(otlpEndpoint) &&
+    !(!suppressed && isTruthy(env.TREVOR_ALLOW_REMOTE_OTEL));
+  const otelExporter: OtelExporter = otlpRemoteBlocked ? "none" : requestedExporter;
   return {
-    otelExporter: parseExporter(env.TREVOR_OTEL_EXPORTER),
+    otelExporter,
+    otlpEndpoint: otelExporter === "otlp" ? otlpEndpoint : null,
     // Remote is off by default and can never be on under test/CI.
     remoteEnabled: !suppressed && isTruthy(env.TREVOR_TELEMETRY_REMOTE),
     // Sentry opts in via a DSN, but test/CI drops it so the suite never reports remotely.
