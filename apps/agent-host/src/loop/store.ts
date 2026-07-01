@@ -250,6 +250,12 @@ export class LoopStore {
     if (!next.ok) {
       return { ok: false, error: next.reason };
     }
+    // Re-establish a lost timeout deadline: the in-memory `deadlines` map does not survive a restart, so a
+    // durable timeout loop restored + resumed would otherwise run ignoring its timeout. Resuming restarts
+    // the timeout budget (a paused loop already holding its deadline keeps it).
+    if (next.state.spec.timeoutMs !== undefined && !this.deadlines.has(loopId)) {
+      this.deadlines.set(loopId, this.scheduler.now() + next.state.spec.timeoutMs);
+    }
     this.scheduleNext(next.state);
     return this.commit(next.state);
   }

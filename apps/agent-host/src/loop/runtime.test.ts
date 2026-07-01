@@ -226,6 +226,25 @@ describe("loop controls (M6)", () => {
     expect(clock.activeTimers()).toBe(1);
   });
 
+  it("resume re-establishes a lost timeout deadline (durable restart safety)", async () => {
+    const clock = new AsyncClock();
+    const { store } = makeStore(clock, fakeRunner().runner);
+    // Simulate a durable timeout loop restored (as paused) after a restart: hydrate, no in-memory deadline.
+    store.hydrate([
+      {
+        id: "loop_1",
+        status: "paused",
+        completed: 0,
+        spec: { runner: "process", durability: "durable", action: "x", everyMs: 20, timeoutMs: 50 },
+      },
+    ]);
+    expect(store.resume("loop_1").ok).toBe(true);
+    // With no re-established deadline the loop would run forever; instead it completes on timeout at 50ms.
+    await clock.advance(50);
+    expect(store.get("loop_1")?.status).toBe("completed");
+    expect(store.get("loop_1")?.stopReason).toBe("timeout");
+  });
+
   it("stop and delete cancel the timer and reach a terminal status", async () => {
     const clock = new AsyncClock();
     const { store } = makeStore(clock, fakeRunner().runner);
