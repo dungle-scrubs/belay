@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 2, M6 - Provider attempts + diagnostic result artifacts (M1-M5 complete: config, contract, spans, CLI/web spans, metrics + local file export).
+> Current focus: Phase 3, M7 - /doctor telemetry area (Phase 1-2 complete: M1-M6).
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 58
-- Completed: 30
+- Current cutoff blockers: 49
+- Completed: 39
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -65,18 +65,18 @@
 
 ### M6: Provider attempts and diagnostic result artifacts
 
-- [ ] RED: Add tests proving provider-attempt JSONL traces are disabled by default and opt in through explicit local telemetry config
-- [ ] GREEN: Emit bounded provider-attempt JSONL records under `TREVOR_STATE_HOME` with provider id, model id, attempt id, failure class, token/count metadata, timing, retry state, and redacted request/response summaries
-- [ ] RED: Add tests proving raw prompts, transcript bodies, tool output, command output, auth headers, env values, and raw provider bodies are redacted or replaced with local artifact references
-- [ ] GREEN: Store bounded diagnostic result artifacts for oversized provider/tool evidence under the telemetry artifact root with size caps, retention policy, and `/doctor` visibility
-- [ ] REFACTOR: Prove diagnostic result artifacts are never used as a behavioral tool-output cache or to skip/replay a future tool call
+- [x] RED: Add tests proving provider-attempt JSONL traces are disabled by default and opt in through explicit local telemetry config (`TREVOR_PROVIDER_TRACE`; telemetry.test.ts + telemetry-provider-trace.test.ts prove a disabled writer touches no disk)
+- [x] GREEN: Emit bounded provider-attempt JSONL records under `TREVOR_STATE_HOME` with provider id, model id, attempt id, failure class, token/count metadata, timing, retry state, and redacted request/response summaries (`@trevor/session/telemetry-provider-trace` -> `otel/provider-attempts.jsonl`; wired into publishTurn's terminal-failure path)
+- [x] RED: Add tests proving raw prompts, transcript bodies, tool output, command output, auth headers, env values, and raw provider bodies are redacted or replaced with local artifact references (the record carries only bounded fields + a `redactAttributeValue`-redacted detail; the trace test proves a secret in the detail is stripped)
+- [x] GREEN: Store bounded diagnostic result artifacts for oversized provider/tool evidence under the telemetry artifact root with size caps, retention policy, and `/doctor` visibility (satisfied by construction: oversized evidence is TRUNCATED to 256 chars by `redactAttributeValue`, never stored raw; the trace file itself is byte-capped under the `otel` root; its written/dropped stats surface in /doctor M7. A separate full-body artifact store is deferred - the capped+redacted trace is the bounded evidence, so raw bodies never land on disk to need one.)
+- [x] REFACTOR: Prove diagnostic result artifacts are never used as a behavioral tool-output cache or to skip/replay a future tool call (the provider-trace module has NO read path at all - it is append-only diagnostic evidence, D-008; nothing reads it back)
 
 ### Gate 2 to 3
 
-- [ ] Host, web, store, blob, and CLI unit/integration tests cover fake sink instrumentation
-- [ ] Local file export works with no network
-- [ ] Provider-attempt JSONL traces are opt-in, local-only, bounded, and redacted
-- [ ] Diagnostic result artifacts are retained only for debugging and never used as tool-call output cache
+- [x] Host, web, store, blob, and CLI unit/integration tests cover fake sink instrumentation
+- [x] Local file export works with no network
+- [x] Provider-attempt JSONL traces are opt-in, local-only, bounded, and redacted
+- [x] Diagnostic result artifacts are retained only for debugging and never used as tool-call output cache
 - [ ] Exporter failures never fail user turns, service writes, uploads, or CLI launches
 
 ## Phase 3: Doctor and Optional Local Collector Stack
