@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M5: Compact Manifest for Prompts and Subagents
+> Current focus: M6: Export Command/API Variants
 
 ## Summary
 
-- Current cutoff blockers: 30
+- Current cutoff blockers: 25
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -47,11 +47,11 @@
 
 ## M5: Compact Manifest for Prompts and Subagents
 
-- [ ] RED: Add token-budget tests for compact manifest variants
-- [ ] GREEN: Build scoped compact manifest generation with summaries and discovery pointers
-- [ ] RED: Add tests proving normal turns never receive the full manifest
-- [ ] GREEN: Include compact manifest only where scoped and useful
-- [ ] REFACTOR: Generate compact prompt text from structured manifest data
+- [x] RED: Add token-budget tests for compact manifest variants
+- [x] GREEN: Build scoped compact manifest generation with summaries and discovery pointers
+- [x] RED: Add tests proving normal turns never receive the full manifest
+- [x] GREEN: Include compact manifest only where scoped and useful
+- [x] REFACTOR: Generate compact prompt text from structured manifest data
 
 ## M6: Export Command/API Variants
 
