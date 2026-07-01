@@ -310,6 +310,9 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   doctor: renderOutput,
   // `trevor_expert` answers capability questions from the manifest as flat, already-redacted text.
   trevor_expert: renderOutput,
+  // `tool_script` returns its bounded structured result (or a typed error line) as text; the rich
+  // source/bridge-calls/budgets live in the detail takeover (plan 16 M8), not the transcript row.
+  tool_script: renderOutput,
   clipboard_write: renderClipboard,
   bash: renderOutput,
   write: renderDiff,

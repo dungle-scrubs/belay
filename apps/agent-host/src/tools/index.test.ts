@@ -4,6 +4,7 @@ import { test } from "vitest";
 import { supervisor } from "../processes";
 import { buildSkillTool } from "../skills";
 import { buildTaskTools } from "../tasks";
+import { buildToolScriptTool } from "../tool-script/tool";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { buildBashTool } from "./bash";
@@ -94,6 +95,12 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     astGrepTool,
     doctorTool,
     trevorExpertTool,
+    buildToolScriptTool({
+      execute: () => Promise.resolve(""),
+      cwd: "/w",
+      makeScratchDir: () => "/tmp/x",
+      cleanupScratchDir: () => {},
+    }),
     clipboardWriteTool,
     supervisor.buildTool(),
     ...buildTaskTools(),

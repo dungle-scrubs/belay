@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M7 - Tool Runtime Integration
-- **Completed:** 37 / 68
-- **Current cutoff blockers:** 31
+- **Current focus:** M8 - Observability and Detail Payloads
+- **Completed:** 42 / 68
+- **Current cutoff blockers:** 26
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -96,11 +96,11 @@
 
 #### M7: Tool Runtime Integration
 
-- [ ] RED: Add host tool runtime tests for normalizing `tool_script` requests and rejecting unsafe permissions.
-- [ ] GREEN: Register `tool_script` in the V2 host tool registry, metadata, provider surface, and prompt guidance.
-- [ ] RED: Add loop tests for successful script, denied bridge call, timeout, cancellation, syntax error, runtime error, and child crash.
-- [ ] GREEN: Emit normal tool started/progress/completed/failed events with bridge-call summaries.
-- [ ] REFACTOR: Keep `tool_script` as a tool, not a workflow runner or background job.
+- [x] RED: Add host tool runtime tests for normalizing `tool_script` requests and rejecting unsafe permissions.
+- [x] GREEN: Register `tool_script` in the V2 host tool registry, metadata, provider surface, and prompt guidance.
+- [x] RED: Add loop tests for successful script, denied bridge call, timeout, cancellation, syntax error, runtime error, and child crash.
+- [x] GREEN: Emit normal tool started/progress/completed/failed events with bridge-call summaries.
+- [x] REFACTOR: Keep `tool_script` as a tool, not a workflow runner or background job.
 
 #### M8: Observability and Detail Payloads
 

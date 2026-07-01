@@ -1,0 +1,118 @@
+import {
+  type ToolScriptResult,
+  type ToolScriptToolset,
+  validateToolScriptRequest,
+} from "@trevor/session";
+import { Effect, Schema } from "effect";
+import type { Tool, ToolContext } from "../tools/types";
+import { type BridgeExecute, createToolScriptBridge } from "./bridge";
+import { type ManagedChild, manageToolScriptRun } from "./host-manager";
+import { type ResolvedLaunch, resolveRunnerLaunch } from "./launch";
+import { spawnRunner } from "./spawn";
+
+/**
+ * The model-facing `tool_script` tool (plan 16, M7). It is a NORMAL, visible, read-only tool - not a
+ * workflow engine, subagent, or background job (D-001): one call runs one bounded script and returns one
+ * result. It validates the request, resolves the launch mode (M4), spawns the isolated child runner (M3),
+ * routes the script's calls through the toolset-gated bridge (M5) with budgets (M6), and formats the result
+ * (or a typed failure) into the tool's string output. All the heavy pieces are injected, so the tool
+ * unit-tests without the real registry and the real spawn.
+ */
+
+export const TOOL_SCRIPT_DESCRIPTION =
+  "Run a short, READ-ONLY TypeScript script for BOUNDED BATCH analysis across many inputs - e.g. scan " +
+  "dozens of files with read/grep, or aggregate search results - returning one compact structured result. " +
+  "The script gets an async `tools` bridge (safe_read: read, glob, grep, ast_grep) and a `context`; it has " +
+  "NO filesystem, network, process, env, import, or shell access, and cannot write or mutate anything. Use " +
+  "it ONLY for repeated read/search operations over many inputs; for a one-off read or search, call the " +
+  "direct tool instead. It is bounded by a timeout, a max call count, and output caps.";
+
+const Params = Schema.Struct({
+  script: Schema.String.annotations({
+    description:
+      "The TypeScript script. `return` a compact result; `await tools.<name>(input)` to read.",
+  }),
+  toolsets: Schema.optionalWith(Schema.Array(Schema.String), {
+    default: () => ["safe_read"],
+  }).annotations({
+    description: "Permitted capability toolsets. Default ['safe_read'] (read/glob/grep/ast_grep).",
+  }),
+});
+
+export interface ToolScriptToolDeps {
+  /** Runs a host tool by name (wired to the registry's executeTool at registration). */
+  readonly execute: BridgeExecute;
+  /** The workspace cwd handed to the script + the spawned child. */
+  readonly cwd: string;
+  /** Creates a fresh scratch dir the sandboxed child may write to; returns its path. */
+  readonly makeScratchDir: () => string;
+  /** Removes a scratch dir after the run (best-effort). */
+  readonly cleanupScratchDir: (dir: string) => void;
+  /** Overridable for tests. */
+  readonly resolveLaunch?: (scratchDir: string) => Promise<ResolvedLaunch>;
+  readonly spawn?: (command: readonly string[], cwd: string) => ManagedChild;
+}
+
+/** Formats a result into the tool's string output: the result for a success, a typed error line otherwise. */
+export function formatToolScriptResult(result: ToolScriptResult): string {
+  if (result.status === "completed") {
+    return typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+  }
+  return `error: tool_script ${result.failureClass}: ${result.error}`;
+}
+
+async function runToolScript(
+  args: typeof Params.Type,
+  ctx: ToolContext | undefined,
+  deps: ToolScriptToolDeps,
+): Promise<string> {
+  const validated = validateToolScriptRequest({
+    language: "typescript",
+    script: args.script,
+    permissions: { toolsets: args.toolsets },
+  });
+  if (!validated.ok) {
+    return `error: tool_script ${validated.failureClass}: ${validated.error}`;
+  }
+  const request = validated.request;
+  const scratchDir = deps.makeScratchDir();
+  try {
+    const launch = await (deps.resolveLaunch ?? ((s) => resolveRunnerLaunch({ scratchDir: s })))(
+      scratchDir,
+    );
+    const spawn = deps.spawn ?? ((command, cwd) => spawnRunner({ command, cwd }));
+    const child = spawn(launch.command, deps.cwd);
+    const bridge = createToolScriptBridge({
+      toolsets: request.permissions.toolsets as readonly ToolScriptToolset[],
+      execute: deps.execute,
+      ...(ctx?.runId !== undefined ? { runId: ctx.runId } : {}),
+      ...(ctx?.callId !== undefined ? { callId: ctx.callId } : {}),
+    });
+    const result = await manageToolScriptRun(child, bridge, {
+      script: request.script,
+      context: {
+        cwd: deps.cwd,
+        ...(ctx?.runId !== undefined ? { runId: ctx.runId } : {}),
+        ...(ctx?.callId !== undefined ? { toolCallId: ctx.callId } : {}),
+      },
+      budgets: request.budgets,
+      sandboxMode: launch.sandboxMode,
+    }).result;
+    return formatToolScriptResult(result);
+  } catch (error) {
+    return `error: tool_script runtime_error: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    deps.cleanupScratchDir(scratchDir);
+  }
+}
+
+/** Builds the `tool_script` tool. `execute` is wired to the host registry's `executeTool` at registration. */
+export function buildToolScriptTool(deps: ToolScriptToolDeps): Tool<typeof Params.Type> {
+  return {
+    name: "tool_script",
+    description: TOOL_SCRIPT_DESCRIPTION,
+    params: Params,
+    readOnly: true,
+    execute: (args, ctx) => Effect.promise(() => runToolScript(args, ctx, deps)),
+  };
+}

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
 import { Effect, Either, JSONSchema, ParseResult, Schema } from "effect";
 import { log, warn } from "../log";
@@ -5,6 +8,7 @@ import { supervisor } from "../processes";
 import type { ToolDef } from "../providers";
 import { buildSkillTool, discoverSkills } from "../skills";
 import { buildTaskTools } from "../tasks";
+import { buildToolScriptTool } from "../tool-script/tool";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
@@ -56,6 +60,22 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   skillViewTool,
   doctorTool,
   trevorExpertTool,
+  // tool_script (plan 16): the bridge routes allowed read-only calls back through THIS registry's
+  // executeTool (hoisted; referenced lazily at call time), gated by the request's toolsets. The child runs
+  // out-of-process in a deny-first sandbox; its scratch dir is an ephemeral, per-run temp dir.
+  buildToolScriptTool({
+    execute: (tool, argsJson, runId, callId) =>
+      Effect.runPromise(executeTool(tool, argsJson, runId, callId)),
+    cwd: process.cwd(),
+    makeScratchDir: () => mkdtempSync(join(tmpdir(), "trevor-tool-script-")),
+    cleanupScratchDir: (dir) => {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // best-effort scratch cleanup
+      }
+    },
+  }),
   clipboardWriteTool,
   supervisor.buildTool(),
   ...buildTaskTools(),
