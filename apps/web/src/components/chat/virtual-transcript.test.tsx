@@ -38,6 +38,24 @@ function toolRow(index: number, compactAbove = true): TranscriptRow {
   };
 }
 
+function assistantRow(id: string, text: string): TranscriptRow {
+  return {
+    kind: "message",
+    id: `message:${id}`,
+    compactAbove: false,
+    message: {
+      kind: "assistant",
+      id,
+      runId: "r1",
+      text,
+      thinking: "",
+      done: true,
+      warm: false,
+      model: "glm",
+    },
+  };
+}
+
 function Harness({
   rows,
   pinned = true,
@@ -340,6 +358,39 @@ describe("VirtualTranscript", () => {
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
     });
+  });
+
+  test("an assistant Mermaid diagram row still lets the virtual list settle", async () => {
+    const rows = [
+      userRow(0),
+      assistantRow(
+        "a-mermaid",
+        `Here is the flow:
+
+\`\`\`mermaid
+graph TD
+  A-->B
+\`\`\``,
+      ),
+      userRow(1),
+    ];
+    const { container } = render(<Harness rows={rows} />);
+
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector("[data-transcript-virtual-list]")
+          ?.getAttribute("data-transcript-ready"),
+        "true",
+      );
+    });
+    assert.ok(container.querySelector('[data-testid="mermaid-block"]'));
+    assert.equal(
+      container
+        .querySelector("[data-transcript-virtual-list]")
+        ?.getAttribute("data-transcript-row-count"),
+      String(rows.length),
+    );
   });
 
   test("user prompts and the final response stay full while compact, tools/thinking collapse", async () => {

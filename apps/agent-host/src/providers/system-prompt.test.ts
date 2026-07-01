@@ -84,6 +84,46 @@ test("buildSystemPrompt points recurring work at /loop and forbids hidden self-r
   );
 });
 
+// --- Plan 19 M5: Mermaid is available for inline transcript explanations ---
+
+test("buildSystemPrompt advertises Mermaid fenced blocks on tool routes", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+
+  assert.ok(
+    prompt.includes("Transcript markdown supports fenced mermaid blocks"),
+    "the tool route prompt advertises inline Mermaid rendering",
+  );
+  assert.ok(
+    prompt.includes(
+      "flows, sequences, state machines, dependencies, or architecture relationships",
+    ),
+    "the prompt names the diagram cases Mermaid should cover",
+  );
+});
+
+test("buildSystemPrompt advertises Mermaid fenced blocks on no-tool routes", () => {
+  const prompt = buildSystemPrompt([], { workspaceRoot: "/ws", cwd: "/ws" });
+
+  assert.ok(
+    prompt.includes("Transcript markdown supports fenced mermaid blocks"),
+    "the answer-only route prompt still advertises transcript Mermaid rendering",
+  );
+});
+
+test("Mermaid guidance separates inline diagrams from Lucid without advertising a callable Lucid tool", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+
+  assert.ok(
+    prompt.includes("Mermaid is for inline response explanation"),
+    "the prompt defines Mermaid as inline transcript explanation",
+  );
+  assert.ok(
+    prompt.includes("Lucid/artifacts are reviewable external iteration surfaces when available"),
+    "the prompt names the Lucid boundary without making it the inline diagram surface",
+  );
+  assert.doesNotMatch(prompt, /call (the )?Lucid/i);
+});
+
 // --- Plan 04 M7: web_search (discovery) vs web_fetch (reading) guidance ---
 
 test("buildSystemPrompt distinguishes web_search for discovery from web_fetch for reading", () => {

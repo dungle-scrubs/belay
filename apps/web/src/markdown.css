@@ -16,10 +16,12 @@
 }
 
 /* Collapse outer margins so a message bubble doesn't gain stray top/bottom gaps. */
-.trevor-md > :first-child {
+.trevor-md > :first-child,
+.trevor-md__html > :first-child {
   margin-top: 0;
 }
-.trevor-md > :last-child {
+.trevor-md > :last-child,
+.trevor-md__html > :last-child {
   margin-bottom: 0;
 }
 
@@ -168,4 +170,114 @@
   margin: 0.8em 0;
   border: none;
   border-top: 1px solid #e3e3e3;
+}
+
+.trevor-mermaid {
+  margin: 0.7em 0;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--smui-surface-1));
+}
+
+.trevor-mermaid__toolbar {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.25rem 0.4rem 0.25rem 0.65rem;
+}
+
+.trevor-mermaid__label {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.trevor-mermaid__actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.trevor-mermaid__actions button {
+  display: inline-flex;
+  width: 1.65rem;
+  height: 1.65rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+.trevor-mermaid__actions button:hover,
+.trevor-mermaid__actions button:focus-visible {
+  border-color: hsl(var(--border));
+  background: hsl(var(--smui-surface-2));
+  color: hsl(var(--foreground));
+}
+
+.trevor-mermaid__actions svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.trevor-mermaid__canvas {
+  max-width: 100%;
+  min-height: 5rem;
+  overflow: auto;
+  background: hsl(var(--background));
+}
+
+.trevor-mermaid__loading {
+  padding: 1.25rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+.trevor-mermaid__svg {
+  width: max-content;
+  min-width: 100%;
+  padding: 0.85rem;
+  transform: scale(var(--trevor-mermaid-zoom));
+  transform-origin: top left;
+}
+
+.trevor-mermaid__svg svg {
+  display: block;
+  max-width: none;
+}
+
+.trevor-mermaid__error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem;
+  color: hsl(var(--smui-red));
+  font-size: 0.85em;
+}
+
+.trevor-mermaid__source {
+  margin: 0;
+  max-height: 18rem;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--smui-surface-1));
+  color: hsl(var(--foreground));
+  white-space: pre;
+}
+
+.trevor-mermaid__source--collapsed {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: pre;
 }

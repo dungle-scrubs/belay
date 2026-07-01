@@ -111,6 +111,11 @@ const RESPONSE_CALIBRATION_GUIDANCE = [
   'Never use "honest" to describe data, state, schemas, or records, such as "this keeps the data honest."',
 ] as const;
 
+const TRANSCRIPT_MARKDOWN_GUIDANCE = [
+  "Transcript markdown supports fenced mermaid blocks. Use them when they clarify flows, sequences, state machines, dependencies, or architecture relationships.",
+  "Mermaid is for inline response explanation inside the transcript. Lucid/artifacts are reviewable external iteration surfaces when available; do not imply a Lucid tool is callable unless it appears in the tool inventory.",
+] as const;
+
 /** Where the agent's file tools operate, so the model resolves paths correctly. */
 export interface SystemPromptContext {
   /** Root that edit/glob/grep are confined to. Defaults to WORKSPACE_ROOT. */
@@ -204,6 +209,7 @@ export class SystemPromptBuilder {
         { render: () => IDENTITY },
         { render: () => executionContext(workspaceRoot, cwd) },
         { enabled: style.length > 0, render: () => style },
+        { render: () => TRANSCRIPT_MARKDOWN_GUIDANCE.join("\n") },
         { render: () => RESPONSE_CALIBRATION_GUIDANCE.join("\n") },
         { render: () => "No tools are available on this route; answer directly in ordinary text." },
       ]);
@@ -214,6 +220,7 @@ export class SystemPromptBuilder {
       ...TOOL_SELECTION_GUIDANCE,
       ...TASK_GUIDANCE,
       ...REPO_GUARDRAILS,
+      ...TRANSCRIPT_MARKDOWN_GUIDANCE,
       ...RESPONSE_CALIBRATION_GUIDANCE,
     ].join("\n");
 

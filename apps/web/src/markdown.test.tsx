@@ -33,6 +33,68 @@ test("copies fenced code block contents from the overlay button", () => {
   assert.equal(writeText.mock.calls[0]?.[0], "const answer = 42;\nconsole.log(answer);");
 });
 
+test("routes explicit mermaid fenced blocks to the React diagram component", () => {
+  const { container } = render(<Markdown text={"```mermaid\ngraph TD\n  A-->B\n```"} />);
+
+  assert.ok(screen.getByTestId("mermaid-block"));
+  assert.equal(screen.getByTestId("mermaid-source").textContent, "graph TD\n  A-->B");
+  assert.equal(container.querySelector("pre code.language-mermaid"), null);
+  assert.equal(screen.queryByLabelText("Copy code block"), null);
+});
+
+test("keeps ordinary fenced code blocks on the existing copyable code path", () => {
+  const { container } = render(<Markdown text={"```mermaidish\ngraph TD\n  A-->B\n```"} />);
+
+  assert.equal(screen.queryByTestId("mermaid-block"), null);
+  assert.ok(container.querySelector("pre code.language-mermaidish"));
+  assert.ok(screen.getByLabelText("Copy code block"));
+});
+
+test("normalizes mermaid language case and whitespace without false positives", () => {
+  const routed = render(<Markdown text={"```  MERMAID   \nsequenceDiagram\n  A->>B: hi\n```"} />);
+  assert.ok(screen.getByTestId("mermaid-block"));
+  routed.unmount();
+
+  const withInfo = render(<Markdown text={'```mermaid title="flow"\ngraph TD\n  A-->B\n```'} />);
+  assert.ok(screen.getByTestId("mermaid-block"));
+  withInfo.unmount();
+
+  render(<Markdown text={"```not-mermaid\ngraph TD\n  A-->B\n```"} />);
+  assert.equal(screen.queryByTestId("mermaid-block"), null);
+});
+
+test("keeps GFM tables, links, and ordinary code rendering across Mermaid splits", () => {
+  const { container } = render(
+    <Markdown
+      text={[
+        "See [docs](https://example.com).",
+        "",
+        "```mermaid",
+        "graph TD",
+        "  A-->B",
+        "```",
+        "",
+        "| Name | Value |",
+        "| --- | --- |",
+        "| alpha | `code` |",
+        "",
+        "```sh",
+        "echo done",
+        "```",
+      ].join("\n")}
+    />,
+  );
+
+  assert.ok(screen.getByTestId("mermaid-block"));
+  assert.equal(
+    screen.getByRole("link", { name: "docs" }).getAttribute("href"),
+    "https://example.com",
+  );
+  assert.ok(container.querySelector(".trevor-md-table-scroll table"));
+  assert.ok(container.querySelector("pre code.language-sh"));
+  assert.ok(screen.getByText("echo done"));
+});
+
 test("dedents a code block quoted from indented source, keeping relative indentation", () => {
   // Every line shares a 4-space indent; the nested arg is indented one level deeper. After dedent the
   // block starts flush-left but the nested arg keeps its extra indentation.

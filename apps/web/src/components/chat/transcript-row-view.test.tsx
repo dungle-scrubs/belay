@@ -311,6 +311,42 @@ test("an ordinary assistant message still renders as markdown (anomaly path unto
   assert.equal(screen.queryByText("provider protocol anomaly"), null);
 });
 
+test("an assistant transcript message routes explicit Mermaid diagrams inline", () => {
+  renderRow(
+    assistant({
+      text: `Here is the flow:
+
+\`\`\`mermaid
+graph TD
+  A-->B
+\`\`\`
+
+\`\`\`ts
+const ordinary = true;
+\`\`\``,
+    }),
+  );
+
+  assert.ok(screen.getByTestId("mermaid-block"));
+  assert.equal(screen.getByTestId("mermaid-source").textContent, "graph TD\n  A-->B");
+  assert.ok(screen.getByText("const ordinary = true;"));
+});
+
+test("a user transcript message keeps Mermaid fences as ordinary code", () => {
+  const { container } = renderRow(
+    userRow({
+      kind: "user",
+      id: "u-mermaid",
+      text: "```mermaid\ngraph TD\n  A-->B\n```",
+      artifacts: [],
+      pastes: [],
+    }),
+  );
+
+  assert.equal(screen.queryByTestId("mermaid-block"), null);
+  assert.ok(container.querySelector("pre code.language-mermaid"));
+});
+
 test("the DeepSeek DSML envelope leak renders as a provider anomaly, escaped", () => {
   // The raw DSML-like tool-call envelope from the original DeepSeek incident, leaked as final text.
   const dsml = [

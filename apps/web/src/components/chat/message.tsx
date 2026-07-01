@@ -394,7 +394,7 @@ export function UserMessage({
 export function AssistantMessage({ content, meta }: { content: string; meta?: ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <MarkdownBody text={content} />
+      <MarkdownBody text={content} mermaid />
       {meta}
     </div>
   );

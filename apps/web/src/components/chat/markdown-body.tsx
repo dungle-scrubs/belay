@@ -12,10 +12,12 @@ export function MarkdownBody({
   text,
   muted = false,
   className,
+  mermaid = false,
 }: {
   readonly text: string;
   readonly muted?: boolean;
   readonly className?: string;
+  readonly mermaid?: boolean;
 }) {
   return (
     <div
@@ -25,7 +27,7 @@ export function MarkdownBody({
         className,
       )}
     >
-      <Markdown text={text} muted={muted} />
+      <Markdown text={text} muted={muted} mermaid={mermaid} />
     </div>
   );
 }

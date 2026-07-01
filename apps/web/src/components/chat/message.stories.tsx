@@ -32,6 +32,66 @@ const plan = ["scaffold", "build", "verify"] as const;
 
 See [the SMUI guide](https://smui.statico.io) for the aesthetic.`;
 
+const MERMAID_FLOW = `A deployment flow:
+
+\`\`\`mermaid
+flowchart TD
+  Plan[Plan] --> Build[Build]
+  Build --> Test{Tests pass?}
+  Test -- yes --> Ship[Ship]
+  Test -- no --> Fix[Fix]
+  Fix --> Build
+\`\`\``;
+
+const MERMAID_SEQUENCE = `Provider turn sequence:
+
+\`\`\`mermaid
+sequenceDiagram
+  participant User
+  participant Web
+  participant Host
+  participant Model
+  User->>Web: submit prompt
+  Web->>Host: user.message
+  Host->>Model: stream request
+  Model-->>Host: deltas and tool calls
+  Host-->>Web: transcript events
+\`\`\``;
+
+const MERMAID_STATE = `Turn lifecycle:
+
+\`\`\`mermaid
+stateDiagram-v2
+  [*] --> Queued
+  Queued --> Running
+  Running --> WaitingForTool
+  WaitingForTool --> Running
+  Running --> Complete
+  Running --> Interrupted
+  Complete --> [*]
+  Interrupted --> [*]
+\`\`\``;
+
+const MERMAID_INVALID = `Broken diagram source remains readable:
+
+\`\`\`mermaid
+graph TD
+  A -->
+\`\`\``;
+
+const MERMAID_WIDE = `A wider dependency graph:
+
+\`\`\`mermaid
+flowchart LR
+  Context[Context registry] --> Prompt[System prompt]
+  Tasks[Task registry] --> Prompt
+  Tools[Tool inventory] --> Prompt
+  Prompt --> Provider[Provider request]
+  Provider --> Stream[Stream events]
+  Stream --> Transcript[Transcript rendering]
+  Transcript --> Mermaid[Inline Mermaid block]
+\`\`\``;
+
 const THINKING = `The user wants a short sample plan. Keep it to a numbered list,
 show a fenced code block so markdown rendering is visible, and link out once.`;
 
@@ -116,6 +176,77 @@ export const Assistant: Story = {
         content={RESPONSE}
         meta={<MessageMeta items={["qwen3.6-27b-mlx", "3.3k/8k ctx", "15 tok/s"]} />}
       />
+    </Frame>
+  ),
+};
+
+export const AssistantMermaidFlowchart: Story = {
+  render: () => (
+    <Frame>
+      <AssistantMessage content={MERMAID_FLOW} />
+    </Frame>
+  ),
+};
+
+export const AssistantMermaidSequence: Story = {
+  render: () => (
+    <Frame>
+      <AssistantMessage content={MERMAID_SEQUENCE} />
+    </Frame>
+  ),
+};
+
+export const AssistantMermaidState: Story = {
+  render: () => (
+    <Frame>
+      <AssistantMessage content={MERMAID_STATE} />
+    </Frame>
+  ),
+};
+
+export const AssistantMermaidSyntaxError: Story = {
+  render: () => (
+    <Frame>
+      <AssistantMessage content={MERMAID_INVALID} />
+    </Frame>
+  ),
+};
+
+export const AssistantMermaidWide: Story = {
+  render: () => (
+    <div className="w-[28rem]">
+      <AssistantMessage content={MERMAID_WIDE} />
+    </div>
+  ),
+};
+
+export const AssistantMermaidDark: Story = {
+  render: () => (
+    <div className="dark bg-background p-4 text-foreground">
+      <Frame>
+        <AssistantMessage content={MERMAID_FLOW} />
+      </Frame>
+    </div>
+  ),
+};
+
+export const AssistantMermaidHighContrast: Story = {
+  render: () => (
+    <div className="bg-background p-4 text-foreground contrast-more:border contrast-more:border-foreground">
+      <Frame>
+        <AssistantMessage content={MERMAID_SEQUENCE} />
+      </Frame>
+    </div>
+  ),
+};
+
+export const AssistantMermaidStreaming: Story = {
+  render: () => (
+    <Frame>
+      <div className="flex flex-col gap-3">
+        <AssistantMessage content={MERMAID_FLOW} />
+        <WorkingIndicator label="streaming" />
+      </div>
     </Frame>
   ),
 };
