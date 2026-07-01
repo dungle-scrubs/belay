@@ -123,6 +123,10 @@ export function parseLoopCommand(input: string): CommandParseResult {
   }
 
   const second = raw[1];
+  // A bare `/loops` (plural, no subcommand) IS the list command (D-006); `/loop` bare opens the builder.
+  if (head.value === "/loops" && second === undefined) {
+    return controlResult(raw, "list");
+  }
   if (second !== undefined && CONTROL_VERBS.has(second.value)) {
     return controlResult(raw, "control");
   }
@@ -152,6 +156,10 @@ export function classifyLoopCommand(input: string): {
     return { action: "invalid" };
   }
   const second = raw[1];
+  // A bare `/loops` (plural, no subcommand) IS the list command (D-006); `/loop` bare opens the builder.
+  if (head.value === "/loops" && second === undefined) {
+    return { action: "list" };
+  }
   if (second !== undefined && CONTROL_VERBS.has(second.value)) {
     const loopId = raw[2]?.value;
     return loopId !== undefined

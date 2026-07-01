@@ -124,7 +124,8 @@ describe("loop cadence scheduling (M6)", () => {
     const { store } = makeStore(clock, runner);
     store.submit('/loop max 3 do "x"');
     store.confirm("loop_1");
-    await clock.advance(0); // delay-0 reschedules fire within the same instant
+    // Continuous loops are floored to 1s between iterations (anti-flood); 3 iterations fire by 3s.
+    await clock.advance(3_000);
     expect(count()).toBe(3);
     expect(store.get("loop_1")?.status).toBe("completed");
   });
@@ -150,7 +151,7 @@ describe("loop bound handling (M6)", () => {
     const { store } = makeStore(clock, runner);
     store.submit('/loop until "done" do "x"');
     store.confirm("loop_1");
-    await clock.advance(0);
+    await clock.advance(2_000); // continuous floor 1s: iterations at 1s and 2s
     expect(count()).toBe(2); // ran twice; the 2nd signalled done
     expect(store.get("loop_1")?.status).toBe("completed");
     expect(store.get("loop_1")?.stopReason).toBe("until_satisfied");
@@ -161,9 +162,51 @@ describe("loop bound handling (M6)", () => {
     const { store } = makeStore(clock, fakeRunner({ fail: true }).runner);
     store.submit('/loop max 3 do "x"');
     store.confirm("loop_1");
-    await clock.advance(0);
+    await clock.advance(1_000); // continuous floor 1s: the first iteration fires at 1s and fails
     expect(store.get("loop_1")?.status).toBe("failed");
     expect(store.get("loop_1")?.error).toBe("boom");
+  });
+
+  it("fails the loop when a runner REJECTS (not the ok:false contract), never crashing the host", async () => {
+    const clock = new AsyncClock();
+    const runner = { run: () => Promise.reject(new Error("transport blip")) };
+    const { store } = makeStore(clock, runner);
+    store.submit('/loop every 100ms max 3 do "x"');
+    store.confirm("loop_1");
+    await clock.advance(100);
+    expect(store.get("loop_1")?.status).toBe("failed");
+    expect(store.get("loop_1")?.error).toContain("transport blip");
+  });
+});
+
+describe("loop iteration re-entrancy guard (M6)", () => {
+  it("run-now does not start a second concurrent iteration while one is in flight", async () => {
+    const clock = new AsyncClock();
+    let calls = 0;
+    let release: () => void = () => {};
+    // A runner that BLOCKS until released, so a second run can be attempted mid-iteration.
+    const runner = {
+      run: () =>
+        new Promise<{ ok: true; summary: string }>((resolve) => {
+          calls += 1;
+          release = () => resolve({ ok: true, summary: "ran" });
+        }),
+    };
+    const { store } = makeStore(clock, runner);
+    store.submit('/loop every 1h max 9 do "x"');
+    store.confirm("loop_1");
+
+    store.runNow("loop_1"); // fire the first iteration (it blocks, in-flight)
+    await clock.advance(0);
+    expect(calls).toBe(1);
+
+    store.runNow("loop_1"); // again while in-flight - the guard must prevent a 2nd concurrent run
+    await clock.advance(0);
+    expect(calls).toBe(1);
+
+    release(); // let the first iteration finish; exactly ONE iteration is recorded
+    await new Promise((r) => setImmediate(r));
+    expect(store.get("loop_1")?.completed).toBe(1);
   });
 });
 

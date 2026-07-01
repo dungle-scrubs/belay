@@ -74,9 +74,6 @@ export const LOOP_RUNNER_ALIASES = {
   session: "current_session_prompt",
 } as const satisfies Record<string, LoopRunner>;
 
-/** Creation keywords that consume the following token as their value. */
-export const LOOP_VALUE_KEYWORDS = ["max", "every", "until", "timeout", "do"] as const;
-
 /** Control verbs that route to a lifecycle action instead of creating a loop. */
 export const LOOP_CONTROL_VERBS = ["stop", "pause", "resume", "run-now", "delete"] as const;
 

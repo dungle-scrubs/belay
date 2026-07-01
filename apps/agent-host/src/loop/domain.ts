@@ -6,10 +6,8 @@ import type { LoopLifecycle, LoopSpec, LoopStopReason } from "@trevor/session";
  * NOTHING about scheduling, execution, or persistence (those are M5/M6, layered on top). Every transition
  * is a total function returning either the next state or a rejection reason, so the runtime can never drive
  * a loop into an illegal state and every rejection is explainable. The status/stop-reason vocabulary is the
- * shared {@link LoopLifecycle}/{@link LoopStopReason}, re-exported for callers that only touch the domain.
+ * shared {@link LoopLifecycle}/{@link LoopStopReason}.
  */
-
-export type { LoopLifecycle, LoopStopReason } from "@trevor/session";
 
 /** The immutable runtime state of one loop. Transitions return a NEW state; nothing here mutates. */
 export interface LoopState {
@@ -29,14 +27,8 @@ export type LoopTransition =
   | { readonly ok: true; readonly state: LoopState }
   | { readonly ok: false; readonly reason: string };
 
-const TERMINAL: ReadonlySet<LoopLifecycle> = new Set(["stopped", "completed", "failed", "deleted"]);
-
-/** Whether a status is terminal (no further transitions except a no-op). */
-export function isTerminalLoop(status: LoopLifecycle): boolean {
-  return TERMINAL.has(status);
-}
-
-/** Whether a spec carries at least one deterministic bound/cadence (D-004) - the activation precondition. */
+/** Whether a spec carries at least one bound/cadence at all (D-004) - `until` counts as a structural bound.
+ *  Note this is NOT the full activation rule: see {@link isActivatableLoop} for the runner-specific check. */
 export function isBoundedLoop(spec: LoopSpec): boolean {
   return (
     spec.max !== undefined ||
@@ -46,9 +38,26 @@ export function isBoundedLoop(spec: LoopSpec): boolean {
   );
 }
 
-/** Whether a spec is activatable: a non-empty action AND at least one bound. */
+/** A DETERMINISTIC bound the runtime can enforce on its own: a count, a cadence, or a wall-clock deadline.
+ *  `until` is excluded - its satisfaction is judged per iteration by the runner, so it is not self-enforcing. */
+function hasDeterministicBound(spec: LoopSpec): boolean {
+  return spec.max !== undefined || spec.everyMs !== undefined || spec.timeoutMs !== undefined;
+}
+
+/**
+ * Whether a spec is activatable: a non-empty action AND a bound the runtime can actually terminate on. Every
+ * loop needs a bound (D-004); additionally a `process` loop bounded ONLY by `until` is rejected, because the
+ * process runner cannot judge an `until` condition (only prompt/background can), so without a co-bound
+ * (max/every/timeout) it would run forever. Prompt/background `until` loops are allowed (the runner signals).
+ */
 export function isActivatableLoop(spec: LoopSpec): boolean {
-  return spec.action.trim().length > 0 && isBoundedLoop(spec);
+  if (spec.action.trim().length === 0 || !isBoundedLoop(spec)) {
+    return false;
+  }
+  if (spec.runner === "process" && !hasDeterministicBound(spec)) {
+    return false; // an `until`-only process loop has no enforceable stop
+  }
+  return true;
 }
 
 const ok = (state: LoopState): LoopTransition => ({ ok: true, state });
@@ -81,6 +90,15 @@ export function requestConfirmation(state: LoopState): LoopTransition {
     return reject(`cannot confirm a ${state.status} loop`);
   }
   if (!isActivatableLoop(state.spec)) {
+    if (
+      state.spec.runner === "process" &&
+      state.spec.until !== undefined &&
+      !hasDeterministicBound(state.spec)
+    ) {
+      return reject(
+        "a process loop bounded only by `until` cannot self-terminate (a process cannot judge the condition) - add a co-bound: max, every, or timeout",
+      );
+    }
     return reject("a loop needs an action and at least one of max, until, every, or timeout");
   }
   return ok({ ...state, status: "pending" });

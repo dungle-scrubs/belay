@@ -15,7 +15,8 @@ import type { LoopState } from "./domain";
 export type PersistedLoop = LoopState & { readonly nextRun?: number };
 
 export interface LoopPersistence {
-  /** Upsert one durable loop's latest record (keyed by id). */
+  /** Upsert one durable loop's latest record (keyed by id). A `deleted` record PRUNES the loop from the
+   *  file rather than persisting a tombstone, so the file cannot grow without bound. */
   save(record: PersistedLoop): void;
   /** Every persisted durable loop, for rehydration at startup. */
   load(): PersistedLoop[];
@@ -45,7 +46,11 @@ export function createLoopPersistence(
   return {
     save(record) {
       const all = readAll();
-      all[record.id] = record;
+      if (record.status === "deleted") {
+        delete all[record.id]; // prune rather than persist a growing tombstone
+      } else {
+        all[record.id] = record;
+      }
       mkdirSync(dirname(filePath), { recursive: true });
       writeFileSync(filePath, JSON.stringify(all, null, 2));
     },

@@ -55,12 +55,14 @@ export function describeLoopParse(input: string): string {
   return `action: create - not ready (${parts.join("; ")}). ${set}`.trimEnd();
 }
 
+/** ` (completed/max)` or ` (completed)` - the progress fragment both the status line and inventory show. */
+function formatProgress(completed: number, max?: number): string {
+  return max !== undefined ? ` (${completed}/${max})` : ` (${completed})`;
+}
+
 /** A one-line status for a loop snapshot: `loop_1 running · every 5m · do "x" (2/5)`. */
 function formatSnapshot(snapshot: LoopSnapshot): string {
-  const progress =
-    snapshot.max !== undefined
-      ? ` (${snapshot.completed}/${snapshot.max})`
-      : ` (${snapshot.completed})`;
+  const progress = formatProgress(snapshot.completed, snapshot.max);
   const reason = snapshot.stopReason !== undefined ? ` [${snapshot.stopReason}]` : "";
   return `${snapshot.loopId} ${snapshot.status} · ${snapshot.summary}${progress}${reason}`;
 }
@@ -71,13 +73,7 @@ function formatInventory(loops: readonly LoopState[]): string {
     return 'No active loops. Create one with /loop, e.g. /loop max 5 do "run tests".';
   }
   return loops
-    .map((loop) => {
-      const progress =
-        loop.spec.max !== undefined
-          ? ` (${loop.completed}/${loop.spec.max})`
-          : ` (${loop.completed})`;
-      return `${loop.id} ${loop.status}${progress}`;
-    })
+    .map((loop) => `${loop.id} ${loop.status}${formatProgress(loop.completed, loop.spec.max)}`)
     .join("\n");
 }
 

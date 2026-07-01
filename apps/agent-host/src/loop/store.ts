@@ -1,9 +1,4 @@
-import {
-  extractLoopSpec,
-  type LoopSnapshot,
-  type LoopSpec,
-  type LoopStatus,
-} from "@trevor/session";
+import { extractLoopSpec, type LoopSnapshot, type LoopSpec } from "@trevor/session";
 import {
   cancelLoop,
   completeLoop,
@@ -105,7 +100,7 @@ export function summarizeLoopSpec(spec: LoopSpec): string {
 }
 
 /** The read-model snapshot of one loop state (the payload of a `loop.status` event). */
-export function loopSnapshot(state: LoopState, nextRun?: number): LoopSnapshot {
+function loopSnapshot(state: LoopState, nextRun?: number): LoopSnapshot {
   return {
     loopId: state.id,
     status: state.status,
@@ -120,23 +115,17 @@ export function loopSnapshot(state: LoopState, nextRun?: number): LoopSnapshot {
   };
 }
 
-/** The client-facing {@link LoopStatus} (6 states) a full lifecycle status projects to. `pending` shows as
- *  a draft awaiting confirmation; `deleted` loops are hidden and never projected into an inventory row. */
-export function toClientStatus(status: LoopState["status"]): LoopStatus | "hidden" {
-  switch (status) {
-    case "draft":
-    case "pending":
-      return "draft";
-    case "deleted":
-      return "hidden";
-    default:
-      return status;
-  }
-}
+/** The floor delay between iterations of a CONTINUOUS loop (a bound with no `every` cadence). Without it a
+ *  continuous loop reschedules at delay 0 and, with an instant-resolving prompt/background seam, would flood
+ *  the turn queue; the floor paces it to a sane rate while still running effectively back-to-back. */
+const CONTINUOUS_ITERATION_FLOOR_MS = 1_000;
 
 export class LoopStore {
   private readonly loops = new Map<string, LoopState>();
   private readonly deadlines = new Map<string, number>();
+  /** Loop ids with an iteration currently executing - guards against a second concurrent run (from a
+   *  run-now/resume racing an in-flight iteration) double-advancing `completed`. */
+  private readonly inFlight = new Set<string>();
   private readonly emit: LoopEventSink;
   private readonly makeId: () => string;
   private readonly runner?: LoopIterationRunner;
@@ -168,12 +157,18 @@ export class LoopStore {
 
   /**
    * Restore loops (durable ones) at startup WITHOUT re-running any effects or re-emitting. A loop that was
-   * `running`/`paused` when the host stopped is restored as-is (its last-known status + counters); the
-   * caller decides whether to resume driving. Kept side-effect-free so hydration is idempotent.
+   * `running` when the host stopped is restored as `paused` (not `running`): its timer did not survive the
+   * restart, so a "running" badge would be a lie - the user explicitly resumes it. `deleted` records are
+   * dropped. Kept side-effect-free (no emit/schedule) so hydration is idempotent.
    */
   hydrate(states: readonly LoopState[]): void {
     for (const state of states) {
-      this.loops.set(state.id, state);
+      if (state.status === "deleted") {
+        continue;
+      }
+      const restored: LoopState =
+        state.status === "running" ? { ...state, status: "paused" } : state;
+      this.loops.set(restored.id, restored);
     }
   }
 
@@ -309,7 +304,8 @@ export class LoopStore {
     if (!this.driving || state.status !== "running") {
       return;
     }
-    const cadence = state.spec.everyMs ?? 0;
+    // A cadence loop waits its interval; a continuous loop (no `every`) is floored so it cannot delay-0 spin.
+    const cadence = state.spec.everyMs ?? CONTINUOUS_ITERATION_FLOOR_MS;
     const deadline = this.deadlines.get(state.id);
     if (deadline === undefined) {
       this.scheduler.schedule(state.id, cadence, () => this.tick(state.id));
@@ -337,25 +333,43 @@ export class LoopStore {
     void this.runIteration(loopId);
   }
 
-  /** Run one iteration's body, apply the resulting transition, and reschedule while still running. */
+  /** Run one iteration's body, apply the resulting transition, and reschedule while still running. Guarded
+   *  against re-entrancy (a run-now/resume racing an in-flight iteration) so a body never runs concurrently
+   *  for the same loop, and against a THROWING runner (a rejected seam) so it cannot crash the host. */
   private async runIteration(loopId: string): Promise<void> {
     const before = this.loops.get(loopId);
     if (this.runner === undefined || before === undefined || before.status !== "running") {
       return;
     }
-    const outcome = await this.runner.run(before.spec);
-    // The loop may have been paused/stopped/deleted while the body ran; re-read and bail if so.
-    const current = this.loops.get(loopId);
-    if (current === undefined || current.status !== "running") {
-      return;
+    if (this.inFlight.has(loopId)) {
+      return; // an iteration is already executing for this loop; do not start a second concurrently
     }
+    this.inFlight.add(loopId);
     let next: LoopTransition;
-    if (!outcome.ok) {
-      next = failLoop(current, outcome.error ?? "iteration failed");
-    } else if (outcome.conditionMet && current.spec.until !== undefined) {
-      next = completeLoop(current, "until_satisfied");
-    } else {
-      next = recordIteration(current); // increments; auto-completes at max
+    try {
+      const outcome = await this.runner.run(before.spec);
+      // The loop may have been paused/stopped/deleted while the body ran; re-read and bail if so.
+      const current = this.loops.get(loopId);
+      if (current === undefined || current.status !== "running") {
+        return;
+      }
+      if (!outcome.ok) {
+        next = failLoop(current, outcome.error ?? "iteration failed");
+      } else if (outcome.conditionMet && current.spec.until !== undefined) {
+        next = completeLoop(current, "until_satisfied");
+      } else {
+        next = recordIteration(current); // increments; auto-completes at max
+      }
+    } catch (error) {
+      // A runner that REJECTS (not the ok:false contract) - e.g. a transport blip - fails the loop instead
+      // of escaping as an unhandled rejection that would crash the host.
+      const current = this.loops.get(loopId);
+      if (current === undefined || current.status !== "running") {
+        return;
+      }
+      next = failLoop(current, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.inFlight.delete(loopId);
     }
     if (!next.ok) {
       return;

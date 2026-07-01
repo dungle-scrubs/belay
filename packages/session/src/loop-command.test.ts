@@ -64,6 +64,12 @@ describe("loop command classification for routing (M1)", () => {
     expect(classifyLoopCommand("/loop list").action).toBe("list");
   });
 
+  it("classifies a BARE /loops (plural, no subcommand) as list", () => {
+    expect(classifyLoopCommand("/loops").action).toBe("list");
+    // Bare /loop (singular) still opens the builder (create), not list.
+    expect(classifyLoopCommand("/loop").action).toBe("create");
+  });
+
   it("classifies each control verb and extracts the target loop id", () => {
     for (const verb of LOOP_CONTROL_VERBS) {
       const routed = classifyLoopCommand(`/loop ${verb} loop_42`);

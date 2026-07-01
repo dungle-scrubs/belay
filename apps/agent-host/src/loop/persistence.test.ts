@@ -71,10 +71,29 @@ describe("durable loop restart (M6)", () => {
     const events: LoopSnapshot[] = [];
     const store2 = new LoopStore({ emit: (s) => events.push(s) });
     store2.hydrate(restored);
-    expect(store2.get("loop_1")?.status).toBe("running");
+    // A `running` loop restores as `paused` - its timer did not survive the restart, so a "running" badge
+    // would be a lie; the user resumes it explicitly.
+    expect(store2.get("loop_1")?.status).toBe("paused");
     expect(store2.get("loop_1")?.spec.action).toBe("sweep");
     // Hydration is side-effect-free: no snapshots re-emitted on restore.
     expect(events).toHaveLength(0);
+  });
+
+  it("prunes a soft-deleted durable loop from the file (no unbounded growth)", () => {
+    const persistence = createLoopPersistence(file);
+    const store = new LoopStore({
+      emit: () => {},
+      makeId: () => "loop_1",
+      runner: idleRunner,
+      scheduler: new LoopScheduler(fixedClock),
+      persist: (record) => persistence.save(record),
+    });
+    store.submit('/loop durable every 1h max 9 do "x"');
+    store.confirm("loop_1");
+    expect(persistence.load()).toHaveLength(1);
+    store.delete("loop_1");
+    // The deleted durable loop is pruned, not left as a growing tombstone.
+    expect(persistence.load()).toEqual([]);
   });
 
   it("does NOT persist a session (non-durable) loop", () => {

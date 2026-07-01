@@ -9,7 +9,6 @@ import {
   failLoop,
   isActivatableLoop,
   isBoundedLoop,
-  isTerminalLoop,
   type LoopState,
   pauseLoop,
   recordIteration,
@@ -60,6 +59,24 @@ describe("loop activation rules (M4)", () => {
     expect(isBoundedLoop({ ...base, until: "done" })).toBe(true);
     expect(isBoundedLoop({ ...base, timeoutMs: 5000 })).toBe(true);
     expect(isBoundedLoop(base)).toBe(false);
+  });
+
+  it("rejects a process loop bounded ONLY by until (it cannot judge the condition), but allows a co-bound", () => {
+    const proc = { runner: "process", durability: "session", action: "curl x" } as const;
+    // until alone: a process can't detect it, so it would never self-terminate -> not activatable.
+    expect(isActivatableLoop({ ...proc, until: "healthy" })).toBe(false);
+    // until PLUS a deterministic bound is fine.
+    expect(isActivatableLoop({ ...proc, until: "healthy", max: 10 })).toBe(true);
+    expect(isActivatableLoop({ ...proc, until: "healthy", timeoutMs: 60_000 })).toBe(true);
+    // A prompt/background loop CAN judge until (the runner signals), so until-only is allowed there.
+    expect(
+      isActivatableLoop({
+        runner: "current_session_prompt",
+        durability: "session",
+        action: "check",
+        until: "green",
+      }),
+    ).toBe(true);
   });
 });
 
@@ -150,9 +167,7 @@ describe("loop guards reject illegal transitions (M4)", () => {
     expect(iterated.ok).toBe(false);
   });
 
-  it("terminal states are terminal and re-deleting is rejected", () => {
-    expect(isTerminalLoop("completed")).toBe(true);
-    expect(isTerminalLoop("running")).toBe(false);
+  it("re-deleting a terminal loop is rejected", () => {
     const stopped = stopLoop(running());
     const deleted = stopped.ok ? deleteLoop(stopped.state) : { ok: false as const, reason: "" };
     expect(deleted.ok && deleted.state.status).toBe("deleted");
