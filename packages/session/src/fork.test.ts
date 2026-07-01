@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { SessionEvent } from "./event";
 import {
   buildForkPrefix,
+  dedupeByOrigin,
   FORK_ORIGIN_KEY,
   forkOriginOf,
   isForkableEvent,
   isForkReady,
+  MODEL_SELECTION_INHERITANCE,
   messageId,
   planFork,
+  reconstructActiveModel,
   selectForkPrefix,
 } from "./fork";
 import { PRODUCER_IDS } from "./identity";
@@ -177,5 +180,85 @@ describe("fork plan over normal append APIs (M2)", () => {
     const partial = plan.events.slice(0, -1).map((e) => ({ type: e.type }));
     expect(isForkReady(partial)).toBe(false);
     expect(isForkReady(plan.events.map((e) => ({ type: e.type })))).toBe(true);
+  });
+});
+
+describe("active model reconstruction across a fork (M4, D-002)", () => {
+  const userMsg = (seq: number, provider: string, reasoning?: string) =>
+    ev(seq, "user.message", { text: "q", provider, ...(reasoning ? { reasoning } : {}) });
+  const switched = (
+    seq: number,
+    to: { model: string; reasoning?: string },
+    outcome: "applied" | "blocked",
+  ) =>
+    ev(seq, "model.switched", {
+      runId: `r${seq}`,
+      from: { model: "qwen" },
+      to,
+      initiator: "manual",
+      outcome,
+    });
+
+  it("seeds from the last user.message model when no switch occurred", () => {
+    expect(reconstructActiveModel([userMsg(1, "qwen", "low")])).toEqual({
+      model: "qwen",
+      reasoning: "low",
+    });
+  });
+
+  it("resumes on the ACTIVE post-switch model, not the pre-switch or a reset default", () => {
+    const prefix = [
+      userMsg(1, "qwen", "low"),
+      switched(2, { model: "opus", reasoning: "high" }, "applied"),
+    ];
+    expect(reconstructActiveModel(prefix)).toEqual({ model: "opus", reasoning: "high" });
+  });
+
+  it("ignores a BLOCKED switch (the active model stays the pre-switch selection)", () => {
+    const prefix = [userMsg(1, "qwen", "low"), switched(2, { model: "opus" }, "blocked")];
+    expect(reconstructActiveModel(prefix)).toEqual({ model: "qwen", reasoning: "low" });
+  });
+
+  it("a later user.message re-establishes the baseline over an earlier switch", () => {
+    const prefix = [
+      userMsg(1, "qwen"),
+      switched(2, { model: "opus" }, "applied"),
+      userMsg(3, "deepseek", "medium"),
+    ];
+    expect(reconstructActiveModel(prefix)).toEqual({ model: "deepseek", reasoning: "medium" });
+  });
+
+  it("returns null for a legacy prefix carrying no model information", () => {
+    expect(
+      reconstructActiveModel([ev(1, "assistant.completed", { runId: "r1", text: "hi" })]),
+    ).toBeNull();
+  });
+});
+
+describe("participant inheritance is opt-in + dedupes by origin (M4)", () => {
+  it("the model selection is an inherited stateful participant seeded from the fork point", () => {
+    expect(MODEL_SELECTION_INHERITANCE.participant).toBe("model-selection");
+    const prefix = [
+      ev(1, "user.message", { text: "q", provider: "qwen", reasoning: "low" }),
+      ev(2, "model.switched", {
+        runId: "r2",
+        from: { model: "qwen" },
+        to: { model: "opus", reasoning: "high" },
+        initiator: "manual",
+        outcome: "applied",
+      }),
+    ];
+    expect(MODEL_SELECTION_INHERITANCE.inherit(prefix)).toEqual({
+      model: "opus",
+      reasoning: "high",
+    });
+  });
+
+  it("dedupes inherited events by their origin, keeping the first occurrence", () => {
+    // Two copies carrying the SAME origin (a re-inherited message) collapse to one.
+    const a = ev(10, "user.message", { text: "a", [FORK_ORIGIN_KEY]: { sessionId: "p", seq: 1 } });
+    const b = ev(11, "user.message", { text: "b", [FORK_ORIGIN_KEY]: { sessionId: "p", seq: 1 } });
+    const c = ev(12, "user.message", { text: "c" }); // native (no origin) - distinct by its own id
+    expect(dedupeByOrigin([a, b, c]).map((e) => e.payload.text)).toEqual(["a", "c"]);
   });
 });

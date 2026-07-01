@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 5
-- **Completed current work:** 12
+- **Current cutoff blockers:** 0
+- **Completed current work:** 17
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M4 - Participant Inheritance
+- **Current focus:** DONE - all milestones implemented; gate + simplify + merge
 
 ## Completed Current State / Hard Dependencies
 
@@ -25,11 +25,11 @@
 - [x] RED: Storybook/test branch-from-here and lineage states.
 - [x] GREEN: Add explicit branch affordance and lineage navigator.
 - [x] REFACTOR: Preserve session navigation/resume semantics.
-- [ ] RED: Cover opt-in inheritance and dedupe by origin/id.
-- [ ] GREEN: Implement inheritance contracts only where needed.
-- [ ] RED: Cover a mid-turn fork resuming its next turn on the active (post-switch) model+reasoning reconstructed from the prefix's `model.switched` events, not a reset default (`.plans/09.1-mid-turn-model-switch`).
-- [ ] GREEN: Treat the model+reasoning selection as an inherited stateful participant seeded from the fork point's active model.
-- [ ] REFACTOR: Document stateless provider behavior.
+- [x] RED: Cover opt-in inheritance and dedupe by origin/id.
+- [x] GREEN: Implement inheritance contracts only where needed.
+- [x] RED: Cover a mid-turn fork resuming its next turn on the active (post-switch) model+reasoning reconstructed from the prefix's `model.switched` events, not a reset default (`.plans/09.1-mid-turn-model-switch`).
+- [x] GREEN: Treat the model+reasoning selection as an inherited stateful participant seeded from the fork point's active model.
+- [x] REFACTOR: Document stateless provider behavior.
 
 ## Accepted / Deferred Follow-Up
 

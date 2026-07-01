@@ -1,4 +1,11 @@
-import { type PublishInput, planFork, type SessionEvent } from "@trevor/session";
+import {
+  type ActiveModel,
+  MODEL_SELECTION_INHERITANCE,
+  type PublishInput,
+  planFork,
+  type SessionEvent,
+  selectForkPrefix,
+} from "@trevor/session";
 
 /**
  * The host FORK operation (plan 15, M2), kept PURE over injected effects so the append sequence is
@@ -32,6 +39,13 @@ export interface ForkResult {
   /** Count of copied conversation events (excludes the `session.forkedFrom` marker). */
   readonly copied: number;
   readonly forkReady: boolean;
+  /**
+   * The model + reasoning the child should resume its next turn on (plan 15, M4, D-002): the ACTIVE
+   * post-switch selection reconstructed from the fork point, NOT a reset default. Null when the prefix
+   * carries no model information (a legacy log). The provider stays stateless; only this selection is
+   * inherited, so main.ts seeds the child's model selection from it.
+   */
+  readonly inheritedModel: ActiveModel | null;
 }
 
 /**
@@ -44,6 +58,7 @@ export async function forkSession(
 ): Promise<ForkResult> {
   const parentEvents = await deps.readSession(args.parentSessionId);
   const childSessionId = deps.newSessionId();
+  const prefix = selectForkPrefix(parentEvents, args.forkSeq);
   const plan = planFork({
     parentSessionId: args.parentSessionId,
     parentEvents,
@@ -60,5 +75,7 @@ export async function forkSession(
     forkSeq: args.forkSeq,
     copied: plan.copied,
     forkReady: true,
+    // The model selection is the one inherited stateful participant (D-002); seed it from the fork point.
+    inheritedModel: MODEL_SELECTION_INHERITANCE.inherit(prefix),
   };
 }

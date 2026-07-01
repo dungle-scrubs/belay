@@ -1,6 +1,8 @@
 import type { SessionEvent } from "./event";
 import { PRODUCER_IDS } from "./identity";
+import { resolveUserTurnModel } from "./model-source";
 import { events } from "./protocol";
+import { decodeTrevorEvent } from "./protocol-decode";
 import type { PublishInput } from "./transport";
 
 /**
@@ -151,4 +153,85 @@ export function planFork(args: {
  */
 export function isForkReady(childEvents: readonly Pick<SessionEvent, "type">[]): boolean {
   return childEvents.some((e) => e.type === "session.forkedFrom");
+}
+
+/** The active model + reasoning selection at a point in a session. */
+export interface ActiveModel {
+  readonly model: string;
+  readonly reasoning?: string;
+}
+
+/**
+ * Reconstructs the ACTIVE model + reasoning at the end of a prefix (plan 15, M4, D-002). It folds the
+ * conversation in order: each `user.message` establishes the turn's selected model, and every
+ * subsequently-APPLIED `model.switched` (a `blocked` switch is ignored) moves the active endpoint. The
+ * result is what a fork's NEXT turn must resume on - the live post-switch selection at the fork point, NOT
+ * a reset default. Returns null only when the prefix carries no model information at all (a legacy log).
+ */
+export function reconstructActiveModel(events: readonly SessionEvent[]): ActiveModel | null {
+  let active: ActiveModel | null = null;
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (!decoded) {
+      continue;
+    }
+    if (decoded.type === "user.message") {
+      const resolved = resolveUserTurnModel(decoded);
+      if (resolved.sourceId) {
+        active = {
+          model: resolved.sourceId,
+          ...(resolved.reasoning !== undefined ? { reasoning: resolved.reasoning } : {}),
+        };
+      }
+    } else if (decoded.type === "model.switched" && decoded.outcome === "applied") {
+      active = {
+        model: decoded.to.model,
+        ...(decoded.to.reasoning !== undefined ? { reasoning: decoded.to.reasoning } : {}),
+      };
+    }
+  }
+  return active;
+}
+
+/**
+ * A stateful participant that INHERITS state across a fork (plan 15, M4). Most participants are stateless
+ * and do NOT implement this - the model PROVIDER, for one, holds no per-session state, so a fork needs no
+ * provider inheritance. Only a participant whose state must carry into the child (the model + reasoning
+ * SELECTION) opts in by implementing `inherit`, which reconstructs that state from the fork prefix.
+ */
+export interface ForkInheritance<S> {
+  readonly participant: string;
+  /** Reconstruct the participant's inherited state from the fork prefix, or null when there is none. */
+  inherit(prefixEvents: readonly SessionEvent[]): S | null;
+}
+
+/**
+ * The one built-in inheritance contract: the model + reasoning selection. The provider stays stateless;
+ * the SELECTION is inherited state, seeded from the fork point's active (post-switch) value (D-002), so a
+ * mid-turn fork resumes on the switched model rather than resetting to a host default.
+ */
+export const MODEL_SELECTION_INHERITANCE: ForkInheritance<ActiveModel> = {
+  participant: "model-selection",
+  inherit: reconstructActiveModel,
+};
+
+/**
+ * Dedupes a list of copied/inherited events by their stable identity - the fork origin when present
+ * (a copied event), else the event's own `(sessionId, seq)` - keeping the FIRST occurrence. So a
+ * participant that inherits items across a re-fork never double-counts the same message.
+ */
+export function dedupeByOrigin<T extends Pick<SessionEvent, "sessionId" | "seq" | "payload">>(
+  events: readonly T[],
+): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const event of events) {
+    const origin = forkOriginOf(event);
+    const key = origin ? `${origin.sessionId}:${origin.seq}` : messageId(event);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(event);
+    }
+  }
+  return out;
 }

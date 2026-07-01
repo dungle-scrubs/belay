@@ -86,4 +86,22 @@ describe("host fork operation over the normal append API (M2)", () => {
       "second question",
     ]);
   });
+
+  it("carries the ACTIVE post-switch model as the child's inherited resume model (M4, D-002)", async () => {
+    // A parent whose turn switched model mid-flight: the fork must resume on the switched-to model.
+    const withSwitch: SessionEvent[] = [
+      ev(1, "user.message", "trevor-web", { text: "q", provider: "qwen", reasoning: "low" }),
+      ev(2, "model.switched", "trevor-host", {
+        runId: "r1",
+        from: { model: "qwen" },
+        to: { model: "opus", reasoning: "high" },
+        initiator: "manual",
+        outcome: "applied",
+      }),
+      ev(3, "assistant.completed", "trevor-host", { runId: "r1", text: "a" }),
+    ];
+    const { deps } = makeStore(withSwitch);
+    const result = await forkSession(deps, { parentSessionId: "parent", forkSeq: 3 });
+    expect(result.inheritedModel).toEqual({ model: "opus", reasoning: "high" });
+  });
 });
