@@ -44,6 +44,8 @@ export const TOOL_DESCRIPTORS = [
   { name: "skill", readOnly: false },
   { name: "skills_list", readOnly: true },
   { name: "skill_view", readOnly: true },
+  // trevor_expert only reads the host-generated capability manifest; a serial-safe pure read.
+  { name: "trevor_expert", readOnly: true },
 ] as const satisfies readonly ToolDescriptor[];
 
 /** Every tool name the host exposes, in declaration order. */

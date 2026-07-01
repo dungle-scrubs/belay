@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M8: Expert Built-In Surface
+> Current focus: M9: Expert Safety and Answer Quality
 
 ## Summary
 
-- Current cutoff blockers: 15
+- Current cutoff blockers: 10
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -71,11 +71,11 @@
 
 ## M8: Expert Built-In Surface
 
-- [ ] RED: Add tests for built-in `trevor-expert` discovery metadata and trigger visibility
-- [ ] GREEN: Register `trevor-expert` as a built-in expert surface
-- [ ] RED: Add tests proving it loads only bounded deterministic export slices needed for the question
-- [ ] GREEN: Implement direct host export access for built-in expert queries, with interpolation optional only when enabled
-- [ ] REFACTOR: Keep `trevor-expert` query orchestration separate from manifest generation
+- [x] RED: Add tests for built-in `trevor-expert` discovery metadata and trigger visibility
+- [x] GREEN: Register `trevor-expert` as a built-in expert surface
+- [x] RED: Add tests proving it loads only bounded deterministic export slices needed for the question
+- [x] GREEN: Implement direct host export access for built-in expert queries, with interpolation optional only when enabled
+- [x] REFACTOR: Keep `trevor-expert` query orchestration separate from manifest generation
 
 ## M9: Expert Safety and Answer Quality
 

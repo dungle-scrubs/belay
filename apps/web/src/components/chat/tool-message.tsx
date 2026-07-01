@@ -308,6 +308,8 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it
   // renders like other text-output tools (the dashboard surface is the /doctor command, not this).
   doctor: renderOutput,
+  // `trevor_expert` answers capability questions from the manifest as flat, already-redacted text.
+  trevor_expert: renderOutput,
   clipboard_write: renderClipboard,
   bash: renderOutput,
   write: renderDiff,

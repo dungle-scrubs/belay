@@ -20,6 +20,7 @@ import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
+import { trevorExpertTool } from "./trevor-expert";
 import type { Tool } from "./types";
 import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
@@ -92,6 +93,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     skillViewTool,
     astGrepTool,
     doctorTool,
+    trevorExpertTool,
     clipboardWriteTool,
     supervisor.buildTool(),
     ...buildTaskTools(),

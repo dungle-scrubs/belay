@@ -22,6 +22,7 @@ import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
+import { trevorExpertTool } from "./trevor-expert";
 import type { Tool } from "./types";
 import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
@@ -54,6 +55,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   skillsListTool,
   skillViewTool,
   doctorTool,
+  trevorExpertTool,
   clipboardWriteTool,
   supervisor.buildTool(),
   ...buildTaskTools(),
