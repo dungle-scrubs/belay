@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { allowedTools, type BridgeExecute, createToolScriptBridge } from "./bridge";
 
@@ -166,6 +166,19 @@ describe("tool_script bridge SYMLINK confinement (M4 hardening)", () => {
     expect(response.status).toBe("denied");
     expect(response.error).toContain("escapes the workspace root");
     // The privileged host read never ran.
+    expect(calls).toEqual([]);
+  });
+
+  it("DENIES the `..`-through-symlink desync: link/../x is lexically in-workspace but escapes at read time", async () => {
+    // The subtle bypass: `resolve()` cancels `link/..` as a string BEFORE following the symlink, so a lexical
+    // check thinks the path is in-workspace; but readFile follows `link` FIRST, then `..` climbs out of the
+    // target's parent. Reading `link/../<secret-dir>/id_rsa` round-trips back to the outside secret.
+    const { bridge, calls } = bridgeFor(workspace);
+    const viaDotDot = await bridge.call("read", { path: `link/../${basename(outside)}/id_rsa` });
+    expect(viaDotDot.status).toBe("denied");
+    expect(viaDotDot.error).toContain("escapes the workspace root");
+    // Even a non-existent tail escapes: link/.. already resolves (via the symlink) outside the workspace.
+    expect((await bridge.call("read", { path: "link/../whatever" })).status).toBe("denied");
     expect(calls).toEqual([]);
   });
 

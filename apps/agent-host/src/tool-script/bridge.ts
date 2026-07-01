@@ -1,5 +1,5 @@
-import { realpathSync } from "node:fs";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { lstatSync, readlinkSync } from "node:fs";
+import { dirname, isAbsolute, join, sep } from "node:path";
 import { TOOLSET_TOOLS, type ToolScriptToolset } from "@trevor/session";
 import { WORKSPACE_ROOT } from "../paths";
 import type { ToolScriptBridge } from "./host-manager";
@@ -49,29 +49,63 @@ const CONFINED_PATH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   ast_grep: ["paths", "globs"],
 };
 
+/** A symlink-follow cap: past this the path is a cycle (or pathologically deep); resolve to `/` so any
+ *  non-root workspace treats it as an escape (deny) rather than looping forever. */
+const MAX_SYMLINK_HOPS = 40;
+
 /**
- * Canonicalizes `p` by realpath-resolving its LONGEST EXISTING ANCESTOR (so a symlinked directory anywhere
- * in the path is followed to its true target) and re-appending the not-yet-existing remainder. This handles
- * a real file (fully realpath'd), a not-yet-created file (parent realpath'd), and a glob pattern (its magic
- * lives in the non-existent remainder, appended verbatim). A non-ENOENT stat error degrades to lexical for
- * that segment. Pure `resolve()` would miss symlinks; `readFile` in the host follows them.
+ * Resolves `absolute` the way the KERNEL's `open()` does - the resolution `readFile` in the host actually
+ * performs - so the confinement check matches the real read. Two subtleties `resolve()`/`realpathSync`
+ * get WRONG on macOS:
+ *   - `resolve()` collapses `..` as a pure string op BEFORE any symlink is followed, so `link/../x` cancels
+ *     to `x` (looks in-workspace) though the kernel climbs out of the link's TARGET.
+ *   - macOS `realpath(3)` resolves `..` LEXICALLY (so `realpath(ws/link/..)` returns `ws`), which DESYNCS
+ *     from `open()` (which follows `link`, then `..` from the target's real parent).
+ * So we walk segments left-to-right: follow each symlink, and apply `..` to the current REAL location. A
+ * non-existent segment (a not-yet-created file, or a glob's magic) is a plain name. This is `namei`.
  */
-function canonicalize(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    const parent = dirname(p);
-    if (parent === p) {
-      return p;
+function resolveLikeKernel(absolute: string): string {
+  const remaining = absolute.split(sep).filter((s) => s !== "" && s !== ".");
+  let current: string = sep;
+  let hops = 0;
+  while (remaining.length > 0) {
+    const segment = remaining.shift() as string;
+    if (segment === "..") {
+      current = dirname(current);
+      continue;
     }
-    return join(canonicalize(parent), basename(p));
+    const next = join(current, segment);
+    let target: string | null = null;
+    try {
+      if (lstatSync(next).isSymbolicLink()) {
+        target = readlinkSync(next);
+      }
+    } catch {
+      // Non-existent / unreadable: a plain component (the kernel would just create/miss it here).
+    }
+    if (target === null) {
+      current = next;
+      continue;
+    }
+    if (++hops > MAX_SYMLINK_HOPS) {
+      return sep; // symlink cycle: escape for any non-root workspace.
+    }
+    // Splice the link's target into the walk: an absolute target restarts at root, a relative one stays
+    // rooted at the link's own directory (`current`), then the rest of the original path continues.
+    if (isAbsolute(target)) {
+      current = sep;
+    }
+    remaining.unshift(...target.split(sep).filter((s) => s !== "" && s !== "."));
   }
+  return current;
 }
 
-/** True when `path`, resolved against `root` then canonicalized (symlinks followed), points OUTSIDE the
- *  canonical workspace root. `canonicalRoot` is precomputed once (root is fixed for a run). */
+/** True when `path` (as the read tool will actually open it) points OUTSIDE the canonical workspace root.
+ *  `canonicalRoot` is precomputed once (root is fixed for a run). The candidate is made absolute against
+ *  `root` by STRING concatenation - never `resolve`/`join`, which would collapse `..` before symlinks. */
 function escapesRoot(root: string, canonicalRoot: string, path: string): boolean {
-  const canonical = canonicalize(resolve(root, path));
+  const absolute = isAbsolute(path) ? path : `${root}${sep}${path}`;
+  const canonical = resolveLikeKernel(absolute);
   return canonical !== canonicalRoot && !canonical.startsWith(canonicalRoot + sep);
 }
 
@@ -128,8 +162,8 @@ export interface ToolScriptBridgeOptions {
 export function createToolScriptBridge(options: ToolScriptBridgeOptions): ToolScriptBridge {
   const allowed = allowedTools(options.toolsets);
   const root = options.workspaceRoot ?? WORKSPACE_ROOT;
-  // Canonicalize the root ONCE - the confinement compares each candidate's realpath against it.
-  const canonicalRoot = canonicalize(root);
+  // Resolve the root ONCE (same kernel-faithful walk) - the confinement compares each candidate against it.
+  const canonicalRoot = resolveLikeKernel(root);
   return {
     async call(tool, input) {
       if (!allowed.has(tool)) {
