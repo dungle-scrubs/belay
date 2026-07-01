@@ -311,6 +311,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description: "Launcher and managed-service log files.",
   },
   {
+    name: "otel",
+    category: "state",
+    relativePath: "otel",
+    description: "Local OTel telemetry artifacts (bounded, redacted JSONL spans/metrics).",
+  },
+  {
     name: "provider-observations",
     category: "state",
     relativePath: "provider-observations.json",
