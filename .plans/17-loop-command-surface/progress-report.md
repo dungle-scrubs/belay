@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M5: Runner Execution
-- Current cutoff blockers: 36 unchecked
+> Current focus: M6: Scheduling, Persistence, And Controls
+- Current cutoff blockers: 29 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -53,13 +53,13 @@
 
 ### M5: Runner Execution
 
-- [ ] RED: Add integration tests for current-session prompt loops.
-- [ ] GREEN: Execute current-session prompt loop bodies through the ordinary turn/session path.
-- [ ] RED: Add integration tests for background-agent prompt loops.
-- [ ] GREEN: Execute background prompt loop bodies through the background-agent path without blocking the active session.
-- [ ] RED: Add integration tests for process command loops, timeouts, cancellation, and redaction.
-- [ ] GREEN: Execute process loop bodies through the existing command/process safety boundary.
-- [ ] REFACTOR: Share execution correlation and diagnostics with existing run/process infrastructure.
+- [x] RED: Add integration tests for current-session prompt loops.
+- [x] GREEN: Execute current-session prompt loop bodies through the ordinary turn/session path.
+- [x] RED: Add integration tests for background-agent prompt loops.
+- [x] GREEN: Execute background prompt loop bodies through the background-agent path without blocking the active session.
+- [x] RED: Add integration tests for process command loops, timeouts, cancellation, and redaction.
+- [x] GREEN: Execute process loop bodies through the existing command/process safety boundary.
+- [x] REFACTOR: Share execution correlation and diagnostics with existing run/process infrastructure.
 
 ### M6: Scheduling, Persistence, And Controls
 
