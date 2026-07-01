@@ -1,5 +1,5 @@
+import type { CommandToken } from "@trevor/session";
 import type { KeyboardEvent } from "react";
-import type { CommandToken } from "@/commands/command-family";
 import { cn } from "@/lib/utils";
 
 /**

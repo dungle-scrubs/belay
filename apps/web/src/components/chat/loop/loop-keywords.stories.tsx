@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { CommandKeywordChip } from "@/commands/command-family";
-import { LOOP_FAMILY } from "@/commands/loop";
+import type { CommandKeywordChip } from "@trevor/session";
+import { LOOP_FAMILY } from "@trevor/session";
 import { LoopKeywords } from "./loop-keywords";
 
 /** Build the keyword chips (the presentation view-model's `chips`) for the loop family. */

@@ -1,4 +1,4 @@
-import type { CommandPresentation } from "@/commands/command-family";
+import type { CommandPresentation } from "@trevor/session";
 import { cn } from "@/lib/utils";
 import { LoopBuilder } from "./loop-builder";
 import { LoopKeywords } from "./loop-keywords";

@@ -37,6 +37,27 @@ export const LOOP_VALUE_KEYWORDS = ["max", "every", "until", "timeout", "do"] as
 /** Control verbs that route to a lifecycle action instead of creating a loop. */
 export const LOOP_CONTROL_VERBS = ["stop", "pause", "resume", "run-now", "delete"] as const;
 
+/**
+ * The lifecycle PROTOCOL ACTIONS the loop family exposes (D-006). A client - the rich web helper OR a
+ * headless client that can only send command text - issues one of these; the host is authoritative. The
+ * command head yields `create` (a `/loop …` creation) or `list` (`/loop list` / `/loops`); a control verb
+ * maps 1:1 to the matching action. UI-neutral: no rendering, just the action vocabulary.
+ */
+export type LoopProtocolAction =
+  | "create"
+  | "list"
+  | "stop"
+  | "pause"
+  | "resume"
+  | "run-now"
+  | "delete";
+
+export const LOOP_PROTOCOL_ACTIONS: readonly LoopProtocolAction[] = [
+  "create",
+  "list",
+  ...LOOP_CONTROL_VERBS,
+];
+
 /** Human label for a runner, used in builder rows and inventory. */
 export function loopRunnerLabel(runner: LoopRunner): string {
   switch (runner) {
@@ -71,6 +92,7 @@ export const LOOP_FAMILY: CommandFamilyDescriptor = {
     { keyword: "durable", arg: null },
   ],
   controlVerbs: [...LOOP_CONTROL_VERBS],
+  protocolActions: [...LOOP_PROTOCOL_ACTIONS],
   examples: [
     { text: '/loop max 5 do "run the test suite"', note: "Five iterations, then stop." },
     { text: '/loop every 5m do "check CI status"', note: "On a cadence until you stop it." },

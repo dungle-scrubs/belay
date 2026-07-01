@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { LOOP_FAMILY, loopGrammar } from "./loop";
+import { LOOP_FAMILY, loopGrammar } from "./loop-command";
 import { parseDurationMs, parseLoopCommand } from "./loop-parser";
 
 test("the legend derives from the descriptor keywords - no separate hand-maintained list (D-016)", () => {

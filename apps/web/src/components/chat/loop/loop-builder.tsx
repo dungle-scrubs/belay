@@ -1,5 +1,5 @@
+import type { CommandPresentation } from "@trevor/session";
 import { Check, CircleDot, TriangleAlert } from "lucide-react";
-import type { CommandPresentation } from "@/commands/command-family";
 import { cn } from "@/lib/utils";
 
 /**

@@ -6,6 +6,7 @@ import type {
 } from "@trevor/session";
 import { buildInitProposal } from "./context/init-agents";
 import { buildDoctorCommandResult } from "./doctor/build";
+import { buildLoopCommands } from "./loop/command";
 import { buildTrevorExportCommand } from "./manifest/export-command";
 import { msg } from "./messages";
 import { supervisor } from "./processes";
@@ -345,6 +346,11 @@ export function buildCommandRegistry(): CommandRegistry {
   add(buildVimCommand());
   add(buildJobsCommand());
   add(buildJobsStopCommand());
+  // `/loop` + `/loops`: the host-owned recurring-work command family (plan 17). Both parse authoritatively
+  // through the shared parser and return a structured, UI-neutral result.
+  for (const loopCommand of buildLoopCommands()) {
+    add(loopCommand);
+  }
 
   const byName = new Map(commands.map((c) => [c.spec.name, c]));
 

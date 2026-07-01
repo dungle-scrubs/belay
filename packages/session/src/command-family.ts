@@ -44,6 +44,9 @@ export interface CommandFamilyDescriptor {
   readonly keywords: readonly CommandKeyword[];
   /** Control verbs (`stop`, `pause`, …) that route to lifecycle actions. */
   readonly controlVerbs: readonly string[];
+  /** The protocol actions any client (rich helper or headless) can issue for this family. Lets a client
+   *  discover the full lifecycle surface without the helper UI; the host validates + executes them. */
+  readonly protocolActions: readonly string[];
   readonly examples: readonly CommandExample[];
 }
 

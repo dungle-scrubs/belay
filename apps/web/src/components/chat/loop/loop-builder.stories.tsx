@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { loopPresentation } from "@/commands/loop-parser";
+import { loopPresentation } from "@trevor/session";
 import { LoopBuilder } from "./loop-builder";
 
 /** The builder renders the presentation view-model; build it from a typed line. */

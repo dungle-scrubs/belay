@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { commandPresentation } from "./command-family";
-import { LOOP_FAMILY } from "./loop";
+import { LOOP_FAMILY } from "./loop-command";
 import { loopPresentation, parseLoopCommand } from "./loop-parser";
 
 /**

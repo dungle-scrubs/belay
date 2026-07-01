@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { LoopControl, LoopInventoryRow } from "@trevor/session";
 import { useState } from "react";
-import type { LoopControl, LoopInventoryRow } from "@/commands/loop";
 import { LoopInventory } from "./loop-inventory";
 
 const ROWS: LoopInventoryRow[] = [

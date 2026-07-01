@@ -1,7 +1,7 @@
+import type { LoopControl, LoopInventoryRow, LoopStatus } from "@trevor/session";
+import { loopRunnerLabel } from "@trevor/session";
 import { Pause, Play, Square, Trash2, Zap } from "lucide-react";
 import type { ComponentType } from "react";
-import type { LoopControl, LoopInventoryRow, LoopStatus } from "@/commands/loop";
-import { loopRunnerLabel } from "@/commands/loop";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 

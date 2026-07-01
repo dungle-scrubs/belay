@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M1: Command Family Contract
-- Current cutoff blockers: 63 unchecked
+> Current focus: M2: Parser Grammar
+- Current cutoff blockers: 58 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -11,11 +11,11 @@
 
 ### M1: Command Family Contract
 
-- [ ] RED: Add unit tests for `/loop` and `/loops` command-family discovery, aliases, examples, and protocol action metadata.
-- [ ] GREEN: Implement the shared command-family contract with names, aliases, grammar keywords, control verbs, examples, and preview metadata.
-- [ ] RED: Add tests proving non-web clients can submit explicit command text and receive structured command results without helper UI.
-- [ ] GREEN: Route explicit command submissions through host-owned command handling.
-- [ ] REFACTOR: Keep command metadata UI-neutral and free of host-rendered rows, chips, colors, or layouts.
+- [x] RED: Add unit tests for `/loop` and `/loops` command-family discovery, aliases, examples, and protocol action metadata.
+- [x] GREEN: Implement the shared command-family contract with names, aliases, grammar keywords, control verbs, examples, and preview metadata.
+- [x] RED: Add tests proving non-web clients can submit explicit command text and receive structured command results without helper UI.
+- [x] GREEN: Route explicit command submissions through host-owned command handling.
+- [x] REFACTOR: Keep command metadata UI-neutral and free of host-rendered rows, chips, colors, or layouts.
 
 ### M2: Parser Grammar
 

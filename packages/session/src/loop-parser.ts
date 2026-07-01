@@ -19,10 +19,11 @@ import {
   LOOP_COMMAND_NAMES,
   LOOP_FAMILY,
   type LoopDurability,
+  type LoopProtocolAction,
   type LoopRunner,
   loopGrammar,
   loopRunnerLabel,
-} from "./loop";
+} from "./loop-command";
 
 interface RawToken {
   readonly value: string;
@@ -134,6 +135,32 @@ export function parseLoopCommand(input: string): CommandParseResult {
 /** Parse and project a `/loop` line into the UI-ready presentation view-model in one call. */
 export function loopPresentation(input: string) {
   return commandPresentation(parseLoopCommand(input), LOOP_FAMILY);
+}
+
+/** The resolved lifecycle action for a `/loop` line, for routing (D-006). A control verb resolves to its
+ *  matching action and carries the target `loopId` when one is typed; a creation line is `create`; a `list`
+ *  subcommand is `list`; a non-`/loop` input is `invalid`. This is what the host routes on - the same
+ *  classification the parser uses, exposed as an action so a headless client needs no builder UI. */
+export function classifyLoopCommand(input: string): {
+  readonly action: LoopProtocolAction | "invalid";
+  readonly loopId?: string;
+} {
+  const raw = tokenize(input);
+  const head = raw[0];
+  if (head === undefined || !LOOP_COMMAND_NAMES.includes(head.value as "/loop" | "/loops")) {
+    return { action: "invalid" };
+  }
+  const second = raw[1];
+  if (second !== undefined && CONTROL_VERBS.has(second.value)) {
+    const loopId = raw[2]?.value;
+    return loopId !== undefined
+      ? { action: second.value as LoopProtocolAction, loopId }
+      : { action: second.value as LoopProtocolAction };
+  }
+  if (second !== undefined && second.value === "list") {
+    return { action: "list" };
+  }
+  return { action: "create" };
 }
 
 /** Build the parse result for a control/list command (no builder rows). */
