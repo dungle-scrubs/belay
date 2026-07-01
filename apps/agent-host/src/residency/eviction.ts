@@ -22,6 +22,14 @@ export type EvictionOutcome =
   | { readonly model: string; readonly unloaded: true }
   | { readonly model: string; readonly unloaded: false; readonly skipped: EvictionSkip };
 
+/** The last model this instance actually evicted, for the /doctor residency surface (M6). */
+export interface LastEviction {
+  readonly endpoint: string;
+  readonly model: string;
+  /** ISO time of the unload. */
+  readonly at: string;
+}
+
 export interface EvictionDeps {
   /** The Trevor-loaded set (eviction eligibility + the candidate list). */
   readonly registry: LocalResidencyRegistry;
@@ -41,7 +49,15 @@ export interface EvictionDeps {
 }
 
 export class LocalResidencyEviction {
+  /** The most recent model this instance unloaded, surfaced by /doctor (M6). */
+  private last: LastEviction | null = null;
+
   constructor(private readonly deps: EvictionDeps) {}
+
+  /** The last eviction this instance performed, or null if it has evicted nothing. */
+  lastEviction(): LastEviction | null {
+    return this.last;
+  }
 
   /** True when a live generation stream currently holds the model's generation resource (plan 11 M6). */
   private hasActiveGeneration(target: ResidencyClaimTarget): boolean {
@@ -90,6 +106,11 @@ export class LocalResidencyEviction {
         }
         await this.deps.unload(candidate.model);
         this.deps.registry.recordUnload(endpoint, candidate.model);
+        this.last = {
+          endpoint,
+          model: candidate.model,
+          at: new Date(this.deps.caps.now()).toISOString(),
+        };
         unloaded = true;
       });
       outcomes.push(

@@ -822,3 +822,88 @@ test("a stale cwd lock raises a warn finding that explains it is auto-reclaimed"
   assert.equal(finding?.status, "warn");
   assert.match(finding?.message ?? "", /reclaimed on next acquire/i);
 });
+
+test("the Local admission area stays idle when neither admission nor residency is probed", () => {
+  const admission = buildDoctorSnapshot(input()).areas.find((a) => a.id === "admission");
+  assert.equal(admission?.status, "ok");
+  assert.equal(admission?.findings?.[0]?.id, "admission.idle");
+});
+
+test("resident local models surface in the Local admission area with caps + claim counts", () => {
+  const admission = buildDoctorSnapshot(
+    input({
+      residency: {
+        residentModels: 2,
+        rows: [
+          {
+            endpoint: "http://localhost:1234/v1",
+            model: "qwen3.6-27b",
+            contextLength: 65_536,
+            claims: 2,
+          },
+          {
+            endpoint: "http://localhost:1234/v1",
+            model: "gemma3-27b",
+            contextLength: 32_768,
+            claims: 1,
+          },
+        ],
+        lastEviction: {
+          endpoint: "http://localhost:1234/v1",
+          model: "phi4-14b",
+          at: "2026-06-26T11:00:00.000Z",
+        },
+      },
+    }),
+  ).areas.find((a) => a.id === "admission");
+
+  assert.equal(admission?.status, "ok");
+  assert.match(admission?.verdict ?? "", /2 models resident/);
+  assert.ok(admission?.findings?.some((f) => f.id === "residency.summary"));
+  const facts = admission?.facts ?? [];
+  assert.ok(facts.some((f) => f.label === "resident models" && f.value === "2"));
+  assert.ok(facts.some((f) => f.label === "qwen3.6-27b" && /65536 ctx, 2 claims/.test(f.value)));
+  assert.ok(facts.some((f) => f.label === "gemma3-27b" && /1 claim\b/.test(f.value)));
+  assert.ok(facts.some((f) => f.label === "last eviction" && /phi4-14b/.test(f.value)));
+});
+
+test("admission leases and resident models render together in the one Local admission area", () => {
+  const admission = buildDoctorSnapshot(
+    input({
+      admission: {
+        resources: 1,
+        activeOwners: 1,
+        queued: 0,
+        oldestWaitMs: 0,
+        staleOwners: 0,
+        rows: [
+          {
+            key: "lmstudio:localhost:1234:qwen3.6-27b",
+            capacity: 1,
+            active: 1,
+            queued: 0,
+            oldestWaitMs: 0,
+            staleActive: 0,
+            topQueuedPriority: null,
+          },
+        ],
+      },
+      residency: {
+        residentModels: 1,
+        rows: [
+          {
+            endpoint: "http://localhost:1234/v1",
+            model: "qwen3.6-27b",
+            contextLength: 65_536,
+            claims: 1,
+          },
+        ],
+        lastEviction: null,
+      },
+    }),
+  ).areas.find((a) => a.id === "admission");
+
+  assert.match(admission?.verdict ?? "", /1 active, 0 queued; 1 model resident/);
+  assert.ok(admission?.findings?.some((f) => f.id === "admission.summary"));
+  assert.ok(admission?.findings?.some((f) => f.id === "residency.summary"));
+});

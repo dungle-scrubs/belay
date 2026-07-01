@@ -18,6 +18,7 @@ import {
   isCwdLockWarn,
 } from "../cwd-lock";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
+import type { ResidencyDoctorSummary } from "../residency/doctor";
 
 /**
  * Builds the structured `doctor.current` snapshot (D-073) from already-probed host facts. PURE over
@@ -74,6 +75,9 @@ export interface DoctorProbeInput {
   /** Local-model admission state (plan 11): active owners, queue depth, oldest wait; absent when not
    *  probed (e.g. no local provider in use). */
   readonly admission?: AdmissionDoctorSummary;
+  /** Local-model residency state (plan 11.1): Trevor-loaded models, their context caps + live claim
+   *  counts, and the last eviction; folded into the Local-admission area. Absent when not probed. */
+  readonly residency?: ResidencyDoctorSummary;
   readonly build: DoctorBuildInfo;
   readonly peripherals: DoctorPeripherals;
   readonly web: DoctorWebDocs;
@@ -604,12 +608,43 @@ function workspaceArea(input: DoctorProbeInput): DoctorArea {
   return area("workspace", "Workspace", finding.message, [finding, ...cwdLockFinding(lock)], facts);
 }
 
-/** The local-model admission area (plan 11 M8): who holds each local runtime, how deep the queue is,
- *  the oldest wait, and a warn when a crashed holder still occupies a slot (a reclaim-on-next-acquire
- *  signal). Absent admission probe (no local work) reads as a clean "idle". */
+/** Residency findings + facts for the Local-admission area (plan 11.1 M6): the Trevor-loaded models this
+ *  instance keeps resident, their context caps + live claim counts, and the last eviction. Returns an
+ *  empty split when nothing is resident, so the area is idle only when BOTH admission and residency are. */
+function residencyParts(r: ResidencyDoctorSummary | undefined): {
+  readonly verdict: string | null;
+  readonly findings: readonly DoctorFinding[];
+  readonly facts: readonly DoctorFact[];
+} {
+  if (!r || r.residentModels === 0) {
+    return { verdict: null, findings: [], facts: [] };
+  }
+  const verdict = `${r.residentModels} model${r.residentModels === 1 ? "" : "s"} resident`;
+  const findings: DoctorFinding[] = [
+    { id: "residency.summary", status: "ok", title: "Resident local models", message: verdict },
+  ];
+  const facts: DoctorFact[] = [
+    { label: "resident models", value: String(r.residentModels) },
+    ...r.rows.map((row) => ({
+      label: row.model,
+      value: `${row.contextLength} ctx, ${row.claims} claim${row.claims === 1 ? "" : "s"}`,
+    })),
+    ...(r.lastEviction
+      ? [{ label: "last eviction", value: `${r.lastEviction.model} (${r.lastEviction.at})` }]
+      : []),
+  ];
+  return { verdict, findings, facts };
+}
+
+/** The local-model admission area (plan 11 M8 + 11.1 M6): who holds each local runtime, how deep the
+ *  queue is, the oldest wait, a warn when a crashed holder still occupies a slot - and the resident
+ *  Trevor-loaded models (context caps, live claim counts, last eviction). No admission AND no residency
+ *  reads as a clean "idle". */
 function admissionArea(input: DoctorProbeInput): DoctorArea {
   const a = input.admission;
-  if (!a || a.resources === 0) {
+  const residency = residencyParts(input.residency);
+  const hasAdmission = !!a && a.resources > 0;
+  if (!hasAdmission && residency.verdict === null) {
     const finding: DoctorFinding = {
       id: "admission.idle",
       status: "ok",
@@ -618,44 +653,56 @@ function admissionArea(input: DoctorProbeInput): DoctorArea {
     };
     return area("admission", "Local admission", finding.message, [finding]);
   }
-  const stale = a.staleOwners > 0;
-  const verdict =
-    `${a.activeOwners} active, ${a.queued} queued` +
-    (a.queued > 0 ? ` (oldest wait ${Math.round(a.oldestWaitMs / 1000)}s)` : "");
+  const stale = !!a && a.staleOwners > 0;
+  const admissionVerdict = a
+    ? `${a.activeOwners} active, ${a.queued} queued` +
+      (a.queued > 0 ? ` (oldest wait ${Math.round(a.oldestWaitMs / 1000)}s)` : "")
+    : null;
   const findings: DoctorFinding[] = [
-    {
-      id: "admission.summary",
-      status: stale ? "warn" : "ok",
-      title: "Local admission",
-      message: verdict,
-    },
-    ...(stale
+    ...(hasAdmission && admissionVerdict
       ? [
           {
-            id: "admission.stale",
-            status: "warn" as const,
-            title: "Stale local-model owner",
-            message: `${a.staleOwners} active owner(s) have no live process; reclaimed on the next acquire`,
+            id: "admission.summary",
+            status: stale ? ("warn" as const) : ("ok" as const),
+            title: "Local admission",
+            message: admissionVerdict,
           },
+          ...(stale
+            ? [
+                {
+                  id: "admission.stale",
+                  status: "warn" as const,
+                  title: "Stale local-model owner",
+                  message: `${a.staleOwners} active owner(s) have no live process; reclaimed on the next acquire`,
+                },
+              ]
+            : []),
         ]
       : []),
+    ...residency.findings,
   ];
   const facts: DoctorArea["facts"] = [
-    { label: "resources", value: String(a.resources) },
-    { label: "active owners", value: String(a.activeOwners) },
-    {
-      label: "queued",
-      value: String(a.queued),
-      ...(a.queued > 0 ? { status: "warn" as const } : {}),
-    },
-    ...a.rows.map((row) => ({
-      label: row.key,
-      value:
-        `${row.active}/${row.capacity} active, ${row.queued} queued` +
-        (row.staleActive > 0 ? `, ${row.staleActive} stale` : ""),
-      ...(row.staleActive > 0 ? { status: "warn" as const } : {}),
-    })),
+    ...(hasAdmission && a
+      ? [
+          { label: "resources", value: String(a.resources) },
+          { label: "active owners", value: String(a.activeOwners) },
+          {
+            label: "queued",
+            value: String(a.queued),
+            ...(a.queued > 0 ? { status: "warn" as const } : {}),
+          },
+          ...a.rows.map((row) => ({
+            label: row.key,
+            value:
+              `${row.active}/${row.capacity} active, ${row.queued} queued` +
+              (row.staleActive > 0 ? `, ${row.staleActive} stale` : ""),
+            ...(row.staleActive > 0 ? { status: "warn" as const } : {}),
+          })),
+        ]
+      : []),
+    ...residency.facts,
   ];
+  const verdict = [admissionVerdict, residency.verdict].filter(Boolean).join("; ");
   return area("admission", "Local admission", verdict, findings, facts);
 }
 

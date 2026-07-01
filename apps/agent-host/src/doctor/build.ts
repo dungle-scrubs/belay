@@ -19,6 +19,7 @@ import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { providerFailures } from "../providers/provider-failure-log";
 import { incidentCategory, providerIncidents } from "../providers/provider-incidents";
+import type { ResidencyDoctorSummary } from "../residency/doctor";
 import { lastWebFetchError } from "../tools/web-fetch/web-fetch-log";
 import {
   buildDoctorSnapshot,
@@ -59,6 +60,8 @@ export interface DoctorRuntimeFacts {
   readonly activeStyle?: { readonly id: string; readonly source: string };
   /** Local-model admission state (plan 11), surfaced in the Local admission area. */
   readonly admission?: AdmissionDoctorSummary;
+  /** Local-model residency state (plan 11.1), folded into the Local admission area. */
+  readonly residency?: ResidencyDoctorSummary;
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
@@ -308,6 +311,7 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
     },
     storage: { roots: probes.roots },
     ...(facts.admission ? { admission: facts.admission } : {}),
+    ...(facts.residency ? { residency: facts.residency } : {}),
     // Package/build/version facts (D-073): the embedded version when present (else a dev build),
     // plus the always-available Node + runtime kind. Update-availability is not probed here.
     build: {
