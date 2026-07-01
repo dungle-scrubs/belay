@@ -48,26 +48,7 @@ if (typeof Element.prototype.scrollIntoView !== "function") {
   Element.prototype.scrollIntoView = () => {};
 }
 
-const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-
-let hasUsableLocalStorage = false;
-
-if (localStorageDescriptor?.value !== undefined) {
-  try {
-    const storage = localStorageDescriptor.value as Storage;
-    hasUsableLocalStorage =
-      storage !== undefined &&
-      typeof storage.getItem === "function" &&
-      typeof storage.setItem === "function" &&
-      typeof storage.clear === "function";
-  } catch {
-    hasUsableLocalStorage = false;
-  }
-}
-
-if (!hasUsableLocalStorage) {
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: createMemoryStorage(),
-  });
-}
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: createMemoryStorage(),
+});
