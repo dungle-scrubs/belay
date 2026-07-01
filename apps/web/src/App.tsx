@@ -21,6 +21,15 @@ import {
 import { ArchiveBrowser } from "@/archive/archive-browser";
 import { buildArchiveRows } from "@/archive/archive-rows";
 import { useArchiveActions } from "@/archive/use-archive-actions";
+import {
+  type ArtifactPanelState,
+  artifactId,
+  closeArtifactPanel,
+  createArtifactPanelState,
+  openArtifactPanel,
+  resetArtifactPanelPreference,
+  resizeArtifactPanel,
+} from "@/artifact-panel/artifact-panel-state";
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import type { PaletteCommand } from "@/components/command-palette/palette-commands";
@@ -90,6 +99,7 @@ const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
 const REASONING_KEY = "trevor.reasoning";
 const SHOW_THINKING_KEY = "trevor.showThinking";
+const ARTIFACT_PANEL_KEY = "trevor.artifactPanel";
 // Host and browser default to one shared session so they auto-attach with no manual
 // wiring; override with ?session=<id> in the URL. The id is owned in @trevor/session so
 // this and the host's SESSION_ID default cannot drift into two different sessions.
@@ -131,6 +141,21 @@ function shortcutCommand(
 // live in ./send-queue, unit-tested without React; the React state machine that drives
 // them (the busy/in-flight latch + release/drain effects) lives in ./hooks/use-send-queue.
 const rawString = { serializer: (value: string) => value, deserializer: (value: string) => value };
+const artifactPanelStorage = {
+  serializer: (value: ArtifactPanelState) => JSON.stringify(value),
+  deserializer: (value: string): ArtifactPanelState => {
+    try {
+      const parsed = JSON.parse(value) as Partial<ArtifactPanelState>;
+      return {
+        ...createArtifactPanelState(parsed.preference),
+        open: parsed.open ?? false,
+        selectedArtifactId: parsed.selectedArtifactId ?? null,
+      };
+    } catch {
+      return createArtifactPanelState();
+    }
+  },
+};
 
 // How long an in-flight turn may go silent with no leader host connected before the browser recovers
 // it (see detectOrphanedTurn). Comfortably longer than the host's own reconnect-reconcile window, so a
@@ -197,6 +222,10 @@ export function App() {
   // line. Kept session-local (plain state, not persisted) - a persisted preference is deferred to the
   // settings/keyboard plan per the plan's escape hatch.
   const [compact, setCompact] = useState(false);
+  const [artifactPanel, setArtifactPanel] = useLocalStorageState<ArtifactPanelState>(
+    sessionScopedKey(ARTIFACT_PANEL_KEY, sessionId),
+    { defaultValue: createArtifactPanelState(), ...artifactPanelStorage },
+  );
   // The Mod+K command palette (plan 07): a frontmost overlay; while open it owns its keys.
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -236,6 +265,20 @@ export function App() {
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
   const transcript = useMemo(() => toTranscript(events), [events]);
+  const transcriptArtifacts = useMemo(
+    () => transcript.flatMap((message) => (message.kind === "user" ? message.artifacts : [])),
+    [transcript],
+  );
+  const artifactPanelOpen = artifactPanel?.open ?? false;
+  const selectedArtifactId = artifactPanel?.selectedArtifactId ?? null;
+  const selectedPanelArtifact = useMemo(
+    () =>
+      artifactPanelOpen && selectedArtifactId !== null
+        ? (transcriptArtifacts.find((artifact) => artifactId(artifact) === selectedArtifactId) ??
+          null)
+        : null,
+    [artifactPanelOpen, selectedArtifactId, transcriptArtifacts],
+  );
   const switchTarget = useMemo(
     () =>
       replayThroughSeq === null
@@ -779,7 +822,8 @@ export function App() {
     paletteOpen ||
     helpOpen ||
     detail !== null ||
-    jobDetail !== null;
+    jobDetail !== null ||
+    artifactPanel?.open === true;
 
   // App actions shared by their keyboard shortcut (the router below) and their palette command, so the
   // two surfaces can never drift (plan 07 M7/M8).
@@ -1100,6 +1144,15 @@ export function App() {
           transcript,
           toolBatches,
           onOpenPath: (path) => void openInEditor(path),
+          onOpenArtifact: (artifact) => {
+            setChooserOpen(false);
+            modal.setArchiveOpen(false);
+            setDetailId(null);
+            setJobDetailId(null);
+            setArtifactPanel((state) =>
+              openArtifactPanel(state ?? createArtifactPanelState(), { artifact }),
+            );
+          },
           onDoctorRefresh: () => void command("/doctor", "refresh"),
           onMenuAction: (cmd: string, args: string) => void command(cmd, args),
           onOpenDetail,
@@ -1137,6 +1190,28 @@ export function App() {
           footer: panelFooter,
           ready: replayed,
         }}
+        artifactPanel={
+          artifactPanel?.open
+            ? {
+                artifact: selectedPanelArtifact,
+                layout: artifactPanel.preference.layout,
+                width: artifactPanel.preference.width,
+                onClose: () =>
+                  setArtifactPanel((state) => {
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                    return closeArtifactPanel(state ?? createArtifactPanelState());
+                  }),
+                onResetWidth: () =>
+                  setArtifactPanel((state) =>
+                    resetArtifactPanelPreference(state ?? createArtifactPanelState()),
+                  ),
+                onWidthChange: (width) =>
+                  setArtifactPanel((state) =>
+                    resizeArtifactPanel(state ?? createArtifactPanelState(), width),
+                  ),
+              }
+            : undefined
+        }
         choosers={{
           resumeOpen: modal.resumeOpen,
           setResumeOpen: modal.setResumeOpen,

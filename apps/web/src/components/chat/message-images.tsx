@@ -17,6 +17,8 @@ export interface MessageImagesProps {
   readonly images: readonly ArtifactRef[];
   /** The message's non-image artifacts, rendered as quiet file/link rows (already partitioned). */
   readonly others: readonly ArtifactRef[];
+  /** Opens an artifact in the shared artifact workspace instead of the local carousel/link. */
+  readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
   /** Opens the same-message carousel at the given image-set index (M5). */
   readonly onOpen?: (index: number) => void;
   /** Resolves a hash to an image URL; defaults to the blob-store `artifactSrc`. */
@@ -25,16 +27,38 @@ export interface MessageImagesProps {
 }
 
 /** A quiet file/link row for a document, non-image, or image that failed to load (no broken icon). */
-function FileRow({ artifact, srcOf }: { artifact: ArtifactRef; srcOf: (hash: string) => string }) {
+function FileRowContent({ artifact }: { readonly artifact: ArtifactRef }) {
   return (
-    <a
-      href={srcOf(artifact.hash)}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-    >
+    <>
       <FileText className="size-3.5 shrink-0" />
       <span className="max-w-[16rem] truncate">{artifact.name ?? artifact.kind}</span>
+    </>
+  );
+}
+
+const fileRowClassName =
+  "inline-flex items-center gap-1.5 border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground";
+
+function FileRow({
+  artifact,
+  onOpenArtifact,
+  srcOf,
+}: {
+  artifact: ArtifactRef;
+  onOpenArtifact?: (artifact: ArtifactRef) => void;
+  srcOf: (hash: string) => string;
+}) {
+  if (onOpenArtifact) {
+    return (
+      <button type="button" onClick={() => onOpenArtifact(artifact)} className={fileRowClassName}>
+        <FileRowContent artifact={artifact} />
+      </button>
+    );
+  }
+
+  return (
+    <a href={srcOf(artifact.hash)} target="_blank" rel="noreferrer" className={fileRowClassName}>
+      <FileRowContent artifact={artifact} />
     </a>
   );
 }
@@ -43,23 +67,25 @@ function FileRow({ artifact, srcOf }: { artifact: ArtifactRef; srcOf: (hash: str
 function ImageTile({
   artifact,
   index,
+  onOpenArtifact,
   onOpen,
   srcOf,
 }: {
   artifact: ArtifactRef;
   index: number;
+  onOpenArtifact?: (artifact: ArtifactRef) => void;
   onOpen?: (index: number) => void;
   srcOf: (hash: string) => string;
 }) {
   const [broken, setBroken] = useState(false);
   if (broken) {
-    return <FileRow artifact={artifact} srcOf={srcOf} />;
+    return <FileRow artifact={artifact} onOpenArtifact={onOpenArtifact} srcOf={srcOf} />;
   }
 
   return (
     <button
       type="button"
-      onClick={() => onOpen?.(index)}
+      onClick={() => (onOpenArtifact ? onOpenArtifact(artifact) : onOpen?.(index))}
       className="block cursor-pointer overflow-hidden border border-border bg-card p-0 leading-none"
       aria-label={`open image ${index + 1}${artifact.name ? `: ${artifact.name}` : ""}`}
     >
@@ -80,6 +106,7 @@ function ImageTile({
 export function MessageImages({
   images,
   others,
+  onOpenArtifact,
   onOpen,
   srcOf = artifactSrc,
   className,
@@ -104,6 +131,7 @@ export function MessageImages({
               key={artifact.hash}
               artifact={artifact}
               index={i}
+              onOpenArtifact={onOpenArtifact}
               onOpen={onOpen}
               srcOf={srcOf}
             />
@@ -114,7 +142,12 @@ export function MessageImages({
       {others.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {others.map((artifact) => (
-            <FileRow key={artifact.hash} artifact={artifact} srcOf={srcOf} />
+            <FileRow
+              key={artifact.hash}
+              artifact={artifact}
+              onOpenArtifact={onOpenArtifact}
+              srcOf={srcOf}
+            />
           ))}
         </div>
       ) : null}

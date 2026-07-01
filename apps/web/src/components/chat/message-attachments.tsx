@@ -13,11 +13,17 @@ import { MessageImages } from "./message-images";
 
 export interface MessageAttachmentsProps {
   readonly artifacts: readonly ArtifactRef[];
+  readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
   readonly srcOf?: (hash: string) => string;
   readonly className?: string;
 }
 
-export function MessageAttachments({ artifacts, srcOf, className }: MessageAttachmentsProps) {
+export function MessageAttachments({
+  artifacts,
+  onOpenArtifact,
+  srcOf,
+  className,
+}: MessageAttachmentsProps) {
   const { images, others } = partitionArtifacts(artifacts);
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -32,11 +38,12 @@ export function MessageAttachments({ artifacts, srcOf, className }: MessageAttac
       <MessageImages
         images={images}
         others={others}
+        onOpenArtifact={onOpenArtifact}
         onOpen={openAt}
         srcOf={srcOf}
         className={className}
       />
-      {images.length > 0 ? (
+      {images.length > 0 && !onOpenArtifact ? (
         <ImageCarousel
           images={images}
           open={open}

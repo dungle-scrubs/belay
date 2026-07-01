@@ -368,11 +368,13 @@ export function UserMessage({
   text,
   artifacts = [],
   pastes = [],
+  onOpenArtifact,
 }: {
   id?: string;
   text: string;
   artifacts?: readonly ArtifactRef[];
   pastes?: readonly PastePayload[];
+  onOpenArtifact?: (artifact: ArtifactRef) => void;
 }) {
   return (
     <div
@@ -381,7 +383,9 @@ export function UserMessage({
     >
       {text ? <MarkdownBody text={text} /> : null}
       {pastes.length ? <PastedTextDetails pastes={pastes} /> : null}
-      {artifacts.length ? <MessageAttachments artifacts={artifacts} /> : null}
+      {artifacts.length ? (
+        <MessageAttachments artifacts={artifacts} onOpenArtifact={onOpenArtifact} />
+      ) : null}
     </div>
   );
 }

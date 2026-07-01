@@ -1,4 +1,5 @@
 import type {
+  ArtifactRef,
   CommandSpec,
   GitStatus,
   JobSnapshot,
@@ -17,6 +18,8 @@ import {
   type SubmitEvent,
   useMemo,
 } from "react";
+import { ArtifactPanel } from "@/artifact-panel/artifact-panel";
+import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state";
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { CommandMenu } from "@/components/chat/command-menu";
@@ -54,6 +57,7 @@ export interface TranscriptView {
   readonly transcript: Transcript;
   readonly toolBatches: ToolBatches;
   readonly onOpenPath: (path: string) => void;
+  readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
   /** Re-runs `/doctor` on the host (a no-model-turn immediate command), wired to the dashboard's
    *  refresh control. App owns it because it depends on the session command action. */
   readonly onDoctorRefresh: () => void;
@@ -128,6 +132,15 @@ export interface PanelBinding {
   readonly ready: boolean;
 }
 
+export interface ArtifactPanelBinding {
+  readonly artifact: ArtifactRef | null;
+  readonly layout: ArtifactPanelLayout;
+  readonly width: number;
+  readonly onClose: () => void;
+  readonly onResetWidth: () => void;
+  readonly onWidthChange: (width: number) => void;
+}
+
 /**
  * The resume + worktree choosers (D-090/D-091): both browser-side UI affordances. App owns their
  * open state, the inventory fetch, and the switch/resume actions; PanelHost renders the modals and
@@ -199,6 +212,7 @@ export function PanelHost(props: {
   /** Stop a running promoted job (plan 09 M8). */
   onKillJob?: (jobId: string) => void;
   panel: PanelBinding;
+  artifactPanel?: ArtifactPanelBinding;
   choosers: ChooserBinding;
   sidebar: SidebarBinding;
   /** A short name for the open session, shown in the main header strip (D-093). */
@@ -237,6 +251,7 @@ export function PanelHost(props: {
     onOpenJobDetail,
     onKillJob,
     panel,
+    artifactPanel,
     choosers,
   } = props;
   const { sidebar, sessionName, chooser, archived, onUnarchive, question, handoff } = props;
@@ -245,6 +260,7 @@ export function PanelHost(props: {
     transcript,
     toolBatches,
     onOpenPath,
+    onOpenArtifact,
     onDoctorRefresh,
     onMenuAction,
     onOpenDetail,
@@ -368,6 +384,7 @@ export function PanelHost(props: {
                 showThinking={showThinking}
                 compact={compact}
                 onOpenPath={onOpenPath}
+                onOpenArtifact={onOpenArtifact}
                 onOpenDetail={onOpenDetail}
                 onDoctorRefresh={onDoctorRefresh}
                 onMenuAction={onMenuAction}
@@ -471,6 +488,17 @@ export function PanelHost(props: {
           )}
         </div>
       </main>
+
+      {artifactPanel ? (
+        <ArtifactPanel
+          artifact={artifactPanel.artifact}
+          layout={artifactPanel.layout}
+          width={artifactPanel.width}
+          onClose={artifactPanel.onClose}
+          onResetWidth={artifactPanel.onResetWidth}
+          onWidthChange={artifactPanel.onWidthChange}
+        />
+      ) : null}
 
       {panel.open ? (
         <SidePanel

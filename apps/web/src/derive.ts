@@ -64,6 +64,20 @@ export function fmtCtx(n: number): string {
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
 }
 
+/** Bytes rounded to a compact KB/MB label, omitted when absent or zero. */
+export function fmtBytes(bytes: number | undefined): string | undefined {
+  if (!bytes || bytes <= 0) {
+    return undefined;
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /**
  * Human elapsed time from milliseconds. The single "how long did this take" formatter, parameterized
  * for the two surfaces that previously diverged: `hours` rolls over to `1h 5m` past an hour (the

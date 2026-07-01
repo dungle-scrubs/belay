@@ -1,4 +1,5 @@
 import { elementScroll, type Rect, useVirtualizer } from "@tanstack/react-virtual";
+import type { ArtifactRef } from "@trevor/session";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { isCompactEligible } from "@/components/chat/compact-display";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
@@ -14,6 +15,7 @@ export interface VirtualTranscriptProps {
   readonly scrollToBottomRequest: number;
   readonly showThinking: boolean;
   readonly onOpenPath: (path: string) => void;
+  readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
   readonly onDoctorRefresh: () => void;
   readonly onMenuAction?: (command: string, args: string) => void;
   /** Opens the tool detail takeover for a detail-eligible row (plan 08). */
@@ -71,6 +73,7 @@ export function VirtualTranscript({
   scrollToBottomRequest,
   showThinking,
   onOpenPath,
+  onOpenArtifact,
   onDoctorRefresh,
   onMenuAction,
   onOpenDetail,
@@ -301,6 +304,7 @@ export function VirtualTranscript({
               row={row}
               showThinking={showThinking}
               onOpenPath={onOpenPath}
+              onOpenArtifact={onOpenArtifact}
               onDoctorRefresh={onDoctorRefresh}
               compact={compact}
               expandedRows={expandedRows}

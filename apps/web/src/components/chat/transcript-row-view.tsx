@@ -1,4 +1,4 @@
-import { estimateTokens, isContextOverflowText } from "@trevor/session";
+import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@trevor/session";
 import {
   ArrowLeftRight,
   CircleX,
@@ -88,6 +88,7 @@ export interface TranscriptRowViewProps {
   readonly row: TranscriptRow;
   readonly showThinking: boolean;
   readonly onOpenPath: (path: string) => void;
+  readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
   readonly onDoctorRefresh: () => void;
   /** Dispatch a nested command-menu row selection back through the command path, e.g. `/style concise`
    *  (plan 03). A leaf action sends a host command; it never starts a model turn. */
@@ -111,6 +112,7 @@ export function TranscriptRowView({
   row,
   showThinking,
   onOpenPath,
+  onOpenArtifact,
   onDoctorRefresh,
   onMenuAction,
   questionsOneLine = false,
@@ -146,6 +148,7 @@ export function TranscriptRowView({
                   compact={false}
                   showThinking={showThinking}
                   onOpenPath={onOpenPath}
+                  onOpenArtifact={onOpenArtifact}
                   onDoctorRefresh={onDoctorRefresh}
                   onMenuAction={onMenuAction}
                   questionsOneLine={questionsOneLine}
@@ -452,6 +455,7 @@ export function TranscriptRowView({
         text={message.text}
         artifacts={message.artifacts}
         pastes={message.pastes}
+        onOpenArtifact={onOpenArtifact}
       />
     );
   }

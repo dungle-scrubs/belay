@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
+import { fmtBytes } from "@/derive";
 import { MarkdownBody } from "./markdown-body";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
@@ -128,20 +129,6 @@ function prettyUrl(url: string): string {
   }
 }
 
-/** Bytes rounded to a compact KB/MB label, omitted when absent or zero. */
-function prettyBytes(bytes: number | undefined): string | undefined {
-  if (!bytes || bytes <= 0) {
-    return undefined;
-  }
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${Math.round(bytes / 1024)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 /** A title link styled like web_search/web_fetch source rows, with the hover affordance arrow. */
 function SourceLink({ href, label }: { href: string; label: string }) {
   return (
@@ -181,7 +168,7 @@ function corpusMeta(corpus: DocsCorpus): string {
     corpus.pageCount !== undefined
       ? `${corpus.pageCount} page${corpus.pageCount === 1 ? "" : "s"}`
       : undefined;
-  return [pages, prettyBytes(corpus.byteCount)].filter(Boolean).join(" · ");
+  return [pages, fmtBytes(corpus.byteCount)].filter(Boolean).join(" · ");
 }
 
 /** The corpus summary header: its documentation root link over the page/byte meta. */
