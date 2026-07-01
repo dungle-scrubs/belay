@@ -6,8 +6,8 @@
 
 ## Summary
 
-- Current cutoff blockers: 83
-- Completed: 5
+- Current cutoff blockers: 75
+- Completed: 13
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -23,17 +23,17 @@
 
 ### M2: Shared observability contract
 
-- [ ] RED: Add unit tests for redaction blocking prompts, tool output, auth headers, API keys, env values, raw provider bodies, and raw paths
-- [ ] GREEN: Add shared redaction and safe-envelope helpers
-- [ ] RED: Add tests for allowed/disallowed metric labels and span attributes
-- [ ] GREEN: Define resource attributes, span names, metric names, and cardinality guards
-- [ ] REFACTOR: Keep package code side-effect-free; apps call explicit bootstrap functions
+- [x] RED: Add unit tests for redaction blocking prompts, tool output, auth headers, API keys, env values, raw provider bodies, and raw paths
+- [x] GREEN: Add shared redaction and safe-envelope helpers (`telemetry-contract.ts`: `redactSecrets`, `redactAttributeValue`, `safeAttributes` - drops disallowed keys by KEY + secret-strips surviving VALUEs)
+- [x] RED: Add tests for allowed/disallowed metric labels and span attributes
+- [x] GREEN: Define resource attributes, span names, metric names, and cardinality guards (`SPAN_NAMES`, `METRIC_NAMES`, `resourceAttributes`, `isDisallowedTelemetryKey`)
+- [x] REFACTOR: Keep package code side-effect-free; apps call explicit bootstrap functions (contract is pure; no SDK/Sentry init in any package)
 
 ### Gate 1 to 2
 
-- [ ] `pnpm test:unit` passes for root/config/redaction tests
-- [ ] CLI detached logs no longer write under `TREVOR_HOME/logs`
-- [ ] No package initializes Sentry or a global OTel SDK
+- [x] `pnpm test:unit` passes for root/config/redaction tests
+- [x] CLI detached logs no longer write under `TREVOR_HOME/logs`
+- [x] No package initializes Sentry or a global OTel SDK
 
 ## Phase 2: Local OTel Instrumentation
 

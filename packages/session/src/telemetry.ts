@@ -14,6 +14,10 @@
  *   DSNs are dropped, so running the suite never emits anything remote regardless of the ambient env.
  */
 
+// The shared observability contract (redaction, safe envelopes, span/metric names) is part of the same
+// `@trevor/session/telemetry` surface as the config, so consumers reach both from one import.
+export * from "./telemetry-contract";
+
 export type OtelExporter = "none" | "file" | "otlp";
 
 /** Why remote telemetry is force-disabled regardless of the configured env. */

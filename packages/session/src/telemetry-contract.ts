@@ -1,0 +1,179 @@
+/**
+ * The shared observability CONTRACT (plan 13, M2): redaction + safe-envelope helpers, the span/metric
+ * name vocabulary, resource attributes, and the cardinality/sensitivity guards for attribute keys. This
+ * is a pure, side-effect-free library (D-003): it defines what telemetry may carry and how values are
+ * sanitized, but initializes no SDK and emits nothing. Runtime apps build spans/metrics from these names
+ * and pass attributes through {@link safeAttributes} before anything is exported.
+ *
+ * Privacy posture (D-002): prompt text, transcript bodies, tool/command output, env values, auth headers,
+ * API keys, raw provider request/response bodies, and raw filesystem paths NEVER become telemetry. They
+ * are blocked by KEY (an attribute named `prompt`/`path`/… is dropped wholesale) and any surviving value
+ * is still secret-stripped + length-capped, so a stray token in an allowed field can't leak either.
+ */
+
+/** The placeholder a redacted span/metric value collapses to. */
+export const REDACTED = "«redacted»";
+
+/** Max characters any single telemetry attribute value may carry (longer is truncated). */
+export const MAX_ATTRIBUTE_LENGTH = 256;
+
+/**
+ * Strips secrets from a free-text string: bearer tokens, `sk-`/`pi-`/`ghp-`… API keys,
+ * `Authorization`/`x-api-key`/`token`/`secret` header+field values, and `?key=`/`?token=` query params.
+ * Deterministic and idempotent. (Mirrors the host's provider `redactSecrets`; kept here as the shared
+ * telemetry-layer redactor so package code has no app dependency.)
+ */
+export function redactSecrets(text: string): string {
+  return text
+    .replace(/(bearer\s+)[A-Za-z0-9._-]+/gi, `$1${REDACTED}`)
+    .replace(/\b(?:sk|pi|rk|key|tok|ghp|gho)-[A-Za-z0-9._-]{8,}/gi, REDACTED)
+    .replace(
+      /("?(?:authorization|x-api-key|api[_-]?key|token|secret|password|dsn)"?\s*[:=]\s*"?)[^\s",}]+/gi,
+      `$1${REDACTED}`,
+    )
+    .replace(/([?&](?:key|token|access_token|api_key)=)[^&\s]+/gi, `$1${REDACTED}`);
+}
+
+/** Collapses absolute filesystem paths to a bounded `<path>` placeholder so raw paths never leak, while
+ *  keeping the tail segment for a hint (e.g. `/Users/x/dev/repo/file.ts` -> `<path>/file.ts`). */
+function collapsePaths(text: string): string {
+  return text.replace(/(?:\/[^\s/:"]+){2,}(\/[^\s/:"]+)/g, `<path>$1`);
+}
+
+/**
+ * Sanitizes a single telemetry attribute VALUE: secret-stripped, path-collapsed, and length-capped.
+ * Non-string values are coerced first. Use for any value that survives the key allowlist.
+ */
+export function redactAttributeValue(value: unknown): string {
+  const text = typeof value === "string" ? value : String(value);
+  const cleaned = collapsePaths(redactSecrets(text));
+  return cleaned.length > MAX_ATTRIBUTE_LENGTH
+    ? `${cleaned.slice(0, MAX_ATTRIBUTE_LENGTH)}…`
+    : cleaned;
+}
+
+/**
+ * Attribute/label keys that must NEVER appear in telemetry - either high-cardinality (run/session id,
+ * raw url/path) or sensitive (prompt, tool/command output, auth, env, raw provider bodies). Compared
+ * after normalizing away case and `_`/`-`/`.` separators, so `run_id`, `runId`, and `run.id` all match.
+ */
+const DISALLOWED_KEYS: ReadonlySet<string> = new Set(
+  [
+    "prompt",
+    "prompttext",
+    "messages",
+    "transcript",
+    "tooloutput",
+    "toolresult",
+    "command",
+    "commandoutput",
+    "output",
+    "content",
+    "authorization",
+    "apikey",
+    "xapikey",
+    "token",
+    "secret",
+    "password",
+    "dsn",
+    "env",
+    "envvalue",
+    "providerbody",
+    "requestbody",
+    "responsebody",
+    "rawbody",
+    "runid",
+    "sessionid",
+    "agentid",
+    "url",
+    "path",
+    "filepath",
+    "cwd",
+    "projectroot",
+  ].map(normalizeKey),
+);
+
+/** Normalizes an attribute key to a comparison form: lowercased, separators removed. */
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[._-]/g, "");
+}
+
+/** Whether an attribute/metric-label key is disallowed (high-cardinality or sensitive) and must be dropped. */
+export function isDisallowedTelemetryKey(key: string): boolean {
+  return DISALLOWED_KEYS.has(normalizeKey(key));
+}
+
+/** A telemetry attribute set: bounded, low-cardinality string/number/boolean values keyed by name. */
+export type TelemetryAttributes = Record<string, string | number | boolean>;
+
+/**
+ * Filters + sanitizes an attribute record into a safe telemetry envelope: drops every disallowed key
+ * (prompt/path/auth/run-id/…), leaves numbers + booleans as-is (low cardinality, no secrets), and
+ * secret-strips + caps every string value. The single choke point every span/metric attribute set passes
+ * through before export.
+ */
+export function safeAttributes(attributes: Readonly<Record<string, unknown>>): TelemetryAttributes {
+  const safe: TelemetryAttributes = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (isDisallowedTelemetryKey(key) || value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      safe[key] = value;
+    } else {
+      safe[key] = redactAttributeValue(value);
+    }
+  }
+  return safe;
+}
+
+/** The span names Trevor emits at public module boundaries (contract-owned, not ad-hoc per module). */
+export const SPAN_NAMES = {
+  turn: "trevor.turn",
+  providerAttempt: "trevor.provider.attempt",
+  tool: "trevor.tool",
+  recovery: "trevor.recovery",
+  storeRequest: "trevor.store.request",
+  storeSocket: "trevor.store.socket",
+  blobIo: "trevor.blob.io",
+  cliLaunch: "trevor.cli.launch",
+  webConnect: "trevor.web.connect",
+} as const;
+
+/** The low-cardinality metric names Trevor records (contract-owned). */
+export const METRIC_NAMES = {
+  turnDuration: "trevor.turn.duration",
+  turnStop: "trevor.turn.stop",
+  modelSwitch: "trevor.turn.model_switch",
+  providerLatency: "trevor.provider.latency",
+  toolDuration: "trevor.tool.duration",
+  exporterDrops: "trevor.exporter.drops",
+  retryCount: "trevor.provider.retries",
+  contextPressure: "trevor.turn.context_pressure",
+  serviceErrors: "trevor.service.errors",
+  blobOutcome: "trevor.blob.outcome",
+} as const;
+
+/** A telemetry span name (one of the contract's {@link SPAN_NAMES}). */
+export type SpanName = (typeof SPAN_NAMES)[keyof typeof SPAN_NAMES];
+/** A telemetry metric name (one of the contract's {@link METRIC_NAMES}). */
+export type MetricName = (typeof METRIC_NAMES)[keyof typeof METRIC_NAMES];
+
+/** One of Trevor's telemetry-emitting services (the OTel `service.name` + Sentry project scope). */
+export type TelemetryService = "agent-host" | "session-store" | "blob-store" | "trevor-cli" | "web";
+
+/**
+ * The OTel resource attributes for a service: bounded, low-cardinality identity only (service name +
+ * version + runtime). No host name, path, or user identity - identity that could deanonymize or explode
+ * cardinality is excluded by construction.
+ */
+export function resourceAttributes(
+  service: TelemetryService,
+  version: string | null,
+): TelemetryAttributes {
+  return {
+    "service.name": `trevor-${service}`,
+    "service.version": version ?? "dev",
+    "telemetry.sdk.name": "trevor",
+  };
+}
