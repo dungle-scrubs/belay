@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M5 - Toolset Capability Matrix
-- **Completed:** 27 / 68
-- **Current cutoff blockers:** 41
+- **Current focus:** M6 - Budgets and Output Bounding
+- **Completed:** 32 / 68
+- **Current cutoff blockers:** 36
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -72,11 +72,11 @@
 
 #### M5: Toolset Capability Matrix
 
-- [ ] RED: Add tests for `safe_read`, `retrieval`, `docs_read`, and `media_read` toolset validation.
-- [ ] GREEN: Implement named toolset validation and bridge exposure.
-- [ ] RED: Add tests proving write, edit, shell, process, clipboard, archive unpack, unrestricted MCP, direct fetch, and unknown tools are denied.
-- [ ] GREEN: Route allowed bridge calls through the normal host tool registry and tool metadata policy.
-- [ ] REFACTOR: Keep toolset definitions centralized and inspectable.
+- [x] RED: Add tests for `safe_read`, `retrieval`, `docs_read`, and `media_read` toolset validation.
+- [x] GREEN: Implement named toolset validation and bridge exposure.
+- [x] RED: Add tests proving write, edit, shell, process, clipboard, archive unpack, unrestricted MCP, direct fetch, and unknown tools are denied.
+- [x] GREEN: Route allowed bridge calls through the normal host tool registry and tool metadata policy.
+- [x] REFACTOR: Keep toolset definitions centralized and inspectable.
 
 #### M6: Budgets and Output Bounding
 
