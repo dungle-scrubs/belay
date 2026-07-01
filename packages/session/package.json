@@ -12,6 +12,7 @@
     "./async": "./src/async.ts",
     "./telemetry": "./src/telemetry.ts",
     "./telemetry-file-sink": "./src/telemetry-file-sink.ts",
+    "./telemetry-provider-trace": "./src/telemetry-provider-trace.ts",
     "./conformance": "./test/transport-conformance.ts"
   },
   "types": "./src/index.ts",

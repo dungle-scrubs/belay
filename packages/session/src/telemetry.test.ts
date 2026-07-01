@@ -19,8 +19,19 @@ test("the default telemetry config is fully local: nothing remote, no Sentry, no
     remoteEnabled: false,
     sentryDsn: null,
     webSentryDsn: null,
+    providerTrace: false,
     suppressedReason: null,
   });
+});
+
+test("provider tracing is opt-in via TREVOR_PROVIDER_TRACE and local-only (on even under test/CI)", () => {
+  assert.equal(resolveTelemetryConfig({ ...BASE }).providerTrace, false);
+  assert.equal(resolveTelemetryConfig({ ...BASE, TREVOR_PROVIDER_TRACE: "1" }).providerTrace, true);
+  // It is a LOCAL trace, so the test/CI remote guard does not force it off.
+  assert.equal(
+    resolveTelemetryConfig({ NODE_ENV: "test", TREVOR_PROVIDER_TRACE: "true" }).providerTrace,
+    true,
+  );
 });
 
 test("TREVOR_OTEL_EXPORTER selects the local exporter; unknown values fall back to none", () => {

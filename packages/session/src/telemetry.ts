@@ -32,6 +32,9 @@ export interface TelemetryConfig {
   readonly sentryDsn: string | null;
   /** The web (browser) Sentry DSN for error capture, or null when unset or suppressed. */
   readonly webSentryDsn: string | null;
+  /** Opt-in LOCAL provider-attempt JSONL tracing (`TREVOR_PROVIDER_TRACE`). Off by default; local-only
+   *  (under `TREVOR_STATE_HOME`), so it is NOT force-disabled under test/CI - a test opts in explicitly. */
+  readonly providerTrace: boolean;
   /** Why remote telemetry is force-disabled (`test`/`ci`), or null when not suppressed. */
   readonly suppressedReason: TelemetrySuppressedReason | null;
 }
@@ -86,6 +89,8 @@ export function resolveTelemetryConfig(env: TelemetryEnv = process.env): Telemet
     // Sentry opts in via a DSN, but test/CI drops it so the suite never reports remotely.
     sentryDsn: suppressed ? null : nonEmpty(env.TREVOR_SENTRY_DSN ?? env.SENTRY_DSN),
     webSentryDsn: suppressed ? null : nonEmpty(env.VITE_TREVOR_SENTRY_DSN),
+    // Provider tracing is local-only, so it opts in regardless of the test/CI remote guard.
+    providerTrace: isTruthy(env.TREVOR_PROVIDER_TRACE),
     suppressedReason,
   };
 }
