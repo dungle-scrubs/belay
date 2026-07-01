@@ -1,4 +1,4 @@
-import { RowChooserModal } from "@/components/command-modal/RowChooserModal";
+import { RowChooserModal } from "@/components/command-modal";
 import { PALETTE_CHOOSER, type PaletteCommand, runPaletteCommand } from "./palette-commands";
 
 /**

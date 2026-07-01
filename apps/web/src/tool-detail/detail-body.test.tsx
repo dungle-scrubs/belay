@@ -38,14 +38,14 @@ test("read shows the path + range and opens the file in the editor", () => {
     <DetailBody
       model={model({
         toolName: "read",
-        args: '{"path":"apps/web/src/App.tsx","offset":10,"limit":5}',
+        args: '{"path":"apps/web/src/app.tsx","offset":10,"limit":5}',
       })}
       onOpenPath={onOpenPath}
     />,
   );
   assert.ok(screen.getByText("L10-14"), "the read range is labelled");
-  fireEvent.click(screen.getByText("apps/web/src/App.tsx"));
-  assert.deepEqual(onOpenPath.mock.calls, [["apps/web/src/App.tsx"]]);
+  fireEvent.click(screen.getByText("apps/web/src/app.tsx"));
+  assert.deepEqual(onOpenPath.mock.calls, [["apps/web/src/app.tsx"]]);
 });
 
 test("write shows the file and its contents as a diff", () => {

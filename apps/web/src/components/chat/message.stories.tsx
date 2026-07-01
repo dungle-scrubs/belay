@@ -74,7 +74,7 @@ export const Tool: Story = {
   render: () => (
     <Frame>
       <div className="flex flex-col gap-3">
-        <ToolCall name="read" args="apps/web/src/App.tsx" status="done" />
+        <ToolCall name="read" args="apps/web/src/app.tsx" status="done" />
         <ToolCall name="bash" args="pnpm typecheck" status="running" />
         <ToolCall name="edit" args="index.css" status="error" />
         <ToolCall name="grep" args="useRichterSession" status="done">
@@ -148,7 +148,7 @@ export const Conversation: Story = {
           content={RESPONSE}
           meta={<MessageMeta items={["qwen3.6-27b-mlx", "3.3k/8k ctx", "15 tok/s"]} />}
         />
-        <ToolCall name="read" args="apps/web/src/App.tsx" status="done" />
+        <ToolCall name="read" args="apps/web/src/app.tsx" status="done" />
         <WorkingIndicator />
       </div>
     </Frame>

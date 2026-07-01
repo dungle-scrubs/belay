@@ -329,6 +329,15 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/repo-policy:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.0.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/server-kit:
     devDependencies:
       '@types/node':

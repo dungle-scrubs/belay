@@ -1,5 +1,6 @@
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
+import { createMemoryStorage } from "@/test-support/storage";
 
 // Unmount any React tree rendered by a test so the jsdom document is clean for the next one.
 afterEach(cleanup);
@@ -45,4 +46,28 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 }
 if (typeof Element.prototype.scrollIntoView !== "function") {
   Element.prototype.scrollIntoView = () => {};
+}
+
+const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+
+let hasUsableLocalStorage = false;
+
+if (localStorageDescriptor?.value !== undefined) {
+  try {
+    const storage = localStorageDescriptor.value as Storage;
+    hasUsableLocalStorage =
+      storage !== undefined &&
+      typeof storage.getItem === "function" &&
+      typeof storage.setItem === "function" &&
+      typeof storage.clear === "function";
+  } catch {
+    hasUsableLocalStorage = false;
+  }
+}
+
+if (!hasUsableLocalStorage) {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: createMemoryStorage(),
+  });
 }

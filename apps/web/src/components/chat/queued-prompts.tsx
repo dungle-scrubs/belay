@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { ArtifactThumb } from "@/ArtifactThumb";
+import { ArtifactThumb } from "@/artifact-thumb";
 import { MarkdownBody } from "@/components/chat/markdown-body";
 import type { QueuedPrompt } from "@/send-queue";
 

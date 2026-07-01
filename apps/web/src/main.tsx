@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
+import { App } from "./app";
 import { TelemetryErrorBoundary } from "./components/error-boundary";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { bootstrapBrowserSentry } from "./sentry";

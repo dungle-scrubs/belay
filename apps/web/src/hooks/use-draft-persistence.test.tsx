@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { readDraft, writeDraft } from "@/composer-storage";
+import { createMemoryStorage } from "@/test-support/storage";
 import { useDraftPersistence } from "./use-draft-persistence";
 
 /**
@@ -10,20 +11,6 @@ import { useDraftPersistence } from "./use-draft-persistence";
  * draft, debounce writes, clear on empty, isolate by session, and tolerate storage failure. Driven
  * through a tiny harness that owns the draft state the hook reads/writes.
  */
-
-function fakeStorage(): Storage {
-  const map = new Map<string, string>();
-  return {
-    getItem: (key) => map.get(key) ?? null,
-    setItem: (key, value) => void map.set(key, value),
-    removeItem: (key) => void map.delete(key),
-    clear: () => map.clear(),
-    key: (index) => [...map.keys()][index] ?? null,
-    get length() {
-      return map.size;
-    },
-  } as Storage;
-}
 
 const throwingStorage = (): Storage =>
   ({
@@ -63,14 +50,14 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 test("restores a saved draft once the session id is known", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   writeDraft(storage, "t", "sess", "saved draft");
   const { result } = renderHook(() => useHarness({ storage, tabId: "t", sessionId: "sess" }));
   assert.equal(result.current.draft, "saved draft");
 });
 
 test("does not clobber a non-empty in-memory draft", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   writeDraft(storage, "t", "sess", "saved draft");
   const { result } = renderHook(() =>
     useHarness({ storage, tabId: "t", sessionId: "sess", initialDraft: "already typing" }),
@@ -79,7 +66,7 @@ test("does not clobber a non-empty in-memory draft", () => {
 });
 
 test("debounces writes and clears the slot when the draft goes empty", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   const { result } = renderHook(() => useHarness({ storage, tabId: "t", sessionId: "sess" }));
 
   act(() => result.current.setDraft("hello"));
@@ -95,7 +82,7 @@ test("debounces writes and clears the slot when the draft goes empty", () => {
 });
 
 test("drafts are isolated by session id", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   const { result, rerender } = renderHook(
     ({ sessionId }: { sessionId: string }) => useHarness({ storage, tabId: "t", sessionId }),
     { initialProps: { sessionId: "sessA" } },
@@ -112,7 +99,7 @@ test("drafts are isolated by session id", () => {
 });
 
 test("switching sessions resets the composer, never carrying the prior session's draft over", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   writeDraft(storage, "t", "sessB", "draft for B");
   const { result, rerender } = renderHook(
     ({ sessionId }: { sessionId: string }) => useHarness({ storage, tabId: "t", sessionId }),
@@ -132,7 +119,7 @@ test("switching sessions resets the composer, never carrying the prior session's
 });
 
 test("a stale bare slash-command fragment is never restored and is cleared on visit", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   // Simulate a stale "/c" left in a session's slot by the old draft-carryover bug.
   writeDraft(storage, "t", "sess", "/c");
   const { result } = renderHook(() => useHarness({ storage, tabId: "t", sessionId: "sess" }));
@@ -144,7 +131,7 @@ test("a stale bare slash-command fragment is never restored and is cleared on vi
 });
 
 test("a bare command fragment typed live is not persisted as a draft", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   const { result } = renderHook(() => useHarness({ storage, tabId: "t", sessionId: "sess" }));
   act(() => result.current.setDraft("/c"));
   act(() => vi.advanceTimersByTime(300));

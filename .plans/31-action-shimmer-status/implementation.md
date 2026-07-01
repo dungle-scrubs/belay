@@ -10,7 +10,7 @@
 
 ## 1. Architecture
 
-Replace generic `working...`/pulse-dot placeholders with a reusable shimmer text indicator whose label reflects the current action. The shimmer is a visual treatment; the important product change is the action label projection. Users should see "thinking", "applying steering", "reading apps/web/src/App.tsx", "searching useSlashMenu", "running pnpm test", "classifying with …", or "summarizing archive" when the event stream gives enough evidence.
+Replace generic `working...`/pulse-dot placeholders with a reusable shimmer text indicator whose label reflects the current action. The shimmer is a visual treatment; the important product change is the action label projection. Users should see "thinking", "applying steering", "reading apps/web/src/app.tsx", "searching useSlashMenu", "running pnpm test", "classifying with …", or "summarizing archive" when the event stream gives enough evidence.
 
 The label source should be deterministic and host/web owned. Do not infer free-form user intent with fuzzy prose matching. Derive labels from structured events already in the transcript: active turn status, tool name/input, tool progress events, provider/reconnect/recovery events, shell lane status, compaction progress, and future background-process/subagent snapshots.
 

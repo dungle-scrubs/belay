@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
 import type { GitStatus } from "@trevor/session";
 import { test } from "vitest";
-import { gitLine, WorkspaceIdentity } from "./WorkspaceIdentity";
+import { gitLine, WorkspaceIdentity } from "./workspace-identity";
 
 const base: GitStatus = {
   branch: "main",

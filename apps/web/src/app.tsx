@@ -34,8 +34,8 @@ import { ModelChooser } from "@/components/chooser/model-chooser";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import type { PaletteCommand } from "@/components/command-palette/palette-commands";
 import { BackToChat } from "@/components/panel/back-to-chat";
-import { PanelHost } from "@/components/panel/PanelHost";
 import { ControlsPanel } from "@/components/panel/panel-controls";
+import { PanelHost } from "@/components/panel/panel-host";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
 import { useModelSelection } from "@/hooks/use-model-selection";
@@ -490,7 +490,7 @@ export function App() {
   // at once (which would run concurrent, out-of-order turns) and the event log stays
   // cleanly paired. ESC-steer prepends, so an interruption preempts what's waiting.
   // The reducer wiring + the in-flight/echo latch + the release/drain effects live in
-  // useSendQueue; App.tsx calls submit/steer and renders the queue.
+  // useSendQueue; app.tsx calls submit/steer and renders the queue.
   const { pending, queue, submit, steer, flushQueuedSteer } = useSendQueue({
     busy,
     publish,

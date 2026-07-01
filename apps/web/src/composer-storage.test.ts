@@ -8,27 +8,13 @@ import {
   readHistory,
   writeDraft,
 } from "./composer-storage";
+import { createMemoryStorage } from "./test-support/storage";
 
 /**
  * The pure tab-local composer persistence policy (D-083/D-084): draft round-trip + clear, the
  * history cap + adjacent de-dupe, tab/session key isolation, version-skew rejection, and graceful
  * degradation when storage throws. Driven by an in-memory fake Storage - no DOM.
  */
-
-/** A minimal in-memory Storage for the read/write/remove the module uses. */
-function fakeStorage(): Storage {
-  const map = new Map<string, string>();
-  return {
-    getItem: (key) => map.get(key) ?? null,
-    setItem: (key, value) => void map.set(key, value),
-    removeItem: (key) => void map.delete(key),
-    clear: () => map.clear(),
-    key: (index) => [...map.keys()][index] ?? null,
-    get length() {
-      return map.size;
-    },
-  } as Storage;
-}
 
 /** A Storage whose every method throws (private mode / disabled storage). */
 const throwingStorage = (): Storage =>
@@ -48,7 +34,7 @@ const throwingStorage = (): Storage =>
   }) as Storage;
 
 test("draft round-trips, then clears (and empty writes clear the slot)", () => {
-  const s = fakeStorage();
+  const s = createMemoryStorage();
   assert.equal(readDraft(s, "tab", "sess"), "");
   writeDraft(s, "tab", "sess", "hello world");
   assert.equal(readDraft(s, "tab", "sess"), "hello world");
@@ -61,7 +47,7 @@ test("draft round-trips, then clears (and empty writes clear the slot)", () => {
 });
 
 test("draft + history are isolated by tab id and by session id", () => {
-  const s = fakeStorage();
+  const s = createMemoryStorage();
   writeDraft(s, "tabA", "sess", "from A");
   writeDraft(s, "tabB", "sess", "from B");
   writeDraft(s, "tabA", "other", "A other");
@@ -76,7 +62,7 @@ test("draft + history are isolated by tab id and by session id", () => {
 });
 
 test("appendHistory de-dupes an adjacent duplicate, trims, and skips empties", () => {
-  const s = fakeStorage();
+  const s = createMemoryStorage();
   appendHistory(s, "t", "x", "ls");
   appendHistory(s, "t", "x", "ls"); // adjacent dup: ignored
   appendHistory(s, "t", "x", "  pwd  "); // trimmed
@@ -87,7 +73,7 @@ test("appendHistory de-dupes an adjacent duplicate, trims, and skips empties", (
 });
 
 test("history is capped to the newest HISTORY_CAP entries", () => {
-  const s = fakeStorage();
+  const s = createMemoryStorage();
   for (let i = 0; i < HISTORY_CAP + 10; i += 1) {
     appendHistory(s, "t", "x", `cmd-${i}`);
   }
@@ -98,7 +84,7 @@ test("history is capped to the newest HISTORY_CAP entries", () => {
 });
 
 test("a version-skewed or malformed payload reads as empty (never throws)", () => {
-  const s = fakeStorage();
+  const s = createMemoryStorage();
   s.setItem("trevor.draft.t.x", JSON.stringify({ v: 999, text: "stale" }));
   s.setItem("trevor.history.t.x", "not json{");
   assert.equal(readDraft(s, "t", "x"), "");

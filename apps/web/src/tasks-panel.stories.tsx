@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { TaskSnapshot, TaskStatus } from "@trevor/session";
-import { TasksPanel } from "./TasksPanel";
+import { TasksPanel } from "./tasks-panel";
 
 /**
  * The header task checklist (plan 09). The panel orders by status, caps the visible rows at five,

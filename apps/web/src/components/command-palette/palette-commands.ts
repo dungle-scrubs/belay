@@ -1,4 +1,4 @@
-import type { RowChooserAdapter } from "@/components/command-modal/RowChooserModal";
+import type { RowChooserAdapter } from "@/components/command-modal";
 import type { CommandRow } from "@/components/command-modal/types";
 
 /**

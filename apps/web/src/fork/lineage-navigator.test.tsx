@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
 import { test } from "vitest";
-import { BranchButton } from "./BranchButton";
-import { LineageNavigator } from "./LineageNavigator";
+import { BranchButton } from "./branch-button";
 import type { Lineage } from "./lineage";
+import { LineageNavigator } from "./lineage-navigator";
 
 const LINEAGE: Lineage = {
   ancestors: [

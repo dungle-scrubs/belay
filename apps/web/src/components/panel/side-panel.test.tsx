@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { render } from "@testing-library/react";
 import { test } from "vitest";
-import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "./SidePanel";
+import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "./side-panel";
 
 test("composes header, breakdown, controls, and footer inside the side drawer", () => {
   const { getByLabelText, getByText } = render(

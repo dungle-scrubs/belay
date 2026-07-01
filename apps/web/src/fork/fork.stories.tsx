@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { BranchButton } from "./BranchButton";
-import { LineageNavigator } from "./LineageNavigator";
+import { BranchButton } from "./branch-button";
 import type { Lineage } from "./lineage";
+import { LineageNavigator } from "./lineage-navigator";
 
 /**
  * The fork lineage navigator + the "branch from here" affordance (plan 15, M3), driven by lineage

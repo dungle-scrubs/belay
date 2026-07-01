@@ -40,7 +40,7 @@ function latest<T>(
 }
 
 /**
- * Pure view-model derivations over the Richter event log, kept out of App.tsx so
+ * Pure view-model derivations over the Richter event log, kept out of app.tsx so
  * the component is just rendering. Each folds `readonly SessionEvent[]` into a
  * typed shape via `decodeTrevorEvent`, so none of them hand-guard raw payloads.
  */

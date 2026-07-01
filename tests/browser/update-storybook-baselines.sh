@@ -8,11 +8,11 @@
 #   tests/browser/update-storybook-baselines.sh
 #   git add apps/web/__snapshots__ && git commit
 #
-# Requires Docker. The repo is copied into a writable container tree (see _container.sh) so the linux
+# Requires Docker. The repo is copied into a writable container tree (see container.sh) so the linux
 # install never touches the host's macOS node_modules; only the regenerated baselines are copied back out.
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/_container.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/container.sh"
 SNAP_DIR="$REPO_ROOT/apps/web/__snapshots__"
 mkdir -p "$SNAP_DIR"
 

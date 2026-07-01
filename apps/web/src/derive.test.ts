@@ -33,7 +33,7 @@ import {
 
 /**
  * The pure view-model selectors over the session event log (derive.ts). They fold raw
- * SessionEvent[] into the shapes App.tsx renders, so a fold bug shows as a wrong transcript,
+ * SessionEvent[] into the shapes app.tsx renders, so a fold bug shows as a wrong transcript,
  * stale meter, or a dead host that still looks present. Tested as pure functions - no DOM.
  */
 

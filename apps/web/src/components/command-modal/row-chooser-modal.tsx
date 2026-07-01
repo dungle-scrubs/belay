@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CommandModal } from "./CommandModal";
+import { CommandModal } from "./command-modal";
 import type { CommandRow, FooterHint } from "./types";
 
 /**

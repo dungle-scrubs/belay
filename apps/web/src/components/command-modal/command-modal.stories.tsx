@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { CommandModal } from "./CommandModal";
+import { CommandModal } from "./command-modal";
 import type { CommandRow, FooterHint } from "./types";
 
 /**

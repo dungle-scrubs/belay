@@ -1,6 +1,6 @@
 import { Maximize2, Plus, Terminal, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type SubmitEvent, useEffect } from "react";
-import { ArtifactThumb } from "@/ArtifactThumb";
+import { ArtifactThumb } from "@/artifact-thumb";
 import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { Button } from "@/components/ui/button";
 import type { Composer } from "@/hooks/use-composer";
@@ -9,7 +9,7 @@ import { useVim } from "@/vim/use-vim";
 
 /**
  * The production prompt composer: the bordered textarea + attach button, the pending-attachment
- * chips, and the upload-error banner. Extracted out of App.tsx so Storybook can exercise the REAL
+ * chips, and the upload-error banner. Extracted out of app.tsx so Storybook can exercise the REAL
  * composer (not an assistant-ui mock) across its states, and so the prompt-shell-lane visual
  * treatment lives in one place.
  *

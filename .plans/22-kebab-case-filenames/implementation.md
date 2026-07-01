@@ -27,16 +27,16 @@ The plan owns filename policy, path migration, import/reference updates, and enf
 
 Initial tracked examples found during planning include:
 
-- `apps/web/src/App.tsx`
-- `apps/web/src/ArtifactThumb.tsx`
-- `apps/web/src/TasksPanel.tsx`
-- `apps/web/src/components/command-modal/CommandModal.tsx`
-- `apps/web/src/components/panel/PanelHost.tsx`
-- `apps/web/src/components/panel/SidePanel.tsx`
-- `apps/web/src/components/panel/Treemap.tsx`
-- `apps/web/src/components/panel/WorkspaceIdentity.tsx`
-- `apps/web/src/resume/ResumeModal.tsx`
-- `apps/web/src/worktrees/WorktreeModal.tsx`
+- `apps/web/src/app.tsx`
+- `apps/web/src/artifact-thumb.tsx`
+- `apps/web/src/tasks-panel.tsx`
+- `apps/web/src/components/command-modal/command-modal.tsx`
+- `apps/web/src/components/panel/panel-host.tsx`
+- `apps/web/src/components/panel/side-panel.tsx`
+- `apps/web/src/components/panel/treemap.tsx`
+- `apps/web/src/components/panel/workspace-identity.tsx`
+- `apps/web/src/resume/resume-modal.tsx`
+- `apps/web/src/worktrees/worktree-modal.tsx`
 
 The inventory phase must produce the authoritative list instead of relying on this planning sample. <!-- D-004 -->
 

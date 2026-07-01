@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { GitStatus } from "@trevor/session";
-import { WorkspaceIdentity } from "./WorkspaceIdentity";
+import { WorkspaceIdentity } from "./workspace-identity";
 
 const base: GitStatus = {
   branch: "main",

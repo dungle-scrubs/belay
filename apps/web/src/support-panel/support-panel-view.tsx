@@ -2,7 +2,7 @@ import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
 import { Maximize2, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { TasksPanel } from "@/TasksPanel";
+import { TasksPanel } from "@/tasks-panel";
 import {
   buildSupportPanel,
   type SupportBackgroundRow,

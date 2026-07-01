@@ -7,7 +7,7 @@ import {
   type SidePanelBreakdownProps,
   SidePanelHeader,
   type SidePanelHeaderProps,
-} from "./SidePanel";
+} from "./side-panel";
 
 const cleanMain: GitStatus = {
   branch: "main",

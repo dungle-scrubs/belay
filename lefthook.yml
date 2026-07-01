@@ -5,6 +5,8 @@ pre-commit:
       glob: "*.{js,jsx,ts,tsx,json,jsonc,css}"
       run: pnpm biome check --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
+    filenames:
+      run: pnpm check:filenames
     types:
       glob: "*.{ts,tsx}"
       run: pnpm -r typecheck

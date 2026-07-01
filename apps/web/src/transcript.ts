@@ -832,7 +832,7 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
  * The SidePanel's whole view-model, folded from the transcript (+ the raw events for the
  * live snapshot) in one place - the single surface that owns the live-vs-completed
  * precedence and the per-category context aggregation. Previously four sibling useMemos
- * in App.tsx fanned out as six props; this collapses them so the panel reads from one
+ * in app.tsx fanned out as six props; this collapses them so the panel reads from one
  * object and the context sum can never re-list (and so drift from) the canonical category
  * set - it folds every completed request's breakdown via `addBreakdown`.
  *

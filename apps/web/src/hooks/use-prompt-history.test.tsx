@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { act, renderHook } from "@testing-library/react";
 import { test } from "vitest";
+import { createMemoryStorage } from "@/test-support/storage";
 import { usePromptHistory } from "./use-prompt-history";
 
 /**
@@ -9,22 +10,8 @@ import { usePromptHistory } from "./use-prompt-history";
  * policy is covered purely in composer-storage.test.ts.
  */
 
-function fakeStorage(): Storage {
-  const map = new Map<string, string>();
-  return {
-    getItem: (key) => map.get(key) ?? null,
-    setItem: (key, value) => void map.set(key, value),
-    removeItem: (key) => void map.delete(key),
-    clear: () => map.clear(),
-    key: (index) => [...map.keys()][index] ?? null,
-    get length() {
-      return map.size;
-    },
-  } as Storage;
-}
-
 test("ArrowUp walks older, ArrowDown walks newer, and restores the live draft at the end", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   const { result } = renderHook(() => usePromptHistory({ storage, tabId: "t", sessionId: "sess" }));
 
   act(() => result.current.record("first"));
@@ -64,7 +51,7 @@ test("ArrowUp walks older, ArrowDown walks newer, and restores the live draft at
 });
 
 test("recallPrev on an empty ring returns null (nothing to recall)", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   const { result } = renderHook(() => usePromptHistory({ storage, tabId: "t", sessionId: "sess" }));
   let recalled: string | null = "x";
   act(() => {
@@ -75,7 +62,7 @@ test("recallPrev on an empty ring returns null (nothing to recall)", () => {
 });
 
 test("history is isolated by session and reloads from storage", () => {
-  const storage = fakeStorage();
+  const storage = createMemoryStorage();
   const { result, rerender } = renderHook(
     ({ sessionId }: { sessionId: string }) => usePromptHistory({ storage, tabId: "t", sessionId }),
     { initialProps: { sessionId: "sessA" } },

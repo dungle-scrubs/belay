@@ -30,8 +30,8 @@ const BATCH: readonly Omit<ConcurrentTool, "status">[] = [
   {
     id: "r1",
     name: "read",
-    args: "apps/web/src/App.tsx",
-    onOpenPath: () => openInEditor("apps/web/src/App.tsx"),
+    args: "apps/web/src/app.tsx",
+    onOpenPath: () => openInEditor("apps/web/src/app.tsx"),
   },
   {
     id: "r2",

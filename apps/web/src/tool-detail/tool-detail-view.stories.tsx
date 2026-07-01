@@ -62,7 +62,7 @@ export const ReadWithOpen: Story = {
       <ToolDetailView
         model={model({
           toolName: "read",
-          args: '{"path":"apps/web/src/App.tsx","offset":120,"limit":40}',
+          args: '{"path":"apps/web/src/app.tsx","offset":120,"limit":40}',
           output: "import { useQuery } from ...\nexport function App() {\n  ...\n}",
         })}
         onBack={noop}
@@ -96,7 +96,7 @@ export const MultiEditChanges: Story = {
       <ToolDetailView
         model={model({
           toolName: "multi_edit",
-          args: '{"path":"apps/web/src/App.tsx","edits":[{"old":"const a = 1","new":"const a = 2"},{"old":"return a","new":"return a + 1"}]}',
+          args: '{"path":"apps/web/src/app.tsx","edits":[{"old":"const a = 1","new":"const a = 2"},{"old":"return a","new":"return a + 1"}]}',
           output: "applied 2 edits",
         })}
         onBack={noop}

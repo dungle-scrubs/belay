@@ -10,7 +10,7 @@ import {
 } from "@/send-queue";
 
 /**
- * The browser's local send-queue React state machine, lifted out of App.tsx so the
+ * The browser's local send-queue React state machine, lifted out of app.tsx so the
  * delicate double-send / echo-latch invariant lives in one place. The PURE transitions
  * and the fold-on-steer rule are in ./send-queue (unit-tested without React); this owns
  * only the React glue: the dispatchQueue reducer wiring, the busy/in-flight latch, and

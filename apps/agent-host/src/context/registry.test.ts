@@ -143,11 +143,11 @@ test("scoped .trevor/rules render only after a matching file is touched", () => 
       "RULE: web-specific.",
     ].join("\n"),
   );
-  write(join(root, "apps", "web", "App.tsx"), "code");
+  write(join(root, "apps", "web", "app.tsx"), "code");
 
   assert.equal(contextRegistry.report(root, root).text, "");
 
-  contextRegistry.noteFileAccess(join(root, "apps", "web", "App.tsx"), root);
+  contextRegistry.noteFileAccess(join(root, "apps", "web", "app.tsx"), root);
   const report = contextRegistry.report(root, root);
 
   assert.match(report.text, /RULE: web-specific\./);

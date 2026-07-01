@@ -2,8 +2,8 @@ import type { ArtifactRef, ModelRef, PastePayload } from "@trevor/session";
 
 /**
  * The browser's local send queue + hard-steer fold - the "when does my prompt go out"
- * state machine, lifted out of App.tsx so it is unit-testable without React rendering.
- * App.tsx owns the React glue (the busy/in-flight gating and the drain effect); this
+ * state machine, lifted out of app.tsx so it is unit-testable without React rendering.
+ * app.tsx owns the React glue (the busy/in-flight gating and the drain effect); this
  * owns the pure transitions and the fold-on-steer rule, in one place.
  *
  * The contract:

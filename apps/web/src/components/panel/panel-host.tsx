@@ -28,10 +28,10 @@ import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { RowChooserModal } from "@/components/command-modal";
-import { HandoffApprovalSurface } from "@/components/handoff/HandoffApprovalSurface";
-import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/SidePanel";
+import { HandoffApprovalSurface } from "@/components/handoff/handoff-approval-surface";
 import { SessionSidebar } from "@/components/panel/session-sidebar";
 import { DrawerToggle } from "@/components/panel/side-drawer";
+import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/side-panel";
 import { QuestionSurface } from "@/components/question";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
@@ -188,7 +188,7 @@ export interface SidebarBinding {
  * NO state - it is
  * pure presentation over the injected view-models and wiring. App stays the composition root: it
  * wires the hooks (session, composer, send queue) and folds the memos (transcript, panelModel,
- * host), then hands them here as cohesive objects. The JSX is moved verbatim from App.tsx - same
+ * host), then hands them here as cohesive objects. The JSX is moved verbatim from app.tsx - same
  * DOM, classes, element order, conditionals, and keys.
  */
 export function PanelHost(props: {

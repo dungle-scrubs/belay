@@ -178,7 +178,7 @@ const FIND_OUTPUT = [
   "apps/agent-host/src/tools/web-search.ts",
 ].join("\n");
 
-const GREP_OUTPUT = `src/App.tsx:173:  const transcript = useMemo(() => toTranscript(events), [events]);
+const GREP_OUTPUT = `src/app.tsx:173:  const transcript = useMemo(() => toTranscript(events), [events]);
 src/session/use-session.ts:42:export function useSession(sessionId: string | null) {
 src/transcript.ts:63:export function toTranscript(events: readonly SessionEvent[]): Message[] {`;
 
@@ -188,9 +188,9 @@ export const Read: Story = {
     <Frame>
       <ToolCall
         name="read"
-        args="apps/web/src/App.tsx"
+        args="apps/web/src/app.tsx"
         status="done"
-        onOpenPath={() => openInEditor("apps/web/src/App.tsx")}
+        onOpenPath={() => openInEditor("apps/web/src/app.tsx")}
       />
     </Frame>
   ),
@@ -432,7 +432,7 @@ export const CompactCollapsed: Story = {
           defaultOpen={false}
         />
         <MultiEditDiff edits={MULTI_FILE_EDITS} defaultOpen={false} />
-        <ToolCall name="read" args="apps/web/src/App.tsx" />
+        <ToolCall name="read" args="apps/web/src/app.tsx" />
       </div>
     </Frame>
   ),

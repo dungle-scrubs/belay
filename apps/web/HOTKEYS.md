@@ -106,23 +106,23 @@ these globally.
 | Keys | Scope | Action | Source |
 | --- | --- | --- | --- |
 | `Esc` | **Global** (`window`) | Cancel the active/pending run (or fold queued steer first); if none, clear the composer draft. Suppressed while a frontmost overlay is open or the Vim layer consumed it - see **Escape ownership** below. | `src/shortcuts/router.ts` (`onEscape`) -> `src/esc-action.ts` |
-| `i` | **Global** (`window`), **only when no input/textarea/contenteditable is focused** | Focus the composer (Vim-style insert mode). | `src/App.tsx` (window `keydown`) |
-| `Enter` | Composer `<input>` | Submit the message (form submit). | `src/App.tsx` (`<form onSubmit>`) |
-| `ArrowUp` / `ArrowDown` | Composer, **only while slash-menu open** | Move the menu highlight. | `src/App.tsx` `onInputKeyDown` |
-| `ArrowUp` | Composer, **menu closed, caret on the first line** (or empty composer) | Recall the previous prompt from history (D-084). Off the first line it moves the caret normally. | `src/App.tsx` `onInputKeyDown` |
-| `ArrowDown` | Composer, **menu closed, mid-history-navigation, caret on the last line** | Step forward through recalled prompts; past the newest, restores the draft you started from. | `src/App.tsx` `onInputKeyDown` |
-| `Tab` | Composer, **only while slash-menu open** | Complete the highlighted command. | `src/App.tsx` `onInputKeyDown` |
-| `Enter` | Composer, **only while slash-menu open** | Complete the command (falls through to submit on an exact match). | `src/App.tsx` `onInputKeyDown` |
-| `Esc` | Composer, **only while slash-menu open** | Dismiss the menu (event is swallowed so the global `Esc` does not also fire). | `src/App.tsx` `onInputKeyDown` |
+| `i` | **Global** (`window`), **only when no input/textarea/contenteditable is focused** | Focus the composer (Vim-style insert mode). | `src/app.tsx` (window `keydown`) |
+| `Enter` | Composer `<input>` | Submit the message (form submit). | `src/app.tsx` (`<form onSubmit>`) |
+| `ArrowUp` / `ArrowDown` | Composer, **only while slash-menu open** | Move the menu highlight. | `src/app.tsx` `onInputKeyDown` |
+| `ArrowUp` | Composer, **menu closed, caret on the first line** (or empty composer) | Recall the previous prompt from history (D-084). Off the first line it moves the caret normally. | `src/app.tsx` `onInputKeyDown` |
+| `ArrowDown` | Composer, **menu closed, mid-history-navigation, caret on the last line** | Step forward through recalled prompts; past the newest, restores the draft you started from. | `src/app.tsx` `onInputKeyDown` |
+| `Tab` | Composer, **only while slash-menu open** | Complete the highlighted command. | `src/app.tsx` `onInputKeyDown` |
+| `Enter` | Composer, **only while slash-menu open** | Complete the command (falls through to submit on an exact match). | `src/app.tsx` `onInputKeyDown` |
+| `Esc` | Composer, **only while slash-menu open** | Dismiss the menu (event is swallowed so the global `Esc` does not also fire). | `src/app.tsx` `onInputKeyDown` |
 | `Enter` / `Space` | Collapsible message header (`role="button"`) | Toggle the collapsible. | `src/components/chat/message.tsx` |
 | any key release | While a text selection is active | Hide the quote-selection toolbar. | `src/components/assistant-ui/quote-selection-toolbar.tsx` (`keyup`) |
 | typing / arrows / `Enter` | cmdk popovers (model selector etc.), **only while open** | Filter list / navigate / select. `Enter` is `stopPropagation`-ed. | `src/components/ui/command.tsx`, `model-selector.tsx` |
-| `ArrowUp` / `ArrowDown` (`Home` / `End`) | ask_user question surface, **single-choice rows** | Move the selection + roving focus across the choices and the custom-answer row. | `src/components/question/QuestionSurface.tsx` (`makeChoiceNav`) |
-| `ArrowUp` / `ArrowDown` | ask_user question surface, **multi-select rows** | Roving focus between rows (Space/click toggles). | `src/components/question/QuestionSurface.tsx` |
-| `ArrowLeft` / `ArrowRight` | ask_user question surface, **multi-question only, NOT in a text field** | Move between question TABS (02.18). Bails on `input`/`textarea`/contenteditable so the caret moves there instead. | `src/components/question/QuestionSurface.tsx` (`onSectionKeyDown`) |
-| `Enter` | ask_user question surface, **not in a textarea** | Confirm-and-advance: move to the next tab, or submit on the final/only tab. In a textarea it stays a newline; `Cmd`/`Ctrl+Enter` advances/submits. | `src/components/question/QuestionSurface.tsx` |
-| `n` | ask_user question surface, **non-input focus** | Reveal + focus the optional note for the question. | `src/components/question/QuestionSurface.tsx` |
-| `Esc` / `i` | **Global** | Still fire over the surface's non-input focus targets (choice rows, custom-answer row): `Esc` cancels/clears, `i` focuses the composer. | `src/App.tsx` |
+| `ArrowUp` / `ArrowDown` (`Home` / `End`) | ask_user question surface, **single-choice rows** | Move the selection + roving focus across the choices and the custom-answer row. | `src/components/question/question-surface.tsx` (`makeChoiceNav`) |
+| `ArrowUp` / `ArrowDown` | ask_user question surface, **multi-select rows** | Roving focus between rows (Space/click toggles). | `src/components/question/question-surface.tsx` |
+| `ArrowLeft` / `ArrowRight` | ask_user question surface, **multi-question only, NOT in a text field** | Move between question TABS (02.18). Bails on `input`/`textarea`/contenteditable so the caret moves there instead. | `src/components/question/question-surface.tsx` (`onSectionKeyDown`) |
+| `Enter` | ask_user question surface, **not in a textarea** | Confirm-and-advance: move to the next tab, or submit on the final/only tab. In a textarea it stays a newline; `Cmd`/`Ctrl+Enter` advances/submits. | `src/components/question/question-surface.tsx` |
+| `n` | ask_user question surface, **non-input focus** | Reveal + focus the optional note for the question. | `src/components/question/question-surface.tsx` |
+| `Esc` / `i` | **Global** | Still fire over the surface's non-input focus targets (choice rows, custom-answer row): `Esc` cancels/clears, `i` focuses the composer. | `src/app.tsx` |
 
 **Practical takeaway:** treat bare `Esc`, `Enter`, `Tab`, `Space`, and the
 arrow keys as taken inside the composer and lists. Everything modifier-based is
@@ -140,7 +140,7 @@ that handles it `stopPropagation`s, so lower layers never also fire:
    handler. A second `Esc` in normal mode is a passthrough and falls through to
    the global layer. The full-surface prompt editor instead consumes the first
    `Esc` for normal mode and closes on the second.
-2. **The slash-command menu** (`src/App.tsx` `onInputKeyDown`). While open, `Esc`
+2. **The slash-command menu** (`src/app.tsx` `onInputKeyDown`). While open, `Esc`
    dismisses the menu and is swallowed.
 3. **A frontmost overlay** (palette, resume/worktree/archive chooser, model
    chooser, takeover). Each `Radix Dialog`/popover closes on its own `Esc`; the
@@ -399,7 +399,7 @@ Caveats:
 ## How to add a binding
 
 1. Follow the existing global-listener pattern (`window` `keydown` reading the
-   latest state from a `ref`, as in `src/App.tsx`'s `Esc` handler) so the
+   latest state from a `ref`, as in `src/app.tsx`'s `Esc` handler) so the
    handler never goes stale.
 2. Gate on `primaryMod(e)` (not raw `ctrlKey`) for cross-platform actions.
 3. `preventDefault()` only for the combo you are claiming, and prefer scoping to

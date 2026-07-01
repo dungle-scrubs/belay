@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { test, vi } from "vitest";
-import { CommandModal } from "./CommandModal";
+import { CommandModal } from "./command-modal";
 import type { CommandRow } from "./types";
 
 const rows: CommandRow[] = [

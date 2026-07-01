@@ -52,6 +52,19 @@ not a dependency of Trevor V2 and must not become one. Provider integration live
 in `apps/agent-host/src/providers` and speaks to LM Studio (and Codex/pi-ai)
 directly.
 
+## Filename policy
+
+Use kebab-case for repo-owned source, test, story, script, and support
+filenames. Keep exported TypeScript symbols and React component names in their
+normal casing, e.g. `PanelHost` may live in `panel-host.tsx`; do not create
+PascalCase component filenames.
+
+Conventional documentation filenames are explicit exceptions: `AGENTS.md`,
+`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `HOTKEYS.md`, `CONTEXT.md`,
+`FEATURES.md`, `SECURITY_RISKS.md`, and skill `SKILL.md` files. Generated
+artifacts may be excluded only through the filename policy checker's explicit
+allowlist.
+
 ## Local storage taxonomy
 
 Before adding any file-backed feature, reuse the existing storage roots. Do not

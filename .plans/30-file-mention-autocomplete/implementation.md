@@ -11,7 +11,7 @@
 
 Typing `@` in the composer should open a fuzzy file picker backed by the active host workspace. It is a composer affordance, not a model tool and not a slash command. The browser renders and navigates the menu; the host owns workspace file enumeration because the browser has no filesystem authority.
 
-The first implementation target is path selection, not automatic file-content injection. Selecting a result inserts a visible workspace-relative mention such as `@apps/web/src/App.tsx` into the draft and records structured mention metadata for that range. The submitted prompt still reads naturally as ordinary text; later work can decide whether selected file mentions become prompt attachments, explicit context blocks, or tool-detail links.
+The first implementation target is path selection, not automatic file-content injection. Selecting a result inserts a visible workspace-relative mention such as `@apps/web/src/app.tsx` into the draft and records structured mention metadata for that range. The submitted prompt still reads naturally as ordinary text; later work can decide whether selected file mentions become prompt attachments, explicit context blocks, or tool-detail links.
 
 ### Boundaries
 

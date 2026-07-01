@@ -5,8 +5,8 @@ import { fmtCtx, fmtTokens } from "@/derive";
 import { useArmedAfterMount } from "@/hooks/use-armed-after-mount";
 import { panelBreakdown } from "./breakdown";
 import { DrawerToggle, SideDrawer } from "./side-drawer";
-import { Treemap } from "./Treemap";
-import { WorkspaceIdentity } from "./WorkspaceIdentity";
+import { Treemap } from "./treemap";
+import { WorkspaceIdentity } from "./workspace-identity";
 
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;

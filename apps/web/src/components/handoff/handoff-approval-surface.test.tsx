@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { test, vi } from "vitest";
-import { HandoffApprovalSurface } from "./HandoffApprovalSurface";
+import { HandoffApprovalSurface } from "./handoff-approval-surface";
 
 /**
  * The generated-handoff approval surface (02.10, M8): generating shows a spinner with no actions; a

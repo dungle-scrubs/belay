@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
  * The transcript scroll-layout model (D-086), as a presentational fixture: a normal top-down column
  * inside a fixed-height frame, with the composer pinned below. It demonstrates that a short session
  * sits at the TOP padding and grows downward (instead of bottom-aligning above the composer), and
- * that an overflowing transcript scrolls. The real wiring + live-edge follow lives in App.tsx; this
+ * that an overflowing transcript scrolls. The real wiring + live-edge follow lives in app.tsx; this
  * is the visual catalog of the layout states the plan calls for.
  */
 
@@ -20,7 +20,7 @@ function TranscriptWellFixture({ rows, heightClass = "h-[40rem]" }: WellProps) {
     <div
       className={`flex w-full max-w-2xl flex-col border border-border bg-smui-surface-sunken px-4 ${heightClass}`}
     >
-      {/* The transcript well: normal top-down column (matches App.tsx) - content starts at the top
+      {/* The transcript well: normal top-down column (matches app.tsx) - content starts at the top
         padding and appends downward; once it overflows the frame it scrolls. */}
       <div className="flex flex-1 flex-col gap-8 overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {Array.from({ length: rows }, (_, i) => (

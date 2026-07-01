@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { HandoffApprovalSurface } from "./HandoffApprovalSurface";
+import { HandoffApprovalSurface } from "./handoff-approval-surface";
 
 /**
  * The generated-handoff approval surface replaces the composer while a `/handoff` draft is pending.
@@ -19,7 +19,7 @@ type Story = StoryObj<typeof HandoffApprovalSurface>;
 
 const DRAFT = `Continue the transcript-selection work in apps/web. The cross-item persistence (02.11) is merged; next, wire the generated-handoff approval surface into PanelHost.
 
-Key files: apps/web/src/components/handoff/HandoffApprovalSurface.tsx, apps/web/src/App.tsx (usePromptEditor + pendingHandoff), apps/agent-host/src/main.ts (runGeneratedHandoff/approveHandoff). Run the web + unit test projects before committing.`;
+Key files: apps/web/src/components/handoff/handoff-approval-surface.tsx, apps/web/src/app.tsx (usePromptEditor + pendingHandoff), apps/agent-host/src/main.ts (runGeneratedHandoff/approveHandoff). Run the web + unit test projects before committing.`;
 
 export const Generating: Story = {
   render: () => (

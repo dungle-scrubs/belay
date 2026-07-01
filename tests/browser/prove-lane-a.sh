@@ -8,7 +8,7 @@
 # All edits are container-local; the committed tree is never mutated.
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/_container.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/container.sh"
 
 docker run --rm --ipc=host -v "$REPO_ROOT":/src:ro "$IMAGE" bash -lc "$CONTAINER_PREP"'
   run() { CI=true pnpm --filter @trevor/web test-storybook >/tmp/r.log 2>&1; echo $?; }

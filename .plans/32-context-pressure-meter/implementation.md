@@ -4,7 +4,7 @@
 
 - [x] Existing usage data contract: `Usage { input, output, contextWindow, genMs }` in `@trevor/session`.
 - [x] Existing live `assistant.progress` flow that updates `panelModel` mid-turn.
-- [x] Existing side panel context meter in `apps/web/src/components/panel/SidePanel.tsx`.
+- [x] Existing side panel context meter in `apps/web/src/components/panel/side-panel.tsx`.
 - [x] Existing SidePanel Storybook coverage and panel tests.
 - [ ] `09.2-web-browser-test-suite` (lands first) - the manual "verify SidePanel desktop/narrow screenshots" step is replaced by 09.2's automated Storybook visual-regression lane; regenerate its committed baselines for the pressure-state SidePanel stories (normal/warning/danger/critical/full/over-window). <!-- D-003 -->
 

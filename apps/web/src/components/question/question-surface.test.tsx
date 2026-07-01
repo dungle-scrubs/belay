@@ -7,7 +7,7 @@ import type {
 } from "@trevor/session";
 import { test, vi } from "vitest";
 import * as fx from "./fixtures";
-import { QuestionSurface } from "./QuestionSurface";
+import { QuestionSurface } from "./question-surface";
 
 /**
  * The presentational QuestionSurface, under jsdom. It renders a contract and emits the wire answer;

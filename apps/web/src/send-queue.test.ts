@@ -13,7 +13,7 @@ import {
 /**
  * Characterization tests for the web send-queue / steering machine (M7 / D-007).
  *
- * These pin the queue transitions and the hard-steer fold that were inline in App.tsx
+ * These pin the queue transitions and the hard-steer fold that were inline in app.tsx
  * (a 1025-line component), BEFORE they are extracted, so the send/steer UX is unchanged:
  *   - a prompt submitted while busy is enqueued (FIFO); the head drains when idle
  *   - a hard steer (ESC) folds the queued prompts + draft into ONE prompt and the

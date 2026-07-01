@@ -1,9 +1,9 @@
-export { CommandModal, type CommandModalProps } from "./CommandModal";
+export { CommandModal, type CommandModalProps } from "./command-modal";
 export {
   type RowChooserAdapter,
   RowChooserModal,
   type RowChooserModalProps,
-} from "./RowChooserModal";
+} from "./row-chooser-modal";
 export {
   type CommandRow,
   DEFAULT_FOOTER_HINTS,

@@ -7,11 +7,11 @@
 #
 #   tests/browser/check-storybook-baselines.sh
 #
-# Requires Docker. Like the update script, the repo is copied into a writable container tree (_container.sh)
+# Requires Docker. Like the update script, the repo is copied into a writable container tree (container.sh)
 # so the linux install never touches the host's macOS node_modules.
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/_container.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/container.sh"
 
 docker run --rm --ipc=host \
   -v "$REPO_ROOT":/src:ro \

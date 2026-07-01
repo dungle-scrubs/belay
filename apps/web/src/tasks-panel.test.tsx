@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { render, screen } from "@testing-library/react";
 import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { test } from "vitest";
-import { TasksPanel } from "@/TasksPanel";
+import { TasksPanel } from "@/tasks-panel";
 
 /**
  * The header task panel (TasksPanel). It is purely presentational over a task snapshot: it orders

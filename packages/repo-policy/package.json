@@ -1,0 +1,16 @@
+{
+  "name": "@trevor/repo-policy",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./filename-policy": "./src/filename-policy.ts"
+  },
+  "types": "./src/filename-policy.ts",
+  "scripts": {
+    "typecheck": "tsgo --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3"
+  }
+}
