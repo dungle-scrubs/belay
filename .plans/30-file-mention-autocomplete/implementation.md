@@ -6,6 +6,7 @@
 - [x] Existing slash-command autocomplete pattern: `useSlashMenu` plus `CommandMenu`, with the caller owning filtering, active index, and key handling.
 - [x] Existing workspace root confinement and file-search primitives in the host (`WORKSPACE_ROOT`, `glob`, `grep`, shared skip policy).
 - [x] Existing prompt token/ref behavior for inline image tokens, so file mentions can follow the same "visible text plus structured metadata" direction without becoming attachment chips.
+- [ ] `17.1-loop-helper-composer-wiring` (lands first) - the composer (`prompt-input.tsx`) already renders a `LoopHelper` builder/preview overlay + command-token highlighting on `/loop` lines; the `@`-mention picker must coexist with it (see Key Decisions). <!-- D-003 -->
 
 ## 1. Architecture
 
@@ -27,6 +28,7 @@ The first implementation target is path selection, not automatic file-content in
 
 - Reuse the slash-menu visual component by generalizing its item shape or adding a sibling wrapper around the same presentational primitive.
 - Trigger only when the caret is inside an active mention token at a safe boundary: start of draft or preceded by whitespace/open punctuation. Email addresses and ordinary `@` in the middle of a word should not open the picker.
+- <!-- D-003 --> COEXIST with the loop helper: `17.1-loop-helper-composer-wiring` already mounts a `LoopHelper` overlay in `prompt-input.tsx` on `/loop` lines. The `@`-picker and the loop helper are mutually exclusive per line (a leading `/loop` head vs an active `@` token), so at most one is active - but both share the composer surface. Do not assume the `@`-picker owns the only composer overlay; gate it on an active `@` token and leave `/loop` lines to the loop helper.
 - Search is host-owned, workspace-confined, debounced, capped, and ignore-aware. It returns relative paths and lightweight metadata only.
 - Selection inserts/replaces the active token and parks the caret after the inserted path.
 - Escape closes only the mention menu first. It must not cancel a turn, clear the draft, or close transcript takeovers while the mention menu owns focus.
