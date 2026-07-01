@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M1 - Provenance Snapshot
-- **Completed:** 7 / 68
-- **Current cutoff blockers:** 61
+- **Current focus:** M2 - Threat Model and Sandbox Contract
+- **Completed:** 12 / 68
+- **Current cutoff blockers:** 56
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -24,11 +24,11 @@
 
 #### M1: Provenance Snapshot
 
-- [ ] RED: Add a contract/provenance test or fixture that captures V1 `tool_script` inputs, outputs, tool-call summaries, and failures.
-- [ ] GREEN: Document V1 behavior from `tool-script-runner.ts`, metadata, runtime normalization, boundary error tests, and observability tests.
-- [ ] RED: Add V2 contract tests for completed, timed out, cancelled, syntax error, runtime error, denied permission, and oversized output results.
-- [ ] GREEN: Define V2 input/output types, result caps, and typed failure classes.
-- [ ] REFACTOR: Mark V1 in-process execution as provenance only, not the V2 safety boundary.
+- [x] RED: Add a contract/provenance test or fixture that captures V1 `tool_script` inputs, outputs, tool-call summaries, and failures.
+- [x] GREEN: Document V1 behavior from `tool-script-runner.ts`, metadata, runtime normalization, boundary error tests, and observability tests.
+- [x] RED: Add V2 contract tests for completed, timed out, cancelled, syntax error, runtime error, denied permission, and oversized output results.
+- [x] GREEN: Define V2 input/output types, result caps, and typed failure classes.
+- [x] REFACTOR: Mark V1 in-process execution as provenance only, not the V2 safety boundary.
 
 #### M2: Threat Model and Sandbox Contract
 

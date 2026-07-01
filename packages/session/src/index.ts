@@ -25,5 +25,6 @@ export * from "./recall";
 export * from "./session-delete";
 export * from "./session-routes";
 export * from "./stream-transport";
+export * from "./tool-script";
 export * from "./tools";
 export * from "./transport";
