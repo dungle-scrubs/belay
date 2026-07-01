@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 3, M7 - /doctor telemetry area (Phase 1-2 complete: M1-M6).
+> Current focus: Phase 3, M8 - optional OTLP/Alloy/Tempo (M1-M7 complete). Then Phase 4 (Sentry).
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 49
-- Completed: 39
+- Current cutoff blockers: 44
+- Completed: 44
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -83,11 +83,11 @@
 
 ### M7: `/doctor` telemetry area
 
-- [ ] RED: Add doctor snapshot tests for disabled, local-file, local-OTLP, Sentry-enabled, degraded, and exporter-drop states
-- [ ] GREEN: Add a telemetry area to `/doctor` with mode, exporter health, last success/failure, local roots, sampling, drops, and redaction self-test status
-- [ ] RED: Add web doctor tests and Storybook fixtures for the telemetry area
-- [ ] GREEN: Render telemetry diagnostics in the existing doctor UI
-- [ ] REFACTOR: Keep DSNs, tokens, endpoints with credentials, prompts, and raw paths out of doctor output
+- [x] RED: Add doctor snapshot tests for disabled, local-file, local-OTLP, Sentry-enabled, degraded, and exporter-drop states (snapshot.test.ts: disabled default, file+Sentry+drops -> warn, failing redaction self-test -> error)
+- [x] GREEN: Add a telemetry area to `/doctor` with mode, exporter health, last success/failure, local roots, sampling, drops, and redaction self-test status (new `telemetry` DoctorAreaId + `telemetryArea` from a host `TelemetryDoctorSummary`: exporter, remote/Sentry/provider-trace posture, drop count, redaction self-test)
+- [x] RED: Add web doctor tests and Storybook fixtures for the telemetry area (doctor-fixtures `telemetryDisabled`/`telemetryFileWithDrops` + a Telemetry story; the web area-row renders it generically)
+- [x] GREEN: Render telemetry diagnostics in the existing doctor UI (a `Radio` icon in the area-row map; the generic DoctorAreaRow renders the area's facts/findings)
+- [x] REFACTOR: Keep DSNs, tokens, endpoints with credentials, prompts, and raw paths out of doctor output (the summary is booleans + counts + the exporter NAME only - `sentryConfigured` is a boolean, never the DSN; a snapshot test asserts no `https://`/`@`/`/Users/` shapes leak)
 
 ### M8: Optional OTLP, Alloy, and Tempo
 
