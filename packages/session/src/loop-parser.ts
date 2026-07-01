@@ -129,7 +129,7 @@ export function parseLoopCommand(input: string): CommandParseResult {
     return controlResult(raw, "list");
   }
 
-  return createResult(raw, command);
+  return createResult(raw, command, input);
 }
 
 /** Parse and project a `/loop` line into the UI-ready presentation view-model in one call. */
@@ -191,13 +191,28 @@ function controlResult(raw: readonly RawToken[], mode: "control" | "list"): Comm
 }
 
 /** Walk a `/loop` creation line into the full create-mode parse result. */
-function createResult(raw: readonly RawToken[], command: string): CommandParseResult {
+function createResult(
+  raw: readonly RawToken[],
+  command: string,
+  input: string,
+): CommandParseResult {
   const head = raw[0];
   const tokens: CommandToken[] = head
     ? [{ end: head.end, kind: "command", start: head.start }]
     : [];
   const diagnostics: CommandDiagnostic[] = [];
+  // An odd number of double quotes means a span was opened but never closed - flag it before the value is
+  // silently carried with a stray quote (D-007). Escaped quotes are not a supported form, so a bare `"` is
+  // always a delimiter here.
+  if ((input.match(/"/g)?.length ?? 0) % 2 === 1) {
+    diagnostics.push({
+      code: "unterminated_quote",
+      message: "Unterminated quote - close the opening double quote.",
+      severity: "error",
+    });
+  }
   const fields: CreationFields = { durability: "session", runner: "current_session_prompt" };
+  let sawDo = false;
 
   let index = 1;
   while (index < raw.length) {
@@ -254,9 +269,19 @@ function createResult(raw: readonly RawToken[], command: string): CommandParseRe
         fields.until = taken.value;
       }
     } else if (word === "do") {
+      sawDo = true;
       const taken = consumeValue(raw, index, tokens, "action", "do");
       index = taken.nextIndex;
-      fields.action = taken.value;
+      if (taken.value !== undefined && taken.value.trim().length === 0) {
+        // `do ""` (or `do` + empty token): an explicit-but-empty action, distinct from no `do` at all.
+        diagnostics.push({
+          code: "empty_action",
+          message: "do needs a non-empty action.",
+          severity: "error",
+        });
+      } else {
+        fields.action = taken.value;
+      }
     } else {
       tokens.push({ end: token.end, kind: "unknown", start: token.start });
       diagnostics.push({
@@ -268,7 +293,7 @@ function createResult(raw: readonly RawToken[], command: string): CommandParseRe
     index += 1;
   }
 
-  return finalizeCreate(command, tokens, fields, diagnostics);
+  return finalizeCreate(command, tokens, fields, diagnostics, sawDo);
 }
 
 interface TakenValue {
@@ -302,12 +327,14 @@ function consumeValue(
   return { nextIndex: keywordIndex + 1, value: valueToken.value };
 }
 
-/** Turn accumulated creation fields into builder rows, legend state, and readiness. */
+/** Turn accumulated creation fields into builder rows, legend state, and readiness. `sawDo` distinguishes
+ *  "no action at all" (a `missing` gap) from "an explicit-but-empty `do`" (an `empty_action` diagnostic). */
 function finalizeCreate(
   command: string,
   tokens: readonly CommandToken[],
   fields: CreationFields,
   diagnostics: readonly CommandDiagnostic[],
+  sawDo: boolean,
 ): CommandParseResult {
   const hasBound =
     fields.max !== undefined ||
@@ -349,7 +376,9 @@ function finalizeCreate(
 
   const usedKeywords = LEGEND.filter((keyword) => isKeywordUsed(keyword, fields, hasAction));
   const missing: string[] = [];
-  if (!hasAction) {
+  // No `do` at all is a missing gap; an explicit-but-empty `do` is reported by the empty_action diagnostic
+  // instead, so it is not double-counted as a missing part.
+  if (!hasAction && !sawDo) {
     missing.push("action");
   }
   if (!hasBound) {

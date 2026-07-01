@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M2: Parser Grammar
-- Current cutoff blockers: 58 unchecked
+> Current focus: M4: Loop Domain And Lifecycle
+- Current cutoff blockers: 43 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -19,27 +19,27 @@
 
 ### M2: Parser Grammar
 
-- [ ] RED: Add parser tests for creation with optional `new`, runner aliases, optional `durable`, and keywords `max`, `every`, `until`, `timeout`, and `do`.
-- [ ] GREEN: Implement deterministic parsing for creation commands with parsed fields and token kinds.
-- [ ] RED: Add parser tests for `/loop list`, `/loops`, `stop`, `pause`, `resume`, `delete`, `run-now`, and provisional `clear`.
-- [ ] GREEN: Implement control command parsing and stable loop id extraction.
-- [ ] REFACTOR: Keep the parser pure so web preview and host submit validation can share it.
+- [x] RED: Add parser tests for creation with optional `new`, runner aliases, optional `durable`, and keywords `max`, `every`, `until`, `timeout`, and `do`.
+- [x] GREEN: Implement deterministic parsing for creation commands with parsed fields and token kinds.
+- [x] RED: Add parser tests for `/loop list`, `/loops`, `stop`, `pause`, `resume`, `delete`, `run-now`, and provisional `clear`.
+- [x] GREEN: Implement control command parsing and stable loop id extraction.
+- [x] REFACTOR: Keep the parser pure so web preview and host submit validation can share it.
 
 ### M3: Quote, Duration, And Diagnostics
 
-- [ ] RED: Add tests for double-quoted spans, single-token unquoted `do` and `until`, escaped quote behavior if supported, and unterminated quote diagnostics.
-- [ ] GREEN: Implement quote handling and single-token fallback behavior.
-- [ ] RED: Add tests for compact duration units and retained or rejected bare-number semantics.
-- [ ] GREEN: Implement duration parsing and normalization.
-- [ ] RED: Add tests for missing action, missing bound, invalid `max`, invalid duration, empty `until`, empty action, and unknown tokens.
-- [ ] GREEN: Return structured diagnostics, missing requirements, used/available keywords, and `ready`.
-- [ ] REFACTOR: Keep diagnostic messages stable enough for tests and UI copy.
+- [x] RED: Add tests for double-quoted spans, single-token unquoted `do` and `until`, escaped quote behavior if supported, and unterminated quote diagnostics.
+- [x] GREEN: Implement quote handling and single-token fallback behavior.
+- [x] RED: Add tests for compact duration units and retained or rejected bare-number semantics.
+- [x] GREEN: Implement duration parsing and normalization.
+- [x] RED: Add tests for missing action, missing bound, invalid `max`, invalid duration, empty `until`, empty action, and unknown tokens.
+- [x] GREEN: Return structured diagnostics, missing requirements, used/available keywords, and `ready`.
+- [x] REFACTOR: Keep diagnostic messages stable enough for tests and UI copy.
 
 ### Gate 1 to 2
 
-- [ ] Parser unit tests cover creation, controls, quotes, durations, and diagnostics.
-- [ ] Shared preview output has no UI rendering details.
-- [ ] Explicit slash-command handling has no model involvement.
+- [x] Parser unit tests cover creation, controls, quotes, durations, and diagnostics.
+- [x] Shared preview output has no UI rendering details.
+- [x] Explicit slash-command handling has no model involvement.
 
 ### M4: Loop Domain And Lifecycle
 
