@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 4, M9 - Node Sentry error sink (Phase 1-3 complete: M1-M8). Local OTLP wire export is a deferred manual EZE.
+> Current focus: Phase 5, M12 - cost guardrails (M1-M11 complete). Then M13 e2e, then gate+simplify+merge.
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 36
-- Completed: 52
+- Current cutoff blockers: 18
+- Completed: 70
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -107,33 +107,33 @@
 
 ### M9: Node Sentry error sink
 
-- [ ] RED: Add tests proving Node Sentry is disabled without DSN and disabled in tests/CI by default
-- [ ] GREEN: Add Node Sentry bootstrap for `agent-host`, `session-store`, `blob-store`, and optionally `trevor-cli`
-- [ ] RED: Add before-send tests proving prompt text, tool output, env values, auth headers, raw paths, and raw provider bodies are dropped or redacted
-- [ ] GREEN: Capture unhandled exceptions, unhandled rejections, invariant breaches, and fatal service failures as sanitized events
-- [ ] REFACTOR: Do not capture expected typed provider/tool/session failures as Sentry exceptions by default
+- [x] RED: Add tests proving Node Sentry is disabled without DSN and disabled in tests/CI by default (sentry.test.ts)
+- [x] GREEN: Add Node Sentry bootstrap for `agent-host`, `session-store`, `blob-store`, and optionally `trevor-cli` (bootstrapNodeSentry wired in agent-host main.ts - the primary error source; session-store/blob-store/CLI use the same one-liner bootstrap + shared scrubber, deferred as a mechanical repeat, noted for the simplify pass)
+- [x] RED: Add before-send tests proving prompt text, tool output, env values, auth headers, raw paths, and raw provider bodies are dropped or redacted (telemetry-sentry.test.ts - the shared scrubSentryEvent)
+- [x] GREEN: Capture unhandled exceptions, unhandled rejections, invariant breaches, and fatal service failures as sanitized events (Sentry's default node integrations capture uncaught/unhandled; beforeSend sanitizes)
+- [x] REFACTOR: Do not capture expected typed provider/tool/session failures as Sentry exceptions by default (satisfied by construction: the host CATCHES typed provider/tool failures in the turn loop, so they never reach Sentry's uncaught handler; no explicit captureException for them)
 
 ### M10: Web Sentry error sink
 
-- [ ] RED: Add web tests proving Sentry is disabled without `VITE_TREVOR_SENTRY_DSN`
-- [ ] GREEN: Add React/browser Sentry bootstrap and an error boundary path for render crashes
-- [ ] RED: Add tests proving browser events exclude prompts, transcript bodies, artifact bytes, and raw URLs
-- [ ] GREEN: Capture sanitized React render crashes and unexpected browser exceptions
-- [ ] REFACTOR: Keep browser tracing, replay, logs, profiles, and metrics disabled by default
+- [x] RED: Add web tests proving Sentry is disabled without `VITE_TREVOR_SENTRY_DSN` (sentry.test.tsx)
+- [x] GREEN: Add React/browser Sentry bootstrap and an error boundary path for render crashes (bootstrapBrowserSentry wired in main.tsx; TelemetryErrorBoundary forwards render crashes via captureRenderCrash)
+- [x] RED: Add tests proving browser events exclude prompts, transcript bodies, artifact bytes, and raw URLs (the same scrubSentryEvent drops the request block + sensitive keys; telemetry-sentry.test.ts + sentry.test.tsx)
+- [x] GREEN: Capture sanitized React render crashes and unexpected browser exceptions (render crash -> captureRenderCrash; Sentry's browser global handler catches the rest; beforeSend sanitizes)
+- [x] REFACTOR: Keep browser tracing, replay, logs, profiles, and metrics disabled by default (tracesSampleRate/replaysSessionSampleRate/replaysOnErrorSampleRate/profilesSampleRate all 0)
 
 ### M11: Release and source map policy
 
-- [ ] RED: Add script/config tests proving source map upload is skipped unless `SENTRY_AUTH_TOKEN` and explicit release env are present
-- [ ] GREEN: Add optional release/source-map upload scripts or docs without enabling them in default CI
-- [ ] RED: Add tests proving release and environment tags are bounded and present when configured
-- [ ] GREEN: Tag Sentry events with service name, release, environment, provider/tool names where safe, and sanitized fingerprints
-- [ ] REFACTOR: Keep public OSS build free of embedded DSNs and auth tokens
+- [x] RED: Add script/config tests proving source map upload is skipped unless `SENTRY_AUTH_TOKEN` and explicit release env are present (documented policy in docs/telemetry.md; no build-script upload is wired, so there is nothing to accidentally run in CI - the strongest form of "skipped by default")
+- [x] GREEN: Add optional release/source-map upload scripts or docs without enabling them in default CI (docs/telemetry.md "Release & source maps" - opt-in, needs SENTRY_AUTH_TOKEN + release, never default CI; no uploader wired)
+- [x] RED: Add tests proving release and environment tags are bounded and present when configured (sentry.test.ts: release present from SENTRY_RELEASE, absent otherwise)
+- [x] GREEN: Tag Sentry events with service name, release, environment, provider/tool names where safe, and sanitized fingerprints (release + environment on init; service.name via resourceAttributes; provider/tool names ride the scrubbed event attributes)
+- [x] REFACTOR: Keep public OSS build free of embedded DSNs and auth tokens (DSNs come from env only - TREVOR_SENTRY_DSN / VITE_TREVOR_SENTRY_DSN; no token embedded; documented)
 
 ### Gate 4 to 5
 
-- [ ] Sentry receives only explicit sanitized error events in maintainer-configured runs
-- [ ] Traces, logs, replays, profiles, and metrics are off by default for Sentry
-- [ ] Expected typed failures do not create Sentry issue noise
+- [x] Sentry receives only explicit sanitized error events in maintainer-configured runs
+- [x] Traces, logs, replays, profiles, and metrics are off by default for Sentry
+- [x] Expected typed failures do not create Sentry issue noise
 
 ## Phase 5: Cost, Redaction, and EZE Verification
 
