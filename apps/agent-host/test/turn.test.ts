@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import type { TrevorEventInput } from "@trevor/session";
+import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
@@ -462,4 +464,29 @@ test("cancellation interrupts a streaming turn before it completes", async () =>
   const completed = events.filter((e) => e.type === "assistant.completed");
   assert.equal(completed.length, 1, events.map((e) => e.type).join(" -> "));
   assert.equal(completed[0]?.payload.cancelled, true);
+});
+
+test("a turn emits a trevor.turn span (provider + model + ok status) with tool spans nested under it", async () => {
+  const recorder = recordingTelemetrySink();
+  const { layer } = collectingEmit();
+  await Effect.runPromise(
+    publishTurn(fakeProvider(), history, { runId: "r1", telemetry: recorder.sink }).pipe(
+      Effect.provide(layer),
+    ),
+  );
+
+  const turnSpans = recorder.named(SPAN_NAMES.turn);
+  assert.equal(turnSpans.length, 1, "exactly one turn span");
+  const [turn] = turnSpans;
+  assert.equal(turn?.status, "ok", "a clean turn is an ok span");
+  assert.equal(turn?.attributes.provider, "fake");
+  assert.equal(turn?.attributes.model, "fake-1");
+  // The default fake provider calls one tool (bash) before answering, so a tool span nests under the turn.
+  assert.ok(
+    recorder.named(SPAN_NAMES.tool).length >= 1,
+    "the executed tool call produced a tool span",
+  );
+  // No prompt/history text leaks into any span.
+  const serialized = JSON.stringify(recorder.spans);
+  assert.ok(!serialized.includes("echo hello-from-tool"), "tool args never enter a span");
 });

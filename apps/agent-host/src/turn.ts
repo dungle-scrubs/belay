@@ -1,4 +1,5 @@
 import { events, type ModelRef, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
+import { NOOP_SINK, SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
 import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
 import type { AdmissionPriority } from "./admission/contract";
 import {
@@ -28,6 +29,7 @@ import { providerFailures } from "./providers/provider-failure-log";
 import { providerIncidents } from "./providers/provider-incidents";
 import { buildSystemPrompt, promptOverheadChars } from "./providers/system-prompt";
 import { Emit } from "./services";
+import { spanEffect } from "./telemetry/span";
 import { offeredToolDefs } from "./tools";
 import { MAX_OUTPUT } from "./tools/shared";
 import { prepareTurn } from "./turn-preflight";
@@ -72,12 +74,16 @@ export function publishTurn(
     /** The local-admission priority class for this turn (plan 11): foreground for a user turn (default),
      *  background for a subagent so it queues behind foreground local-model work. */
     readonly priority?: AdmissionPriority;
+    /** The telemetry sink for the turn span + per-tool spans (plan 13 M3); NOOP (disabled) unless the
+     *  host wires an exporter. Spans carry provider/model + status only, never prompt or tool content. */
+    readonly telemetry?: TelemetrySink;
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
   const switchCell = options.switch;
   const rebuildProvider = options.rebuildProvider;
   const initialModel = options.initialModel;
+  const sink = options.telemetry ?? NOOP_SINK;
 
   return Effect.gen(function* () {
     const emit = yield* Emit;
@@ -374,6 +380,7 @@ export function publishTurn(
       runAgent(provider, history, reasoning, runId, useTools, {
         toolNames,
         delegate,
+        telemetry: sink,
         ...(loop ? { loop } : {}),
         ...(seedUsage ? { seedUsage } : {}),
         ...(switchCell ? { switch: switchCell } : {}),
@@ -381,7 +388,11 @@ export function publishTurn(
         ...(initialModel ? { initialModel } : {}),
       }),
       handle,
+      // The whole turn is a `trevor.turn` span (provider + model + ok/error/interrupted status); the
+      // per-tool spans nest under it. It wraps the run BEFORE the terminal onExit/catchAll below, so the
+      // span sees the real success/failure/cancel exit rather than the swallowed one.
     ).pipe(
+      spanEffect(sink, SPAN_NAMES.turn, { provider: provider.id, model: provider.model }),
       Effect.onExit((exit) =>
         Effect.gen(function* () {
           yield* flushAll;
