@@ -142,6 +142,29 @@ test("test/CI forces remote off and drops both Sentry DSNs even when explicitly 
   }
 });
 
+test("cost guardrails: no env turns on remote volume without an explicit opt-in (M12)", () => {
+  // The config surface has NO knob to enable Sentry traces/logs/replays/profiles/metrics - those are
+  // hardcoded off in the bootstrap. The only remote paths are gated:
+  //  - a Sentry DSN (dropped under test/CI),
+  //  - a non-loopback OTLP endpoint (needs TREVOR_ALLOW_REMOTE_OTEL, dropped under test/CI),
+  //  - the master TREVOR_TELEMETRY_REMOTE switch (dropped under test/CI).
+  // Simulate a hostile env that tries every remote lever at once, under test suppression:
+  const config = resolveTelemetryConfig({
+    NODE_ENV: "test",
+    TREVOR_TELEMETRY_REMOTE: "1",
+    TREVOR_SENTRY_DSN: "https://a@x/1",
+    VITE_TREVOR_SENTRY_DSN: "https://w@x/3",
+    TREVOR_OTEL_EXPORTER: "otlp",
+    TREVOR_OTEL_ENDPOINT: "https://collector.example.com",
+    TREVOR_ALLOW_REMOTE_OTEL: "1",
+  });
+  assert.equal(config.remoteEnabled, false);
+  assert.equal(config.sentryDsn, null);
+  assert.equal(config.webSentryDsn, null);
+  assert.equal(config.otelExporter, "none");
+  assert.equal(config.otlpEndpoint, null);
+});
+
 test("telemetrySuppressedReason names the guard: test before ci, else null", () => {
   assert.equal(telemetrySuppressedReason({ NODE_ENV: "test" }), "test");
   assert.equal(telemetrySuppressedReason({ VITEST: "1" }), "test");

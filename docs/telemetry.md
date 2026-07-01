@@ -61,6 +61,23 @@ design, so a checkout never ships traces off the machine by accident.
 > the supported free path. If a persistent local collector port is ever introduced, register it in
 > `~/.agents/PORTS.md` in the same change.
 
+## Cost guardrails & free-tier posture
+
+Trevor's default is **$0**: nothing leaves the machine. Remote volume is caged at the config layer -
+there is **no** setting that turns on Sentry traces / logs / replays / profiles / session-metrics (they
+are hardcoded off), and the only remote paths (a Sentry DSN, a non-loopback OTLP endpoint, the
+`TREVOR_TELEMETRY_REMOTE` master switch) each require an explicit opt-in and are force-off under
+test/CI. Local export is **bounded**: each `otel/*.jsonl` file is byte-capped and writes past the cap are
+**dropped and counted** (`/doctor` → Telemetry shows the drop count) rather than growing without bound.
+
+**To temporarily enable more telemetry while debugging**, opt in locally - nothing goes remote:
+
+```sh
+TREVOR_OTEL_EXPORTER=file TREVOR_PROVIDER_TRACE=1 trevor   # local spans/metrics + provider-attempt trace
+```
+
+Then inspect `otel/*.jsonl` (see below) and turn it back off when done.
+
 ## Cost & Sentry posture
 
 Sentry, when a DSN is configured, receives **error events only** - traces, logs, replays, profiles, and
