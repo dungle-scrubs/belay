@@ -1,6 +1,7 @@
 export * from "./approval";
 export * from "./blob";
 export * from "./breakdown";
+export * from "./capability-manifest";
 export * from "./command-menu";
 export * from "./connectivity";
 export * from "./context-overflow";

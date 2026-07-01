@@ -1,25 +1,25 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: Hard Dependencies
+> Current focus: M2: Section Provider Registry
 
 ## Summary
 
-- Current cutoff blockers: 52
+- Current cutoff blockers: 45
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
 ## Hard Dependencies
 
-- [ ] `03-nested-command-menu` complete before command-family/menu/style manifest sections are implemented
-- [ ] `.plans/trevor-v2` D-075 discovery registry current cutoff complete before skill/discovery manifest and `trevor-expert` slices are implemented
+- [x] `03-nested-command-menu` complete before command-family/menu/style manifest sections are implemented
+- [x] `.plans/trevor-v2` D-075 discovery registry current cutoff complete before skill/discovery manifest and `trevor-expert` slices are implemented
 
 ## M1: Manifest Schema
 
-- [ ] RED: Add protocol/contract tests for manifest version, generated time, scope, sections, provenance, truncation, and unavailable-section representation
-- [ ] GREEN: Define full and compact manifest schemas with stable section ids
-- [ ] RED: Add tests proving manifest payloads are descriptive and do not grant executable authority
-- [ ] GREEN: Keep authorization/allow-list metadata descriptive only
-- [ ] REFACTOR: Keep manifest types separate from command/tool execution types
+- [x] RED: Add protocol/contract tests for manifest version, generated time, scope, sections, provenance, truncation, and unavailable-section representation
+- [x] GREEN: Define full and compact manifest schemas with stable section ids
+- [x] RED: Add tests proving manifest payloads are descriptive and do not grant executable authority
+- [x] GREEN: Keep authorization/allow-list metadata descriptive only
+- [x] REFACTOR: Keep manifest types separate from command/tool execution types
 
 ## M2: Section Provider Registry
 
