@@ -252,7 +252,7 @@ function decodeBridgeCall(v: unknown): ToolScriptBridgeCall | null {
 
 function decodeArtifact(v: unknown): ToolScriptArtifact | null {
   const o = asOptRecord(v);
-  if (!o || o.kind !== "artifact" || typeof o.artifactId !== "string") {
+  if (o?.kind !== "artifact" || typeof o.artifactId !== "string") {
     return null;
   }
   return {
