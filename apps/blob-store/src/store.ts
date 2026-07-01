@@ -2,7 +2,14 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { HEX64, type PutBlobResult } from "@trevor/session/blob-contract";
-import { NOOP_SINK, SPAN_NAMES, type TelemetrySink, withSpan } from "@trevor/session/telemetry";
+import {
+  METRIC_NAMES,
+  NOOP_SINK,
+  recordMetric,
+  SPAN_NAMES,
+  type TelemetrySink,
+  withSpan,
+} from "@trevor/session/telemetry";
 
 /**
  * The content-addressed blob store on disk (D-028). Bytes are named by their
@@ -67,12 +74,14 @@ export class BlobStore {
           await writeFile(path, bytes, { flag: "wx" });
         } catch (cause) {
           if ((cause as NodeJS.ErrnoException).code === "EEXIST") {
+            recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "put", outcome: "deduped" });
             return { ...result, deduped: true };
           }
           throw cause;
         }
         const meta: BlobMeta = { size: result.size, mimeType };
         await writeFile(`${path}.meta`, JSON.stringify(meta), "utf8");
+        recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "put", outcome: "stored" });
         return { ...result, deduped: false };
       },
     );
@@ -82,6 +91,7 @@ export class BlobStore {
   async get(hash: string): Promise<{ bytes: Uint8Array; meta: BlobMeta } | null> {
     return withSpan(this.sink, SPAN_NAMES.blobIo, { op: "get" }, async () => {
       if (!HEX64.test(hash)) {
+        recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "get", outcome: "miss" });
         return null;
       }
       const path = this.pathFor(hash);
@@ -90,8 +100,10 @@ export class BlobStore {
           readFile(path),
           readFile(`${path}.meta`, "utf8"),
         ]);
+        recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "get", outcome: "hit" });
         return { bytes, meta: JSON.parse(metaRaw) as BlobMeta };
       } catch {
+        recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "get", outcome: "miss" });
         return null;
       }
     });
@@ -101,11 +113,15 @@ export class BlobStore {
   async head(hash: string): Promise<BlobMeta | null> {
     return withSpan(this.sink, SPAN_NAMES.blobIo, { op: "head" }, async () => {
       if (!HEX64.test(hash)) {
+        recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "head", outcome: "miss" });
         return null;
       }
       try {
-        return JSON.parse(await readFile(`${this.pathFor(hash)}.meta`, "utf8")) as BlobMeta;
+        const meta = JSON.parse(await readFile(`${this.pathFor(hash)}.meta`, "utf8")) as BlobMeta;
+        recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "head", outcome: "hit" });
+        return meta;
       } catch {
+        recordMetric(this.sink, METRIC_NAMES.blobOutcome, 1, { op: "head", outcome: "miss" });
         return null;
       }
     });
