@@ -16,6 +16,7 @@ import { createBlobServer } from "./server";
 const PORT = Number(process.env.BLOB_STORE_PORT ?? RESERVED_PORTS.blob);
 const ROOT = blobStoreRoot();
 const MAX_BYTES = Number(process.env.BLOB_STORE_MAX_BYTES ?? 25 * 1024 * 1024);
+const HOST = process.env.BLOB_STORE_HOST;
 
 // Detect-only legacy migration (D-009): never changes the default; just nudges if importable
 // ~/.trevor blob data is present, with a sanitized source path.
@@ -30,9 +31,10 @@ if (legacyBlobs?.status === "migrate") {
 
 startServer(createBlobServer(ROOT, MAX_BYTES), {
   port: PORT,
+  host: HOST,
   onListen: (port) => {
     console.log(
-      `[blob-store] listening on http://127.0.0.1:${port} (root: ${abbreviateHome(ROOT)})`,
+      `[blob-store] listening on http://${HOST ?? "127.0.0.1"}:${port} (root: ${abbreviateHome(ROOT)})`,
     );
   },
 });
