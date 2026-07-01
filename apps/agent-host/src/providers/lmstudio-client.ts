@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import type { Model } from "@earendil-works/pi-ai/compat";
 import { debug, log, warn } from "../log";
 import { msg } from "../messages";
+import type { ResidencyRecorder } from "../residency/registry";
 import { ModelLoadError, ProviderUnavailable } from "./errors";
 import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
 import {
@@ -42,6 +43,9 @@ export interface LmStudioClientConfig {
   /** Runs the `lms unload`/`load` work under the endpoint lifecycle lease (plan 11 M5), so two host
    *  processes never run competing reloads against one runtime. Omitted = run reloads directly. */
   readonly withLifecycleLease?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /** Records this client's own `lms load` into the host residency registry (plan 11.1 M2), so only
+   *  models THIS instance loaded are eviction-eligible. Omitted = residency tracking disabled. */
+  readonly residency?: ResidencyRecorder;
 }
 
 export class LmStudioClient {
@@ -198,6 +202,9 @@ export class LmStudioClient {
         this.contextWindow = target;
         this.lastError = null;
         this.lastReloadMs = Date.now() - startedAt;
+        // Record the load into the host residency registry ONLY here - the path where THIS instance
+        // actually ran `lms load` - so a model loaded outside Trevor is never eviction-eligible (D-004).
+        this.config.residency?.recordLoad(this.config.url, this.config.model, target);
         log("lmstudio", "model loaded", {
           model: this.config.model,
           context: target,

@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 41
+- **Current cutoff blockers:** 28
 - **Completed current work:** 5
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M2 - Track Trevor-Loaded Models
+- **Current focus:** M4 - Evict-on-Last-Release
 - **Note:** Phases 2-4 are gated on `.plans/11-local-admission-control` (shared store, lifecycle lease, generation registry); Phase 1 (context cap) has no plan 11 dependency. See implementation.md §0 for the full hard-dependency list.
 
 ## Completed Current State / Hard Dependencies
@@ -38,25 +38,25 @@
 
 #### M2: Track Trevor-Loaded Models
 
-- [ ] RED: Add a test that loading a model via `ensureMaxContext` records it in a host-level Trevor-loaded set, and that a model Trevor did not load is absent.
-- [ ] GREEN: Maintain a host-owned residency registry of Trevor-loaded local models (id + endpoint + loaded context).
-- [ ] RED: Add a test that the set updates on load and on unload.
-- [ ] GREEN: Wire load/unload into the registry.
-- [ ] REFACTOR: Keep the registry a separate host-owned component, not `LmStudioClient` internal state.
+- [x] RED: Add a test that loading a model via `ensureMaxContext` records it in a host-level Trevor-loaded set, and that a model Trevor did not load is absent.
+- [x] GREEN: Maintain a host-owned residency registry of Trevor-loaded local models (id + endpoint + loaded context).
+- [x] RED: Add a test that the set updates on load and on unload.
+- [x] GREEN: Wire load/unload into the registry.
+- [x] REFACTOR: Keep the registry a separate host-owned component, not `LmStudioClient` internal state.
 
 #### M3: Residency Claims in Plan 11's Shared Store
 
-- [ ] RED: Add an integration test where two instances each claim their active local model and both claims are visible in an isolated shared store.
-- [ ] GREEN: Register/refresh a residency claim (keyed by the lifecycle resource + model) for this instance's active local model, heartbeating through plan 11's lease.
-- [ ] RED: Add a test that a crashed instance's claim expires via plan 11's TTL.
-- [ ] GREEN: Rely on plan 11's stale-owner reaping for claim expiry.
-- [ ] REFACTOR: Reuse plan 11's owner metadata/heartbeat rather than a parallel liveness mechanism.
+- [x] RED: Add an integration test where two instances each claim their active local model and both claims are visible in an isolated shared store.
+- [x] GREEN: Register/refresh a residency claim (keyed by the lifecycle resource + model) for this instance's active local model, heartbeating through plan 11's lease.
+- [x] RED: Add a test that a crashed instance's claim expires via plan 11's TTL.
+- [x] GREEN: Rely on plan 11's stale-owner reaping for claim expiry.
+- [x] REFACTOR: Reuse plan 11's owner metadata/heartbeat rather than a parallel liveness mechanism.
 
 #### Gate 2-3
 
-- [ ] Trevor tracks exactly the models it loaded; external models are excluded.
-- [ ] Each instance's active-model claim is visible cross-process and heartbeated.
-- [ ] Crashed-instance claims expire via plan 11's TTL.
+- [x] Trevor tracks exactly the models it loaded; external models are excluded.
+- [x] Each instance's active-model claim is visible cross-process and heartbeated.
+- [x] Crashed-instance claims expire via plan 11's TTL.
 
 ### Phase 3: Reference-Counted Eviction
 
