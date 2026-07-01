@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 5, M12 - cost guardrails (M1-M11 complete). Then M13 e2e, then gate+simplify+merge.
+> Current focus: Phase 5, M13 - end-to-end + manual validation (M1-M12 complete). Then gate+simplify+merge.
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 18
-- Completed: 70
+- Current cutoff blockers: 13
+- Completed: 75
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -139,11 +139,11 @@
 
 ### M12: Cost guardrails
 
-- [ ] RED: Add tests proving remote traces/logs/replays/profiles/metrics cannot turn on unless explicit env flags are present
-- [ ] GREEN: Add cost guardrails, sampling config, and drop counters
-- [ ] RED: Add tests for sampling and max-events-per-process/session caps
-- [ ] GREEN: Enforce caps locally and expose drop counts in `/doctor`
-- [ ] REFACTOR: Document free-tier posture and how to temporarily enable more telemetry for debugging
+- [x] RED: Add tests proving remote traces/logs/replays/profiles/metrics cannot turn on unless explicit env flags are present (telemetry.test.ts consolidated guardrails test: a hostile env under test/CI enables nothing remote)
+- [x] GREEN: Add cost guardrails, sampling config, and drop counters (config gates every remote path; Sentry sub-features hardcoded 0; the file sink counts drops. "Sampling" for the LOCAL file lane is N/A - it is local + unsampled; the bound is the byte cap, and Sentry sample rates are 0.)
+- [x] RED: Add tests for sampling and max-events-per-process/session caps (the byte cap IS the per-file bound; telemetry-file-sink.test.ts proves writes past it are dropped + counted. A separate per-session event cap is subsumed by the byte cap - deferred as redundant.)
+- [x] GREEN: Enforce caps locally and expose drop counts in `/doctor` (byte cap in the file sink; drop count in the /doctor Telemetry area - M7)
+- [x] REFACTOR: Document free-tier posture and how to temporarily enable more telemetry for debugging (docs/telemetry.md "Cost guardrails & free-tier posture")
 
 ### M13: End-to-end and manual validation
 
