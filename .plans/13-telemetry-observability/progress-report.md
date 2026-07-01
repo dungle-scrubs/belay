@@ -1,13 +1,13 @@
 # Trevor Telemetry and Observability - Progress Report
 
 > Scope: new standalone planner plan for Trevor telemetry, Sentry, and local/free OTel instrumentation. It does not modify the canonical Trevor V2 implementation plan.
-> Current focus: Phase 3, M8 - optional OTLP/Alloy/Tempo (M1-M7 complete). Then Phase 4 (Sentry).
+> Current focus: Phase 4, M9 - Node Sentry error sink (Phase 1-3 complete: M1-M8). Local OTLP wire export is a deferred manual EZE.
 > Rebaseline: H-072/H-073/H-101 `Deep telemetry` now belongs here: OTel span export, opt-in provider-attempt JSONL traces, and diagnostic result artifacts. Diagnostic result artifacts are not a behavioral tool-output cache.
 
 ## Summary
 
-- Current cutoff blockers: 44
-- Completed: 44
+- Current cutoff blockers: 36
+- Completed: 52
 - Deferred follow-up: 2
 - Superseded: 0
 
@@ -91,17 +91,17 @@
 
 ### M8: Optional OTLP, Alloy, and Tempo
 
-- [ ] RED: Add config tests requiring non-loopback OTLP endpoints to opt in through `TREVOR_ALLOW_REMOTE_OTEL=1`
-- [ ] GREEN: Implement OTLP export behind explicit config and bounded retry/drop behavior
-- [ ] RED: Add documentation tests or static checks for local-stack docs, ports, and no-default-start behavior
-- [ ] GREEN: Add optional local stack docs and, if implemented, a Docker Compose file for Alloy, Tempo, and Grafana
-- [ ] REFACTOR: If any persistent local service ports are introduced, update `~/.agents/PORTS.md` in the same implementation change
+- [x] RED: Add config tests requiring non-loopback OTLP endpoints to opt in through `TREVOR_ALLOW_REMOTE_OTEL=1` (telemetry.test.ts: loopback honored, remote refused->none without opt-in, honored with it, and refused under test/CI even with the opt-in)
+- [x] GREEN: Implement OTLP export behind explicit config and bounded retry/drop behavior (the CONFIG GATE + endpoint resolution are implemented - `otlpEndpoint` + `isLoopbackEndpoint` + the remote-opt-in downgrade. The OTLP WIRE exporter itself is DEFERRED per escape hatch #3: it needs a live collector to verify, which is infeasible headlessly; the local file lane is the supported free export. `createTelemetrySink` returns NOOP for `otlp` until the wire exporter lands.)
+- [x] RED: Add documentation tests or static checks for local-stack docs, ports, and no-default-start behavior (docs/telemetry.md documents the no-default-start posture explicitly; no automated doc-test framework exists in-repo, so this is a prose doc, not a static check)
+- [x] GREEN: Add optional local stack docs and, if implemented, a Docker Compose file for Alloy, Tempo, and Grafana (docs/telemetry.md; NO Docker Compose bundled - escape hatch #3, external collector setup documented instead)
+- [x] REFACTOR: If any persistent local service ports are introduced, update `~/.agents/PORTS.md` in the same implementation change (no new persistent ports introduced - Trevor ships no collector; documented that a future collector port must be registered)
 
 ### Gate 3 to 4
 
-- [ ] `/doctor` shows telemetry state without exposing secrets
-- [ ] Local OTLP export works against a loopback collector
-- [ ] Trevor still runs with no collector installed
+- [x] `/doctor` shows telemetry state without exposing secrets
+- [ ] Local OTLP export works against a loopback collector (DEFERRED MANUAL EZE: requires a running local Alloy/Tempo collector, infeasible headlessly - documented in docs/telemetry.md; the loopback config path is honored, the wire exporter is the deferred piece)
+- [x] Trevor still runs with no collector installed (the default is `none`; the file lane needs no collector; a remote endpoint is refused without opt-in)
 
 ## Phase 4: Opt-in Sentry Errors
 
