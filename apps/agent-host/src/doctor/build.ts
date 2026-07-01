@@ -26,6 +26,7 @@ import {
   type DoctorProviderIncident,
   type DoctorProviderProbe,
   type DoctorRootProbe,
+  type TelemetryDoctorSummary,
 } from "./snapshot";
 
 /**
@@ -62,6 +63,8 @@ export interface DoctorRuntimeFacts {
   readonly admission?: AdmissionDoctorSummary;
   /** Local-model residency state (plan 11.1), folded into the Local admission area. */
   readonly residency?: ResidencyDoctorSummary;
+  /** Telemetry mode + exporter health (plan 13 M7), surfaced in the Telemetry area. */
+  readonly telemetry?: TelemetryDoctorSummary;
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
@@ -312,6 +315,7 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
     storage: { roots: probes.roots },
     ...(facts.admission ? { admission: facts.admission } : {}),
     ...(facts.residency ? { residency: facts.residency } : {}),
+    ...(facts.telemetry ? { telemetry: facts.telemetry } : {}),
     // Package/build/version facts (D-073): the embedded version when present (else a dev build),
     // plus the always-available Node + runtime kind. Update-availability is not probed here.
     build: {

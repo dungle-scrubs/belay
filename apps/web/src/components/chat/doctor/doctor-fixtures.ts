@@ -577,6 +577,53 @@ export const storageLegacyImportable: DoctorArea = {
 
 // --- Workspace -------------------------------------------------------------
 
+export const telemetryDisabled: DoctorArea = {
+  id: "telemetry",
+  label: "Telemetry",
+  status: "ok",
+  verdict: "disabled (local-only default; nothing remote)",
+  facts: [
+    { label: "exporter", value: "none" },
+    { label: "remote", value: "off" },
+    { label: "sentry", value: "off" },
+    { label: "provider trace", value: "off" },
+    { label: "drops", value: "0" },
+    { label: "redaction self-test", value: "pass" },
+  ],
+  findings: [
+    {
+      id: "telemetry.mode",
+      status: "ok",
+      title: "Telemetry",
+      message: "disabled (local-only default; nothing remote)",
+    },
+  ],
+};
+
+export const telemetryFileWithDrops: DoctorArea = {
+  id: "telemetry",
+  label: "Telemetry",
+  status: "warn",
+  verdict: "file exporter + Sentry",
+  facts: [
+    { label: "exporter", value: "file" },
+    { label: "remote", value: "off" },
+    { label: "sentry", value: "configured" },
+    { label: "provider trace", value: "on" },
+    { label: "drops", value: "12", status: "warn" },
+    { label: "redaction self-test", value: "pass" },
+  ],
+  findings: [
+    { id: "telemetry.mode", status: "ok", title: "Telemetry", message: "file exporter + Sentry" },
+    {
+      id: "telemetry.drops",
+      status: "warn",
+      title: "Exporter drops",
+      message: "12 telemetry record(s) dropped (byte cap or write failure)",
+    },
+  ],
+};
+
 export const workspaceGit: DoctorArea = {
   id: "workspace",
   label: "Workspace",

@@ -907,3 +907,68 @@ test("admission leases and resident models render together in the one Local admi
   assert.ok(admission?.findings?.some((f) => f.id === "admission.summary"));
   assert.ok(admission?.findings?.some((f) => f.id === "residency.summary"));
 });
+
+test("the Telemetry area reads disabled by default and exposes no DSN/endpoint/path", () => {
+  const telemetry = buildDoctorSnapshot(
+    input({
+      telemetry: {
+        exporter: "none",
+        remoteEnabled: false,
+        sentryConfigured: false,
+        providerTrace: false,
+        suppressed: null,
+        drops: 0,
+        redactionOk: true,
+      },
+    }),
+  ).areas.find((a) => a.id === "telemetry");
+
+  assert.equal(telemetry?.status, "ok");
+  assert.match(telemetry?.verdict ?? "", /disabled \(local-only/);
+  assert.ok(telemetry?.facts?.some((f) => f.label === "exporter" && f.value === "none"));
+  assert.ok(telemetry?.facts?.some((f) => f.label === "redaction self-test" && f.value === "pass"));
+  // No secret shapes leak (a DSN value, an endpoint, a raw path).
+  assert.ok(!/https?:\/\/|@|\/Users\//.test(JSON.stringify(telemetry)), "no DSN/endpoint/path");
+});
+
+test("the Telemetry area shows the file exporter + warns on drops", () => {
+  const telemetry = buildDoctorSnapshot(
+    input({
+      telemetry: {
+        exporter: "file",
+        remoteEnabled: false,
+        sentryConfigured: true,
+        providerTrace: true,
+        suppressed: null,
+        drops: 12,
+        redactionOk: true,
+      },
+    }),
+  ).areas.find((a) => a.id === "telemetry");
+
+  assert.equal(telemetry?.status, "warn", "drops raise the area to warn");
+  assert.match(telemetry?.verdict ?? "", /file exporter \+ Sentry/);
+  assert.ok(telemetry?.findings?.some((f) => f.id === "telemetry.drops"));
+  assert.ok(telemetry?.facts?.some((f) => f.label === "provider trace" && f.value === "on"));
+});
+
+test("a failing redaction self-test surfaces as a telemetry ERROR", () => {
+  const telemetry = buildDoctorSnapshot(
+    input({
+      telemetry: {
+        exporter: "file",
+        remoteEnabled: false,
+        sentryConfigured: false,
+        providerTrace: false,
+        suppressed: null,
+        drops: 0,
+        redactionOk: false,
+      },
+    }),
+  ).areas.find((a) => a.id === "telemetry");
+
+  assert.equal(telemetry?.status, "error");
+  assert.ok(
+    telemetry?.findings?.some((f) => f.id === "telemetry.redaction" && f.status === "error"),
+  );
+});

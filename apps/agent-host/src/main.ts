@@ -21,7 +21,7 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
-import { resolveTelemetryConfig } from "@trevor/session/telemetry";
+import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
 import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
@@ -75,6 +75,7 @@ import {
   collectDoctorProbeResults,
   type DoctorRuntimeFacts,
 } from "./doctor/build";
+import type { TelemetryDoctorSummary } from "./doctor/snapshot";
 import { registerDoctorSnapshotSource } from "./doctor/source";
 import { envNumber } from "./env";
 import { nodeGitRunner, readGitStatus } from "./git-status";
@@ -2185,6 +2186,25 @@ function doctorFacts(): DoctorRuntimeFacts {
       Date.now(),
     ),
     residency: residency.summary(),
+    telemetry: telemetryDoctorFacts(),
+  };
+}
+
+/** The telemetry mode + exporter health for /doctor (plan 13 M7). Derived from the resolved config + the
+ *  host sink's drop count + a live redaction self-test; never exposes a DSN, endpoint, prompt, or path. */
+function telemetryDoctorFacts(): TelemetryDoctorSummary {
+  const config = resolveTelemetryConfig();
+  // Redaction self-test: a known-sensitive probe key MUST be dropped and a benign one kept.
+  const probe = safeAttributes({ prompt: "secret-probe", ok: 1 });
+  const redactionOk = !("prompt" in probe) && probe.ok === 1;
+  return {
+    exporter: config.otelExporter,
+    remoteEnabled: config.remoteEnabled,
+    sentryConfigured: config.sentryDsn !== null,
+    providerTrace: config.providerTrace,
+    suppressed: config.suppressedReason,
+    drops: hostTelemetry.stats?.().dropped ?? 0,
+    redactionOk,
   };
 }
 

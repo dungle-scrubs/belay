@@ -40,6 +40,22 @@ export interface DoctorProviderProbe {
   readonly status: "warm" | "cold" | "unreachable";
 }
 
+/** The telemetry mode + exporter health for the Telemetry area (plan 13 M7). Redaction-safe by
+ *  construction: it carries booleans + counts + the exporter NAME, never a DSN, endpoint, or path. */
+export interface TelemetryDoctorSummary {
+  readonly exporter: "none" | "file" | "otlp";
+  readonly remoteEnabled: boolean;
+  /** Whether a Sentry DSN is configured - the boolean only, never the DSN value. */
+  readonly sentryConfigured: boolean;
+  readonly providerTrace: boolean;
+  /** Why remote telemetry is force-off (test/ci), or null. */
+  readonly suppressed: "test" | "ci" | null;
+  /** Exporter records dropped (byte cap / write failure) since start; 0 when disabled or healthy. */
+  readonly drops: number;
+  /** The redaction self-test result: does `safeAttributes` drop a known-sensitive probe key. */
+  readonly redactionOk: boolean;
+}
+
 /** A probed filesystem root for the Storage/Roots area: its sanitized path + health. */
 export interface DoctorRootProbe {
   readonly id: RootCategoryId;
@@ -78,6 +94,9 @@ export interface DoctorProbeInput {
   /** Local-model residency state (plan 11.1): Trevor-loaded models, their context caps + live claim
    *  counts, and the last eviction; folded into the Local-admission area. Absent when not probed. */
   readonly residency?: ResidencyDoctorSummary;
+  /** Telemetry mode + exporter health (plan 13 M7): exporter, remote/Sentry/provider-trace on-off, drop
+   *  count, and the redaction self-test - never a DSN, endpoint, prompt, or path. Absent when not probed. */
+  readonly telemetry?: TelemetryDoctorSummary;
   readonly build: DoctorBuildInfo;
   readonly peripherals: DoctorPeripherals;
   readonly web: DoctorWebDocs;
@@ -698,6 +717,71 @@ function admissionArea(input: DoctorProbeInput): DoctorArea {
   return area("admission", "Local admission", verdict, findings, facts);
 }
 
+/** The Telemetry area (plan 13 M7): the exporter mode, remote/Sentry/provider-trace posture, exporter
+ *  drop count, and the redaction self-test. Redaction-safe - no DSN, endpoint, prompt, or path. A
+ *  disabled default reads as a clean "local-only, nothing remote". */
+function telemetryArea(input: DoctorProbeInput): DoctorArea {
+  const t = input.telemetry;
+  if (!t) {
+    return area("telemetry", "Telemetry", "not probed", [
+      {
+        id: "telemetry.idle",
+        status: "not_checked",
+        title: "Telemetry",
+        message: "telemetry state not probed",
+      },
+    ]);
+  }
+  const disabled = t.exporter === "none" && !t.sentryConfigured && !t.remoteEnabled;
+  const verdict = disabled
+    ? "disabled (local-only default; nothing remote)"
+    : `${t.exporter} exporter` +
+      (t.sentryConfigured ? " + Sentry" : "") +
+      (t.suppressed ? ` (remote off: ${t.suppressed})` : "");
+  const findings: DoctorFinding[] = [
+    {
+      id: "telemetry.mode",
+      status: "ok",
+      title: "Telemetry",
+      message: verdict,
+    },
+    ...(t.redactionOk
+      ? []
+      : [
+          {
+            id: "telemetry.redaction",
+            status: "error" as const,
+            title: "Redaction self-test",
+            message:
+              "the telemetry redaction self-test FAILED; telemetry should be treated as unsafe",
+          },
+        ]),
+    ...(t.drops > 0
+      ? [
+          {
+            id: "telemetry.drops",
+            status: "warn" as const,
+            title: "Exporter drops",
+            message: `${t.drops} telemetry record(s) dropped (byte cap or write failure)`,
+          },
+        ]
+      : []),
+  ];
+  const facts: DoctorArea["facts"] = [
+    { label: "exporter", value: t.exporter },
+    { label: "remote", value: t.remoteEnabled ? "enabled" : "off" },
+    { label: "sentry", value: t.sentryConfigured ? "configured" : "off" },
+    { label: "provider trace", value: t.providerTrace ? "on" : "off" },
+    { label: "drops", value: String(t.drops), ...(t.drops > 0 ? { status: "warn" as const } : {}) },
+    {
+      label: "redaction self-test",
+      value: t.redactionOk ? "pass" : "fail",
+      ...(t.redactionOk ? {} : { status: "error" as const }),
+    },
+  ];
+  return area("telemetry", "Telemetry", verdict, findings, facts);
+}
+
 /**
  * The Updates / Version area (D-073): the package/build/version facts that ARE available (host build
  * version, runtime kind, Node version), plus an explicit note that this build does not query for a
@@ -892,6 +976,7 @@ export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
       storageArea(input),
       workspaceArea(input),
       admissionArea(input),
+      telemetryArea(input),
       updatesArea(input),
     ],
   };

@@ -112,7 +112,7 @@ function currentSize(path: string): number {
 export function createTelemetrySink(
   service: TelemetryService,
   opts: { readonly env?: TelemetryEnv; readonly dir?: string; readonly maxBytes?: number } = {},
-): TelemetrySink {
+): TelemetrySink & { readonly stats?: () => FileSinkStats } {
   const config = resolveTelemetryConfig(opts.env);
   if (config.otelExporter === "file") {
     return createFileSink({

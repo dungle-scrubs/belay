@@ -12,6 +12,7 @@ import {
   Globe,
   HardDrive,
   Plug,
+  Radio,
   Webhook,
   Wrench,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const AREA_ICON: Record<DoctorAreaId, ComponentType<{ className?: string }>> = {
   storage: HardDrive,
   workspace: FolderGit2,
   admission: Gauge,
+  telemetry: Radio,
   updates: ArrowUpCircle,
 };
 

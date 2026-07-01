@@ -25,6 +25,8 @@ import {
   sessionStuck,
   storageOk,
   storageRootInvalid,
+  telemetryDisabled,
+  telemetryFileWithDrops,
   toolsAstGrepMissing,
   toolsOk,
   updatesAvailable,
@@ -144,6 +146,11 @@ export const Workspace: Story = {
 /** Session / Run and Updates: a stalled run, and an available update. */
 export const SessionAndUpdates: Story = {
   render: () => <RowPanel areas={[sessionStuck, updatesAvailable]} />,
+};
+
+/** Telemetry (plan 13): the disabled local-only default, and a file exporter with drops. */
+export const Telemetry: Story = {
+  render: () => <RowPanel areas={[telemetryDisabled, telemetryFileWithDrops]} />,
 };
 
 /** The wrapping torture test: long model ids, deep paths, long errors, all
