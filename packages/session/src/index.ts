@@ -12,6 +12,7 @@ export * from "./doctor";
 export * from "./envelope";
 export * from "./error-message";
 export * from "./event";
+export * from "./fork";
 export * from "./identity";
 export * from "./image-tokens";
 export * from "./inventory";

@@ -1,0 +1,128 @@
+import { describe, expect, it } from "vitest";
+import type { SessionEvent } from "./event";
+import {
+  buildForkPrefix,
+  FORK_ORIGIN_KEY,
+  forkOriginOf,
+  isForkableEvent,
+  messageId,
+  selectForkPrefix,
+} from "./fork";
+
+/** Builds a minimal SessionEvent for the prefix tests. */
+function ev(seq: number, type: string, payload: Record<string, unknown> = {}): SessionEvent {
+  return {
+    sessionId: "parent",
+    seq,
+    eventId: `e${seq}`,
+    type,
+    producerId: "host",
+    payload,
+    createdAt: "2026-07-01T00:00:00.000Z",
+  };
+}
+
+/** A realistic parent log: two turns of conversation interleaved with session-local control events. */
+const PARENT: SessionEvent[] = [
+  ev(1, "user.message", { text: "hi" }),
+  ev(2, "assistant.completed", { runId: "r1", text: "hello" }),
+  ev(3, "session.title", { title: "chat" }), // session-local control - not forkable
+  ev(4, "model.switched", { runId: "r2", to: { model: "opus", reasoning: "high" } }),
+  ev(5, "user.message", { text: "again" }),
+  ev(6, "host.beat", { instanceId: "abc" }), // transport/presence - not forkable
+  ev(7, "assistant.completed", { runId: "r2", text: "sure" }),
+];
+
+describe("stable per-message identity (M1)", () => {
+  it("derives a stable, deterministic id from (sessionId, seq) - not the store-minted eventId", () => {
+    const a = ev(5, "user.message");
+    expect(messageId(a)).toBe("parent:5");
+    expect(messageId(a)).toBe(messageId(ev(5, "user.message")));
+    // The id does not depend on the store-minted eventId (which a fork COPY would reassign).
+    expect(messageId({ sessionId: "parent", seq: 5 })).toBe("parent:5");
+  });
+});
+
+describe("forkable event classification (M1)", () => {
+  it("copies durable conversation/turn/model/task/context state, not session-local control", () => {
+    for (const t of [
+      "user.message",
+      "assistant.completed",
+      "tool.started",
+      "tool.completed",
+      "model.switched",
+      "context.compacted",
+      "tasks.current",
+    ]) {
+      expect(isForkableEvent(t)).toBe(true);
+    }
+    for (const t of [
+      "session.switch",
+      "session.title",
+      "session.archived",
+      "session.deleted",
+      "host.online",
+      "host.beat",
+      "presence",
+      "handoff.requested",
+      "delegated.to",
+      "assistant.delta", // ephemeral streaming - superseded by assistant.completed
+    ]) {
+      expect(isForkableEvent(t)).toBe(false);
+    }
+  });
+});
+
+describe("prefix selection (M1)", () => {
+  it("selects forkable events up to AND INCLUDING the fork seq, dropping later + non-forkable ones", () => {
+    const prefix = selectForkPrefix(PARENT, 5);
+    // seq 1,2,4,5 are forkable and <= 5; seq 3 (session.title) is excluded; seq 6,7 are after 5.
+    expect(prefix.map((e) => e.seq)).toEqual([1, 2, 4, 5]);
+  });
+
+  it("includes the fork-point event itself", () => {
+    expect(selectForkPrefix(PARENT, 7).map((e) => e.seq)).toEqual([1, 2, 4, 5, 7]);
+  });
+});
+
+describe("fork prefix builder (M1)", () => {
+  it("produces PublishInputs preserving type/producer/payload, each tagged with its parent origin", () => {
+    const seeds = buildForkPrefix({ parentSessionId: "parent", parentEvents: PARENT, forkSeq: 5 });
+    expect(seeds.map((s) => s.type)).toEqual([
+      "user.message",
+      "assistant.completed",
+      "model.switched",
+      "user.message",
+    ]);
+    // The first seed keeps the original payload PLUS an origin tag pointing at parent seq 1.
+    const first = seeds[0];
+    expect(first?.producerId).toBe("host");
+    expect(first?.payload.text).toBe("hi");
+    expect(first?.payload[FORK_ORIGIN_KEY]).toEqual({ sessionId: "parent", seq: 1 });
+    // The model.switched carries its "to" model through the copy (M4 reconstructs the active model from it).
+    const switched = seeds[2];
+    expect(switched?.payload.to).toEqual({ model: "opus", reasoning: "high" });
+    expect(switched?.payload[FORK_ORIGIN_KEY]).toEqual({ sessionId: "parent", seq: 4 });
+  });
+
+  it("reads the origin back off a copied event, and returns null for a native (untagged) event", () => {
+    const seeds = buildForkPrefix({ parentSessionId: "parent", parentEvents: PARENT, forkSeq: 5 });
+    // A seed is a PublishInput; wrap its payload to read the origin.
+    expect(forkOriginOf({ payload: seeds[0]?.payload ?? {} })).toEqual({
+      sessionId: "parent",
+      seq: 1,
+    });
+    expect(forkOriginOf(ev(1, "user.message"))).toBeNull();
+  });
+
+  it("re-forking overwrites any inherited origin tag with the IMMEDIATE parent (single-parent lineage)", () => {
+    // A child event that was itself copied (carries grandparent origin) is forked again from "child".
+    const childEvent = ev(2, "user.message", {
+      text: "hi",
+      [FORK_ORIGIN_KEY]: { sessionId: "grandparent", seq: 9 },
+    });
+    const child = { ...childEvent, sessionId: "child" };
+    const seeds = buildForkPrefix({ parentSessionId: "child", parentEvents: [child], forkSeq: 2 });
+    expect(seeds[0]?.payload[FORK_ORIGIN_KEY]).toEqual({ sessionId: "child", seq: 2 });
+  });
+});

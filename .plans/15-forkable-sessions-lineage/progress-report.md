@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 14
-- **Completed current work:** 3
+- **Current cutoff blockers:** 11
+- **Completed current work:** 6
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Message Identity and Prefix Builder
+- **Current focus:** M2 - Fork Protocol and Host Operation
 
 ## Completed Current State / Hard Dependencies
 
@@ -16,9 +16,9 @@
 
 ## Current Cutoff Blockers
 
-- [ ] RED: Cover stable per-message ids and prefix selection.
-- [ ] GREEN: Implement a clean "fresh linear session from prefix" builder.
-- [ ] REFACTOR: Keep existing linear replay behavior unchanged.
+- [x] RED: Cover stable per-message ids and prefix selection.
+- [x] GREEN: Implement a clean "fresh linear session from prefix" builder.
+- [x] REFACTOR: Keep existing linear replay behavior unchanged.
 - [ ] RED: Cover `session.forkedFrom`, origin tags, `forkReady`, and self-contained child replay.
 - [ ] GREEN: Implement host fork operation over normal session append APIs.
 - [ ] REFACTOR: Keep Richter generic.
