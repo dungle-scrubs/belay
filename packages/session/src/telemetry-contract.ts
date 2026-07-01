@@ -174,18 +174,49 @@ export interface SpanRecord {
   readonly error?: string;
 }
 
+/** A metric's shape: a monotonic `counter` (events) or a `histogram` (a duration/size distribution). */
+export type MetricKind = "counter" | "histogram";
+
+/** One recorded metric point: a contract name, a numeric value, and bounded low-cardinality labels. */
+export interface MetricRecord {
+  readonly name: MetricName;
+  readonly value: number;
+  readonly kind: MetricKind;
+  readonly labels: TelemetryAttributes;
+}
+
 /**
- * The sink runtime apps push finished spans (and later metrics) into. This is the seam the OTel SDK, the
+ * The sink runtime apps push finished spans + metric points into. This is the seam the OTel SDK, the
  * local file exporter, or a test's in-memory recorder plug into (escape hatch: local JSONL first, SDK
- * later) - the instrumentation only ever sees this interface, never an exporter. `span` must be
+ * later) - the instrumentation only ever sees this interface, never an exporter. Both methods must be
  * best-effort and never throw (a telemetry failure must not fail user work).
  */
 export interface TelemetrySink {
   span(record: SpanRecord): void;
+  metric(record: MetricRecord): void;
 }
 
 /** The no-op sink: telemetry is disabled by default, so instrumentation runs against this and emits nothing. */
-export const NOOP_SINK: TelemetrySink = { span: () => {} };
+export const NOOP_SINK: TelemetrySink = { span: () => {}, metric: () => {} };
+
+/**
+ * Records one metric point through `sink`, best-effort: the labels are run through {@link safeAttributes}
+ * so a high-cardinality or sensitive label (run id, session id, prompt, path, command) can never become a
+ * metric dimension, and a sink failure is swallowed. `kind` defaults to a counter.
+ */
+export function recordMetric(
+  sink: TelemetrySink,
+  name: MetricName,
+  value: number,
+  labels: Readonly<Record<string, unknown>> = {},
+  kind: MetricKind = "counter",
+): void {
+  try {
+    sink.metric({ name, value, kind, labels: safeAttributes(labels) });
+  } catch {
+    // A telemetry sink failure must never propagate into user work.
+  }
+}
 
 /**
  * Times `fn`, then pushes a finished span for it into `sink` with the sanitized attributes and an

@@ -15,7 +15,7 @@ import {
   type SessionTransport,
   type TrevorEventInput,
 } from "@trevor/session";
-import type { SpanRecord, TelemetrySink } from "@trevor/session/telemetry";
+import type { MetricRecord, SpanRecord, TelemetrySink } from "@trevor/session/telemetry";
 
 /**
  * The generic test harness shared by every integration and e2e test (see repo-root AGENTS.md
@@ -201,21 +201,29 @@ export function sessionSummary(over?: Partial<SessionSummary>): SessionSummary {
   };
 }
 
-/** A recording {@link TelemetrySink} for span instrumentation tests: captures every finished span so a
- *  test can assert names, statuses, and (already-sanitized) attributes. `named(name)` filters by span. */
+/** A recording {@link TelemetrySink} for instrumentation tests: captures every finished span + metric so
+ *  a test can assert names, statuses, and (already-sanitized) attributes/labels. `named`/`metric` filter. */
 export interface RecordingTelemetrySink {
   readonly sink: TelemetrySink;
   readonly spans: readonly SpanRecord[];
+  readonly metrics: readonly MetricRecord[];
   named(name: string): readonly SpanRecord[];
+  metric(name: string): readonly MetricRecord[];
 }
 
 /** Builds a recording telemetry sink (plan 13): the shared fake sink host/store/blob span tests push into. */
 export function recordingTelemetrySink(): RecordingTelemetrySink {
   const spans: SpanRecord[] = [];
+  const metrics: MetricRecord[] = [];
   return {
-    sink: { span: (record) => spans.push(record) },
+    sink: {
+      span: (record) => spans.push(record),
+      metric: (record) => metrics.push(record),
+    },
     spans,
+    metrics,
     named: (name) => spans.filter((span) => span.name === name),
+    metric: (name) => metrics.filter((point) => point.name === name),
   };
 }
 

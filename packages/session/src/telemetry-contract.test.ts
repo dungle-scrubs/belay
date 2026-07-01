@@ -3,8 +3,10 @@ import { test } from "vitest";
 import {
   isDisallowedTelemetryKey,
   METRIC_NAMES,
+  type MetricRecord,
   NOOP_SINK,
   REDACTED,
+  recordMetric,
   redactAttributeValue,
   redactSecrets,
   resourceAttributes,
@@ -18,7 +20,7 @@ import {
 /** A recording sink for the span-core tests (the app-facing one lives in @trevor/test-kit). */
 function recordingSink(): { sink: TelemetrySink; spans: SpanRecord[] } {
   const spans: SpanRecord[] = [];
-  return { sink: { span: (r) => spans.push(r) }, spans };
+  return { sink: { span: (r) => spans.push(r), metric: () => {} }, spans };
 }
 
 /** A deterministic clock: each read advances by `step` ms. */
@@ -178,13 +180,46 @@ test("a throwing sink never propagates into the wrapped work (telemetry is best-
     span: () => {
       throw new Error("sink down");
     },
+    metric: () => {},
   };
   // The wrapped fn's value still returns even though the sink throws.
   assert.equal(await withSpan(brokenSink, SPAN_NAMES.turn, {}, async () => 42), 42);
 });
 
-test("NOOP_SINK accepts spans and emits nothing", () => {
+test("NOOP_SINK accepts spans and metrics and emits nothing", () => {
+  assert.doesNotThrow(() => {
+    NOOP_SINK.span({ name: SPAN_NAMES.turn, attributes: {}, status: "ok", durationMs: 1 });
+    NOOP_SINK.metric({ name: METRIC_NAMES.turnDuration, value: 1, kind: "histogram", labels: {} });
+  });
+});
+
+test("recordMetric sanitizes labels so a high-cardinality/sensitive dimension can never be recorded", () => {
+  const points: MetricRecord[] = [];
+  const sink: TelemetrySink = { span: () => {}, metric: (p) => points.push(p) };
+  recordMetric(sink, METRIC_NAMES.turnDuration, 1234, {
+    model: "qwen3.6-27b",
+    outcome: "answered",
+    // all of these must be dropped from the metric labels:
+    run_id: "r-123",
+    session_id: "s-1",
+    prompt: "secret",
+    command: "rm -rf /",
+    file_path: "/Users/x/y",
+  });
+  const [point] = points;
+  assert.equal(point?.name, METRIC_NAMES.turnDuration);
+  assert.equal(point?.value, 1234);
+  assert.deepEqual(point?.labels, { model: "qwen3.6-27b", outcome: "answered" });
+});
+
+test("a throwing metric sink never propagates into user work", () => {
+  const brokenSink: TelemetrySink = {
+    span: () => {},
+    metric: () => {
+      throw new Error("metric sink down");
+    },
+  };
   assert.doesNotThrow(() =>
-    NOOP_SINK.span({ name: SPAN_NAMES.turn, attributes: {}, status: "ok", durationMs: 1 }),
+    recordMetric(brokenSink, METRIC_NAMES.turnStop, 1, { cause: "answered" }),
   );
 });
