@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { TrevorEventInput } from "@trevor/session";
-import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { METRIC_NAMES, SPAN_NAMES } from "@trevor/session/telemetry";
 import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
@@ -489,4 +489,16 @@ test("a turn emits a trevor.turn span (provider + model + ok status) with tool s
   // No prompt/history text leaks into any span.
   const serialized = JSON.stringify(recorder.spans);
   assert.ok(!serialized.includes("echo hello-from-tool"), "tool args never enter a span");
+
+  // The turn also records a low-cardinality turn-stop counter (cause/action/provider/model bounded).
+  const stops = recorder.metric(METRIC_NAMES.turnStop);
+  assert.equal(stops.length, 1, "one turn-stop metric per turn");
+  assert.equal(stops[0]?.value, 1);
+  assert.equal(stops[0]?.kind, "counter");
+  assert.equal(stops[0]?.labels.provider, "fake");
+  assert.ok(typeof stops[0]?.labels.cause === "string", "the stop cause is a bounded label");
+  assert.ok(
+    !JSON.stringify(stops).includes("r1"),
+    "the run id is never a metric label (high-cardinality)",
+  );
 });

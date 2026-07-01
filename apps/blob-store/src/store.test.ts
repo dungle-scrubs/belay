@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { METRIC_NAMES, SPAN_NAMES } from "@trevor/session/telemetry";
 import { recordingTelemetrySink } from "@trevor/test-kit";
 import { afterEach, beforeEach, test } from "vitest";
 import { BlobStore, HEX64 } from "./store";
@@ -85,4 +85,27 @@ test("blob IO emits an ok span per op (put/get/head) carrying no hash, path, or 
   const serialized = JSON.stringify(spans);
   assert.ok(!serialized.includes(hash), "the content hash never enters a span");
   assert.ok(!serialized.includes(dir), "the on-disk path never enters a span");
+
+  // Each op also records a low-cardinality blob-outcome counter (op + outcome, no hash/path).
+  const outcomes = recorder.metric(METRIC_NAMES.blobOutcome);
+  assert.deepEqual(
+    outcomes.map((m) => `${m.labels.op}:${m.labels.outcome}`),
+    ["put:stored", "get:hit", "head:hit", "get:miss"],
+  );
+  assert.ok(
+    outcomes.every((m) => m.value === 1 && m.kind === "counter"),
+    "each outcome is a single counter increment",
+  );
+});
+
+test("a re-put of identical bytes records a deduped blob-outcome metric", async () => {
+  const recorder = recordingTelemetrySink();
+  const instrumented = new BlobStore(dir, recorder.sink);
+  const bytes = new TextEncoder().encode("dedupe me");
+  await instrumented.put(bytes, "text/plain");
+  await instrumented.put(bytes, "text/plain");
+  assert.deepEqual(
+    recorder.metric(METRIC_NAMES.blobOutcome).map((m) => m.labels.outcome),
+    ["stored", "deduped"],
+  );
 });

@@ -1,5 +1,11 @@
 import { events, type ModelRef, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
-import { NOOP_SINK, SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
+import {
+  METRIC_NAMES,
+  NOOP_SINK,
+  recordMetric,
+  SPAN_NAMES,
+  type TelemetrySink,
+} from "@trevor/session/telemetry";
 import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
 import type { AdmissionPriority } from "./admission/contract";
 import {
@@ -358,6 +364,12 @@ export function publishTurn(
               ...(event.reason ? { reason: event.reason } : {}),
             }),
           );
+          // A low-cardinality model-switch counter (plan 13 M5, D-010): outcome (applied/blocked) +
+          // initiator are bounded, so a multi-model turn is observable without a high-cardinality label.
+          recordMetric(sink, METRIC_NAMES.modelSwitch, 1, {
+            outcome: event.outcome,
+            initiator: event.initiator,
+          });
         } else {
           // input is the prompt size of the latest step (current context); output sums.
           usage = {
@@ -397,6 +409,22 @@ export function publishTurn(
         Effect.gen(function* () {
           yield* flushAll;
           yield* Effect.sync(() => logUsageBreakdown(runId, breakdown, usage));
+
+          // A low-cardinality turn-stop counter for EVERY turn (plan 13 M5): a terminal stop's rich cause
+          // when present, else the exit disposition (answered/cancelled/failed). All labels are bounded
+          // vocabularies - never a run id or prompt - so this aggregates cleanly.
+          const stopCause =
+            stop?.cause ??
+            (Exit.isSuccess(exit)
+              ? "answered"
+              : Cause.isInterruptedOnly(exit.cause)
+                ? "cancelled"
+                : "failed");
+          recordMetric(sink, METRIC_NAMES.turnStop, 1, {
+            cause: stopCause,
+            provider: provider.id,
+            model: provider.model,
+          });
 
           if (Exit.isSuccess(exit)) {
             // A clean end OR a malformed-protocol anomaly (which ends the stream successfully with a
