@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M2: Section Provider Registry
+> Current focus: M3: Core Registry-Derived Sections
 
 ## Summary
 
-- Current cutoff blockers: 45
+- Current cutoff blockers: 40
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -23,11 +23,11 @@
 
 ## M2: Section Provider Registry
 
-- [ ] RED: Add tests for section provider registration and deterministic section order
-- [ ] GREEN: Implement section-provider registry and manifest builder
-- [ ] RED: Add tests for missing, failed, slow, or unavailable section providers
-- [ ] GREEN: Represent unavailable sections explicitly with sanitized status
-- [ ] REFACTOR: Keep each provider small and subsystem-owned
+- [x] RED: Add tests for section provider registration and deterministic section order
+- [x] GREEN: Implement section-provider registry and manifest builder
+- [x] RED: Add tests for missing, failed, slow, or unavailable section providers
+- [x] GREEN: Represent unavailable sections explicitly with sanitized status
+- [x] REFACTOR: Keep each provider small and subsystem-owned
 
 ## M3: Core Registry-Derived Sections
 
