@@ -1,10 +1,10 @@
 # Capability Manifest and Trevor Expert - Progress Report
 
-> Current focus: M3: Core Registry-Derived Sections
+> Current focus: M4: Runtime and Integration Sections
 
 ## Summary
 
-- Current cutoff blockers: 40
+- Current cutoff blockers: 35
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -31,11 +31,11 @@
 
 ## M3: Core Registry-Derived Sections
 
-- [ ] RED: Add tests for tool, command, command-family, nested-menu, style, skill, and agent summary sections
-- [ ] GREEN: Build sections from existing registries and D-075 discovery outputs
-- [ ] RED: Add tests proving hidden/debug-only capabilities are filtered or marked by scope
-- [ ] GREEN: Implement scope-aware filtering for human, client, compact, subagent, and expert scopes
-- [ ] REFACTOR: Remove duplicated hardcoded lists from manifest sections
+- [x] RED: Add tests for tool, command, command-family, nested-menu, style, skill, and agent summary sections
+- [x] GREEN: Build sections from existing registries and D-075 discovery outputs
+- [x] RED: Add tests proving hidden/debug-only capabilities are filtered or marked by scope
+- [x] GREEN: Implement scope-aware filtering for human, client, compact, subagent, and expert scopes
+- [x] REFACTOR: Remove duplicated hardcoded lists from manifest sections
 
 ## M4: Runtime and Integration Sections
 
