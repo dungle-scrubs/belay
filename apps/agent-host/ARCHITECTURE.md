@@ -62,6 +62,12 @@ edge, replay dispatch, the command lane, and turn dispatch together.
   imported artifacts (never slash commands), host-owned mediation of server-originated
   elicitation and budget-gated off-by-default sampling (`mediation.ts`), and the redacted
   per-server status snapshot.
+- `lsp/` - the host-owned LSP integration (plan 24): the stable read-only result contract with
+  typed degraded outcomes (unavailable/unsupported/timeout/stale/server_error - degradation is
+  data, never a thrown turn failure), result-size caps, the generic language-server adapter
+  boundary with the TS/JS adapter first, the JSON-RPC client over stdio (reusing `mcp/`'s
+  Content-Length framing), and the per-workspace-root runtime manager with lazy spawn, bounded
+  restart-on-crash, and status snapshots.
 - `skills/` - skill discovery and progressive disclosure behind the skills tools.
 - `subagents/` - subagent discovery (`discovery.ts`) for delegated agents.
 - `serial-run/` - the serialized multi-plan run lane.
