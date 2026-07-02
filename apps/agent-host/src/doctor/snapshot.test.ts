@@ -6,12 +6,8 @@ import {
   summarizeSnapshot,
 } from "@trevor/session";
 import { test } from "vitest";
-import {
-  buildDoctorSnapshot,
-  type DoctorProbeInput,
-  type DoctorRootProbe,
-  type PeripheralState,
-} from "./snapshot";
+import type { DoctorProbeInput, DoctorRootProbe, PeripheralState } from "./probe-input";
+import { buildDoctorSnapshot } from "./snapshot";
 
 /**
  * D-073 M1-M3: the structured doctor.current snapshot construction. Pure over probed facts, so these

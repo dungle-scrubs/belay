@@ -21,13 +21,13 @@ import { providerFailures } from "../providers/provider-failure-log";
 import { incidentCategory, providerIncidents } from "../providers/provider-incidents";
 import type { ResidencyDoctorSummary } from "../residency/doctor";
 import { lastWebFetchError } from "../tools/web-fetch/web-fetch-log";
-import {
-  buildDoctorSnapshot,
-  type DoctorProviderIncident,
-  type DoctorProviderProbe,
-  type DoctorRootProbe,
-  type TelemetryDoctorSummary,
-} from "./snapshot";
+import type {
+  DoctorProviderIncident,
+  DoctorProviderProbe,
+  DoctorRootProbe,
+  TelemetryDoctorSummary,
+} from "./probe-input";
+import { buildDoctorSnapshot } from "./snapshot";
 
 /**
  * Builds the live `doctor.current` snapshot from already-resolved host facts (D-073). This is the
@@ -38,7 +38,7 @@ import {
  * with already-probed facts before delegating to {@link buildDoctorSnapshot}.
  *
  * Responsible for: probing live host facts and assembling the /doctor snapshot + command result.
- * Not for: the pure area/finding fold (snapshot.ts) or the tool registration seam (source.ts).
+ * Not for: the pure area/finding folds (snapshot.ts + the areas-* modules) or the tool registration seam (source.ts).
  */
 
 /**

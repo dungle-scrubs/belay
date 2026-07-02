@@ -9,7 +9,7 @@ import type { ResidentModel } from "./registry";
  * (provider:host:port) are diagnosis handles, never credentials, so they surface as-is (D-004).
  *
  * Responsible for: the /doctor read model: resident models, claim counts, and the last eviction.
- * Not for: the host-wide doctor areas/snapshot - ../doctor/snapshot.ts folds this summary in.
+ * Not for: the host-wide doctor areas/snapshot - ../doctor/areas-platform.ts folds this summary in.
  */
 
 /** One resident model row: where it lives, the context it holds, and how many live instances claim it. */

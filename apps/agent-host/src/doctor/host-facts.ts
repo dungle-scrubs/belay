@@ -24,7 +24,7 @@ import { discoverAgents } from "@host/subagents/discovery";
 import { relativeTime, type WorktreeSummary } from "@trevor/session";
 import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
 import type { DoctorRuntimeFacts } from "./build";
-import type { TelemetryDoctorSummary } from "./snapshot";
+import type { TelemetryDoctorSummary } from "./probe-input";
 
 /**
  * The live host facts /doctor reads (D-073), extracted from main.ts (plan 22.2 M2). main.ts
@@ -33,7 +33,7 @@ import type { TelemetryDoctorSummary } from "./snapshot";
  * from the exact same state.
  *
  * Responsible for: reading live host runtime state into /doctor's DoctorRuntimeFacts.
- * Not for: probing/assembling the snapshot (build.ts) or the pure area/finding fold (snapshot.ts).
+ * Not for: probing/assembling the snapshot (build.ts) or the pure area/finding folds (the areas-* modules).
  */
 
 /** The live main.ts state the facts are read from - constructed singletons and mutable-state getters. */
