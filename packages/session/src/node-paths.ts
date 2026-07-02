@@ -335,6 +335,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description: "Best-effort append-only turn-stop diagnostics.",
   },
   {
+    name: "hook-approvals",
+    category: "state",
+    relativePath: "hooks-approvals.json",
+    description:
+      "Sha256 trust-hash approval records for project/user hooks (plan 25): { approvals: { <source>:<id>: ... } }.",
+  },
+  {
     name: "worktrees",
     category: "state",
     relativePath: ".worktrees",
