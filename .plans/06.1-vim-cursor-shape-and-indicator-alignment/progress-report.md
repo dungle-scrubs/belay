@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M3: Verification
+> Current focus: complete - all milestones done
 
 - Total checklist items: 17
-- Completed: 14
-- Current cutoff blockers: 3
+- Completed: 17
+- Current cutoff blockers: 0
 
 ## 0. Hard Dependencies
 
@@ -33,6 +33,6 @@
 
 ## M3: Verification
 
-- [ ] RED: EZE note - focused real app: Esc→block, `i`/`a`→thin line, `v`/`V`→block/selection; pill sits just right of the +/expand icons and does not move as the mode changes
-- [ ] GREEN: Run `pnpm test:web`, `pnpm typecheck`, `pnpm lint`, `pnpm test-storybook`; inspect composer + editor at desktop and narrow widths
-- [ ] REFACTOR: Note the off-Chromium degradation (thin bar on FF/Safari) in the component doc-comment
+- [x] RED: EZE note - focused real app: Esc→block, `i`/`a`→thin line, `v`/`V`→block/selection; pill sits just right of the +/expand icons and does not move as the mode changes
+- [x] GREEN: Run `pnpm test:web`, `pnpm typecheck`, `pnpm lint`, `pnpm test-storybook`; inspect composer + editor at desktop and narrow widths
+- [x] REFACTOR: Note the off-Chromium degradation (thin bar on FF/Safari) in the component doc-comment
