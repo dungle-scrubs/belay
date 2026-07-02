@@ -53,7 +53,6 @@ function BottomRow({
         <Button variant="ghost" size="icon" className="size-7">
           <Maximize2 className="size-4" />
         </Button>
-        <span className="flex-1" />
         {indicator}
       </div>
     </div>

@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M2: Indicator left-alignment
+> Current focus: M3: Verification
 
 - Total checklist items: 17
-- Completed: 7
-- Current cutoff blockers: 10
+- Completed: 14
+- Current cutoff blockers: 3
 
 ## 0. Hard Dependencies
 
@@ -23,13 +23,13 @@
 
 ## M2: Indicator left-alignment
 
-- [ ] RED: Assert the mode-indicator pill has no preceding `flex-1` spacer and renders immediately after the composer controls (prompt-input test)
-- [ ] GREEN: Remove `<span className="flex-1" />` before `<VimModeIndicator>` in `prompt-input.tsx`
-- [ ] RED: Same DOM-order assertion for the full-surface editor header in `prompt-surface-editor.test.tsx`
-- [ ] GREEN: Remove the `flex-1` spacer in `prompt-surface-editor.tsx`; drop the spacer in the `BottomRow` mock in `vim-mode-indicator.stories.tsx`
-- [ ] RED: Confirm the pill's stable width still prevents row reflow across insert/normal/visual (extend the narrow/mode-cycle story assertion)
-- [ ] GREEN: Regenerate the affected Storybook baselines in the pinned container (`components-promptinput--vim-mode`, `--vim-shell-lane`, `chat-vimmodeindicator--*`)
-- [ ] REFACTOR: Confirm no other story/caller depended on the removed spacer; keep the pill's `shrink-0`/`min-w`
+- [x] RED: Assert the mode-indicator pill has no preceding `flex-1` spacer and renders immediately after the composer controls (prompt-input test)
+- [x] GREEN: Remove `<span className="flex-1" />` before `<VimModeIndicator>` in `prompt-input.tsx`
+- [x] RED: Same DOM-order assertion for the full-surface editor header in `prompt-surface-editor.test.tsx`
+- [x] GREEN: Remove the `flex-1` spacer in `prompt-surface-editor.tsx`; drop the spacer in the `BottomRow` mock in `vim-mode-indicator.stories.tsx`
+- [x] RED: Confirm the pill's stable width still prevents row reflow across insert/normal/visual (extend the narrow/mode-cycle story assertion)
+- [x] GREEN: Regenerate the affected Storybook baselines in the pinned container (`components-promptinput--vim-mode`, `--vim-shell-lane`, `chat-vimmodeindicator--*`)
+- [x] REFACTOR: Confirm no other story/caller depended on the removed spacer; keep the pill's `shrink-0`/`min-w`
 
 ## M3: Verification
 

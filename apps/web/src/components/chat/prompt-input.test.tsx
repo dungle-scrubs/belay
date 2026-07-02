@@ -81,6 +81,29 @@ describe("PromptInput Vim caret shape (06.1)", () => {
   });
 });
 
+describe("PromptInput Vim mode indicator alignment (06.1)", () => {
+  test("the pill sits immediately right of the composer controls, with no flex-1 spacer", () => {
+    render(<PromptHarness initialDraft="" vimEnabled />);
+    const pill = screen.getByRole("status");
+    const prev = pill.previousElementSibling;
+
+    expect(prev?.getAttribute("aria-label")).toBe("Attach files (or paste / drag-drop)");
+    expect(prev?.className ?? "").not.toContain("flex-1");
+  });
+
+  test("the pill keeps its stable-width classes across the mode cycle (no row reflow)", () => {
+    render(<PromptHarness initialDraft="hello" vimEnabled />);
+    const input = screen.getByRole("textbox");
+    const pill = screen.getByRole("status");
+
+    for (const key of ["Escape", "v", "Escape", "i"]) {
+      fireEvent.keyDown(input, { key });
+      expect(pill.className).toContain("min-w-");
+      expect(pill.className).toContain("shrink-0");
+    }
+  });
+});
+
 describe("PromptInput loop helper wiring", () => {
   test("renders the loop helper for an active /loop line only", () => {
     render(<PromptHarness initialDraft={'/loop max 5 do "run tests"'} />);

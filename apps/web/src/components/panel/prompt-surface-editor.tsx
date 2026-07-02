@@ -58,12 +58,8 @@ export function PromptSurfaceEditor({
         <span className="text-label tracking-wider text-muted-foreground/80">
           {title ?? "Edit prompt"}
         </span>
-        {vim.enabled ? (
-          <>
-            <span className="flex-1" />
-            <VimModeIndicator mode={vim.mode} />
-          </>
-        ) : null}
+        {/* Left-aligned right of the title (06.1), matching the composer's bottom-row placement. */}
+        {vim.enabled ? <VimModeIndicator mode={vim.mode} /> : null}
       </header>
 
       <textarea

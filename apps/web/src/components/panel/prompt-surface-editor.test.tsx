@@ -77,6 +77,15 @@ test("with Vim enabled the header shows the mode indicator (starts in insert)", 
   assert.ok(screen.getByLabelText("Vim mode: insert"));
 });
 
+test("the mode indicator sits immediately right of the title, with no flex-1 spacer (06.1)", () => {
+  renderEditor("x", "Edit handoff prompt", true);
+  const pill = screen.getByRole("status");
+  const prev = pill.previousElementSibling;
+
+  assert.equal(prev?.textContent, "Edit handoff prompt", "the title is the pill's left neighbor");
+  assert.ok(!(prev?.className ?? "").includes("flex-1"), "no spacer pushes the pill right");
+});
+
 test("Vim Escape enters normal-mode and does NOT close the editor; a second Escape closes", () => {
   const { onConfirm } = renderEditor("hello", undefined, true);
   const ta = screen.getByRole("textbox") as HTMLTextAreaElement;

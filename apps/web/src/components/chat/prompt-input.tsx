@@ -283,14 +283,9 @@ export function PromptInput({
                 <Maximize2 className="size-4" />
               </Button>
             ) : null}
-            {/* The Vim mode indicator sits at the right of the bottom row when Vim mode is on; its
-              stable width keeps the row from reflowing as the mode changes. */}
-            {vim.enabled ? (
-              <>
-                <span className="flex-1" />
-                <VimModeIndicator mode={vim.mode} />
-              </>
-            ) : null}
+            {/* The Vim mode indicator sits left-aligned, immediately right of the composer controls
+              (06.1); its stable width keeps the row from reflowing as the mode changes. */}
+            {vim.enabled ? <VimModeIndicator mode={vim.mode} /> : null}
           </div>
         </div>
         {/* Auto-growing textarea: Enter submits, Shift+Enter inserts a newline. */}
