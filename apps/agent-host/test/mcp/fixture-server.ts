@@ -1,8 +1,18 @@
+import {
+  catalogPage,
+  catalogToolsFor,
+  FIXTURE_PROMPTS,
+  FIXTURE_RESOURCES,
+  type FixtureCatalogMode,
+} from "./fixture-catalog";
+
 /**
- * A minimal MCP stdio fixture server for the transport integration tests (plan 23 M2). Speaks
- * JSON-RPC 2.0 over LSP-style Content-Length frames with its OWN tiny framing implementation
- * (deliberately independent of src/mcp/framing.ts, so the tests are cross-implementation, not
- * self-confirming). Implements initialize + tools/list + trivial tools, plus error triggers:
+ * A minimal MCP stdio fixture server for the transport integration tests (plan 23 M2/M4).
+ * Speaks JSON-RPC 2.0 over LSP-style Content-Length frames with its OWN tiny framing
+ * implementation (deliberately independent of src/mcp/framing.ts, so the tests are
+ * cross-implementation, not self-confirming). Implements initialize + paginated
+ * tools/resources/prompts lists (the shared ./fixture-catalog) + trivial tools, plus error
+ * triggers:
  *   echo      - returns the given text
  *   env_probe - returns JSON.stringify(process.env) (for the D-004 env-allowlist probe)
  *   boom      - responds with a JSON-RPC error
@@ -10,7 +20,8 @@
  *   crash     - exits the process without responding
  *   garbage   - responds with a well-framed but non-JSON body
  * `--protocol=<v>` forces the initialize result's protocolVersion (for negotiation tests);
- * by default it echoes the client's requested version. Exits 0 when stdin ends.
+ * by default it echoes the client's requested version. `--catalog=large|counting` selects a
+ * ./fixture-catalog mode (discovery/search-cap tests). Exits 0 when stdin ends.
  */
 
 interface JsonRpcIn {
@@ -19,6 +30,7 @@ interface JsonRpcIn {
   readonly method?: string;
   readonly params?: {
     readonly protocolVersion?: string;
+    readonly cursor?: string;
     readonly name?: string;
     readonly arguments?: Record<string, unknown>;
   };
@@ -27,6 +39,12 @@ interface JsonRpcIn {
 const protocolOverride = process.argv
   .find((arg) => arg.startsWith("--protocol="))
   ?.slice("--protocol=".length);
+
+const catalogMode = (process.argv
+  .find((arg) => arg.startsWith("--catalog="))
+  ?.slice("--catalog=".length) ?? "default") as FixtureCatalogMode;
+
+let toolsListCalls = 0;
 
 let buffer = Buffer.alloc(0);
 
@@ -87,20 +105,24 @@ function handle(message: JsonRpcIn): void {
     return; // notification: no response
   }
   if (message.method === "tools/list") {
-    result(message.id, {
-      tools: [
-        {
-          name: "echo",
-          description: "echoes text back",
-          inputSchema: { type: "object", properties: { text: { type: "string" } } },
-        },
-        {
-          name: "env_probe",
-          description: "returns this process's environment",
-          inputSchema: { type: "object", properties: {} },
-        },
-      ],
-    });
+    if (message.params?.cursor === undefined) {
+      toolsListCalls += 1;
+    }
+    const { page, nextCursor } = catalogPage(
+      catalogToolsFor(catalogMode, toolsListCalls),
+      message.params?.cursor,
+    );
+    result(message.id, { tools: page, ...(nextCursor ? { nextCursor } : {}) });
+    return;
+  }
+  if (message.method === "resources/list") {
+    const { page, nextCursor } = catalogPage(FIXTURE_RESOURCES, message.params?.cursor);
+    result(message.id, { resources: page, ...(nextCursor ? { nextCursor } : {}) });
+    return;
+  }
+  if (message.method === "prompts/list") {
+    const { page, nextCursor } = catalogPage(FIXTURE_PROMPTS, message.params?.cursor);
+    result(message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
     return;
   }
   if (message.method === "tools/call") {

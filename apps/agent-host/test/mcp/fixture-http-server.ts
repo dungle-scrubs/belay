@@ -1,23 +1,31 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import {
+  catalogPage,
+  catalogToolsFor,
+  FIXTURE_PROMPTS,
+  FIXTURE_RESOURCES,
+  type FixtureCatalogMode,
+} from "./fixture-catalog";
 
 /**
  * A minimal MCP Streamable HTTP fixture server for the http transport integration tests
- * (plan 23 M3). A REAL node:http server with its own inline JSON-RPC handling (deliberately
+ * (plan 23 M3/M4). A REAL node:http server with its own inline JSON-RPC handling (deliberately
  * independent of src/mcp, so the tests are cross-implementation, not self-confirming). Clients
  * POST JSON-RPC to the endpoint; replies come back as application/json or - in
  * `responseMode: "sse"` - as a text/event-stream event, per the Streamable HTTP spec. The
  * fixture ALWAYS issues an `mcp-session-id` on initialize and rejects any follow-up without a
  * known one (404 + JSON-RPC error), so a passing follow-up proves the client echoed the id.
- * Behavior triggers, mirroring the stdio fixture's tools:
+ * Lists (tools/resources/prompts) come paginated from the shared ./fixture-catalog. Behavior
+ * triggers, mirroring the stdio fixture's tools:
  *   echo    - returns the given text
  *   boom    - responds with a JSON-RPC error
  *   hang    - never responds (for timeout tests)
  *   garbage - responds with a non-JSON body (or a non-JSON SSE data event)
  *   sever   - destroys the socket mid-response (SSE mode: after headers + a comment event)
  * Options: `requireBearer` (401 without/with a wrong token), `protocolVersion` (forces the
- * initialize result's version, for negotiation tests).
+ * initialize result's version, for negotiation tests), `catalog` (a ./fixture-catalog mode).
  */
 
 export interface FixtureHttpServerOptions {
@@ -27,6 +35,8 @@ export interface FixtureHttpServerOptions {
   readonly requireBearer?: string;
   /** Forces the initialize result's protocolVersion (for negotiation-failure tests). */
   readonly protocolVersion?: string;
+  /** Which shared catalog the list methods serve (default: the two M2 tools). */
+  readonly catalog?: FixtureCatalogMode;
 }
 
 /** One observed JSON-RPC request, for session-preservation assertions. */
@@ -50,6 +60,7 @@ interface JsonRpcIn {
   readonly method?: string;
   readonly params?: {
     readonly protocolVersion?: string;
+    readonly cursor?: string;
     readonly name?: string;
     readonly arguments?: Record<string, unknown>;
   };
@@ -59,9 +70,11 @@ export async function startFixtureHttpServer(
   options: FixtureHttpServerOptions = {},
 ): Promise<FixtureHttpServer> {
   const responseMode = options.responseMode ?? "json";
+  const catalogMode = options.catalog ?? "default";
   const issued: string[] = [];
   const sessions = new Set<string>();
   const recorded: RecordedFixtureRequest[] = [];
+  let toolsListCalls = 0;
 
   const reply = (
     response: ServerResponse,
@@ -226,15 +239,27 @@ export async function startFixtureHttpServer(
       return;
     }
     if (message.method === "tools/list") {
+      if (message.params?.cursor === undefined) {
+        toolsListCalls += 1;
+      }
+      const { page, nextCursor } = catalogPage(
+        catalogToolsFor(catalogMode, toolsListCalls),
+        message.params?.cursor,
+      );
+      replyResult(response, message.id, { tools: page, ...(nextCursor ? { nextCursor } : {}) });
+      return;
+    }
+    if (message.method === "resources/list") {
+      const { page, nextCursor } = catalogPage(FIXTURE_RESOURCES, message.params?.cursor);
       replyResult(response, message.id, {
-        tools: [
-          {
-            name: "echo",
-            description: "echoes text back",
-            inputSchema: { type: "object", properties: { text: { type: "string" } } },
-          },
-        ],
+        resources: page,
+        ...(nextCursor ? { nextCursor } : {}),
       });
+      return;
+    }
+    if (message.method === "prompts/list") {
+      const { page, nextCursor } = catalogPage(FIXTURE_PROMPTS, message.params?.cursor);
+      replyResult(response, message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
       return;
     }
     if (message.method === "tools/call") {
