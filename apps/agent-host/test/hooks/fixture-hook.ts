@@ -1,12 +1,14 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 
 /**
  * The scriptable hook FIXTURE the runner integration tests spawn (plan 25 M3): a tiny node
  * process whose first argv token selects a behavior - echo argv back as a decision (the
  * no-shell proof), echo stdin back (payload delivery), print a literal (JSON contract cases),
  * record stdin to a file then exit silently (payload capture + the implicit-allow shape, 25 M5),
- * hang (timeout ladder, optionally ignoring SIGTERM to force the SIGKILL rung), spew bytes
- * (output caps), fail with stderr + exit code, or report cwd/env (spawn hygiene).
+ * print one literal on the first run and another after (a marker-file "sequence", for the Stop
+ * re-dispatch cases, 25 M8), hang (timeout ladder, optionally ignoring SIGTERM to force the
+ * SIGKILL rung), spew bytes (output caps), fail with stderr + exit code, or report cwd/env
+ * (spawn hygiene).
  *
  * Responsible for: deterministic child-side behaviors for the hook runner tests.
  * Not for: the launch recipe - ./fixture-config owns that.
@@ -37,6 +39,19 @@ switch (mode) {
   }
   case "print": {
     process.stdout.write(process.argv[3] ?? "");
+    break;
+  }
+  case "sequence": {
+    // Stateful two-step script (25 M8): the marker file at argv[3] tracks whether this hook has
+    // run before - first run writes it and prints argv[4], every later run prints argv[5]. Lets
+    // a Stop hook answer differently on the re-dispatch after a continuation pass.
+    const marker = process.argv[3] ?? "";
+    if (existsSync(marker)) {
+      process.stdout.write(process.argv[5] ?? "");
+    } else {
+      writeFileSync(marker, "ran\n");
+      process.stdout.write(process.argv[4] ?? "");
+    }
     break;
   }
   case "record": {

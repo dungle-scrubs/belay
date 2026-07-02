@@ -4,6 +4,7 @@ import {
   type AdmissionTurnReporter,
   admissionStatusEvent,
 } from "@host/admission/turn-ref";
+import type { StopContext } from "@host/hooks/runtime";
 import { BreakdownAccumulator, logUsageBreakdown } from "@host/metrics/breakdown";
 import {
   type ChatMessage,
@@ -19,7 +20,7 @@ import { spanEffect } from "@host/telemetry/span";
 import { offeredToolDefs } from "@host/tools/index";
 import { MAX_OUTPUT } from "@host/tools/shared";
 import { DeltaBuffer } from "@host/transport/delta-buffer";
-import { debug } from "@host/transport/log";
+import { debug, warn } from "@host/transport/log";
 import { Emit } from "@host/transport/services";
 import { events, type ModelRef, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
 import {
@@ -30,11 +31,18 @@ import {
   type TelemetrySink,
 } from "@trevor/session/telemetry";
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
-import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, FiberRef, Option, Stream } from "effect";
 import type { HistoryImageResolver } from "./image-resolution";
 import { type AgentEvent, type DelegateCapability, runAgent, type TurnHooks } from "./loop";
-import type { TurnLoopConfig } from "./loop-config";
-import { createStopToolSummary, stopHookHaltStop, stopTerminalReason } from "./stop-hook";
+import { type TurnLoopConfig, turnLoopConfig } from "./loop-config";
+import { withStallTimeout } from "./loop-stalls";
+import {
+  continuationMessages,
+  createStopToolSummary,
+  stopHookHaltStop,
+  stopTerminalReason,
+  withContinuationExhausted,
+} from "./stop-hook";
 import type { SwitchCell } from "./switch-cell";
 import { prepareTurn } from "./turn-preflight";
 import { recordTurnStop } from "./turn-stop-metrics";
@@ -213,33 +221,123 @@ export function publishTurn(
         }),
       );
 
-    // The Stop finalization gate (plan 25 M7, D-004): runs every approved+enabled Stop hook over
-    // the FINAL text + terminal reason BEFORE the completed event publishes (the emission awaits
-    // the dispatch, bounded by the per-hook timeouts). A halt swaps the completion's stop for the
-    // visible hook-halt marker - the completion still publishes, so the turn ENDS (halt blocks
-    // "finalize as-is" semantics, never the run's termination). Dispatched ONLY from the success
-    // exit below: a genuine terminal assistant result. A cancelled/interrupted fiber, a provider
-    // failure, and a preflight-blocked turn never dispatch Stop. `onStopOutcome` is the M9 seam.
+    // The ONE continuation pass a Stop context can buy (plan 25 M8, D-004): a tool-less
+    // synthesis step inside this same run - the turn's history, the answer being continued, and
+    // the hooks' attributed notes as one user message. Its text streams as ordinary deltas onto
+    // this completion (no new event kinds), tool_call/overflow events are DROPPED (zero tools
+    // offered - model-context-only, structurally unable to mutate), and the same stall watchdog
+    // as a loop step bounds it. A pass failure is a warn, never a wedge - the turn finalizes
+    // with what it already has. Uses the turn's ORIGINAL provider (a mid-turn switch's rebuilt
+    // provider is loop-internal), which is the model that produced the answer being continued.
+    const continuationPass = (contexts: readonly StopContext[]): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const messages = continuationMessages(turnHistory, full, contexts);
+        const lead = full.length > 0 ? "\n\n" : "";
+        let emitted = false;
+        yield* Stream.runForEach(
+          withStallTimeout(
+            provider.stream(messages, [], reasoning),
+            provider.model,
+            turnLoopConfig(loop).streamStallMs,
+          ),
+          (event) =>
+            Effect.gen(function* () {
+              if (event.type === "text") {
+                // The pass reads as a new paragraph under the answer it continues.
+                const piece = emitted ? event.text : `${lead}${event.text}`;
+                emitted = true;
+                full += piece;
+                breakdown.onAnswer(piece.length);
+                yield* text.add(piece);
+              } else if (event.type === "thinking") {
+                breakdown.onThinking(event.text.length);
+                yield* thinking.add(event.text);
+              } else if (event.type === "usage") {
+                usage = {
+                  input: event.usage.input,
+                  output: (usage?.output ?? 0) + event.usage.output,
+                  contextWindow: event.usage.contextWindow,
+                  genMs: (usage?.genMs ?? 0) + event.usage.genMs,
+                };
+              }
+              // tool_call/overflow are dropped: the pass offers ZERO tools (D-004).
+            }),
+        ).pipe(
+          Effect.catchAll((error) =>
+            Effect.sync(() =>
+              warn("hooks", "stop continuation pass failed", {
+                run: runId.slice(0, 8),
+                error: error.message,
+              }),
+            ),
+          ),
+        );
+        yield* flushAll;
+      });
+
+    // The Stop finalization gate (plan 25 M7/M8, D-004): runs every approved+enabled Stop hook
+    // over the FINAL text + terminal reason BEFORE the completed event publishes (the emission
+    // awaits the dispatch, bounded by the per-hook timeouts). A halt swaps the completion's stop
+    // for the visible hook-halt marker - the completion still publishes, so the turn ENDS (halt
+    // blocks "finalize as-is" semantics, never the run's termination). A context (continuation
+    // request) buys AT MOST one synthesis pass, then Stop re-dispatches so hooks review the TRUE
+    // final text: a halt there is honored, a second context is ignored with a diagnostic. The
+    // budget is a per-run local - one run IS one turn here, so a new user turn resets it.
+    // Dispatched ONLY from the success exit below: a genuine terminal assistant result. A
+    // cancelled/interrupted fiber, a provider failure, and a preflight-blocked turn never
+    // dispatch Stop. `onStopOutcome` is the M9 seam and observes EVERY dispatch's outcome.
     const stopHookGate = Effect.gen(function* () {
       const dispatchStop = turnHooks?.dispatchStop;
       if (!turnHooks || !dispatchStop) {
         return;
       }
-      const outcome = yield* Effect.promise(() =>
-        dispatchStop({
-          event: "Stop",
-          sessionId: turnHooks.sessionId,
-          runId,
-          turnId: runId,
-          cwd: turnHooks.cwd,
-          terminalReason: stopTerminalReason(stop),
-          finalText: full,
-          toolSummary: toolSummary.snapshot(),
-        }),
-      );
-      turnHooks.onStopOutcome?.({ outcome });
-      if (outcome.decision === "halt") {
-        stop = stopHookHaltStop(outcome);
+      let continuationUsed = false;
+      // Bounded structurally: iteration 1 returns or spends the budget; iteration 2 always returns.
+      while (true) {
+        const outcome = yield* Effect.promise(() =>
+          dispatchStop({
+            event: "Stop",
+            sessionId: turnHooks.sessionId,
+            runId,
+            turnId: runId,
+            cwd: turnHooks.cwd,
+            terminalReason: stopTerminalReason(stop),
+            finalText: full,
+            toolSummary: toolSummary.snapshot(),
+          }),
+        );
+        if (outcome.decision === "halt") {
+          turnHooks.onStopOutcome?.({ outcome });
+          stop = stopHookHaltStop(outcome);
+          return;
+        }
+        if (outcome.contexts.length === 0) {
+          turnHooks.onStopOutcome?.({ outcome });
+          return;
+        }
+        if (continuationUsed) {
+          // The second continuation request (D-004): ignored, diagnosed, observable.
+          turnHooks.onStopOutcome?.({ outcome: withContinuationExhausted(outcome) });
+          warn("hooks", "stop continuation ignored", {
+            run: runId.slice(0, 8),
+            hook: outcome.contexts[0]?.hook,
+          });
+          return;
+        }
+        continuationUsed = true;
+        turnHooks.onStopOutcome?.({ outcome });
+        // Forked as its own INTERRUPTIBLE daemon fiber: this gate runs inside the turn's
+        // uninterruptible onExit, where running the pass in place would wedge - the stall
+        // watchdog's scoped fiber would inherit uninterruptibility and the stream's scope close
+        // would await it forever. The daemon self-bounds (watchdog + a finite provider stream),
+        // so this await is bounded; the pass never fails (it folds stream errors into a warn).
+        const pass = yield* Effect.forkDaemon(
+          Effect.interruptible(continuationPass(outcome.contexts)),
+        );
+        const passExit = yield* Fiber.await(pass);
+        if (Exit.isFailure(passExit)) {
+          warn("hooks", "stop continuation pass died", { run: runId.slice(0, 8) });
+        }
       }
     });
 

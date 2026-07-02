@@ -154,11 +154,15 @@ export interface StopContext {
   readonly context: string;
 }
 
+/** Why one Stop hook contributed no usable effect: a run/trust diagnostic, or a continuation
+ *  request past the one-pass budget (25 M8) - the turn seam appends that one, not this module. */
+export type StopDiagnosticReason = HookDiagnosticReason | "continuation_exhausted";
+
 /** One per-dispatch Stop diagnostic: which hook, why it produced no usable effect. */
 export interface StopDiagnostic {
   /** The hook's approval key, `<source>:<id>`. */
   readonly hook: string;
-  readonly reason: HookDiagnosticReason;
+  readonly reason: StopDiagnosticReason;
   readonly detail: string;
 }
 

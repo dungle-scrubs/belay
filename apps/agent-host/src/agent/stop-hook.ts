@@ -1,17 +1,21 @@
-import type { StopOutcome, StopToolSummaryEntry } from "@host/hooks/runtime";
+import type { StopContext, StopOutcome, StopToolSummaryEntry } from "@host/hooks/runtime";
+import type { ChatMessage } from "@host/providers/index";
 import type { TurnStop } from "@trevor/session";
 
 /**
- * The turn side of the Stop hook seam (plan 25 M7, D-004): the pure helpers publishTurn uses to
- * build a finalizing turn's Stop payload and to render a halt onto the terminal completion. The
- * tool summary is deliberately compact and cheap - per-tool call counts in first-appearance
- * order plus the distinct `path` arguments (the shared field name of the fs tools) when the
- * call's JSON parses, capped per tool - never raw arguments or outputs. A halt rides the
- * existing TurnStop mechanism with the M5 `hook_halt` cause, so the web transcript renders it
- * today (the stop note on assistant.completed) with no protocol changes; M9 owns richer events.
+ * The turn side of the Stop hook seam (plan 25 M7/M8, D-004): the pure helpers publishTurn uses
+ * to build a finalizing turn's Stop payload, render a halt onto the terminal completion, and
+ * frame the ONE continuation pass a Stop context can request. The tool summary is deliberately
+ * compact and cheap - per-tool call counts in first-appearance order plus the distinct `path`
+ * arguments (the shared field name of the fs tools) when the call's JSON parses, capped per
+ * tool - never raw arguments or outputs. A halt rides the existing TurnStop mechanism with the
+ * M5 `hook_halt` cause, so the web transcript renders it today (the stop note on
+ * assistant.completed) with no protocol changes; M9 owns richer events. The continuation prompt
+ * cites each note's hook (the withHookContexts attribution shape) and states the pass is
+ * tool-less - model-context-only, per D-004.
  *
  * Responsible for: the Stop payload's tool-summary accumulation, the terminal-reason
- * projection, and the halted-completion TurnStop.
+ * projection, the halted-completion TurnStop, and the continuation-pass message framing.
  * Not for: dispatch semantics (@host/hooks/runtime) or the finalization wiring itself
  * (./turn).
  */
@@ -90,5 +94,51 @@ export function stopHookHaltStop(outcome: StopOutcome): TurnStop {
     cause: "hook_halt",
     action: "paused",
     summary: `Completion halted by Stop hook "${hook}"${outcome.reason ? `: ${outcome.reason}` : ""}.`,
+  };
+}
+
+/**
+ * The continuation pass's conversation (25 M8): the turn's own history, the answer being
+ * continued (skipped when the turn produced no text), and the hooks' attributed notes framed as
+ * ONE user message that also states the pass's constraint - no tools, plain text. The notes use
+ * the same `[hook <key>]: <note>` attribution as withHookContexts, so the model (and anyone
+ * reading the transcript) can tell hook guidance from user intent.
+ */
+export function continuationMessages(
+  history: readonly ChatMessage[],
+  finalText: string,
+  contexts: readonly StopContext[],
+): ChatMessage[] {
+  const notes = contexts.map((note) => `[hook ${note.hook}]: ${note.context}`).join("\n");
+  return [
+    ...history,
+    ...(finalText.length > 0 ? [{ role: "assistant" as const, content: finalText }] : []),
+    {
+      role: "user",
+      content:
+        "A Stop hook reviewed your answer and asked for one continuation with this context:\n" +
+        `${notes}\n` +
+        "Address the context and give your complete final answer now, in plain text. " +
+        "You cannot call tools.",
+    },
+  ];
+}
+
+/**
+ * The budget-exhausted projection (25 M8, D-004): the re-dispatch outcome with the ignored
+ * continuation request appended as a diagnostic, attributed to the first requesting hook - what
+ * rides to `onStopOutcome` (the M9 seam) so the ignored ask stays observable.
+ */
+export function withContinuationExhausted(outcome: StopOutcome): StopOutcome {
+  return {
+    ...outcome,
+    diagnostics: [
+      ...outcome.diagnostics,
+      {
+        hook: outcome.contexts[0]?.hook ?? "unknown",
+        reason: "continuation_exhausted",
+        detail: "the one continuation pass for this run is spent; additional Stop context ignored",
+      },
+    ],
   };
 }
