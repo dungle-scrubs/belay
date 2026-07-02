@@ -27,7 +27,7 @@ import { describeAgent, discoverAgents } from "@host/subagents/discovery";
 import { CLIPBOARD_TOOL_NAMES } from "@host/tools/clip";
 import { taskRegistry } from "@host/tools/tasks/tasks";
 import { log, warn } from "@host/transport/log";
-import { commas, msg } from "@host/transport/messages";
+import { msg } from "@host/transport/messages";
 import { Emit } from "@host/transport/services";
 import { nodeGitRunner, readGitStatus } from "@host/worktrees/git-status";
 import * as Sentry from "@sentry/node";
@@ -55,6 +55,7 @@ import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
 import { ADMISSION_HEARTBEAT_MS, nodeAdmissionCaps } from "./admission/store";
+import { makeCompactionCommands } from "./agent/compaction-commands";
 import { CompactionController } from "./agent/compaction-controller";
 import { makeControlPrompts } from "./agent/control-prompts";
 import {
@@ -89,7 +90,6 @@ import {
   type ChatMessage,
   DEFAULT_PROVIDER,
   lmsBin,
-  type ProviderError,
   pickProvider,
 } from "./providers";
 import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./providers/catalog";
@@ -596,15 +596,6 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
  * when this host is the live leader - forks its turn. On replay the prompt is recorded
  * without being answered.
  */
-// --- cross-turn compaction (D-040..D-043) ---
-// The latest turn's prompt size + window, captured from each assistant.completed usage, drive the
-// between-turn compaction gate (the within-turn airbag is overflow recovery). `floorReached` stops
-// retrying a fold that could not shrink further until a fresh turn moves the needle; `lastProvider`
-// is the model the fold summarizes with (the last turn's provider, per D-043).
-/** The in-flight MANUAL `/compact` fold, so ESC can interrupt it (the user asked, so they can take
- *  it back). Only the manual fold is tracked - automatic folds are not interruptible (the blocking
- *  one is load-bearing for the next turn). Null when no manual fold is running. */
-let manualCompactFiber: Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null = null;
 /** True between a `/compact` command and its `command.result`. If a host dies mid-fold the command
  *  is left with no result (a dangling `/compact` that looks broken); the next leader gives it one. */
 let compactPending = false;
@@ -640,76 +631,21 @@ const {
   forceCompact: () => forceCompact(),
 });
 
-/** Emit at most one progress tick per this many summary tokens, so a streaming fold publishes a
- *  bounded handful of advisory `context.compacting` events rather than one per delta. */
-const COMPACT_PROGRESS_TOKEN_STEP = 40;
-
-/** Builds a throttled progress callback for one fold: emits an honest live `context.compacting`
- *  tick (real tokens streamed ÷ budget) as the summary streams, fire-and-forget. The web fills a
- *  transient bar from these and drops it when the matching `context.compacted` lands. */
-function compactionProgress(foldId: string): (tokens: number, budget: number) => void {
-  // -1 = nothing emitted yet (so the first tick always fires, even at 0). A plain 0 sentinel breaks
-  // the throttle while the summary sits at 0 tokens - the model ingesting a large fold prompt before
-  // its first output token - flooding the log with identical tokens:0 ticks.
-  let lastEmitted = -1;
-  return (tokens, budget) => {
-    if (lastEmitted >= 0 && tokens - lastEmitted < COMPACT_PROGRESS_TOKEN_STEP) {
-      return;
-    }
-    lastEmitted = tokens;
-    emit(events.contextCompacting({ foldId, tokens, budget })).catch(() => {});
-  };
-}
-
-/** True when a fold should run before the next turn: live leader, over COMPACT_WHEN of the window,
- *  and not already at the fold floor. Live + leader gated so replay/standbys never gate (a fold that
- *  cannot change the budget there would loop the scheduler). */
-function needsCompaction(): boolean {
-  return compactionController.needed(live && lease.isLeader());
-}
-
-/**
- * Kicks off ONE fold off the idle slot: plan + summarize + emit `context.compacted`. The fold's own
- * echo (handled below) admits it, updates the budget estimate, and releases the gate. A no-fold
- * result (nothing left to fold) or any failure marks the floor and releases the gate directly, so
- * the gate never loops. Not live/leader (or no provider) just releases the gate.
- */
-function startCompaction(): void {
-  const provider = compactionController.providerOrDefault();
-  if (!live || !lease.isLeader() || !provider) {
-    scheduler.finishCompaction();
-    return;
-  }
-  const foldId = crypto.randomUUID();
-  Effect.runFork(
-    compactionController
-      .planFold({
-        provider,
-        events: historyEvents.slice(),
-        producerId: PRODUCER_ID,
-        foldId,
-        onProgress: compactionProgress(foldId),
-      })
-      .pipe(
-        Effect.flatMap((event) =>
-          event
-            ? // Its echo (the context.compacted case in handleEvent) admits it + releases the gate.
-              Effect.promise(() => emit(event))
-            : Effect.sync(() => {
-                compactionController.markFloorReached();
-                scheduler.finishCompaction();
-              }),
-        ),
-        Effect.catchAllCause((cause) =>
-          Effect.sync(() => {
-            warn("host", "compaction failed", { cause: Cause.pretty(cause) });
-            compactionController.markFloorReached();
-            scheduler.finishCompaction();
-          }),
-        ),
-      ),
-  );
-}
+// The compaction command lane (plan 22.3, agent/compaction-commands): the between-turn fold gate
+// + trigger, the manual /compact fold (with its ESC-interruptible fiber, read back through the
+// manualCompactFiber getter), and the fold-progress throttle. Constructed BEFORE the scheduler -
+// whose compaction gate takes needsCompaction/startCompaction below - so the scheduler half is
+// threaded lazily.
+const { needsCompaction, startCompaction, forceCompact, manualCompactFiber } =
+  makeCompactionCommands({
+    producerId: PRODUCER_ID,
+    emit,
+    compactionController,
+    historyEvents: () => historyEvents,
+    live: () => live,
+    lease,
+    scheduler: () => scheduler,
+  });
 
 const scheduler = new TurnScheduler({
   isLeader: () => lease.isLeader(),
@@ -728,7 +664,7 @@ const { abortRuns, reapOrphans } = makeRunLifecycle({
   scheduler,
   emit,
   runningRunId: () => runningRunId,
-  manualCompactFiber: () => manualCompactFiber,
+  manualCompactFiber,
 });
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
@@ -758,7 +694,7 @@ function onBecomeLeader(): void {
   // A /compact whose fold a previous leader was interrupted mid-run (restart/crash) left its command
   // with no result - a dangling "/compact" that looks broken. Give it one. `!manualCompactFiber`
   // guards the (rare) leadership-flap-mid-fold case where this host is the one actually running it.
-  if (compactPending && !manualCompactFiber) {
+  if (compactPending && !manualCompactFiber()) {
     compactPending = false;
     emit(
       events.commandResult({
@@ -914,54 +850,6 @@ function goLive(): void {
 }
 
 /**
- * Forces one compaction fold now (the /compact command), at ANY context level: `force` folds every
- * completed turn regardless of the budget (the user asked - their choice), not just when over 80%.
- * Same plan + summary + emit path, whose echo admits the fold. Refuses only while a turn is active
- * (a fold must not overlap a turn, D-041), and reports when there's genuinely nothing to fold.
- */
-async function forceCompact(): Promise<string> {
-  if (scheduler.isBusy()) {
-    return "A turn is in progress — run /compact again once it finishes.";
-  }
-  if (manualCompactFiber) {
-    return "A compaction is already running.";
-  }
-  const provider = compactionController.providerOrDefault();
-  if (!provider) {
-    return "No provider available to summarize.";
-  }
-  const foldId = crypto.randomUUID();
-  // Forked (not awaited inline) so ESC can interrupt it - the summary's provider stream aborts on
-  // interrupt. On interrupt nothing is emitted, so the context is left exactly as it was.
-  const fiber = Effect.runFork(
-    compactionController.planFold({
-      provider,
-      events: historyEvents.slice(),
-      producerId: PRODUCER_ID,
-      foldId,
-      onProgress: compactionProgress(foldId),
-      force: true, // fold regardless of the current context %
-    }),
-  );
-  manualCompactFiber = fiber;
-  const exit = await Effect.runPromise(Fiber.await(fiber));
-  manualCompactFiber = null;
-  if (Exit.isFailure(exit)) {
-    if (Cause.isInterruptedOnly(exit.cause)) {
-      return "Compaction cancelled."; // the user pressed ESC; no fold applied
-    }
-    warn("host", "compaction failed", { cause: Cause.pretty(exit.cause) });
-    return "Compaction failed.";
-  }
-  const event = exit.value;
-  if (!event) {
-    return "Nothing to compact — no completed turns to fold yet.";
-  }
-  await emit(event); // the echo admits the fold and updates the budget estimate
-  return `✓ compacted ~${commas(Number(event.payload.tokensBefore))} → ~${commas(Number(event.payload.tokensAfter))} tokens`;
-}
-
-/**
  * Runs a prompt-shell-lane command (a leading `!`) through the shared protected `runCommand` path and
  * publishes one `shell.result` (paired by requestId). Like an immediate command this bypasses the
  * model and the turn queue and runs even while a turn streams - but unlike a command its output never
@@ -1008,7 +896,7 @@ const {
   emit,
   scheduler,
   turnMachine,
-  manualCompactFiber: () => manualCompactFiber,
+  manualCompactFiber,
   backgroundChildren,
   debugMode: () => debugMode,
 });
