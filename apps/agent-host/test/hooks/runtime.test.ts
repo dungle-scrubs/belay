@@ -162,6 +162,122 @@ describe("dispatchPreToolUse - the approval gate (D-006)", () => {
   });
 });
 
+describe("dispatchPreToolUse - bounded context (25 M6)", () => {
+  test("context from allow hooks accumulates in config order with attribution", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        {
+          id: "a",
+          mode: "print",
+          flags: ['{"decision":"allow","context":"check the lockfile"}'],
+        },
+        { id: "b", mode: "print", flags: ['{"decision":"allow","context":"second note"}'] },
+      ]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(outcome.decision).toBe("allow");
+    expect(outcome.contexts).toEqual([
+      { hook: "project:a", context: "check the lockfile" },
+      { hook: "project:b", context: "second note" },
+    ]);
+  });
+
+  test("an oversized context arrives bounded with a truncation marker", async () => {
+    const huge = "c".repeat(6_000);
+    const h = using(
+      hooksRuntimeHarness([
+        { id: "big", mode: "print", flags: [JSON.stringify({ decision: "allow", context: huge })] },
+      ]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(outcome.contexts).toHaveLength(1);
+    expect(outcome.contexts[0]?.context.length).toBeLessThan(huge.length);
+    expect(outcome.contexts[0]?.context).toContain("truncated");
+  });
+
+  test("a blocking decision still carries the contexts gathered before it", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        { id: "a", mode: "print", flags: ['{"decision":"allow","context":"heads up"}'] },
+        { id: "guard", mode: "print", flags: [DENY] },
+      ]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(outcome.decision).toBe("deny");
+    expect(outcome.contexts).toEqual([{ hook: "project:a", context: "heads up" }]);
+  });
+});
+
+describe("dispatchPreToolUse - scoped updatedInput (25 M6, D-003)", () => {
+  const rewrite = (command: string) =>
+    JSON.stringify({ decision: "allow", updatedInput: { command } });
+
+  test("an allowlisted bash.command rewrite rides through", async () => {
+    const h = using(
+      hooksRuntimeHarness([{ id: "rw", mode: "print", flags: [rewrite("echo rewritten")] }]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(outcome.decision).toBe("allow");
+    expect(outcome.updatedInput).toEqual({ command: "echo rewritten" });
+    expect(outcome.diagnostics).toEqual([]);
+  });
+
+  test("later hooks override the same field in config order", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        { id: "first", mode: "print", flags: [rewrite("echo first")] },
+        { id: "second", mode: "print", flags: [rewrite("echo second")] },
+      ]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(outcome.updatedInput).toEqual({ command: "echo second" });
+  });
+
+  test("an unsupported field is rejected with a diagnostic and no update", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        {
+          id: "sneaky",
+          mode: "print",
+          flags: ['{"decision":"allow","updatedInput":{"cwd":"/"}}'],
+        },
+      ]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(outcome.decision).toBe("allow");
+    expect(outcome.updatedInput).toBeUndefined();
+    expect(outcome.diagnostics).toEqual([
+      expect.objectContaining({ hook: "project:sneaky", reason: "updated_input_rejected" }),
+    ]);
+  });
+
+  test("an unsupported tool is rejected with a diagnostic and no update", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        {
+          id: "sneaky",
+          mode: "print",
+          flags: ['{"decision":"allow","updatedInput":{"file_path":"/etc/hosts"}}'],
+        },
+      ]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(
+      preToolUsePayload({ toolName: "read", toolInput: { file_path: "a.txt" } }),
+    );
+    expect(outcome.updatedInput).toBeUndefined();
+    expect(outcome.diagnostics).toEqual([
+      expect.objectContaining({ hook: "project:sneaky", reason: "updated_input_rejected" }),
+    ]);
+  });
+});
+
 describe("dispatchPreToolUse - non-blocking failures and stats (D-007)", () => {
   test("a failing hook is a diagnostic; the dispatch still allows", async () => {
     const h = using(hooksRuntimeHarness([{ id: "broken", mode: "fail", flags: ["boom", "2"] }]));

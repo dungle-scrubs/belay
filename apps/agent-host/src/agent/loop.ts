@@ -39,12 +39,14 @@ import { type TurnLoopConfig, turnLoopConfig } from "./loop-config";
 import { logProviderFailure, observeUnknownFailure } from "./loop-failures";
 import { withStallTimeout, withToolStallTimeout } from "./loop-stalls";
 import {
+  applyHookUpdatedInput,
   guardedToolResult,
   hookBlockedResult,
   hookHaltStop,
   looksUnfinished,
   parsedToolInput,
   partitionToolCalls,
+  withHookContexts,
 } from "./loop-tool-calls";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
@@ -981,11 +983,24 @@ export function runAgent(
                       if (outcome?.decision === "deny") {
                         // The tool is withheld; the model reads an explicit denial (D-003). The
                         // denial goes through the guardrail observer like any failed call, so a
-                        // model re-trying the same denied call accumulates repeat guidance.
-                        return Effect.succeed(finishCall(call, index, hookBlockedResult(outcome)));
+                        // model re-trying the same denied call accumulates repeat guidance. Any
+                        // context notes gathered before the deny still reach the model (25 M6).
+                        return Effect.succeed(
+                          finishCall(
+                            call,
+                            index,
+                            withHookContexts(hookBlockedResult(outcome), outcome),
+                          ),
+                        );
                       }
-                      return runTool(call.name, call.arguments, call.id).pipe(
-                        Effect.map((rawResult) => finishCall(call, index, rawResult)),
+                      // Allow: apply any allowlist-validated rewrite BEFORE the executor decode,
+                      // so the rewritten input faces the tool's normal schema validation (25 M6,
+                      // D-003), then append the bounded, attributed context notes to the result.
+                      const args = applyHookUpdatedInput(call.arguments, outcome);
+                      return runTool(call.name, args, call.id).pipe(
+                        Effect.map((rawResult) =>
+                          finishCall(call, index, withHookContexts(rawResult, outcome)),
+                        ),
                       );
                     },
                   ),

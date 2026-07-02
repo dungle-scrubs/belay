@@ -80,6 +80,39 @@ export function hookHaltStop(outcome: PreToolUseOutcome, steps: number): TurnSto
 }
 
 /**
+ * Appends the dispatch's bounded context notes to the model-facing result (25 M6, D-003), each
+ * attributed to its hook so the model (and the transcript) can tell hook guidance from real
+ * tool output. The result stays primary - notes ride below it. Each note was already capped at
+ * decision parse, so a hook cannot flood the result body.
+ */
+export function withHookContexts(result: string, outcome: PreToolUseOutcome | null): string {
+  if (!outcome || outcome.contexts.length === 0) {
+    return result;
+  }
+  const notes = outcome.contexts.map((note) => `[hook ${note.hook}]: ${note.context}`).join("\n");
+  return `${result}\n\n${notes}`;
+}
+
+/**
+ * Applies the dispatch's allowlist-validated field rewrites onto the call's raw argument JSON
+ * (25 M6, D-003), producing the argument string the executor decodes - so a rewritten value
+ * faces the tool's NORMAL schema validation, exactly like a model-authored argument. No
+ * rewrite (or un-mergeable original args, which the executor will reject anyway) returns the
+ * original string unchanged.
+ */
+export function applyHookUpdatedInput(argsJson: string, outcome: PreToolUseOutcome | null): string {
+  const updated = outcome?.updatedInput;
+  if (!updated || Object.keys(updated).length === 0) {
+    return argsJson;
+  }
+  const parsed = parsedToolInput(argsJson);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return argsJson;
+  }
+  return JSON.stringify({ ...(parsed as Record<string, unknown>), ...updated });
+}
+
+/**
  * Heuristic: did the model END a turn by ANNOUNCING an imminent action without calling a tool?
  * A weaker model sometimes trails off ("Let me continue reading the remaining files:") and stops
  * instead of emitting the next tool batch, which the loop would otherwise accept as a final answer.

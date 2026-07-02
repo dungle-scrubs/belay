@@ -8,6 +8,7 @@ import {
   type HookDiscoveryReport,
   type HookDiscoveryRoots,
 } from "./discovery";
+import { evaluateUpdatedInput } from "./input-policy";
 import { redactHookText } from "./redact";
 import { type HookDiagnosticReason, hookExecutionOutcome, hookTrustOutcome } from "./results";
 import { type HookRunnerOptions, runHook } from "./runner";
@@ -23,8 +24,10 @@ import { computeHookTrustFingerprint, evaluateHookTrust } from "./trust";
  * config order (project root before user root, D-001); the first blocking decision (deny/halt)
  * short-circuits the rest (D-003), unapproved/changed/missing-script hooks contribute
  * diagnostics without ever executing (D-006), and every failure mode is a non-blocking
- * diagnostic (D-007) - dispatch itself NEVER rejects. Everything logged here is redacted
- * (D-009); transcript events are M9's, so callers get the outcome as data.
+ * diagnostic (D-007) - dispatch itself NEVER rejects. Allow decisions can additionally carry
+ * bounded, attributed context notes and an allowlist-scoped input rewrite (25 M6, D-003 -
+ * ./input-policy owns the table). Everything logged here is redacted (D-009); transcript
+ * events are M9's, so callers get the outcome as data.
  *
  * Responsible for: the PreToolUse payload/outcome contracts and the discovery -> trust ->
  * approval -> execution -> outcome dispatch pipeline.
@@ -54,18 +57,32 @@ export interface PreToolUsePayload {
   readonly toolMetadata: { readonly readOnly: boolean };
 }
 
-/** One per-dispatch diagnostic: which hook, why it produced no usable decision, redacted detail. */
+/** Why one hook contributed no usable effect: a run/trust diagnostic, or a rejected input
+ *  rewrite (25 M6) - the hook spoke a decision but its updatedInput failed the allowlist. */
+export type PreToolUseDiagnosticReason = HookDiagnosticReason | "updated_input_rejected";
+
+/** One per-dispatch diagnostic: which hook, why it produced no usable effect, redacted detail. */
 export interface PreToolUseDiagnostic {
   /** The hook's approval key, `<source>:<id>`. */
   readonly hook: string;
-  readonly reason: HookDiagnosticReason;
+  readonly reason: PreToolUseDiagnosticReason;
   readonly detail: string;
+}
+
+/** One hook's bounded context note (25 M6), attributed so the model/transcript can cite it. */
+export interface PreToolUseContext {
+  /** The contributing hook's approval key, `<source>:<id>`. */
+  readonly hook: string;
+  /** Bounded at decision parse (MAX_HOOK_CONTEXT_CHARS). */
+  readonly context: string;
 }
 
 /**
  * What one dispatch means to the tool boundary: the effective decision (the first blocking
- * deny/halt, else allow), the blocking hook + its reason when one fired, and every accumulated
- * diagnostic. Plain data - the loop applies it, M9 turns it into transcript events.
+ * deny/halt, else allow), the blocking hook + its reason when one fired, the bounded context
+ * notes gathered from every decision that ran (25 M6), the merged allowlisted input rewrite
+ * when one passed policy (25 M6, D-003), and every accumulated diagnostic. Plain data - the
+ * loop applies it, M9 turns it into transcript events.
  */
 export interface PreToolUseOutcome {
   readonly decision: HookDecisionKind;
@@ -73,6 +90,12 @@ export interface PreToolUseOutcome {
   readonly hook?: string;
   /** The blocking hook's stated reason (bounded at parse); absent when none was given. */
   readonly reason?: string;
+  /** Context notes in hook config order, including the blocking hook's own note. */
+  readonly contexts: readonly PreToolUseContext[];
+  /** The merged, allowlist-validated field rewrites (later hooks override the same field, in
+   *  config order). Absent when no hook rewrote anything or every rewrite was rejected. The
+   *  values are UNVALIDATED here - the tool's normal schema decode still applies (D-003). */
+  readonly updatedInput?: Readonly<Record<string, unknown>>;
   readonly diagnostics: readonly PreToolUseDiagnostic[];
 }
 
@@ -128,10 +151,15 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
   const dispatchPreToolUse = async (payload: PreToolUsePayload): Promise<PreToolUseOutcome> => {
     const hooks = discovery().hooks.filter((hook) => hook.event === "PreToolUse" && hook.enabled);
     if (hooks.length === 0) {
-      return { decision: "allow", diagnostics: [] };
+      return { decision: "allow", contexts: [], diagnostics: [] };
     }
     const approvals = loadHookApprovals(approvalsPath);
     const diagnostics: PreToolUseDiagnostic[] = [];
+    const contexts: PreToolUseContext[] = [];
+    // The merged allowlisted rewrites (25 M6): each passing hook's fields layer on in config
+    // order, so a later hook overrides an earlier one field-by-field - the same last-writer
+    // determinism as the config files themselves. Stays undefined until a rewrite passes policy.
+    let updatedInput: Record<string, unknown> | undefined;
 
     for (const hook of hooks) {
       const key = hookApprovalKey(hook);
@@ -174,14 +202,36 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
           ms: execution.durationMs,
           ...(decision.reason ? { reason: redactHookText(decision.reason) } : {}),
         });
+        if (decision.context) {
+          // Bounded at parse; attributed here so the model-facing note can cite its source.
+          contexts.push({ hook: key, context: decision.context });
+        }
         if (decision.decision !== "allow") {
-          // First blocking decision wins: later hooks never run (D-003).
+          // First blocking decision wins: later hooks never run (D-003). A blocking hook's
+          // updatedInput is moot - the tool will not execute - so only contexts ride along.
           return {
             decision: decision.decision,
             hook: key,
             ...(decision.reason ? { reason: decision.reason } : {}),
+            contexts,
             diagnostics,
           };
+        }
+        if (decision.updatedInput !== undefined) {
+          // The narrow rewrite path (25 M6, D-003): only allowlisted leaf fields pass, a
+          // rejection keeps the ORIGINAL input and surfaces as a diagnostic, and the value
+          // still faces the tool's normal schema decode at the executor boundary.
+          const evaluated = evaluateUpdatedInput(payload.toolName, decision.updatedInput);
+          if (evaluated.ok) {
+            updatedInput = { ...updatedInput, ...evaluated.fields };
+          } else {
+            diagnostics.push({
+              hook: key,
+              reason: "updated_input_rejected",
+              detail: evaluated.detail,
+            });
+            warn("hooks", "updatedInput rejected", { hook: key, detail: evaluated.detail });
+          }
         }
       } catch (cause) {
         // Dispatch never rejects (D-007): an unexpected fault in one hook's gate/run is that
@@ -195,7 +245,12 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
       }
     }
 
-    return { decision: "allow", diagnostics };
+    return {
+      decision: "allow",
+      contexts,
+      ...(updatedInput && Object.keys(updatedInput).length > 0 ? { updatedInput } : {}),
+      diagnostics,
+    };
   };
 
   return {

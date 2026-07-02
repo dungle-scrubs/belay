@@ -134,6 +134,91 @@ describe("PreToolUse halt - the turn stops with a visible reason", () => {
   });
 });
 
+describe("PreToolUse context - the model sees it alongside the tool result (25 M6)", () => {
+  test("bounded context is appended to the tool result with hook attribution", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        {
+          id: "ctx",
+          mode: "print",
+          flags: ['{"decision":"allow","context":"check the lockfile first"}'],
+        },
+      ]),
+    );
+
+    const events = await runBashTurn(h, "echo ctx-body");
+
+    const result = payloadOf(events, "tool.completed")?.result as string;
+    expect(result).toContain("ctx-body");
+    expect(result).toContain("[hook project:ctx]: check the lockfile first");
+    // Attribution FOLLOWS the real output: the tool result stays primary, the note rides below.
+    expect(result.indexOf("ctx-body")).toBeLessThan(result.indexOf("[hook project:ctx]"));
+  });
+});
+
+describe("PreToolUse updatedInput - narrow, schema-validated rewrites (25 M6, D-003)", () => {
+  test("an allowlisted bash.command rewrite executes the rewritten command", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        {
+          id: "rw",
+          mode: "print",
+          flags: ['{"decision":"allow","updatedInput":{"command":"echo rewritten-by-hook"}}'],
+        },
+      ]),
+    );
+
+    const events = await runBashTurn(h, "echo original-cmd");
+
+    const result = payloadOf(events, "tool.completed")?.result as string;
+    expect(result).toContain("rewritten-by-hook");
+    expect(result).not.toContain("original-cmd");
+  });
+
+  test("an unsupported field is rejected: the original input executes and a diagnostic surfaces", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        {
+          id: "sneaky",
+          mode: "print",
+          flags: ['{"decision":"allow","updatedInput":{"cwd":"/"}}'],
+        },
+      ]),
+    );
+    const outcomes: PreToolUseOutcome[] = [];
+
+    const events = await runBashTurn(h, "echo original-cmd", {
+      hooks: turnHooks(h, { onOutcome: (report) => outcomes.push(report.outcome) }),
+    });
+
+    expect(payloadOf(events, "tool.completed")?.result).toContain("original-cmd");
+    expect(outcomes[0]?.updatedInput).toBeUndefined();
+    expect(outcomes[0]?.diagnostics).toEqual([
+      expect.objectContaining({ hook: "project:sneaky", reason: "updated_input_rejected" }),
+    ]);
+  });
+
+  test("a rewritten value still passes the tool's normal schema validation", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        {
+          id: "rw",
+          mode: "print",
+          flags: ['{"decision":"allow","updatedInput":{"command":42}}'],
+        },
+      ]),
+    );
+
+    const events = await runBashTurn(h, "echo original-cmd");
+
+    // The policy only scopes WHICH fields may change; the value goes through the tool's own
+    // schema decode, so a wrong type fails exactly like a model-authored bad argument.
+    const result = payloadOf(events, "tool.completed")?.result as string;
+    expect(result).toMatch(/^error: bash failed/);
+    expect(result).not.toContain("original-cmd");
+  });
+});
+
 describe("PreToolUse trust gate at the boundary (D-006)", () => {
   test("an unapproved hook is a diagnostic only - the tool still runs", async () => {
     const h = using(
