@@ -1,24 +1,29 @@
 import {
+  BIG_FIXTURE_CHARS,
   catalogPage,
   catalogToolsFor,
   FIXTURE_PROMPTS,
+  FIXTURE_RESOURCE_CONTENTS,
   FIXTURE_RESOURCES,
   type FixtureCatalogMode,
 } from "./fixture-catalog";
 
 /**
- * A minimal MCP stdio fixture server for the transport integration tests (plan 23 M2/M4).
+ * A minimal MCP stdio fixture server for the transport integration tests (plan 23 M2/M4/M5).
  * Speaks JSON-RPC 2.0 over LSP-style Content-Length frames with its OWN tiny framing
  * implementation (deliberately independent of src/mcp/framing.ts, so the tests are
  * cross-implementation, not self-confirming). Implements initialize + paginated
- * tools/resources/prompts lists (the shared ./fixture-catalog) + trivial tools, plus error
- * triggers:
- *   echo      - returns the given text
- *   env_probe - returns JSON.stringify(process.env) (for the D-004 env-allowlist probe)
- *   boom      - responds with a JSON-RPC error
- *   hang      - never responds (for timeout tests)
- *   crash     - exits the process without responding
- *   garbage   - responds with a well-framed but non-JSON body
+ * tools/resources/prompts lists (the shared ./fixture-catalog) + resources/read over the
+ * shared FIXTURE_RESOURCE_CONTENTS + trivial tools, plus error triggers:
+ *   echo       - returns the given text
+ *   env_probe  - returns JSON.stringify(process.env) (for the D-004 env-allowlist probe)
+ *   args_probe - returns JSON.stringify(arguments) (for the M5 argument round-trip test)
+ *   big        - returns `chars` (default BIG_FIXTURE_CHARS) characters (for bounding tests)
+ *   soft_fail  - returns an isError result with content (for the M5 isError path)
+ *   boom       - responds with a JSON-RPC error
+ *   hang       - never responds (for timeout tests)
+ *   crash      - exits the process without responding
+ *   garbage    - responds with a well-framed but non-JSON body
  * `--protocol=<v>` forces the initialize result's protocolVersion (for negotiation tests);
  * by default it echoes the client's requested version. `--catalog=large|counting` selects a
  * ./fixture-catalog mode (discovery/search-cap tests). Exits 0 when stdin ends.
@@ -32,6 +37,7 @@ interface JsonRpcIn {
     readonly protocolVersion?: string;
     readonly cursor?: string;
     readonly name?: string;
+    readonly uri?: string;
     readonly arguments?: Record<string, unknown>;
   };
 }
@@ -125,6 +131,24 @@ function handle(message: JsonRpcIn): void {
     result(message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
     return;
   }
+  if (message.method === "resources/read") {
+    const uri = message.params?.uri;
+    const contents = uri === undefined ? undefined : FIXTURE_RESOURCE_CONTENTS[uri];
+    if (!contents) {
+      rpcError(message.id, -32002, `resource not found: ${String(uri)}`);
+      return;
+    }
+    result(message.id, {
+      contents: [
+        {
+          uri,
+          mimeType: contents.mimeType,
+          ...(contents.text !== undefined ? { text: contents.text } : { blob: contents.blob }),
+        },
+      ],
+    });
+    return;
+  }
   if (message.method === "tools/call") {
     const name = message.params?.name;
     if (name === "echo") {
@@ -135,6 +159,24 @@ function handle(message: JsonRpcIn): void {
     }
     if (name === "env_probe") {
       result(message.id, { content: [{ type: "text", text: JSON.stringify(process.env) }] });
+      return;
+    }
+    if (name === "args_probe") {
+      result(message.id, {
+        content: [{ type: "text", text: JSON.stringify(message.params?.arguments ?? {}) }],
+      });
+      return;
+    }
+    if (name === "big") {
+      const chars = Number(message.params?.arguments?.chars ?? BIG_FIXTURE_CHARS);
+      result(message.id, { content: [{ type: "text", text: "b".repeat(chars) }] });
+      return;
+    }
+    if (name === "soft_fail") {
+      result(message.id, {
+        content: [{ type: "text", text: "external service exploded" }],
+        isError: true,
+      });
       return;
     }
     if (name === "boom") {

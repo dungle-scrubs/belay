@@ -49,6 +49,10 @@ export interface McpCapabilityCacheSnapshotEntry {
 export interface McpCapabilityCache {
   /** Re-discovers one server's capabilities; `undefined` for a name the cache does not know. */
   readonly refreshCapabilities: (serverName: string) => Promise<McpServerCapabilities | undefined>;
+  /** The latest cached discovery for one server; `undefined` when unknown or never discovered.
+   *  A read of the CACHE only - it never talks to the server (the runtime refreshes first when
+   *  it needs freshness). */
+  readonly capabilitiesFor: (serverName: string) => McpServerCapabilities | undefined;
   /** Capped, ranked substring search over cached names + descriptions (D-003). */
   readonly searchCapabilities: (
     query: string,
@@ -99,6 +103,9 @@ export function createMcpCapabilityCache(
     }
   };
 
+  const capabilitiesFor = (serverName: string): McpServerCapabilities | undefined =>
+    entries.get(serverName)?.capabilities;
+
   const searchCapabilities = (
     query: string,
     searchOptions: { readonly limit?: number } = {},
@@ -140,7 +147,7 @@ export function createMcpCapabilityCache(
       ...(entry.lastError !== undefined ? { lastError: entry.lastError } : {}),
     }));
 
-  return { refreshCapabilities, searchCapabilities, snapshot };
+  return { refreshCapabilities, capabilitiesFor, searchCapabilities, snapshot };
 }
 
 function allRecords(capabilities: McpServerCapabilities | undefined): McpCapabilityRecord[] {

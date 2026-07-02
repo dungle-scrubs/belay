@@ -55,8 +55,11 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 - `mcp/` - the host-owned MCP client runtime (plan 23): the named-server config + registry
   (tool-proxy is one ordinary named server), the shared transport contract, Content-Length
   framing, the stdio transport with its secret-minimal child environment, the Streamable
-  HTTP/SSE transport with session identity and redacted bearer auth, and capability
-  discovery + the per-server cache with qualified identity and capped search.
+  HTTP/SSE transport with session identity and redacted bearer auth, capability discovery +
+  the per-server cache with qualified identity and capped search, and the host-lifetime
+  runtime seam (`runtime.ts`): lazy per-server connections, qualified tool calls through the
+  host tool contract, resources as bounded provenance-carrying context records, and the
+  redacted per-server status snapshot.
 - `skills/` - skill discovery and progressive disclosure behind the skills tools.
 - `subagents/` - subagent discovery (`discovery.ts`) for delegated agents.
 - `serial-run/` - the serialized multi-plan run lane.

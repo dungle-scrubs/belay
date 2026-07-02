@@ -2,28 +2,34 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
+  BIG_FIXTURE_CHARS,
   catalogPage,
   catalogToolsFor,
   FIXTURE_PROMPTS,
+  FIXTURE_RESOURCE_CONTENTS,
   FIXTURE_RESOURCES,
   type FixtureCatalogMode,
 } from "./fixture-catalog";
 
 /**
  * A minimal MCP Streamable HTTP fixture server for the http transport integration tests
- * (plan 23 M3/M4). A REAL node:http server with its own inline JSON-RPC handling (deliberately
+ * (plan 23 M3/M4/M5). A REAL node:http server with its own inline JSON-RPC handling (deliberately
  * independent of src/mcp, so the tests are cross-implementation, not self-confirming). Clients
  * POST JSON-RPC to the endpoint; replies come back as application/json or - in
  * `responseMode: "sse"` - as a text/event-stream event, per the Streamable HTTP spec. The
  * fixture ALWAYS issues an `mcp-session-id` on initialize and rejects any follow-up without a
  * known one (404 + JSON-RPC error), so a passing follow-up proves the client echoed the id.
- * Lists (tools/resources/prompts) come paginated from the shared ./fixture-catalog. Behavior
- * triggers, mirroring the stdio fixture's tools:
- *   echo    - returns the given text
- *   boom    - responds with a JSON-RPC error
- *   hang    - never responds (for timeout tests)
- *   garbage - responds with a non-JSON body (or a non-JSON SSE data event)
- *   sever   - destroys the socket mid-response (SSE mode: after headers + a comment event)
+ * Lists (tools/resources/prompts) come paginated from the shared ./fixture-catalog;
+ * resources/read serves the shared FIXTURE_RESOURCE_CONTENTS. Behavior triggers, mirroring the
+ * stdio fixture's tools:
+ *   echo       - returns the given text
+ *   args_probe - returns JSON.stringify(arguments) (for the M5 argument round-trip test)
+ *   big        - returns `chars` (default BIG_FIXTURE_CHARS) characters (for bounding tests)
+ *   soft_fail  - returns an isError result with content (for the M5 isError path)
+ *   boom       - responds with a JSON-RPC error
+ *   hang       - never responds (for timeout tests)
+ *   garbage    - responds with a non-JSON body (or a non-JSON SSE data event)
+ *   sever      - destroys the socket mid-response (SSE mode: after headers + a comment event)
  * Options: `requireBearer` (401 without/with a wrong token), `protocolVersion` (forces the
  * initialize result's version, for negotiation tests), `catalog` (a ./fixture-catalog mode).
  */
@@ -62,6 +68,7 @@ interface JsonRpcIn {
     readonly protocolVersion?: string;
     readonly cursor?: string;
     readonly name?: string;
+    readonly uri?: string;
     readonly arguments?: Record<string, unknown>;
   };
 }
@@ -137,6 +144,24 @@ export async function startFixtureHttpServer(
     if (name === "echo") {
       replyResult(response, message.id, {
         content: [{ type: "text", text: String(message.params?.arguments?.text ?? "") }],
+      });
+      return;
+    }
+    if (name === "args_probe") {
+      replyResult(response, message.id, {
+        content: [{ type: "text", text: JSON.stringify(message.params?.arguments ?? {}) }],
+      });
+      return;
+    }
+    if (name === "big") {
+      const chars = Number(message.params?.arguments?.chars ?? BIG_FIXTURE_CHARS);
+      replyResult(response, message.id, { content: [{ type: "text", text: "b".repeat(chars) }] });
+      return;
+    }
+    if (name === "soft_fail") {
+      replyResult(response, message.id, {
+        content: [{ type: "text", text: "external service exploded" }],
+        isError: true,
       });
       return;
     }
@@ -260,6 +285,24 @@ export async function startFixtureHttpServer(
     if (message.method === "prompts/list") {
       const { page, nextCursor } = catalogPage(FIXTURE_PROMPTS, message.params?.cursor);
       replyResult(response, message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
+      return;
+    }
+    if (message.method === "resources/read") {
+      const uri = message.params?.uri;
+      const contents = uri === undefined ? undefined : FIXTURE_RESOURCE_CONTENTS[uri];
+      if (!contents) {
+        replyRpcError(response, message.id, -32002, `resource not found: ${String(uri)}`);
+        return;
+      }
+      replyResult(response, message.id, {
+        contents: [
+          {
+            uri,
+            mimeType: contents.mimeType,
+            ...(contents.text !== undefined ? { text: contents.text } : { blob: contents.blob }),
+          },
+        ],
+      });
       return;
     }
     if (message.method === "tools/call") {

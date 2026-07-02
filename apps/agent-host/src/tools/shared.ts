@@ -11,12 +11,15 @@ import type { Tool } from "./types";
 /** Largest tool output returned to the model; anything longer is truncated. */
 export const MAX_OUTPUT = 8000;
 
+/** The marker appended when output is truncated (single owner; mcp/content.ts bounds with it too). */
+export const TRUNCATION_NOTICE = "\n…[truncated]";
+
 /** Directories never descended into by glob/grep. */
 export const SKIP_DIRS = /(^|\/)(node_modules|\.git|dist|\.next)\//u;
 
 /** Caps tool output at MAX_OUTPUT characters, with a truncation marker. */
 export function cap(text: string): string {
-  return text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}\n…[truncated]` : text;
+  return text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}${TRUNCATION_NOTICE}` : text;
 }
 
 /** Clamps a lenient numeric arg into [floor, ceiling], falling back when absent/non-finite. Shared

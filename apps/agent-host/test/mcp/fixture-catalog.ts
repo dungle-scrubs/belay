@@ -127,3 +127,29 @@ export const FIXTURE_PROMPTS = [
   },
   { name: "greet", description: "produce a fixture greeting" },
 ] as const;
+
+/** Default size for the `big` behavior tool + the oversized fixture resource (M5): larger than
+ *  the host's MAX_OUTPUT (8000), so bounding is observable. */
+export const BIG_FIXTURE_CHARS = 20_000;
+
+export interface FixtureResourceContents {
+  readonly mimeType: string;
+  readonly text?: string;
+  readonly blob?: string;
+}
+
+/** What `resources/read` serves, keyed by uri (M5). `fixture://big` and `fixture://blob` are
+ *  readable but deliberately unlisted (like the boom/hang behavior tools), so the M4 discovery
+ *  assertions over FIXTURE_RESOURCES stay untouched. */
+export const FIXTURE_RESOURCE_CONTENTS: Readonly<Record<string, FixtureResourceContents>> = {
+  "fixture://readme": {
+    mimeType: "text/plain",
+    text: "fixture readme body: hello from the fixture catalog\n",
+  },
+  "fixture://logs/today": { mimeType: "text/plain", text: "log line 1\nlog line 2\n" },
+  "fixture://big": { mimeType: "text/plain", text: "r".repeat(BIG_FIXTURE_CHARS) },
+  "fixture://blob": {
+    mimeType: "application/octet-stream",
+    blob: Buffer.from("binary fixture bytes").toString("base64"),
+  },
+};

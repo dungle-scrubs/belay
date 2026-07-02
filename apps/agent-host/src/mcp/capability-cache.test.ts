@@ -54,6 +54,14 @@ describe("capability cache - refresh", () => {
     expect(discovered?.tools.map((tool) => tool.qualifiedName)).toEqual(["alpha:echo"]);
   });
 
+  test("capabilitiesFor reads the cache without talking to the server", async () => {
+    const cache = createMcpCapabilityCache([stubSource("alpha", [{ name: "echo" }])]);
+    expect(cache.capabilitiesFor("alpha")).toBeUndefined(); // nothing discovered yet
+    expect(cache.capabilitiesFor("nope")).toBeUndefined();
+    await cache.refreshCapabilities("alpha");
+    expect(cache.capabilitiesFor("alpha")?.tools.map((tool) => tool.name)).toEqual(["echo"]);
+  });
+
   test("records the failure in the snapshot and rethrows when discovery fails", async () => {
     const failing: McpCapabilitySource = {
       config: stdioConfig("alpha"),
