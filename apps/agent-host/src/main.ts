@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { publishTurn } from "@host/agent/turn";
-import { envNumber } from "@host/boot/env";
+import { leaseOptions, makeLeadership } from "@host/boot/leadership";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
 import { buildCommandRegistry } from "@host/commands/commands";
@@ -10,15 +10,12 @@ import { hooksRuntime } from "@host/hooks/host-runtime";
 import { lspManager } from "@host/lsp/host-runtime";
 import { mcpRuntime } from "@host/mcp/host-runtime";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
-import { vimEnabled } from "@host/prefs/vim-store";
 import { supervisor } from "@host/processes/processes";
 import { contextRegistry } from "@host/project-context/registry";
 import {
   acquireCwdLock,
-  CWD_LOCK_HEARTBEAT_MS,
   type CwdLockOwner,
   nodeCwdLockCaps,
-  refreshCwdLock,
   releaseCwdLock,
 } from "@host/session/cwd-lock";
 import { Lease } from "@host/session/lease";
@@ -29,15 +26,12 @@ import { taskRegistry } from "@host/tools/tasks/tasks";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import { Emit } from "@host/transport/services";
-import { nodeGitRunner, readGitStatus } from "@host/worktrees/git-status";
 import * as Sentry from "@sentry/node";
 import {
   catalogEntryFor,
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
-  type GitStatus,
-  gitRefLabel,
   inputEstimateTokens,
   type ModelRef,
   PRODUCER_IDS,
@@ -54,7 +48,7 @@ import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-tr
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
-import { ADMISSION_HEARTBEAT_MS, nodeAdmissionCaps } from "./admission/store";
+import { nodeAdmissionCaps } from "./admission/store";
 import { makeCompactionCommands } from "./agent/compaction-commands";
 import { CompactionController } from "./agent/compaction-controller";
 import { makeControlPrompts } from "./agent/control-prompts";
@@ -104,6 +98,7 @@ import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { registerToolScriptSink } from "./tool-script/sink";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
 import { openInEditor } from "./tools/open-editor";
+import { makePresence } from "./transport/presence";
 import { nodeWorktreeManager } from "./worktrees";
 import { makeWorktreeCommands } from "./worktrees/commands";
 
@@ -302,7 +297,6 @@ let live = false;
  *  every call. */
 let history: ChatMessage[] = [];
 let historyEvents: SessionEvent[] = [];
-let leaseRunning = false;
 // The turn-dispatch state (active run, deferred FIFO, catch-up watermarks) lives in
 // the TurnScheduler constructed below, not in module mutables.
 
@@ -398,16 +392,6 @@ taskRegistry.onChange(() => {
     () => {},
   );
 });
-
-/** Lease timings are overridable via env so tests can run fast. */
-function leaseOptions() {
-  return {
-    heartbeatMs: envNumber("LEASE_HEARTBEAT_MS"),
-    probeMs: envNumber("LEASE_PROBE_MS"),
-    ttlMs: envNumber("LEASE_TTL_MS"),
-    settleMs: envNumber("LEASE_SETTLE_MS"),
-  };
-}
 
 const lease = new Lease(
   INSTANCE_ID,
@@ -666,139 +650,20 @@ const { abortRuns, reapOrphans } = makeRunLifecycle({
   manualCompactFiber,
 });
 
-/** On becoming leader: answer any pending prompt, else pre-warm the local model. */
-function onBecomeLeader(): void {
-  // Claim the cwd advisory lock now that we are the mutating owner of this directory (plan 01).
-  acquireWorkspaceCwdLock();
-  // The leader owns the internet probe (D-060): kick off a fresh check + re-announce so the advisory
-  // reflects this host's reachability. Fire-and-forget - a turn never waits on it.
-  internet
-    .refresh()
-    .then(announceOnline)
-    .catch(() => {});
-  if (turnMachine.hasInFlight) {
-    // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
-    // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
-    // the stale pending prompt. Each reap's interrupted completion echoes back to the completion handler,
-    // which auto-resumes it from the transcript (bounded) - so the work continues instead of stranding
-    // the user mid-turn, while a user ESC (cancelled, not interrupted) still stays put.
-    reapOrphans();
-    scheduler.clearPending();
-  } else if (live) {
-    // No dangling run, but the trailing turn may be an un-continued interrupt a prior host never
-    // resumed (e.g. the browser recovered the orphan, then this host took leadership while already
-    // live - the path goLive's post-replay reconcile doesn't re-run). Pick it up.
-    maybeAutoResume();
-  }
-  // A /compact whose fold a previous leader was interrupted mid-run (restart/crash) left its command
-  // with no result - a dangling "/compact" that looks broken. Give it one. `!manualCompactFiber`
-  // guards the (rare) leadership-flap-mid-fold case where this host is the one actually running it.
-  if (compactPending && !manualCompactFiber()) {
-    compactPending = false;
-    emit(
-      events.commandResult({
-        command: "/compact",
-        text: "Compaction interrupted — the host restarted. Run /compact again.",
-        ok: false,
-      }),
-    ).catch(() => {});
-  }
-  const pending = scheduler.pendingCatchUp();
-  if (pending) {
-    scheduler.noteTurn(pending); // catch up a prompt that arrived while probing
-    return;
-  }
-  const local = providers[DEFAULT_PROVIDER];
-  if (!local) {
-    return;
-  }
-  // Pre-warm the local model off the leader transition (best-effort: log and move on).
-  Effect.runFork(
-    Effect.gen(function* () {
-      const { warm } = yield* local.readiness();
-      if (!warm) {
-        yield* local.warm();
-      }
-    }).pipe(
-      Effect.catchAllCause((cause) =>
-        Effect.sync(() => warn("host", "warm failed", { cause: Cause.pretty(cause) })),
-      ),
-    ),
-  );
-}
-
-/**
- * Reads the host cwd's structured git status (D-088) plus a back-compat `branch` string
- * derived from it (branch name, or `detached <sha>` when HEAD is detached). A non-git cwd
- * yields both undefined - the status is omitted rather than reported as an empty repo.
- */
-function currentGit(): { git: GitStatus | undefined; branch: string | undefined } {
-  const status = readGitStatus(nodeGitRunner(process.cwd()));
-  if (!status) {
-    return { git: undefined, branch: undefined };
-  }
-  return { git: status, branch: gitRefLabel(status) ?? undefined };
-}
-
-/**
- * Builds and emits host.online with a freshly-read git status. Idempotent + latching, so
- * it doubles as the git-status refresh after a host-owned operation that can change the
- * repository (a `!` shell command); a `/cd` or `/clear` instead spawns a new host that
- * re-runs goLive in the new cwd.
- */
-/** The managed worktrees for the host's current base repo (empty when cwd is not a git repo). */
-function currentWorktrees(): ReturnType<typeof worktrees.summaries> {
-  try {
-    return worktrees.summaries(process.cwd());
-  } catch {
-    return [];
-  }
-}
-
-function announceOnline(): void {
-  const { git, branch } = currentGit();
-  emit(
-    events.hostOnline({
-      // Per-provider model id + thinking options so the browser can render the right
-      // reasoning control (none / binary / graduated) for whichever provider is chosen.
-      // Each provider describes its own descriptor, so the announcement can't drift from
-      // the Provider interface.
-      providers: Object.keys(providers),
-      default: DEFAULT_PROVIDER,
-      models: Object.fromEntries(
-        Object.entries(providers).map(([key, provider]) => [key, provider.describe()]),
-      ),
-      instanceId: INSTANCE_ID,
-      ...(branch ? { branch } : {}),
-      ...(git ? { git } : {}),
-      cwd: abbrevHome(process.cwd()),
-      workspace: abbrevHome(WORKSPACE_ROOT),
-      // The immediate-command inventory, so the browser knows which slashes route
-      // to the host's command lane (and can drive a slash menu). Debug-mode adds /restart
-      // (and friends) to this set; toggling /debug re-announces with the set updated.
-      commands: [...commands.specs, ...debugCommandSpecs(debugMode)],
-      // The discovered subagents (D-045), so the model picks one to delegate to by description.
-      agents: discoverAgents().map(describeAgent),
-      // The managed worktrees for this base repo (D-091), so the browser's switcher renders
-      // without reading local state.
-      worktrees: currentWorktrees(),
-      // The latest internet snapshot (D-060), so a joining client sees connectivity without waiting
-      // for the next probe transition.
-      internet: internet.current(),
-      // The host-owned model sources + per-source catalog (D-065): the provider/runtime/subscription
-      // summaries with auth state, and each configured source's live model list. Empty until the
-      // first async load completes (then a re-announce fills them in).
-      sources: catalog.sources,
-      catalog: catalog.catalogBySource,
-      // The host-owned Vim-mode prompt preference (plan 06), so the web gates its opt-in composer
-      // motions on this machine's vim.json config rather than per-tab browser state.
-      vimEnabled: vimEnabled(),
-      // The tracked background jobs (plan 09): promoted bash/shell commands + `process` jobs, so the
-      // support panel renders them. The supervisor re-announces on every job change (below).
-      jobs: supervisor.snapshots(),
-    }),
-  ).catch(() => {});
-}
+// The host presence surface (plan 22.3, transport/presence): the git/worktree projections + the
+// idempotent host.online announcement - wired over the live providers/commands/catalog/debug
+// state; refreshCatalog, the command lanes, the shell lane, and the doctor facts keep dispatching
+// under the same local names.
+const { currentGit, currentWorktrees, announceOnline } = makePresence({
+  providers,
+  commands,
+  debugMode: () => debugMode,
+  worktrees,
+  internet,
+  catalog: () => catalog,
+  instanceId: INSTANCE_ID,
+  emit,
+});
 
 // Re-announce host.online whenever a *visible* tracked job changes (a `process` start or a promoted
 // command's start / exit / kill / promote / remove), so the support panel reflects it live without polling
@@ -807,46 +672,33 @@ function announceOnline(): void {
 // harmless no-op for consumers (it is not debounced - the gating is what bounds the volume).
 supervisor.onChange = announceOnline;
 
-/** On go-live: start the lease (once), announce presence, and report online. */
-function goLive(): void {
-  log("host", "replay complete; live");
-  if (!leaseRunning) {
-    leaseRunning = true;
-    lease.start(Date.now());
-    setInterval(() => lease.tick(Date.now()), 500);
-    // Keep the cwd advisory lock's heartbeat fresh while we lead, so a crashed leader's lock ages into
-    // stale and is reclaimable (plan 01). Leader-gated, cheap, best-effort.
-    setInterval(() => {
-      if (lease.isLeader()) {
-        try {
-          refreshCwdLock(WORKSPACE_ROOT, cwdLockOwner(), cwdLockCaps);
-        } catch {
-          // best-effort heartbeat
-        }
-      }
-    }, CWD_LOCK_HEARTBEAT_MS);
-    // Keep this instance's local-model residency claim fresh so it doesn't age into stale + get
-    // reclaimed while we still hold the model (plan 11.1). A no-op when no local model is claimed.
-    setInterval(() => {
-      void residency.heartbeat();
-    }, ADMISSION_HEARTBEAT_MS);
-  }
-  emit(events.hostHello({ instanceId: INSTANCE_ID })).catch(() => {});
-  announceOnline();
-  // Reconnect reconcile: a turn that ended while the store was unreachable (a socket/store outage,
-  // e.g. a watch-lane restart mid-turn) had its terminal completion lost, leaving it
-  // started-with-no-completion in the log - a forever-"Working" phantom. Now that the stream is back,
-  // close every such orphan. A genuinely live turn (runningRunId) is excluded, so this never cuts a
-  // real turn short. Leader-only: only the owner closes runs. (Cold leadership also reaps via
-  // onBecomeLeader; this adds the reconnect-as-existing-leader path that case misses.)
-  if (lease.isLeader()) {
-    reapOrphans();
-    // After reaping, auto-resume an un-continued trailing interrupt that is already settled in the log
-    // (the browser recovered the orphan while no host was up - tonight's nimoy/lucid case). A run this
-    // reap just closed is still mid-echo, so it is picked up by the completion handler, not here.
-    maybeAutoResume();
-  }
-}
+// Go-live + leadership transitions (plan 22.3, boot/leadership): the once-only lease/heartbeat
+// start + reconnect reconcile, and the leader-transition reconcile (cwd lock, orphan reap,
+// dangling-/compact result, catch-up, pre-warm) - wired over the lease/scheduler and the
+// reap/resume/announce seams. The Lease's onRoleChange closure above resolves `onBecomeLeader` at
+// role-change time (runtime), so this destructure sitting after the Lease construction is TDZ-safe.
+const { goLive, onBecomeLeader } = makeLeadership({
+  instanceId: INSTANCE_ID,
+  emit,
+  lease,
+  scheduler,
+  turnMachine,
+  internet,
+  providers,
+  residency,
+  live: () => live,
+  getCompactPending: () => compactPending,
+  setCompactPending: (value) => {
+    compactPending = value;
+  },
+  manualCompactFiber,
+  acquireWorkspaceCwdLock,
+  cwdLockOwner,
+  cwdLockCaps,
+  announceOnline,
+  reapOrphans,
+  maybeAutoResume,
+});
 
 // The prompt-shell lane (plan 22.3, processes/shell-lane): `!command` execution through the
 // promotable runner, publishing one shell.result per request - wired over emit + the git
