@@ -112,7 +112,7 @@ import {
 import { buildSourceProvider, type CatalogSnapshot, loadCatalog } from "./providers/catalog";
 import { parseOverflowWindow } from "./providers/error-classifier";
 import { recordLearnedWindow } from "./providers/model-metadata-overrides";
-import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./providers/provider-auth";
+import { makeSourceSignIn } from "./providers/source-signin";
 import { createHostResidency } from "./residency/host";
 import { disposeCurrentPlan, serialNext } from "./serial-run/driver";
 import { startSerialRun } from "./serial-run/entry";
@@ -258,63 +258,14 @@ function refreshCatalog(): void {
     .catch((error) => warn("catalog", "load failed", { error: msg(error) }));
 }
 
-// Host-driven source SIGN-IN (D-065 M5): the chooser's authenticate/re-authenticate action asks the
-// host to run an OAuth device-code flow. The host emits the device code (URL + short code), waits for
-// the user to authorize, persists the credential, and refreshes the catalog so the source flips to
-// ready. One flow at a time - a new sign-in (or a cancel) aborts the in-flight one.
-let signInAbort: AbortController | null = null;
-// The browser+paste flow (Anthropic) awaits a user-pasted code; `/source-signin-code` resolves this.
-let signInCodeResolver: ((code: string) => void) | null = null;
-function startSourceSignIn(sourceId: string): void {
-  const target = signInTargetFor(sourceId);
-  if (!target) {
-    void emit(
-      events.hostSourceAuth({
-        state: { sourceId, phase: "error", detail: "this source has no sign-in flow" },
-      }),
-    );
-    return;
-  }
-  signInAbort?.abort();
-  const controller = new AbortController();
-  signInAbort = controller;
-  let completed = false;
-  void runSourceSignIn({
-    sourceId,
-    oauthName: target.oauthName,
-    login: target.login,
-    authPath: SOURCE_AUTH_PATH,
-    signal: controller.signal,
-    emit: (state) => {
-      if (state.phase === "complete") {
-        completed = true;
-      }
-      void emit(events.hostSourceAuth({ state }));
-    },
-    // Browser+paste flow: hold the resolver until `/source-signin-code` arrives; reject on abort so
-    // the login unwinds to a cancelled phase.
-    requestCode: () =>
-      new Promise<string>((resolve, reject) => {
-        if (controller.signal.aborted) {
-          reject(new Error("aborted"));
-          return;
-        }
-        signInCodeResolver = resolve;
-        controller.signal.addEventListener("abort", () => reject(new Error("aborted")), {
-          once: true,
-        });
-      }),
-  }).then(() => {
-    if (signInAbort === controller) {
-      signInAbort = null;
-    }
-    signInCodeResolver = null;
-    // Re-read auth only on success: the new credential makes the source ready in the next catalog.
-    if (completed) {
-      refreshCatalog();
-    }
-  });
-}
+// Host-driven source SIGN-IN (D-065 M5), extracted to providers/source-signin (plan 22.2 M2): the
+// chooser's authenticate action runs an OAuth device-code flow through the host. Built once over
+// emit + the catalog refresh; the destructured consts keep the same local names so the command-lane
+// dispatch below is unchanged.
+const { startSourceSignIn, cancelSignIn, submitSignInCode } = makeSourceSignIn({
+  emit,
+  refreshCatalog,
+});
 // Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_STATE_HOME, with the
 // shared home-abbreviation as its display closure.
 const worktrees = nodeWorktreeManager(abbrevHome);
@@ -2092,13 +2043,12 @@ function handleEvent(message: SessionEvent): void {
         return;
       }
       if (command === "/source-signin-cancel") {
-        signInAbort?.abort();
+        cancelSignIn();
         return;
       }
       // The user-pasted code for a browser+paste sign-in (Anthropic): resolve the host's pending wait.
       if (command === "/source-signin-code") {
-        signInCodeResolver?.(args.trim());
-        signInCodeResolver = null;
+        submitSignInCode(args.trim());
         return;
       }
       // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so
