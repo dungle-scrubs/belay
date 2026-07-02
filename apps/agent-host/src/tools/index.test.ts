@@ -18,6 +18,7 @@ import { editTool } from "./edit";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./index";
+import { buildLspCodeActionsTool } from "./lsp-code-actions";
 import { buildLspDiagnosticsTool } from "./lsp-diagnostics";
 import { buildLspDocumentSymbolsTool } from "./lsp-document-symbols";
 import { buildLspHoverTool } from "./lsp-hover";
@@ -66,12 +67,14 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     sessionRecallTool,
     astGrepTool,
     doctorTool,
-    // lsp_* (plan 24, D-007): explicit read-only language-server pulls.
+    // lsp_* (plan 24, D-007): explicit read-only language-server pulls; code actions are
+    // proposals only (D-005), so even that surface is a concurrent-safe read.
     buildLspStatusTool(lspTestManager),
     buildLspDiagnosticsTool(lspTestManager),
     buildLspHoverTool(lspTestManager),
     buildLspDocumentSymbolsTool(lspTestManager),
     buildLspWorkspaceSymbolsTool(lspTestManager),
+    buildLspCodeActionsTool(lspTestManager),
   ]) {
     assert.equal(tool.readOnly, true, `${tool.name} should declare readOnly: true`);
     assert.ok(READ_ONLY_TOOLS.has(tool.name), `${tool.name} should be in READ_ONLY_TOOLS`);
@@ -135,6 +138,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     buildLspHoverTool(lspTestManager),
     buildLspDocumentSymbolsTool(lspTestManager),
     buildLspWorkspaceSymbolsTool(lspTestManager),
+    buildLspCodeActionsTool(lspTestManager),
     buildToolScriptTool({
       execute: () => Promise.resolve(""),
       cwd: "/w",

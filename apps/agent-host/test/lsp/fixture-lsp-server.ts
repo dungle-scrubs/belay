@@ -7,7 +7,8 @@
  * Requests: initialize (capabilities per the --no-capability flag), shutdown,
  * textDocument/hover (answers `hover:<line>:<character>` markdown), textDocument/documentSymbol
  * (a nested fixture outline), workspace/symbol (a small catalog filtered by query), and
- * textDocument/codeAction (a quickfix with an edit plus a source action).
+ * textDocument/codeAction (a quickfix with an edit, a source action without one, and a
+ * command-only refactor).
  *
  * Notifications: initialized (ignored), exit (exits 0), and didOpen/didChange/didClose document
  * sync - didOpen/didChange publish one warning diagnostic per line containing "oops" (none for
@@ -265,6 +266,15 @@ function handle(message: JsonRpcIn): void {
         },
       },
       { title: "Organize imports", kind: "source.organizeImports" },
+      {
+        title: "Move to a new file",
+        kind: "refactor.move",
+        command: {
+          title: "Move to a new file",
+          command: "_typescript.applyRefactoring",
+          arguments: [],
+        },
+      },
     ]);
     return;
   }

@@ -336,12 +336,13 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   // resource/prompt records, server status), so it renders like other text-output tools.
   mcp: renderOutput,
   // lsp_* (plan 24) return bounded flat text (status lines, diagnostic lists, hover content,
-  // outlines, symbol matches), so they render like other text-output tools.
+  // outlines, symbol matches, code-action proposals), so they render like other text-output tools.
   lsp_status: renderOutput,
   lsp_diagnostics: renderOutput,
   lsp_hover: renderOutput,
   lsp_document_symbols: renderOutput,
   lsp_workspace_symbols: renderOutput,
+  lsp_code_actions: renderOutput,
   clipboard_write: renderClipboard,
   bash: renderOutput,
   write: renderDiff,

@@ -27,6 +27,7 @@ import { editTool } from "./edit";
 import { ToolInputError } from "./errors";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
+import { buildLspCodeActionsTool } from "./lsp-code-actions";
 import { buildLspDiagnosticsTool } from "./lsp-diagnostics";
 import { buildLspDocumentSymbolsTool } from "./lsp-document-symbols";
 import { buildLspHoverTool } from "./lsp-hover";
@@ -85,6 +86,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   buildLspHoverTool(lspManager),
   buildLspDocumentSymbolsTool(lspManager),
   buildLspWorkspaceSymbolsTool(lspManager),
+  buildLspCodeActionsTool(lspManager),
   // tool_script (plan 16): the bridge routes allowed read-only calls back through THIS registry's
   // executeTool (hoisted; referenced lazily at call time), gated by the request's toolsets. The child runs
   // out-of-process in a deny-first sandbox; its scratch dir is an ephemeral, per-run temp dir.
