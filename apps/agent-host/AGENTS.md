@@ -4,6 +4,35 @@ The host: a Node + **Effect** Richter participant that runs the agent loop
 (model <-> tools) for each turn. Layers on [`apps/AGENTS.md`](../AGENTS.md) and the
 repo-root [`AGENTS.md`](../../AGENTS.md).
 
+## Structure and naming (plan 22.1)
+
+Every module has a predictable by-domain home; `ARCHITECTURE.md` is the map.
+
+- **No loose files in `src/` root.** Only the composition root (`main.ts`) lives there;
+  everything else belongs to a subsystem dir. Enforced by `test/structure.test.ts`.
+- **Plural dir = a collection of peers** (`commands/`, `tools/`, `skills/`, `processes/`,
+  `providers/`, `prefs/`, `subagents/`, `metrics/`, `worktrees/`). **Singular dir = one
+  cohesive subsystem** (`boot/`, `transport/`, `session/`, `handoff/`, `agent/`, `doctor/`).
+- **No catch-all dirs.** Never add `lib/`, `utils/`, `helpers/`, `misc/`, or `common/`; a
+  leaf helper joins the subsystem that owns its concept.
+- **Imports use the `@host/*` alias** (`@host/session/lease`) instead of deep relative
+  paths; same-dir imports stay relative (`./lease`). No `index.ts` barrels - import the
+  concrete module.
+- **Every source file opens with a structured header** so modules are self-describing and
+  doc-generatable, in this fixed shape (enforced by `test/header-check.test.ts`):
+
+  ```ts
+  /**
+   * <optional summary prose - why the module exists, key constraints.>
+   *
+   * Responsible for: <what this module owns, one line.>
+   * Not for: <the adjacent concern a reader might wrongly look for here, and where it lives.>
+   */
+  ```
+
+  `Responsible for:` is required; `Not for:` is required only where the boundary is easy
+  to confuse (its absence means "no adjacent concern worth disambiguating").
+
 ## The call graph is Effect - stay inside it
 
 The host's turn pipeline and control plane have been migrated to Effect (stable v3

@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M1 - Relocation Inventory, Target Map, and Conventions
-- Current cutoff blockers: 39
+- Current focus: M2 - `@host/*` Path Alias Scaffolding
+- Current cutoff blockers: 34
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 0
+- Completed current work: 5
 
 ## Current Cutoff Blockers
 
@@ -14,11 +14,11 @@
 
 #### M1: Relocation Inventory, Target Map, and Conventions
 
-- [ ] RED: Add a failing guard/test that flags any file directly under `apps/agent-host/src/` outside an allowlist (`main.ts`).
-- [ ] GREEN: Produce the authoritative inventory of loose `src/` root files mapped to their target dirs.
-- [ ] GREEN: Add the AGENTS.md naming rule (plural = collection, singular = subsystem) and the no-catch-all-dir rule.
-- [ ] GREEN: Add the AGENTS.md `Responsible for / Not for` header standard with a fixed, doc-generatable shape.
-- [ ] REFACTOR: Keep the inventory/map output stable, sorted, and reviewable.
+- [x] RED: Add a failing guard/test that flags any file directly under `apps/agent-host/src/` outside an allowlist (`main.ts`).
+- [x] GREEN: Produce the authoritative inventory of loose `src/` root files mapped to their target dirs.
+- [x] GREEN: Add the AGENTS.md naming rule (plural = collection, singular = subsystem) and the no-catch-all-dir rule.
+- [x] GREEN: Add the AGENTS.md `Responsible for / Not for` header standard with a fixed, doc-generatable shape.
+- [x] REFACTOR: Keep the inventory/map output stable, sorted, and reviewable.
 
 #### M2: `@host/*` Path Alias Scaffolding
 
