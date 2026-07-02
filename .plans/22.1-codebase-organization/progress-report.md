@@ -38,7 +38,7 @@
 
 - [x] RED: Capture the current failing root-flatness guard against the inventory.
 - [x] GREEN: `git mv` the loose files into `boot/`, `transport/`, `session/`, `commands/`, `skills/`, `subagents/`, `processes/`, `prefs/`, `metrics/`, `handoff/` - pure moves, no content edits.
-- [x] GREEN: Move files that belong to settled dirs into them flat (`turn`/`turn-preflight` -> `agent/`, `git-status` -> `worktrees/`, `clip` -> merge into `tools/clipboard`).
+- [x] GREEN: Move files that belong to settled dirs into them flat (`turn`/`turn-preflight` -> `agent/`, `git-status` -> `worktrees/`, `clip` -> `tools/clip.ts` - pure move beside `tools/clipboard`; the content merge was rejected per D-012, see D-014).
 - [x] GREEN: Update imports for moved files to `@host/*` (or local relative within a dir).
 - [x] RED: Re-run the root-flatness guard and typecheck; capture remaining failures.
 - [x] REFACTOR: Batch related moves by destination dir so each commit is reviewable and bisectable.
