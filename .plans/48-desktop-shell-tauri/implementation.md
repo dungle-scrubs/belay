@@ -260,7 +260,7 @@ The host is a Node + Effect app. The umbrella plan already marks a spawnable hos
 
 ## 6. Progress Report Accounting
 
-The progress report is `.plans/10-desktop-shell-tauri/progress-report.md`. It tracks only the desktop shell/Tauri extraction. It does not track forkable sessions, general artifact panels, or runtime feature work inside the web app except for desktop-safe config seams.
+The progress report is `.plans/48-desktop-shell-tauri/progress-report.md`. It tracks only the desktop shell/Tauri extraction. It does not track forkable sessions, general artifact panels, or runtime feature work inside the web app except for desktop-safe config seams.
 
 ## 7. Validation Commands
 
@@ -278,5 +278,5 @@ pnpm --filter @trevor/desktop test
 
 ## 8. Decisions
 
-Canonical decisions are in `.plans/10-desktop-shell-tauri/plan.db`.
+Canonical decisions are in `.plans/48-desktop-shell-tauri/plan.db`.
 

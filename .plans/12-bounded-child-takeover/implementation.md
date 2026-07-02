@@ -5,7 +5,7 @@
 - [x] `.plans/08-tool-detail-takeover` defines the transcript-takeover pattern for inspecting deeper runtime/tool detail.
 - [x] The umbrella subagent design (D-045-D-049 in `.plans/trevor-v2/implementation.md`) defines isolated child sessions, depth limits, inline/background modes, durable child logs, and fold-back semantics.
 - [x] `.plans/09-shell-promote-background-jobs` defines visible background-job inspection patterns that this plan should not duplicate.
-- [x] `.plans/10-desktop-shell-tauri` defines future shell/supervisor boundaries that may affect escalation/takeover UX.
+- [x] `.plans/48-desktop-shell-tauri` defines future shell/supervisor boundaries that may affect escalation/takeover UX.
 - [x] `.plans/11-local-admission-control` defines local model/runtime admission limits that bounded children must respect.
 - [ ] `.plans/09.1-mid-turn-model-switch` lands the per-turn model+reasoning switch cell (the "switch boundary") and the `model.switched` event before this plan, so a bounded child created mid-turn can snapshot the parent turn's currently-active model+reasoning from the cell rather than the model the turn started with, and a model/provider "route escalation" can reuse 09.1's switch seam. <!-- D-005 -->
 

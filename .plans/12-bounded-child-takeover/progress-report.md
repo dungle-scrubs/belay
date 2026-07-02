@@ -13,7 +13,7 @@
 - [x] `.plans/08-tool-detail-takeover` defines the transcript-takeover pattern for inspecting deeper runtime/tool detail.
 - [x] The umbrella subagent design defines isolated child sessions, depth limits, inline/background modes, durable child logs, and fold-back semantics.
 - [x] `.plans/09-shell-promote-background-jobs` defines visible background-job inspection patterns that this plan should not duplicate.
-- [x] `.plans/10-desktop-shell-tauri` defines future shell/supervisor boundaries that may affect escalation/takeover UX.
+- [x] `.plans/48-desktop-shell-tauri` defines future shell/supervisor boundaries that may affect escalation/takeover UX.
 - [x] `.plans/11-local-admission-control` defines local model/runtime admission limits that bounded children must respect.
 
 ## Current Cutoff Blockers
