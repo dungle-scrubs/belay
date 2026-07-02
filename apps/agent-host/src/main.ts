@@ -85,6 +85,7 @@ import { createLoopIterationRunner, defaultProcessSeam } from "./loop/runner";
 import { LoopStore } from "./loop/store";
 import { assembleManifest } from "./manifest/build";
 import { registerManifestSource } from "./manifest/source";
+import { makeShellLane } from "./processes/shell-lane";
 import {
   buildProviders,
   type ChatMessage,
@@ -103,8 +104,6 @@ import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { registerToolScriptSink } from "./tool-script/sink";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
 import { openInEditor } from "./tools/open-editor";
-import { DEFAULT_PROMOTION_CONFIG } from "./tools/promote-policy";
-import { promotedResultText, runPromotable } from "./tools/promote-runner";
 import { nodeWorktreeManager } from "./worktrees";
 import { makeWorktreeCommands } from "./worktrees/commands";
 
@@ -849,30 +848,10 @@ function goLive(): void {
   }
 }
 
-/**
- * Runs a prompt-shell-lane command (a leading `!`) through the shared protected `runCommand` path and
- * publishes one `shell.result` (paired by requestId). Like an immediate command this bypasses the
- * model and the turn queue and runs even while a turn streams - but unlike a command its output never
- * enters the model context (D-082). A refusal (safety floor) or non-zero/timeout maps to `ok: false`.
- */
-async function runShellCommand(requestId: string, command: string): Promise<void> {
-  // The prompt-shell lane shares the promotable runner (plan 09): a long `!command` promotes to a tracked
-  // background job rather than timing out. The shell.result output stays out of the model context (D-082);
-  // a promoted result names its `pN` and is `ok` (it is running, not failed).
-  const result = await runPromotable(supervisor, command, process.cwd(), {
-    enabled: DEFAULT_PROMOTION_CONFIG.enabled,
-    thresholdMs: DEFAULT_PROMOTION_CONFIG.thresholdMs,
-    origin: { source: "shell", requestId },
-  });
-  const output =
-    result.decision === "promote"
-      ? promotedResultText(result.jobId ?? "?", result.output)
-      : result.output;
-  await emit(events.shellResult({ requestId, command, output, ok: result.ok }));
-  // A shell command can change repository state (checkout, commit, stage); re-announce
-  // so the sidebar git line reflects it without polling. Latching + idempotent.
-  announceOnline();
-}
+// The prompt-shell lane (plan 22.3, processes/shell-lane): `!command` execution through the
+// promotable runner, publishing one shell.result per request - wired over emit + the git
+// re-announce; handleEvent's user.shell arm dispatches into it.
+const { runShellCommand } = makeShellLane({ emit, announceOnline });
 
 // Host-driven source SIGN-IN (D-065 M5, providers/source-signin): wired over emit + the catalog
 // refresh.
