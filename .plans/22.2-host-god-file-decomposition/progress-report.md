@@ -6,11 +6,11 @@
 
 ## Summary
 
-- Current focus: M2 - Decompose main.ts (events extraction)
-- Current cutoff blockers: 23
+- Current focus: M3 - Decompose agent/loop.ts
+- Current cutoff blockers: 18
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 7
+- Completed current work: 12
 
 ## Current Cutoff Blockers
 
@@ -30,11 +30,11 @@
 
 #### M2: Decompose `main.ts` (events extraction)
 
-- [ ] RED: Confirm the routing/startup characterization tests are green pre-split.
-- [ ] GREEN: Extract each long `handleEvent` handler body into `events/`, leaving a visible routing table in `main.ts`.
-- [ ] GREEN: Move remaining domain helpers in `main.ts` to their domain dirs (e.g. `doctorFacts` -> `doctor/`).
-- [ ] RED: Re-run characterization + turn/e2e suites.
-- [ ] REFACTOR: Add headers to new `events/` modules; keep the composition root readable top-to-bottom.
+- [x] RED: Confirm the routing/startup characterization tests are green pre-split.
+- [x] GREEN: Extract each long `handleEvent` handler body into `events/`, leaving a visible routing table in `main.ts`. (Shape per D-007: seven domain clusters - doctor/host-facts, worktrees/commands, handoff/orchestrator, providers/source-signin, session/session-switch, commands/lifecycle, serial-run/commands - instead of an events/ indirection layer; the routing chain stays whole in main.ts and its arms are now short delegations. main.ts 2932 -> 1926 lines.)
+- [x] GREEN: Move remaining domain helpers in `main.ts` to their domain dirs (e.g. `doctorFacts` -> `doctor/`).
+- [x] RED: Re-run characterization + turn/e2e suites.
+- [x] REFACTOR: Add headers to new `events/` modules; keep the composition root readable top-to-bottom.
 
 #### M3: Decompose `agent/loop.ts`
 
