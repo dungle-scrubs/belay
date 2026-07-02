@@ -259,6 +259,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description:
       "Local-model admission concurrency/TTL overrides (plan 11): { defaultCapacity, staleAfterMs, capacityByResource }.",
   },
+  {
+    name: "hooks-config",
+    category: "config",
+    relativePath: "hooks.json",
+    description: "User-global hook definitions (plan 25): { hooks: { <id>: ... } }.",
+  },
   // state (TREVOR_STATE_HOME) - all machine-local runtime state
   {
     name: "sessions-db",

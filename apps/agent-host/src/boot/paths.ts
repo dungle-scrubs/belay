@@ -74,6 +74,14 @@ export const USER_ADMISSION_JSON = join(TREVOR_HOME, "admission.json");
 export const USER_MCP_SERVERS_JSON = join(TREVOR_HOME, "mcp-servers.json");
 
 /**
+ * The user-global hooks file (plan 25): an optional `{ hooks: { "<id>": ... } }` JSON under the
+ * config home, the USER root of hook discovery (project hooks live in the workspace's
+ * `.trevor/hooks.json`). Hooks from either root never execute before explicit approval (D-006).
+ * Host-owned + portable; absent means no user hooks.
+ */
+export const USER_HOOKS_JSON = join(TREVOR_HOME, "hooks.json");
+
+/**
  * The directory the workspace-confined tools operate inside. Point the agent at a
  * target repo with TREVOR_WORKSPACE; defaults to the host's working directory.
  * Confinement is a path-escape guard (no `../` or absolute path may leave the

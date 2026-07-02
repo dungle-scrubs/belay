@@ -68,6 +68,11 @@ edge, replay dispatch, the command lane, and turn dispatch together.
   boundary with the TS/JS adapter first, the JSON-RPC client over stdio (reusing `mcp/`'s
   Content-Length framing), and the per-workspace-root runtime manager with lazy spawn, bounded
   restart-on-crash, and status snapshots.
+- `hooks/` - the narrow host-owned command-hook runtime (plan 25): the hook config model
+  (exactly two events, `PreToolUse` and `Stop`; explicit command + args arrays, no shell
+  splitting) with tolerant decode and a redacted debug projection, and bounded discovery
+  across the project (`.trevor/hooks.json`) and user (`<TREVOR_HOME>/hooks.json`) roots with
+  source provenance.
 - `skills/` - skill discovery and progressive disclosure behind the skills tools.
 - `subagents/` - subagent discovery (`discovery.ts`) for delegated agents.
 - `serial-run/` - the serialized multi-plan run lane.
