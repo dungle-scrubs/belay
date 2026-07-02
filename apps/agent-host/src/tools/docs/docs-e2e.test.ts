@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { DocsFs } from "./corpus-store";
-import { type DocsArgs, type DocsDeps, runDocs } from "./docs";
+import type { DocsDeps } from "./deps";
+import { runDocs } from "./docs";
+import type { DocsArgs } from "./params";
 import type { WebFetchReader, WebSearchReader } from "./readers";
 
 /**

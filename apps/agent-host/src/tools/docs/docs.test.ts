@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { Either, Schema } from "effect";
 import { test } from "vitest";
 import type { DocsFs } from "./corpus-store";
-import { type DocsArgs, type DocsDeps, DocsParams, docsTool, runDocs } from "./docs";
+import type { DocsDeps } from "./deps";
+import { docsTool, runDocs } from "./docs";
 import { DOCS_ACTIONS } from "./envelope";
+import { type DocsArgs, DocsParams } from "./params";
 
 /**
  * Tool-entry coverage: the param schema accepts every action and rejects an unknown/absent one, the
