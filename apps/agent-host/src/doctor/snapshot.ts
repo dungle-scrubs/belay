@@ -48,7 +48,9 @@ export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
       // The LSP area carries the diagnostic-warning finding (plan 24 M8, D-008) on top of its
       // lifecycle state: stored diagnostics WITH errors roll the area to warn.
       peripheralArea("lsp", "LSP", input.peripherals.lsp, lspAreaFindings(input)),
-      peripheralArea("hooks", "Hooks", input.peripherals.hooks),
+      // The Hooks area carries its approval/script/performance/legacy findings (plan 25 M9,
+      // D-009) on top of its lifecycle state, the same shape as the LSP diagnostic-warning.
+      peripheralArea("hooks", "Hooks", input.peripherals.hooks, input.hooksFindings ?? []),
       storageArea(input),
       workspaceArea(input),
       admissionArea(input),

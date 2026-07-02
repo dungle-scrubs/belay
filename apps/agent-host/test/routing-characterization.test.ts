@@ -65,6 +65,9 @@ const UNROUTED: readonly string[] = [
   "delegated.to",
   "handoff.generating",
   "handoff.requested",
+  // A visible hook decision (plan 25 M9): host-emitted from the turn pipeline, web-rendered;
+  // handleEvent never consumes it.
+  "hook.decision",
   "host.internet",
   "host.online",
   "host.role",

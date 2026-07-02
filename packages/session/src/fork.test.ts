@@ -76,6 +76,7 @@ describe("forkable event classification (M1)", () => {
       "delegated.to",
       "assistant.delta", // ephemeral streaming - superseded by assistant.completed
       "context.compacted", // NOT copied: its throughSeq is a stale parent seq in the re-numbered child
+      "hook.decision", // a run-scoped policy marker (plan 25 M9), like tool.guardrail - not conversation state
     ]) {
       expect(isForkableEvent(t)).toBe(false);
     }

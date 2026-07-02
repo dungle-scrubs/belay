@@ -10,6 +10,8 @@ import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import type { InternetMonitor } from "@host/connectivity/probe";
+import type { HooksRuntime, HooksStatusSnapshot } from "@host/hooks/runtime";
+import type { HookStatsEntry } from "@host/hooks/stats";
 import type { LspServerStatus } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
 import type { McpRuntime, McpServerStatusEntry } from "@host/mcp/runtime";
@@ -28,6 +30,7 @@ import { commas } from "@host/transport/messages";
 import { relativeTime, type WorktreeSummary } from "@trevor/session";
 import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
 import type { DoctorRuntimeFacts } from "./build";
+import { hooksAreaFindings, hooksDebugSummary, hooksPeripheralState } from "./hooks-status";
 import { lspDebugSummary, lspPeripheralState, lspStoredDiagnostics } from "./lsp-status";
 import { mcpDebugSummary, mcpPeripheralState } from "./mcp-status";
 import type { TelemetryDoctorSummary } from "./probe-input";
@@ -72,6 +75,9 @@ export interface HostFactsDeps {
   readonly mcp: Pick<McpRuntime, "statusSnapshot">;
   /** The host LSP manager (plan 24 M8): its status snapshot feeds the /doctor LSP area + debug. */
   readonly lsp: Pick<LspManager, "statusSnapshot">;
+  /** The host hooks runtime (plan 25 M9): its status + stats snapshots feed the /doctor Hooks
+   *  area (state, approval/script/performance/legacy findings) and the debug line. */
+  readonly hooks: Pick<HooksRuntime, "statusSnapshot" | "statsSnapshot">;
 }
 
 /** Builds the /doctor runtime-fact readers over the host's live state; main.ts wires it once. */
@@ -96,6 +102,7 @@ export function makeHostFacts(deps: HostFactsDeps) {
     cwdLockCaps,
     mcp,
     lsp,
+    hooks,
   } = deps;
 
   /** A snapshot of the live turn machine for /doctor: what the host is doing right now.
@@ -104,6 +111,8 @@ export function makeHostFacts(deps: HostFactsDeps) {
   function hostState(
     mcpSnapshot: readonly McpServerStatusEntry[],
     lspSnapshot: readonly LspServerStatus[],
+    hooksSnapshot: HooksStatusSnapshot,
+    hooksStats: readonly HookStatsEntry[],
   ): Record<string, unknown> {
     const turns = scheduler.debug();
     return {
@@ -144,6 +153,9 @@ export function makeHostFacts(deps: HostFactsDeps) {
       // plus stored diagnostic-error counts, absent when no adapter matches. Counts + status
       // words only - never a path, message, or env value.
       ...lspState(lspSnapshot),
+      // Hooks runtime status (plan 25 M9): a compact trust histogram of the configured hooks
+      // plus total runs, absent when nothing is configured. Keys + status words only.
+      ...hooksState(hooksSnapshot, hooksStats),
       // Managed worktrees (D-091): the current row + count, plus any stale (missing-path) entries, so
       // a worktree/session mismatch is visible at a glance.
       ...worktreeState(),
@@ -174,6 +186,15 @@ export function makeHostFacts(deps: HostFactsDeps) {
   function lspState(snapshot: readonly LspServerStatus[]): Record<string, string> {
     const summary = lspDebugSummary(snapshot);
     return summary ? { lsp: summary } : {};
+  }
+
+  /** The compact hooks debug line for /doctor's host record; nothing when unconfigured. */
+  function hooksState(
+    snapshot: HooksStatusSnapshot,
+    stats: readonly HookStatsEntry[],
+  ): Record<string, string> {
+    const summary = hooksDebugSummary(snapshot, stats);
+    return summary ? { hooks: summary } : {};
   }
 
   /** The managed-worktree summary for /doctor: the current row, the managed count, and stale entries. */
@@ -213,15 +234,18 @@ export function makeHostFacts(deps: HostFactsDeps) {
     const cwdLock = workspaceCwdLockFact();
     const style = activeStylePref();
     // One snapshot per runtime per build: hostState's debug lines and the peripheral rollups
-    // below fold the SAME reads instead of re-snapshotting (LSP snapshots can stat the fs).
+    // below fold the SAME reads instead of re-snapshotting (LSP snapshots can stat the fs,
+    // hooks snapshots recompute trust fingerprints).
     const mcpSnapshot = mcp.statusSnapshot();
     const lspSnapshot = lsp.statusSnapshot();
+    const hooksSnapshot = hooks.statusSnapshot();
+    const hooksStats = hooks.statsSnapshot();
     return {
       cwd: abbrevHome(process.cwd()),
       workspace: abbrevHome(WORKSPACE_ROOT),
       instanceId: instanceId.slice(0, 8),
       role: lease.isLeader() ? "leader" : "standby",
-      host: hostState(mcpSnapshot, lspSnapshot),
+      host: hostState(mcpSnapshot, lspSnapshot, hooksSnapshot, hooksStats),
       internet: internet.current(),
       branch: currentGit().branch,
       catalog: catalog().sources,
@@ -242,6 +266,10 @@ export function makeHostFacts(deps: HostFactsDeps) {
       // peripheral state the doctor LSP area renders (details scrubbed + bounded by the fold),
       // plus stored diagnostic counts for the diagnostic-warning finding.
       ...lspFacts(lspSnapshot),
+      // The hooks runtime rollup (plan 25 M9, D-009): configured hooks + trust states folded
+      // into the Hooks peripheral state, plus the approval/script/performance/legacy findings.
+      hooks: hooksPeripheralState(hooksSnapshot),
+      hooksFindings: hooksAreaFindings(hooksSnapshot, hooksStats),
     };
   }
 

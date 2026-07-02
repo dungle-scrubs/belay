@@ -606,6 +606,21 @@ export type DecodedEvent =
       readonly failureFingerprint?: string;
     }
   | {
+      readonly type: "hook.decision";
+      readonly runId: string;
+      /** The hook's approval key, `<source>:<id>`. */
+      readonly hookId: string;
+      /** "PreToolUse" | "Stop"; kept open for forward-compat gates. */
+      readonly event: string;
+      /** "deny" | "halt" | "context" | "updated_input" | "continuation" | "timeout" | "error" |
+       *  "unapproved" | "trust_changed" (an `allow` never rides the wire); open for forward-compat.
+       *  A garbled value degrades to "error" - the quiet diagnostic verb, never a fake block. */
+      readonly decision: string;
+      readonly toolName?: string;
+      /** The hook's stated reason / diagnostic detail - redacted and bounded at the host. */
+      readonly reason?: string;
+    }
+  | {
       readonly type: "host.online";
       readonly branch?: string;
       readonly git?: GitStatus;
@@ -932,6 +947,19 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         argsFingerprint: str(p.argsFingerprint),
         ...(resultFingerprint ? { resultFingerprint } : {}),
         ...(failureFingerprint ? { failureFingerprint } : {}),
+      };
+    }
+    case "hook.decision": {
+      const toolName = optStr(p.toolName);
+      const reason = optStr(p.reason);
+      return {
+        type: "hook.decision",
+        runId,
+        hookId: str(p.hookId),
+        event: str(p.event, "PreToolUse"),
+        decision: str(p.decision, "error"),
+        ...(toolName ? { toolName } : {}),
+        ...(reason ? { reason } : {}),
       };
     }
     case "host.online":

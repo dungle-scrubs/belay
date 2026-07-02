@@ -328,6 +328,28 @@ export interface TrevorEventInput {
   readonly payload: Record<string, unknown>;
 }
 
+/** The lifecycle gate a hook decision came from (plan 25 D-002): the two first-cut hook events. */
+export type HookDecisionEventName = "PreToolUse" | "Stop";
+
+/**
+ * What a `hook.decision` event records (plan 25 M9, D-009): a hook's visible effect on the turn.
+ * `deny`/`halt` are the blocking decisions, `context`/`updated_input` the bounded influence
+ * verbs, `continuation` a Stop hook's one-pass continuation request, and
+ * `timeout`/`error`/`unapproved`/`trust_changed` the diagnostic states. An `allow` is
+ * deliberately NOT here: it never rides the wire (one event per tool call would drown the log;
+ * the host's structured hook logs keep the audit trail).
+ */
+export type HookDecisionKind =
+  | "deny"
+  | "halt"
+  | "context"
+  | "updated_input"
+  | "continuation"
+  | "timeout"
+  | "error"
+  | "unapproved"
+  | "trust_changed";
+
 /** Who asked for a mid-turn model/reasoning switch: `manual` (the UI selector) now, `auto` (the future
  *  auto-router) later. The single seam both initiators attach to (plan 09.1 D-004). */
 export type ModelSwitchInitiator = "manual" | "auto";
@@ -767,6 +789,31 @@ export const events = {
       argsFingerprint: p.argsFingerprint,
       ...(p.resultFingerprint ? { resultFingerprint: p.resultFingerprint } : {}),
       ...(p.failureFingerprint ? { failureFingerprint: p.failureFingerprint } : {}),
+    },
+  }),
+  /**
+   * A visible hook decision (plan 25 M9, D-009): one PreToolUse/Stop hook's effect on the run -
+   * a deny/halt block, a bounded context note or allowlisted input rewrite, a Stop continuation
+   * request, or a diagnostic state (timeout/error/unapproved/trust-changed). `hookId` is the
+   * hook's approval key (`<source>:<id>`); `reason` is already redacted and bounded at the host
+   * boundary. An `allow` never rides this event (log-only - per-tool-call allows are noise).
+   */
+  hookDecision: (p: {
+    runId: string;
+    hookId: string;
+    event: HookDecisionEventName;
+    decision: HookDecisionKind;
+    toolName?: string;
+    reason?: string;
+  }): TrevorEventInput => ({
+    type: "hook.decision",
+    payload: {
+      runId: p.runId,
+      hookId: p.hookId,
+      event: p.event,
+      decision: p.decision,
+      ...(p.toolName ? { toolName: p.toolName } : {}),
+      ...(p.reason ? { reason: p.reason } : {}),
     },
   }),
   hostBeat: (p: { instanceId: string }): TrevorEventInput => ({

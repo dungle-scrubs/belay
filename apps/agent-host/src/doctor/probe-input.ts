@@ -1,5 +1,5 @@
 import type { CwdLockDoctorFact } from "@host/session/cwd-lock";
-import type { InternetSnapshot } from "@trevor/session";
+import type { DoctorFinding, InternetSnapshot } from "@trevor/session";
 import type { RootCategoryId } from "@trevor/session/node-paths";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
@@ -88,6 +88,9 @@ export interface DoctorProbeInput {
    *  error/warning totals - counts only, never a message or a path. Errors surface as the LSP
    *  area's diagnostic-warning finding (D-008). Absent when nothing is stored / not probed. */
   readonly lspDiagnostics?: DoctorLspDiagnostics;
+  /** The Hooks area's extra findings (plan 25 M9, D-009): approval/missing-script/performance/
+   *  config/legacy-migration warnings from the hooks-status fold. Absent when not probed. */
+  readonly hooksFindings?: readonly DoctorFinding[];
   readonly web: DoctorWebDocs;
   /** Redacted provider-failure observation counts (D-076 M5/M6): distinct unclassified shapes and
    *  total sightings, shown as a Providers fact. Counts + fingerprint ids only - never any secret. */

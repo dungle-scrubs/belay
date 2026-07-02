@@ -1119,6 +1119,64 @@ test("provider.question.answer decodes a garbled/missing action as an accept (fo
   assert.equal(decoded?.type === "provider.question.answer" && decoded.answer.action, "accept");
 });
 
+// --- plan 25 M9: visible hook decision events ---
+
+test("hook.decision round-trips a PreToolUse deny with tool + reason (plan 25 M9)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.hookDecision({
+        runId: "r-1",
+        hookId: "project:guard",
+        event: "PreToolUse",
+        decision: "deny",
+        toolName: "bash",
+        reason: "workspace is read-only",
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "hook.decision",
+    runId: "r-1",
+    hookId: "project:guard",
+    event: "PreToolUse",
+    decision: "deny",
+    toolName: "bash",
+    reason: "workspace is read-only",
+  });
+});
+
+test("hook.decision omits absent optionals on the wire and round-trips a Stop halt", () => {
+  const built = events.hookDecision({
+    runId: "r-1",
+    hookId: "user:review",
+    event: "Stop",
+    decision: "halt",
+  });
+  assert.equal("toolName" in built.payload, false);
+  assert.equal("reason" in built.payload, false);
+
+  const decoded = decodeTrevorEvent(stored(built));
+  assert.equal(decoded?.type, "hook.decision");
+  if (decoded?.type !== "hook.decision") return;
+  assert.equal(decoded.event, "Stop");
+  assert.equal(decoded.decision, "halt");
+  assert.equal("toolName" in decoded, false);
+  assert.equal("reason" in decoded, false);
+});
+
+test("hook.decision decodes a sparse/forward-compat payload with safe defaults", () => {
+  const decoded = decodeTrevorEvent(
+    stored({ type: "hook.decision", payload: {} }, { eventId: "ev-hd" }),
+  );
+  assert.equal(decoded?.type, "hook.decision");
+  if (decoded?.type !== "hook.decision") return;
+  assert.equal(decoded.runId, "ev-hd", "a missing runId falls back to the event id");
+  assert.equal(decoded.hookId, "");
+  assert.equal(decoded.event, "PreToolUse");
+  // A garbled decision degrades to the quiet diagnostic verb - never a fake deny/halt.
+  assert.equal(decoded.decision, "error");
+});
+
 test("LIFECYCLE_TYPES names exactly the lifecycle events, drawn from their constructors (D-032)", () => {
   // The inventory's per-session activity signal reads these; pinning the set here keeps the
   // protocol the single source - adding a lifecycle event must update this list, not a literal

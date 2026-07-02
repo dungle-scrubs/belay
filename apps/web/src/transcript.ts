@@ -177,6 +177,25 @@ export type QuestionMessage = {
   items: readonly { readonly id: string; readonly question: string; readonly answer: string }[];
   summary: string;
 };
+// A visible hook decision (plan 25 M9), rendered inline as a quiet attributed line: a PreToolUse
+// hook denied a tool, a Stop hook halted the finalizing turn, or a hook injected bounded context.
+// Only those three verbs get a transcript row - updated_input/continuation ride their visible
+// effects (the rewritten call, the continued text) and the diagnostic verbs (timeout/error/
+// unapproved/trust_changed) belong to /doctor. `reason` is already redacted + bounded at the host.
+export type HookDecisionMessage = {
+  kind: "hookDecision";
+  id: string;
+  /** The hook's approval key, `<source>:<id>`. */
+  hookId: string;
+  /** "PreToolUse" | "Stop" (open for forward-compat gates). */
+  event: string;
+  /** "deny" | "halt" | "context" - the only verbs that render inline. */
+  decision: string;
+  toolName?: string;
+  reason?: string;
+};
+/** The hook.decision verbs that render as transcript rows (plan 25 M9). */
+export const RENDERED_HOOK_DECISIONS: ReadonlySet<string> = new Set(["deny", "halt", "context"]);
 // A mid-turn model/reasoning switch (plan 09.1), rendered inline as a quiet breadcrumb: the active turn
 // changed model and/or reasoning at a step boundary. `from`/`to` carry the model id + reasoning so the
 // delta renders, including a reasoning-only change (same model on both sides). A `blocked` outcome (the
@@ -217,6 +236,7 @@ export type Message =
   | DelegationMessage
   | ShellMessage
   | QuestionMessage
+  | HookDecisionMessage
   | ModelSwitchMessage;
 
 /**
@@ -720,6 +740,24 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           action: decoded.action,
           reason: decoded.reason,
           count: decoded.count,
+        });
+        break;
+      }
+      case "hook.decision": {
+        // A visible hook decision (plan 25 M9): only the deny/halt/context verbs render inline;
+        // everything else (updated_input, continuation, the diagnostic states) has its own
+        // surface (the rewritten call, the continued text, /doctor) and stays off the transcript.
+        if (!RENDERED_HOOK_DECISIONS.has(decoded.decision)) {
+          break;
+        }
+        messages.push({
+          kind: "hookDecision",
+          id: event.eventId,
+          hookId: decoded.hookId,
+          event: decoded.event,
+          decision: decoded.decision,
+          ...(decoded.toolName ? { toolName: decoded.toolName } : {}),
+          ...(decoded.reason ? { reason: decoded.reason } : {}),
         });
         break;
       }

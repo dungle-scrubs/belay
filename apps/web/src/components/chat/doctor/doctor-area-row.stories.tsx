@@ -3,10 +3,13 @@ import type { DoctorArea } from "@trevor/session";
 import { DoctorAreaRow } from "./doctor-area-row";
 import {
   coreOk,
+  hooksLegacyMigration,
   hooksMissingScript,
   hooksOk,
   hooksSlow,
   hooksTrustChanged,
+  hooksUnapproved,
+  hooksUnconfigured,
   internetDisconnected,
   internetOk,
   longPathsSnapshot,
@@ -138,9 +141,23 @@ export const Lsp: Story = {
   ),
 };
 
-/** Hooks: all present, script missing, slow, trust changed. */
+/** Hooks (plan 25 M9): ready with trust rollup, unconfigured, awaiting approval, trust changed,
+ *  script missing, degrading handler, legacy HOOK.md migration - the host's real per-state
+ *  detail strings through the generic peripheral row. */
 export const Hooks: Story = {
-  render: () => <RowPanel areas={[hooksOk, hooksMissingScript, hooksSlow, hooksTrustChanged]} />,
+  render: () => (
+    <RowPanel
+      areas={[
+        hooksOk,
+        hooksUnconfigured,
+        hooksUnapproved,
+        hooksTrustChanged,
+        hooksMissingScript,
+        hooksSlow,
+        hooksLegacyMigration,
+      ]}
+    />
+  ),
 };
 
 /** Storage / Roots: writable vs not writable. */

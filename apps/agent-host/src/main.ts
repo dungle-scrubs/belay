@@ -1284,6 +1284,9 @@ const { doctorFacts } = makeHostFacts({
   mcp: mcpRuntime,
   // The LSP manager (plan 24 M8): its status snapshot feeds the /doctor LSP area + debug line.
   lsp: lspManager,
+  // The hooks runtime (plan 25 M9): its status + stats snapshots feed the /doctor Hooks area
+  // (trust states, approval/script/performance/legacy findings) + debug line.
+  hooks: hooksRuntime,
 });
 
 // The `doctor` tool (D-073 M6) has no CommandContext, so the host registers the snapshot accessor it

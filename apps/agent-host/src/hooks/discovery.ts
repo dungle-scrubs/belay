@@ -45,6 +45,21 @@ export interface HookDiscoveryReport {
   readonly roots: readonly HookRoot[];
 }
 
+/**
+ * One legacy V1 `HOOK.md` handler found near a hook root (plan 25 M10, D-009): V1 kept hooks as
+ * `.trevor/hooks/<id>/HOOK.md` files with frontmatter. V2 REPORTS them for migration - discovery
+ * never parses them into definitions and never executes them. `executable` marks a file whose
+ * frontmatter declares a `command:` (the V1 executable-handler shape) vs a prompt-only file.
+ */
+export interface LegacyHookFile {
+  /** Absolute path to the HOOK.md file (abbreviate before display). */
+  readonly path: string;
+  /** Which root's tree it was found under. */
+  readonly source: HookSource;
+  /** Whether the frontmatter declares a `command:` - the shape that MUST be migrated. */
+  readonly executable: boolean;
+}
+
 /** The default roots: the workspace's `.trevor/hooks.json` plus the user-global hooks.json. */
 export function defaultHookDiscoveryRoots(
   workspaceRoot: string = WORKSPACE_ROOT,

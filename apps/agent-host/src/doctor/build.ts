@@ -4,6 +4,7 @@ import { abbrevHome } from "@host/boot/paths";
 import { type CwdLockDoctorFact, cwdLockSummary } from "@host/session/cwd-lock";
 import { fmtFields } from "@host/transport/log";
 import {
+  type DoctorFinding,
   type DoctorSnapshot,
   formatDoctorReport,
   type InternetSnapshot,
@@ -79,6 +80,12 @@ export interface DoctorRuntimeFacts {
   /** Stored LSP diagnostics counts (plan 24 M8): errors surface as the LSP area's
    *  diagnostic-warning finding. Counts only, never a message or a path. */
   readonly lspDiagnostics?: DoctorLspDiagnostics;
+  /** The hooks runtime rollup (plan 25 M9, D-009): the runtime's status snapshot folded by
+   *  doctor/hooks-status into one peripheral state. Absent (not probed) means unconfigured. */
+  readonly hooks?: PeripheralState;
+  /** The Hooks area's extra findings (plan 25 M9): approval, missing scripts, degrading
+   *  handlers, config issues, and legacy HOOK.md migration guidance. */
+  readonly hooksFindings?: readonly DoctorFinding[];
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
@@ -337,16 +344,19 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
       node: process.version,
       runtime: RUNTIME_KIND.host,
     },
-    // MCP and LSP report their subsystems' REAL rollups (plans 23/24 M8) fed in by host-facts;
-    // Hooks is not integrated in this build, so it reports `unconfigured` (not an error).
+    // MCP, LSP, and Hooks report their subsystems' REAL rollups (plans 23/24 M8, 25 M9) fed in
+    // by host-facts; an unprobed subsystem reports `unconfigured` (not an error).
     peripherals: {
       mcp: facts.mcp ?? { kind: "unconfigured" },
       lsp: facts.lsp ?? { kind: "unconfigured" },
-      hooks: { kind: "unconfigured" },
+      hooks: facts.hooks ?? { kind: "unconfigured" },
     },
     // Stored LSP diagnostics counts (plan 24 M8): with errors present, the LSP area attaches
     // its diagnostic-warning finding (D-008).
     ...(facts.lspDiagnostics ? { lspDiagnostics: facts.lspDiagnostics } : {}),
+    // The Hooks area's extra findings (plan 25 M9): approval / scripts / performance / config /
+    // legacy-migration warnings ride beside the lifecycle state, like the LSP diagnostics.
+    ...(facts.hooksFindings ? { hooksFindings: facts.hooksFindings } : {}),
     // Web / Docs config facts (D-073, plan 04): presence booleans + readiness enums only, never key
     // values. web_search reads BRAVE_API_KEY then SERPER_API_KEY; the web_fetch ladder is static
     // (always), Jina (keyless, "keyed" when JINA_API_KEY is set), and Firecrawl (gated on

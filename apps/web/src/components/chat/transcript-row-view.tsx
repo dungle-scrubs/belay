@@ -7,6 +7,7 @@ import {
   RotateCw,
   ShieldAlert,
   TriangleAlert,
+  Webhook,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { compactDisplayFor } from "@/components/chat/compact-display";
@@ -294,6 +295,25 @@ export function TranscriptRowView({
         <ShieldAlert className="size-3 shrink-0" />
         guardrail · {message.tool} · {reason} ×{message.count}
         {blocked ? " · blocked" : ""}
+      </div>
+    );
+  }
+
+  if (message.kind === "hookDecision") {
+    // A visible hook decision (plan 25 M9): a quiet, attributed advisory line - the hook's
+    // approval key, what it did (denied a tool / halted the turn / added context), and its
+    // already-redacted reason. Understated like the guardrail marker, never an alarming card.
+    const action =
+      message.decision === "deny"
+        ? `denied ${message.toolName ?? "a tool"}`
+        : message.decision === "halt"
+          ? "halted the turn"
+          : `context${message.toolName ? ` for ${message.toolName}` : ""}`;
+    return (
+      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+        <Webhook className="size-3 shrink-0" />
+        hook · {message.hookId} · {action}
+        {message.reason ? ` · ${message.reason}` : ""}
       </div>
     );
   }

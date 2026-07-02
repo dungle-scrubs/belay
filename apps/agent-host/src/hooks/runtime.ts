@@ -7,13 +7,14 @@ import {
   hookApprovalsPath,
   loadHookApprovals,
 } from "./approval";
-import type { HookDefinition } from "./config";
+import type { HookConfigIssue, HookDefinition, HookEvent, HookSource } from "./config";
 import type { HookDecision, HookDecisionKind } from "./decision";
 import {
   defaultHookDiscoveryRoots,
   discoverHooks,
   type HookDiscoveryReport,
   type HookDiscoveryRoots,
+  type LegacyHookFile,
 } from "./discovery";
 import { evaluateUpdatedInput } from "./input-policy";
 import { redactHookText } from "./redact";
@@ -25,7 +26,7 @@ import {
 } from "./results";
 import { type HookRunnerOptions, runHook } from "./runner";
 import { createHookStats, type HookStatsEntry } from "./stats";
-import { computeHookTrustFingerprint, evaluateHookTrust } from "./trust";
+import { computeHookTrustFingerprint, evaluateHookTrust, type HookTrustStatus } from "./trust";
 
 /**
  * The hooks RUNTIME (plan 25 M5/M7): the host-lifetime seam that composes discovery, trust
@@ -112,6 +113,10 @@ export interface PreToolUseOutcome {
    *  config order). Absent when no hook rewrote anything or every rewrite was rejected. The
    *  values are UNVALIDATED here - the tool's normal schema decode still applies (D-003). */
   readonly updatedInput?: Readonly<Record<string, unknown>>;
+  /** The approval keys of the hooks whose rewrites contributed to `updatedInput`, in config
+   *  order (25 M9 attribution: the updated_input event names its author). Present exactly when
+   *  `updatedInput` is. */
+  readonly updatedInputHooks?: readonly string[];
   readonly diagnostics: readonly PreToolUseDiagnostic[];
 }
 
@@ -197,6 +202,24 @@ export interface HooksRuntimeOptions {
   readonly runnerOptions?: Omit<HookRunnerOptions, "cwd">;
 }
 
+/** One configured hook's doctor-facing status (M9): identity + freshly evaluated trust. */
+export interface HookStatusEntry {
+  /** The hook's approval key, `<source>:<id>`. */
+  readonly key: string;
+  readonly event: HookEvent;
+  readonly source: HookSource;
+  readonly enabled: boolean;
+  readonly trust: HookTrustStatus;
+}
+
+/** The doctor-facing hooks picture (M9): configured hooks + config issues + legacy HOOK.md. */
+export interface HooksStatusSnapshot {
+  readonly hooks: readonly HookStatusEntry[];
+  readonly issues: readonly HookConfigIssue[];
+  /** Legacy V1 HOOK.md files found near the hook roots (M10) - reported, never executed. */
+  readonly legacy: readonly LegacyHookFile[];
+}
+
 export interface HooksRuntime {
   /** Runs the PreToolUse gate for one tool call. Resolves ALWAYS - never rejects (D-007). */
   readonly dispatchPreToolUse: (payload: PreToolUsePayload) => Promise<PreToolUseOutcome>;
@@ -206,6 +229,9 @@ export interface HooksRuntime {
   readonly statsSnapshot: () => readonly HookStatsEntry[];
   /** The cached discovery report (definitions + config issues) for Doctor (M9). */
   readonly discoveryReport: () => HookDiscoveryReport;
+  /** The doctor-facing status picture (M9): every configured hook with its trust state,
+   *  evaluated fresh (approvals + fingerprints re-read), plus config issues and legacy files. */
+  readonly statusSnapshot: () => HooksStatusSnapshot;
 }
 
 /** One gated hook's result inside a dispatch: a (never-executed or failed) diagnostic, or the
@@ -241,6 +267,10 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     return discovered;
   };
 
+  /** The trust anchor for a hook's relative script references (D-006). */
+  const trustBaseDir = (hook: HookDefinition): string =>
+    hook.source === "project" ? workspaceRoot : userConfigDir;
+
   // The shared per-hook gate for both dispatchers (M7): trust evaluation (D-006), execution,
   // stats, and the diagnostic/decision split (D-007). Throws only on an unexpected fault, which
   // each dispatcher folds into that hook's command_failed diagnostic - dispatch never rejects.
@@ -250,8 +280,7 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     approvals: HookApprovalsState,
     payload: unknown,
   ): Promise<GatedHookRun> => {
-    const baseDir = hook.source === "project" ? workspaceRoot : userConfigDir;
-    const fingerprint = computeHookTrustFingerprint(hook, baseDir);
+    const fingerprint = computeHookTrustFingerprint(hook, trustBaseDir(hook));
     const status = evaluateHookTrust(fingerprint, approvedHashFor(approvals, key));
     const trustDiagnostic = hookTrustOutcome(status);
     if (trustDiagnostic) {
@@ -290,7 +319,9 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     // The merged allowlisted rewrites (25 M6): each passing hook's fields layer on in config
     // order, so a later hook overrides an earlier one field-by-field - the same last-writer
     // determinism as the config files themselves. Stays undefined until a rewrite passes policy.
+    // `updatedInputHooks` records each contributor's approval key (25 M9 attribution).
     let updatedInput: Record<string, unknown> | undefined;
+    const updatedInputHooks: string[] = [];
 
     for (const hook of hooks) {
       const key = hookApprovalKey(hook);
@@ -332,6 +363,7 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
           const evaluated = evaluateUpdatedInput(payload.toolName, decision.updatedInput);
           if (evaluated.ok) {
             updatedInput = { ...updatedInput, ...evaluated.fields };
+            updatedInputHooks.push(key);
           } else {
             diagnostics.push({
               hook: key,
@@ -356,7 +388,9 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     return {
       decision: "allow",
       contexts,
-      ...(updatedInput && Object.keys(updatedInput).length > 0 ? { updatedInput } : {}),
+      ...(updatedInput && Object.keys(updatedInput).length > 0
+        ? { updatedInput, updatedInputHooks }
+        : {}),
       diagnostics,
     };
   };
@@ -419,10 +453,34 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     return { decision: "allow", contexts, diagnostics };
   };
 
+  // The doctor-facing picture (M9): trust is evaluated FRESH per snapshot (approvals re-read,
+  // fingerprints recomputed) so /doctor reflects an approval or a script edit immediately, on
+  // the same cached discovery every dispatch uses. `legacy` is M10's HOOK.md migration scan.
+  const statusSnapshot = (): HooksStatusSnapshot => {
+    const report = discovery();
+    const approvals = loadHookApprovals(approvalsPath);
+    return {
+      hooks: report.hooks.map((hook) => {
+        const key = hookApprovalKey(hook);
+        const fingerprint = computeHookTrustFingerprint(hook, trustBaseDir(hook));
+        return {
+          key,
+          event: hook.event,
+          source: hook.source,
+          enabled: hook.enabled,
+          trust: evaluateHookTrust(fingerprint, approvedHashFor(approvals, key)),
+        };
+      }),
+      issues: report.issues,
+      legacy: [],
+    };
+  };
+
   return {
     dispatchPreToolUse,
     dispatchStop,
     statsSnapshot: () => stats.snapshot(),
     discoveryReport: () => discovery(),
+    statusSnapshot,
   };
 }

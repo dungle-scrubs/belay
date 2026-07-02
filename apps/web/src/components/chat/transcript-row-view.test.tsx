@@ -458,3 +458,59 @@ test("plan 07: a blocked guardrail marker names the block", () => {
   assert.match(container.textContent ?? "", /repeated failure/i);
   assert.match(container.textContent ?? "", /blocked/i);
 });
+
+test("plan 25 M9: a hook deny renders as a quiet attributed line with tool and reason", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "hookDecision",
+      id: "hd1",
+      hookId: "project:guard",
+      event: "PreToolUse",
+      decision: "deny",
+      toolName: "bash",
+      reason: "workspace is read-only",
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.match(text, /hook/i);
+  assert.match(text, /project:guard/);
+  assert.match(text, /denied bash/);
+  assert.match(text, /workspace is read-only/);
+  // A quiet advisory line, not the alarming alert card.
+  assert.equal(container.querySelector('[role="alert"]'), null);
+});
+
+test("plan 25 M9: a Stop halt renders the halted-turn line with its reason", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "hookDecision",
+      id: "hd2",
+      hookId: "user:review",
+      event: "Stop",
+      decision: "halt",
+      reason: "cover the edge case",
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.match(text, /user:review/);
+  assert.match(text, /halted the turn/i);
+  assert.match(text, /cover the edge case/);
+});
+
+test("plan 25 M9: a hook context note renders attributed to its tool", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "hookDecision",
+      id: "hd3",
+      hookId: "project:note",
+      event: "PreToolUse",
+      decision: "context",
+      toolName: "read",
+      reason: "prefer the v2 config",
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.match(text, /project:note/);
+  assert.match(text, /context for read/i);
+  assert.match(text, /prefer the v2 config/);
+});

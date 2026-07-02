@@ -22,7 +22,13 @@ import { MAX_OUTPUT } from "@host/tools/shared";
 import { DeltaBuffer } from "@host/transport/delta-buffer";
 import { debug, warn } from "@host/transport/log";
 import { Emit } from "@host/transport/services";
-import { events, type ModelRef, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
+import {
+  events,
+  type ModelRef,
+  type ProviderDiagnostic,
+  type TrevorEventInput,
+  type TurnStop,
+} from "@trevor/session";
 import {
   METRIC_NAMES,
   NOOP_SINK,
@@ -32,6 +38,7 @@ import {
 } from "@trevor/session/telemetry";
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, Fiber, FiberRef, Option, Stream } from "effect";
+import { withHookDecisionEvents } from "./hook-events";
 import type { HistoryImageResolver } from "./image-resolution";
 import { type AgentEvent, type DelegateCapability, runAgent, type TurnHooks } from "./loop";
 import { type TurnLoopConfig, turnLoopConfig } from "./loop-config";
@@ -101,7 +108,14 @@ export function publishTurn(
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
-  const turnHooks = options.hooks;
+  // The M9 hook.decision seam: wrap the turn's hooks ONCE so every PreToolUse/Stop dispatch
+  // outcome also folds into visible hook.decision events. The wrapper only QUEUES them (its
+  // observer callbacks are sync); the turn drains the queue through the same awaited Emit path
+  // as every other event - deterministic ordering, never a dangling forked publish.
+  const pendingHookEvents: TrevorEventInput[] = [];
+  const turnHooks = options.hooks
+    ? withHookDecisionEvents(options.hooks, options.runId, (event) => pendingHookEvents.push(event))
+    : undefined;
   const switchCell = options.switch;
   const rebuildProvider = options.rebuildProvider;
   const initialModel = options.initialModel;
@@ -200,6 +214,18 @@ export function publishTurn(
     const flushAll = Effect.gen(function* () {
       yield* text.flush();
       yield* thinking.flush();
+    });
+
+    // Drains the hook.decision events the wrapped hooks queued (M9): called at each loop-event
+    // boundary and after the Stop gate, so every queued event publishes through the same
+    // awaited Emit path - and always AHEAD of the terminal completion.
+    const flushHookEvents = Effect.gen(function* () {
+      while (pendingHookEvents.length > 0) {
+        const next = pendingHookEvents.shift();
+        if (next) {
+          yield* emit.publish(next);
+        }
+      }
     });
 
     const complete = (extra: {
@@ -364,6 +390,9 @@ export function publishTurn(
 
     const handle = (event: AgentEvent) =>
       Effect.gen(function* () {
+        // Hook decisions queued during the previous execution window publish first (M9), so a
+        // deny/context row lands ahead of the tool.completed it explains.
+        yield* flushHookEvents;
         if (event.type === "text") {
           full += event.text;
           breakdown.onAnswer(event.text.length);
@@ -535,7 +564,7 @@ export function publishTurn(
         toolNames,
         delegate,
         telemetry: sink,
-        ...(options.hooks ? { hooks: options.hooks } : {}),
+        ...(turnHooks ? { hooks: turnHooks } : {}),
         ...(loop ? { loop } : {}),
         ...(seedUsage ? { seedUsage } : {}),
         ...(switchCell ? { switch: switchCell } : {}),
@@ -559,6 +588,9 @@ export function publishTurn(
           if (Exit.isSuccess(exit)) {
             yield* stopHookGate;
           }
+          // Any hook.decision still queued (the Stop gate's own, or a straggler from a turn
+          // that ended mid-batch) publishes BEFORE the terminal completion below (M9).
+          yield* flushHookEvents;
 
           // A low-cardinality turn-stop counter for EVERY turn (plan 13 M5): a terminal stop's rich cause
           // when present, else the exit disposition (answered/cancelled/failed). All labels are bounded

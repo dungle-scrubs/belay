@@ -9,6 +9,7 @@ import {
   Sparkles,
   Terminal,
   TriangleAlert,
+  Webhook,
   Wrench,
 } from "lucide-react";
 import type { ElementType } from "react";
@@ -127,6 +128,22 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
       };
     case "guardrail":
       return marker("guardrail", ShieldAlert, `Guardrail: ${message.tool}`, message.reason);
+    case "hookDecision": {
+      // A hook decision (plan 25 M9) compacts to the same quiet marker shape as a guardrail:
+      // the hook's key as the label, its action + reason as the summary.
+      const action =
+        message.decision === "deny"
+          ? `denied ${message.toolName ?? "a tool"}`
+          : message.decision === "halt"
+            ? "halted the turn"
+            : `context${message.toolName ? ` for ${message.toolName}` : ""}`;
+      return marker(
+        "hookDecision",
+        Webhook,
+        `Hook: ${message.hookId}`,
+        `${action}${message.reason ? ` - ${message.reason}` : ""}`,
+      );
+    }
     case "compacting":
       return {
         kind: "compacting",

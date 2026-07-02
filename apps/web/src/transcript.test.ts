@@ -1278,6 +1278,104 @@ test("plan 07: a tool.guardrail event reduces to a redacted inline guardrail mar
   assert.doesNotMatch(dump, /same output|"path"/, "no raw output or arguments surface");
 });
 
+test("plan 25 M9: hook.decision deny/halt/context events reduce to attributed inline rows", () => {
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    ev(
+      2,
+      events.hookDecision({
+        runId: "r1",
+        hookId: "project:guard",
+        event: "PreToolUse",
+        decision: "deny",
+        toolName: "bash",
+        reason: "workspace is read-only",
+      }),
+    ),
+    ev(
+      3,
+      events.hookDecision({
+        runId: "r1",
+        hookId: "project:note",
+        event: "PreToolUse",
+        decision: "context",
+        toolName: "read",
+        reason: "heads up",
+      }),
+    ),
+    ev(
+      4,
+      events.hookDecision({
+        runId: "r1",
+        hookId: "user:review",
+        event: "Stop",
+        decision: "halt",
+        reason: "cover the edge case",
+      }),
+    ),
+    ev(5, events.assistantCompleted({ runId: "r1", text: "done" })),
+  ];
+  const rows = toTranscript(log).filter((m) => m.kind === "hookDecision");
+  assert.deepEqual(rows, [
+    {
+      kind: "hookDecision",
+      id: rows[0]?.id,
+      hookId: "project:guard",
+      event: "PreToolUse",
+      decision: "deny",
+      toolName: "bash",
+      reason: "workspace is read-only",
+    },
+    {
+      kind: "hookDecision",
+      id: rows[1]?.id,
+      hookId: "project:note",
+      event: "PreToolUse",
+      decision: "context",
+      toolName: "read",
+      reason: "heads up",
+    },
+    {
+      kind: "hookDecision",
+      id: rows[2]?.id,
+      hookId: "user:review",
+      event: "Stop",
+      decision: "halt",
+      reason: "cover the edge case",
+    },
+  ]);
+});
+
+test("plan 25 M9: diagnostic hook.decision verbs produce no transcript row", () => {
+  // updated_input/continuation/timeout/error/unapproved/trust_changed stay off the transcript:
+  // the visible surfaces for those are the tool result, the continued text, and /doctor.
+  const diagnostic = (seq: number, decision: string) =>
+    ev(
+      seq,
+      events.raw("hook.decision", {
+        runId: "r1",
+        hookId: "project:x",
+        event: "PreToolUse",
+        decision,
+      }),
+    );
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    diagnostic(2, "updated_input"),
+    diagnostic(3, "continuation"),
+    diagnostic(4, "timeout"),
+    diagnostic(5, "error"),
+    diagnostic(6, "unapproved"),
+    diagnostic(7, "trust_changed"),
+    ev(8, events.assistantCompleted({ runId: "r1", text: "done" })),
+  ];
+  assert.equal(
+    toTranscript(log).some((m) => m.kind === "hookDecision"),
+    false,
+    "only deny/halt/context render inline",
+  );
+});
+
 test("plan 07: an ask_user guardrail marker is suppressed (no transcript row for ask_user)", () => {
   const log = [
     ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),

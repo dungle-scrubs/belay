@@ -500,50 +500,55 @@ export const lspDiagnosticWarning: DoctorArea = {
 };
 
 // --- Hooks -----------------------------------------------------------------
+// These mirror the HOST's real Hooks area shape (plan 25 M9): the hooks runtime's status
+// snapshot is folded by doctor/hooks-status into ONE PeripheralState whose detail string
+// becomes both the verdict and the single `hooks.status` finding via the generic peripheralArea
+// mapping, plus the extra findings the fold raises (approval / missing scripts / degrading
+// handlers / legacy HOOK.md migration). Keys are `<source>:<id>` identities, paths are
+// home-abbreviated, and nothing carries a hook's arguments or output (D-009).
+
+const HOOKS_READY_DETAIL = "2 hooks (1 PreToolUse · 1 Stop) · 2 approved";
 
 export const hooksOk: DoctorArea = {
   id: "hooks",
   label: "Hooks",
   status: "ok",
-  verdict: "All hook scripts present.",
-  facts: [
-    { label: "pre-turn", value: "ok", status: "ok" },
-    { label: "post-turn", value: "ok", status: "ok" },
-  ],
+  verdict: HOOKS_READY_DETAIL,
+  findings: [{ id: "hooks.status", status: "ok", title: "Hooks", message: HOOKS_READY_DETAIL }],
 };
 
-export const hooksMissingScript: DoctorArea = {
+export const hooksUnconfigured: DoctorArea = {
   id: "hooks",
   label: "Hooks",
-  status: "error",
-  verdict: "A configured hook script is missing.",
+  status: "not_checked",
+  verdict: "Hooks is not configured.",
   findings: [
     {
-      id: "hooks.preturn.missing",
-      status: "error",
-      title: "pre-turn hook script not found",
-      message:
-        "The configured hook points at a file that doesn't exist, so the turn pipeline can't run it.",
-      source: "~/.trevorV2/hooks/pre-turn.sh",
-      nextAction: { label: "Restore the script or remove the hook" },
+      id: "hooks.status",
+      status: "not_checked",
+      title: "Hooks",
+      message: "Hooks is not configured.",
     },
   ],
 };
 
-export const hooksSlow: DoctorArea = {
+const HOOKS_UNAPPROVED_DETAIL = "2 hooks (2 PreToolUse) · 1 approved · 1 awaiting approval";
+
+export const hooksUnapproved: DoctorArea = {
   id: "hooks",
   label: "Hooks",
   status: "warn",
-  verdict: "A hook is running slowly.",
+  verdict: HOOKS_UNAPPROVED_DETAIL,
   findings: [
+    { id: "hooks.status", status: "ok", title: "Hooks", message: HOOKS_UNAPPROVED_DETAIL },
     {
-      id: "hooks.postturn.slow",
+      id: "hooks.approval",
       status: "warn",
-      title: "post-turn hook is slow",
+      title: "Hooks awaiting approval",
       message:
-        "The post-turn hook averaged 4.8s over the last 5 turns, adding latency to every turn.",
-      evidence: "samples: 5.1s, 4.6s, 4.9s, 4.2s, 5.0s",
-      nextAction: { label: "Profile or simplify the hook" },
+        "1 hook awaiting approval: project:fmt. " +
+        "A hook never executes until its current trust hash is approved.",
+      nextAction: { label: "Review each hook, then approve its trust hash" },
     },
   ],
 };
@@ -552,15 +557,77 @@ export const hooksTrustChanged: DoctorArea = {
   id: "hooks",
   label: "Hooks",
   status: "warn",
-  verdict: "Hook trust changed since last run.",
+  verdict: HOOKS_UNAPPROVED_DETAIL,
   findings: [
+    { id: "hooks.status", status: "ok", title: "Hooks", message: HOOKS_UNAPPROVED_DETAIL },
     {
-      id: "hooks.trust.changed",
+      id: "hooks.approval",
       status: "warn",
-      title: "Hook script modified",
-      message: "A hook script changed on disk and is paused pending re-approval before it runs.",
-      source: "~/.trevorV2/hooks/pre-turn.sh",
-      nextAction: { label: "Review the change and re-approve" },
+      title: "Hooks awaiting approval",
+      message:
+        "1 hook awaiting approval: project:fmt. " +
+        "A hook never executes until its current trust hash is approved. " +
+        "1 hook changed since approval and needs RE-approval.",
+      nextAction: { label: "Review each hook, then approve its trust hash" },
+    },
+  ],
+};
+
+const HOOKS_MISSING_DETAIL = "1 hook (1 PreToolUse) · 0 approved · 1 missing script";
+
+export const hooksMissingScript: DoctorArea = {
+  id: "hooks",
+  label: "Hooks",
+  status: "warn",
+  verdict: HOOKS_MISSING_DETAIL,
+  findings: [
+    { id: "hooks.status", status: "ok", title: "Hooks", message: HOOKS_MISSING_DETAIL },
+    {
+      id: "hooks.scripts",
+      status: "warn",
+      title: "Hook scripts missing",
+      message: "The command script does not exist for: project:fmt.",
+      nextAction: { label: "Restore the script or remove the hook" },
+    },
+  ],
+};
+
+const HOOKS_SLOW_DETAIL = "1 hook (1 Stop) · 1 approved";
+
+export const hooksSlow: DoctorArea = {
+  id: "hooks",
+  label: "Hooks",
+  status: "warn",
+  verdict: HOOKS_SLOW_DETAIL,
+  findings: [
+    { id: "hooks.status", status: "ok", title: "Hooks", message: HOOKS_SLOW_DETAIL },
+    {
+      id: "hooks.performance",
+      status: "warn",
+      title: "Degrading hook handlers",
+      message: "project:audit timed out 3 of 14 runs. Each gated call pays this latency.",
+      nextAction: { label: "Profile or simplify the hook, or raise its timeoutMs" },
+    },
+  ],
+};
+
+const HOOKS_LEGACY_DETAIL = "0 hooks · 1 legacy HOOK.md file (migrate)";
+
+export const hooksLegacyMigration: DoctorArea = {
+  id: "hooks",
+  label: "Hooks",
+  status: "warn",
+  verdict: HOOKS_LEGACY_DETAIL,
+  findings: [
+    { id: "hooks.status", status: "ok", title: "Hooks", message: HOOKS_LEGACY_DETAIL },
+    {
+      id: "hooks.legacy",
+      status: "warn",
+      title: "Legacy HOOK.md handlers",
+      message:
+        "1 legacy V1 HOOK.md file found - these never execute in V2: " +
+        "~/dev/app/.trevor/hooks/fmt/HOOK.md.",
+      nextAction: { label: "Migrate each handler to a hooks.json entry" },
     },
   ],
 };

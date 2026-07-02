@@ -238,6 +238,18 @@ describe("dispatchPreToolUse - scoped updatedInput (25 M6, D-003)", () => {
     expect(outcome.updatedInput).toEqual({ command: "echo second" });
   });
 
+  test("the outcome attributes which hooks contributed the rewrite, in config order (25 M9)", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        { id: "first", mode: "print", flags: [rewrite("echo first")] },
+        { id: "second", mode: "print", flags: [rewrite("echo second")] },
+      ]),
+    );
+
+    const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(outcome.updatedInputHooks).toEqual(["project:first", "project:second"]);
+  });
+
   test("an unsupported field is rejected with a diagnostic and no update", async () => {
     const h = using(
       hooksRuntimeHarness([
@@ -252,6 +264,7 @@ describe("dispatchPreToolUse - scoped updatedInput (25 M6, D-003)", () => {
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("allow");
     expect(outcome.updatedInput).toBeUndefined();
+    expect(outcome.updatedInputHooks).toBeUndefined();
     expect(outcome.diagnostics).toEqual([
       expect.objectContaining({ hook: "project:sneaky", reason: "updated_input_rejected" }),
     ]);
@@ -307,5 +320,34 @@ describe("dispatchPreToolUse - non-blocking failures and stats (D-007)", () => {
     expect(h.runtime.statsSnapshot()).toEqual([
       expect.objectContaining({ key: "project:broken", runs: 1, failures: 1 }),
     ]);
+  });
+});
+
+describe("statusSnapshot - the doctor-facing hooks picture (25 M9)", () => {
+  test("reports every configured hook with its freshly evaluated trust status", async () => {
+    const h = using(
+      hooksRuntimeHarness(
+        [
+          { id: "fmt", mode: "print", flags: ['{"decision":"allow"}'] },
+          { id: "new", mode: "print", flags: ['{"decision":"allow"}'], approved: false },
+        ],
+        [{ id: "audit", mode: "print", flags: ['{"decision":"allow"}'], event: "Stop" }],
+      ),
+    );
+
+    const snapshot = h.runtime.statusSnapshot();
+    expect(snapshot.hooks).toEqual([
+      expect.objectContaining({
+        key: "project:fmt",
+        event: "PreToolUse",
+        source: "project",
+        enabled: true,
+        trust: "approved",
+      }),
+      expect.objectContaining({ key: "project:new", trust: "unapproved" }),
+      expect.objectContaining({ key: "user:audit", event: "Stop", trust: "approved" }),
+    ]);
+    expect(snapshot.issues).toEqual([]);
+    expect(snapshot.legacy).toEqual([]);
   });
 });
