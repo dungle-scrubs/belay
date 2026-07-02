@@ -543,9 +543,13 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       telemetry: hostTelemetry,
       providerTrace,
       // The PreToolUse gate (plan 25 M5): every tool call this turn executes passes the
-      // host-wide hooks runtime, identified as a main-loop or restricted /clip call.
+      // host-wide hooks runtime, identified as a main-loop or restricted /clip call. The Stop
+      // gate (25 M7) reviews this turn's terminal result before its completion publishes; child
+      // (subagent) turns deliberately carry no Stop gate - finalization review is a main-turn
+      // concern, and a child's distilled result is reviewed when the PARENT turn finalizes.
       hooks: {
         dispatchPreToolUse: hooksRuntime.dispatchPreToolUse,
+        dispatchStop: hooksRuntime.dispatchStop,
         sessionId: SESSION_ID,
         callerKind: restricted ? ("clip" as const) : ("main" as const),
         cwd: process.cwd(),

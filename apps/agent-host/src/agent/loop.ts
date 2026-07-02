@@ -5,7 +5,13 @@
  * Not for: publishing the turn as session events - publishTurn (turn.ts) - or hook dispatch
  * semantics - @host/hooks/runtime.
  */
-import type { HookCallerKind, PreToolUseOutcome, PreToolUsePayload } from "@host/hooks/runtime";
+import type {
+  HookCallerKind,
+  PreToolUseOutcome,
+  PreToolUsePayload,
+  StopOutcome,
+  StopPayload,
+} from "@host/hooks/runtime";
 import { debug } from "@host/transport/log";
 import {
   constrainReasoning,
@@ -169,6 +175,9 @@ export interface DelegateCapability {
  */
 export interface TurnHooks {
   readonly dispatchPreToolUse: (payload: PreToolUsePayload) => Promise<PreToolUseOutcome>;
+  /** The Stop finalization gate (plan 25 M7, D-004): publishTurn dispatches it before emitting
+   *  a genuine terminal completion. Absent = no Stop gate (a test turn, or a child turn). */
+  readonly dispatchStop?: (payload: StopPayload) => Promise<StopOutcome>;
   readonly sessionId: string;
   readonly callerKind: HookCallerKind;
   readonly cwd: string;
@@ -177,6 +186,9 @@ export interface TurnHooks {
     readonly toolName: string;
     readonly outcome: PreToolUseOutcome;
   }) => void;
+  /** The M9 event seam for Stop outcomes, mirroring `onOutcome`: observes every Stop dispatch's
+   *  outcome (decision + contexts + diagnostics) so transcript events can layer on later. */
+  readonly onStopOutcome?: (report: { readonly outcome: StopOutcome }) => void;
 }
 
 /** Options for a turn: a subagent's tool allow-list, and (for a parent) the delegation capability. */

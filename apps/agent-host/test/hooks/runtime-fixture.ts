@@ -10,7 +10,12 @@ import {
 } from "@host/hooks/approval";
 import type { HookSource } from "@host/hooks/config";
 import { discoverHooks } from "@host/hooks/discovery";
-import { createHooksRuntime, type HooksRuntime, type PreToolUsePayload } from "@host/hooks/runtime";
+import {
+  createHooksRuntime,
+  type HooksRuntime,
+  type PreToolUsePayload,
+  type StopPayload,
+} from "@host/hooks/runtime";
 import { computeHookTrustFingerprint } from "@host/hooks/trust";
 import { HOOK_FIXTURE_COMMAND, hookFixtureArgs } from "./fixture-config";
 
@@ -136,6 +141,21 @@ export function preToolUsePayload(overrides: Partial<PreToolUsePayload> = {}): P
     toolName: "bash",
     toolInput: { command: "echo hi" },
     toolMetadata: { readOnly: false },
+    ...overrides,
+  };
+}
+
+/** A complete Stop payload with overridable fields, for dispatch-level tests (25 M7). */
+export function stopPayload(overrides: Partial<StopPayload> = {}): StopPayload {
+  return {
+    event: "Stop",
+    sessionId: "s-hooks-test",
+    runId: "run-hooks-1",
+    turnId: "run-hooks-1",
+    cwd: "/tmp",
+    terminalReason: "completed",
+    finalText: "The final answer.",
+    toolSummary: [{ tool: "bash", count: 2 }],
     ...overrides,
   };
 }

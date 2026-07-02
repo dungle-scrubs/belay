@@ -34,6 +34,7 @@ import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
 import type { HistoryImageResolver } from "./image-resolution";
 import { type AgentEvent, type DelegateCapability, runAgent, type TurnHooks } from "./loop";
 import type { TurnLoopConfig } from "./loop-config";
+import { createStopToolSummary, stopHookHaltStop, stopTerminalReason } from "./stop-hook";
 import type { SwitchCell } from "./switch-cell";
 import { prepareTurn } from "./turn-preflight";
 import { recordTurnStop } from "./turn-stop-metrics";
@@ -92,6 +93,7 @@ export function publishTurn(
   },
 ): Effect.Effect<void, never, Emit> {
   const { runId, reasoning, toolNames, delegate, resolveImages, loop, seedUsage } = options;
+  const turnHooks = options.hooks;
   const switchCell = options.switch;
   const rebuildProvider = options.rebuildProvider;
   const initialModel = options.initialModel;
@@ -173,6 +175,10 @@ export function publishTurn(
     // transient outage that gave up) - distinct from a non-retryable terminal failure, which never
     // reconnects. The /doctor surface reads the two categories separately.
     let reconnectAttempts = 0;
+    // The compact per-tool accounting for the Stop hook payload (plan 25 M7, D-004): every
+    // tool_start this turn publishes is recorded (name + touched path when cheaply derivable),
+    // so a Stop hook can review WHAT ran without ever seeing raw arguments or outputs.
+    const toolSummary = createStopToolSummary();
 
     const text = new DeltaBuffer((delta) =>
       emit.publish(events.assistantDelta({ runId, text: delta })),
@@ -207,6 +213,36 @@ export function publishTurn(
         }),
       );
 
+    // The Stop finalization gate (plan 25 M7, D-004): runs every approved+enabled Stop hook over
+    // the FINAL text + terminal reason BEFORE the completed event publishes (the emission awaits
+    // the dispatch, bounded by the per-hook timeouts). A halt swaps the completion's stop for the
+    // visible hook-halt marker - the completion still publishes, so the turn ENDS (halt blocks
+    // "finalize as-is" semantics, never the run's termination). Dispatched ONLY from the success
+    // exit below: a genuine terminal assistant result. A cancelled/interrupted fiber, a provider
+    // failure, and a preflight-blocked turn never dispatch Stop. `onStopOutcome` is the M9 seam.
+    const stopHookGate = Effect.gen(function* () {
+      const dispatchStop = turnHooks?.dispatchStop;
+      if (!turnHooks || !dispatchStop) {
+        return;
+      }
+      const outcome = yield* Effect.promise(() =>
+        dispatchStop({
+          event: "Stop",
+          sessionId: turnHooks.sessionId,
+          runId,
+          turnId: runId,
+          cwd: turnHooks.cwd,
+          terminalReason: stopTerminalReason(stop),
+          finalText: full,
+          toolSummary: toolSummary.snapshot(),
+        }),
+      );
+      turnHooks.onStopOutcome?.({ outcome });
+      if (outcome.decision === "halt") {
+        stop = stopHookHaltStop(outcome);
+      }
+    });
+
     // Records the terminal incident into the per-provider latest-incident store and emits the
     // structured provider-incident log line (D-007), keyed by runId, provider, model, phase, reason,
     // retryability, and attempt. The detail is already redacted at the provider boundary; this carries
@@ -239,6 +275,7 @@ export function publishTurn(
           yield* thinking.add(event.text);
         } else if (event.type === "tool_start") {
           breakdown.onToolCall(event.call.arguments.length);
+          toolSummary.record(event.call.name, event.call.arguments);
           yield* flushAll;
           yield* emit.publish(
             events.toolStarted({
@@ -417,6 +454,13 @@ export function publishTurn(
         Effect.gen(function* () {
           yield* flushAll;
           yield* Effect.sync(() => logUsageBreakdown(runId, breakdown, usage));
+
+          // The Stop dispatch rule (25 M7): only a genuine terminal assistant result - the
+          // success exit, including budget/halt/no-reply stops - is reviewable. It runs before
+          // the metrics below so a hook halt is counted under its real cause.
+          if (Exit.isSuccess(exit)) {
+            yield* stopHookGate;
+          }
 
           // A low-cardinality turn-stop counter for EVERY turn (plan 13 M5): a terminal stop's rich cause
           // when present, else the exit disposition (answered/cancelled/failed). All labels are bounded
