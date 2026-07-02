@@ -81,6 +81,7 @@ import {
   RESTART_RESUME_REASON,
   resumeProjection,
 } from "./agent/resume-projection";
+import { makeRunLifecycle } from "./agent/run-lifecycle";
 import { createSwitchCell, type SwitchCell } from "./agent/switch-cell";
 import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
@@ -797,55 +798,6 @@ function maybeAutoResume(): void {
   );
 }
 
-/**
- * Publishes the terminal completion for a run being closed WITHOUT a completion of its own - a user
- * cancel (ESC) or a host reap of an orphan. Dedups via `completedRuns` (the fiber's own onExit is
- * dropped, so the run closes exactly once) and carries the run's last-known usage, since the tokens
- * it consumed don't vanish on a cancel. `cancelled` = the user pressed ESC; `interrupted` = the host
- * closed it (restart/crash mid-turn), rendered as a muted "host restarted" note rather than an ESC.
- */
-function closeRun(runId: string, kind: "cancelled" | "interrupted"): void {
-  const event = turnMachine.close(runId, kind);
-  if (event) {
-    emit(event).catch(() => {});
-  }
-}
-
-/**
- * Tears down the active work for a cancel/stop: interrupt a running MANUAL /compact (the user asked,
- * so they can take it back; automatic folds aren't tracked here and run to completion), close every
- * targeted run as `cancelled`, and cancel the scheduler. An empty `runId` means "whatever is active" -
- * every in-flight run - and matches `scheduler.cancel("")`. Shared by the live-leader user.cancel
- * handler and the graceful-stop path, so /stop + SIGTERM tear down the same things ESC does.
- */
-function abortRuns(runId: string): void {
-  if (manualCompactFiber) {
-    Effect.runFork(Fiber.interrupt(manualCompactFiber));
-  }
-  const targets = runId ? [runId] : turnMachine.inFlightIds();
-  for (const target of targets) {
-    closeRun(target, "cancelled");
-  }
-  scheduler.cancel(runId);
-}
-
-/**
- * Closes runs left dangling by a previous leader (crashed or hot-reloaded mid-turn): an
- * assistant.started with no completion. Called on TAKING leadership, when this host has no turn of
- * its own running, so every in-flight run is a dead orphan. Closes each as `interrupted`, which
- * unfreezes the send queue and makes ESC meaningful again on the next real turn. Idempotent: each
- * emitted completion echoes back and the set is cleared.
- */
-function reapOrphans(): void {
-  for (const event of turnMachine.reapExcept(runningRunId)) {
-    const runId = typeof event.payload.runId === "string" ? event.payload.runId : "";
-    log("host", "reaping orphaned run", { run: runId.slice(0, 8) });
-    // Emit directly (not via closeRun's dedup gate): a turn whose completion was lost to a store outage
-    // already tripped that gate, so going through it again would silently drop the reconciling event.
-    emit(event).catch(() => {});
-  }
-}
-
 /** Emit at most one progress tick per this many summary tokens, so a streaming fold publishes a
  *  bounded handful of advisory `context.compacting` events rather than one per delta. */
 const COMPACT_PROGRESS_TOKEN_STEP = 40;
@@ -924,6 +876,17 @@ const scheduler = new TurnScheduler({
     return live ? startTurn(event, history.slice()) : null;
   },
   compaction: { needed: needsCompaction, run: startCompaction },
+});
+
+// The run close/abort/reap lifecycle (plan 22.3, agent/run-lifecycle): wired over the live turn
+// machine + scheduler and the active-run/manual-compact markers, so handleEvent's user.cancel arm,
+// the lifecycle commands, and the leadership reconciles share one teardown.
+const { abortRuns, reapOrphans } = makeRunLifecycle({
+  turnMachine,
+  scheduler,
+  emit,
+  runningRunId: () => runningRunId,
+  manualCompactFiber: () => manualCompactFiber,
 });
 
 /** On becoming leader: answer any pending prompt, else pre-warm the local model. */
