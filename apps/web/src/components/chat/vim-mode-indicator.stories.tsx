@@ -22,7 +22,7 @@ export default meta;
 type Story = StoryObj<typeof VimModeIndicator>;
 
 /** A mock of the composer bottom row (prompt-input.tsx): the `+` upload (or shell glyph) + expand, then
- *  the Vim indicator - so placement + height stability are reviewable before the M6 wiring. */
+ *  the Vim indicator - so placement + height stability are reviewable in isolation. */
 function BottomRow({
   glyph = "plus",
   indicator,

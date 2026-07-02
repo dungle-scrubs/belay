@@ -37,6 +37,7 @@ test("every mode pill carries the fixed-height + min-width classes (no reflow on
     const el = getByLabelText(`Vim mode: ${mode}`);
     assert.ok(el.className.includes("h-6"), `${mode}: fixed height`);
     assert.ok(el.className.includes("min-w-"), `${mode}: stable min width`);
+    assert.ok(el.className.includes("shrink-0"), `${mode}: never shrinks in the row`);
     unmount();
   }
 });
