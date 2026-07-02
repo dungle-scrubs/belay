@@ -1,32 +1,30 @@
 # Host God-File Decomposition - Progress Report
 
-> **Status: deferred / gated.** Does not start until 22.1 merges and the per-file boundary gates clear (see implementation.md § Hard Dependencies).
+> Gates cleared 2026-07-02: 22.1 merged; plans 28/21/10 do not move any of the four god-files
+> (verified against their implementation plans); plan 41 already carries the D-008 forward
+> accommodation expecting this plan's doctor split to land first.
 
 ## Summary
 
-- Current focus: M1 - Characterize Routing, Startup, and Loop Behavior (BLOCKED on gates)
-- Current cutoff blockers: 0
-- Accepted/deferred follow-up: 30
+- Current focus: M2 - Decompose main.ts (events extraction)
+- Current cutoff blockers: 23
+- Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 0
+- Completed current work: 7
 
 ## Current Cutoff Blockers
-
-None - this plan is gated. All work is parked under Accepted/Deferred Follow-Up until the hard-dependency gates clear.
-
-## Accepted/Deferred Follow-Up
 
 ### Phase 1: Characterization Safety Net
 
 #### M1: Characterize Routing, Startup, and Loop Behavior
 
-- [ ] RED: Add characterization tests asserting `handleEvent` routes every current `SessionEvent` kind to its handler (completeness).
-- [ ] GREEN: Make them pass against current `main.ts` (document, not change, behavior).
-- [ ] RED: Add a startup/init-order assertion covering the composition-root wiring sequence.
-- [ ] GREEN: Make it pass against current startup.
-- [ ] RED: Add characterization tests for `agent/loop.ts`'s observable turn outcomes.
-- [ ] GREEN: Make them pass against the current loop.
-- [ ] REFACTOR: Keep the characterization suite fast and deterministic (fake provider).
+- [x] RED: Add characterization tests asserting `handleEvent` routes every current `SessionEvent` kind to its handler (completeness).
+- [x] GREEN: Make them pass against current `main.ts` (document, not change, behavior).
+- [x] RED: Add a startup/init-order assertion covering the composition-root wiring sequence.
+- [x] GREEN: Make it pass against current startup.
+- [x] RED: Add characterization tests for `agent/loop.ts`'s observable turn outcomes.
+- [x] GREEN: Make them pass against the current loop.
+- [x] REFACTOR: Keep the characterization suite fast and deterministic (fake provider).
 
 ### Phase 2: Decompose, One File at a Time
 
