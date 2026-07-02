@@ -11,9 +11,11 @@ import {
   internetOk,
   longPathsSnapshot,
   lspDiagnosticWarning,
+  lspError,
   lspMissing,
   lspOk,
-  lspUnavailable,
+  lspTimeout,
+  lspUnconfigured,
   mcpAuthNeeded,
   mcpError,
   mcpOk,
@@ -125,9 +127,15 @@ export const Mcp: Story = {
   render: () => <RowPanel areas={[mcpOk, mcpUnconfigured, mcpAuthNeeded, mcpError, mcpTimeout]} />,
 };
 
-/** LSP: ready, command missing, probe timed out, diagnostic warnings. */
+/** LSP (plan 24 M8): ready with freshness, unconfigured, missing binary with install hint,
+ *  crash, initialize timeout, stored-diagnostics warning - the host's real per-state detail
+ *  strings through the generic peripheral row. */
 export const Lsp: Story = {
-  render: () => <RowPanel areas={[lspOk, lspMissing, lspUnavailable, lspDiagnosticWarning]} />,
+  render: () => (
+    <RowPanel
+      areas={[lspOk, lspUnconfigured, lspMissing, lspError, lspTimeout, lspDiagnosticWarning]}
+    />
+  ),
 };
 
 /** Hooks: all present, script missing, slow, trust changed. */

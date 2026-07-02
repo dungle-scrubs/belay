@@ -1,5 +1,5 @@
 import { buildDoctorCommandResult } from "@host/doctor/build";
-import type { PeripheralState } from "@host/doctor/probe-input";
+import type { DoctorLspDiagnostics, PeripheralState } from "@host/doctor/probe-input";
 import { buildLoopCommands } from "@host/loop/command";
 import type { LoopController } from "@host/loop/store";
 import { buildTrevorExportCommand } from "@host/manifest/export-command";
@@ -59,6 +59,10 @@ export interface CommandContext {
   readonly catalog?: readonly SourceSummary[];
   /** The MCP runtime rollup (plan 23 M8, D-009), for the /doctor MCP area. */
   readonly mcp?: PeripheralState;
+  /** The LSP manager rollup (plan 24 M8, D-008), for the /doctor LSP area. */
+  readonly lsp?: PeripheralState;
+  /** Stored LSP diagnostics counts (plan 24 M8), for the LSP area's diagnostic-warning finding. */
+  readonly lspDiagnostics?: DoctorLspDiagnostics;
   /** Forces one cross-turn compaction fold now and resolves with a human-readable result line
    *  (D-040), for /compact. Absent when the host cannot compact (e.g. not the live leader). */
   readonly compact?: () => Promise<string>;
@@ -145,6 +149,8 @@ function buildDoctorCommand(): Command<DoctorInput> {
       lease,
       catalog,
       mcp,
+      lsp,
+      lspDiagnostics,
     }) => ({
       providers,
       cwd,
@@ -157,6 +163,8 @@ function buildDoctorCommand(): Command<DoctorInput> {
       lease,
       catalog,
       mcp,
+      lsp,
+      lspDiagnostics,
     }),
     run: (args, input) => buildDoctorCommandResult(args, input),
   };

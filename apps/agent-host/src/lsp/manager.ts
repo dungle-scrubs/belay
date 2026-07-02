@@ -9,7 +9,14 @@ import {
   type LspExitInfo,
   spawnLspClient,
 } from "./client";
-import { degraded, type LspDegraded, type LspOutcome, type LspServerStatus, ok } from "./contract";
+import {
+  degraded,
+  type LspDegraded,
+  type LspOutcome,
+  type LspServerStatus,
+  type LspStoredDiagnosticsSummary,
+  ok,
+} from "./contract";
 import { isLspClientError } from "./errors";
 
 /**
@@ -254,8 +261,26 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
     }
   };
 
+  /** Bounded counts over the live client's stored publishes (plan 24 M8); undefined until any
+   *  file carries diagnostics, so an idle snapshot stays free of empty noise. */
+  const storedDiagnosticsOf = (entry: WorkspaceEntry): LspStoredDiagnosticsSummary | undefined => {
+    const stored = (entry.client?.diagnosticsSnapshot() ?? []).filter(
+      (file) => file.diagnostics.length > 0,
+    );
+    if (stored.length === 0) {
+      return undefined;
+    }
+    const all = stored.flatMap((file) => file.diagnostics);
+    return {
+      files: stored.length,
+      errors: all.filter((diagnostic) => diagnostic.severity === "error").length,
+      warnings: all.filter((diagnostic) => diagnostic.severity === "warning").length,
+    };
+  };
+
   const statusOf = (entry: WorkspaceEntry): LspServerStatus => {
     const adapter = adapterOf(entry);
+    const diagnostics = storedDiagnosticsOf(entry);
     const base = {
       workspaceRoot: entry.root,
       restarts: entry.restarts,
@@ -263,6 +288,7 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
       ...(entry.lastRequestMethod ? { lastRequestMethod: entry.lastRequestMethod } : {}),
       ...(entry.lastRequestAt !== undefined ? { lastRequestAt: entry.lastRequestAt } : {}),
       ...(entry.lastError ? { lastError: entry.lastError } : {}),
+      ...(diagnostics ? { diagnostics } : {}),
     };
     if (!adapter) {
       return { ...base, status: "missing" };

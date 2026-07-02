@@ -3,6 +3,7 @@ import { internetArea, peripheralArea, webDocsArea } from "./areas-connectivity"
 import { coreArea, sessionArea, toolsArea, workspaceArea } from "./areas-host";
 import { admissionArea, storageArea, telemetryArea, updatesArea } from "./areas-platform";
 import { providersArea } from "./areas-providers";
+import { lspDiagnosticFinding } from "./lsp-status";
 import type { DoctorProbeInput } from "./probe-input";
 
 /**
@@ -21,6 +22,12 @@ import type { DoctorProbeInput } from "./probe-input";
  * Not for: probing or IO - build.ts - or the per-area folds - the areas-* modules.
  */
 
+/** The LSP area's extra findings: the diagnostic-warning when stored errors are present. */
+function lspAreaFindings(input: DoctorProbeInput) {
+  const finding = lspDiagnosticFinding(input.lspDiagnostics);
+  return finding ? [finding] : [];
+}
+
 export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
   return {
     state: "ready",
@@ -38,7 +45,9 @@ export function buildDoctorSnapshot(input: DoctorProbeInput): DoctorSnapshot {
       toolsArea(input),
       webDocsArea(input),
       peripheralArea("mcp", "MCP", input.peripherals.mcp),
-      peripheralArea("lsp", "LSP", input.peripherals.lsp),
+      // The LSP area carries the diagnostic-warning finding (plan 24 M8, D-008) on top of its
+      // lifecycle state: stored diagnostics WITH errors roll the area to warn.
+      peripheralArea("lsp", "LSP", input.peripherals.lsp, lspAreaFindings(input)),
       peripheralArea("hooks", "Hooks", input.peripherals.hooks),
       storageArea(input),
       workspaceArea(input),

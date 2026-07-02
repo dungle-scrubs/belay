@@ -10,6 +10,7 @@ import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import type { InternetMonitor } from "@host/connectivity/probe";
+import type { LspManager } from "@host/lsp/manager";
 import type { McpRuntime } from "@host/mcp/runtime";
 import { activeStylePref } from "@host/prefs/style-store";
 import { contextRegistry } from "@host/project-context/registry";
@@ -26,6 +27,7 @@ import { commas } from "@host/transport/messages";
 import { relativeTime, type WorktreeSummary } from "@trevor/session";
 import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
 import type { DoctorRuntimeFacts } from "./build";
+import { lspDebugSummary, lspPeripheralState, lspStoredDiagnostics } from "./lsp-status";
 import { mcpDebugSummary, mcpPeripheralState } from "./mcp-status";
 import type { TelemetryDoctorSummary } from "./probe-input";
 
@@ -67,6 +69,8 @@ export interface HostFactsDeps {
   readonly cwdLockCaps: CwdLockCaps;
   /** The host MCP runtime (plan 23 M8): its status snapshot feeds the /doctor MCP area + debug. */
   readonly mcp: Pick<McpRuntime, "statusSnapshot">;
+  /** The host LSP manager (plan 24 M8): its status snapshot feeds the /doctor LSP area + debug. */
+  readonly lsp: Pick<LspManager, "statusSnapshot">;
 }
 
 /** Builds the /doctor runtime-fact readers over the host's live state; main.ts wires it once. */
@@ -90,6 +94,7 @@ export function makeHostFacts(deps: HostFactsDeps) {
     hostTelemetry,
     cwdLockCaps,
     mcp,
+    lsp,
   } = deps;
 
   /** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
@@ -129,6 +134,10 @@ export function makeHostFacts(deps: HostFactsDeps) {
       // MCP runtime status (plan 23 M8): a compact per-status histogram of the configured servers,
       // absent when none are configured. Redaction-safe: server counts + status words only.
       ...mcpState(),
+      // LSP manager status (plan 24 M8): a compact per-status histogram of the touched workspaces
+      // plus stored diagnostic-error counts, absent when no adapter matches. Counts + status
+      // words only - never a path, message, or env value.
+      ...lspState(),
       // Managed worktrees (D-091): the current row + count, plus any stale (missing-path) entries, so
       // a worktree/session mismatch is visible at a glance.
       ...worktreeState(),
@@ -153,6 +162,12 @@ export function makeHostFacts(deps: HostFactsDeps) {
   function mcpState(): Record<string, string> {
     const summary = mcpDebugSummary(mcp.statusSnapshot());
     return summary ? { mcp: summary } : {};
+  }
+
+  /** The compact LSP debug line for /doctor's host record; nothing when no adapter matches. */
+  function lspState(): Record<string, string> {
+    const summary = lspDebugSummary(lsp.statusSnapshot());
+    return summary ? { lsp: summary } : {};
   }
 
   /** The managed-worktree summary for /doctor: the current row, the managed count, and stale entries. */
@@ -213,6 +228,20 @@ export function makeHostFacts(deps: HostFactsDeps) {
       // The MCP runtime rollup (plan 23 M8, D-009): per-server status folded into the one
       // peripheral state the doctor MCP area renders; every field is already redacted.
       mcp: mcpPeripheralState(mcp.statusSnapshot(), Date.now()),
+      // The LSP manager rollup (plan 24 M8, D-008): per-workspace status folded into the one
+      // peripheral state the doctor LSP area renders (details scrubbed + bounded by the fold),
+      // plus stored diagnostic counts for the diagnostic-warning finding.
+      ...lspFacts(),
+    };
+  }
+
+  /** The /doctor LSP facts: the folded peripheral state plus stored-diagnostics counts. */
+  function lspFacts(): Pick<DoctorRuntimeFacts, "lsp" | "lspDiagnostics"> {
+    const snapshot = lsp.statusSnapshot();
+    const diagnostics = lspStoredDiagnostics(snapshot);
+    return {
+      lsp: lspPeripheralState(snapshot, Date.now()),
+      ...(diagnostics ? { lspDiagnostics: diagnostics } : {}),
     };
   }
 

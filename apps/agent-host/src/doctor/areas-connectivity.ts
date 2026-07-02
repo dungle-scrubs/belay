@@ -130,12 +130,15 @@ export function webDocsArea(input: DoctorProbeInput): DoctorArea {
  * Maps each state to a status + verdict + next action: `unconfigured`/`timeout` stay `not_checked`
  * (nothing wrong / degraded, never a false error), `ready` is `ok`, `unavailable`/`auth-needed` warn
  * with a repair action, and `error` is an error with an inspect action. Pure, so the mapping is
- * unit-tested for every state.
+ * unit-tested for every state. A subsystem with facts beyond its lifecycle state (the LSP
+ * diagnostic-warning, plan 24 M8) appends them as `extraFindings`, which the shared area()
+ * rollup folds into the header status.
  */
 export function peripheralArea(
   id: DoctorAreaId,
   label: string,
   state: PeripheralState,
+  extraFindings: readonly DoctorFinding[] = [],
 ): DoctorArea {
   let status: DoctorStatus;
   let message: string;
@@ -177,5 +180,5 @@ export function peripheralArea(
     message,
     ...(nextAction ? { nextAction } : {}),
   };
-  return area(id, label, message, [finding]);
+  return area(id, label, message, [finding, ...extraFindings]);
 }

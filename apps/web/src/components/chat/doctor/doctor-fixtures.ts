@@ -394,73 +394,107 @@ export const mcpTimeout: DoctorArea = {
 };
 
 // --- LSP -------------------------------------------------------------------
+// These mirror the HOST's real LSP area shape (plan 24 M8): the manager status snapshot is
+// folded by doctor/lsp-status into ONE PeripheralState whose detail string becomes both the
+// verdict and the single `lsp.status` finding via the generic peripheralArea mapping - plus
+// the diagnostic-warning finding (`lsp.diagnostics`) when stored diagnostics carry errors.
+// Details are scrubbed (home paths abbreviated) and bounded; no facts, no per-file findings.
+
+const LSP_READY_DETAIL = "typescript-language-server ready · checked 2m ago";
 
 export const lspOk: DoctorArea = {
   id: "lsp",
   label: "LSP",
   status: "ok",
-  verdict: "Language server ready.",
-  facts: [
-    { label: "server", value: "typescript-language-server", status: "ok" },
-    { label: "diagnostics", value: "0 issues" },
+  verdict: LSP_READY_DETAIL,
+  findings: [{ id: "lsp.status", status: "ok", title: "LSP", message: LSP_READY_DETAIL }],
+};
+
+export const lspUnconfigured: DoctorArea = {
+  id: "lsp",
+  label: "LSP",
+  status: "not_checked",
+  verdict: "LSP is not configured.",
+  findings: [
+    { id: "lsp.status", status: "not_checked", title: "LSP", message: "LSP is not configured." },
   ],
 };
+
+const LSP_MISSING_DETAIL =
+  "typescript-language-server is not installed (checked ~/dev/trevorV2/node_modules/.bin and " +
+  "PATH); install: pnpm add -g typescript-language-server";
 
 export const lspMissing: DoctorArea = {
   id: "lsp",
   label: "LSP",
   status: "warn",
-  verdict: "Configured LSP command not found.",
-  facts: [{ label: "server", value: "not on PATH", status: "warn" }],
+  verdict: LSP_MISSING_DETAIL,
   findings: [
     {
-      id: "lsp.command.missing",
+      id: "lsp.status",
       status: "warn",
-      title: "typescript-language-server not on PATH",
-      message:
-        "The configured language server binary wasn't found; Trevor falls back to search, tests, and compiler output.",
-      nextAction: {
-        label: "Install the server",
-        command: "pnpm add -g typescript-language-server",
-      },
+      title: "LSP",
+      message: LSP_MISSING_DETAIL,
+      nextAction: { label: "Check the LSP integration" },
     },
   ],
 };
 
-export const lspUnavailable: DoctorArea = {
+const LSP_ERROR_DETAIL =
+  'LSP server "typescript-language-server" crashed: child exited (code 1, signal null); ' +
+  "stderr tail: TypeError: Cannot read properties of undefined";
+
+export const lspError: DoctorArea = {
   id: "lsp",
   label: "LSP",
-  status: "not_checked",
-  verdict: "Language server did not respond in time.",
-  facts: [{ label: "server", value: "timed out", status: "not_checked" }],
+  status: "error",
+  verdict: LSP_ERROR_DETAIL,
   findings: [
     {
-      id: "lsp.unavailable",
-      status: "not_checked",
-      title: "LSP probe timed out",
-      message:
-        "The server didn't answer within the probe budget; pull diagnostics will retry on demand.",
+      id: "lsp.status",
+      status: "error",
+      title: "LSP",
+      message: LSP_ERROR_DETAIL,
+      nextAction: { label: "Inspect the LSP integration" },
     },
   ],
 };
+
+const LSP_TIMEOUT_DETAIL =
+  'LSP request "initialize" to "typescript-language-server" timed out after 10000ms';
+
+export const lspTimeout: DoctorArea = {
+  id: "lsp",
+  label: "LSP",
+  status: "not_checked",
+  verdict: LSP_TIMEOUT_DETAIL,
+  findings: [
+    {
+      id: "lsp.status",
+      status: "not_checked",
+      title: "LSP",
+      message: LSP_TIMEOUT_DETAIL,
+      nextAction: { label: "Re-run /doctor to retry" },
+    },
+  ],
+};
+
+const LSP_DIAGNOSTIC_DETAIL =
+  "typescript-language-server ready · diagnostics: 2 errors, 1 warning in 2 files · checked 40s ago";
 
 export const lspDiagnosticWarning: DoctorArea = {
   id: "lsp",
   label: "LSP",
   status: "warn",
-  verdict: "Language server reporting warnings.",
-  facts: [
-    { label: "server", value: "typescript-language-server", status: "ok" },
-    { label: "diagnostics", value: "3 warnings", status: "warn" },
-  ],
+  verdict: LSP_DIAGNOSTIC_DETAIL,
   findings: [
+    { id: "lsp.status", status: "ok", title: "LSP", message: LSP_DIAGNOSTIC_DETAIL },
     {
       id: "lsp.diagnostics",
       status: "warn",
-      title: "3 workspace warnings",
-      message:
-        "The language server reports unused variables and an implicit any in the open project.",
-      nextAction: { label: "Review diagnostics in the editor" },
+      title: "Workspace diagnostics",
+      message: "The language server reports 2 errors, 1 warning in 2 files.",
+      nextAction: { label: "Pull details with lsp_diagnostics" },
     },
   ],
 };

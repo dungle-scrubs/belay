@@ -84,6 +84,10 @@ export interface DoctorProbeInput {
   readonly telemetry?: TelemetryDoctorSummary;
   readonly build: DoctorBuildInfo;
   readonly peripherals: DoctorPeripherals;
+  /** Stored LSP diagnostics counts (plan 24 M8): how many files carry diagnostics plus the
+   *  error/warning totals - counts only, never a message or a path. Errors surface as the LSP
+   *  area's diagnostic-warning finding (D-008). Absent when nothing is stored / not probed. */
+  readonly lspDiagnostics?: DoctorLspDiagnostics;
   readonly web: DoctorWebDocs;
   /** Redacted provider-failure observation counts (D-076 M5/M6): distinct unclassified shapes and
    *  total sightings, shown as a Providers fact. Counts + fingerprint ids only - never any secret. */
@@ -196,4 +200,12 @@ export interface DoctorPeripherals {
   readonly mcp: PeripheralState;
   readonly lsp: PeripheralState;
   readonly hooks: PeripheralState;
+}
+
+/** Bounded stored-LSP-diagnostics counts for the LSP area (plan 24 M8). Redaction-safe by
+ *  construction: counts only, never a diagnostic message, file path, or code. */
+export interface DoctorLspDiagnostics {
+  readonly files: number;
+  readonly errors: number;
+  readonly warnings: number;
 }

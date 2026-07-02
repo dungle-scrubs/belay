@@ -104,6 +104,15 @@ export type LspServerStatusKind =
   | "error"
   | "timeout";
 
+/** Bounded counts over a live server's STORED published diagnostics (plan 24 M8): how many
+ *  files currently carry diagnostics and the error/warning totals - counts only, never a
+ *  message or a path, so the Doctor surface stays redaction-safe by construction. */
+export interface LspStoredDiagnosticsSummary {
+  readonly files: number;
+  readonly errors: number;
+  readonly warnings: number;
+}
+
 /** One workspace root's server status snapshot (the lsp_status/Doctor projection). */
 export interface LspServerStatus {
   readonly workspaceRoot: string;
@@ -117,6 +126,8 @@ export interface LspServerStatus {
   readonly staleAgeMs?: number;
   /** Crash-restart count consumed against the bounded restart budget. */
   readonly restarts: number;
+  /** Stored-diagnostics counts (plan 24 M8); absent until a live server has published any. */
+  readonly diagnostics?: LspStoredDiagnosticsSummary;
 }
 
 /** Why a result degraded instead of answering (D-006). */

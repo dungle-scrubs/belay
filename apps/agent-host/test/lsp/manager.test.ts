@@ -140,6 +140,23 @@ describe("lsp manager - diagnostics through an acquired client", () => {
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics?.[0]).toMatchObject({ severity: "warning", message: "oops on line 2" });
   });
+
+  it("summarizes stored diagnostics in the status snapshot (plan 24 M8, counts only)", async () => {
+    const lsp = manager();
+    const outcome = await lsp.acquire();
+    expect(outcome.kind).toBe("ready");
+    if (outcome.kind !== "ready") {
+      return;
+    }
+    // Before any publish arrives, the snapshot carries no summary at all.
+    expect(lsp.status().diagnostics).toBeUndefined();
+
+    outcome.client.openDocument("file:///w/summary.ts", "typescript", "fine\noops in summary");
+    await outcome.client.waitForDiagnostics("file:///w/summary.ts", 5_000);
+    expect(lsp.status().diagnostics).toEqual({ files: 1, errors: 0, warnings: 1 });
+    const snapshot = lsp.statusSnapshot();
+    expect(snapshot[0]?.diagnostics).toEqual({ files: 1, errors: 0, warnings: 1 });
+  });
 });
 
 describe("lsp manager - real TS adapter degradation", () => {
