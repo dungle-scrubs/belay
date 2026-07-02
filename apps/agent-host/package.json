@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     "./testing": "./test/support/index.ts",
-    "./testing/mcp-fixtures": "./test/support/mcp-fixtures.ts"
+    "./testing/mcp-fixtures": "./test/support/mcp-fixtures.ts",
+    "./testing/lsp-fixtures": "./test/support/lsp-fixtures.ts"
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",

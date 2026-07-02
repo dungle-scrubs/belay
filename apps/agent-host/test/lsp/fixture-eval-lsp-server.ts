@@ -22,6 +22,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * - didOpen/didChange always publish (possibly empty) diagnostics: a `: number = "..."` line
  *   yields one TS2322-style error; every line containing "noisy_diag" yields one warning, which
  *   is how the noisy-server regression produces hundreds of diagnostics from one file.
+ * - `textDocument/codeAction` (plan 24 M9): a preferred quickfix per `: number = "..."` mismatch
+ *   line inside the requested range, whose workspace edit rewrites the `number` annotation to
+ *   `string` - derived from the open document, so the proposal preview carries real positions.
  *
  * Exits 0 when stdin ends.
  */
@@ -35,6 +38,10 @@ interface JsonRpcIn {
     readonly rootPath?: string;
     readonly textDocument?: { readonly uri?: string; readonly text?: string };
     readonly position?: { readonly line?: number; readonly character?: number };
+    readonly range?: {
+      readonly start?: { readonly line?: number; readonly character?: number };
+      readonly end?: { readonly line?: number; readonly character?: number };
+    };
     readonly contentChanges?: readonly { readonly text?: string }[];
     readonly query?: string;
   };
@@ -253,6 +260,7 @@ function handle(message: JsonRpcIn): void {
         hoverProvider: true,
         documentSymbolProvider: true,
         workspaceSymbolProvider: true,
+        codeActionProvider: true,
       },
       serverInfo: { name: "trevor-lsp-eval-fixture", version: "0.0.1" },
     });
@@ -334,6 +342,43 @@ function handle(message: JsonRpcIn): void {
       return;
     }
     result(id, { contents: { kind: "markdown", value: `\`\`\`typescript\n${signature}\n\`\`\`` } });
+    return;
+  }
+
+  if (method === "textDocument/codeAction") {
+    const uri = params?.textDocument?.uri ?? "";
+    const text = documents.get(uri) ?? "";
+    const startLine = params?.range?.start?.line ?? 0;
+    const endLine = params?.range?.end?.line ?? startLine;
+    const lines = text.split("\n");
+    const actions: unknown[] = [];
+    for (let line = startLine; line <= endLine && line < lines.length; line += 1) {
+      const content = lines[line] ?? "";
+      const mismatch = /:\s*number\s*=\s*["']/.exec(content);
+      if (!mismatch) {
+        continue;
+      }
+      const character = content.indexOf("number", mismatch.index);
+      actions.push({
+        title: "Change the annotation to 'string'",
+        kind: "quickfix",
+        isPreferred: true,
+        edit: {
+          changes: {
+            [uri]: [
+              {
+                range: {
+                  start: { line, character },
+                  end: { line, character: character + "number".length },
+                },
+                newText: "string",
+              },
+            ],
+          },
+        },
+      });
+    }
+    result(id, actions);
     return;
   }
 

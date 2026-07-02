@@ -63,8 +63,9 @@ describe("lsp_code_actions against the fixture server", () => {
     const before = snapshotWorkspace();
     const result = await run(manager(), { file: "fixable.ts", startLine: 1, endLine: 1 });
 
-    // Proposal metadata: the fixture's quickfix (with edit), source action, and command action.
-    expect(result).toMatch(/3 code action proposal\(s\)/);
+    // Proposal metadata: the fixture's context echo (line 1 carries a published diagnostic),
+    // quickfix (with edit), source action, and command action.
+    expect(result).toMatch(/4 code action proposal\(s\)/);
     expect(result).toMatch(/proposals only/i);
     expect(result).toContain("Fix the oops [quickfix] (preferred)");
     expect(result).toContain('fixable.ts 1:1-1:5 -> "okay"');
@@ -76,6 +77,24 @@ describe("lsp_code_actions against the fixture server", () => {
     for (const [name, bytes] of before) {
       expect(after.get(name)).toBe(bytes);
     }
+  });
+
+  it("forwards the file's overlapping published diagnostics as the request context", async () => {
+    // Real servers (tsserver) derive quickfixes from context.diagnostics, so the tool must
+    // forward the stored publish for the requested range - re-encoded to the 0-based wire
+    // shape with a numeric severity (the fixture echoes the first one back verbatim).
+    const overlapping = await run(manager(), { file: "fixable.ts", startLine: 1, endLine: 1 });
+    expect(overlapping).toContain("context-echo: 1 diagnostic(s): sev2 0:0 oops on line 1");
+
+    // And the bare line range widens to cover the WHOLE line ("oops line one" = 13 chars):
+    // tsserver only returns fixes whose error span intersects the request range, so a
+    // zero-width default range at column 1 would suppress every real quickfix.
+    expect(overlapping).toContain("@0:0-0:13");
+
+    // A clean range forwards nothing: no echo action, just the fixture's three canned actions.
+    const clean = await run(manager(), { file: "fixable.ts", startLine: 2, endLine: 2 });
+    expect(clean).not.toContain("context-echo");
+    expect(clean).toMatch(/3 code action proposal\(s\)/);
   });
 
   it("surfaces command-only actions with a clear unsupported-mutating status", async () => {

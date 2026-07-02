@@ -13,6 +13,7 @@ import {
   loadWorkspaceFile,
   lspWorkspaceRoot,
   openWorkspaceFile,
+  toLspDiagnostic,
   toLspPosition,
 } from "./lsp-shared";
 import { clipLine, simpleTool } from "./shared";
@@ -24,7 +25,10 @@ import type { Tool } from "./types";
  * workspace edit SERIALIZED as reviewable text. Nothing is ever applied: workspace edits,
  * rename edits, file operations, and commands are all rendered, never executed; command-only
  * actions carry an explicit unsupported-mutating status. Proposal count and preview size are
- * capped; degraded outcomes are bounded SUCCESS text (D-006).
+ * capped; degraded outcomes are bounded SUCCESS text (D-006). The request's CodeActionContext
+ * carries the file's published diagnostics overlapping the range (plan 24 M9), because real
+ * servers (tsserver) derive quickfixes from the forwarded diagnostics and answer an empty
+ * context with no actions.
  *
  * Responsible for: the lsp_code_actions tool definition - params, action decode, and the
  * proposal-only rendering.
@@ -49,7 +53,11 @@ const Params = Schema.Struct({
   }),
   endColumn: Schema.optional(
     Schema.Number.annotations({
-      jsonSchema: { type: "integer", minimum: 1, description: "1-based end column (default 1)." },
+      jsonSchema: {
+        type: "integer",
+        minimum: 1,
+        description: "1-based end column (default: end of endLine).",
+      },
     }),
   ),
 });
@@ -171,13 +179,27 @@ export function buildLspCodeActionsTool(manager: LspManager): Tool<LspCodeAction
         return describeDegraded(acquired);
       }
       openWorkspaceFile(acquired.client, loaded);
+      // CodeActionContext carries the file's published diagnostics overlapping the requested
+      // lines (plan 24 M9): real servers (tsserver) derive their quickfixes from exactly these
+      // and return NOTHING for an empty context, so the tool waits for the post-open publish
+      // (the lsp_diagnostics seam) and forwards the overlap re-encoded to the wire shape.
+      const published = (await acquired.client.waitForDiagnostics(loaded.uri)) ?? [];
+      const overlapping = published.filter(
+        (diagnostic) =>
+          diagnostic.range.start.line <= args.endLine &&
+          diagnostic.range.end.line >= args.startLine,
+      );
+      // A bare line range covers WHOLE lines: tsserver only returns fixes whose error span
+      // intersects the request range, so the endColumn default is the end of endLine, never a
+      // zero-width span at column 1.
+      const endLineLength = loaded.text.split("\n")[args.endLine - 1]?.length ?? 0;
       const outcome = await manager.request("textDocument/codeAction", {
         textDocument: { uri: loaded.uri },
         range: {
           start: toLspPosition(args.startLine, args.startColumn ?? 1),
-          end: toLspPosition(args.endLine, args.endColumn ?? 1),
+          end: toLspPosition(args.endLine, args.endColumn ?? endLineLength + 1),
         },
-        context: { diagnostics: [] },
+        context: { diagnostics: overlapping.map(toLspDiagnostic) },
       });
       if (outcome.kind === "degraded") {
         return describeDegraded(outcome);

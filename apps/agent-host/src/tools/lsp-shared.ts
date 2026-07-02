@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { LspClient } from "@host/lsp/client";
+import type { LspDiagnostic, LspSeverity } from "@host/lsp/contract";
 import { displayPath } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 
@@ -84,5 +85,35 @@ export function toLspPosition(
   return {
     line: Math.max(0, Math.trunc(line) - 1),
     character: Math.max(0, Math.trunc(column) - 1),
+  };
+}
+
+const WIRE_SEVERITY: Readonly<Record<LspSeverity, number>> = {
+  error: 1,
+  warning: 2,
+  info: 3,
+  hint: 4,
+};
+
+/**
+ * A stored contract diagnostic re-encoded to the 0-based LSP wire shape, for requests that
+ * carry diagnostics back to the server (CodeActionContext). Real servers derive quickfixes
+ * from exactly these - tsserver reads the numeric `code` - so the decode at the publish
+ * boundary must round-trip: 1-based positions back to 0-based, named severity back to its
+ * number, and an integer-looking code back to a number.
+ */
+export function toLspDiagnostic(diagnostic: LspDiagnostic): Record<string, unknown> {
+  const code = Number(diagnostic.code);
+  return {
+    range: {
+      start: toLspPosition(diagnostic.range.start.line, diagnostic.range.start.column),
+      end: toLspPosition(diagnostic.range.end.line, diagnostic.range.end.column),
+    },
+    severity: WIRE_SEVERITY[diagnostic.severity],
+    message: diagnostic.message,
+    ...(diagnostic.source !== undefined ? { source: diagnostic.source } : {}),
+    ...(diagnostic.code !== undefined
+      ? { code: Number.isInteger(code) ? code : diagnostic.code }
+      : {}),
   };
 }

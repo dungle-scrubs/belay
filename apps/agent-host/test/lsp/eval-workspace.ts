@@ -36,15 +36,24 @@ export function createEvalWorkspace(options: EvalWorkspaceOptions): string {
     writeFileSync(absolute, content);
   }
   if (options.server) {
-    const shim = join(root, "node_modules", ".bin", "typescript-language-server");
-    mkdirSync(dirname(shim), { recursive: true });
-    // The child inherits the vitest worker's cwd (the repo root), so the bare `tsx` specifier
-    // resolves exactly as ./fixture-config.ts's launch recipe does for the protocol fixture.
-    writeFileSync(
-      shim,
-      `#!/bin/sh\nexec "${process.execPath}" --import tsx "${EVAL_SERVER_PATH}" "$@"\n`,
-    );
-    chmodSync(shim, 0o755);
+    installEvalServer(root);
   }
   return root;
+}
+
+/**
+ * Installs the eval fixture server as the workspace-local language-server binary. Exposed on
+ * its own (plan 24 M9) so an e2e suite can start server-less - proving the unavailable path -
+ * and then install the binary mid-suite; the manager re-resolves it on the next lazy acquire.
+ */
+export function installEvalServer(root: string): void {
+  const shim = join(root, "node_modules", ".bin", "typescript-language-server");
+  mkdirSync(dirname(shim), { recursive: true });
+  // The child inherits the vitest worker's cwd (the repo root), so the bare `tsx` specifier
+  // resolves exactly as ./fixture-config.ts's launch recipe does for the protocol fixture.
+  writeFileSync(
+    shim,
+    `#!/bin/sh\nexec "${process.execPath}" --import tsx "${EVAL_SERVER_PATH}" "$@"\n`,
+  );
+  chmodSync(shim, 0o755);
 }

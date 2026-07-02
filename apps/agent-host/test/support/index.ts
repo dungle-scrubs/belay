@@ -18,6 +18,10 @@ export {
   executeFinalizedHandoff,
   runDirectHandoff,
 } from "@host/handoff/handoff-flow";
+// The LSP seam (plan 24 M9): the host manager singleton, so cross-service e2e can drive the
+// registered lsp_* tools over a hermetic fixture workspace (see ./lsp-fixtures) and shut the
+// managed server down in afterAll (the role main.ts's shutdown path plays live).
+export { lspManager } from "@host/lsp/host-runtime";
 // The MCP seam (plan 23 M9): the config loader, runtime constructor, host singleton, and
 // model-facing tool builder, so cross-service e2e can drive every capability path over hermetic
 // fixture servers (see ./mcp-fixtures) through the exact construction the host uses.

@@ -132,6 +132,49 @@
 - [ ] GREEN: Run a manual EZE repro in this repo for hover, document symbols, workspace symbols, diagnostics, and code-action proposals.
 - [ ] REFACTOR: Record exact verification commands and any unsupported language-adapter follow-up in the progress report.
 
+##### M9 verification record (2026-07-02)
+
+Exact verification commands, all green:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test            # all projects: 3374 passed | 3 skipped (unit + integration + web + e2e)
+pnpm test:unit       # 2447 passed
+pnpm test:integration
+pnpm test:web
+pnpm vitest run --project e2e e2e/lsp-integration.test.ts   # 5 passed
+bash tests/browser/check-storybook-baselines.sh             # 331/331 snapshots (after M8 regen)
+```
+
+Manual EZE against the REAL `typescript-language-server` 5.3.0 (resolved via `pnpm add -D
+typescript typescript-language-server` into a scratch temp TS project, spawned through the
+production adapter -> manager -> lsp_* tools; scratch driver, not committed):
+`pnpm exec tsx --tsconfig apps/agent-host/tsconfig.json <scratch>/eze-lsp-real.ts`.
+Observed real output: diagnostics `4:14-4:19 error [typescript 2322] ...` and
+`5:21-5:30 error [typescript 2552] Cannot find name 'makeGadet' ...`; hover
+`(alias) makeGadget(size: number): Gadget`; document symbols (nested outline with properties);
+workspace symbols `- function makeGadget src/gadgets.ts:5:1`; code actions
+`Change spelling to 'makeGadget' [quickfix] (preferred)` with the serialized preview
+`src/broken.ts 5:21-5:30 -> "makeGadget"`, plus tsserver refactors rendered as
+command-only/not-executed; status configured -> ready.
+
+EZE-discovered fixes folded into M9 (RED-first, test/lsp/tools-code-actions.test.ts):
+`lsp_code_actions` now forwards the file's published diagnostics overlapping the requested
+lines as `CodeActionContext.diagnostics` (re-encoded 0-based wire shape, numeric codes;
+`toLspDiagnostic` in tools/lsp-shared.ts) and defaults the request range to cover WHOLE lines
+(`endColumn` = end of `endLine`), because tsserver derives quickfixes from the forwarded
+diagnostics and only returns fixes whose error span intersects the request range - with the
+old empty context + zero-width range the real server returned no quickfix at all.
+
+Unsupported-adapter follow-up: TS/JS remains the only adapter (D-004); non-TS workspaces fold
+to the doctor "unconfigured" state and every lsp_* tool degrades to the bounded
+no-adapter-matched text (pinned in test/lsp + e2e). A second language family needs only a new
+`LanguageServerAdapter` (detects/resolveCommand/initializeOptions); context-diagnostics
+forwarding is the LSP-spec client behavior, so it should carry over unchanged. Real-tsserver
+note: TS2322 on a variable initializer legitimately has no quickfix (same in VS Code) - not a
+defect.
+
 ### Done Gate
 
 - [ ] LSP tools are read-only, bounded, and explicit.

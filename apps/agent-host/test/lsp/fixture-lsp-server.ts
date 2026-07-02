@@ -7,8 +7,9 @@
  * Requests: initialize (capabilities per the --no-capability flag), shutdown,
  * textDocument/hover (answers `hover:<line>:<character>` markdown), textDocument/documentSymbol
  * (a nested fixture outline), workspace/symbol (a small catalog filtered by query), and
- * textDocument/codeAction (a quickfix with an edit, a source action without one, and a
- * command-only refactor).
+ * textDocument/codeAction (a quickfix with an edit, a source action without one, a command-only
+ * refactor, and - when the request carries context diagnostics - a context-echo action naming
+ * the first one, which is how the tests pin that the tool forwards published diagnostics).
  *
  * Notifications: initialized (ignored), exit (exits 0), and didOpen/didChange/didClose document
  * sync - didOpen/didChange publish one warning diagnostic per line containing "oops" (none for
@@ -33,7 +34,18 @@ interface JsonRpcIn {
     readonly position?: { readonly line?: number; readonly character?: number };
     readonly contentChanges?: readonly { readonly text?: string }[];
     readonly query?: string;
+    readonly range?: {
+      readonly start?: { readonly line?: number; readonly character?: number };
+      readonly end?: { readonly line?: number; readonly character?: number };
+    };
+    readonly context?: { readonly diagnostics?: readonly ContextDiagnostic[] };
   };
+}
+
+interface ContextDiagnostic {
+  readonly range?: { readonly start?: { readonly line?: number; readonly character?: number } };
+  readonly severity?: number;
+  readonly message?: string;
 }
 
 const initMode = process.argv.find((arg) => arg.startsWith("--init="))?.slice("--init=".length);
@@ -249,7 +261,30 @@ function handle(message: JsonRpcIn): void {
 
   if (method === "textDocument/codeAction") {
     const uri = params?.textDocument?.uri ?? "";
+    // Echo the received CodeActionContext (plan 24 M9): real servers (tsserver) only produce
+    // quickfixes from the diagnostics the CLIENT forwards in context AND only when the request
+    // range intersects the error span, so this proposal exists exactly when the tool forwarded
+    // overlapping published diagnostics - in 0-based wire shape - and names the request range.
+    const context = params?.context?.diagnostics ?? [];
+    const first = context[0];
+    const requestRange =
+      `${params?.range?.start?.line ?? "?"}:${params?.range?.start?.character ?? "?"}-` +
+      `${params?.range?.end?.line ?? "?"}:${params?.range?.end?.character ?? "?"}`;
+    const contextEcho =
+      first === undefined
+        ? []
+        : [
+            {
+              title:
+                `context-echo: ${context.length} diagnostic(s): ` +
+                `sev${first.severity ?? "?"} ${first.range?.start?.line ?? "?"}:` +
+                `${first.range?.start?.character ?? "?"} ${first.message ?? ""} ` +
+                `@${requestRange}`,
+              kind: "source.contextEcho",
+            },
+          ];
     result(id, [
+      ...contextEcho,
       {
         title: "Fix the oops",
         kind: "quickfix",
