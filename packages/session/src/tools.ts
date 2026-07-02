@@ -52,9 +52,12 @@ export const TOOL_DESCRIPTORS = [
   // than workspace mutation), so it is always a mutating serial barrier (plan 23 D-008).
   { name: "mcp", readOnly: false },
   // lsp_* (plan 24) are explicit read-only language-server pulls (D-003/D-007): they only read
-  // server-reported facts (status, diagnostics) and never mutate the workspace.
+  // server-reported facts (status, diagnostics, hover, symbols) and never mutate the workspace.
   { name: "lsp_status", readOnly: true },
   { name: "lsp_diagnostics", readOnly: true },
+  { name: "lsp_hover", readOnly: true },
+  { name: "lsp_document_symbols", readOnly: true },
+  { name: "lsp_workspace_symbols", readOnly: true },
   // tool_script runs a bounded READ-ONLY script through a read-only bridge; no mutation, serial-safe.
   { name: "tool_script", readOnly: true },
 ] as const satisfies readonly ToolDescriptor[];

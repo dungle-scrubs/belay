@@ -247,6 +247,23 @@ test("D-003: LSP appears in the prompt ONLY as the advertised tool inventory lin
   ]);
 });
 
+test("plan 24 M4: literal text search guidance still prefers grep/ast_grep over LSP symbols", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  // The grep guidance line survives untouched (M6 owns LSP guidance; M4 must not undermine it)...
+  assert.ok(
+    prompt.includes(
+      "Use grep (ripgrep-backed text/regex search) for exact strings, symbols, error text, or regular expressions",
+    ),
+    "grep stays the literal/text search channel",
+  );
+  // ...and nothing tells the model to swap grep/rg/ast_grep for symbol lookups.
+  assert.doesNotMatch(
+    prompt,
+    /symbols? (instead of|rather than|over) (grep|rg|ast_grep)/i,
+    "no guidance replaces grep with LSP symbols",
+  );
+});
+
 test("D-003: prompt content is a pure function of its inputs - no diagnostics side channel", () => {
   contextRegistry.reset();
   // Two builds with identical inputs are byte-identical: nothing (an LSP manager, a diagnostics

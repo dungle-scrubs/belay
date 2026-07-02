@@ -19,7 +19,10 @@ import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./index";
 import { buildLspDiagnosticsTool } from "./lsp-diagnostics";
+import { buildLspDocumentSymbolsTool } from "./lsp-document-symbols";
+import { buildLspHoverTool } from "./lsp-hover";
 import { buildLspStatusTool } from "./lsp-status";
+import { buildLspWorkspaceSymbolsTool } from "./lsp-workspace-symbols";
 import { buildMcpTool } from "./mcp";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
@@ -66,6 +69,9 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     // lsp_* (plan 24, D-007): explicit read-only language-server pulls.
     buildLspStatusTool(lspTestManager),
     buildLspDiagnosticsTool(lspTestManager),
+    buildLspHoverTool(lspTestManager),
+    buildLspDocumentSymbolsTool(lspTestManager),
+    buildLspWorkspaceSymbolsTool(lspTestManager),
   ]) {
     assert.equal(tool.readOnly, true, `${tool.name} should declare readOnly: true`);
     assert.ok(READ_ONLY_TOOLS.has(tool.name), `${tool.name} should be in READ_ONLY_TOOLS`);
@@ -126,6 +132,9 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     // The lsp_* tools' name/readOnly nature is likewise config-independent (plan 24).
     buildLspStatusTool(lspTestManager),
     buildLspDiagnosticsTool(lspTestManager),
+    buildLspHoverTool(lspTestManager),
+    buildLspDocumentSymbolsTool(lspTestManager),
+    buildLspWorkspaceSymbolsTool(lspTestManager),
     buildToolScriptTool({
       execute: () => Promise.resolve(""),
       cwd: "/w",
