@@ -67,8 +67,8 @@ export function hookBlockedResult(outcome: PreToolUseOutcome): string {
 
 /**
  * The terminal stop a PreToolUse halt carries onto the turn completion (25 M5): the same
- * `TurnStop` mechanism the budget/stall pauses use, with an open `hook_halt` cause (the
- * TurnStopCause vocabulary is forward-open by design) and the hook's visible reason as summary.
+ * `TurnStop` mechanism the budget/stall pauses use, with the typed `hook_halt` cause
+ * (a KnownTurnStopCause) and the hook's visible reason as summary.
  */
 export function hookHaltStop(outcome: PreToolUseOutcome, steps: number): TurnStop {
   return {

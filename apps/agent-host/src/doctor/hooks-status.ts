@@ -1,5 +1,4 @@
 import { abbrevHome } from "@host/boot/paths";
-import type { HookEvent } from "@host/hooks/config";
 import type { HooksStatusSnapshot } from "@host/hooks/runtime";
 import type { HookStatsEntry } from "@host/hooks/stats";
 import type { DoctorFinding } from "@trevor/session";
@@ -11,7 +10,7 @@ import type { PeripheralState } from "./probe-input";
  * (configured hooks + freshly evaluated trust + config issues + legacy HOOK.md files) and its
  * per-hook run counters into the one {@link PeripheralState} the doctor Hooks area renders,
  * plus the area's extra findings and the compact debug histogram - the mcp/lsp-status
- * tradition. Pure over already-redacted data: keys are `<source>:<id>` identities, issue
+ * tradition. Pure over already-redacted data: keys are the runtime's approval keys, issue
  * details were bounded at config parse, and the only path this module touches (a legacy
  * HOOK.md location) is home-abbreviated before display. The findings ladder: unapproved/
  * changed-trust hooks warn with approval guidance (D-006 - they never execute until approved),
@@ -83,12 +82,7 @@ function eventBreakdown(snapshot: HooksStatusSnapshot): string {
   if (snapshot.hooks.length === 0) {
     return "";
   }
-  const counts = new Map<HookEvent, number>();
-  for (const hook of snapshot.hooks) {
-    counts.set(hook.event, (counts.get(hook.event) ?? 0) + 1);
-  }
-  const breakdown = [...counts.entries()].map(([event, count]) => `${count} ${event}`);
-  return ` (${breakdown.join(" · ")})`;
+  return ` (${statusHistogram(snapshot.hooks.map((hook) => hook.event))})`;
 }
 
 /** The Hooks area's extra findings: approval, missing scripts, degradation, config, legacy. */
@@ -116,8 +110,14 @@ export function hooksAreaFindings(
       message:
         `${plural(awaiting.length, "hook")} awaiting approval: ` +
         `${awaiting.map((hook) => hook.key).join(", ")}. ` +
-        `A hook never executes until its current trust hash is approved.${changedNote}`,
-      nextAction: { label: "Review each hook, then approve its trust hash" },
+        "A hook never executes until its current trust hash is approved. " +
+        "Approval covers the hook config and its entry-point script only - not PATH-resolved " +
+        `commands or files the script itself loads.${changedNote}`,
+      nextAction: {
+        label:
+          "Review each hook, then record its current trust hash in hooks-approvals.json " +
+          "under the state root (no approval command exists yet)",
+      },
     });
   }
 

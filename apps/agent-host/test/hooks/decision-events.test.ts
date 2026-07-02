@@ -34,9 +34,8 @@ function turnHooks(h: HooksRuntimeHarness): TurnHooks {
   return {
     dispatchPreToolUse: h.runtime.dispatchPreToolUse,
     dispatchStop: h.runtime.dispatchStop,
-    sessionId: "s-hook-events",
-    callerKind: "main",
-    cwd: h.workspaceRoot,
+    hasHooks: h.runtime.hasHooks,
+    identity: { sessionId: "s-hook-events", callerKind: "main", cwd: h.workspaceRoot },
   };
 }
 
@@ -85,7 +84,7 @@ describe("hook.decision emission from the turn pipeline", () => {
     expect(decisions.length).toBeGreaterThanOrEqual(1);
     expect(decisions[0]).toEqual({
       runId: "run-hd-deny",
-      hookId: "project:guard",
+      hookId: h.projectKey("guard"),
       event: "PreToolUse",
       decision: "deny",
       toolName: "bash",
@@ -106,7 +105,7 @@ describe("hook.decision emission from the turn pipeline", () => {
     expect(hookDecisions(events)).toEqual([
       {
         runId: "run-hd-halt",
-        hookId: "project:review",
+        hookId: h.projectKey("review"),
         event: "Stop",
         decision: "halt",
         reason: "review before shipping",
@@ -130,7 +129,7 @@ describe("hook.decision emission from the turn pipeline", () => {
     // Two gated tool calls, one visible unapproved row - not one per call.
     expect(hookDecisions(events)).toEqual([
       expect.objectContaining({
-        hookId: "project:new",
+        hookId: h.projectKey("new"),
         event: "PreToolUse",
         decision: "unapproved",
       }),

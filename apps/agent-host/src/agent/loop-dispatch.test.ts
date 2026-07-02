@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { PreToolUseOutcome } from "@host/hooks/runtime";
 import { Effect, Fiber, Stream } from "effect";
 import { test, vi } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
@@ -61,6 +62,9 @@ vi.mock("../tools", async () => {
 
 // Imported AFTER the mock is registered so the loop binds the fake registry.
 const { runAgent } = await import("./loop");
+
+type AgentEvent = import("./loop").AgentEvent;
+type TurnHooks = import("./loop").TurnHooks;
 
 const usage = { input: 10, output: 1, contextWindow: 1_000_000, genMs: 1 };
 
@@ -283,4 +287,154 @@ test("M3: recovery trims a deterministic, call-ordered conversation", async () =
   const trimR = trimLargestToolResult([...reverse], 0);
   assert.deepEqual(trimR, trimF, "same trim target + reclaim regardless of completion order");
   assert.ok(trimF && trimF.reclaimed > 0, "the largest (call 1) result was trimmed");
+});
+
+// --- plan 25 simplify pass: hook gating at the batch boundary ---------------------------------
+
+const ALLOW_OUTCOME: PreToolUseOutcome = { decision: "allow", contexts: [], diagnostics: [] };
+
+test("25 C3: a mid-batch PreToolUse halt drains in-flight reads and skips later members", async () => {
+  ctl.reset();
+  // Three reads, concurrency 2: c0's gate allows and its execute PARKS (in flight); c1's gate is
+  // held open until c0 is executing, then resolves halt; c2 (queued behind the concurrency cap)
+  // must be skipped without ever reaching hook dispatch. c0 is released only AFTER c2's skip is
+  // observable, proving an in-flight read past its gate drains and publishes before the stop.
+  let releaseC0!: () => void;
+  const c0Gate = new Promise<string>((resolve) => {
+    releaseC0 = () => resolve("ran read 0");
+  });
+  ctl.responder = (_name, args) => (args === "0" ? c0Gate : Promise.resolve(`ran read ${args}`));
+
+  const dispatched: string[] = [];
+  let resolveHalt!: (outcome: PreToolUseOutcome) => void;
+  const hooks: TurnHooks = {
+    dispatchPreToolUse: (payload) => {
+      const arg = String(payload.toolInput);
+      dispatched.push(arg);
+      if (arg === "1") {
+        return new Promise((resolve) => {
+          resolveHalt = resolve;
+        });
+      }
+      return Promise.resolve(ALLOW_OUTCOME);
+    },
+    identity: { sessionId: "s", callerKind: "main", cwd: "/w" },
+  };
+
+  const events: AgentEvent[] = [];
+  const calls = [0, 1, 2].map((i) => ({ name: "read", arguments: String(i) }));
+  let committed = false;
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const fiber = yield* Effect.fork(
+        Stream.runForEach(
+          runAgent(
+            batchProvider(calls, () => {
+              committed = true;
+            }),
+            [{ role: "user", content: "go" }],
+            "off",
+            "r1",
+            true,
+            { hooks, loop: { toolConcurrency: 2 } },
+          ),
+          (event) => Effect.sync(() => void events.push(event)),
+        ),
+      );
+      // c0 is executing and c1's gate has dispatched (and is pending).
+      yield* waitFor(() => ctl.started.includes("0") && dispatched.includes("1"));
+      resolveHalt({
+        decision: "halt",
+        hook: "project:/w:gate",
+        reason: "stop the line",
+        contexts: [],
+        diagnostics: [],
+      });
+      // c2's skip publishes while c0 is STILL in flight - the halt never waits on c0.
+      yield* waitFor(() =>
+        events.some((event) => event.type === "tool_end" && event.call.id === "c2"),
+      );
+      releaseC0();
+      yield* Fiber.join(fiber);
+    }),
+  );
+
+  // Later batch members are skipped BEFORE dispatch: c2's gate never ran.
+  assert.deepEqual(dispatched, ["0", "1"]);
+  // Only the allowed in-flight read actually executed.
+  assert.deepEqual(ctl.started, ["0"]);
+
+  const end = (id: string) =>
+    events.find(
+      (event): event is Extract<AgentEvent, { type: "tool_end" }> =>
+        event.type === "tool_end" && event.call.id === id,
+    );
+  assert.equal(end("c0")?.result, "ran read 0");
+  assert.equal(end("c0")?.skipped, undefined, "the drained read is a real execution");
+  assert.equal(end("c1")?.skipped, true);
+  assert.match(end("c1")?.result ?? "", /halted by PreToolUse hook/);
+  assert.equal(end("c2")?.skipped, true);
+  assert.match(end("c2")?.result ?? "", /not executed - the turn was halted/);
+
+  // The in-flight read's result publishes BEFORE the terminal stop, and the turn never opens a
+  // second model step past the halt.
+  const stopIndex = events.findIndex((event) => event.type === "stop");
+  const c0Index = events.findIndex((event) => event.type === "tool_end" && event.call.id === "c0");
+  assert.ok(stopIndex > c0Index, "the drained result precedes the stop");
+  const stop = events[stopIndex];
+  assert.equal(stop?.type === "stop" ? stop.stop.cause : "?", "hook_halt");
+  assert.equal(committed, false, "no next model step ran after the halt");
+});
+
+test("25 E1: hasHooks=false skips PreToolUse dispatch (and payload construction) entirely", async () => {
+  ctl.reset();
+  const dispatched: string[] = [];
+  const hooks: TurnHooks = {
+    dispatchPreToolUse: (payload) => {
+      dispatched.push(payload.toolName);
+      return Promise.resolve(ALLOW_OUTCOME);
+    },
+    hasHooks: () => false,
+    identity: { sessionId: "s", callerKind: "main", cwd: "/w" },
+  };
+  await Effect.runPromise(
+    Stream.runDrain(
+      runAgent(
+        batchProvider([{ name: "read", arguments: "0" }]),
+        [{ role: "user", content: "go" }],
+        "off",
+        "r1",
+        true,
+        { hooks },
+      ),
+    ),
+  );
+  assert.deepEqual(dispatched, [], "no dispatch on an unhooked host");
+  assert.deepEqual(ctl.started, ["0"], "the tool still executed normally");
+});
+
+test("25 E1: an absent hasHooks keeps dispatching (conservative default for hand-built hooks)", async () => {
+  ctl.reset();
+  const dispatched: string[] = [];
+  const hooks: TurnHooks = {
+    dispatchPreToolUse: (payload) => {
+      dispatched.push(payload.toolName);
+      return Promise.resolve(ALLOW_OUTCOME);
+    },
+    identity: { sessionId: "s", callerKind: "main", cwd: "/w" },
+  };
+  await Effect.runPromise(
+    Stream.runDrain(
+      runAgent(
+        batchProvider([{ name: "read", arguments: "0" }]),
+        [{ role: "user", content: "go" }],
+        "off",
+        "r1",
+        true,
+        { hooks },
+      ),
+    ),
+  );
+  assert.deepEqual(dispatched, ["read"]);
+  assert.deepEqual(ctl.started, ["0"]);
 });

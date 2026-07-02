@@ -492,7 +492,11 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     mintChildSessionId: () => `${SESSION_ID}::sub::${crypto.randomUUID()}`,
     // Child turns share the host-wide hooks runtime (plan 25 M5): a delegated subagent's tool
     // calls pass the same PreToolUse gate, attributed to its own child session.
-    hooks: { dispatchPreToolUse: hooksRuntime.dispatchPreToolUse, cwd: process.cwd() },
+    hooks: {
+      dispatchPreToolUse: hooksRuntime.dispatchPreToolUse,
+      hasHooks: hooksRuntime.hasHooks,
+      cwd: process.cwd(),
+    },
   };
   // The host owns the background lifecycle: a background child OUTLIVES this turn, so it runs detached
   // here against the SESSION-level registry + cap, publishing its terminal delegated.to to the parent
@@ -550,9 +554,12 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       hooks: {
         dispatchPreToolUse: hooksRuntime.dispatchPreToolUse,
         dispatchStop: hooksRuntime.dispatchStop,
-        sessionId: SESSION_ID,
-        callerKind: restricted ? ("clip" as const) : ("main" as const),
-        cwd: process.cwd(),
+        hasHooks: hooksRuntime.hasHooks,
+        identity: {
+          sessionId: SESSION_ID,
+          callerKind: restricted ? ("clip" as const) : ("main" as const),
+          cwd: process.cwd(),
+        },
       },
       ...(restricted ? { toolNames: CLIPBOARD_TOOL_NAMES } : {}),
       ...(seedUsage ? { seedUsage } : {}),

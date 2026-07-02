@@ -39,9 +39,8 @@ function turnHooks(h: HooksRuntimeHarness, overrides: Partial<TurnHooks> = {}): 
   return {
     dispatchPreToolUse: h.runtime.dispatchPreToolUse,
     dispatchStop: h.runtime.dispatchStop,
-    sessionId: "s-stop",
-    callerKind: "main",
-    cwd: h.workspaceRoot,
+    hasHooks: h.runtime.hasHooks,
+    identity: { sessionId: "s-stop", callerKind: "main", cwd: h.workspaceRoot },
     ...overrides,
   };
 }
@@ -136,8 +135,81 @@ describe("Stop halt - the completion carries a visible halted-by-hook reason", (
     expect(completed?.text).toBe("All done.");
     const stop = completed?.stop as { cause: string; action: string; summary: string } | undefined;
     expect(stop?.cause).toBe("hook_halt");
-    expect(stop?.summary).toContain('Stop hook "project:gate"');
+    expect(stop?.summary).toContain(`Stop hook "${h.projectKey("gate")}"`);
     expect(stop?.summary).toContain("ship it tomorrow");
+  });
+});
+
+describe("Stop payload toolSummary counts EXECUTED tools only (25 simplify C4)", () => {
+  test("a hook-denied call never appears in the Stop payload's tool summary", async () => {
+    const DENY_BASH = JSON.stringify({ decision: "deny", reason: "no shell today" });
+    const h = using(
+      hooksRuntimeHarness((scratch) => [
+        { id: "guard", mode: "print", flags: [DENY_BASH] },
+        { id: "rec", mode: "record", flags: [scratch("summary.json")], event: "Stop" },
+      ]),
+    );
+    const provider = fakeProvider({
+      step: scriptedStep([{ name: "bash", args: { command: "echo denied" } }], "All done."),
+    });
+
+    await runTurn(provider, [{ role: "user", content: "run it" }], {
+      runId: "run-stop-denied",
+      hooks: turnHooks(h),
+    });
+
+    // The denied bash call produced a paired tool result but never RAN, so the Stop payload's
+    // accounting of "what the turn executed" is empty.
+    const payload = JSON.parse(readFileSync(h.scratchPath("summary.json"), "utf8"));
+    expect(payload.toolSummary).toEqual([]);
+  });
+});
+
+describe("Stop halt - reason redaction is parse-time (25 simplify S2)", () => {
+  test("a halt reason carrying an env-style secret reaches the stop summary redacted", async () => {
+    const leakyHalt = JSON.stringify({
+      decision: "halt",
+      reason: "halting: CI_SECRET=halt-secret-value must not ship",
+    });
+    const h = using(
+      hooksRuntimeHarness([{ id: "gate", mode: "print", flags: [leakyHalt], event: "Stop" }]),
+    );
+    const provider = fakeProvider({
+      step: scriptedStep([{ name: "bash", args: { command: "echo fine" } }], "All done."),
+    });
+
+    const events = await runTurn(provider, [{ role: "user", content: "run it" }], {
+      runId: "run-stop-redact",
+      hooks: turnHooks(h),
+    });
+
+    const completed = payloadOf(events, "assistant.completed");
+    const stop = completed?.stop as { cause: string; summary: string } | undefined;
+    expect(stop?.cause).toBe("hook_halt");
+    expect(stop?.summary).not.toContain("halt-secret-value");
+    expect(stop?.summary).toContain("CI_SECRET=");
+  });
+});
+
+describe("Stop gate defect backstop (25 simplify C1)", () => {
+  test("a hooks binding whose dispatchStop rejects still publishes the terminal completion", async () => {
+    const h = using(hooksRuntimeHarness([]));
+    const provider = fakeProvider({
+      step: scriptedStep([{ name: "bash", args: { command: "echo fine" } }], "All done."),
+    });
+
+    const events = await runTurn(provider, [{ role: "user", content: "run it" }], {
+      runId: "run-stop-defect",
+      hooks: turnHooks(h, {
+        dispatchStop: () => Promise.reject(new Error("discovery layer exploded")),
+        // Claim a Stop hook exists so the gate actually dispatches the broken binding.
+        hasHooks: (event) => event === "Stop",
+      }),
+    });
+
+    const completions = events.filter((event) => event.type === "assistant.completed");
+    expect(completions).toHaveLength(1);
+    expect(payloadOf(events, "assistant.completed")?.text).toBe("All done.");
   });
 });
 

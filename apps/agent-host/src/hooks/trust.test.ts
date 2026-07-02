@@ -1,7 +1,13 @@
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { type HookDefinition, normalizeHooksConfig } from "./config";
-import { computeHookTrustFingerprint, evaluateHookTrust, type HookTrustIo } from "./trust";
+import {
+  computeHookTrustFingerprint,
+  createHookTrustFingerprintCache,
+  evaluateHookTrust,
+  type HookFileStamp,
+  type HookTrustIo,
+} from "./trust";
 
 const BASE = "/repo";
 
@@ -110,6 +116,80 @@ describe("computeHookTrustFingerprint - config and script changes", () => {
     );
     expect(before.referencedFiles).toEqual(["./policy.json"]);
     expect(after.hash).not.toBe(before.hash);
+  });
+});
+
+describe("computeHookTrustFingerprint - length-prefixed file framing (S4)", () => {
+  test("bytes cannot migrate across file boundaries with an identical digest", () => {
+    // Same config (same two arg files); the concatenated hashed material would be identical
+    // under naive `\nfile:<ref>\n<content>` framing because a.txt's CONTENT can spell the next
+    // section header. The length prefix pins each section, so the hashes must differ.
+    const withContents = (a: string, b: string) =>
+      computeHookTrustFingerprint(
+        { ...guard, command: "node", args: ["./a.txt", "./b.txt"] },
+        BASE,
+        fakeIo({
+          [resolve(BASE, "./a.txt")]: a,
+          [resolve(BASE, "./b.txt")]: b,
+        }),
+      );
+    expect(withContents("X\nfile:./b.txt\nY", "Z").hash).not.toBe(
+      withContents("X", "Y\nfile:./b.txt\nZ").hash,
+    );
+  });
+});
+
+describe("createHookTrustFingerprintCache - stamp-guarded reuse (E2)", () => {
+  const node = { ...guard, command: "node", args: ["./policy.json"] };
+  const policy = resolve(BASE, "./policy.json");
+
+  function countingHarness(initial: string) {
+    const files: Record<string, string> = { [policy]: initial };
+    const stamps: Record<string, HookFileStamp> = { [policy]: { mtimeMs: 1, size: 1 } };
+    let reads = 0;
+    const io: HookTrustIo = {
+      isFile: (path) => files[path] !== undefined,
+      readFile: (path) => {
+        reads += 1;
+        const contents = files[path];
+        if (contents === undefined) {
+          throw new Error(`ENOENT: ${path}`);
+        }
+        return contents;
+      },
+    };
+    const cache = createHookTrustFingerprintCache(io, (path) => stamps[path] ?? null);
+    return { files, stamps, io, cache, reads: () => reads };
+  }
+
+  test("an unchanged file reuses the cached fingerprint without re-reading it", () => {
+    const h = countingHarness('{"allow":[]}');
+    const first = h.cache.fingerprintFor("project:/repo:guard", node, BASE);
+    const again = h.cache.fingerprintFor("project:/repo:guard", node, BASE);
+    expect(again).toBe(first);
+    expect(h.reads()).toBe(1);
+  });
+
+  test("a changed stamp recomputes: the fresh fingerprint reflects the edit", () => {
+    const h = countingHarness('{"allow":[]}');
+    const before = h.cache.fingerprintFor("project:/repo:guard", node, BASE);
+    h.files[policy] = '{"allow":["bash"]}';
+    h.stamps[policy] = { mtimeMs: 2, size: 18 };
+    const after = h.cache.fingerprintFor("project:/repo:guard", node, BASE);
+    expect(after.hash).not.toBe(before.hash);
+    expect(h.reads()).toBe(2);
+  });
+
+  test("a file appearing where none resolved before invalidates the cache", () => {
+    const h = countingHarness('{"allow":[]}');
+    const gone = { ...node, args: ["./new-file.json"] };
+    const newFile = resolve(BASE, "./new-file.json");
+    const before = h.cache.fingerprintFor("project:/repo:guard", gone, BASE);
+    h.files[newFile] = "now it exists";
+    h.stamps[newFile] = { mtimeMs: 3, size: 13 };
+    const after = h.cache.fingerprintFor("project:/repo:guard", gone, BASE);
+    expect(after.hash).not.toBe(before.hash);
+    expect(after.referencedFiles).toEqual(["./new-file.json"]);
   });
 });
 

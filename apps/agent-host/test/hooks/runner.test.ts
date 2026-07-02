@@ -1,18 +1,13 @@
 import { parseHookDecision } from "@host/hooks/decision";
-import {
-  DEFAULT_HOOK_OUTPUT_CAP_CHARS,
-  type HookExecution,
-  redactHookExecution,
-  runHook,
-} from "@host/hooks/runner";
+import { redactHookText } from "@host/hooks/redact";
+import { DEFAULT_HOOK_OUTPUT_CAP_CHARS, type HookExecution, runHook } from "@host/hooks/runner";
 import { describe, expect, test } from "vitest";
 import { fixtureHook } from "./fixture-config";
 
 /**
  * Hook runner integration tests (plan 25 M3): the command runner against the real fixture
  * child - no-shell argv fidelity (D-005), stdin payload delivery, the SIGTERM -> grace ->
- * SIGKILL timeout ladder, output caps, spawn hygiene (cwd + minimal env, D-004), and the
- * redacted execution projection (D-009).
+ * SIGKILL timeout ladder, output caps, and spawn hygiene (cwd + minimal env, D-004).
  *
  * Responsible for: exercising runHook end to end over ./fixture-hook.
  * Not for: decision-parse and redaction unit cases - src/hooks/decision.test.ts and
@@ -117,7 +112,9 @@ describe("runHook - output caps", () => {
 describe("runHook - spawn hygiene (D-004)", () => {
   test("the child runs in the given cwd", async () => {
     const execution = await runHook(fixtureHook("cwd"), {}, { cwd });
-    expect(contextOf(execution)).toBe(cwd);
+    // The decision's context is redacted at parse (S2), which home-abbreviates paths - so the
+    // child's reported cwd is compared in its redacted form.
+    expect(contextOf(execution)).toBe(redactHookText(cwd));
   });
 
   test("the child env is the minimal allowlist - host secrets never arrive", async () => {
@@ -138,20 +135,5 @@ describe("runHook - spawn hygiene (D-004)", () => {
 
     expect(execution.spawnError).toBeDefined();
     expect(execution.exitCode).toBeNull();
-  });
-});
-
-describe("redactHookExecution - the stored/log projection (D-009)", () => {
-  test("stdout/stderr are redacted in the log projection", async () => {
-    const hook = fixtureHook("fail", ["API_KEY=topsecret at /Users/somebody/x", "3"]);
-    const execution = await runHook(hook, {}, { cwd });
-    const log = redactHookExecution(execution);
-
-    expect(execution.exitCode).toBe(3);
-    expect(log.stderr).not.toContain("topsecret");
-    expect(log.stderr).not.toContain("/Users/somebody");
-    expect(log.exitCode).toBe(3);
-    expect(log.timedOut).toBe(false);
-    expect(log.durationMs).toBe(execution.durationMs);
   });
 });

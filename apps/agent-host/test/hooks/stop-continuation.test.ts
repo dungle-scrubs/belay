@@ -49,9 +49,8 @@ function turnHooks(h: HooksRuntimeHarness, overrides: Partial<TurnHooks> = {}): 
   return {
     dispatchPreToolUse: h.runtime.dispatchPreToolUse,
     dispatchStop: h.runtime.dispatchStop,
-    sessionId: "s-continue",
-    callerKind: "main",
-    cwd: h.workspaceRoot,
+    hasHooks: h.runtime.hasHooks,
+    identity: { sessionId: "s-continue", callerKind: "main", cwd: h.workspaceRoot },
     ...overrides,
   };
 }
@@ -108,7 +107,9 @@ describe("Stop continuation - one pass, context visible to the model", () => {
 
     const events = await runTurn(provider, [{ role: "user", content: "assess it" }], {
       runId: "run-continue-1",
-      hooks: turnHooks(h, { onStopOutcome: (report) => reports.push(report.outcome) }),
+      hooks: turnHooks(h, {
+        observers: { onStopOutcome: (report) => reports.push(report.outcome) },
+      }),
     });
 
     // Exactly one continuation pass: the main step plus one tool-less synthesis call.
@@ -116,7 +117,7 @@ describe("Stop continuation - one pass, context visible to the model", () => {
     expect(calls[1]?.tools).toBe(0);
     const prompt = calls[1]?.messages[calls[1].messages.length - 1];
     expect(prompt?.role).toBe("user");
-    expect(prompt?.content).toContain("[hook project:coach]: cover the risks");
+    expect(prompt?.content).toContain(`[hook ${h.projectKey("coach")}]: cover the risks`);
     // The pass sees the answer it is continuing from.
     expect(
       calls[1]?.messages.some(
@@ -137,7 +138,7 @@ describe("Stop continuation - one pass, context visible to the model", () => {
     expect(reports).toHaveLength(2);
     expect(reports[1]?.diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ hook: "project:coach", reason: "continuation_exhausted" }),
+        expect.objectContaining({ hook: h.projectKey("coach"), reason: "continuation_exhausted" }),
       ]),
     );
   });

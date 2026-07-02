@@ -5,7 +5,8 @@
  * the LSP wire decoders, adapter manifest sniffing - kept in one place beside ./coerce instead
  * of re-spelled per module.
  *
- * Responsible for: asRecord / asNonEmptyString narrowing for tolerant raw-input decoding.
+ * Responsible for: asRecord / asNonEmptyString / asStringArray narrowing for tolerant raw-input
+ * decoding.
  * Not for: numeric coercions (./coerce) or any protocol semantics.
  */
 
@@ -19,4 +20,9 @@ export function asRecord(raw: unknown): Record<string, unknown> | undefined {
 /** The raw value as a non-blank string, or undefined for anything else. */
 export function asNonEmptyString(raw: unknown): string | undefined {
   return typeof raw === "string" && raw.trim().length > 0 ? raw : undefined;
+}
+
+/** The raw value's string items in order ([] for non-arrays); non-strings are dropped. */
+export function asStringArray(raw: unknown): readonly string[] {
+  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];
 }

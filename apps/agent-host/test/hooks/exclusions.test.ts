@@ -81,6 +81,7 @@ describe("runtime surface - exactly two dispatch entry points (D-008)", () => {
       "discoveryReport",
       "dispatchPreToolUse",
       "dispatchStop",
+      "hasHooks",
       "statsSnapshot",
       "statusSnapshot",
     ]);

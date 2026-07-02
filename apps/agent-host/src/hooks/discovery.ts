@@ -80,7 +80,7 @@ const MAX_LEGACY_FRONTMATTER_CHARS = 4_096;
 const LEGACY_PROJECT_HOOKS_DIR = join(".trevor", "hooks");
 
 /** The V1 user hooks home, `~/.trevor/hooks` (V1's config root, not V2's TREVOR_HOME). */
-export function defaultLegacyUserHooksDir(): string {
+function defaultLegacyUserHooksDir(): string {
   return join(homedir(), ".trevor", "hooks");
 }
 
@@ -155,7 +155,7 @@ function frontmatterDeclaresCommand(head: string): boolean {
 /**
  * Discovers hook definitions across the fixed roots. Deterministic: project before user, entry
  * order within a file preserved. The same id may appear under both roots - provenance (not the
- * id alone) identifies a hook, and the approval key is `<source>:<id>`.
+ * id alone) identifies a hook, and the approval key (approval.hookApprovalKey) scopes it.
  */
 export function discoverHooks(
   roots: HookDiscoveryRoots = defaultHookDiscoveryRoots(),

@@ -4,9 +4,11 @@ import type { SessionEvent } from "./event";
 import {
   decodeTrevorEvent,
   events,
+  type KnownTurnStopCause,
   LEGACY_TASK_REVISION,
   LIFECYCLE_TYPES,
   type TrevorEventInput,
+  TURN_STOP_CAUSE_DESCRIPTIONS,
   taskSnapshotReplaces,
 } from "./protocol";
 import type { ProviderQuestionAnswer, ProviderQuestionContract } from "./provider-question";
@@ -441,6 +443,24 @@ test("assistant.completed stop metadata round-trips through decodeTrevorEvent", 
     context: { inputTokens: 89_022, contextWindow: 1_000_000, pressure: 0.089022 },
     diagnosticRef: null,
   });
+});
+
+test("hook_halt is a known turn-stop cause with a description (plan 25 simplify C2)", () => {
+  const cause: KnownTurnStopCause = "hook_halt";
+  assert.equal(typeof TURN_STOP_CAUSE_DESCRIPTIONS[cause], "string");
+
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.assistantCompleted({
+        runId: "r",
+        text: "done",
+        stop: { cause, action: "paused", summary: 'Completion halted by Stop hook "user:gate".' },
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "assistant.completed");
+  if (decoded?.type !== "assistant.completed") return;
+  assert.equal(decoded.stop?.cause, "hook_halt");
 });
 
 test("legacy assistant.completed events decode with no stop object", () => {

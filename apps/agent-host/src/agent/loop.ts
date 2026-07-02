@@ -5,6 +5,7 @@
  * Not for: publishing the turn as session events - publishTurn (turn.ts) - or hook dispatch
  * semantics - @host/hooks/runtime.
  */
+import type { HookEvent } from "@host/hooks/config";
 import type {
   HookCallerKind,
   PreToolUseOutcome,
@@ -82,7 +83,15 @@ const CHECKPOINT_MIN_ADVANCE_TOKENS = 1_024;
 export type AgentEvent =
   | ModelEvent
   | { readonly type: "tool_start"; readonly call: ToolCall }
-  | { readonly type: "tool_end"; readonly call: ToolCall; readonly result: string }
+  | {
+      readonly type: "tool_end";
+      readonly call: ToolCall;
+      readonly result: string;
+      /** Set when the tool never actually EXECUTED (a PreToolUse deny/halt, or a batch member
+       *  skipped after a halt): the paired result exists for transcript coherence, but the call
+       *  did no work - so accounting of "what the turn ran" must ignore it (25 simplify C4). */
+      readonly skipped?: true;
+    }
   | {
       /** A tool-call guardrail flagged a repeating path (07): the redacted decision for the call that
        *  just ran. `runAgent` emits this only for a non-`allow` decision; turn.ts maps it to the
@@ -163,32 +172,43 @@ export interface DelegateCapability {
   readonly run: (name: string, args: string) => Promise<string>;
 }
 
+/** The turn identity hooks payloads carry: which session, who initiated, and the working dir. */
+export interface TurnHookIdentity {
+  readonly sessionId: string;
+  readonly callerKind: HookCallerKind;
+  readonly cwd: string;
+}
+
+/** The M9 event-emission seams: observers of every dispatch outcome (decision + diagnostics),
+ *  which agent/hook-events.ts wraps to fold each outcome into visible hook.decision events. */
+export interface TurnHookObservers {
+  readonly onOutcome?: (report: {
+    readonly callId: string;
+    readonly toolName: string;
+    readonly outcome: PreToolUseOutcome;
+  }) => void;
+  /** Mirrors `onOutcome` for the Stop gate: observes every Stop dispatch's outcome. */
+  readonly onStopOutcome?: (report: { readonly outcome: StopOutcome }) => void;
+}
+
 /**
- * The PreToolUse hook capability injected into a turn (plan 25 M5, D-003): the host-lifetime
- * dispatcher (@host/hooks/host-runtime in production) plus the turn identity the loop itself
- * does not know - which session this turn belongs to, who initiated it (main/subagent/clip),
- * and the turn's working directory. Absent = no hooks fire (a test turn, or a host that opts a
- * turn out); the loop then behaves exactly as before. `onOutcome` is the M9 event-emission
- * seam: it observes every dispatch outcome (decision + diagnostics) so transcript events can be
- * layered on without re-threading the loop; today only loop-side effects (denial results, halt
- * stops) and the runtime's structured logs exist.
+ * The hook capability injected into a turn (plan 25 M5/M7, D-003/D-004): the host-lifetime
+ * dispatchers (@host/hooks/host-runtime in production), the cheap per-event `hasHooks`
+ * predicate off the runtime's cached discovery, the turn `identity` the loop itself does not
+ * know, and the optional M9 `observers`. Absent = no hooks fire (a test turn, or a host that
+ * opts a turn out); the loop then behaves exactly as before.
  */
 export interface TurnHooks {
   readonly dispatchPreToolUse: (payload: PreToolUsePayload) => Promise<PreToolUseOutcome>;
   /** The Stop finalization gate (plan 25 M7, D-004): publishTurn dispatches it before emitting
    *  a genuine terminal completion. Absent = no Stop gate (a test turn, or a child turn). */
   readonly dispatchStop?: (payload: StopPayload) => Promise<StopOutcome>;
-  readonly sessionId: string;
-  readonly callerKind: HookCallerKind;
-  readonly cwd: string;
-  readonly onOutcome?: (report: {
-    readonly callId: string;
-    readonly toolName: string;
-    readonly outcome: PreToolUseOutcome;
-  }) => void;
-  /** The M9 event seam for Stop outcomes, mirroring `onOutcome`: observes every Stop dispatch's
-   *  outcome (decision + contexts + diagnostics) so transcript events can layer on later. */
-  readonly onStopOutcome?: (report: { readonly outcome: StopOutcome }) => void;
+  /** Cheap "any enabled hooks for this event?" predicate (25 simplify E1), so the loop/turn can
+   *  skip payload construction and per-call accounting entirely on an unhooked host. Absent =
+   *  assume hooks exist and always dispatch (the conservative default for hand-built tests). */
+  readonly hasHooks?: (event: HookEvent) => boolean;
+  readonly identity: TurnHookIdentity;
+  readonly observers?: TurnHookObservers;
 }
 
 /** Options for a turn: a subagent's tool allow-list, and (for a parent) the delegation capability. */
@@ -277,24 +297,28 @@ export function runAgent(
   };
   // The PreToolUse gate for one call (plan 25 M5, D-003): builds the full payload from the turn
   // identity (opts.hooks) + what the loop knows about the call, and resolves to the dispatch
-  // outcome - or null when no hooks are wired, which costs nothing. The dispatcher never rejects
-  // (D-007); the runtime folds its own faults into diagnostics. `onOutcome` is the M9 event seam.
+  // outcome - or null when no hooks are wired, which costs nothing. When the runtime's hasHooks
+  // predicate says no PreToolUse hooks exist, even payload construction (the extra JSON.parse of
+  // the full arguments) is skipped (25 simplify E1). The dispatcher never rejects (D-007); the
+  // runtime folds its own faults into diagnostics. `observers.onOutcome` is the M9 event seam.
   const hooks = opts.hooks;
+  const preToolUseHooked = (): boolean =>
+    hooks !== undefined && (hooks.hasHooks?.("PreToolUse") ?? true);
   const dispatchPreToolUse = (call: ToolCall): Effect.Effect<PreToolUseOutcome | null> =>
-    hooks
+    hooks && preToolUseHooked()
       ? Effect.promise(async () => {
           const outcome = await hooks.dispatchPreToolUse({
             event: "PreToolUse",
-            sessionId: hooks.sessionId,
+            sessionId: hooks.identity.sessionId,
             runId: runId ?? "",
             turnId: runId ?? "",
-            cwd: hooks.cwd,
-            callerKind: hooks.callerKind,
+            cwd: hooks.identity.cwd,
+            callerKind: hooks.identity.callerKind,
             toolName: call.name,
             toolInput: parsedToolInput(call.arguments),
             toolMetadata: { readOnly: READ_ONLY_TOOLS.has(call.name) },
           });
-          hooks.onOutcome?.({ callId: call.id, toolName: call.name, outcome });
+          hooks.observers?.onOutcome?.({ callId: call.id, toolName: call.name, outcome });
           return outcome;
         })
       : Effect.succeed(null);
@@ -931,15 +955,21 @@ export function runAgent(
           // The tail of one completed (or hook-denied) call: observe it through the guardrail
           // controller (07), compose the decision onto the model-facing result, commit the slot,
           // and emit tool_end (+ the redacted guardrail marker on a non-allow decision).
+          // `executed: false` marks a hook DENIAL: it still feeds the guardrail (a repeated
+          // denial accumulates repeat guidance) but its tool_end is flagged skipped, so the
+          // Stop-payload accounting never counts a tool that did not run (25 simplify C4).
           const finishCall = (
             call: ToolCall,
             index: number,
             rawResult: string,
+            executed = true,
           ): Stream.Stream<AgentEvent, ProviderError> => {
             const decision = guardrails.observe(call.name, call.arguments, rawResult);
             const result = guardedToolResult(rawResult, decision);
             slots[index] = result;
-            const events: AgentEvent[] = [{ type: "tool_end", call, result }];
+            const events: AgentEvent[] = [
+              { type: "tool_end", call, result, ...(executed ? {} : { skipped: true as const }) },
+            ];
             // A non-allow decision rides out as a redacted guardrail event (turn.ts publishes
             // tool.guardrail); the model-facing guidance stays on the tool result above.
             if (decision.action !== "allow") {
@@ -957,7 +987,7 @@ export function runAgent(
             result: string,
           ): Stream.Stream<AgentEvent, ProviderError> => {
             slots[index] = result;
-            return Stream.succeed<AgentEvent>({ type: "tool_end", call, result });
+            return Stream.succeed<AgentEvent>({ type: "tool_end", call, result, skipped: true });
           };
 
           // One call's execution as a Stream: run the PreToolUse gate (25 M5), then the tool,
@@ -974,6 +1004,9 @@ export function runAgent(
               Effect.suspend(() => {
                 // A halt landed earlier in this batch: never execute past it. Calls already in
                 // flight in the same concurrent read segment drain; everything after is skipped.
+                // "In flight" includes calls whose PreToolUse gate is already past dispatch -
+                // once its gate has dispatched, an allowed call runs to completion and its tool
+                // result publishes before the stop.
                 if (haltStop) {
                   return Effect.succeed(
                     skipCall(
@@ -1002,6 +1035,7 @@ export function runAgent(
                             call,
                             index,
                             withHookContexts(hookBlockedResult(outcome), outcome),
+                            false,
                           ),
                         );
                       }

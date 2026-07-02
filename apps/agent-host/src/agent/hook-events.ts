@@ -176,17 +176,19 @@ export function withHookDecisionEvents(
 
   return {
     ...hooks,
-    onOutcome: (report) => {
-      hooks.onOutcome?.(report);
-      for (const event of preToolUseDecisionEvents(runId, report.toolName, report.outcome)) {
-        emit(event);
-      }
-    },
-    onStopOutcome: (report) => {
-      hooks.onStopOutcome?.(report);
-      for (const event of stopDecisionEvents(runId, report.outcome)) {
-        emit(event);
-      }
+    observers: {
+      onOutcome: (report) => {
+        hooks.observers?.onOutcome?.(report);
+        for (const event of preToolUseDecisionEvents(runId, report.toolName, report.outcome)) {
+          emit(event);
+        }
+      },
+      onStopOutcome: (report) => {
+        hooks.observers?.onStopOutcome?.(report);
+        for (const event of stopDecisionEvents(runId, report.outcome)) {
+          emit(event);
+        }
+      },
     },
   };
 }

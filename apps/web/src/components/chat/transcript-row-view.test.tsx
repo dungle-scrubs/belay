@@ -172,6 +172,20 @@ test("renders typed stop notes for non-automatic adaptive termination causes", (
   }
 });
 
+test("renders a hook_halt stop with its own title (plan 25 simplify C2)", () => {
+  renderRow(
+    assistant({
+      stop: {
+        cause: "hook_halt",
+        action: "paused",
+        summary: 'Completion halted by Stop hook "project:/repo:gate": not yet.',
+      },
+    }),
+  );
+  assert.ok(screen.getByText("halted by hook"));
+  assert.ok(screen.getByText(/Completion halted by Stop hook/));
+});
+
 test("renders step backstop stops so a paused turn is never silent", () => {
   renderRow(
     assistant({

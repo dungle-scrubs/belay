@@ -74,6 +74,23 @@ describe("parseHookDecision - bounds", () => {
     const parsed = parseHookDecision('{"decision":"allow","context":{"not":"a string"}}');
     expect(parsed).toEqual({ ok: true, decision: { decision: "allow" } });
   });
+
+  test("reason and context are redacted AT PARSE (S2): env-style secrets never survive", () => {
+    const parsed = parseHookDecision(
+      JSON.stringify({
+        decision: "deny",
+        reason: "blocked because API_KEY=supersecret123 leaked",
+        context: "loaded from /Users/somebody/.env with TOKEN=alsosecret",
+      }),
+    );
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.decision.reason).not.toContain("supersecret123");
+      expect(parsed.decision.reason).toContain("API_KEY=");
+      expect(parsed.decision.context).not.toContain("alsosecret");
+      expect(parsed.decision.context).not.toContain("/Users/somebody");
+    }
+  });
 });
 
 describe("parseHookDecision - invalid output is data, never a throw", () => {

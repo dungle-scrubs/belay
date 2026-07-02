@@ -34,6 +34,7 @@ import { WithInspect } from "@/tool-detail/inspect-affordance";
 import { fmtCtx, fmtTokens, toolSummary } from "../../derive";
 import {
   formatSwitchEndpoint,
+  hookDecisionActionLabel,
   LEGACY_RECONNECT_ATTEMPTS,
   type Message,
   type ToolMessage as ToolMessageData,
@@ -66,6 +67,8 @@ function stopTitle(cause: string): string {
       return "paused at step backstop";
     case "loop_stalled":
       return "loop stalled";
+    case "hook_halt":
+      return "halted by hook";
     case "provider_protocol_anomaly":
       return "provider protocol anomaly";
     case "overflow":
@@ -303,12 +306,7 @@ export function TranscriptRowView({
     // A visible hook decision (plan 25 M9): a quiet, attributed advisory line - the hook's
     // approval key, what it did (denied a tool / halted the turn / added context), and its
     // already-redacted reason. Understated like the guardrail marker, never an alarming card.
-    const action =
-      message.decision === "deny"
-        ? `denied ${message.toolName ?? "a tool"}`
-        : message.decision === "halt"
-          ? "halted the turn"
-          : `context${message.toolName ? ` for ${message.toolName}` : ""}`;
+    const action = hookDecisionActionLabel(message.decision, message.toolName);
     return (
       <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
         <Webhook className="size-3 shrink-0" />

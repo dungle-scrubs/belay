@@ -14,7 +14,12 @@ import {
 } from "lucide-react";
 import type { ElementType } from "react";
 import { parseToolArgs, toolSummary, truncate } from "../../derive";
-import { type AssistantMessage, formatSwitchEndpoint, type Message } from "../../transcript";
+import {
+  type AssistantMessage,
+  formatSwitchEndpoint,
+  hookDecisionActionLabel,
+  type Message,
+} from "../../transcript";
 import { type ToolStatus, toolMessageStatus, toolStatusColor } from "./tool-status";
 
 /**
@@ -131,12 +136,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
     case "hookDecision": {
       // A hook decision (plan 25 M9) compacts to the same quiet marker shape as a guardrail:
       // the hook's key as the label, its action + reason as the summary.
-      const action =
-        message.decision === "deny"
-          ? `denied ${message.toolName ?? "a tool"}`
-          : message.decision === "halt"
-            ? "halted the turn"
-            : `context${message.toolName ? ` for ${message.toolName}` : ""}`;
+      const action = hookDecisionActionLabel(message.decision, message.toolName);
       return marker(
         "hookDecision",
         Webhook,

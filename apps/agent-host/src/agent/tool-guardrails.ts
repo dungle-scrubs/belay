@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "@host/boot/canonical-json";
 
 /**
  * Tool-call guardrails: a pure, per-turn controller (D-002). It observes tool calls and their
@@ -98,31 +99,17 @@ function sha(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, FINGERPRINT_LENGTH);
 }
 
-/** Recursively sorts object keys so two structurally-equal argument objects canonicalize identically. */
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(canonicalize);
-  }
-  if (value && typeof value === "object") {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      sorted[key] = canonicalize((value as Record<string, unknown>)[key]);
-    }
-    return sorted;
-  }
-  return value;
-}
-
 /**
  * A stable, short fingerprint of a tool call's raw argument JSON. Objects are canonicalized with
- * sorted keys so `{a,b}` and `{b,a}` collapse to one signature; a non-JSON or otherwise un-parseable
- * argument string falls back to hashing the raw text verbatim (never throws). An empty argument
- * string is treated as the empty object, matching the executor's `JSON.parse(args || "{}")`.
+ * recursively sorted keys (the shared @host/boot/canonical-json) so `{a,b}` and `{b,a}` collapse
+ * to one signature; a non-JSON or otherwise un-parseable argument string falls back to hashing
+ * the raw text verbatim (never throws). An empty argument string is treated as the empty object,
+ * matching the executor's `JSON.parse(args || "{}")`.
  */
 export function argsFingerprint(argsJson: string): string {
   let canonical: string;
   try {
-    canonical = JSON.stringify(canonicalize(JSON.parse(argsJson || "{}")));
+    canonical = canonicalJson(JSON.parse(argsJson || "{}"));
   } catch {
     canonical = argsJson;
   }

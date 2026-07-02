@@ -504,8 +504,8 @@ export const lspDiagnosticWarning: DoctorArea = {
 // snapshot is folded by doctor/hooks-status into ONE PeripheralState whose detail string
 // becomes both the verdict and the single `hooks.status` finding via the generic peripheralArea
 // mapping, plus the extra findings the fold raises (approval / missing scripts / degrading
-// handlers / legacy HOOK.md migration). Keys are `<source>:<id>` identities, paths are
-// home-abbreviated, and nothing carries a hook's arguments or output (D-009).
+// handlers / legacy HOOK.md migration). Keys are the runtime's approval-key identities, paths
+// are home-abbreviated, and nothing carries a hook's arguments or output (D-009).
 
 const HOOKS_READY_DETAIL = "2 hooks (1 PreToolUse · 1 Stop) · 2 approved";
 

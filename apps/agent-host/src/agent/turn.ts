@@ -198,8 +198,12 @@ export function publishTurn(
     // reconnects. The /doctor surface reads the two categories separately.
     let reconnectAttempts = 0;
     // The compact per-tool accounting for the Stop hook payload (plan 25 M7, D-004): every
-    // tool_start this turn publishes is recorded (name + touched path when cheaply derivable),
-    // so a Stop hook can review WHAT ran without ever seeing raw arguments or outputs.
+    // EXECUTED tool completion this turn publishes is recorded (name + touched path when
+    // cheaply derivable) - a hook-denied or halt-skipped call is not "what the turn ran", so it
+    // never counts (25 simplify C4). Recording is skipped entirely when no Stop hook exists
+    // (25 simplify E1); the whole Stop gate below is inert then too, so nothing reads it.
+    const stopGateActive =
+      turnHooks?.dispatchStop !== undefined && (turnHooks.hasHooks?.("Stop") ?? true);
     const toolSummary = createStopToolSummary();
 
     const text = new DeltaBuffer((delta) =>
@@ -314,7 +318,7 @@ export function publishTurn(
     // dispatch Stop. `onStopOutcome` is the M9 seam and observes EVERY dispatch's outcome.
     const stopHookGate = Effect.gen(function* () {
       const dispatchStop = turnHooks?.dispatchStop;
-      if (!turnHooks || !dispatchStop) {
+      if (!turnHooks || !dispatchStop || !stopGateActive) {
         return;
       }
       let continuationUsed = false;
@@ -323,27 +327,27 @@ export function publishTurn(
         const outcome = yield* Effect.promise(() =>
           dispatchStop({
             event: "Stop",
-            sessionId: turnHooks.sessionId,
+            sessionId: turnHooks.identity.sessionId,
             runId,
             turnId: runId,
-            cwd: turnHooks.cwd,
+            cwd: turnHooks.identity.cwd,
             terminalReason: stopTerminalReason(stop),
             finalText: full,
             toolSummary: toolSummary.snapshot(),
           }),
         );
         if (outcome.decision === "halt") {
-          turnHooks.onStopOutcome?.({ outcome });
+          turnHooks.observers?.onStopOutcome?.({ outcome });
           stop = stopHookHaltStop(outcome);
           return;
         }
         if (outcome.contexts.length === 0) {
-          turnHooks.onStopOutcome?.({ outcome });
+          turnHooks.observers?.onStopOutcome?.({ outcome });
           return;
         }
         if (continuationUsed) {
           // The second continuation request (D-004): ignored, diagnosed, observable.
-          turnHooks.onStopOutcome?.({ outcome: withContinuationExhausted(outcome) });
+          turnHooks.observers?.onStopOutcome?.({ outcome: withContinuationExhausted(outcome) });
           warn("hooks", "stop continuation ignored", {
             run: runId.slice(0, 8),
             hook: outcome.contexts[0]?.hook,
@@ -351,7 +355,7 @@ export function publishTurn(
           return;
         }
         continuationUsed = true;
-        turnHooks.onStopOutcome?.({ outcome });
+        turnHooks.observers?.onStopOutcome?.({ outcome });
         // Forked as its own INTERRUPTIBLE daemon fiber: this gate runs inside the turn's
         // uninterruptible onExit, where running the pass in place would wedge - the stall
         // watchdog's scoped fiber would inherit uninterruptibility and the stream's scope close
@@ -402,7 +406,6 @@ export function publishTurn(
           yield* thinking.add(event.text);
         } else if (event.type === "tool_start") {
           breakdown.onToolCall(event.call.arguments.length);
-          toolSummary.record(event.call.name, event.call.arguments);
           yield* flushAll;
           yield* emit.publish(
             events.toolStarted({
@@ -414,6 +417,11 @@ export function publishTurn(
           );
         } else if (event.type === "tool_end") {
           breakdown.onToolResult(event.call.name, event.result.length);
+          // Stop-payload accounting records EXECUTED completions only (25 simplify C4): a
+          // denied/skipped call carries `skipped`, and an unhooked turn records nothing (E1).
+          if (stopGateActive && !event.skipped) {
+            toolSummary.record(event.call.name, event.call.arguments);
+          }
           yield* emit.publish(
             events.toolCompleted({
               runId,
@@ -584,9 +592,22 @@ export function publishTurn(
 
           // The Stop dispatch rule (25 M7): only a genuine terminal assistant result - the
           // success exit, including budget/halt/no-reply stops - is reviewable. It runs before
-          // the metrics below so a hook halt is counted under its real cause.
+          // the metrics below so a hook halt is counted under its real cause. The gate is
+          // defect-proofed (25 simplify C1): dispatchStop itself never rejects (D-007), but a
+          // fault in a hooks BINDING (a broken discovery/approvals layer in a hand-wired
+          // TurnHooks) must never suppress the terminal completion - it downgrades to a warn
+          // and the completion below publishes unconditionally.
           if (Exit.isSuccess(exit)) {
-            yield* stopHookGate;
+            yield* stopHookGate.pipe(
+              Effect.catchAllCause((cause) =>
+                Effect.sync(() =>
+                  warn("hooks", "stop hook gate failed; finalizing without it", {
+                    run: runId.slice(0, 8),
+                    cause: Cause.pretty(cause).slice(0, 300),
+                  }),
+                ),
+              ),
+            );
           }
           // Any hook.decision still queued (the Stop gate's own, or a straggler from a turn
           // that ended mid-batch) publishes BEFORE the terminal completion below (M9).

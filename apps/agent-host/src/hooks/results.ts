@@ -16,8 +16,8 @@ import type { HookTrustStatus } from "./trust";
  * caller branches on with catch - every variant is ordinary data on the happy path. Diagnostic
  * details quote hook output, so they are redacted (D-009) and bounded.
  *
- * Responsible for: the decision/diagnostic outcome union, deriving it from an execution or a
- * trust status, and the blocking predicate.
+ * Responsible for: the decision/diagnostic outcome union and deriving it from an execution or
+ * a trust status.
  * Not for: running hooks (./runner), parsing stdout (./decision), or counters (./stats).
  */
 
@@ -102,11 +102,6 @@ export function hookTrustOutcome(status: HookTrustStatus): HookDiagnosticOutcome
     case "missing-script":
       return diagnostic("missing_script", "the hook's command script does not exist");
   }
-}
-
-/** Whether an outcome blocks the gated action: ONLY an explicit deny/halt decision (D-007). */
-export function isBlockingHookOutcome(outcome: HookOutcome): boolean {
-  return outcome.kind === "decision" && outcome.decision.decision !== "allow";
 }
 
 function diagnostic(reason: HookDiagnosticReason, detail: string): HookDiagnosticOutcome {

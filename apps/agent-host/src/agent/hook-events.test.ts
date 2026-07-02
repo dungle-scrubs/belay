@@ -195,10 +195,8 @@ test("withHookDecisionEvents dedupes DIAGNOSTIC events per turn but never blocki
   const seen: string[] = [];
   const hooks: TurnHooks = {
     dispatchPreToolUse: () => Promise.reject(new Error("unused")),
-    sessionId: "s",
-    callerKind: "main",
-    cwd: "/w",
-    onOutcome: (report) => seen.push(report.toolName),
+    identity: { sessionId: "s", callerKind: "main", cwd: "/w" },
+    observers: { onOutcome: (report) => seen.push(report.toolName) },
   };
   const wrapped = withHookDecisionEvents(hooks, "r-1", (event) =>
     published.push(`${event.payload.decision}:${event.payload.hookId}`),
@@ -209,8 +207,8 @@ test("withHookDecisionEvents dedupes DIAGNOSTIC events per turn but never blocki
     hook: "project:guard",
     diagnostics: [{ hook: "project:new", reason: "unapproved", detail: "not approved" }],
   });
-  wrapped.onOutcome?.({ callId: "c1", toolName: "bash", outcome: unapprovedDeny });
-  wrapped.onOutcome?.({ callId: "c2", toolName: "read", outcome: unapprovedDeny });
+  wrapped.observers?.onOutcome?.({ callId: "c1", toolName: "bash", outcome: unapprovedDeny });
+  wrapped.observers?.onOutcome?.({ callId: "c2", toolName: "read", outcome: unapprovedDeny });
 
   // The unapproved diagnostic emits once for the turn; each deny (a real per-call block) emits.
   assert.deepEqual(published, [

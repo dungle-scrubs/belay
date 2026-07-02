@@ -1,5 +1,7 @@
+import { statSync } from "node:fs";
 import { TREVOR_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { debug, log, warn } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import {
   approvedHashFor,
   type HookApprovalsState,
@@ -7,8 +9,14 @@ import {
   hookApprovalsPath,
   loadHookApprovals,
 } from "./approval";
-import type { HookConfigIssue, HookDefinition, HookEvent, HookSource } from "./config";
-import type { HookDecision, HookDecisionKind } from "./decision";
+import {
+  HOOK_EVENTS,
+  type HookConfigIssue,
+  type HookDefinition,
+  type HookEvent,
+  type HookSource,
+} from "./config";
+import type { HookDecision, HookVerb } from "./decision";
 import {
   defaultHookDiscoveryRoots,
   discoverHooks,
@@ -27,18 +35,21 @@ import {
 } from "./results";
 import { type HookRunnerOptions, runHook } from "./runner";
 import { createHookStats, type HookStatsEntry } from "./stats";
-import { computeHookTrustFingerprint, evaluateHookTrust, type HookTrustStatus } from "./trust";
+import { createHookTrustFingerprintCache, evaluateHookTrust, type HookTrustStatus } from "./trust";
 
 /**
  * The hooks RUNTIME (plan 25 M5/M7): the host-lifetime seam that composes discovery, trust
  * evaluation, the approval gate, execution, and per-hook stats into one dispatch surface, in
  * the mcp/lsp host-runtime tradition (construction touches nothing; discovery is lazy and
- * cached for the host's lifetime, approvals re-read per dispatch so a fresh grant takes effect
- * without a restart). Both dispatchers run every enabled, APPROVED hook of their event in
- * config order (project root before user root, D-001); the first blocking decision
- * short-circuits the rest (D-003), unapproved/changed/missing-script hooks contribute
- * diagnostics without ever executing (D-006), and every failure mode is a non-blocking
- * diagnostic (D-007) - dispatch itself NEVER rejects. `dispatchPreToolUse` allow decisions can
+ * cached for the host's lifetime, approvals re-read per dispatch - stat-guarded, so a fresh
+ * grant takes effect without a restart while an unchanged file is never re-parsed). Both
+ * dispatchers share one gate core: every enabled, APPROVED hook of the event runs in config
+ * order (project root before user root, D-001); the first blocking decision short-circuits the
+ * rest (D-003), unapproved/changed/missing-script hooks contribute diagnostics without ever
+ * executing (D-006), and every failure mode is a non-blocking diagnostic (D-007) - dispatch
+ * itself NEVER rejects. Approval keys are per-workspace for project hooks
+ * (`project:<workspace root>:<id>`, S1): a hook approved in one repo never auto-executes in
+ * another repo shipping byte-identical config. `dispatchPreToolUse` allow decisions can
  * additionally carry bounded, attributed context notes and an allowlist-scoped input rewrite
  * (25 M6, D-003 - ./input-policy owns the table). `dispatchStop` reviews a finalizing turn
  * (D-004): its only blocking semantic is halt (a stray "deny" normalizes to halt rather than
@@ -46,8 +57,8 @@ import { computeHookTrustFingerprint, evaluateHookTrust, type HookTrustStatus } 
  * and `updatedInput` is ignored wholesale - a Stop hook rewrites nothing. Everything logged
  * here is redacted (D-009); transcript events are M9's, so callers get the outcome as data.
  *
- * Responsible for: the PreToolUse/Stop payload/outcome contracts and the discovery -> trust ->
- * approval -> execution -> outcome dispatch pipeline.
+ * Responsible for: the PreToolUse/Stop payload/outcome contracts, the shared discovery ->
+ * trust -> approval -> execution -> outcome gate core, and the per-event hasHooks predicate.
  * Not for: the host singleton (./host-runtime), loop-side enforcement of an outcome
  * (@host/agent/loop), the turn-finalization seam (@host/agent/turn), or per-module mechanics
  * (./discovery, ./trust, ./approval, ./runner).
@@ -81,7 +92,7 @@ export type PreToolUseDiagnosticReason = HookDiagnosticReason | "updated_input_r
 
 /** One per-dispatch diagnostic: which hook, why it produced no usable effect, redacted detail. */
 export interface PreToolUseDiagnostic {
-  /** The hook's approval key, `<source>:<id>`. */
+  /** The hook's approval key. */
   readonly hook: string;
   readonly reason: PreToolUseDiagnosticReason;
   readonly detail: string;
@@ -89,7 +100,7 @@ export interface PreToolUseDiagnostic {
 
 /** One hook's bounded context note (25 M6), attributed so the model/transcript can cite it. */
 export interface PreToolUseContext {
-  /** The contributing hook's approval key, `<source>:<id>`. */
+  /** The contributing hook's approval key. */
   readonly hook: string;
   /** Bounded at decision parse (MAX_HOOK_CONTEXT_CHARS). */
   readonly context: string;
@@ -103,10 +114,10 @@ export interface PreToolUseContext {
  * loop applies it, M9 turns it into transcript events.
  */
 export interface PreToolUseOutcome {
-  readonly decision: HookDecisionKind;
+  readonly decision: HookVerb;
   /** The blocking hook's approval key; absent when the dispatch allowed. */
   readonly hook?: string;
-  /** The blocking hook's stated reason (bounded at parse); absent when none was given. */
+  /** The blocking hook's stated reason (redacted + bounded at parse); absent when none given. */
   readonly reason?: string;
   /** Context notes in hook config order, including the blocking hook's own note. */
   readonly contexts: readonly PreToolUseContext[];
@@ -125,8 +136,9 @@ export interface PreToolUseOutcome {
  * What a Stop hook reads on stdin (plan 25 M7, D-004): the finalizing run's identity plus the
  * terminal result it is reviewing. `terminalReason` is the turn's TurnStop cause when one fired
  * (e.g. "context_pressure", "hook_halt") or "completed" for an ordinary answer; `toolSummary`
- * is the compact per-tool accounting of what the turn ran (names + counts + touched paths when
- * cheaply derivable) - never raw arguments or outputs.
+ * is the compact per-tool accounting of what the turn EXECUTED (names + counts + touched paths
+ * when cheaply derivable; a hook-denied or halt-skipped call is not counted) - never raw
+ * arguments or outputs.
  */
 export interface StopPayload {
   readonly event: "Stop";
@@ -154,7 +166,7 @@ export type StopDecision = "allow" | "halt";
 
 /** One hook's bounded continuation context (M8), attributed like {@link PreToolUseContext}. */
 export interface StopContext {
-  /** The contributing hook's approval key, `<source>:<id>`. */
+  /** The contributing hook's approval key. */
   readonly hook: string;
   /** Bounded at decision parse (MAX_HOOK_CONTEXT_CHARS). */
   readonly context: string;
@@ -166,7 +178,7 @@ export type StopDiagnosticReason = HookDiagnosticReason | "continuation_exhauste
 
 /** One per-dispatch Stop diagnostic: which hook, why it produced no usable effect. */
 export interface StopDiagnostic {
-  /** The hook's approval key, `<source>:<id>`. */
+  /** The hook's approval key. */
   readonly hook: string;
   readonly reason: StopDiagnosticReason;
   readonly detail: string;
@@ -183,7 +195,7 @@ export interface StopOutcome {
   readonly decision: StopDecision;
   /** The halting hook's approval key; absent when the dispatch allowed. */
   readonly hook?: string;
-  /** The halting hook's stated reason (bounded at parse); absent when none was given. */
+  /** The halting hook's stated reason (redacted + bounded at parse); absent when none given. */
   readonly reason?: string;
   /** Context notes in hook config order, including the halting hook's own note. */
   readonly contexts: readonly StopContext[];
@@ -195,7 +207,8 @@ export interface HooksRuntimeOptions {
   readonly roots?: HookDiscoveryRoots;
   /** The approvals file (default: the storage-inventory path). */
   readonly approvalsPath?: string;
-  /** Trust anchor for project hooks + the hook child cwd (default WORKSPACE_ROOT). */
+  /** Trust anchor + approval-key scope for project hooks and the hook child cwd (default
+   *  WORKSPACE_ROOT). */
   readonly workspaceRoot?: string;
   /** Trust anchor for user hooks (default TREVOR_HOME). */
   readonly userConfigDir?: string;
@@ -208,7 +221,7 @@ export interface HooksRuntimeOptions {
 
 /** One configured hook's doctor-facing status (M9): identity + freshly evaluated trust. */
 export interface HookStatusEntry {
-  /** The hook's approval key, `<source>:<id>`. */
+  /** The hook's approval key. */
   readonly key: string;
   readonly event: HookEvent;
   readonly source: HookSource;
@@ -229,12 +242,15 @@ export interface HooksRuntime {
   readonly dispatchPreToolUse: (payload: PreToolUsePayload) => Promise<PreToolUseOutcome>;
   /** Runs the Stop gate for one finalizing turn (M7). Resolves ALWAYS - never rejects (D-007). */
   readonly dispatchStop: (payload: StopPayload) => Promise<StopOutcome>;
+  /** Whether any enabled hook is configured for `event` (cheap, off the cached per-event lists)
+   *  - the hot-path predicate callers use to skip payload construction entirely. */
+  readonly hasHooks: (event: HookEvent) => boolean;
   /** The per-hook run counters for Doctor (M9). */
   readonly statsSnapshot: () => readonly HookStatsEntry[];
   /** The cached discovery report (definitions + config issues) for Doctor (M9). */
   readonly discoveryReport: () => HookDiscoveryReport;
   /** The doctor-facing status picture (M9): every configured hook with its trust state,
-   *  evaluated fresh (approvals + fingerprints re-read), plus config issues and legacy files. */
+   *  evaluated fresh (approvals + fingerprints re-checked), plus config issues and legacy files. */
   readonly statusSnapshot: () => HooksStatusSnapshot;
 }
 
@@ -243,6 +259,27 @@ export interface HooksRuntime {
 type GatedHookRun =
   | HookDiagnosticOutcome
   | { readonly kind: "decision"; readonly decision: HookDecision; readonly durationMs: number };
+
+/** The shared no-hooks outcome (frozen): a transparent allow both dispatchers can return. */
+const EMPTY_ALLOW_OUTCOME: PreToolUseOutcome & StopOutcome = Object.freeze({
+  decision: "allow" as const,
+  contexts: Object.freeze([]),
+  diagnostics: Object.freeze([]),
+});
+
+/** What the shared gate core produced for one event dispatch, before per-event shaping. */
+interface GateRunResult<R extends string> {
+  /** The first blocking hook's spoken verb, or "allow" when every hook allowed. */
+  readonly decision: HookVerb;
+  readonly hook?: string;
+  readonly reason?: string;
+  readonly contexts: { readonly hook: string; readonly context: string }[];
+  readonly diagnostics: {
+    readonly hook: string;
+    readonly reason: HookDiagnosticReason | R;
+    readonly detail: string;
+  }[];
+}
 
 /** Builds a hooks runtime bound to explicit roots/paths; production uses ./host-runtime. */
 export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRuntime {
@@ -253,8 +290,8 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
   const stats = createHookStats();
 
   // Discovery is lazy and cached for the host's lifetime (the mcp-servers.json posture: config
-  // is read at startup, not per call); approvals re-read per dispatch below, so approving a hook
-  // takes effect on the next tool call without a host restart.
+  // is read at startup, not per call); approvals are stat-guard re-read per dispatch below, so
+  // approving a hook takes effect on the next tool call without a host restart.
   let discovered: HookDiscoveryReport | undefined;
   const discovery = (): HookDiscoveryReport => {
     if (!discovered) {
@@ -271,20 +308,65 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     return discovered;
   };
 
+  // Per-event dispatch lists, precomputed once off the cached discovery (25 simplify pass E1):
+  // the hot path asks "any PreToolUse hooks?" per tool call, so it must be a cached lookup, not
+  // a filter pass.
+  let byEvent: ReadonlyMap<HookEvent, readonly HookDefinition[]> | undefined;
+  const eventHooks = (event: HookEvent): readonly HookDefinition[] => {
+    if (!byEvent) {
+      const report = discovery();
+      byEvent = new Map(
+        HOOK_EVENTS.map((name) => [
+          name,
+          report.hooks.filter((hook) => hook.event === name && hook.enabled),
+        ]),
+      );
+    }
+    return byEvent.get(event) ?? [];
+  };
+  const hasHooks = (event: HookEvent): boolean => eventHooks(event).length > 0;
+
+  /** The workspace-scoped approval key for one discovered hook (S1). */
+  const approvalKeyFor = (hook: HookDefinition): string => hookApprovalKey(hook, workspaceRoot);
+
+  // The approvals read cache (25 simplify pass E3): one statSync per dispatch keeps the
+  // fresh-grant-without-restart semantics, while an unchanged file skips the read+parse.
+  let approvalsCache: { readonly stamp: string; readonly state: HookApprovalsState } | undefined;
+  const approvalsStamp = (): string => {
+    try {
+      const stat = statSync(approvalsPath);
+      return `${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return "absent";
+    }
+  };
+  const currentApprovals = (): HookApprovalsState => {
+    const stamp = approvalsStamp();
+    if (approvalsCache?.stamp !== stamp) {
+      approvalsCache = { stamp, state: loadHookApprovals(approvalsPath) };
+    }
+    return approvalsCache.state;
+  };
+
+  // The trust fingerprint cache (25 simplify pass E2): per hook key, guarded by the referenced
+  // files' mtime+size stamps, so an unchanged script is never re-read/re-hashed per dispatch
+  // while an edit still re-closes the gate on the very next dispatch (D-006).
+  const fingerprints = createHookTrustFingerprintCache();
+
   /** The trust anchor for a hook's relative script references (D-006). */
   const trustBaseDir = (hook: HookDefinition): string =>
     hook.source === "project" ? workspaceRoot : userConfigDir;
 
   // The shared per-hook gate for both dispatchers (M7): trust evaluation (D-006), execution,
   // stats, and the diagnostic/decision split (D-007). Throws only on an unexpected fault, which
-  // each dispatcher folds into that hook's command_failed diagnostic - dispatch never rejects.
+  // the gate core folds into that hook's command_failed diagnostic - dispatch never rejects.
   const gateAndRun = async (
     hook: HookDefinition,
     key: string,
     approvals: HookApprovalsState,
     payload: unknown,
   ): Promise<GatedHookRun> => {
-    const fingerprint = computeHookTrustFingerprint(hook, trustBaseDir(hook));
+    const fingerprint = fingerprints.fingerprintFor(key, hook, trustBaseDir(hook));
     const status = evaluateHookTrust(fingerprint, approvedHashFor(approvals, key));
     const trustDiagnostic = hookTrustOutcome(status);
     if (trustDiagnostic) {
@@ -298,7 +380,7 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
       ...options.runnerOptions,
     });
     const outcome = hookExecutionOutcome(execution);
-    stats.record(hook, execution, outcome);
+    stats.record(key, hook.timeoutMs, execution, outcome);
 
     if (outcome.kind === "diagnostic") {
       warn("hooks", "hook diagnostic", {
@@ -312,25 +394,28 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     return { kind: "decision", decision: outcome.decision, durationMs: execution.durationMs };
   };
 
-  const dispatchPreToolUse = async (payload: PreToolUsePayload): Promise<PreToolUseOutcome> => {
-    const hooks = discovery().hooks.filter((hook) => hook.event === "PreToolUse" && hook.enabled);
-    if (hooks.length === 0) {
-      return { decision: "allow", contexts: [], diagnostics: [] };
-    }
-    const approvals = loadHookApprovals(approvalsPath);
-    const diagnostics: PreToolUseDiagnostic[] = [];
-    const contexts: PreToolUseContext[] = [];
-    // The merged allowlisted rewrites (25 M6): each passing hook's fields layer on in config
-    // order, so a later hook overrides an earlier one field-by-field - the same last-writer
-    // determinism as the config files themselves. Stays undefined until a rewrite passes policy.
-    // `updatedInputHooks` records each contributor's approval key (25 M9 attribution).
-    let updatedInput: Record<string, unknown> | undefined;
-    const updatedInputHooks: string[] = [];
+  // The shared dispatch core (25 simplify pass R9): filter (precomputed per-event list) ->
+  // approvals -> gateAndRun -> log/context/diagnostic accumulation -> first-block
+  // short-circuit. The per-event differences ride in as parameters: extra structured-log
+  // fields, and the PreToolUse-only allow-path extension (the updatedInput merge).
+  const runGate = async <R extends string>(opts: {
+    readonly event: HookEvent;
+    readonly payload: PreToolUsePayload | StopPayload;
+    readonly logFields: Readonly<Record<string, unknown>>;
+    readonly onAllow?: (
+      key: string,
+      decision: HookDecision,
+      diagnostics: GateRunResult<R>["diagnostics"],
+    ) => void;
+  }): Promise<GateRunResult<R>> => {
+    const approvals = currentApprovals();
+    const contexts: GateRunResult<R>["contexts"] = [];
+    const diagnostics: GateRunResult<R>["diagnostics"] = [];
 
-    for (const hook of hooks) {
-      const key = hookApprovalKey(hook);
+    for (const hook of eventHooks(opts.event)) {
+      const key = approvalKeyFor(hook);
       try {
-        const run = await gateAndRun(hook, key, approvals, payload);
+        const run = await gateAndRun(hook, key, approvals, opts.payload);
         if (run.kind === "diagnostic") {
           diagnostics.push({ hook: key, reason: run.reason, detail: run.detail });
           continue;
@@ -338,20 +423,20 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
 
         const decision = run.decision;
         log("hooks", "hook decision", {
-          run: payload.runId.slice(0, 8),
+          run: opts.payload.runId.slice(0, 8),
           hook: key,
-          tool: payload.toolName,
+          ...opts.logFields,
           decision: decision.decision,
           ms: run.durationMs,
-          ...(decision.reason ? { reason: redactHookText(decision.reason) } : {}),
+          ...(decision.reason ? { reason: decision.reason } : {}),
         });
         if (decision.context) {
-          // Bounded at parse; attributed here so the model-facing note can cite its source.
+          // Bounded + redacted at parse; attributed here so the note can cite its source.
           contexts.push({ hook: key, context: decision.context });
         }
         if (decision.decision !== "allow") {
           // First blocking decision wins: later hooks never run (D-003). A blocking hook's
-          // updatedInput is moot - the tool will not execute - so only contexts ride along.
+          // updatedInput is moot - the gated action will not proceed - so only contexts ride.
           return {
             decision: decision.decision,
             hook: key,
@@ -360,95 +445,14 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
             diagnostics,
           };
         }
-        if (decision.updatedInput !== undefined) {
-          // The narrow rewrite path (25 M6, D-003): only allowlisted leaf fields pass, a
-          // rejection keeps the ORIGINAL input and surfaces as a diagnostic, and the value
-          // still faces the tool's normal schema decode at the executor boundary.
-          const evaluated = evaluateUpdatedInput(payload.toolName, decision.updatedInput);
-          if (evaluated.ok) {
-            updatedInput = { ...updatedInput, ...evaluated.fields };
-            updatedInputHooks.push(key);
-          } else {
-            diagnostics.push({
-              hook: key,
-              reason: "updated_input_rejected",
-              detail: evaluated.detail,
-            });
-            warn("hooks", "updatedInput rejected", { hook: key, detail: evaluated.detail });
-          }
-        }
+        opts.onAllow?.(key, decision, diagnostics);
       } catch (cause) {
         // Dispatch never rejects (D-007): an unexpected fault in one hook's gate/run is that
         // hook's diagnostic, and the remaining hooks still get their say.
         diagnostics.push({
           hook: key,
           reason: "command_failed",
-          detail: redactHookText(cause instanceof Error ? cause.message : String(cause)),
-        });
-        warn("hooks", "hook dispatch fault", { hook: key });
-      }
-    }
-
-    return {
-      decision: "allow",
-      contexts,
-      ...(updatedInput && Object.keys(updatedInput).length > 0
-        ? { updatedInput, updatedInputHooks }
-        : {}),
-      diagnostics,
-    };
-  };
-
-  const dispatchStop = async (payload: StopPayload): Promise<StopOutcome> => {
-    const hooks = discovery().hooks.filter((hook) => hook.event === "Stop" && hook.enabled);
-    if (hooks.length === 0) {
-      return { decision: "allow", contexts: [], diagnostics: [] };
-    }
-    const approvals = loadHookApprovals(approvalsPath);
-    const diagnostics: StopDiagnostic[] = [];
-    const contexts: StopContext[] = [];
-
-    for (const hook of hooks) {
-      const key = hookApprovalKey(hook);
-      try {
-        const run = await gateAndRun(hook, key, approvals, payload);
-        if (run.kind === "diagnostic") {
-          diagnostics.push({ hook: key, reason: run.reason, detail: run.detail });
-          continue;
-        }
-
-        const decision = run.decision;
-        log("hooks", "hook decision", {
-          run: payload.runId.slice(0, 8),
-          hook: key,
-          event: "Stop",
-          decision: decision.decision,
-          ms: run.durationMs,
-          ...(decision.reason ? { reason: redactHookText(decision.reason) } : {}),
-        });
-        if (decision.context) {
-          // Bounded at parse; attributed so the continuation prompt (M8) can cite its source.
-          contexts.push({ hook: key, context: decision.context });
-        }
-        if (decision.decision !== "allow") {
-          // First blocking decision wins (D-003 tradition). Stop's only block is halt, so a
-          // stray "deny" normalizes to halt rather than minting a third finalization verb; a
-          // Stop decision's `updatedInput` is ignored wholesale - it rewrites nothing (D-004).
-          return {
-            decision: "halt",
-            hook: key,
-            ...(decision.reason ? { reason: decision.reason } : {}),
-            contexts,
-            diagnostics,
-          };
-        }
-      } catch (cause) {
-        // Dispatch never rejects (D-007): an unexpected fault in one hook's gate/run is that
-        // hook's diagnostic, and the remaining hooks still get their say.
-        diagnostics.push({
-          hook: key,
-          reason: "command_failed",
-          detail: redactHookText(cause instanceof Error ? cause.message : String(cause)),
+          detail: redactHookText(msg(cause)),
         });
         warn("hooks", "hook dispatch fault", { hook: key });
       }
@@ -457,17 +461,94 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
     return { decision: "allow", contexts, diagnostics };
   };
 
-  // The doctor-facing picture (M9): trust is evaluated FRESH per snapshot (approvals re-read,
-  // fingerprints recomputed) so /doctor reflects an approval or a script edit immediately, on
-  // the same cached discovery every dispatch uses. `legacy` is the M10 HOOK.md migration scan -
-  // report-only, per snapshot (a migration or a new stray file shows up without a restart).
+  const dispatchPreToolUse = async (payload: PreToolUsePayload): Promise<PreToolUseOutcome> => {
+    if (!hasHooks("PreToolUse")) {
+      return EMPTY_ALLOW_OUTCOME;
+    }
+    // The merged allowlisted rewrites (25 M6): each passing hook's fields layer on in config
+    // order, so a later hook overrides an earlier one field-by-field - the same last-writer
+    // determinism as the config files themselves. Stays undefined until a rewrite passes policy.
+    // `updatedInputHooks` records each contributor's approval key (25 M9 attribution).
+    let updatedInput: Record<string, unknown> | undefined;
+    const updatedInputHooks: string[] = [];
+
+    const run = await runGate<"updated_input_rejected">({
+      event: "PreToolUse",
+      payload,
+      logFields: { tool: payload.toolName },
+      onAllow: (key, decision, diagnostics) => {
+        if (decision.updatedInput === undefined) {
+          return;
+        }
+        // The narrow rewrite path (25 M6, D-003): only allowlisted leaf fields pass, a
+        // rejection keeps the ORIGINAL input and surfaces as a diagnostic, and the value
+        // still faces the tool's normal schema decode at the executor boundary.
+        const evaluated = evaluateUpdatedInput(payload.toolName, decision.updatedInput);
+        if (evaluated.ok) {
+          updatedInput = { ...updatedInput, ...evaluated.fields };
+          updatedInputHooks.push(key);
+        } else {
+          diagnostics.push({
+            hook: key,
+            reason: "updated_input_rejected",
+            detail: evaluated.detail,
+          });
+          warn("hooks", "updatedInput rejected", { hook: key, detail: evaluated.detail });
+        }
+      },
+    });
+
+    if (run.decision !== "allow") {
+      return {
+        decision: run.decision,
+        ...(run.hook ? { hook: run.hook } : {}),
+        ...(run.reason ? { reason: run.reason } : {}),
+        contexts: run.contexts,
+        diagnostics: run.diagnostics,
+      };
+    }
+    return {
+      decision: "allow",
+      contexts: run.contexts,
+      ...(updatedInput && Object.keys(updatedInput).length > 0
+        ? { updatedInput, updatedInputHooks }
+        : {}),
+      diagnostics: run.diagnostics,
+    };
+  };
+
+  const dispatchStop = async (payload: StopPayload): Promise<StopOutcome> => {
+    if (!hasHooks("Stop")) {
+      return EMPTY_ALLOW_OUTCOME;
+    }
+    const run = await runGate<never>({ event: "Stop", payload, logFields: { event: "Stop" } });
+    if (run.decision !== "allow") {
+      // Stop's only block is halt, so a stray "deny" normalizes to halt rather than minting a
+      // third finalization verb; a Stop decision's `updatedInput` is ignored wholesale - it
+      // rewrites nothing (D-004).
+      return {
+        decision: "halt",
+        ...(run.hook ? { hook: run.hook } : {}),
+        ...(run.reason ? { reason: run.reason } : {}),
+        contexts: run.contexts,
+        diagnostics: run.diagnostics,
+      };
+    }
+    return { decision: "allow", contexts: run.contexts, diagnostics: run.diagnostics };
+  };
+
+  // The doctor-facing picture (M9): trust is evaluated FRESH per snapshot (approvals re-read
+  // when changed, fingerprints revalidated by file stamp) so /doctor reflects an approval or a
+  // script edit immediately, on the same cached discovery every dispatch uses. `legacy` is the
+  // M10 HOOK.md migration scan - report-only, per snapshot (a migration or a new stray file
+  // shows up without a restart).
   const statusSnapshot = (): HooksStatusSnapshot => {
     const report = discovery();
-    const approvals = loadHookApprovals(approvalsPath);
+    const approvals = currentApprovals();
     return {
       hooks: report.hooks.map((hook) => {
-        const key = hookApprovalKey(hook);
-        const fingerprint = computeHookTrustFingerprint(hook, trustBaseDir(hook));
+        const key = approvalKeyFor(hook);
+        const fingerprint = fingerprints.fingerprintFor(key, hook, trustBaseDir(hook));
         return {
           key,
           event: hook.event,
@@ -487,6 +568,7 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
   return {
     dispatchPreToolUse,
     dispatchStop,
+    hasHooks,
     statsSnapshot: () => stats.snapshot(),
     discoveryReport: () => discovery(),
     statusSnapshot,

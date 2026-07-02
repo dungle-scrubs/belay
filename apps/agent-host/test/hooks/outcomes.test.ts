@@ -1,4 +1,4 @@
-import { hookExecutionOutcome, isBlockingHookOutcome } from "@host/hooks/results";
+import { hookExecutionOutcome } from "@host/hooks/results";
 import { runHook } from "@host/hooks/runner";
 import { createHookStats } from "@host/hooks/stats";
 import { describe, expect, test } from "vitest";
@@ -24,7 +24,6 @@ describe("execution outcomes end to end (D-007)", () => {
     const outcome = hookExecutionOutcome(execution);
 
     expect(outcome).toMatchObject({ kind: "diagnostic", reason: "command_failed" });
-    expect(isBlockingHookOutcome(outcome)).toBe(false);
   });
 
   test("a hang becomes a non-blocking timeout diagnostic", async () => {
@@ -32,7 +31,6 @@ describe("execution outcomes end to end (D-007)", () => {
     const outcome = hookExecutionOutcome(execution);
 
     expect(outcome).toMatchObject({ kind: "diagnostic", reason: "timeout" });
-    expect(isBlockingHookOutcome(outcome)).toBe(false);
   });
 
   test("non-JSON stdout becomes a non-blocking invalid_json diagnostic", async () => {
@@ -40,7 +38,6 @@ describe("execution outcomes end to end (D-007)", () => {
     const outcome = hookExecutionOutcome(execution);
 
     expect(outcome).toMatchObject({ kind: "diagnostic", reason: "invalid_json" });
-    expect(isBlockingHookOutcome(outcome)).toBe(false);
   });
 
   test("a missing executable becomes a non-blocking command_failed diagnostic", async () => {
@@ -63,7 +60,6 @@ describe("execution outcomes end to end (D-007)", () => {
       kind: "decision",
       decision: { decision: "deny", reason: "not on my watch" },
     });
-    expect(isBlockingHookOutcome(outcome)).toBe(true);
   });
 });
 
@@ -75,13 +71,18 @@ describe("per-hook counters over real executions", () => {
 
     for (const hook of [hang, fail]) {
       const execution = await runHook(hook, {}, { cwd });
-      stats.record(hook, execution, hookExecutionOutcome(execution));
+      stats.record(
+        "project:/repo:fixture",
+        hook.timeoutMs,
+        execution,
+        hookExecutionOutcome(execution),
+      );
     }
 
     // Both fixtures share the id/source, so they land on one per-hook entry.
     expect(stats.snapshot()).toEqual([
       expect.objectContaining({
-        key: "project:fixture",
+        key: "project:/repo:fixture",
         runs: 2,
         timeouts: 1,
         failures: 1,

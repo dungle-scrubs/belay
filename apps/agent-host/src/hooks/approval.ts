@@ -2,20 +2,20 @@ import { loadJsonConfig, writeJsonConfig } from "@host/boot/config";
 import { asNonEmptyString, asRecord } from "@host/boot/decode";
 import { storagePathByName } from "@trevor/session/node-paths";
 import type { HookDefinition } from "./config";
-import type { HookTrustStatus } from "./trust";
 
 /**
  * The hook approval store and THE execution gate (plan 25 M2, D-006). Approval is explicit
  * trust: a project/user hook NEVER executes before the user approves its current trust hash,
  * and any change to config or referenced scripts re-closes the gate until re-approval.
  * Approvals live in `<TREVOR_STATE_HOME>/hooks-approvals.json` (machine-local runtime state,
- * routed through the storage inventory) keyed by `<source>:<id>`, each record holding the
- * approved `sha256:` hash and when it was granted. State transitions are pure - callers load,
- * transform, save - so the store stays inspectable and unit-testable without disk. Execution
- * itself lands in M3; until then {@link canExecuteHook} is the single predicate that layer
- * must consult, while unapproved hooks keep reporting through discovery diagnostics.
+ * routed through the storage inventory) keyed by {@link hookApprovalKey}, each record holding
+ * the approved `sha256:` hash and when it was granted. State transitions are pure - callers
+ * load, transform, save - so the store stays inspectable and unit-testable without disk. The
+ * runtime enforces the gate by evaluating a hook's fresh fingerprint against
+ * {@link approvedHashFor} (./trust's `evaluateHookTrust`); anything but `approved` reports
+ * through diagnostics and never executes.
  *
- * Responsible for: approval persistence (approve/revoke/lookup) and the trust execution gate.
+ * Responsible for: approval persistence (approve/lookup) and the approval-key scheme.
  * Not for: computing trust hashes or statuses - ./trust owns those.
  */
 
@@ -39,10 +39,18 @@ export function hookApprovalsPath(): string {
   return storagePathByName(HOOK_APPROVALS_ENTRY);
 }
 
-/** The store key for one hook: `<source>:<id>` - provenance-scoped, so a project approval
- *  never trusts the same bytes arriving as a user hook. */
-export function hookApprovalKey(hook: Pick<HookDefinition, "source" | "id">): string {
-  return `${hook.source}:${hook.id}`;
+/**
+ * The store key for one hook. A USER hook is `user:<id>` - it is the same hook wherever the
+ * host runs. A PROJECT hook is `project:<abs workspace root>:<id>`: the workspace root scopes
+ * the approval, so a hook approved in repo A never auto-executes in repo B just because repo B
+ * ships byte-identical config (the fingerprint alone cannot tell the two apart). Provenance is
+ * in the key too, so a project approval never trusts the same bytes arriving as a user hook.
+ */
+export function hookApprovalKey(
+  hook: Pick<HookDefinition, "source" | "id">,
+  workspaceRoot: string,
+): string {
+  return hook.source === "project" ? `project:${workspaceRoot}:${hook.id}` : `user:${hook.id}`;
 }
 
 /** Tolerantly decodes a raw approvals file; entries without a usable hash are dropped. Pure. */
@@ -91,22 +99,7 @@ export function approveHook(
   return { approvals: { ...state.approvals, [key]: { hash, approvedAt } } };
 }
 
-/** Withdraws any approval under `key`. Pure. */
-export function revokeHookApproval(state: HookApprovalsState, key: string): HookApprovalsState {
-  const { [key]: _removed, ...rest } = state.approvals;
-  return { approvals: rest };
-}
-
-/** The approved hash stored under `key`, or undefined when never approved (or revoked). */
+/** The approved hash stored under `key`, or undefined when never approved. */
 export function approvedHashFor(state: HookApprovalsState, key: string): string | undefined {
   return state.approvals[key]?.hash;
-}
-
-/**
- * THE trust gate (D-006): only a hook whose current fingerprint the user explicitly approved
- * may execute. Unapproved, changed, and missing-script hooks are diagnostics, never executions.
- * The M3 execution harness must consult this predicate before running anything.
- */
-export function canExecuteHook(status: HookTrustStatus): boolean {
-  return status === "approved";
 }

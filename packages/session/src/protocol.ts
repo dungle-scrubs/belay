@@ -89,6 +89,7 @@ export type KnownTurnStopCause =
   | "context_pressure"
   | "step_backstop"
   | "loop_stalled"
+  | "hook_halt"
   | "provider_protocol_anomaly"
   | "overflow"
   | "no_reply"
@@ -107,6 +108,8 @@ export const TURN_STOP_CAUSE_DESCRIPTIONS = {
   step_backstop: "The high step circuit breaker fired.",
   /** The host saw repeated tool cycles without enough progress. */
   loop_stalled: "The tool loop repeated without enough progress.",
+  /** A configured hook blocked the tool call or the finalization (plan 25). */
+  hook_halt: "A hook halted the turn.",
   /** The provider boundary reported malformed or protocol-leaking output. */
   provider_protocol_anomaly: "The provider boundary reported malformed output.",
   /** Context overflow recovery exhausted its cheap rungs. */

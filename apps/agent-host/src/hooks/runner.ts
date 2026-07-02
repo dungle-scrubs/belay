@@ -16,12 +16,13 @@ import { redactHookText } from "./redact";
  * non-zero exit, and timeout are all data in the result (D-007) - so the outcome model is a
  * plain result union rather than a tagged error channel: there is no failure here a caller
  * would branch on as an error. The execution's streams are RAW (capped) because ./decision
- * parses stdout; anything stored or logged goes through {@link redactHookExecution} (D-009).
+ * parses stdout; anything derived from them that is stored or logged goes through
+ * ./redact's redactHookText (D-009).
  *
- * Responsible for: spawning one hook, payload delivery, output caps, the timeout kill ladder,
- * and the redacted execution projection.
+ * Responsible for: spawning one hook, payload delivery, output caps, and the timeout kill
+ * ladder.
  * Not for: decision parsing (./decision), blocking semantics (./results, M4), or the
- * approval gate - callers consult approval.canExecuteHook first.
+ * approval gate - the runtime evaluates trust (./trust + ./approval) before running anything.
  */
 
 /** Hard cap per stream (64 KiB of text); a chatty hook cannot balloon stored results. */
@@ -49,7 +50,7 @@ export interface HookStreamCapture {
 
 /**
  * What one hook run did, as pure data. `stdout`/`stderr` are raw-but-capped (decision parsing
- * needs the bytes as written); use {@link redactHookExecution} for anything stored or logged.
+ * needs the bytes as written); anything stored or logged from them must pass redactHookText.
  */
 export interface HookExecution {
   readonly stdout: HookStreamCapture;
@@ -59,19 +60,6 @@ export interface HookExecution {
   readonly timedOut: boolean;
   readonly durationMs: number;
   /** Set when the process could not start at all (redacted message); exitCode stays null. */
-  readonly spawnError?: string;
-}
-
-/** The stored/log/event projection of an execution: streams redacted, shape flattened (D-009). */
-export interface HookExecutionLog {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly stdoutTruncated: boolean;
-  readonly stderrTruncated: boolean;
-  readonly exitCode: number | null;
-  readonly signal: NodeJS.Signals | null;
-  readonly timedOut: boolean;
-  readonly durationMs: number;
   readonly spawnError?: string;
 }
 
@@ -155,21 +143,6 @@ export function runHook(
       // A synchronous stdin throw means the child is already dead; error/close settle it.
     }
   });
-}
-
-/** Projects an execution into its stored/log form: streams redacted, truncation flags kept. */
-export function redactHookExecution(execution: HookExecution): HookExecutionLog {
-  return {
-    stdout: redactHookText(execution.stdout.text),
-    stderr: redactHookText(execution.stderr.text),
-    stdoutTruncated: execution.stdout.truncated,
-    stderrTruncated: execution.stderr.truncated,
-    exitCode: execution.exitCode,
-    signal: execution.signal,
-    timedOut: execution.timedOut,
-    durationMs: execution.durationMs,
-    ...(execution.spawnError !== undefined ? { spawnError: execution.spawnError } : {}),
-  };
 }
 
 /** A cap-enforcing stream collector: keeps the first `maxChars`, drops the rest, flags the cut. */

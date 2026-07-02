@@ -122,7 +122,10 @@ test("unapproved and trust-changed hooks raise ONE approval warning naming the h
   assert.ok(finding?.message.includes("project:new"), finding?.message);
   assert.ok(finding?.message.includes("user:edited"), finding?.message);
   assert.match(finding?.message ?? "", /never execute/i);
-  assert.ok(finding?.nextAction, "approval guidance is actionable");
+  // The trust boundary is stated (S3): approval covers the config + entry-point script only.
+  assert.match(finding?.message ?? "", /entry-point script only/);
+  // The guidance names the real current mechanism: the hooks-approvals.json state file.
+  assert.match(finding?.nextAction?.label ?? "", /hooks-approvals\.json/);
 });
 
 test("a missing script raises its own warning naming the hook", () => {

@@ -181,11 +181,13 @@ export type QuestionMessage = {
 // hook denied a tool, a Stop hook halted the finalizing turn, or a hook injected bounded context.
 // Only those three verbs get a transcript row - updated_input/continuation ride their visible
 // effects (the rewritten call, the continued text) and the diagnostic verbs (timeout/error/
-// unapproved/trust_changed) belong to /doctor. `reason` is already redacted + bounded at the host.
+// unapproved/trust_changed) belong to /doctor. `reason` is redacted on the host at decision
+// parse (every host surface carries the redacted form by construction) and re-redacted +
+// bounded at the event fold.
 export type HookDecisionMessage = {
   kind: "hookDecision";
   id: string;
-  /** The hook's approval key, `<source>:<id>`. */
+  /** The hook's approval key (`user:<id>`, or `project:<workspace root>:<id>`). */
   hookId: string;
   /** "PreToolUse" | "Stop" (open for forward-compat gates). */
   event: string;
@@ -196,6 +198,17 @@ export type HookDecisionMessage = {
 };
 /** The hook.decision verbs that render as transcript rows (plan 25 M9). */
 export const RENDERED_HOOK_DECISIONS: ReadonlySet<string> = new Set(["deny", "halt", "context"]);
+
+/** The one-line action label for a rendered hook decision ("denied bash" / "halted the turn" /
+ *  "context for read"), shared by the full transcript row and its compact form so the two
+ *  surfaces cannot drift. */
+export function hookDecisionActionLabel(decision: string, toolName?: string): string {
+  return decision === "deny"
+    ? `denied ${toolName ?? "a tool"}`
+    : decision === "halt"
+      ? "halted the turn"
+      : `context${toolName ? ` for ${toolName}` : ""}`;
+}
 // A mid-turn model/reasoning switch (plan 09.1), rendered inline as a quiet breadcrumb: the active turn
 // changed model and/or reasoning at a step boundary. `from`/`to` carry the model id + reasoning so the
 // delta renders, including a reasoning-only change (same model on both sides). A `blocked` outcome (the

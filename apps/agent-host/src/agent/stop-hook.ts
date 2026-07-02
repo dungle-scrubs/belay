@@ -1,3 +1,4 @@
+import { asRecord } from "@host/boot/decode";
 import type { StopContext, StopOutcome, StopToolSummaryEntry } from "@host/hooks/runtime";
 import type { ChatMessage } from "@host/providers/index";
 import type { TurnStop } from "@trevor/session";
@@ -8,11 +9,13 @@ import type { TurnStop } from "@trevor/session";
  * frame the ONE continuation pass a Stop context can request. The tool summary is deliberately
  * compact and cheap - per-tool call counts in first-appearance order plus the distinct `path`
  * arguments (the shared field name of the fs tools) when the call's JSON parses, capped per
- * tool - never raw arguments or outputs. A halt rides the existing TurnStop mechanism with the
- * M5 `hook_halt` cause, so the web transcript renders it today (the stop note on
- * assistant.completed) with no protocol changes; M9 owns richer events. The continuation prompt
- * cites each note's hook (the withHookContexts attribution shape) and states the pass is
- * tool-less - model-context-only, per D-004.
+ * tool - never raw arguments or outputs. It counts EXECUTED tools only: publishTurn records a
+ * call at its non-skipped completion, so a hook-denied or halt-skipped call never inflates
+ * "what the turn ran" (25 simplify C4). A halt rides the existing TurnStop mechanism with the
+ * typed `hook_halt` cause, so the web transcript renders it (the stop note on
+ * assistant.completed) with no extra event kinds. The continuation prompt cites each note's
+ * hook (the withHookContexts attribution shape) and states the pass is tool-less -
+ * model-context-only, per D-004.
  *
  * Responsible for: the Stop payload's tool-summary accumulation, the terminal-reason
  * projection, the halted-completion TurnStop, and the continuation-pass message framing.
@@ -23,14 +26,14 @@ import type { TurnStop } from "@trevor/session";
 /** Touched-path cap per tool: enough to orient a hook, never a flood. */
 const MAX_SUMMARY_FILES_PER_TOOL = 8;
 
-/** Accumulates one turn's tool calls into the compact Stop-payload summary. */
+/** Accumulates one turn's executed tool calls into the compact Stop-payload summary. */
 export interface StopToolSummary {
-  /** Records one tool call as it starts: the name plus its raw argument JSON. */
+  /** Records one EXECUTED tool call at completion: the name plus its raw argument JSON. */
   readonly record: (name: string, argsJson: string) => void;
   readonly snapshot: () => readonly StopToolSummaryEntry[];
 }
 
-/** A per-turn collector; publishTurn feeds it every tool_start it publishes. */
+/** A per-turn collector; publishTurn feeds it every non-skipped tool completion. */
 export function createStopToolSummary(): StopToolSummary {
   const order: string[] = [];
   const counts = new Map<string, number>();
@@ -66,11 +69,7 @@ export function createStopToolSummary(): StopToolSummary {
 /** The cheap touched-path derivation: the call's `path` argument when its JSON parses. */
 function pathArgOf(argsJson: string): string | undefined {
   try {
-    const parsed: unknown = JSON.parse(argsJson || "{}");
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return undefined;
-    }
-    const path = (parsed as Record<string, unknown>).path;
+    const path = asRecord(JSON.parse(argsJson || "{}"))?.path;
     return typeof path === "string" && path.length > 0 ? path : undefined;
   } catch {
     return undefined;

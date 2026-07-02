@@ -2,11 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   DEFAULT_HOOK_TIMEOUT_MS,
   HOOK_EVENTS,
-  type HookDefinition,
   loadHooksFile,
   MAX_HOOK_TIMEOUT_MS,
   normalizeHooksConfig,
-  redactHookDefinition,
 } from "./config";
 
 const preToolUseEntry = {
@@ -213,34 +211,6 @@ describe("normalizeHooksConfig - flags and knobs", () => {
     );
     expect(hooks[0]?.enabled).toBe(true);
     expect(issues).toEqual([]);
-  });
-});
-
-describe("redactHookDefinition", () => {
-  test("the command keeps only its basename while identity fields stay readable", () => {
-    const { hooks } = normalizeHooksConfig(
-      { hooks: { guard: { ...preToolUseEntry, command: "/Users/someone/repo/scripts/check.sh" } } },
-      "project",
-    );
-    const redacted = redactHookDefinition(hooks[0] as HookDefinition);
-    expect(redacted.command).toBe("check.sh");
-    expect(redacted.id).toBe("guard");
-    expect(redacted.event).toBe("PreToolUse");
-    expect(redacted.source).toBe("project");
-    expect(JSON.stringify(redacted)).not.toContain("/Users/someone");
-  });
-
-  test("args stay readable but are length-bounded with a truncation marker", () => {
-    const secretish = `x${"y".repeat(200)}`;
-    const { hooks } = normalizeHooksConfig(
-      { hooks: { guard: { ...preToolUseEntry, args: ["--fast", secretish] } } },
-      "project",
-    );
-    const redacted = redactHookDefinition(hooks[0] as HookDefinition);
-    expect(redacted.args[0]).toBe("--fast");
-    expect(redacted.args[1]).toContain("…");
-    expect(redacted.args[1]?.length).toBeLessThan(secretish.length);
-    expect(JSON.stringify(redacted)).not.toContain(secretish);
   });
 });
 

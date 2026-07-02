@@ -35,9 +35,8 @@ afterEach(() => {
 function turnHooks(h: HooksRuntimeHarness, overrides: Partial<TurnHooks> = {}): TurnHooks {
   return {
     dispatchPreToolUse: h.runtime.dispatchPreToolUse,
-    sessionId: "s-hooks",
-    callerKind: "main",
-    cwd: h.workspaceRoot,
+    hasHooks: h.runtime.hasHooks,
+    identity: { sessionId: "s-hooks", callerKind: "main", cwd: h.workspaceRoot },
     ...overrides,
   };
 }
@@ -108,7 +107,7 @@ describe("PreToolUse deny - the tool is withheld, the model reads a clear denial
     expect(existsSync(marker)).toBe(false);
     const completed = payloadOf(events, "tool.completed");
     expect(completed?.result).toMatch(/^error: /);
-    expect(completed?.result).toContain('denied by PreToolUse hook "project:guard"');
+    expect(completed?.result).toContain(`denied by PreToolUse hook "${h.projectKey("guard")}"`);
     expect(completed?.result).toContain("not on my watch");
     // The turn itself continues: the model reads the denial and still answers.
     expect(payloadOf(events, "assistant.completed")?.text).toBe("All done.");
@@ -127,10 +126,27 @@ describe("PreToolUse halt - the turn stops with a visible reason", () => {
     const stop = completed?.stop as { cause: string; action: string; summary: string } | undefined;
     expect(stop?.cause).toBe("hook_halt");
     expect(stop?.action).toBe("paused");
-    expect(stop?.summary).toContain("project:stopper");
+    expect(stop?.summary).toContain(h.projectKey("stopper"));
     expect(stop?.summary).toContain("stop the line");
     // The halted call still gets a paired tool result so the transcript stays coherent.
     expect(payloadOf(events, "tool.completed")?.result).toContain("halted by PreToolUse hook");
+  });
+});
+
+describe("PreToolUse deny - reason redaction is parse-time (25 simplify S2)", () => {
+  test("a hook echoing an env-style secret in its reason never leaks it into the tool result", async () => {
+    const deny = JSON.stringify({
+      decision: "deny",
+      reason: "policy hit: DEPLOY_TOKEN=tok-supersecret-value do not pass",
+    });
+    const h = using(hooksRuntimeHarness([{ id: "leaky", mode: "print", flags: [deny] }]));
+
+    const events = await runBashTurn(h, "echo blocked");
+
+    const result = payloadOf(events, "tool.completed")?.result as string;
+    expect(result).toContain("denied by PreToolUse hook");
+    expect(result).not.toContain("tok-supersecret-value");
+    expect(result).toContain("DEPLOY_TOKEN=");
   });
 });
 
@@ -150,9 +166,11 @@ describe("PreToolUse context - the model sees it alongside the tool result (25 M
 
     const result = payloadOf(events, "tool.completed")?.result as string;
     expect(result).toContain("ctx-body");
-    expect(result).toContain("[hook project:ctx]: check the lockfile first");
+    expect(result).toContain(`[hook ${h.projectKey("ctx")}]: check the lockfile first`);
     // Attribution FOLLOWS the real output: the tool result stays primary, the note rides below.
-    expect(result.indexOf("ctx-body")).toBeLessThan(result.indexOf("[hook project:ctx]"));
+    expect(result.indexOf("ctx-body")).toBeLessThan(
+      result.indexOf(`[hook ${h.projectKey("ctx")}]`),
+    );
   });
 });
 
@@ -188,13 +206,15 @@ describe("PreToolUse updatedInput - narrow, schema-validated rewrites (25 M6, D-
     const outcomes: PreToolUseOutcome[] = [];
 
     const events = await runBashTurn(h, "echo original-cmd", {
-      hooks: turnHooks(h, { onOutcome: (report) => outcomes.push(report.outcome) }),
+      hooks: turnHooks(h, {
+        observers: { onOutcome: (report) => outcomes.push(report.outcome) },
+      }),
     });
 
     expect(payloadOf(events, "tool.completed")?.result).toContain("original-cmd");
     expect(outcomes[0]?.updatedInput).toBeUndefined();
     expect(outcomes[0]?.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:sneaky", reason: "updated_input_rejected" }),
+      expect.objectContaining({ hook: h.projectKey("sneaky"), reason: "updated_input_rejected" }),
     ]);
   });
 
@@ -230,7 +250,9 @@ describe("PreToolUse trust gate at the boundary (D-006)", () => {
     const outcomes: PreToolUseOutcome[] = [];
 
     const events = await runBashTurn(h, `touch ${marker}`, {
-      hooks: turnHooks(h, { onOutcome: (report) => outcomes.push(report.outcome) }),
+      hooks: turnHooks(h, {
+        observers: { onOutcome: (report) => outcomes.push(report.outcome) },
+      }),
     });
 
     expect(existsSync(marker)).toBe(true);
@@ -239,7 +261,7 @@ describe("PreToolUse trust gate at the boundary (D-006)", () => {
     expect(outcomes).toHaveLength(1);
     expect(outcomes[0]?.decision).toBe("allow");
     expect(outcomes[0]?.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:rec", reason: "unapproved" }),
+      expect.objectContaining({ hook: h.projectKey("rec"), reason: "unapproved" }),
     ]);
   });
 });

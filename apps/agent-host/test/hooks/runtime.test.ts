@@ -1,5 +1,17 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  approveHook,
+  EMPTY_HOOK_APPROVALS,
+  hookApprovalKey,
+  saveHookApprovals,
+} from "@host/hooks/approval";
+import { discoverHooks } from "@host/hooks/discovery";
+import { createHooksRuntime } from "@host/hooks/runtime";
+import { computeHookTrustFingerprint } from "@host/hooks/trust";
 import { afterEach, describe, expect, test } from "vitest";
+import { HOOK_FIXTURE_COMMAND, hookFixtureArgs } from "./fixture-config";
 import {
   type HooksRuntimeHarness,
   hooksRuntimeHarness,
@@ -93,7 +105,7 @@ describe("dispatchPreToolUse - blocking decisions and config order", () => {
 
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("deny");
-    expect(outcome.hook).toBe("project:guard");
+    expect(outcome.hook).toBe(h.projectKey("guard"));
     expect(outcome.reason).toBe("touches prod");
     expect(existsSync(h.scratchPath("after-deny.json"))).toBe(false);
   });
@@ -107,7 +119,7 @@ describe("dispatchPreToolUse - blocking decisions and config order", () => {
 
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("deny");
-    expect(outcome.hook).toBe("project:guard");
+    expect(outcome.hook).toBe(h.projectKey("guard"));
     expect(existsSync(h.scratchPath("user-after-deny.json"))).toBe(false);
   });
 
@@ -115,7 +127,7 @@ describe("dispatchPreToolUse - blocking decisions and config order", () => {
     const h = using(hooksRuntimeHarness([{ id: "stopper", mode: "print", flags: [HALT] }]));
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("halt");
-    expect(outcome.hook).toBe("project:stopper");
+    expect(outcome.hook).toBe(h.projectKey("stopper"));
     expect(outcome.reason).toBe("stop the line");
   });
 });
@@ -131,7 +143,7 @@ describe("dispatchPreToolUse - the approval gate (D-006)", () => {
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("allow");
     expect(outcome.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:rec", reason: "unapproved" }),
+      expect.objectContaining({ hook: h.projectKey("rec"), reason: "unapproved" }),
     ]);
     expect(existsSync(h.scratchPath("unapproved.json"))).toBe(false);
   });
@@ -178,8 +190,8 @@ describe("dispatchPreToolUse - bounded context (25 M6)", () => {
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("allow");
     expect(outcome.contexts).toEqual([
-      { hook: "project:a", context: "check the lockfile" },
-      { hook: "project:b", context: "second note" },
+      { hook: h.projectKey("a"), context: "check the lockfile" },
+      { hook: h.projectKey("b"), context: "second note" },
     ]);
   });
 
@@ -207,7 +219,7 @@ describe("dispatchPreToolUse - bounded context (25 M6)", () => {
 
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("deny");
-    expect(outcome.contexts).toEqual([{ hook: "project:a", context: "heads up" }]);
+    expect(outcome.contexts).toEqual([{ hook: h.projectKey("a"), context: "heads up" }]);
   });
 });
 
@@ -247,7 +259,7 @@ describe("dispatchPreToolUse - scoped updatedInput (25 M6, D-003)", () => {
     );
 
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
-    expect(outcome.updatedInputHooks).toEqual(["project:first", "project:second"]);
+    expect(outcome.updatedInputHooks).toEqual([h.projectKey("first"), h.projectKey("second")]);
   });
 
   test("an unsupported field is rejected with a diagnostic and no update", async () => {
@@ -266,7 +278,7 @@ describe("dispatchPreToolUse - scoped updatedInput (25 M6, D-003)", () => {
     expect(outcome.updatedInput).toBeUndefined();
     expect(outcome.updatedInputHooks).toBeUndefined();
     expect(outcome.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:sneaky", reason: "updated_input_rejected" }),
+      expect.objectContaining({ hook: h.projectKey("sneaky"), reason: "updated_input_rejected" }),
     ]);
   });
 
@@ -286,7 +298,7 @@ describe("dispatchPreToolUse - scoped updatedInput (25 M6, D-003)", () => {
     );
     expect(outcome.updatedInput).toBeUndefined();
     expect(outcome.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:sneaky", reason: "updated_input_rejected" }),
+      expect.objectContaining({ hook: h.projectKey("sneaky"), reason: "updated_input_rejected" }),
     ]);
   });
 });
@@ -297,7 +309,7 @@ describe("dispatchPreToolUse - non-blocking failures and stats (D-007)", () => {
     const outcome = await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(outcome.decision).toBe("allow");
     expect(outcome.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:broken", reason: "command_failed" }),
+      expect.objectContaining({ hook: h.projectKey("broken"), reason: "command_failed" }),
     ]);
   });
 
@@ -318,7 +330,7 @@ describe("dispatchPreToolUse - non-blocking failures and stats (D-007)", () => {
     const h = using(hooksRuntimeHarness([{ id: "broken", mode: "fail", flags: ["boom", "1"] }]));
     await h.runtime.dispatchPreToolUse(preToolUsePayload());
     expect(h.runtime.statsSnapshot()).toEqual([
-      expect.objectContaining({ key: "project:broken", runs: 1, failures: 1 }),
+      expect.objectContaining({ key: h.projectKey("broken"), runs: 1, failures: 1 }),
     ]);
   });
 });
@@ -338,16 +350,175 @@ describe("statusSnapshot - the doctor-facing hooks picture (25 M9)", () => {
     const snapshot = h.runtime.statusSnapshot();
     expect(snapshot.hooks).toEqual([
       expect.objectContaining({
-        key: "project:fmt",
+        key: h.projectKey("fmt"),
         event: "PreToolUse",
         source: "project",
         enabled: true,
         trust: "approved",
       }),
-      expect.objectContaining({ key: "project:new", trust: "unapproved" }),
-      expect.objectContaining({ key: "user:audit", event: "Stop", trust: "approved" }),
+      expect.objectContaining({ key: h.projectKey("new"), trust: "unapproved" }),
+      expect.objectContaining({ key: h.userKey("audit"), event: "Stop", trust: "approved" }),
     ]);
     expect(snapshot.issues).toEqual([]);
     expect(snapshot.legacy).toEqual([]);
+  });
+});
+
+describe("hasHooks - the hot-path predicate (25 simplify E1)", () => {
+  test("reports per-event presence off the cached discovery", async () => {
+    const h = using(
+      hooksRuntimeHarness([{ id: "pre", mode: "print", flags: ['{"decision":"allow"}'] }]),
+    );
+    expect(h.runtime.hasHooks("PreToolUse")).toBe(true);
+    expect(h.runtime.hasHooks("Stop")).toBe(false);
+  });
+
+  test("a disabled hook does not count", async () => {
+    const h = using(
+      hooksRuntimeHarness([
+        { id: "off", mode: "print", flags: ['{"decision":"allow"}'], enabled: false },
+      ]),
+    );
+    expect(h.runtime.hasHooks("PreToolUse")).toBe(false);
+  });
+});
+
+describe("per-workspace project approvals (25 simplify S1)", () => {
+  test("a project hook approved under workspace A is unapproved under workspace B", async () => {
+    const root = mkdtempSync(join(tmpdir(), "trevor-hooks-s1-"));
+    try {
+      // Two workspaces with BYTE-IDENTICAL project config (and the same fixture command), one
+      // shared approvals file. Approval is granted under workspace A's key only.
+      const marker = join(root, "executed-marker");
+      const hooksJson = JSON.stringify({
+        hooks: {
+          rec: {
+            event: "PreToolUse",
+            command: HOOK_FIXTURE_COMMAND,
+            args: hookFixtureArgs("record", [marker]),
+          },
+        },
+      });
+      const approvalsPath = join(root, "hook-approvals.json");
+      const userConfigDir = join(root, "user-home");
+      mkdirSync(userConfigDir, { recursive: true });
+      const workspaces = ["ws-a", "ws-b"].map((name) => {
+        const workspaceRoot = join(root, name);
+        mkdirSync(join(workspaceRoot, ".trevor"), { recursive: true });
+        const projectHooksPath = join(workspaceRoot, ".trevor", "hooks.json");
+        writeFileSync(projectHooksPath, hooksJson);
+        return { workspaceRoot, projectHooksPath };
+      });
+      const [wsA, wsB] = workspaces as [(typeof workspaces)[number], (typeof workspaces)[number]];
+
+      const hook = discoverHooks({
+        projectHooksPath: wsA.projectHooksPath,
+        userHooksPath: join(userConfigDir, "hooks.json"),
+      }).hooks[0];
+      expect(hook).toBeDefined();
+      if (!hook) {
+        return;
+      }
+      saveHookApprovals(
+        approveHook(
+          EMPTY_HOOK_APPROVALS,
+          hookApprovalKey(hook, wsA.workspaceRoot),
+          computeHookTrustFingerprint(hook, wsA.workspaceRoot).hash,
+        ),
+        approvalsPath,
+      );
+
+      const runtimeFor = (ws: (typeof workspaces)[number]) =>
+        createHooksRuntime({
+          roots: {
+            projectHooksPath: ws.projectHooksPath,
+            userHooksPath: join(userConfigDir, "hooks.json"),
+          },
+          approvalsPath,
+          workspaceRoot: ws.workspaceRoot,
+          userConfigDir,
+          legacyUserHooksDir: join(root, "legacy-user-hooks"),
+        });
+
+      // Workspace B: same bytes, different workspace - the gate stays closed.
+      const inB = await runtimeFor(wsB).dispatchPreToolUse(preToolUsePayload());
+      expect(inB.decision).toBe("allow");
+      expect(inB.diagnostics).toEqual([
+        expect.objectContaining({
+          hook: hookApprovalKey(hook, wsB.workspaceRoot),
+          reason: "unapproved",
+        }),
+      ]);
+      expect(existsSync(marker)).toBe(false);
+
+      // Workspace A: the approval applies and the hook executes.
+      const inA = await runtimeFor(wsA).dispatchPreToolUse(preToolUsePayload());
+      expect(inA.diagnostics).toEqual([]);
+      expect(existsSync(marker)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("trust fingerprint cache preserves re-close semantics (25 simplify E2)", () => {
+  test("editing a referenced file between dispatches re-closes the gate as trust_changed", async () => {
+    const h = using(
+      hooksRuntimeHarness(
+        [{ id: "gate", mode: "print", flags: ['{"decision":"allow"}', "./policy.json"] }],
+        [],
+        { workspaceFiles: { "policy.json": '{"allow":[]}' } },
+      ),
+    );
+
+    const first = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(first.decision).toBe("allow");
+    expect(first.diagnostics).toEqual([]);
+
+    // A repeat dispatch with nothing changed still executes (the cached fingerprint is valid).
+    const repeat = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(repeat.diagnostics).toEqual([]);
+
+    writeFileSync(join(h.workspaceRoot, "policy.json"), '{"allow":["bash"],"edited":true}');
+    const afterEdit = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(afterEdit.decision).toBe("allow");
+    expect(afterEdit.diagnostics).toEqual([
+      expect.objectContaining({ hook: h.projectKey("gate"), reason: "trust_changed" }),
+    ]);
+  });
+});
+
+describe("approvals re-read per dispatch (25 simplify E3)", () => {
+  test("a fresh grant takes effect on the next dispatch without a runtime restart", async () => {
+    const h = using(
+      hooksRuntimeHarness((scratch) => [
+        { id: "rec", mode: "record", flags: [scratch("late-approval.json")], approved: false },
+      ]),
+    );
+
+    const before = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(before.diagnostics).toEqual([
+      expect.objectContaining({ hook: h.projectKey("rec"), reason: "unapproved" }),
+    ]);
+    expect(existsSync(h.scratchPath("late-approval.json"))).toBe(false);
+
+    // Grant the approval on disk exactly as an approval surface would, then dispatch again.
+    const hook = h.runtime.discoveryReport().hooks[0];
+    expect(hook).toBeDefined();
+    if (!hook) {
+      return;
+    }
+    saveHookApprovals(
+      approveHook(
+        EMPTY_HOOK_APPROVALS,
+        h.projectKey("rec"),
+        computeHookTrustFingerprint(hook, h.workspaceRoot).hash,
+      ),
+      h.approvalsPath,
+    );
+
+    const after = await h.runtime.dispatchPreToolUse(preToolUsePayload());
+    expect(after.diagnostics).toEqual([]);
+    expect(existsSync(h.scratchPath("late-approval.json"))).toBe(true);
   });
 });

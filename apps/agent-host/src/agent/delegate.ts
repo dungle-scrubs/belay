@@ -33,10 +33,11 @@ export interface DelegationContext {
   readonly parentSessionId: string;
   readonly producerId: string;
   readonly mintChildSessionId: () => string;
-  /** PreToolUse hook wiring for CHILD turns (plan 25 M5): the host-lifetime dispatcher plus the
-   *  hook cwd. The child-specific identity (its session id, callerKind "subagent") is bound per
-   *  child in runDelegatedChild. Absent = children run without hooks (tests). */
-  readonly hooks?: Pick<TurnHooks, "dispatchPreToolUse" | "cwd">;
+  /** PreToolUse hook wiring for CHILD turns (plan 25 M5): the host-lifetime dispatcher (plus
+   *  its hasHooks predicate) and the hook cwd. The child-specific identity (its session id,
+   *  callerKind "subagent") is bound per child in runDelegatedChild. Absent = children run
+   *  without hooks (tests). */
+  readonly hooks?: Pick<TurnHooks, "dispatchPreToolUse" | "hasHooks"> & { readonly cwd: string };
 }
 
 export interface DelegationRequest {
@@ -154,9 +155,12 @@ export async function runDelegatedChild(
           ? {
               hooks: {
                 dispatchPreToolUse: ctx.hooks.dispatchPreToolUse,
-                sessionId: childSessionId,
-                callerKind: "subagent" as const,
-                cwd: ctx.hooks.cwd,
+                ...(ctx.hooks.hasHooks ? { hasHooks: ctx.hooks.hasHooks } : {}),
+                identity: {
+                  sessionId: childSessionId,
+                  callerKind: "subagent" as const,
+                  cwd: ctx.hooks.cwd,
+                },
               },
             }
           : {}),

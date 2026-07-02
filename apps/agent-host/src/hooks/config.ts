@@ -1,7 +1,7 @@
-import { basename } from "node:path";
 import { asPositiveInt } from "@host/boot/coerce";
 import { loadJsonConfig } from "@host/boot/config";
-import { asNonEmptyString, asRecord } from "@host/boot/decode";
+import { asNonEmptyString, asRecord, asStringArray } from "@host/boot/decode";
+import type { HookDecisionEventName } from "@trevor/session";
 
 /**
  * The normalized hook config model (plan 25 M1). Hooks are a NARROW host-owned command-hook
@@ -14,13 +14,18 @@ import { asNonEmptyString, asRecord } from "@host/boot/decode";
  * names the supported set, and a disabled entry stays in the model with a diagnostic so
  * Doctor can report it.
  *
- * Responsible for: the normalized HookDefinition model - parsing, validation issues, the
- * redacted inspection projection, and loading one hooks.json file.
+ * Responsible for: the normalized HookDefinition model - parsing, validation issues, and
+ * loading one hooks.json file.
  * Not for: multi-root discovery order (./discovery) or trust hashing (./trust).
  */
 
-/** The only lifecycle events in the first cut (D-002); everything else is rejected as data. */
-export const HOOK_EVENTS = ["PreToolUse", "Stop"] as const;
+/** The only lifecycle events in the first cut (D-002); everything else is rejected as data.
+ *  Type-tied to the session wire's hook event names, so the config vocabulary and the
+ *  hook.decision event vocabulary cannot drift apart. */
+export const HOOK_EVENTS = [
+  "PreToolUse",
+  "Stop",
+] as const satisfies readonly HookDecisionEventName[];
 
 export type HookEvent = (typeof HOOK_EVENTS)[number];
 
@@ -66,13 +71,10 @@ export const DEFAULT_HOOK_TIMEOUT_MS = 5_000;
 /** Hard cap on a per-hook override, so a config typo cannot stall a turn for minutes. */
 export const MAX_HOOK_TIMEOUT_MS = 30_000;
 
-export const EMPTY_HOOKS_CONFIG: HooksConfig = { hooks: [], issues: [] };
+const EMPTY_HOOKS_CONFIG: HooksConfig = { hooks: [], issues: [] };
 
-/** No `:` (reserved as the approval-key separator, `<source>:<id>`), no whitespace, no empties. */
+/** No `:` (reserved as the approval-key separator), no whitespace, no empties. */
 const VALID_HOOK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-
-/** Args stay readable in the redacted projection but each value is bounded to this many chars. */
-const REDACTED_ARG_MAX_CHARS = 64;
 
 /**
  * Tolerantly decodes one raw hooks-file value into the normalized model, stamping every
@@ -144,26 +146,6 @@ export function loadHooksFile(
   return loadJsonConfig(path, (raw) => normalizeHooksConfig(raw, source), EMPTY_HOOKS_CONFIG, read);
 }
 
-/**
- * The debug/inspection projection (D-009 output-time redaction, consistent with
- * redactMcpServerConfig): identity fields stay readable, the command keeps only its basename
- * (paths can carry usernames), and args are kept - nothing is masked by default - but each
- * value is bounded to a display length so a secret-bearing arg cannot flood a log line.
- */
-export function redactHookDefinition(hook: HookDefinition): HookDefinition {
-  return {
-    ...hook,
-    command: basename(hook.command),
-    args: hook.args.map(boundArg),
-  };
-}
-
-function boundArg(arg: string): string {
-  return arg.length <= REDACTED_ARG_MAX_CHARS
-    ? arg
-    : `${arg.slice(0, REDACTED_ARG_MAX_CHARS)}…[${arg.length} chars]`;
-}
-
 function normalizeHook(
   id: string,
   rawEntry: unknown,
@@ -200,7 +182,7 @@ function normalizeHook(
       id,
       event,
       command,
-      args: stringArray(entry.args),
+      args: asStringArray(entry.args),
       timeoutMs: Math.min(
         asPositiveInt(entry.timeoutMs) ?? DEFAULT_HOOK_TIMEOUT_MS,
         MAX_HOOK_TIMEOUT_MS,
@@ -213,8 +195,4 @@ function normalizeHook(
 
 function asHookEvent(raw: unknown): HookEvent | undefined {
   return HOOK_EVENTS.find((event) => event === raw);
-}
-
-function stringArray(raw: unknown): readonly string[] {
-  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];
 }

@@ -6,10 +6,10 @@ import { REDACTED, redactSecrets } from "@trevor/session/telemetry";
  * scrubbed before storage: the shared telemetry redactor covers bearer/authorization headers,
  * token-like strings, and known secret-named fields, and two hook-local passes cover what it
  * deliberately leaves alone - env-style `KEY=value` assignments (a hook that dumps its
- * environment must not persist the values) and home-directory paths (they carry usernames;
- * config.ts makes the same call for command paths). Deterministic and idempotent. This is
- * STORAGE-time redaction: the runner hands decision parsing the raw capped stdout, and only
- * the stored/log projection passes through here.
+ * environment must not persist the values) and home-directory paths (they carry usernames).
+ * Deterministic and idempotent, so layered passes are safe: ./decision redacts reason/context
+ * AT PARSE (every downstream surface is covered by construction) and the event fold re-redacts
+ * as belt and braces. The runner still hands decision parsing the raw capped stdout.
  *
  * Responsible for: scrubbing secret-shaped values from hook output bound for logs/events/Doctor.
  * Not for: output capping (./runner) or decision parsing (./decision).

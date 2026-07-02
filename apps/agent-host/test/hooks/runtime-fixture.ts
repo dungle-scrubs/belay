@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   approveHook,
   EMPTY_HOOK_APPROVALS,
@@ -22,9 +22,10 @@ import { HOOK_FIXTURE_COMMAND, hookFixtureArgs } from "./fixture-config";
 /**
  * Shared temp-config builder for the hooks RUNTIME suites (plan 25 M5): materializes real
  * project/user hooks.json files over ./fixture-hook, grants real approvals (computed with the
- * same trust fingerprints the runtime evaluates), and returns a `createHooksRuntime` bound to
- * those roots - so dispatch tests exercise the discovery -> trust -> approval -> execution
- * pipeline end to end on disk, exactly as a configured host would.
+ * same trust fingerprints the runtime evaluates, under the same workspace-scoped keys), and
+ * returns a `createHooksRuntime` bound to those roots - so dispatch tests exercise the
+ * discovery -> trust -> approval -> execution pipeline end to end on disk, exactly as a
+ * configured host would.
  *
  * Responsible for: the on-disk hooks-runtime test harness (config files, approvals, payloads).
  * Not for: fixture child behavior (./fixture-hook) or the launch recipe (./fixture-config).
@@ -46,6 +47,12 @@ export interface HooksRuntimeHarness {
   readonly runtime: HooksRuntime;
   /** The workspace root the runtime is bound to (hook children run here). */
   readonly workspaceRoot: string;
+  /** The approvals file the runtime reads (stat-guarded per dispatch). */
+  readonly approvalsPath: string;
+  /** The workspace-scoped approval key of a PROJECT hook (S1): `project:<workspace>:<id>`. */
+  readonly projectKey: (id: string) => string;
+  /** The approval key of a USER hook: `user:<id>`. */
+  readonly userKey: (id: string) => string;
   /** A scratch path inside the harness dir (e.g. a record-file or marker target). */
   readonly scratchPath: (name: string) => string;
   readonly cleanup: () => void;
@@ -70,14 +77,22 @@ export type FixtureHookSpecs =
   | readonly FixtureHookSpec[]
   | ((scratch: (name: string) => string) => readonly FixtureHookSpec[]);
 
+export interface HarnessOptions {
+  /** Files (relative path -> contents) materialized under the WORKSPACE root before approvals
+   *  are computed, so a hook whose args reference them is approved over their initial bytes. */
+  readonly workspaceFiles?: Readonly<Record<string, string>>;
+}
+
 /**
  * Builds a runtime over real temp hooks.json roots. Approvals are granted against the SAME
  * fingerprints the runtime computes (project hooks anchored at the workspace root, user hooks
- * at the user config dir), so `approved: true` hooks actually execute.
+ * at the user config dir) under the SAME workspace-scoped keys, so `approved: true` hooks
+ * actually execute.
  */
 export function hooksRuntimeHarness(
   projectSpecs: FixtureHookSpecs,
   userSpecs: FixtureHookSpecs = [],
+  options: HarnessOptions = {},
 ): HooksRuntimeHarness {
   const root = mkdtempSync(join(tmpdir(), "trevor-hooks-rt-"));
   const scratchPath = (name: string): string => join(root, name);
@@ -93,6 +108,11 @@ export function hooksRuntimeHarness(
   const approvalsPath = join(root, "state", "hook-approvals.json");
   writeFileSync(projectHooksPath, hooksJson(project));
   writeFileSync(userHooksPath, hooksJson(user));
+  for (const [relative, contents] of Object.entries(options.workspaceFiles ?? {})) {
+    const target = join(workspaceRoot, relative);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, contents);
+  }
 
   const approvedIds = new Set(
     [
@@ -103,12 +123,15 @@ export function hooksRuntimeHarness(
   const report = discoverHooks({ projectHooksPath, userHooksPath });
   let approvals: HookApprovalsState = EMPTY_HOOK_APPROVALS;
   for (const hook of report.hooks) {
-    const key = hookApprovalKey(hook);
-    if (!approvedIds.has(key)) {
+    if (!approvedIds.has(`${hook.source}:${hook.id}`)) {
       continue;
     }
     const baseDir = baseDirFor(hook.source, workspaceRoot, userConfigDir);
-    approvals = approveHook(approvals, key, computeHookTrustFingerprint(hook, baseDir).hash);
+    approvals = approveHook(
+      approvals,
+      hookApprovalKey(hook, workspaceRoot),
+      computeHookTrustFingerprint(hook, baseDir).hash,
+    );
   }
   saveHookApprovals(approvals, approvalsPath);
 
@@ -122,6 +145,9 @@ export function hooksRuntimeHarness(
       legacyUserHooksDir: join(root, "legacy-user-hooks"),
     }),
     workspaceRoot,
+    approvalsPath,
+    projectKey: (id) => hookApprovalKey({ source: "project", id }, workspaceRoot),
+    userKey: (id) => hookApprovalKey({ source: "user", id }, workspaceRoot),
     scratchPath,
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };

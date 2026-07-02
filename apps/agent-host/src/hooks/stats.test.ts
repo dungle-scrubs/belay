@@ -33,7 +33,8 @@ function record(
   hook: HookDefinition,
   run: HookExecution,
 ): void {
-  stats.record(hook, run, hookExecutionOutcome(run));
+  const key = hook.source === "project" ? `project:/repo:${hook.id}` : `user:${hook.id}`;
+  stats.record(key, hook.timeoutMs, run, hookExecutionOutcome(run));
 }
 
 describe("createHookStats - counters accumulate per hook", () => {
@@ -47,7 +48,7 @@ describe("createHookStats - counters accumulate per hook", () => {
 
     expect(stats.snapshot()).toEqual([
       {
-        key: "project:guard",
+        key: "project:/repo:guard",
         runs: 4,
         slowRuns: 1,
         timeouts: 1,
@@ -109,7 +110,10 @@ describe("createHookStats - snapshot shape for Doctor (D-009)", () => {
     record(stats, review, execution());
     record(stats, guard, execution());
 
-    expect(stats.snapshot().map((entry) => entry.key)).toEqual(["project:guard", "user:review"]);
+    expect(stats.snapshot().map((entry) => entry.key)).toEqual([
+      "project:/repo:guard",
+      "user:review",
+    ]);
   });
 
   test("the snapshot is a copy - later recordings do not mutate an earlier snapshot", () => {

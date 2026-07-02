@@ -1,6 +1,6 @@
 import { asPositiveInt } from "@host/boot/coerce";
 import { loadJsonConfig } from "@host/boot/config";
-import { asNonEmptyString, asRecord } from "@host/boot/decode";
+import { asNonEmptyString, asRecord, asStringArray } from "@host/boot/decode";
 import { USER_MCP_SERVERS_JSON } from "@host/boot/paths";
 
 /**
@@ -224,7 +224,7 @@ function normalizeServer(
         enabled,
         transport: "stdio",
         command,
-        args: stringArray(entry.args),
+        args: asStringArray(entry.args),
         env: stringRecord(entry.env),
         exposure,
         requestTimeoutMs,
@@ -309,10 +309,6 @@ function asHttpEndpoint(raw: unknown): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function stringArray(raw: unknown): readonly string[] {
-  return Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];
 }
 
 function stringRecord(raw: unknown): Readonly<Record<string, string>> {

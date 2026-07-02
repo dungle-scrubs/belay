@@ -98,7 +98,7 @@ describe("dispatchStop - blocking decisions and config order", () => {
     const outcome = await h.runtime.dispatchStop(stopPayload());
 
     expect(outcome.decision).toBe("halt");
-    expect(outcome.hook).toBe("project:gate");
+    expect(outcome.hook).toBe(h.projectKey("gate"));
     expect(outcome.reason).toBe("not good enough");
     expect(existsSync(h.scratchPath("after.json"))).toBe(false);
   });
@@ -109,7 +109,7 @@ describe("dispatchStop - blocking decisions and config order", () => {
     );
     const outcome = await h.runtime.dispatchStop(stopPayload());
     expect(outcome.decision).toBe("halt");
-    expect(outcome.hook).toBe("project:denier");
+    expect(outcome.hook).toBe(h.projectKey("denier"));
     expect(outcome.reason).toBe("spoke the wrong verb");
   });
 });
@@ -132,7 +132,7 @@ describe("dispatchStop - the approval gate (D-006)", () => {
 
     expect(outcome.decision).toBe("allow");
     expect(outcome.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:rec", reason: "unapproved" }),
+      expect.objectContaining({ hook: h.projectKey("rec"), reason: "unapproved" }),
     ]);
     expect(existsSync(h.scratchPath("unapproved.json"))).toBe(false);
   });
@@ -161,8 +161,8 @@ describe("dispatchStop - bounded context and non-blocking failures (D-007)", () 
 
     expect(outcome.decision).toBe("allow");
     expect(outcome.contexts).toEqual([
-      { hook: "project:one", context: "first note" },
-      { hook: "project:two", context: "second note" },
+      { hook: h.projectKey("one"), context: "first note" },
+      { hook: h.projectKey("two"), context: "second note" },
     ]);
   });
 
@@ -194,7 +194,7 @@ describe("dispatchStop - bounded context and non-blocking failures (D-007)", () 
 
     expect(outcome.decision).toBe("allow");
     expect(outcome.diagnostics).toEqual([
-      expect.objectContaining({ hook: "project:broken", reason: "command_failed" }),
+      expect.objectContaining({ hook: h.projectKey("broken"), reason: "command_failed" }),
     ]);
   });
 });

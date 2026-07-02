@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { hookExecutionOutcome, hookTrustOutcome, isBlockingHookOutcome } from "./results";
+import { hookExecutionOutcome, hookTrustOutcome } from "./results";
 import type { HookExecution } from "./runner";
 
 function execution(overrides: Partial<HookExecution> = {}): HookExecution {
@@ -20,7 +20,6 @@ describe("hookExecutionOutcome - failures are diagnostics, never throws (D-007)"
       execution({ timedOut: true, exitCode: null, signal: "SIGTERM", durationMs: 205 }),
     );
     expect(outcome).toMatchObject({ kind: "diagnostic", reason: "timeout" });
-    expect(isBlockingHookOutcome(outcome)).toBe(false);
   });
 
   test("a spawn failure is a command_failed diagnostic", () => {
@@ -86,7 +85,6 @@ describe("hookExecutionOutcome - silent success is implicit allow (25 M5)", () =
   test("exit 0 with empty stdout is an implicit allow decision, not a diagnostic", () => {
     const outcome = hookExecutionOutcome(execution());
     expect(outcome).toEqual({ kind: "decision", decision: { decision: "allow" } });
-    expect(isBlockingHookOutcome(outcome)).toBe(false);
   });
 
   test("exit 0 with whitespace-only stdout is still an implicit allow", () => {
@@ -106,7 +104,6 @@ describe("hookExecutionOutcome - explicit decisions from successful runs are pre
       execution({ stdout: { text: '{"decision":"allow"}', truncated: false } }),
     );
     expect(outcome).toEqual({ kind: "decision", decision: { decision: "allow" } });
-    expect(isBlockingHookOutcome(outcome)).toBe(false);
   });
 
   test("an explicit deny still blocks", () => {
@@ -116,14 +113,13 @@ describe("hookExecutionOutcome - explicit decisions from successful runs are pre
       }),
     );
     expect(outcome).toMatchObject({ kind: "decision", decision: { decision: "deny" } });
-    expect(isBlockingHookOutcome(outcome)).toBe(true);
   });
 
   test("an explicit halt still blocks", () => {
     const outcome = hookExecutionOutcome(
       execution({ stdout: { text: '{"decision":"halt"}', truncated: false } }),
     );
-    expect(isBlockingHookOutcome(outcome)).toBe(true);
+    expect(outcome).toMatchObject({ kind: "decision", decision: { decision: "halt" } });
   });
 });
 
@@ -155,8 +151,7 @@ describe("hookTrustOutcome - the gate's diagnostic projection (D-006)", () => {
 
   test("trust diagnostics never block the turn - they only keep the hook from running", () => {
     for (const status of ["unapproved", "changed", "missing-script"] as const) {
-      const outcome = hookTrustOutcome(status);
-      expect(outcome && isBlockingHookOutcome(outcome)).toBe(false);
+      expect(hookTrustOutcome(status)?.kind).toBe("diagnostic");
     }
   });
 });
