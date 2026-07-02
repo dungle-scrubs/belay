@@ -1,3 +1,4 @@
+import { pumpStdinFrames, send, sendRaw } from "../support/stdio-frames";
 import type { FixtureCatalogMode } from "./fixture-catalog";
 import {
   createFixtureDispatcher,
@@ -9,9 +10,9 @@ import {
 
 /**
  * A minimal MCP stdio fixture server for the transport integration tests (plan 23 M2/M4/M5).
- * Speaks JSON-RPC 2.0 over LSP-style Content-Length frames with its OWN tiny framing
- * implementation (deliberately independent of src/mcp/framing.ts, so the tests are
- * cross-implementation, not self-confirming). Method dispatch - initialize, the paginated
+ * Speaks JSON-RPC 2.0 over LSP-style Content-Length frames through the shared fixture frame
+ * pump (../support/stdio-frames - deliberately independent of src/mcp/framing.ts, so the tests
+ * are cross-implementation, not self-confirming). Method dispatch - initialize, the paginated
  * ./fixture-catalog lists, prompts/get, resources/read, and the common tools/call behaviors
  * (echo, env_probe, args_probe, big, soft_fail, boom, hang) - is the shared
  * ./fixture-dispatch; only the wire mechanics and stdio-specific triggers live here:
@@ -43,43 +44,7 @@ const dispatcher = createFixtureDispatcher({
 
 const serverRequests = createFixtureServerRequests();
 
-let buffer = Buffer.alloc(0);
-
-process.stdin.on("data", (chunk: Buffer) => {
-  buffer = Buffer.concat([buffer, chunk]);
-  drainFrames();
-});
-process.stdin.on("end", () => process.exit(0));
-
-function drainFrames(): void {
-  while (true) {
-    const headerEnd = buffer.indexOf("\r\n\r\n");
-    if (headerEnd === -1) {
-      return;
-    }
-    const header = buffer.subarray(0, headerEnd).toString("utf8");
-    const match = /content-length:\s*(\d+)/i.exec(header);
-    if (!match?.[1]) {
-      process.exit(2);
-    }
-    const length = Number(match[1]);
-    const bodyStart = headerEnd + 4;
-    if (buffer.length < bodyStart + length) {
-      return;
-    }
-    const body = buffer.subarray(bodyStart, bodyStart + length).toString("utf8");
-    buffer = buffer.subarray(bodyStart + length);
-    handle(JSON.parse(body) as JsonRpcIn);
-  }
-}
-
-function sendRaw(body: string): void {
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
-}
-
-function send(message: unknown): void {
-  sendRaw(JSON.stringify(message));
-}
+pumpStdinFrames((body) => handle(JSON.parse(body) as JsonRpcIn));
 
 function handle(message: JsonRpcIn): void {
   if (message.method === undefined) {

@@ -1,5 +1,6 @@
 import type { McpServerStatusEntry } from "@host/mcp/runtime";
 import { relativeTime } from "@trevor/session";
+import { plural, statusHistogram } from "./format";
 import type { PeripheralState } from "./probe-input";
 
 /**
@@ -19,8 +20,6 @@ import type { PeripheralState } from "./probe-input";
  * Not for: reading live runtime state (host-facts.ts injects the snapshot) or rendering the
  * area (areas-connectivity.ts peripheralArea).
  */
-
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Names one server with its already-redacted connection target. */
 const serverRef = (entry: McpServerStatusEntry): string => `"${entry.server}" (${entry.target})`;
@@ -121,13 +120,8 @@ export function mcpDebugSummary(entries: readonly McpServerStatusEntry[]): strin
   if (entries.length === 0) {
     return undefined;
   }
-  const counts = new Map<string, number>();
-  for (const entry of entries) {
-    const key = entry.enabled ? entry.status : "disabled";
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  const breakdown = [...counts.entries()]
-    .map(([status, count]) => `${count} ${status}`)
-    .join(" · ");
+  const breakdown = statusHistogram(
+    entries.map((entry) => (entry.enabled ? entry.status : "disabled")),
+  );
   return `${plural(entries.length, "server")} · ${breakdown}`;
 }

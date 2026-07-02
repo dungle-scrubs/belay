@@ -1,5 +1,6 @@
-import type { ChatMessage, Provider, ProviderEvent } from "@host/providers";
+import type { Provider } from "@host/providers";
 import type { TrevorEventInput } from "@trevor/session";
+import type { ScriptedCall } from "../support/fake-provider";
 
 /**
  * Scripted-turn plumbing for the plan 24 M7 eval and distraction suites: a deterministic
@@ -13,41 +14,15 @@ import type { TrevorEventInput } from "@trevor/session";
  * boot/paths and the LSP singleton read the env at first import.
  */
 
-const USAGE = { input: 10, output: 5, contextWindow: 100_000, genMs: 1 };
-
-export interface ScriptedCall {
-  readonly name: string;
-  readonly args: Record<string, unknown>;
-}
+export type { ScriptedCall } from "../support/fake-provider";
 
 /** A provider that runs each scripted tool call once, in order, then answers with `answer`. */
 export async function scriptedProvider(
   calls: readonly ScriptedCall[],
   answer: string,
 ): Promise<Provider> {
-  const { fakeProvider } = await import("../support/fake-provider");
-  return fakeProvider({
-    step: (messages: readonly ChatMessage[]): ProviderEvent[] => {
-      const done = messages.filter((message) => message.role === "tool").length;
-      const call = calls[done];
-      return call
-        ? [
-            {
-              type: "tool_call",
-              call: {
-                id: `c${done + 1}`,
-                name: call.name,
-                arguments: JSON.stringify(call.args),
-              },
-            },
-            { type: "usage", usage: USAGE },
-          ]
-        : [
-            { type: "text", text: answer },
-            { type: "usage", usage: USAGE },
-          ];
-    },
-  });
+  const { fakeProvider, scriptedStep } = await import("../support/fake-provider");
+  return fakeProvider({ step: scriptedStep(calls, answer) });
 }
 
 /** The published result of the named tool's completion ("" when the tool never completed). */

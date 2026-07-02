@@ -2,7 +2,12 @@ import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { LspClient } from "@host/lsp/client";
-import type { LspDiagnostic, LspSeverity } from "@host/lsp/contract";
+import {
+  degraded,
+  type LspDegraded,
+  type LspDiagnostic,
+  type LspSeverity,
+} from "@host/lsp/contract";
 import { displayPath } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 
@@ -10,10 +15,12 @@ import type { LspManager } from "@host/lsp/manager";
  * Shared file plumbing for the lsp_* tools (plan 24 M3-M5): resolving a tool's `file` argument
  * against the workspace root, language-id detection, uri conversion, syncing the file's CURRENT
  * disk content onto an acquired client (didOpen, or a full didChange re-sync when already open,
- * which is what keeps a stale server view fresh), and 1-based -> 0-based wire position encoding.
- * A missing/unreadable file is data (null) the tool renders as bounded text, never a throw.
+ * which is what keeps a stale server view fresh), the capability gate every request-shaped tool
+ * runs before asking (a server that never advertised the provider degrades as "unsupported"
+ * instead of being asked), and 1-based -> 0-based wire position encoding. A missing/unreadable
+ * file is data (null) the tool renders as bounded text, never a throw.
  *
- * Responsible for: the workspace-file seam the lsp tool defs share.
+ * Responsible for: the workspace-file and capability-gate seams the lsp tool defs share.
  * Not for: display formatting (@host/lsp/format), lifecycle (@host/lsp/manager), or per-tool
  * params and rendering (./lsp-*).
  */
@@ -75,6 +82,34 @@ export function fileNotFound(file: string, root: string): string {
 /** Syncs the loaded file onto the acquired client so the server analyzes its current content. */
 export function openWorkspaceFile(client: LspClient, file: WorkspaceFile): void {
   client.openDocument(file.uri, file.languageId, file.text);
+}
+
+/** The initialize-declared provider capabilities the request-shaped lsp tools gate on. */
+export type LspProviderCapability =
+  | "hoverProvider"
+  | "documentSymbolProvider"
+  | "workspaceSymbolProvider"
+  | "codeActionProvider";
+
+/**
+ * The capability gate (D-006 "unsupported"): a degraded outcome when the acquired server's
+ * initialize capabilities never advertised the provider - asking it would only earn a
+ * method-not-found - or undefined when the request may proceed. LSP capability values are
+ * `true` or an options object, so any truthy value counts as advertised.
+ */
+export function unsupportedCapability(
+  acquired: { readonly client: LspClient; readonly server: string },
+  provider: LspProviderCapability,
+): LspDegraded | undefined {
+  const capabilities = acquired.client.capabilities();
+  if (capabilities === undefined || capabilities[provider]) {
+    return undefined;
+  }
+
+  return degraded(
+    "unsupported",
+    `${acquired.server} does not advertise ${provider} in its initialize capabilities`,
+  );
 }
 
 /** A tool's 1-based line/column encoded as the 0-based LSP wire position. */

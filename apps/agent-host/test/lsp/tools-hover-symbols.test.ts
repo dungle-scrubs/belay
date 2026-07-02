@@ -99,6 +99,14 @@ describe("lsp_hover against the fixture server", () => {
       await runTool(buildLspHoverTool(unavailable), { file: "code.ts", line: 1, column: 1 }),
     ).toContain("not installed");
   });
+
+  it("a server without hoverProvider degrades to unsupported without asking it", async () => {
+    const lsp = manager({ adapters: [lspFixtureAdapter(["--no-capability=hover"])] });
+    // The fixture would happily ANSWER the hover; only the capability gate can degrade here.
+    const result = await runTool(buildLspHoverTool(lsp), { file: "code.ts", line: 1, column: 1 });
+    expect(result).toContain("unsupported");
+    expect(result).toContain("hoverProvider");
+  });
 });
 
 describe("lsp_document_symbols against the fixture server", () => {
@@ -117,6 +125,13 @@ describe("lsp_document_symbols against the fixture server", () => {
       },
     );
     expect(result).toContain("not installed");
+  });
+
+  it("a server without documentSymbolProvider degrades to unsupported without asking it", async () => {
+    const lsp = manager({ adapters: [lspFixtureAdapter(["--no-capability=documentSymbol"])] });
+    const result = await runTool(buildLspDocumentSymbolsTool(lsp), { file: "code.ts" });
+    expect(result).toContain("unsupported");
+    expect(result).toContain("documentSymbolProvider");
   });
 });
 
@@ -147,5 +162,12 @@ describe("lsp_workspace_symbols against the fixture server", () => {
       },
     );
     expect(result).toContain("not installed");
+  });
+
+  it("a server without workspaceSymbolProvider degrades to unsupported without asking it", async () => {
+    const lsp = manager({ adapters: [lspFixtureAdapter(["--no-capability=workspaceSymbol"])] });
+    const result = await runTool(buildLspWorkspaceSymbolsTool(lsp), { query: "fixture" });
+    expect(result).toContain("unsupported");
+    expect(result).toContain("workspaceSymbolProvider");
   });
 });

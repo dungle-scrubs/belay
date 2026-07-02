@@ -1,20 +1,24 @@
+import { asRecord } from "@host/boot/decode";
 import { clipLine } from "@host/tools/shared";
 import { MAX_LSP_DEGRADED_DETAIL_CHARS } from "./caps";
 
 /**
- * The stable LSP result contract (plan 24 M1): the shapes every read-only LSP tool (D-002 -
- * status, diagnostics, hover, document symbols, workspace symbols, code-action proposals)
- * returns, plus the typed DEGRADED outcomes (D-006). Degradation is data, not control flow: a
- * missing, unsupported, slow, stale, or erroring server produces an {@link LspDegraded} result
- * variant the tool renders as normal bounded text - an LSP failure never throws through a
- * turn. Positions are 1-based line/column (matching how read/grep display locations); the
- * 0-based LSP wire positions convert at the decode boundary ({@link rangeFromLsp}).
+ * The stable LSP result contract (plan 24 M1): the wire-decode vocabularies the read-only LSP
+ * tools (D-002 - status, diagnostics, hover, document symbols, workspace symbols, code-action
+ * proposals) share, plus the typed DEGRADED outcomes (D-006). Degradation is data, not control
+ * flow: a missing, unsupported, slow, or erroring server produces an {@link LspDegraded}
+ * result variant the tool renders as normal bounded text - an LSP failure never throws through
+ * a turn. Positions are 1-based line/column (matching how read/grep display locations); the
+ * 0-based LSP wire positions convert at the decode boundary ({@link rangeFromLsp}). The tools
+ * render wire records straight to bounded text, so some result shapes here
+ * ({@link LspFileDiagnostics}, {@link LspHover}, {@link LspCodeActionProposal}) exist to PIN
+ * the plan's result contract in the co-located tests rather than to be constructed by tool
+ * code.
  *
  * Read-only registration (D-007): the six tool names live here as {@link LSP_TOOL_DESCRIPTORS},
- * each pinned readOnly. They join the cross-surface packages/session TOOL_DESCRIPTORS table
- * only as each tool def lands (M3-M5), because that table's parity test pins it 1:1 against
- * the host's REAL tool defs; until then this contract (and its forward-guard test) is the
- * read-only declaration.
+ * each pinned readOnly, and every one is registered in the cross-surface packages/session
+ * TOOL_DESCRIPTORS table (whose parity test pins it 1:1 against the host's REAL tool defs);
+ * the forward-guard test here asserts each LSP name is present there as read-only.
  *
  * Responsible for: the LSP result shapes, the degraded-outcome variants and constructors, the
  * severity/symbol-kind vocabularies, and the read-only LSP tool descriptor table.
@@ -130,12 +134,12 @@ export interface LspServerStatus {
   readonly diagnostics?: LspStoredDiagnosticsSummary;
 }
 
-/** Why a result degraded instead of answering (D-006). */
+/** Why a result degraded instead of answering (D-006). ("stale" is a STATUS word, not a
+ *  degraded reason: a quiet-but-ready server still answers, so nothing degrades as stale.) */
 export const LSP_DEGRADED_REASONS = [
   "unavailable",
   "unsupported",
   "timeout",
-  "stale",
   "server_error",
 ] as const;
 
@@ -174,8 +178,7 @@ export function isLspDegraded(outcome: LspOutcome<unknown>): outcome is LspDegra
 
 /** Decodes one 0-based LSP wire position to the 1-based contract; garbage degrades to 1:1. */
 function positionFromLsp(raw: unknown): LspPosition {
-  const record =
-    typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : undefined;
+  const record = asRecord(raw);
   const line = typeof record?.line === "number" && record.line >= 0 ? record.line + 1 : 1;
   const column =
     typeof record?.character === "number" && record.character >= 0 ? record.character + 1 : 1;
@@ -184,8 +187,7 @@ function positionFromLsp(raw: unknown): LspPosition {
 
 /** Decodes one LSP wire range ({ start, end } of 0-based positions); garbage degrades to 1:1. */
 export function rangeFromLsp(raw: unknown): LspRange {
-  const record =
-    typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : undefined;
+  const record = asRecord(raw);
   return { start: positionFromLsp(record?.start), end: positionFromLsp(record?.end) };
 }
 

@@ -1,7 +1,7 @@
 /**
- * Responsible for: the simpleTool builder, output capping, the one-line clip helper, the
- * lenient numeric clamp, stream merging, the skip-dirs policy, and the toolInput/toolExecution
- * failure helpers.
+ * Responsible for: the simpleTool builder, output capping, the bounded-text helper, the
+ * one-line clip helper, the lenient numeric clamp, stream merging, the skip-dirs policy, and
+ * the toolInput/toolExecution failure helpers.
  * Not for: the failure classes themselves - errors.ts.
  */
 import { msg } from "@host/transport/messages";
@@ -21,6 +21,21 @@ export const SKIP_DIRS = /(^|\/)(node_modules|\.git|dist|\.next)\//u;
 /** Caps tool output at MAX_OUTPUT characters, with a truncation marker. */
 export function cap(text: string): string {
   return text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}${TRUNCATION_NOTICE}` : text;
+}
+
+export interface BoundedText {
+  readonly text: string;
+  readonly truncated: boolean;
+}
+
+/** Bounds text at `maxChars` with the shared truncation marker, flagging the cut. The one
+ *  implementation behind mcp/content's boundText and lsp/caps's capText. */
+export function boundedText(text: string, maxChars: number): BoundedText {
+  if (text.length <= maxChars) {
+    return { text, truncated: false };
+  }
+
+  return { text: `${text.slice(0, maxChars)}${TRUNCATION_NOTICE}`, truncated: true };
 }
 
 /** Collapses `text` onto one line (whitespace runs become single spaces) and cuts it at

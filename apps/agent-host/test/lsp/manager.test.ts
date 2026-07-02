@@ -1,10 +1,13 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTypeScriptLanguageServerAdapter } from "@host/lsp/adapter";
+import {
+  createTypeScriptLanguageServerAdapter,
+  type LanguageServerAdapter,
+} from "@host/lsp/adapter";
 import { createLspManager, type LspManager, type LspManagerOptions } from "@host/lsp/manager";
 import { afterEach, describe, expect, it } from "vitest";
-import { lspFixtureAdapter } from "./fixture-config";
+import { lspFixtureAdapter, lspFixtureSpawnSpec } from "./fixture-config";
 
 /**
  * LSP manager integration (plan 24 M2 tasks 1-2 + 5-8): the spawned lifecycle against the REAL
@@ -104,6 +107,60 @@ describe("lsp manager - lifecycle", () => {
     await expect.poll(() => lsp.status().status).toBe("error");
     const parked = await lsp.acquire();
     expect(parked).toMatchObject({ kind: "degraded", reason: "server_error" });
+  });
+
+  it("a crash after a long-healthy run resets the restart budget instead of parking", async () => {
+    let time = 1_000;
+    const lsp = manager({ now: () => time, maxAutoRestarts: 1 });
+
+    // Crash 1 consumes the only budgeted restart.
+    await lsp.request("textDocument/hover", hoverParams("file:///crash.ts"));
+    await expect.poll(() => lsp.status().restarts).toBe(1);
+
+    // The budgeted respawn serves healthily, then sits ready for over ten minutes.
+    const recovered = await lsp.request("textDocument/hover", hoverParams("file:///ok.ts", 3, 4));
+    expect(recovered).toMatchObject({ kind: "ok" });
+    time += 11 * 60_000;
+
+    // Crash 2 lands long after ready: the budget resets first, so the root is NOT parked...
+    await lsp.request("textDocument/hover", hoverParams("file:///crash.ts"));
+    await expect.poll(() => lsp.status().restarts).toBe(1);
+    expect(lsp.status().status).not.toBe("error");
+
+    // ...and the next use respawns and answers.
+    const after = await lsp.request("textDocument/hover", hoverParams("file:///again.ts", 5, 6));
+    expect(after).toMatchObject({ kind: "ok", value: { contents: { value: "hover:5:6" } } });
+  });
+
+  it("statusOf caches the idle binary resolution; acquire re-resolves and refreshes it", async () => {
+    let resolves = 0;
+    let installed = false;
+
+    const countingAdapter: LanguageServerAdapter = {
+      id: "counting",
+      displayName: "counting-server",
+      detects: () => true,
+      resolveCommand: () => {
+        resolves += 1;
+        return installed ? lspFixtureSpawnSpec() : undefined;
+      },
+    };
+    const lsp = manager({ adapters: [countingAdapter] });
+
+    // Repeated idle status reads resolve the binary exactly once (no PATH walk per call).
+    expect(lsp.status().status).toBe("unavailable");
+    lsp.status();
+    lsp.statusSnapshot();
+    expect(resolves).toBe(1);
+
+    // Installing the binary is invisible to the cached idle status, but the next ACQUIRE
+    // re-resolves fresh (the e2e install-mid-suite recovery path) and refreshes the cache.
+    installed = true;
+    expect(lsp.status().status).toBe("unavailable");
+    expect(resolves).toBe(1);
+    const outcome = await lsp.acquire();
+    expect(outcome.kind).toBe("ready");
+    expect(lsp.status().status).toBe("ready");
   });
 
   it("reports a ready server as stale once quiet past the threshold", async () => {

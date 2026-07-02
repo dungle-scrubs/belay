@@ -1,7 +1,11 @@
 import { resolve } from "node:path";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { msg } from "@host/transport/messages";
-import { createTypeScriptLanguageServerAdapter, type LanguageServerAdapter } from "./adapter";
+import {
+  createTypeScriptLanguageServerAdapter,
+  type LanguageServerAdapter,
+  type LspSpawnSpec,
+} from "./adapter";
 import {
   DEFAULT_LSP_INIT_TIMEOUT_MS,
   DEFAULT_LSP_REQUEST_TIMEOUT_MS,
@@ -24,10 +28,14 @@ import { isLspClientError } from "./errors";
  * state behind one seam the M3-M5 tools program against. The first cut serves the host's one
  * WORKSPACE_ROOT, but state is keyed per root so multi-root support is a config change, not a
  * redesign. Servers spawn LAZILY on first use; adapter selection is cached per root; a crash
- * consumes a bounded restart budget (respawn on next use, then parked as error); an initialize
- * failure parks the root immediately (no respawn storms). Every miss - no adapter, missing
- * binary, timeout, crash, closed - surfaces as a plain degraded result variant (./contract,
- * D-006): nothing here ever throws through a turn.
+ * consumes a bounded restart budget (respawn on next use, then parked as error - but a server
+ * that had been ready for over {@link READY_RESTART_BUDGET_RESET_MS} earns a fresh budget
+ * first, so a long-healthy root never parks on an occasional crash); an initialize failure
+ * parks the root immediately (no respawn storms). Every miss - no adapter, missing binary,
+ * timeout, crash, closed - surfaces as a plain degraded result variant (./contract, D-006):
+ * nothing here ever throws through a turn. The idle status branch caches the adapter's binary
+ * resolution per root (invalidated on crash or a failed spawn), so status snapshots never walk
+ * PATH on every call.
  *
  * Responsible for: workspace-root keyed lifecycle state, adapter selection, lazy spawn,
  * degrade-mapping of typed client failures, restart policy, and status snapshots.
@@ -37,6 +45,10 @@ import { isLspClientError } from "./errors";
 
 export const DEFAULT_LSP_STALE_AFTER_MS = 5 * 60_000;
 export const DEFAULT_LSP_MAX_AUTO_RESTARTS = 1;
+
+/** A server ready for longer than this earns a fresh restart budget when it crashes: budget
+ *  exhaustion should park a crash LOOP, not a root whose server died weeks apart. */
+export const READY_RESTART_BUDGET_RESET_MS = 10 * 60_000;
 
 export interface LspManagerOptions {
   /** Adapter candidates in priority order (default: the TS/JS adapter, D-004). */
@@ -48,6 +60,8 @@ export interface LspManagerOptions {
   readonly now?: () => number;
   readonly requestTimeoutMs?: number;
   readonly initTimeoutMs?: number;
+  /** The clients' default publish-wait deadline (capped by requestTimeoutMs). */
+  readonly publishWaitMs?: number;
   /** A ready server quiet for longer than this reports "stale" (with its age). */
   readonly staleAfterMs?: number;
   /** Crash respawns granted before the root parks as "error". */
@@ -86,6 +100,8 @@ interface WorkspaceEntry {
   initPromise?: Promise<LspAcquireOutcome>;
   initializing: boolean;
   ready: boolean;
+  /** When the current server became ready; cleared on crash. Backs the budget reset. */
+  readySince?: number;
   /** A parked terminal failure: acquires answer this without respawning. */
   failure?: { readonly status: "timeout" | "error"; readonly outcome: LspDegraded };
   restarts: number;
@@ -94,6 +110,10 @@ interface WorkspaceEntry {
   lastRequestAt?: number;
   /** The last successful server response (initialize or request); drives staleness. */
   lastActivityAt?: number;
+  /** The idle status branch's cached binary resolution (E4): refreshed by every acquire,
+   *  invalidated on crash or a failed spawn, so statusSnapshot never stats per call. */
+  commandResolved: boolean;
+  command?: LspSpawnSpec;
 }
 
 export function createLspManager(options: LspManagerOptions = {}): LspManager {
@@ -115,7 +135,14 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
     const root = resolve(workspaceRoot ?? defaultRoot);
     let entry = entries.get(root);
     if (!entry) {
-      entry = { root, adapterResolved: false, initializing: false, ready: false, restarts: 0 };
+      entry = {
+        root,
+        adapterResolved: false,
+        initializing: false,
+        ready: false,
+        restarts: 0,
+        commandResolved: false,
+      };
       entries.set(root, entry);
     }
     return entry;
@@ -145,14 +172,24 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
     return degraded("server_error", msg(error));
   };
 
-  /** The crash policy (unexpected exits after ready): one budgeted lazy respawn, then parked. */
+  /** The crash policy (unexpected exits after ready): one budgeted lazy respawn, then parked.
+   *  A server that had been ready past READY_RESTART_BUDGET_RESET_MS earns a fresh budget
+   *  first - exhaustion parks crash LOOPS, never a root whose crashes are weeks apart. */
   const handleExit = (entry: WorkspaceEntry, info: LspExitInfo): void => {
     if (info.expected || closed || !entry.ready) {
       return; // initialize-phase failures classify through the initialize rejection instead
     }
+    if (
+      entry.readySince !== undefined &&
+      now() - entry.readySince > READY_RESTART_BUDGET_RESET_MS
+    ) {
+      entry.restarts = 0;
+    }
     entry.ready = false;
+    entry.readySince = undefined;
     entry.client = undefined;
     entry.initPromise = undefined;
+    entry.commandResolved = false; // the binary may have changed; the next status re-checks
     entry.restarts += 1;
     entry.lastError = info.detail;
     if (entry.restarts > maxAutoRestarts) {
@@ -183,6 +220,7 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
       ...(options.hostEnv ? { hostEnv: options.hostEnv } : {}),
       requestTimeoutMs,
       initTimeoutMs,
+      ...(options.publishWaitMs !== undefined ? { publishWaitMs: options.publishWaitMs } : {}),
       ...(options.closeGraceMs !== undefined ? { closeGraceMs: options.closeGraceMs } : {}),
       onExit: (info) => handleExit(entry, info),
     });
@@ -191,6 +229,7 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
       await client.initialize();
       entry.initializing = false;
       entry.ready = true;
+      entry.readySince = now();
       entry.lastActivityAt = now();
       return { kind: "ready", client, server: adapter.displayName };
     } catch (error) {
@@ -198,6 +237,7 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
       // terminal discipline): repeated acquires answer from the parked outcome, no respawn storm.
       entry.initializing = false;
       entry.client = undefined;
+      entry.commandResolved = false; // this spawn attempt failed; the next status re-checks
       entry.lastError = msg(error);
       const outcome = degradeError(error);
       entry.failure = {
@@ -227,7 +267,11 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
       return { kind: "ready", client: entry.client, server: adapter.displayName };
     }
     if (!entry.initPromise) {
+      // Acquire is about to spawn, so it always resolves FRESH (a binary installed since the
+      // last look must be found) and refreshes the status branch's cache with what it saw.
       const spawnSpec = adapter.resolveCommand(entry.root);
+      entry.command = spawnSpec;
+      entry.commandResolved = true;
       if (!spawnSpec) {
         return degraded(
           "unavailable",
@@ -309,10 +353,14 @@ export function createLspManager(options: LspManagerOptions = {}): LspManager {
       }
       return { ...base, status: "ready" };
     }
-    // Idle: never spawned, or awaiting a budgeted respawn after a crash.
-    return adapter.resolveCommand(entry.root)
-      ? { ...base, status: "configured" }
-      : { ...base, status: "unavailable" };
+    // Idle: never spawned, or awaiting a budgeted respawn after a crash. The binary lookup is
+    // cached per entry (a stat + PATH walk per snapshot would punish /doctor and lsp_status);
+    // acquire refreshes it, and a crash or failed spawn invalidates it.
+    if (!entry.commandResolved) {
+      entry.command = adapter.resolveCommand(entry.root);
+      entry.commandResolved = true;
+    }
+    return entry.command ? { ...base, status: "configured" } : { ...base, status: "unavailable" };
   };
 
   const doClose = async (): Promise<void> => {

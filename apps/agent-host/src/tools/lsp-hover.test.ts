@@ -33,7 +33,12 @@ function fakeClient(overrides: Partial<LspClient> = {}): LspClient {
     diagnosticsFor: () => undefined,
     waitForDiagnostics: () => Promise.resolve(undefined),
     diagnosticsSnapshot: () => [],
-    capabilities: () => ({}),
+    capabilities: () => ({
+      hoverProvider: true,
+      documentSymbolProvider: true,
+      workspaceSymbolProvider: true,
+      codeActionProvider: true,
+    }),
     shutdown: () => Promise.resolve(),
     state: () => ({ alive: true, initialized: true, stderrTail: "" }),
     ...overrides,

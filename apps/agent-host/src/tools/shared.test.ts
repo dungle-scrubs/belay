@@ -2,15 +2,31 @@ import assert from "node:assert/strict";
 import { Effect, Schema } from "effect";
 import { test } from "vitest";
 import { ToolExecutionError, ToolInputError } from "./errors";
-import { MAX_OUTPUT, simpleTool, toolExecution, toolInput } from "./shared";
+import {
+  boundedText,
+  MAX_OUTPUT,
+  simpleTool,
+  TRUNCATION_NOTICE,
+  toolExecution,
+  toolInput,
+} from "./shared";
 
 /**
  * `simpleTool` is the tool primitive: the body returns core logic only, while the primitive stamps
  * the tool name onto unknown throws/rejections, explicit input failures, explicit execution
- * failures, read-only metadata, and capped output.
+ * failures, read-only metadata, and capped output. `boundedText` is the one flag-carrying
+ * truncation helper behind mcp/content's boundText and lsp/caps's capText.
  */
 
 const NameOnly = Schema.Struct({ x: Schema.optional(Schema.String) });
+
+test("boundedText leaves short text untouched and cuts long text with the shared marker", () => {
+  assert.deepEqual(boundedText("hello", 10), { text: "hello", truncated: false });
+
+  const bounded = boundedText("z".repeat(50), 10);
+  assert.equal(bounded.text, `${"z".repeat(10)}${TRUNCATION_NOTICE}`);
+  assert.equal(bounded.truncated, true);
+});
 
 test("simpleTool wraps unknown throws and explicit sentinel failures with the tool name", async () => {
   const thrown = simpleTool({

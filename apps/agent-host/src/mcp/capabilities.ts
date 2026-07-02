@@ -1,5 +1,5 @@
+import { asNonEmptyString, asRecord } from "@host/boot/decode";
 import type { McpServerConfig } from "./config";
-import { asNonEmptyString, asRecord } from "./decode";
 import { isMcpTransportError } from "./errors";
 import type { McpTransport } from "./transport";
 

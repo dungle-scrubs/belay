@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { LanguageServerAdapter } from "@host/lsp/adapter";
 import { createLspManager, type LspManager, type LspManagerOptions } from "@host/lsp/manager";
 import { buildLspCodeActionsTool, type LspCodeActionsArgs } from "@host/tools/lsp-code-actions";
+import { buildLspDiagnosticsTool } from "@host/tools/lsp-diagnostics";
 import { Effect } from "effect";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { lspFixtureAdapter } from "./fixture-config";
@@ -114,5 +115,38 @@ describe("lsp_code_actions against the fixture server", () => {
         endLine: 1,
       }),
     ).toContain("not installed");
+  });
+
+  it("a server without codeActionProvider degrades to unsupported without asking it", async () => {
+    const lsp = manager({ adapters: [lspFixtureAdapter(["--no-capability=codeAction"])] });
+    // The fixture would happily ANSWER the request; only the capability gate can degrade here.
+    const result = await run(lsp, { file: "fixable.ts", startLine: 1, endLine: 1 });
+    expect(result).toContain("unsupported");
+    expect(result).toContain("codeActionProvider");
+  });
+
+  it("diagnostics then code actions on the same unchanged file share ONE sync + publish", async () => {
+    const lsp = manager();
+    const diagnostics = await Effect.runPromise(
+      buildLspDiagnosticsTool(lsp).execute({ file: "fixable.ts" }),
+    );
+    expect(diagnostics).toContain("oops on line 1");
+
+    // Unchanged content: the second tool reuses the stored publish (the context echo proves
+    // the forwarded diagnostics came from it) instead of re-syncing and waiting again.
+    const actions = await run(lsp, { file: "fixable.ts", startLine: 1, endLine: 1 });
+    expect(actions).toContain("context-echo: 1 diagnostic(s)");
+
+    const acquired = await lsp.acquire();
+    expect(acquired.kind).toBe("ready");
+    if (acquired.kind !== "ready") {
+      return;
+    }
+    const syncs = (await acquired.client.request("fixture/documentSyncs")) as Record<
+      string,
+      { didOpen: number; didChange: number }
+    >;
+    const uri = Object.keys(syncs).find((key) => key.endsWith("fixable.ts")) ?? "";
+    expect(syncs[uri]).toEqual({ didOpen: 1, didChange: 0 });
   });
 });

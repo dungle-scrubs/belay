@@ -25,13 +25,17 @@ test("each TREVOR_LSP_* knob maps to its manager option", () => {
   assert.deepEqual(lspManagerEnvOptions({ TREVOR_LSP_STALE_AFTER_MS: "1" }), {
     staleAfterMs: 1,
   });
+  assert.deepEqual(lspManagerEnvOptions({ TREVOR_LSP_PUBLISH_WAIT_MS: "500" }), {
+    publishWaitMs: 500,
+  });
   assert.deepEqual(
     lspManagerEnvOptions({
       TREVOR_LSP_REQUEST_TIMEOUT_MS: "800",
       TREVOR_LSP_INIT_TIMEOUT_MS: "1500",
       TREVOR_LSP_STALE_AFTER_MS: "60000",
+      TREVOR_LSP_PUBLISH_WAIT_MS: "500",
     }),
-    { requestTimeoutMs: 800, initTimeoutMs: 1500, staleAfterMs: 60000 },
+    { requestTimeoutMs: 800, initTimeoutMs: 1500, staleAfterMs: 60000, publishWaitMs: 500 },
   );
 });
 
@@ -42,15 +46,10 @@ test("malformed, zero, or negative values are ignored, never a crash or a zero t
         TREVOR_LSP_REQUEST_TIMEOUT_MS: bad,
         TREVOR_LSP_INIT_TIMEOUT_MS: bad,
         TREVOR_LSP_STALE_AFTER_MS: bad,
+        TREVOR_LSP_PUBLISH_WAIT_MS: bad,
       }),
       {},
       `"${bad}" must be ignored`,
     );
   }
-});
-
-test("fractional values truncate to whole milliseconds", () => {
-  assert.deepEqual(lspManagerEnvOptions({ TREVOR_LSP_REQUEST_TIMEOUT_MS: "800.9" }), {
-    requestTimeoutMs: 800,
-  });
 });

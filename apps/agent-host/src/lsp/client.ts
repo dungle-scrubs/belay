@@ -1,7 +1,15 @@
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { asRecord } from "@host/boot/decode";
 import { createFrameParser, encodeFrame } from "@host/mcp/framing";
-import { notificationEnvelope, requestEnvelope, responseEnvelope } from "@host/mcp/transport";
+import {
+  armRequestTimeout,
+  decodeRpcError,
+  notificationEnvelope,
+  requestEnvelope,
+  responseEnvelope,
+} from "@host/mcp/transport";
+import { minimalChildEnv } from "@host/processes/child-env";
 import { clipLine } from "@host/tools/shared";
 import { msg } from "@host/transport/messages";
 import type { LspSpawnSpec } from "./adapter";
@@ -10,6 +18,7 @@ import {
   MAX_LSP_DIAGNOSTIC_MESSAGE_CHARS,
   MAX_LSP_SERVER_LOG_CHARS,
   MAX_LSP_STORED_DIAGNOSTICS_PER_FILE,
+  MAX_LSP_STORED_FILES,
 } from "./caps";
 import { type LspDiagnostic, lspSeverityName, rangeFromLsp } from "./contract";
 import {
@@ -29,43 +38,37 @@ import {
  * process and speaks LSP - the initialize/initialized handshake with capability capture,
  * request/response correlation by id with per-request timeouts, didOpen/didChange/didClose
  * document sync (read-only tools still open documents so push-model servers publish
- * diagnostics), a per-uri publishDiagnostics store decoded to the ./contract shapes, graceful
- * shutdown (shutdown request -> exit notification -> grace -> kill), and crash tracking with a
- * bounded stderr tail. Mirrors mcp/stdio-transport's hygiene: the minimal child env allowlist,
- * unref'd + cleared timers, pending-map draining on every death path, and a terminal fate that
- * answers all later requests - a handshake failure reaps the child, never leaves a zombie.
+ * diagnostics; identical content skips the re-sync and keeps the stored publish), a per-uri
+ * publishDiagnostics store decoded to the ./contract shapes (version-gated - a publish tagged
+ * for an earlier document version is dropped - and bounded to MAX_LSP_STORED_FILES entries),
+ * graceful shutdown (shutdown request -> exit notification -> grace -> kill), and crash
+ * tracking with a bounded stderr tail. Mirrors mcp/stdio-transport's hygiene: the shared
+ * minimal child env policy (processes/child-env, D-004), unref'd + cleared timers, pending-map
+ * draining on every death path, and a terminal fate that answers all later requests - every
+ * failure path reaps the child through the SIGTERM -> grace -> SIGKILL ladder, never leaving
+ * a zombie.
  *
  * Wire format: LSP's Content-Length framing IS the framing mcp/framing.ts implements (that
  * module is even documented as "LSP-style"), so this client imports it rather than duplicating
- * a byte parser; the JSON-RPC envelope builders in mcp/transport.ts are protocol-neutral and
- * shared the same way. That cross-subsystem reuse is ACCEPTED coupling for now - if a third
- * JSON-RPC consumer appears, framing/envelopes deserve a protocol-neutral shared home.
+ * a byte parser; the JSON-RPC envelope builders, per-request deadline, and rpc-error decode in
+ * mcp/transport.ts are protocol-neutral and shared the same way (the error VOCABULARY stays
+ * Lsp*). That cross-subsystem reuse is ACCEPTED coupling for now - if a third JSON-RPC
+ * consumer appears, framing/envelopes deserve a protocol-neutral shared home.
  *
  * Responsible for: one language server's child lifecycle, framed JSON-RPC plumbing with
  * classified failures, document sync, and the published-diagnostics store.
  * Not for: adapter selection or workspace status (./manager) and result caps (./caps).
  */
 
-/** The ONLY host env vars an LSP child inherits (mirrors the MCP stdio allowlist, D-004). */
-export const LSP_CHILD_ENV_ALLOWLIST = ["PATH", "HOME", "LANG", "LC_ALL", "TMPDIR"] as const;
-
 export const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 15_000;
 export const DEFAULT_LSP_INIT_TIMEOUT_MS = 10_000;
 
+/** How long waitForDiagnostics waits for a publish by default (still capped by the request
+ *  timeout): publishes follow a sync within moments, so waiters never need the full deadline. */
+export const DEFAULT_LSP_PUBLISH_WAIT_MS = 3_000;
+
 const DEFAULT_CLOSE_GRACE_MS = 2_000;
 const SHUTDOWN_REQUEST_TIMEOUT_MS = 2_000;
-
-/** The secret-minimal child environment: allowlisted host vars only. */
-export function lspChildEnv(hostEnv: NodeJS.ProcessEnv): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const name of LSP_CHILD_ENV_ALLOWLIST) {
-    const value = hostEnv[name];
-    if (value !== undefined) {
-      env[name] = value;
-    }
-  }
-  return env;
-}
 
 /** How one child exit is reported to the manager: expected (shutdown) or a crash. */
 export interface LspExitInfo {
@@ -85,6 +88,8 @@ export interface LspClientOptions {
   readonly requestTimeoutMs?: number;
   /** The initialize handshake's own (usually longer) deadline. */
   readonly initTimeoutMs?: number;
+  /** waitForDiagnostics' default deadline; capped by requestTimeoutMs. */
+  readonly publishWaitMs?: number;
   /** How long shutdown waits for a voluntary exit before SIGKILL. */
   readonly closeGraceMs?: number;
   /** Crash/exit notification for the manager's restart policy. */
@@ -124,7 +129,8 @@ export interface LspClient {
     readonly diagnostics: readonly LspDiagnostic[];
   }[];
   /** Resolves with the next published diagnostics for the uri (or the already-arrived set);
-   *  undefined when the server publishes nothing within the deadline. Never throws. */
+   *  undefined when the server publishes nothing within the deadline (default: the dedicated
+   *  publish-wait deadline, capped by the request timeout). Never throws. */
   readonly waitForDiagnostics: (
     uri: string,
     timeoutMs?: number,
@@ -143,21 +149,19 @@ interface PendingRequest {
   readonly cancelTimeout: () => void;
 }
 
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
-}
-
 /** Spawns the language server's child process and returns the client over it. */
 export function spawnLspClient(options: LspClientOptions): LspClient {
   const serverName = options.serverName;
   const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_LSP_REQUEST_TIMEOUT_MS;
   const initTimeoutMs = options.initTimeoutMs ?? DEFAULT_LSP_INIT_TIMEOUT_MS;
+  const publishWaitMs = Math.min(
+    options.publishWaitMs ?? DEFAULT_LSP_PUBLISH_WAIT_MS,
+    requestTimeoutMs,
+  );
   const closeGraceMs = options.closeGraceMs ?? DEFAULT_CLOSE_GRACE_MS;
 
   const child = spawn(options.spawn.command, [...options.spawn.args], {
-    env: lspChildEnv(options.hostEnv ?? process.env),
+    env: minimalChildEnv(options.hostEnv ?? process.env),
     stdio: ["pipe", "pipe", "pipe"],
   });
 
@@ -179,7 +183,10 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
 
   /** Open documents' sync versions, keyed by uri. */
   const documentVersions = new Map<string, number>();
-  /** The last published diagnostics per uri, decoded and bounded. */
+  /** Open documents' last synced text, keyed by uri (the unchanged-content sync guard). */
+  const documentTexts = new Map<string, string>();
+  /** The last published diagnostics per uri, decoded and bounded; capped at
+   *  MAX_LSP_STORED_FILES entries with oldest-insertion eviction. */
   const published = new Map<string, readonly LspDiagnostic[]>();
   /** Waiters for the next publishDiagnostics per uri. */
   const diagnosticWaiters = new Map<string, ((d?: readonly LspDiagnostic[]) => void)[]>();
@@ -207,8 +214,22 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     }
   };
 
+  const awaitExit = (timeoutMs: number): Promise<boolean> =>
+    exited
+      ? Promise.resolve(true)
+      : new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(false), timeoutMs);
+          timer.unref?.();
+          exitWaiters.push(() => {
+            clearTimeout(timer);
+            resolve(true);
+          });
+        });
+
   /** Every death path lands here exactly once: record the fate and drain every waiter.
-   *  Failure paths reap the child immediately; the graceful shutdown path owns its own exit. */
+   *  Failure paths reap the child immediately - SIGTERM, then SIGKILL after the grace window
+   *  (the same ladder shutdown uses), so a child that ignores SIGTERM cannot linger; the
+   *  graceful shutdown path owns its own exit. */
   const terminate = (error: LspClientError, terminalKind: "failed" | "closed"): void => {
     if (fate) {
       return;
@@ -223,6 +244,11 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     }
     if (terminalKind === "failed" && !exited) {
       child.kill();
+      void awaitExit(closeGraceMs).then((exitedInGrace) => {
+        if (!exitedInGrace) {
+          child.kill("SIGKILL");
+        }
+      });
     }
   };
 
@@ -232,17 +258,6 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     } catch {
       // A dead child's stdin can throw synchronously; the exit/error handlers classify it.
     }
-  };
-
-  const armTimeout = (method: string, timeoutMs: number, id: number): (() => void) => {
-    const timer = setTimeout(() => {
-      const entry = settle(id);
-      if (entry) {
-        entry.reject(fail(new LspTimeoutError({ server: serverName, method, timeoutMs })));
-      }
-    }, timeoutMs);
-    timer.unref?.();
-    return () => clearTimeout(timer);
   };
 
   const requestWithTimeout = (
@@ -257,16 +272,34 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       }
       const id = nextId;
       nextId += 1;
-      const cancelTimeout = armTimeout(method, timeoutMs, id);
+      const cancelTimeout = armRequestTimeout(
+        serverName,
+        method,
+        timeoutMs,
+        LspTimeoutError,
+        (timeout) => {
+          const entry = settle(id);
+          if (entry) {
+            entry.reject(fail(timeout));
+          }
+        },
+      );
       pending.set(id, { method, resolve, reject, cancelTimeout });
       send(requestEnvelope(id, method, params));
     });
 
-  /** Decodes one publishDiagnostics params object into bounded contract diagnostics. */
+  /** Decodes one publishDiagnostics params object into bounded contract diagnostics. A publish
+   *  tagged with a version OLDER than the document's current sync is a stale wave for previous
+   *  content and is dropped - the store keeps waiting for the current version's publish. */
   const storePublishedDiagnostics = (raw: unknown): void => {
     const params = asRecord(raw);
     const uri = typeof params?.uri === "string" ? params.uri : undefined;
     if (!uri) {
+      return;
+    }
+    const version = typeof params?.version === "number" ? params.version : undefined;
+    const currentVersion = documentVersions.get(uri);
+    if (version !== undefined && currentVersion !== undefined && version < currentVersion) {
       return;
     }
     const entries = Array.isArray(params?.diagnostics) ? params.diagnostics : [];
@@ -287,6 +320,13 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     });
     const bounded = capItems(decoded, MAX_LSP_STORED_DIAGNOSTICS_PER_FILE).items;
     published.set(uri, bounded);
+    if (published.size > MAX_LSP_STORED_FILES) {
+      // Evict the oldest entry (insertion order) so a long session cannot grow unbounded.
+      const oldest = published.keys().next().value;
+      if (oldest !== undefined) {
+        published.delete(oldest);
+      }
+    }
     wakeDiagnosticWaiters(uri, bounded);
   };
 
@@ -325,17 +365,7 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
         return; // a late response after timeout/shutdown - nothing to correlate
       }
       if ("error" in message) {
-        const error = asRecord(message.error) ?? {};
-        entry.reject(
-          fail(
-            new LspRpcError({
-              server: serverName,
-              method: entry.method,
-              ...(typeof error.code === "number" ? { code: error.code } : {}),
-              detail: typeof error.message === "string" ? error.message : "JSON-RPC error",
-            }),
-          ),
-        );
+        entry.reject(fail(decodeRpcError(serverName, entry.method, message.error, LspRpcError)));
         return;
       }
       entry.resolve(message.result);
@@ -480,18 +510,6 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     }
   };
 
-  const awaitExit = (timeoutMs: number): Promise<boolean> =>
-    exited
-      ? Promise.resolve(true)
-      : new Promise((resolve) => {
-          const timer = setTimeout(() => resolve(false), timeoutMs);
-          timer.unref?.();
-          exitWaiters.push(() => {
-            clearTimeout(timer);
-            resolve(true);
-          });
-        });
-
   const doShutdown = async (): Promise<void> => {
     closing = true;
     if (!exited && fate === null) {
@@ -527,8 +545,12 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       if (fate) {
         return;
       }
-      published.delete(uri); // the previous publish is stale for the new content
       const version = documentVersions.get(uri);
+      if (version !== undefined && documentTexts.get(uri) === text) {
+        return; // identical content is already synced; the stored publish stays valid
+      }
+      published.delete(uri); // the previous publish is stale for the new content
+      documentTexts.set(uri, text);
       if (version === undefined) {
         documentVersions.set(uri, 1);
         send(
@@ -552,13 +574,14 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
         return;
       }
       documentVersions.delete(uri);
+      documentTexts.delete(uri);
       published.delete(uri);
       send(notificationEnvelope("textDocument/didClose", { textDocument: { uri } }));
     },
     diagnosticsFor: (uri) => published.get(uri),
     diagnosticsSnapshot: () =>
       [...published.entries()].map(([uri, diagnostics]) => ({ uri, diagnostics })),
-    waitForDiagnostics: (uri, timeoutMs = requestTimeoutMs) => {
+    waitForDiagnostics: (uri, timeoutMs = publishWaitMs) => {
       const arrived = published.get(uri);
       if (arrived !== undefined || fate) {
         return Promise.resolve(arrived);

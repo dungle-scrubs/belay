@@ -1,3 +1,4 @@
+import { envPositiveMs } from "@host/boot/env";
 import { createLspManager, type LspManager, type LspManagerOptions } from "./manager";
 
 /**
@@ -8,34 +9,28 @@ import { createLspManager, type LspManager, type LspManagerOptions } from "./man
  * process, socket, or file handle. Stdio language servers exit on parent death regardless of an
  * explicit close (their stdin pipe closes), so a hard exit cannot orphan them.
  *
- * Timeouts and the stale threshold are env-tunable (plan 24 M7, D-006): the host reads pure env,
- * so `TREVOR_LSP_REQUEST_TIMEOUT_MS`, `TREVOR_LSP_INIT_TIMEOUT_MS`, and
- * `TREVOR_LSP_STALE_AFTER_MS` override the manager defaults per machine (a slow language server,
- * a hermetic test bounding its wall time). Absent or malformed values contribute nothing.
+ * Timeouts, the publish-wait deadline, and the stale threshold are env-tunable (plan 24 M7,
+ * D-006): the host reads pure env, so `TREVOR_LSP_REQUEST_TIMEOUT_MS`,
+ * `TREVOR_LSP_INIT_TIMEOUT_MS`, `TREVOR_LSP_PUBLISH_WAIT_MS`, and `TREVOR_LSP_STALE_AFTER_MS`
+ * override the manager defaults per machine (a slow language server, a hermetic test bounding
+ * its wall time). Absent or malformed values contribute nothing (boot/env's envPositiveMs).
  *
  * Responsible for: constructing and exporting the one host LSP manager, and the env -> options
  * mapping that configures it.
- * Not for: lifecycle mechanics (./manager), adapter selection (./adapter), or the model-facing
- * tool surfaces (@host/tools/lsp-*).
+ * Not for: lifecycle mechanics (./manager), adapter selection (./adapter), the env-number
+ * idiom (@host/boot/env), or the model-facing tool surfaces (@host/tools/lsp-*).
  */
-
-/** A positive whole-millisecond env value, or undefined for absent/malformed/non-positive. */
-function envMs(raw: string | undefined): number | undefined {
-  if (raw === undefined || raw.trim().length === 0) {
-    return undefined;
-  }
-  const value = Math.trunc(Number(raw));
-  return Number.isFinite(value) && value > 0 ? value : undefined;
-}
 
 /** The manager options the TREVOR_LSP_* env knobs contribute; {} leaves every default in place. */
 export function lspManagerEnvOptions(env: NodeJS.ProcessEnv): LspManagerOptions {
-  const requestTimeoutMs = envMs(env.TREVOR_LSP_REQUEST_TIMEOUT_MS);
-  const initTimeoutMs = envMs(env.TREVOR_LSP_INIT_TIMEOUT_MS);
-  const staleAfterMs = envMs(env.TREVOR_LSP_STALE_AFTER_MS);
+  const requestTimeoutMs = envPositiveMs(env, "TREVOR_LSP_REQUEST_TIMEOUT_MS");
+  const initTimeoutMs = envPositiveMs(env, "TREVOR_LSP_INIT_TIMEOUT_MS");
+  const publishWaitMs = envPositiveMs(env, "TREVOR_LSP_PUBLISH_WAIT_MS");
+  const staleAfterMs = envPositiveMs(env, "TREVOR_LSP_STALE_AFTER_MS");
   return {
     ...(requestTimeoutMs !== undefined ? { requestTimeoutMs } : {}),
     ...(initTimeoutMs !== undefined ? { initTimeoutMs } : {}),
+    ...(publishWaitMs !== undefined ? { publishWaitMs } : {}),
     ...(staleAfterMs !== undefined ? { staleAfterMs } : {}),
   };
 }

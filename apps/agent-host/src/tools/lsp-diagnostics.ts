@@ -113,10 +113,12 @@ async function workspaceSummary(
     `LSP diagnostics summary: ${files.length} file(s), ${all.length} ${severityLabel(severity)}diagnostic(s) (${formatSeverityCounts(all)})`,
   ];
   let budget = MAX_LSP_DIAGNOSTICS;
+  let shownFiles = 0;
   for (const entry of files) {
     if (budget <= 0) {
       break;
     }
+    shownFiles += 1;
     lines.push(`${entry.file} (${formatSeverityCounts(entry.diagnostics)}):`);
     const shown = entry.diagnostics.slice(0, budget);
     lines.push(...shown.map((diagnostic) => `  ${formatDiagnosticLine(diagnostic)}`));
@@ -125,6 +127,10 @@ async function workspaceSummary(
   const remaining = all.length - Math.min(all.length, MAX_LSP_DIAGNOSTICS);
   if (remaining > 0) {
     lines.push(`…and ${remaining} more not shown`);
+  }
+  const hiddenFiles = files.length - shownFiles;
+  if (hiddenFiles > 0) {
+    lines.push(`(${hiddenFiles} more file(s) not shown)`);
   }
   return lines.join("\n");
 }

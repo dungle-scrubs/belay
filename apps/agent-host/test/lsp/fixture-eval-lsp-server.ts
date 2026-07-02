@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { pumpStdinFrames, send } from "../support/stdio-frames";
 
 /**
  * The WORKSPACE-DERIVED stdio LSP fixture for the plan 24 M7 evals: unlike
@@ -9,8 +10,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  * (a workspace-symbol result that carries the true definition location, an outline that covers
  * a file's actual top-level symbols, a hover that returns the declared signature, diagnostics
  * that pinpoint the offending file+line) measure genuine navigation value, not echoes. It
- * speaks JSON-RPC 2.0 over LSP Content-Length frames with its own tiny framing implementation,
- * per the fixture precedent, so the tests stay cross-implementation.
+ * speaks JSON-RPC 2.0 over LSP Content-Length frames through the shared fixture frame pump
+ * (../support/stdio-frames - independent of the production parser, per the fixture precedent),
+ * so the tests stay cross-implementation.
  *
  * Behaviors, all derived from workspace content:
  * - `workspace/symbol`: scans the workspace's .ts files for top-level declarations whose name
@@ -62,40 +64,7 @@ let rootPath = process.cwd();
 /** The open documents' current full text, keyed by uri (full-sync fixture). */
 const documents = new Map<string, string>();
 
-let buffer = Buffer.alloc(0);
-
-process.stdin.on("data", (chunk: Buffer) => {
-  buffer = Buffer.concat([buffer, chunk]);
-  drainFrames();
-});
-process.stdin.on("end", () => process.exit(0));
-
-function drainFrames(): void {
-  while (true) {
-    const headerEnd = buffer.indexOf("\r\n\r\n");
-    if (headerEnd === -1) {
-      return;
-    }
-    const header = buffer.subarray(0, headerEnd).toString("utf8");
-    const match = /content-length:\s*(\d+)/i.exec(header);
-    if (!match?.[1]) {
-      process.exit(2);
-    }
-    const length = Number(match[1]);
-    const bodyStart = headerEnd + 4;
-    if (buffer.length < bodyStart + length) {
-      return;
-    }
-    const body = buffer.subarray(bodyStart, bodyStart + length).toString("utf8");
-    buffer = buffer.subarray(bodyStart + length);
-    handle(JSON.parse(body) as JsonRpcIn);
-  }
-}
-
-function send(message: unknown): void {
-  const body = JSON.stringify(message);
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
-}
+pumpStdinFrames((body) => handle(JSON.parse(body) as JsonRpcIn));
 
 function result(id: JsonRpcIn["id"], value: unknown): void {
   send({ jsonrpc: "2.0", id, result: value });

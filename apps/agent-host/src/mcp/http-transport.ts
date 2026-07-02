@@ -1,10 +1,11 @@
+import { asRecord } from "@host/boot/decode";
 import { type McpHttpServerConfig, redactMcpEndpoint } from "./config";
-import { asRecord } from "./decode";
 import {
   isMcpTransportError,
   McpAuthRequiredError,
   McpClosedError,
   McpMalformedResponseError,
+  McpRpcError,
   McpTimeoutError,
   type McpTransportError,
   type McpTransportErrorTag,
@@ -116,7 +117,7 @@ export function createHttpTransport(
       return undefined;
     }
     if ("error" in message) {
-      throw fail(decodeRpcError(server.name, method, message.error));
+      throw fail(decodeRpcError(server.name, method, message.error, McpRpcError));
     }
     return { value: message.result };
   };
@@ -172,7 +173,7 @@ export function createHttpTransport(
     try {
       const error = asRecord(JSON.parse(text))?.error;
       if (asRecord(error)) {
-        return fail(decodeRpcError(server.name, method, error, `HTTP ${httpStatus}`));
+        return fail(decodeRpcError(server.name, method, error, McpRpcError, `HTTP ${httpStatus}`));
       }
     } catch {
       // fall through: a non-JSON failure body is malformed
@@ -264,10 +265,16 @@ export function createHttpTransport(
     const controller = new AbortController();
     inflight.add(controller);
     let timedOut = false;
-    const disarm = armRequestTimeout(server.name, method, server.requestTimeoutMs, () => {
-      timedOut = true;
-      controller.abort();
-    });
+    const disarm = armRequestTimeout(
+      server.name,
+      method,
+      server.requestTimeoutMs,
+      McpTimeoutError,
+      () => {
+        timedOut = true;
+        controller.abort();
+      },
+    );
     try {
       const response = await fetch(server.endpoint, {
         method: "POST",

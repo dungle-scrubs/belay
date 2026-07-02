@@ -1,5 +1,6 @@
 import { accessSync, constants, readFileSync, statSync } from "node:fs";
 import { delimiter, join } from "node:path";
+import { asRecord } from "@host/boot/decode";
 
 /**
  * The generic language-server adapter boundary (plan 24 M2, D-004): what the runtime manager
@@ -95,19 +96,18 @@ function isExecutable(path: string): boolean {
 /** True when package.json names typescript in dependencies or devDependencies. Tolerant:
  *  absent or malformed JSON is simply "no". */
 function dependsOnTypeScript(packageJsonPath: string): boolean {
-  let parsed: unknown;
+  let record: Record<string, unknown> | undefined;
   try {
-    parsed = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+    record = asRecord(JSON.parse(readFileSync(packageJsonPath, "utf8")));
   } catch {
     return false;
   }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+  if (!record) {
     return false;
   }
-  const record = parsed as Record<string, unknown>;
   for (const field of ["dependencies", "devDependencies"]) {
-    const deps = record[field];
-    if (typeof deps === "object" && deps !== null && "typescript" in deps) {
+    const deps = asRecord(record[field]);
+    if (deps && "typescript" in deps) {
       return true;
     }
   }

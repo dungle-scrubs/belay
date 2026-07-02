@@ -1,9 +1,16 @@
+import { asRecord } from "@host/boot/decode";
 import { MAX_LSP_DOCUMENT_SYMBOLS } from "@host/lsp/caps";
 import { type LspDocumentSymbol, lspSymbolKindName, rangeFromLsp } from "@host/lsp/contract";
 import { describeDegraded, formatRange } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 import { Schema } from "effect";
-import { fileNotFound, loadWorkspaceFile, lspWorkspaceRoot, openWorkspaceFile } from "./lsp-shared";
+import {
+  fileNotFound,
+  loadWorkspaceFile,
+  lspWorkspaceRoot,
+  openWorkspaceFile,
+  unsupportedCapability,
+} from "./lsp-shared";
 import { clipLine, simpleTool } from "./shared";
 import type { Tool } from "./types";
 
@@ -30,12 +37,6 @@ export type LspDocumentSymbolsArgs = typeof Params.Type;
 
 /** Longest rendered symbol detail suffix. */
 const MAX_DETAIL_CHARS = 80;
-
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
-}
 
 /** One wire symbol (hierarchical DocumentSymbol or flat SymbolInformation) to the contract. */
 function decodeSymbol(raw: unknown): LspDocumentSymbol | null {
@@ -108,6 +109,10 @@ export function buildLspDocumentSymbolsTool(manager: LspManager): Tool<LspDocume
       const acquired = await manager.acquire();
       if (acquired.kind === "degraded") {
         return describeDegraded(acquired);
+      }
+      const unsupported = unsupportedCapability(acquired, "documentSymbolProvider");
+      if (unsupported) {
+        return describeDegraded(unsupported);
       }
       openWorkspaceFile(acquired.client, loaded);
       const outcome = await manager.request("textDocument/documentSymbol", {

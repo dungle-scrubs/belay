@@ -127,6 +127,18 @@ describe("lsp_diagnostics against the fixture server", () => {
     expect(errorsOnly).toMatch(/no .*diagnostics/i);
   });
 
+  it("summary names how many files the per-file budget left out", async () => {
+    const lsp = manager();
+    await diagnostics(lsp, { file: "many.ts" });
+    await diagnostics(lsp, { file: "problems.ts" });
+
+    // many.ts alone exhausts the MAX_LSP_DIAGNOSTICS budget, so problems.ts never renders;
+    // the summary must say a file was omitted rather than silently dropping it.
+    const summary = await diagnostics(lsp, {});
+    expect(summary).toContain("(1 more file(s) not shown)");
+    expect(summary).not.toContain("problems.ts (");
+  });
+
   it("summary before any pull explains itself without spawning the server", async () => {
     const lsp = manager();
     const summary = await diagnostics(lsp, {});

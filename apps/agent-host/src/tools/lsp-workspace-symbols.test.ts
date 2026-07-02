@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { MAX_LSP_WORKSPACE_SYMBOLS } from "@host/lsp/caps";
+import type { LspClient } from "@host/lsp/client";
 import { degraded, type LspOutcome, type LspServerStatus, ok } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
 import { ToolInputError } from "@host/tools/errors";
@@ -22,12 +23,29 @@ import {
 
 const ROOT = "/w/symbols";
 
+/** A capable fake client: the tool acquires only to run the capability gate (no doc sync). */
+function fakeClient(): LspClient {
+  return {
+    initialize: () => Promise.resolve({ capabilities: {} }),
+    request: () => Promise.resolve(null),
+    notify: () => {},
+    openDocument: () => {},
+    closeDocument: () => {},
+    diagnosticsFor: () => undefined,
+    waitForDiagnostics: () => Promise.resolve(undefined),
+    diagnosticsSnapshot: () => [],
+    capabilities: () => ({ workspaceSymbolProvider: true }),
+    shutdown: () => Promise.resolve(),
+    state: () => ({ alive: true, initialized: true, stderrTail: "" }),
+  };
+}
+
 function fakeManager(
   request: (method: string, params?: unknown) => Promise<LspOutcome<unknown>>,
 ): LspManager {
   const snapshot: LspServerStatus = { workspaceRoot: ROOT, status: "ready", restarts: 0 };
   return {
-    acquire: () => Promise.reject(new Error("workspace symbols need no document sync")),
+    acquire: () => Promise.resolve({ kind: "ready", client: fakeClient(), server: "fake-ls" }),
     request,
     status: () => snapshot,
     statusSnapshot: () => [snapshot],

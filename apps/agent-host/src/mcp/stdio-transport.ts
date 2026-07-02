@@ -1,11 +1,14 @@
 import { spawn } from "node:child_process";
+import { MINIMAL_CHILD_ENV_ALLOWLIST, minimalChildEnv } from "@host/processes/child-env";
 import { msg } from "@host/transport/messages";
 import type { McpStdioServerConfig } from "./config";
 import {
   isMcpTransportError,
   McpClosedError,
   McpMalformedResponseError,
+  McpRpcError,
   McpServerCrashError,
+  McpTimeoutError,
   type McpTransportError,
   type McpTransportErrorTag,
 } from "./errors";
@@ -42,8 +45,9 @@ import {
  * Not for: frame byte-parsing (./framing) or capability discovery/caching (./capabilities).
  */
 
-/** D-004: the ONLY host env vars an MCP stdio child inherits (plus explicit per-server env). */
-export const STDIO_CHILD_ENV_ALLOWLIST = ["PATH", "HOME", "LANG", "LC_ALL", "TMPDIR"] as const;
+/** D-004: the ONLY host env vars an MCP stdio child inherits (plus explicit per-server env);
+ *  the shared processes/child-env policy under this transport's established name. */
+export const STDIO_CHILD_ENV_ALLOWLIST = MINIMAL_CHILD_ENV_ALLOWLIST;
 
 const DEFAULT_CLOSE_GRACE_MS = 2_000;
 const STDERR_TAIL_CHARS = 2_048;
@@ -53,14 +57,7 @@ export function stdioChildEnv(
   hostEnv: NodeJS.ProcessEnv,
   serverEnv: Readonly<Record<string, string>>,
 ): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const name of STDIO_CHILD_ENV_ALLOWLIST) {
-    const value = hostEnv[name];
-    if (value !== undefined) {
-      env[name] = value;
-    }
-  }
-  return { ...env, ...serverEnv };
+  return minimalChildEnv(hostEnv, serverEnv);
 }
 
 export interface StdioTransportOptions {
@@ -187,7 +184,7 @@ export function spawnStdioTransport(
         return; // a late response after timeout/close - nothing to correlate
       }
       if ("error" in message) {
-        entry.reject(fail(decodeRpcError(server.name, entry.method, message.error)));
+        entry.reject(fail(decodeRpcError(server.name, entry.method, message.error, McpRpcError)));
         return;
       }
       entry.resolve(message.result);
@@ -284,6 +281,7 @@ export function spawnStdioTransport(
         server.name,
         method,
         server.requestTimeoutMs,
+        McpTimeoutError,
         (timeout) => {
           const entry = settle(id);
           if (entry) {

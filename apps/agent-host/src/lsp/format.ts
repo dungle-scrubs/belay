@@ -51,7 +51,6 @@ const DEGRADED_REASON_WORDS: Record<LspDegraded["reason"], string> = {
   unavailable: "unavailable",
   unsupported: "unsupported",
   timeout: "timed out",
-  stale: "stale",
   server_error: "error",
 };
 

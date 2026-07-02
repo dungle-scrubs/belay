@@ -1,10 +1,5 @@
-import { asRecord } from "./decode";
-import {
-  McpHandshakeError,
-  McpRpcError,
-  McpTimeoutError,
-  type McpTransportErrorTag,
-} from "./errors";
+import { asRecord } from "@host/boot/decode";
+import { McpHandshakeError, type McpTransportErrorTag } from "./errors";
 
 /**
  * The transport-agnostic MCP client contract (plan 23 M3): the one interface every transport
@@ -104,15 +99,28 @@ export function responseEnvelope(
     : { jsonrpc: "2.0", id, error: outcome.error };
 }
 
-/** Decodes a JSON-RPC `error` member into the typed per-request failure. */
-export function decodeRpcError(
+/** The props a JSON-RPC-error class (McpRpcError, LspRpcError) is constructed from. */
+export interface RpcErrorProps {
+  readonly server: string;
+  readonly method: string;
+  readonly code?: number;
+  readonly detail: string;
+}
+
+/**
+ * Decodes a JSON-RPC `error` member into the typed per-request failure. Generic over the
+ * error constructor so each protocol keeps its own vocabulary (McpRpcError, LspRpcError)
+ * without re-spelling the tolerant decode.
+ */
+export function decodeRpcError<E>(
   server: string,
   method: string,
   raw: unknown,
+  rpcError: new (props: RpcErrorProps) => E,
   fallbackDetail = "JSON-RPC error",
-): McpRpcError {
+): E {
   const error = asRecord(raw) ?? {};
-  return new McpRpcError({
+  return new rpcError({
     server,
     method,
     ...(typeof error.code === "number" ? { code: error.code } : {}),
@@ -195,18 +203,28 @@ export function decodeInitializeResult(
   };
 }
 
+/** The props a request-timeout class (McpTimeoutError, LspTimeoutError) is constructed from. */
+export interface TimeoutErrorProps {
+  readonly server: string;
+  readonly method: string;
+  readonly timeoutMs: number;
+}
+
 /**
  * Arms the shared per-request deadline: after `timeoutMs` the callback receives the typed
- * timeout error. Returns the disposer; the timer never keeps the process alive.
+ * timeout error, constructed through the given class so each protocol keeps its own vocabulary
+ * (McpTimeoutError, LspTimeoutError). Returns the disposer; the timer never keeps the process
+ * alive.
  */
-export function armRequestTimeout(
+export function armRequestTimeout<E>(
   server: string,
   method: string,
   timeoutMs: number,
-  onTimeout: (error: McpTimeoutError) => void,
+  timeoutError: new (props: TimeoutErrorProps) => E,
+  onTimeout: (error: E) => void,
 ): () => void {
   const timer = setTimeout(
-    () => onTimeout(new McpTimeoutError({ server, method, timeoutMs })),
+    () => onTimeout(new timeoutError({ server, method, timeoutMs })),
     timeoutMs,
   );
   timer.unref?.();

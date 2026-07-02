@@ -1,9 +1,10 @@
+import { asRecord } from "@host/boot/decode";
 import { capItems, MAX_LSP_WORKSPACE_SYMBOLS } from "@host/lsp/caps";
 import { type LspWorkspaceSymbol, lspSymbolKindName, rangeFromLsp } from "@host/lsp/contract";
 import { describeDegraded, displayPath, formatPosition } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 import { Schema } from "effect";
-import { lspWorkspaceRoot } from "./lsp-shared";
+import { lspWorkspaceRoot, unsupportedCapability } from "./lsp-shared";
 import { clamp, simpleTool, toolInput } from "./shared";
 import type { Tool } from "./types";
 
@@ -37,12 +38,6 @@ const Params = Schema.Struct({
 });
 
 export type LspWorkspaceSymbolsArgs = typeof Params.Type;
-
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
-}
 
 /** One wire SymbolInformation/WorkspaceSymbol to the contract shape. */
 function decodeSymbol(raw: unknown): LspWorkspaceSymbol | null {
@@ -89,6 +84,14 @@ export function buildLspWorkspaceSymbolsTool(manager: LspManager): Tool<LspWorks
         );
       }
       const limit = clamp(args.limit, 1, MAX_LSP_WORKSPACE_SYMBOLS, DEFAULT_LIMIT);
+      const acquired = await manager.acquire();
+      if (acquired.kind === "degraded") {
+        return describeDegraded(acquired);
+      }
+      const unsupported = unsupportedCapability(acquired, "workspaceSymbolProvider");
+      if (unsupported) {
+        return describeDegraded(unsupported);
+      }
       const outcome = await manager.request("workspace/symbol", { query });
       if (outcome.kind === "degraded") {
         return describeDegraded(outcome);

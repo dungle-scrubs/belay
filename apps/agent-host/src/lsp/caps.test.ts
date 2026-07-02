@@ -10,10 +10,10 @@ import {
   MAX_LSP_DIAGNOSTICS,
   MAX_LSP_DOCUMENT_SYMBOLS,
   MAX_LSP_HOVER_CHARS,
-  MAX_LSP_LOCATIONS,
   MAX_LSP_PROPOSAL_TEXT_CHARS,
   MAX_LSP_SERVER_LOG_CHARS,
   MAX_LSP_STORED_DIAGNOSTICS_PER_FILE,
+  MAX_LSP_STORED_FILES,
   MAX_LSP_WORKSPACE_SYMBOLS,
 } from "./caps";
 
@@ -26,9 +26,9 @@ test("every list cap is positive and small enough to never dump a project", () =
   const listCaps = [
     MAX_LSP_DIAGNOSTICS,
     MAX_LSP_STORED_DIAGNOSTICS_PER_FILE,
+    MAX_LSP_STORED_FILES,
     MAX_LSP_DOCUMENT_SYMBOLS,
     MAX_LSP_WORKSPACE_SYMBOLS,
-    MAX_LSP_LOCATIONS,
     MAX_LSP_CODE_ACTIONS,
   ];
   for (const cap of listCaps) {

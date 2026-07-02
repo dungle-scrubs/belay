@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ChatMessage, ProviderEvent } from "@trevor/agent-host/testing";
 import { createEvalWorkspace, installEvalServer } from "@trevor/agent-host/testing/lsp-fixtures";
 import type { RunningServer } from "@trevor/server-kit";
 import type { SessionEvent } from "@trevor/session";
@@ -122,28 +121,6 @@ interface ScriptedCall {
   readonly args: Record<string, unknown>;
 }
 
-/** A fake-provider step script: one scripted tool call per step, then a final text answer. */
-const lspCallScript =
-  (calls: readonly ScriptedCall[], answer: string) =>
-  (messages: readonly ChatMessage[]): ProviderEvent[] => {
-    const done = messages.filter((m) => m.role === "tool").length;
-    const usage = {
-      type: "usage" as const,
-      usage: { input: 10, output: 5, contextWindow: 100_000, genMs: 1 },
-    };
-    const next = calls[done];
-    if (!next) {
-      return [{ type: "text", text: answer }, usage];
-    }
-    return [
-      {
-        type: "tool_call",
-        call: { id: `lsp-${done + 1}`, name: next.name, arguments: JSON.stringify(next.args) },
-      },
-      usage,
-    ];
-  };
-
 /** Runs a scripted fake-provider turn through the real store and returns the subscriber. */
 async function runLspTurn(
   sessionId: string,
@@ -157,7 +134,7 @@ async function runLspTurn(
 
   await host.publishTurnVia(
     host.transportEmit(transport, sessionId, "host"),
-    host.fakeProvider({ step: lspCallScript(calls, answer) }),
+    host.fakeProvider({ step: host.scriptedStep(calls, answer) }),
     [{ role: "user", content: "Use the language server tools." }],
     { runId: `r-${sessionId}` },
   );

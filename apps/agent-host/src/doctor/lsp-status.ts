@@ -3,6 +3,7 @@ import { MAX_LSP_DEGRADED_DETAIL_CHARS } from "@host/lsp/caps";
 import type { LspServerStatus } from "@host/lsp/contract";
 import { clipLine } from "@host/tools/shared";
 import { type DoctorFinding, relativeTime } from "@trevor/session";
+import { plural, statusHistogram } from "./format";
 import type { DoctorLspDiagnostics, PeripheralState } from "./probe-input";
 
 /**
@@ -20,8 +21,6 @@ import type { DoctorLspDiagnostics, PeripheralState } from "./probe-input";
  * Not for: reading live manager state (host-facts.ts injects the snapshot) or rendering the
  * area (areas-connectivity.ts peripheralArea + snapshot.ts).
  */
-
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Abbreviates every home-prefixed path and clips to one bounded line. */
 function scrub(detail: string): string {
@@ -167,13 +166,7 @@ export function lspDebugSummary(entries: readonly LspServerStatus[]): string | u
   if (configured.length === 0) {
     return undefined;
   }
-  const counts = new Map<string, number>();
-  for (const entry of configured) {
-    counts.set(entry.status, (counts.get(entry.status) ?? 0) + 1);
-  }
-  const breakdown = [...counts.entries()]
-    .map(([status, count]) => `${count} ${status}`)
-    .join(" · ");
+  const breakdown = statusHistogram(configured.map((entry) => entry.status));
   const diagnostics = lspStoredDiagnostics(configured);
   const stored = diagnostics && diagnostics.errors > 0 ? ` · ${diagnosticCounts(diagnostics)}` : "";
   return `${plural(configured.length, "workspace")} · ${breakdown}${stored}`;

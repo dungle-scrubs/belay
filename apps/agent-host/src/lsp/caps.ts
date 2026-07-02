@@ -1,4 +1,4 @@
-import { TRUNCATION_NOTICE } from "@host/tools/shared";
+import { type BoundedText, boundedText } from "@host/tools/shared";
 
 /**
  * Result-size caps for the LSP subsystem (plan 24 M1). Every LSP payload the model or the UI
@@ -18,6 +18,10 @@ export const MAX_LSP_DIAGNOSTICS = 50;
 /** Most published diagnostics the client retains per file; later ones are dropped at the door. */
 export const MAX_LSP_STORED_DIAGNOSTICS_PER_FILE = 200;
 
+/** Most files the client's published-diagnostics store retains; the oldest entry (insertion
+ *  order) is evicted on overflow, so a long session cannot grow the store unbounded. */
+export const MAX_LSP_STORED_FILES = 100;
+
 /** Longest single diagnostic message (one-line clipped). */
 export const MAX_LSP_DIAGNOSTIC_MESSAGE_CHARS = 400;
 
@@ -29,9 +33,6 @@ export const MAX_LSP_DOCUMENT_SYMBOLS = 200;
 
 /** Most workspace-symbol matches one query returns. */
 export const MAX_LSP_WORKSPACE_SYMBOLS = 50;
-
-/** Most locations any location-list result returns. */
-export const MAX_LSP_LOCATIONS = 50;
 
 /** Most code-action proposals one request returns. */
 export const MAX_LSP_CODE_ACTIONS = 20;
@@ -58,15 +59,8 @@ export function capItems<T>(items: readonly T[], max: number): CappedItems<T> {
   return { items: items.slice(0, max), truncated: true };
 }
 
-export interface CappedText {
-  readonly text: string;
-  readonly truncated: boolean;
-}
+export type CappedText = BoundedText;
 
-/** Cuts text at `maxChars` with the host's standard truncation marker, flagging the cut. */
-export function capText(text: string, maxChars: number): CappedText {
-  if (text.length <= maxChars) {
-    return { text, truncated: false };
-  }
-  return { text: `${text.slice(0, maxChars)}${TRUNCATION_NOTICE}`, truncated: true };
-}
+/** Cuts text at `maxChars` with the host's standard truncation marker, flagging the cut - the
+ *  shared tools/shared boundedText under the LSP subsystem's established name. */
+export const capText: (text: string, maxChars: number) => CappedText = boundedText;

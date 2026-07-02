@@ -1,7 +1,7 @@
 import { asPositiveInt } from "@host/boot/coerce";
 import { loadJsonConfig } from "@host/boot/config";
+import { asNonEmptyString, asRecord } from "@host/boot/decode";
 import { USER_MCP_SERVERS_JSON } from "@host/boot/paths";
-import { asNonEmptyString, asRecord } from "./decode";
 
 /**
  * The normalized MCP server config model (plan 23 M1). MCP is a generalized host-owned runtime

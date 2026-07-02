@@ -31,6 +31,39 @@ export interface FakeProviderOptions {
   ) => Stream.Stream<ProviderEvent, ProviderError>;
 }
 
+export interface ScriptedCall {
+  readonly name: string;
+  readonly args: Record<string, unknown>;
+}
+
+/**
+ * A step script that runs each scripted tool call exactly once, in order (one call per model
+ * step, never retried), then answers with `answer`. The shared shape of every "call these
+ * tools, then conclude" turn across the LSP/MCP integration and e2e suites.
+ */
+export function scriptedStep(
+  calls: readonly ScriptedCall[],
+  answer: string,
+): (messages: readonly ChatMessage[]) => ProviderEvent[] {
+  const scriptedUsage = { input: 10, output: 5, contextWindow: 100_000, genMs: 1 };
+  return (messages) => {
+    const done = messages.filter((message) => message.role === "tool").length;
+    const call = calls[done];
+    return call
+      ? [
+          {
+            type: "tool_call",
+            call: { id: `c${done + 1}`, name: call.name, arguments: JSON.stringify(call.args) },
+          },
+          { type: "usage", usage: scriptedUsage },
+        ]
+      : [
+          { type: "text", text: answer },
+          { type: "usage", usage: scriptedUsage },
+        ];
+  };
+}
+
 /** Default behavior: request a bash tool on step 1, answer once the tool result is present. */
 function defaultStep(messages: readonly ChatMessage[]): ProviderEvent[] {
   const answered = messages.some((m) => m.role === "tool");

@@ -9,6 +9,7 @@ import {
   lspWorkspaceRoot,
   openWorkspaceFile,
   toLspPosition,
+  unsupportedCapability,
 } from "./lsp-shared";
 import { simpleTool } from "./shared";
 import type { Tool } from "./types";
@@ -88,6 +89,10 @@ export function buildLspHoverTool(manager: LspManager): Tool<LspHoverArgs> {
       const acquired = await manager.acquire();
       if (acquired.kind === "degraded") {
         return describeDegraded(acquired);
+      }
+      const unsupported = unsupportedCapability(acquired, "hoverProvider");
+      if (unsupported) {
+        return describeDegraded(unsupported);
       }
       openWorkspaceFile(acquired.client, loaded);
       const outcome = await manager.request("textDocument/hover", {

@@ -108,13 +108,9 @@ test("a status snapshot names the lifecycle state vocabulary", () => {
 });
 
 test("every degraded reason constructs a plain result variant, never a throw (D-006)", () => {
-  assert.deepEqual(LSP_DEGRADED_REASONS, [
-    "unavailable",
-    "unsupported",
-    "timeout",
-    "stale",
-    "server_error",
-  ]);
+  // "stale" is a STATUS word (LspServerStatusKind), never a degraded reason: a quiet-but-ready
+  // server still answers, so nothing ever degrades as stale.
+  assert.deepEqual(LSP_DEGRADED_REASONS, ["unavailable", "unsupported", "timeout", "server_error"]);
   for (const reason of LSP_DEGRADED_REASONS) {
     const outcome = degraded(reason, `the server said: ${reason}`);
     assert.equal(outcome.kind, "degraded");
@@ -179,10 +175,8 @@ test("symbol kind numbers decode to readable names, unknown degrades to symbol",
 
 /**
  * D-007 read-only declaration (plan task 7/8). The packages/session TOOL_DESCRIPTORS parity
- * test pins that table 1:1 against the host's REAL tool defs, and the LSP tools only exist
- * from M3-M5 - so the six names join TOOL_DESCRIPTORS with each tool def, and THIS contract
- * pins their read-only nature now: every declared LSP tool is read-only, and the forward
- * guard fails if an M3-M5 registration ever lands one as a mutating barrier.
+ * test pins that table 1:1 against the host's REAL tool defs; with every M3-M5 tool landed,
+ * the forward guard here asserts each LSP name IS registered there and read-only.
  */
 
 test("the six LSP tools are declared, each read-only (D-007)", () => {
@@ -200,13 +194,12 @@ test("the six LSP tools are declared, each read-only (D-007)", () => {
   }
 });
 
-test("forward guard: any LSP tool registered in the shared table must be read-only", () => {
-  // Widened: the literal-union table does not carry LSP names until M3-M5 register them.
+test("forward guard: every LSP tool is registered in the shared table as read-only", () => {
+  // Widened: LSP_TOOL_NAMES is a separate literal union from the table's name union.
   const table: readonly ToolDescriptor[] = TOOL_DESCRIPTORS;
   for (const name of LSP_TOOL_NAMES) {
     const registered = table.find((tool) => tool.name === name);
-    if (registered) {
-      assert.equal(registered.readOnly, true, `${name} must register as readOnly: true (D-007)`);
-    }
+    assert.ok(registered, `${name} must be registered in TOOL_DESCRIPTORS (D-007)`);
+    assert.equal(registered?.readOnly, true, `${name} must register as readOnly: true (D-007)`);
   }
 });

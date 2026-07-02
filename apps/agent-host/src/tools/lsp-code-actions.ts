@@ -1,3 +1,4 @@
+import { asRecord } from "@host/boot/decode";
 import {
   capItems,
   capText,
@@ -15,6 +16,7 @@ import {
   openWorkspaceFile,
   toLspDiagnostic,
   toLspPosition,
+  unsupportedCapability,
 } from "./lsp-shared";
 import { clipLine, simpleTool } from "./shared";
 import type { Tool } from "./types";
@@ -66,12 +68,6 @@ export type LspCodeActionsArgs = typeof Params.Type;
 
 /** Longest rendered replacement text per edit line. */
 const MAX_EDIT_TEXT_CHARS = 120;
-
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
-}
 
 /** One TextEdit as a reviewable line: `path 1:1-1:5 -> "newText"`. */
 function editLine(uri: string, raw: unknown, root: string): string {
@@ -177,6 +173,10 @@ export function buildLspCodeActionsTool(manager: LspManager): Tool<LspCodeAction
       const acquired = await manager.acquire();
       if (acquired.kind === "degraded") {
         return describeDegraded(acquired);
+      }
+      const unsupported = unsupportedCapability(acquired, "codeActionProvider");
+      if (unsupported) {
+        return describeDegraded(unsupported);
       }
       openWorkspaceFile(acquired.client, loaded);
       // CodeActionContext carries the file's published diagnostics overlapping the requested

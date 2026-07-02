@@ -1,4 +1,10 @@
-import { type LspClient, type LspClientOptions, spawnLspClient } from "@host/lsp/client";
+import { MAX_LSP_STORED_FILES } from "@host/lsp/caps";
+import {
+  type LspClient,
+  type LspClientOptions,
+  type LspExitInfo,
+  spawnLspClient,
+} from "@host/lsp/client";
 import { describe, expect, it } from "vitest";
 import { lspFixtureSpawnSpec } from "./fixture-config";
 
@@ -140,6 +146,28 @@ describe("lsp client - requests", () => {
       });
     });
   });
+
+  it("a failure-path terminate SIGKILLs a child that ignores SIGTERM", async () => {
+    const exits: LspExitInfo[] = [];
+    await withClient(
+      clientOptions({
+        spawn: lspFixtureSpawnSpec(["--ignore-sigterm"]),
+        closeGraceMs: 250,
+        onExit: (info) => exits.push(info),
+      }),
+      async (client) => {
+        await client.initialize();
+        // The garbage body poisons the stream: a terminal failure that must reap the child
+        // even though it ignores SIGTERM (the awaitExit -> SIGKILL ladder).
+        await expect(hover(client, "file:///garbage.ts")).rejects.toMatchObject({
+          _tag: "LspMalformedResponseError",
+        });
+        await expect.poll(() => exits.length, { timeout: 5_000 }).toBe(1);
+        expect(exits[0]).toMatchObject({ expected: false });
+        expect(exits[0]?.detail).toContain("SIGKILL");
+      },
+    );
+  });
 });
 
 describe("lsp client - document sync and diagnostics", () => {
@@ -188,6 +216,88 @@ describe("lsp client - document sync and diagnostics", () => {
       await client.waitForDiagnostics("file:///w/three.ts", 5_000);
       client.closeDocument("file:///w/three.ts");
       expect(await client.waitForDiagnostics("file:///w/three.ts", 5_000)).toHaveLength(0);
+    });
+  });
+
+  it("drops a publish tagged with an older document version (the stale-wave race)", async () => {
+    await withClient(clientOptions(), async (client) => {
+      await client.initialize();
+      const uri = "file:///w/stale-wave.ts";
+      client.openDocument(uri, "typescript", "oops v1");
+      expect(await client.waitForDiagnostics(uri, 5_000)).toHaveLength(1);
+
+      // didChange bumps the document to v2; the fixture answers with a LATE v1-tagged wave.
+      // The client must drop it: the store keeps waiting for v2 instead of serving stale data.
+      client.openDocument(uri, "typescript", "clean v2");
+      expect(await client.waitForDiagnostics(uri, 400)).toBeUndefined();
+      expect(client.diagnosticsFor(uri)).toBeUndefined();
+    });
+  });
+
+  it("skips the didChange for unchanged content and keeps the published entry", async () => {
+    await withClient(clientOptions(), async (client) => {
+      await client.initialize();
+      const uri = "file:///w/same.ts";
+      client.openDocument(uri, "typescript", "oops same");
+      const first = await client.waitForDiagnostics(uri, 5_000);
+      expect(first).toHaveLength(1);
+
+      // Identical content: no re-sync, and the stored publish answers waiters instantly.
+      client.openDocument(uri, "typescript", "oops same");
+      expect(await client.waitForDiagnostics(uri, 5_000)).toEqual(first);
+
+      const syncs = (await client.request("fixture/documentSyncs")) as Record<
+        string,
+        { didOpen: number; didChange: number }
+      >;
+      expect(syncs[uri]).toEqual({ didOpen: 1, didChange: 0 });
+    });
+  });
+
+  it("waits at most the dedicated publish deadline, still capped by the request timeout", async () => {
+    // A silent server must release the waiter at the publish deadline, not the (much longer)
+    // request timeout.
+    await withClient(
+      clientOptions({ requestTimeoutMs: 30_000, publishWaitMs: 300 }),
+      async (client) => {
+        await client.initialize();
+        client.openDocument("file:///w/silent-wait.ts", "typescript", "oops but silent");
+        const startedAt = Date.now();
+        expect(await client.waitForDiagnostics("file:///w/silent-wait.ts")).toBeUndefined();
+        expect(Date.now() - startedAt).toBeLessThan(5_000);
+      },
+    );
+
+    // And the request timeout stays the ceiling when the knob is set higher.
+    await withClient(
+      clientOptions({ requestTimeoutMs: 300, publishWaitMs: 60_000 }),
+      async (client) => {
+        await client.initialize();
+        client.openDocument("file:///w/silent-cap.ts", "typescript", "oops but silent");
+        const startedAt = Date.now();
+        expect(await client.waitForDiagnostics("file:///w/silent-cap.ts")).toBeUndefined();
+        expect(Date.now() - startedAt).toBeLessThan(5_000);
+      },
+    );
+  });
+
+  it("caps the published store at MAX_LSP_STORED_FILES, evicting the oldest uri", async () => {
+    await withClient(clientOptions(), async (client) => {
+      await client.initialize();
+      const uris = Array.from(
+        { length: MAX_LSP_STORED_FILES + 1 },
+        (_, index) => `file:///w/cap-${index}.ts`,
+      );
+      for (const uri of uris) {
+        client.openDocument(uri, "typescript", "oops");
+      }
+      // The pipe is FIFO: once the LAST publish arrived, every earlier one did too.
+      expect(await client.waitForDiagnostics(uris.at(-1) as string, 5_000)).toHaveLength(1);
+
+      const stored = client.diagnosticsSnapshot().map((entry) => entry.uri);
+      expect(stored).toHaveLength(MAX_LSP_STORED_FILES);
+      expect(stored).not.toContain(uris[0]);
+      expect(client.diagnosticsFor(uris[0] as string)).toBeUndefined();
     });
   });
 });

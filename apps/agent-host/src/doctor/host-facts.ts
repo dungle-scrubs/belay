@@ -10,8 +10,9 @@ import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import type { InternetMonitor } from "@host/connectivity/probe";
+import type { LspServerStatus } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
-import type { McpRuntime } from "@host/mcp/runtime";
+import type { McpRuntime, McpServerStatusEntry } from "@host/mcp/runtime";
 import { activeStylePref } from "@host/prefs/style-store";
 import { contextRegistry } from "@host/project-context/registry";
 import type { CatalogSnapshot } from "@host/providers/catalog";
@@ -97,8 +98,13 @@ export function makeHostFacts(deps: HostFactsDeps) {
     lsp,
   } = deps;
 
-  /** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
-  function hostState(): Record<string, unknown> {
+  /** A snapshot of the live turn machine for /doctor: what the host is doing right now.
+   *  Takes the MCP/LSP status snapshots as arguments so one doctorFacts build snapshots each
+   *  runtime exactly once (LSP snapshots can stat the filesystem for idle roots). */
+  function hostState(
+    mcpSnapshot: readonly McpServerStatusEntry[],
+    lspSnapshot: readonly LspServerStatus[],
+  ): Record<string, unknown> {
     const turns = scheduler.debug();
     return {
       live: live(),
@@ -133,11 +139,11 @@ export function makeHostFacts(deps: HostFactsDeps) {
       ...contextState(),
       // MCP runtime status (plan 23 M8): a compact per-status histogram of the configured servers,
       // absent when none are configured. Redaction-safe: server counts + status words only.
-      ...mcpState(),
+      ...mcpState(mcpSnapshot),
       // LSP manager status (plan 24 M8): a compact per-status histogram of the touched workspaces
       // plus stored diagnostic-error counts, absent when no adapter matches. Counts + status
       // words only - never a path, message, or env value.
-      ...lspState(),
+      ...lspState(lspSnapshot),
       // Managed worktrees (D-091): the current row + count, plus any stale (missing-path) entries, so
       // a worktree/session mismatch is visible at a glance.
       ...worktreeState(),
@@ -159,14 +165,14 @@ export function makeHostFacts(deps: HostFactsDeps) {
   }
 
   /** The compact MCP debug line for /doctor's host record; nothing when unconfigured. */
-  function mcpState(): Record<string, string> {
-    const summary = mcpDebugSummary(mcp.statusSnapshot());
+  function mcpState(snapshot: readonly McpServerStatusEntry[]): Record<string, string> {
+    const summary = mcpDebugSummary(snapshot);
     return summary ? { mcp: summary } : {};
   }
 
   /** The compact LSP debug line for /doctor's host record; nothing when no adapter matches. */
-  function lspState(): Record<string, string> {
-    const summary = lspDebugSummary(lsp.statusSnapshot());
+  function lspState(snapshot: readonly LspServerStatus[]): Record<string, string> {
+    const summary = lspDebugSummary(snapshot);
     return summary ? { lsp: summary } : {};
   }
 
@@ -206,12 +212,16 @@ export function makeHostFacts(deps: HostFactsDeps) {
   function doctorFacts(): DoctorRuntimeFacts {
     const cwdLock = workspaceCwdLockFact();
     const style = activeStylePref();
+    // One snapshot per runtime per build: hostState's debug lines and the peripheral rollups
+    // below fold the SAME reads instead of re-snapshotting (LSP snapshots can stat the fs).
+    const mcpSnapshot = mcp.statusSnapshot();
+    const lspSnapshot = lsp.statusSnapshot();
     return {
       cwd: abbrevHome(process.cwd()),
       workspace: abbrevHome(WORKSPACE_ROOT),
       instanceId: instanceId.slice(0, 8),
       role: lease.isLeader() ? "leader" : "standby",
-      host: hostState(),
+      host: hostState(mcpSnapshot, lspSnapshot),
       internet: internet.current(),
       branch: currentGit().branch,
       catalog: catalog().sources,
@@ -227,17 +237,18 @@ export function makeHostFacts(deps: HostFactsDeps) {
       telemetry: telemetryDoctorFacts(),
       // The MCP runtime rollup (plan 23 M8, D-009): per-server status folded into the one
       // peripheral state the doctor MCP area renders; every field is already redacted.
-      mcp: mcpPeripheralState(mcp.statusSnapshot(), Date.now()),
+      mcp: mcpPeripheralState(mcpSnapshot, Date.now()),
       // The LSP manager rollup (plan 24 M8, D-008): per-workspace status folded into the one
       // peripheral state the doctor LSP area renders (details scrubbed + bounded by the fold),
       // plus stored diagnostic counts for the diagnostic-warning finding.
-      ...lspFacts(),
+      ...lspFacts(lspSnapshot),
     };
   }
 
   /** The /doctor LSP facts: the folded peripheral state plus stored-diagnostics counts. */
-  function lspFacts(): Pick<DoctorRuntimeFacts, "lsp" | "lspDiagnostics"> {
-    const snapshot = lsp.statusSnapshot();
+  function lspFacts(
+    snapshot: readonly LspServerStatus[],
+  ): Pick<DoctorRuntimeFacts, "lsp" | "lspDiagnostics"> {
     const diagnostics = lspStoredDiagnostics(snapshot);
     return {
       lsp: lspPeripheralState(snapshot, Date.now()),

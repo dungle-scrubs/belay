@@ -1,4 +1,4 @@
-import { asRecord } from "./decode";
+import { asRecord } from "@host/boot/decode";
 import type { McpServerRequestHandler, McpServerRequestOutcome } from "./transport";
 
 /**

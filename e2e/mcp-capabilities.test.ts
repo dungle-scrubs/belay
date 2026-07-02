@@ -3,11 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
-  ChatMessage,
   McpArgs,
   McpElicitationRequest,
   McpSamplingRequest,
-  ProviderEvent,
 } from "@trevor/agent-host/testing";
 import {
   STDIO_FIXTURE_COMMAND,
@@ -166,28 +164,6 @@ const execute = (tool: McpTool, args: McpArgs): Promise<string> =>
 const executeErr = (tool: McpTool, args: McpArgs): Promise<{ message: string }> =>
   Effect.runPromise(Effect.flip(tool.execute(args)));
 
-/** A fake-provider step script: one mcp tool call per step, then a final text answer. */
-const mcpCallScript =
-  (calls: readonly McpArgs[]) =>
-  (messages: readonly ChatMessage[]): ProviderEvent[] => {
-    const done = messages.filter((m) => m.role === "tool").length;
-    const usage = {
-      type: "usage" as const,
-      usage: { input: 10, output: 5, contextWindow: 1000, genMs: 1 },
-    };
-    const next = calls[done];
-    if (!next) {
-      return [{ type: "text", text: "mcp e2e done." }, usage];
-    }
-    return [
-      {
-        type: "tool_call",
-        call: { id: `mcp-${done + 1}`, name: "mcp", arguments: JSON.stringify(next) },
-      },
-      usage,
-    ];
-  };
-
 /** Runs a scripted fake-provider turn through the real store and returns the subscriber. */
 async function runMcpTurn(
   sessionId: string,
@@ -200,7 +176,12 @@ async function runMcpTurn(
 
   await host.publishTurnVia(
     host.transportEmit(transport, sessionId, "host"),
-    host.fakeProvider({ step: mcpCallScript(calls) }),
+    host.fakeProvider({
+      step: host.scriptedStep(
+        calls.map((args) => ({ name: "mcp", args: { ...args } })),
+        "mcp e2e done.",
+      ),
+    }),
     [{ role: "user", content: "Use the configured MCP servers." }],
     { runId: `r-${sessionId}` },
   );

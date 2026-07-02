@@ -1,5 +1,5 @@
-import { MAX_OUTPUT, TRUNCATION_NOTICE } from "@host/tools/shared";
-import { asRecord } from "./decode";
+import { asRecord } from "@host/boot/decode";
+import { type BoundedText, boundedText, MAX_OUTPUT } from "@host/tools/shared";
 
 /**
  * Tolerant decoding of MCP result payloads into model-safe text (plan 23 M5). Every decoder
@@ -13,17 +13,12 @@ import { asRecord } from "./decode";
  * Not for: execution, identity, or provenance - ./runtime owns those.
  */
 
-export interface BoundedText {
-  readonly text: string;
-  readonly truncated: boolean;
-}
+export type { BoundedText } from "@host/tools/shared";
 
-/** Bounds text at `maxChars` with the host's standard truncation marker, flagging the cut. */
+/** Bounds text at `maxChars` (default MAX_OUTPUT) with the host's standard truncation marker,
+ *  flagging the cut - a thin default over the shared tools/shared boundedText. */
 export function boundText(text: string, maxChars: number = MAX_OUTPUT): BoundedText {
-  if (text.length <= maxChars) {
-    return { text, truncated: false };
-  }
-  return { text: `${text.slice(0, maxChars)}${TRUNCATION_NOTICE}`, truncated: true };
+  return boundedText(text, maxChars);
 }
 
 export interface McpToolResultOutcome {
