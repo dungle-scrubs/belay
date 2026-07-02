@@ -5,7 +5,7 @@ import { envNumber } from "@host/boot/env";
 import { abbrevHome, TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
 import { buildCommandRegistry } from "@host/commands/commands";
-import { debugCommandSpecs, isStopConfirmed } from "@host/commands/debug-commands";
+import { debugCommandSpecs } from "@host/commands/debug-commands";
 import { runDirectHandoff } from "@host/handoff/handoff-flow";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
 import { vimEnabled } from "@host/prefs/vim-store";
@@ -25,12 +25,7 @@ import {
   releaseCwdLock,
 } from "@host/session/cwd-lock";
 import { Lease } from "@host/session/lease";
-import {
-  MAX_RESTART_RESUMES,
-  resumeAfterStop,
-  type StopOutcome,
-  stopSession,
-} from "@host/session/session-lifecycle";
+import { MAX_RESTART_RESUMES, resumeAfterStop } from "@host/session/session-lifecycle";
 import { skillRegistry } from "@host/skills/skills";
 import { describeAgent, discoverAgents } from "@host/subagents/discovery";
 import { CLIPBOARD_TOOL_NAMES, copyLastCopyable, routeClip } from "@host/tools/clip";
@@ -87,6 +82,7 @@ import {
 import { createSwitchCell, type SwitchCell } from "./agent/switch-cell";
 import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
+import { makeLifecycleCommands } from "./commands/lifecycle";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { buildLiveDoctorSnapshot, collectDoctorProbeResults } from "./doctor/build";
@@ -1353,181 +1349,28 @@ const { worktreeSwitch, worktreeNew, worktreeMerge, worktreeDelete, worktreeReco
     announceOnline,
   });
 
-/** Toggles debug-command mode and re-announces, so the slash menu reveals/hides the debug set. */
-function toggleDebug(): void {
-  debugMode = !debugMode;
-  log("host", "debug mode", { on: debugMode });
-  emit(
-    events.commandResult({
-      command: "/debug",
-      text: debugMode
-        ? "✓ debug mode ON — extra commands available (try /restart)"
-        : "debug mode OFF",
-      ok: true,
-    }),
-  ).catch(() => {});
-  // Re-announce so every client's command set (and slash menu) reflects the new surface.
-  announceOnline();
-}
-
-/**
- * Restarts the host IN PLACE (debug-only): spawns a replacement on the SAME session/cwd and retires
- * this process, so a fresh `tsx main.ts` picks up code changes on demand. Unlike `/cd`/`/clear` it
- * keeps the session, so the browser stays put and just reconnects; an in-flight turn is orphaned and
- * the new leader reaps it. The headline reason debug mode exists: a stable (non-watch) host plus an
- * explicit "pick up my changes" instead of an auto-watch restart that silently breaks a live turn.
- */
-async function restartHost(args: string): Promise<void> {
-  // The typed `/restart` stays debug-gated (so a normal session can't be restarted by a stray
-  // keystroke), but the sidebar's explicit "restart" button sends `force` to bypass the gate - a
-  // deliberate click is its own confirmation and shouldn't require toggling debug first.
-  const forced = args.trim() === "force";
-  if (!debugMode && !forced) {
-    await emit(
-      events.commandResult({
-        command: "/restart",
-        text: "Run /debug first — /restart is a debug-mode command.",
-        ok: false,
-      }),
-    );
-    return;
-  }
-  try {
-    const spawned = spawnReplacementHost({
-      cwd: process.cwd(),
-      sessionId: SESSION_ID,
-      workspace: WORKSPACE_ROOT,
-    });
-    await emit(
-      events.commandResult({
-        command: "/restart",
-        text: `✓ restarting host (pid ${spawned.pid}) — reconnecting with fresh code…`,
-        ok: true,
-      }),
-    );
-    log("host", "restart: replacement spawned", { pid: spawned.pid, session: SESSION_ID });
-    retireAfterSessionSwitch();
-  } catch (error) {
-    warn("host", "restart failed", { error: msg(error) });
-    await emit(
-      events.commandResult({
-        command: "/restart",
-        text: `Failed to restart host: ${msg(error)}`,
-        ok: false,
-      }),
-    );
-  }
-}
-
-/**
- * Runs the graceful session teardown (D-094): abort active work (a clean cancelled completion where
- * the turn can still flush), clear the deferred queue so no successor answers stale prompts, and tear
- * down background jobs - in that order. Shared by the SIGTERM path (`trevor stop`) and the debug
- * `/stop` command; the CALLER exits the process afterward (which lapses the lease). The durable log is
- * never touched - nothing here can reach it.
- */
-function performGracefulStop(): StopOutcome {
-  // Free the cwd advisory lock for the next owner before we tear the session down (plan 01).
-  releaseWorkspaceCwdLock();
-  // Release this instance's local-model residency claim so a peer can reclaim/evict promptly instead of
-  // waiting out the TTL (plan 11.1). The claim release flushes synchronously on the uncontended store
-  // fast path; the follow-on unload sweep is best-effort and may be cut short by the imminent exit -
-  // that's fine, a peer sweeps it. Fire-and-forget so teardown ordering is unchanged.
-  void residency.shutdown();
-  return stopSession({
-    abortActive: () => abortRuns(""),
-    clearQueue: () => scheduler.clearPending(),
-    killJobs: () => supervisor.killAll(),
-    isBusy: () => scheduler.isBusy(),
-    queuedCount: () => scheduler.debug().queued,
+// The debug lifecycle commands (/debug, /restart, /archive, /unarchive, /stop) and the graceful
+// stop, extracted to commands/lifecycle (plan 22.2 M2): built once over the live switch mechanics +
+// teardown seams; the destructured consts keep the same local names so the command-lane dispatch
+// and the SIGTERM handler below are unchanged. The runtime debug flag stays main.ts state (read by
+// announceOnline and the replacement-host env), threaded through as {getDebug, setDebug}.
+const { toggleDebug, restartHost, performGracefulStop, setArchived, stopCurrentSession } =
+  makeLifecycleCommands({
+    sessionId: SESSION_ID,
+    emit,
+    announceOnline,
+    getDebug: () => debugMode,
+    setDebug: (on) => {
+      debugMode = on;
+    },
+    spawnReplacementHost,
+    retireAfterSessionSwitch,
+    releaseWorkspaceCwdLock,
+    residency,
+    abortRuns,
+    scheduler,
+    supervisor,
   });
-}
-
-/**
- * The debug `/archive` and `/unarchive` commands (D-094 M4): flip the durable `session.archived` flag
- * for the CURRENT session. Archiving hides it from the sidebar and `/resume` (the open browser then
- * gates behind its unarchive notice); it never deletes history, and `/unarchive` is the exact inverse.
- * Debug-gated like `/restart` (the handler re-checks even though the spec is only announced in debug).
- */
-async function setArchived(archived: boolean): Promise<void> {
-  const command = archived ? "/archive" : "/unarchive";
-  if (!debugMode) {
-    await emit(
-      events.commandResult({
-        command,
-        text: `Run /debug first — ${command} is a debug-mode command.`,
-        ok: false,
-      }),
-    );
-    return;
-  }
-  await emit(events.sessionArchived({ archived }));
-  await emit(
-    events.commandResult({
-      command,
-      text: archived
-        ? "✓ archived — hidden from the sidebar and /resume (history preserved; /unarchive to restore)."
-        : "✓ unarchived — restored to the sidebar and /resume.",
-      ok: true,
-    }),
-  );
-}
-
-/**
- * The debug `/stop` command (D-094 M4): graceful session shutdown, gated behind debug mode AND an
- * explicit confirm because it ends the session. Bare `/stop` only describes the effect; `/stop
- * confirm` runs the same teardown as `trevor stop` (SIGTERM), reports what it tore down, then exits so
- * the lease lapses and the launcher reaps the ownership record. History is preserved throughout.
- */
-async function stopCurrentSession(args: string): Promise<void> {
-  if (!debugMode) {
-    await emit(
-      events.commandResult({
-        command: "/stop",
-        text: "Run /debug first — /stop is a debug-mode command.",
-        ok: false,
-      }),
-    );
-    return;
-  }
-  if (!isStopConfirmed(args)) {
-    await emit(
-      events.commandResult({
-        command: "/stop",
-        text: "Stop ends this session: it cancels the active turn, clears the queue, tears down background jobs, and shuts the host down. History is preserved. Run `/stop confirm` to proceed.",
-        ok: true,
-      }),
-    );
-    return;
-  }
-  let outcome: StopOutcome;
-  try {
-    outcome = performGracefulStop();
-  } catch (error) {
-    warn("host", "graceful stop failed; tearing down anyway", { error: msg(error) });
-    supervisor.killAll();
-    await emit(
-      events.commandResult({
-        command: "/stop",
-        text: `Stopped (forced): ${msg(error)}`,
-        ok: false,
-      }),
-    );
-    process.exit(0);
-  }
-  log("host", "stopping (/stop)", {
-    cancelledActive: outcome.cancelledActive,
-    clearedQueued: outcome.clearedQueued,
-  });
-  await emit(
-    events.commandResult({
-      command: "/stop",
-      text: `✓ stopped — ${outcome.cancelledActive ? "cancelled the active turn" : "no active turn"}, cleared ${outcome.clearedQueued} queued. Shutting down; history is preserved.`,
-      ok: true,
-    }),
-  );
-  process.exit(0);
-}
 
 // The live host facts /doctor reads (D-073), extracted to doctor/host-facts (plan 22.2 M2): the
 // reader is constructed once over the host's live singletons; the thin `doctorFacts` const keeps
