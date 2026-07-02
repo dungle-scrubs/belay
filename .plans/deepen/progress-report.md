@@ -7,9 +7,9 @@
 
 > Current focus: M1: SessionTransport read/await/identity helpers
 
-- Total checklist items: 25
+- Total checklist items: 27
 - Completed: 0
-- Current cutoff blockers: 25
+- Current cutoff blockers: 27
 
 ## High
 
@@ -34,6 +34,8 @@
 - [ ] M13: joinSession + waitForType (test-kit)
 
 - [ ] M23: session fan-out hub (session-store; pass 2)
+- [ ] M26: event-provenance predicates (host + session; pass 3)
+- [ ] M27: cancellable-fiber Exit interpretation (agent-host; pass 3)
 
 ## Low
 

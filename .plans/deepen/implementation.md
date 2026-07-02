@@ -237,6 +237,43 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
   unit-testable without a WS harness.
 - **Churn:** moderate (~90-line module; server.ts 274 -> ~190 lines; store tests cover e2e).
 
+
+#### M26: event-provenance predicates (host + packages/session) (pass 3)
+
+- **Symptom:** information leakage - the self/answerable/control/clip producer-id rule is one tiny
+  vocabulary reconstructed at ~11 read sites; only turn-scheduler names it (isAnswerablePrompt,
+  extracted precisely so the contract could not regress).
+- **Evidence:** byte-identical isSelf lambdas in agent/history-projection.ts:72 and
+  agent/baseline.ts:45; bare producerId comparisons in compaction-planner.ts:82 and six main.ts
+  dispatch arms (912-1162); sub-producer namespace built by string concat in main.ts:115-120 but
+  compared raw in session/control-model.ts:86 + agent/start-turn.ts:185; history-projection stays
+  in sync with main.ts only via a prose comment (:59); PRODUCER_IDS in packages/session/identity.ts
+  already owns the strings.
+- **Proposed boundary:** an EventProvenance helper (beside PRODUCER_IDS, or a thin host wrapper)
+  owning the sub-producer derivation (self, :control, :clip, :recall) and predicates
+  isSelf/isAnswerable/isOwnControl/isClip; read sites call the predicate.
+- **Payoff:** ~11 inline comparisons + 2 duplicate lambdas collapse; the comment-only coupling
+  disappears; the startsWith-bug class the isAnswerablePrompt doc fears becomes structurally
+  impossible.
+- **Churn:** medium (~40-line helper + 11 mechanical call sites across 6 host files).
+
+#### M27: cancellable-fiber Exit interpretation (agent-host) (pass 3)
+
+- **Symptom:** repeated boilerplate - the "interrupt = quiet cancel, failure = warn(host,
+  Cause.pretty), success = value" fold copied at every Effect->promise bridge.
+- **Evidence:** structurally identical blocking bridges in handoff/orchestrator.ts:219-234 and
+  agent/compaction-commands.ts:169-177; the same fold in start-turn.ts:255 observer; the
+  classification recurs in turn.ts:606/623/645, telemetry/span.ts:43, boot/leadership.ts:166
+  (Cause.pretty x7 sites, isInterruptedOnly x7, nearly all paired); the cancel one-liner
+  Effect.runFork(Fiber.interrupt(f)) copied at 3 sites.
+- **Proposed boundary:** `interpretFiberExit(exit, label)` returning
+  {cancelled}|{failed}|{ok,value} and owning the warn shape, plus `interruptFiber(fiber)`; callers
+  branch on the tag.
+- **Payoff:** one owner for what counts as a clean cancel vs a defect and how the host logs it; the
+  log shape cannot drift between handoff/compaction/turn paths.
+- **Churn:** small-medium (~25-line helper + ~5 call-site rewrites; scoped away from the recorded
+  ActiveRun/forwarder candidates).
+
 ### Low
 
 #### M14: `apps/agent-host/src/agent` ActiveRun cell
@@ -341,6 +378,17 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
 - **Payoff:** ~35 lines collapse; the "missing rows read zeroed, not stale" invariant lives once;
   a unit-test seam for row construction without a live repo.
 - **Churn:** low (single file; summaries() already tested).
+
+## Considered and rejected (pass 3)
+
+- Truncation-marker spelling drift (TRUNCATION_NOTICE vs 4 local variants): cosmetic, unparsed,
+  host-local - domain-drift material, not a depth boundary.
+- Duration/relative-time/number formatters: already converged (relativeTime shared; formatElapsed
+  single-owner; commas vs k/M deliberately different surfaces).
+- Identity/wire vocabulary (PRODUCER_IDS, RUNTIME_KIND, HOST_ROLE, encodeStreamParams): already
+  centralized with strong docs.
+- Largest not-yet-flagged files (loop.ts 1106, turn.ts 703, docs/discovery.ts 636, hooks/runtime.ts
+  576, tasks.ts 533): cohesive single-purpose modules, not shallow.
 
 ## Considered and rejected (pass 2)
 
