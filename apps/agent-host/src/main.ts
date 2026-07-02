@@ -6,6 +6,7 @@ import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
 import { buildCommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
+import { lspManager } from "@host/lsp/host-runtime";
 import { mcpRuntime } from "@host/mcp/host-runtime";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
 import { vimEnabled } from "@host/prefs/vim-store";
@@ -1872,6 +1873,9 @@ process.once("SIGINT", () => {
   // Best-effort MCP teardown (plan 23 M7): close() ends every connected stdio child's stdin
   // synchronously before the first await, and a child orphaned by the exit sees pipe EOF anyway.
   void mcpRuntime.close();
+  // Same discipline for the LSP manager (plan 24 M3): language-server children see stdin EOF on
+  // a hard exit regardless, so this close is best-effort courtesy, not a correctness gate.
+  void lspManager.close();
   process.exit(0);
 });
 
@@ -1893,6 +1897,7 @@ process.once("SIGTERM", () => {
     supervisor.killAll();
   }
   void mcpRuntime.close();
+  void lspManager.close();
   process.exit(0);
 });
 

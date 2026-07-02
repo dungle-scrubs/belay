@@ -118,6 +118,11 @@ export interface LspClient {
   readonly closeDocument: (uri: string) => void;
   /** The last published diagnostics for a uri; undefined when none arrived since last sync. */
   readonly diagnosticsFor: (uri: string) => readonly LspDiagnostic[] | undefined;
+  /** Every uri's last published diagnostics (the lsp_diagnostics workspace-summary read model). */
+  readonly diagnosticsSnapshot: () => readonly {
+    readonly uri: string;
+    readonly diagnostics: readonly LspDiagnostic[];
+  }[];
   /** Resolves with the next published diagnostics for the uri (or the already-arrived set);
    *  undefined when the server publishes nothing within the deadline. Never throws. */
   readonly waitForDiagnostics: (
@@ -551,6 +556,8 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       send(notificationEnvelope("textDocument/didClose", { textDocument: { uri } }));
     },
     diagnosticsFor: (uri) => published.get(uri),
+    diagnosticsSnapshot: () =>
+      [...published.entries()].map(([uri, diagnostics]) => ({ uri, diagnostics })),
     waitForDiagnostics: (uri, timeoutMs = requestTimeoutMs) => {
       const arrived = published.get(uri);
       if (arrived !== undefined || fate) {

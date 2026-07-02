@@ -335,6 +335,10 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   // `mcp` (plan 23 M7) returns bounded flat text for every action (search hits, call output,
   // resource/prompt records, server status), so it renders like other text-output tools.
   mcp: renderOutput,
+  // lsp_* (plan 24) return bounded flat text (status lines, diagnostic lists), so they render
+  // like other text-output tools.
+  lsp_status: renderOutput,
+  lsp_diagnostics: renderOutput,
   clipboard_write: renderClipboard,
   bash: renderOutput,
   write: renderDiff,

@@ -221,6 +221,46 @@ test("tool results from a PRIOR turn are carried into the next turn's prompt", (
   ]);
 });
 
+test("D-003 (plan 24): diagnostics reach the prompt ONLY as an explicit lsp tool result", () => {
+  const diagnosticsText = "src/a.ts 3:5-3:9 error [typescript 2304] Cannot find name 'x'";
+  // Without an lsp_diagnostics round-trip, no diagnostics text exists anywhere in the prompt -
+  // the projection has no ambient feed to inject from.
+  const bare = project([
+    ev(events.userMessage({ text: "how does a.ts look?", provider: "qwen" })),
+    ev(events.assistantCompleted({ runId: "r1", text: "a.ts defines the widget" }), SELF),
+  ]);
+  assert.ok(!JSON.stringify(bare).includes("diagnostic"), "no ambient diagnostics injection");
+  // With the explicit pull, the diagnostics appear in exactly one message: the role:"tool" result.
+  const pulled = project([
+    ev(events.userMessage({ text: "check a.ts", provider: "qwen" })),
+    ev(
+      events.toolStarted({
+        runId: "r1",
+        callId: "c1",
+        name: "lsp_diagnostics",
+        arguments: '{"file":"src/a.ts"}',
+      }),
+      SELF,
+    ),
+    ev(
+      events.toolCompleted({
+        runId: "r1",
+        callId: "c1",
+        name: "lsp_diagnostics",
+        result: diagnosticsText,
+      }),
+      SELF,
+    ),
+    ev(events.assistantCompleted({ runId: "r1", text: "one error in a.ts" }), SELF),
+  ]);
+  const carrying = pulled.filter((message) => JSON.stringify(message).includes(diagnosticsText));
+  assert.deepEqual(
+    carrying.map((message) => message.role),
+    ["tool"],
+    "diagnostics ride only in the tool-result message",
+  );
+});
+
 test("a self-authored /clear is ignored (does not reset)", () => {
   const log = [
     ev(events.userMessage({ text: "keep me", provider: "qwen" })),

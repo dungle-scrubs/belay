@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createLspManager, type LspManager } from "@host/lsp/manager";
 import { createMcpRuntime } from "@host/mcp/runtime";
 import { supervisor } from "@host/processes/processes";
 import { buildSkillTool } from "@host/skills/skills";
@@ -17,6 +18,8 @@ import { editTool } from "./edit";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./index";
+import { buildLspDiagnosticsTool } from "./lsp-diagnostics";
+import { buildLspStatusTool } from "./lsp-status";
 import { buildMcpTool } from "./mcp";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
@@ -33,6 +36,13 @@ import { writeTool } from "./write";
 // The bash tool is now a builder (it threads the supervisor + promotion config, plan 09); build one
 // instance for the parity/readOnly checks below - its name + readOnly nature are unchanged.
 const bashTool = buildBashTool(supervisor, DEFAULT_PROMOTION_CONFIG);
+
+// The lsp_* tools are builders over the manager seam (plan 24); their name/readOnly nature is
+// config-independent, so an adapterless manager (which can never spawn) suffices here.
+const lspTestManager: LspManager = createLspManager({
+  adapters: [],
+  defaultWorkspaceRoot: "/w",
+});
 
 /**
  * Pins the `readOnly` partition that drives concurrent dispatch (D-050 / M1). `READ_ONLY_TOOLS`
@@ -53,6 +63,9 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     sessionRecallTool,
     astGrepTool,
     doctorTool,
+    // lsp_* (plan 24, D-007): explicit read-only language-server pulls.
+    buildLspStatusTool(lspTestManager),
+    buildLspDiagnosticsTool(lspTestManager),
   ]) {
     assert.equal(tool.readOnly, true, `${tool.name} should declare readOnly: true`);
     assert.ok(READ_ONLY_TOOLS.has(tool.name), `${tool.name} should be in READ_ONLY_TOOLS`);
@@ -110,6 +123,9 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     trevorExpertTool,
     // The mcp tool's name/readOnly nature is config-independent; an empty runtime suffices here.
     buildMcpTool(createMcpRuntime([])),
+    // The lsp_* tools' name/readOnly nature is likewise config-independent (plan 24).
+    buildLspStatusTool(lspTestManager),
+    buildLspDiagnosticsTool(lspTestManager),
     buildToolScriptTool({
       execute: () => Promise.resolve(""),
       cwd: "/w",

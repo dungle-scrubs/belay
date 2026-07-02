@@ -227,6 +227,36 @@ test("generic MCP guidance never names tool_proxy (D-001)", () => {
   assert.doesNotMatch(prompt, /tool[-_ ]proxy/i, "tool-proxy must not appear in generic guidance");
 });
 
+// --- Plan 24 M3: LSP is pull-only - the prompt never carries an ambient diagnostics feed (D-003) ---
+
+test("D-003: LSP appears in the prompt ONLY as the advertised tool inventory lines", () => {
+  contextRegistry.reset();
+  const lspTools = [
+    ...TOOLS,
+    { name: "lsp_status", description: "Report language server health.", parameters: {} },
+    { name: "lsp_diagnostics", description: "Pull diagnostics for a file.", parameters: {} },
+  ];
+  const prompt = buildSystemPrompt(lspTools, { workspaceRoot: "/ws", cwd: "/ws" });
+  // Every line that mentions LSP or plural "diagnostics" must be an inventory line derived from
+  // the tool defs themselves - never an injected diagnostics block or ambient feed. (The doctor
+  // guidance says "self-diagnostic", singular, so the \bdiagnostics\b probe skips it.)
+  const mentions = prompt.split("\n").filter((line) => /lsp|\bdiagnostics\b/i.test(line));
+  assert.deepEqual(mentions, [
+    "- lsp_status: Report language server health.",
+    "- lsp_diagnostics: Pull diagnostics for a file.",
+  ]);
+});
+
+test("D-003: prompt content is a pure function of its inputs - no diagnostics side channel", () => {
+  contextRegistry.reset();
+  // Two builds with identical inputs are byte-identical: nothing (an LSP manager, a diagnostics
+  // store) can inject content between calls. Diagnostics reach the model only as tool RESULTS
+  // (see agent/history-projection.test.ts), never through prompt construction.
+  const first = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  const second = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.equal(first, second);
+});
+
 // --- Phase 7 M2: nested AGENTS.md context injected into the per-turn prompt (D-080) ---
 
 test("buildSystemPrompt injects the AGENTS.md context block when a file exists", () => {

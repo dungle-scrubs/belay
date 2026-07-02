@@ -5,6 +5,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { lspManager } from "@host/lsp/host-runtime";
 import { mcpRuntime } from "@host/mcp/host-runtime";
 import { supervisor } from "@host/processes/processes";
 import { buildSkillTool, discoverSkills } from "@host/skills/skills";
@@ -26,6 +27,8 @@ import { editTool } from "./edit";
 import { ToolInputError } from "./errors";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
+import { buildLspDiagnosticsTool } from "./lsp-diagnostics";
+import { buildLspStatusTool } from "./lsp-status";
 import { buildMcpTool } from "./mcp";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
@@ -71,6 +74,11 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   // mcp (plan 23 M7): the model-facing surface over the host-wide MCP runtime singleton (the
   // supervisor/taskRegistry DI pattern); never readOnly - external calls are serial barriers (D-008).
   buildMcpTool(mcpRuntime),
+  // lsp_* (plan 24 M3-M5): read-only PULL tools over the host-wide LSP manager singleton (D-001,
+  // D-003) - every one a concurrent-safe read (D-007), and every degraded LSP outcome a bounded
+  // SUCCESS string, never a turn failure (D-006).
+  buildLspStatusTool(lspManager),
+  buildLspDiagnosticsTool(lspManager),
   // tool_script (plan 16): the bridge routes allowed read-only calls back through THIS registry's
   // executeTool (hoisted; referenced lazily at call time), gated by the request's toolsets. The child runs
   // out-of-process in a deny-first sandbox; its scratch dir is an ephemeral, per-run temp dir.
