@@ -2,14 +2,20 @@ import { spawn } from "node:child_process";
 import type { McpStdioServerConfig } from "./config";
 import {
   McpClosedError,
-  McpHandshakeError,
   McpMalformedResponseError,
   McpRpcError,
   McpServerCrashError,
-  McpTimeoutError,
   type McpTransportError,
 } from "./errors";
 import { createFrameParser, encodeFrame } from "./framing";
+import {
+  armRequestTimeout,
+  decodeInitializeResult,
+  MCP_PROTOCOL_VERSION,
+  type McpInitializeResult,
+  type McpTransport,
+  type McpTransportState,
+} from "./transport";
 
 /**
  * The MCP stdio transport (plan 23 M2): spawns a configured server as a child process and
@@ -22,19 +28,9 @@ import { createFrameParser, encodeFrame } from "./framing";
  * keys and TREVOR_* state never reach an MCP child.
  *
  * Responsible for: the stdio child lifecycle, the MCP handshake, and framed JSON-RPC
- * request/response plumbing with classified failures.
- * Not for: frame byte-parsing (./framing) or capability discovery/caching (a later milestone).
+ * request/response plumbing with classified failures, behind the shared ./transport contract.
+ * Not for: frame byte-parsing (./framing) or capability discovery/caching (./capabilities).
  */
-
-/** The protocol version this client requests. */
-export const MCP_PROTOCOL_VERSION = "2025-06-18";
-
-/** Server-negotiated versions the client accepts; anything else is a handshake failure. */
-export const SUPPORTED_MCP_PROTOCOL_VERSIONS: readonly string[] = [
-  "2025-06-18",
-  "2025-03-26",
-  "2024-11-05",
-];
 
 /** D-004: the ONLY host env vars an MCP stdio child inherits (plus explicit per-server env). */
 export const STDIO_CHILD_ENV_ALLOWLIST = ["PATH", "HOME", "LANG", "LC_ALL", "TMPDIR"] as const;
@@ -57,31 +53,6 @@ export function stdioChildEnv(
   return { ...env, ...serverEnv };
 }
 
-export interface McpInitializeResult {
-  readonly protocolVersion: string;
-  readonly capabilities: unknown;
-  readonly serverInfo?: unknown;
-}
-
-export interface McpStdioTransportState {
-  readonly status: "configured" | "ready" | "failed" | "closed";
-  readonly initialized: boolean;
-  readonly protocolVersion?: string;
-  readonly lastError?: string;
-}
-
-export interface McpStdioTransport {
-  /** Runs the MCP handshake (initialize -> initialized notification); memoized. */
-  readonly initialize: () => Promise<McpInitializeResult>;
-  /** Sends a JSON-RPC request and resolves its correlated result. */
-  readonly request: (method: string, params?: unknown) => Promise<unknown>;
-  /** Sends a JSON-RPC notification (no id, no response). */
-  readonly notify: (method: string, params?: unknown) => void;
-  /** Drains pending requests and shuts the child down (graceful, then SIGKILL). Idempotent. */
-  readonly close: () => Promise<void>;
-  readonly state: () => McpStdioTransportState;
-}
-
 export interface StdioTransportOptions {
   /** The host environment to filter (default `process.env`); injectable for tests. */
   readonly hostEnv?: NodeJS.ProcessEnv;
@@ -94,14 +65,14 @@ interface PendingRequest {
   readonly method: string;
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: McpTransportError) => void;
-  readonly timer: NodeJS.Timeout;
+  readonly cancelTimeout: () => void;
 }
 
 /** Spawns the server's child process and returns the transport over it. */
 export function spawnStdioTransport(
   server: McpStdioServerConfig,
   options: StdioTransportOptions = {},
-): McpStdioTransport {
+): McpTransport {
   const clientInfo = options.clientInfo ?? { name: "trevor", version: "dev" };
   const closeGraceMs = options.closeGraceMs ?? DEFAULT_CLOSE_GRACE_MS;
 
@@ -110,7 +81,7 @@ export function spawnStdioTransport(
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  let status: McpStdioTransportState["status"] = "configured";
+  let status: McpTransportState["status"] = "configured";
   let initialized = false;
   let protocolVersion: string | undefined;
   let lastError: string | undefined;
@@ -128,7 +99,7 @@ export function spawnStdioTransport(
   const settle = (id: number): PendingRequest | undefined => {
     const entry = pending.get(id);
     if (entry) {
-      clearTimeout(entry.timer);
+      entry.cancelTimeout();
       pending.delete(id);
     }
     return entry;
@@ -283,20 +254,19 @@ export function spawnStdioTransport(
       }
       const id = nextId;
       nextId += 1;
-      const timer = setTimeout(() => {
-        const entry = settle(id);
-        if (entry) {
-          const timeout = new McpTimeoutError({
-            server: server.name,
-            method,
-            timeoutMs: server.requestTimeoutMs,
-          });
-          lastError = timeout.message;
-          entry.reject(timeout);
-        }
-      }, server.requestTimeoutMs);
-      timer.unref?.();
-      pending.set(id, { method, resolve, reject, timer });
+      const cancelTimeout = armRequestTimeout(
+        server.name,
+        method,
+        server.requestTimeoutMs,
+        (timeout) => {
+          const entry = settle(id);
+          if (entry) {
+            lastError = timeout.message;
+            entry.reject(timeout);
+          }
+        },
+      );
+      pending.set(id, { method, resolve, reject, cancelTimeout });
       send({ jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) });
     });
 
@@ -313,28 +283,16 @@ export function spawnStdioTransport(
       capabilities: {},
       clientInfo,
     });
-    const result = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
-    const version = result.protocolVersion;
-    if (typeof version !== "string" || !SUPPORTED_MCP_PROTOCOL_VERSIONS.includes(version)) {
-      const failure = new McpHandshakeError({
-        server: server.name,
-        detail:
-          typeof version === "string"
-            ? `server negotiated unsupported protocolVersion "${version}"`
-            : "initialize result lacks a protocolVersion",
-      });
-      terminate(failure, "failed");
-      throw failure;
+    const outcome = decodeInitializeResult(server.name, raw);
+    if ("failure" in outcome) {
+      terminate(outcome.failure, "failed");
+      throw outcome.failure;
     }
     notify("notifications/initialized");
     initialized = true;
-    protocolVersion = version;
+    protocolVersion = outcome.result.protocolVersion;
     status = "ready";
-    return {
-      protocolVersion: version,
-      capabilities: result.capabilities,
-      ...(result.serverInfo !== undefined ? { serverInfo: result.serverInfo } : {}),
-    };
+    return outcome.result;
   };
 
   const awaitExit = (timeoutMs: number): Promise<boolean> =>

@@ -53,8 +53,9 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 - `commands/` - the slash-command registry, debug commands, and the `!command` general
   interpolation trust gate.
 - `mcp/` - the host-owned MCP client runtime (plan 23): the named-server config + registry
-  (tool-proxy is one ordinary named server), Content-Length framing, and the stdio transport
-  with its secret-minimal child environment.
+  (tool-proxy is one ordinary named server), the shared transport contract, Content-Length
+  framing, the stdio transport with its secret-minimal child environment, and the Streamable
+  HTTP/SSE transport with session identity and redacted bearer auth.
 - `skills/` - skill discovery and progressive disclosure behind the skills tools.
 - `subagents/` - subagent discovery (`discovery.ts`) for delegated agents.
 - `serial-run/` - the serialized multi-plan run lane.

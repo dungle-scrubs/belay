@@ -1,12 +1,8 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { McpStdioServerConfig } from "../../src/mcp/config";
-import {
-  MCP_PROTOCOL_VERSION,
-  type McpStdioTransport,
-  STDIO_CHILD_ENV_ALLOWLIST,
-  spawnStdioTransport,
-} from "../../src/mcp/stdio-transport";
+import { STDIO_CHILD_ENV_ALLOWLIST, spawnStdioTransport } from "../../src/mcp/stdio-transport";
+import { MCP_PROTOCOL_VERSION, type McpTransport } from "../../src/mcp/transport";
 
 /**
  * Stdio transport integration (plan 23 M2): drives the REAL fixture MCP server (a spawned child
@@ -32,7 +28,7 @@ function fixtureConfig(overrides: Partial<McpStdioServerConfig> = {}): McpStdioS
 
 async function withTransport(
   config: McpStdioServerConfig,
-  run: (transport: McpStdioTransport) => Promise<void>,
+  run: (transport: McpTransport) => Promise<void>,
 ): Promise<void> {
   const transport = spawnStdioTransport(config);
   try {
@@ -42,7 +38,7 @@ async function withTransport(
   }
 }
 
-function callTool(transport: McpStdioTransport, name: string, args: Record<string, unknown> = {}) {
+function callTool(transport: McpTransport, name: string, args: Record<string, unknown> = {}) {
   return transport.request("tools/call", { name, arguments: args });
 }
 

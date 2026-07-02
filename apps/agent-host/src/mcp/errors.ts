@@ -8,7 +8,7 @@ import { Data } from "effect";
  * rejections today and slot into the Effect `E` channel when the runtime layers above arrive.
  *
  * Responsible for: the typed MCP failure vocabulary - framing, handshake, timeout, crash,
- * closed, JSON-RPC, malformed-response - and the McpTransportError union.
+ * closed, JSON-RPC, malformed-response, auth-required - and the McpTransportError union.
  * Not for: config validation findings - those are McpConfigIssue DATA in ./config, not throws.
  */
 
@@ -89,6 +89,18 @@ export class McpMalformedResponseError extends Data.TaggedError("McpMalformedRes
   }
 }
 
+/** The server refused the request for lack of valid credentials (HTTP 401/403). The transport
+ *  parks in "auth_needed": new credentials are the remedy, not a reconnect. The detail carries
+ *  the redacted endpoint and status only - never the presented token. */
+export class McpAuthRequiredError extends Data.TaggedError("McpAuthRequiredError")<{
+  readonly server: string;
+  readonly detail: string;
+}> {
+  override get message(): string {
+    return `MCP server "${this.server}" requires authentication: ${this.detail}`;
+  }
+}
+
 export type McpTransportError =
   | McpFramingError
   | McpHandshakeError
@@ -96,4 +108,21 @@ export type McpTransportError =
   | McpServerCrashError
   | McpClosedError
   | McpRpcError
-  | McpMalformedResponseError;
+  | McpMalformedResponseError
+  | McpAuthRequiredError;
+
+const TRANSPORT_ERROR_TAGS: ReadonlySet<string> = new Set([
+  "McpFramingError",
+  "McpHandshakeError",
+  "McpTimeoutError",
+  "McpServerCrashError",
+  "McpClosedError",
+  "McpRpcError",
+  "McpMalformedResponseError",
+  "McpAuthRequiredError",
+]);
+
+/** Narrows an unknown rejection to the typed transport vocabulary (for rethrow-as-is paths). */
+export function isMcpTransportError(error: unknown): error is McpTransportError {
+  return error instanceof Error && "_tag" in error && TRANSPORT_ERROR_TAGS.has(String(error._tag));
+}

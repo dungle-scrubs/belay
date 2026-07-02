@@ -167,7 +167,7 @@ export function redactMcpServerConfig(server: McpServerConfig): RedactedMcpServe
   const { auth, ...rest } = server;
   return {
     ...rest,
-    endpoint: redactEndpoint(server.endpoint),
+    endpoint: redactMcpEndpoint(server.endpoint),
     ...(auth
       ? {
           auth: {
@@ -275,8 +275,10 @@ function normalizeAuth(raw: unknown): McpAuthConfig | undefined {
   };
 }
 
-/** Keeps origin + path; drops userinfo, query, and fragment (secrets ride in all three). */
-function redactEndpoint(endpoint: string): string {
+/** Keeps origin + path; drops userinfo, query, and fragment (secrets ride in all three).
+ *  Shared with the transports: any endpoint that reaches an error message or debug line goes
+ *  through here first. */
+export function redactMcpEndpoint(endpoint: string): string {
   const url = new URL(endpoint); // normalization guaranteed a parseable http(s) URL
   return `${url.origin}${url.pathname}`;
 }
