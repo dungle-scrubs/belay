@@ -74,6 +74,21 @@ const TOOL_SELECTION_GUIDANCE = [
   "Use archive_read with path for local zip inspection before falling back to shell unzip. Use archive_read with url only for a public archive that must be downloaded through the guarded URL policy.",
   "Use archive_unpack only when the user asks to extract a local zip archive, and always provide an explicit destination plus include patterns when only selected entries are wanted.",
   "Use docs for CURRENT EXTERNAL documentation - the official docs of a product, API, library, SDK, or service (setup, usage, configuration, limits, reference). docs resolves a subject into a cached, citeable corpus you then search and read, layering caching and source citations over web_search/web_fetch; reach for it when you need authoritative external reference material rather than a single one-off page read.",
+  // Plan 24 M6 (D-002/D-003/D-006): LSP guidance is SELECTIVE-USE - the named moments where a
+  // bounded language-server fact beats searching or reading, the explicit not-cases (text search
+  // and exploration stay on grep/ast_grep/glob/read), and the hard non-blocking rule: correctness
+  // truth stays with tests/typecheck/compiler output, and LSP never gates an edit.
+  "Use the lsp_* tools for precise language-server facts at chosen moments: lsp_workspace_symbols " +
+    "to find where a NAMED symbol (function, class, type, constant) is defined; " +
+    "lsp_document_symbols to orient in a large file without reading all of it; lsp_hover for the " +
+    "type signature or docs at an exact file:line:column; lsp_diagnostics for a targeted " +
+    "post-edit check of one file's current problems; lsp_code_actions to propose safe fixes " +
+    "(read-only proposals - apply the ones you accept with edit).",
+  "Do NOT use lsp_* tools for literal text or string search, config/docs/route discovery, or " +
+    "broad exploration - grep, ast_grep, glob, and read stay the right tools there. LSP is " +
+    "auxiliary and OPTIONAL: correctness truth stays with the tests, typecheck, and compiler " +
+    "output, and a missing, slow, or degraded language server is a bounded result to note and " +
+    "move past - never wait for LSP before editing.",
   // Plan 23 M7 (D-001/D-003/D-005): MCP guidance stays GENERIC (named servers, never a specific
   // integration), search-capped (no catalog dumps), and qualified ('<server>:<tool>').
   "The mcp tool talks to the user's configured MCP servers - external integrations connected to Trevor, each a named server exposing tools, resources, and prompts. Use its search action to DISCOVER capabilities by keyword and call with the qualified '<server>:<tool>' name to run one; prefer Trevor's built-in tools when they fit, and reach for mcp only when the task needs one of those configured external integrations. Results are ranked and capped - never expect or dump a full server catalog.",

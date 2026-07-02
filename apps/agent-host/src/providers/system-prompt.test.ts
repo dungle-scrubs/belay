@@ -229,7 +229,7 @@ test("generic MCP guidance never names tool_proxy (D-001)", () => {
 
 // --- Plan 24 M3: LSP is pull-only - the prompt never carries an ambient diagnostics feed (D-003) ---
 
-test("D-003: LSP appears in the prompt ONLY as the advertised tool inventory lines", () => {
+test("D-003: LSP appears in the prompt ONLY as inventory lines and the fixed M6 guidance copy", () => {
   contextRegistry.reset();
   const lspTools = [
     ...TOOLS,
@@ -237,14 +237,17 @@ test("D-003: LSP appears in the prompt ONLY as the advertised tool inventory lin
     { name: "lsp_diagnostics", description: "Pull diagnostics for a file.", parameters: {} },
   ];
   const prompt = buildSystemPrompt(lspTools, { workspaceRoot: "/ws", cwd: "/ws" });
-  // Every line that mentions LSP or plural "diagnostics" must be an inventory line derived from
-  // the tool defs themselves - never an injected diagnostics block or ambient feed. (The doctor
-  // guidance says "self-diagnostic", singular, so the \bdiagnostics\b probe skips it.)
+  // Every line that mentions LSP or plural "diagnostics" must be either an inventory line derived
+  // from the tool defs themselves or the STATIC M6 selective-use guidance copy - never an injected
+  // diagnostics block or ambient feed. (The doctor guidance says "self-diagnostic", singular, so
+  // the \bdiagnostics\b probe skips it.) The two guidance sentences are pinned by prefix here; the
+  // purity test below proves nothing dynamic can ride along between builds.
   const mentions = prompt.split("\n").filter((line) => /lsp|\bdiagnostics\b/i.test(line));
-  assert.deepEqual(mentions, [
-    "- lsp_status: Report language server health.",
-    "- lsp_diagnostics: Pull diagnostics for a file.",
-  ]);
+  assert.equal(mentions.length, 4, mentions.join("\n"));
+  assert.equal(mentions[0], "- lsp_status: Report language server health.");
+  assert.equal(mentions[1], "- lsp_diagnostics: Pull diagnostics for a file.");
+  assert.match(mentions[2] ?? "", /^Use the lsp_\* tools for precise language-server facts/);
+  assert.match(mentions[3] ?? "", /^Do NOT use lsp_\* tools for literal text or string search/);
 });
 
 test("plan 24 M4: literal text search guidance still prefers grep/ast_grep over LSP symbols", () => {
@@ -261,6 +264,80 @@ test("plan 24 M4: literal text search guidance still prefers grep/ast_grep over 
     prompt,
     /symbols? (instead of|rather than|over) (grep|rg|ast_grep)/i,
     "no guidance replaces grep with LSP symbols",
+  );
+});
+
+// --- Plan 24 M6: selective-use LSP guidance (D-002/D-003/D-006) ---
+
+test("24 M6: guidance names the LSP use-cases - symbols, orientation, hover facts, targeted diagnostics, proposals", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("lsp_workspace_symbols to find where a NAMED symbol"),
+    "workspace symbols are the named-definition lookup",
+  );
+  assert.ok(
+    prompt.includes("lsp_document_symbols to orient in a large file"),
+    "document symbols are the large-file orientation move",
+  );
+  assert.ok(
+    prompt.includes("lsp_hover for the type signature or docs at an exact file:line:column"),
+    "hover is the positional type/signature/doc fact",
+  );
+  assert.ok(
+    prompt.includes("lsp_diagnostics for a targeted post-edit check"),
+    "diagnostics are the targeted post-edit check",
+  );
+  assert.ok(
+    prompt.includes("lsp_code_actions to propose safe fixes"),
+    "code actions are the safe-fix proposal channel",
+  );
+});
+
+test("24 M6: guidance names the not-cases and keeps grep/ast_grep/glob/read as the search channels", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("Do NOT use lsp_* tools for literal text or string search"),
+    "literal/string search is an explicit not-case",
+  );
+  assert.ok(
+    prompt.includes("config/docs/route discovery, or broad exploration"),
+    "config, docs, routes, and broad exploration are explicit not-cases",
+  );
+  assert.ok(
+    prompt.includes("grep, ast_grep, glob, and read stay the right tools there"),
+    "the normal search/read tools remain the route for those tasks",
+  );
+});
+
+test("24 M6: correctness truth stays with tests, typecheck, and compiler output; LSP is auxiliary", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("correctness truth stays with the tests, typecheck, and compiler output"),
+    "tests/typecheck/compiler remain the final correctness channels",
+  );
+  assert.ok(
+    prompt.includes("LSP is auxiliary and OPTIONAL"),
+    "LSP is framed as auxiliary and optional, never a dependency",
+  );
+});
+
+test("24 M6: nothing asks the model to wait for LSP before editing (D-003)", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  // The one permitted wait+LSP phrasing is the PROHIBITION itself; any other line pairing
+  // "wait" with LSP would be a blocking instruction and must not exist.
+  for (const line of prompt.split("\n")) {
+    if (/wait[^.]*\b(lsp|language.server)/i.test(line)) {
+      assert.match(line, /never wait/i, `a wait+LSP line must be the prohibition: ${line}`);
+    }
+  }
+  assert.ok(
+    prompt.includes("never wait for LSP before editing"),
+    "the non-blocking rule is stated explicitly",
+  );
+  assert.doesNotMatch(
+    prompt,
+    /(run|call|check|consult)\s+lsp_\w+\s+(before|prior to)\s+(editing|each edit|any edit|writing)/i,
+    "no guidance gates an edit on an LSP call",
   );
 });
 

@@ -100,6 +100,29 @@ test("a tool without the readOnly flag is absent from READ_ONLY_TOOLS", () => {
 });
 
 /**
+ * Plan 24 M6 REFACTOR: LSP doctrine (when to reach for a language server, when not to) lives in
+ * the system prompt's tool-selection guidance, NEVER in the tool schemas. The descriptions stay
+ * one short paragraph each; growing one past this bound means doctrine is leaking into a schema.
+ */
+test("lsp_* tool descriptions stay short - doctrine belongs to the prompt, not schemas (24 M6)", () => {
+  const lspTools = [
+    buildLspStatusTool(lspTestManager),
+    buildLspDiagnosticsTool(lspTestManager),
+    buildLspHoverTool(lspTestManager),
+    buildLspDocumentSymbolsTool(lspTestManager),
+    buildLspWorkspaceSymbolsTool(lspTestManager),
+    buildLspCodeActionsTool(lspTestManager),
+  ];
+  for (const tool of lspTools) {
+    assert.ok(
+      tool.description.length <= 320,
+      `${tool.name} description is ${tool.description.length} chars (max 320)`,
+    );
+    assert.ok(!tool.description.includes("\n"), `${tool.name} description stays one paragraph`);
+  }
+});
+
+/**
  * Drift guard (D-031): the shared tool-vocabulary table in `@trevor/session` must match the
  * host's REAL tool definitions exactly - every tool the host can expose, and each tool's
  * `readOnly` nature. The conditional tools (`ast_grep`, registered only when its binary
