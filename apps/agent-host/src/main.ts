@@ -2,11 +2,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { publishTurn } from "@host/agent/turn";
 import { envNumber } from "@host/boot/env";
-import { abbrevHome, TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
 import { buildCommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
-import { runDirectHandoff } from "@host/handoff/handoff-flow";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
 import { vimEnabled } from "@host/prefs/vim-store";
 import { supervisor } from "@host/processes/processes";
@@ -107,13 +106,7 @@ import { parseOverflowWindow } from "./providers/error-classifier";
 import { recordLearnedWindow } from "./providers/model-metadata-overrides";
 import { makeSourceSignIn } from "./providers/source-signin";
 import { createHostResidency } from "./residency/host";
-import { disposeCurrentPlan, serialNext } from "./serial-run/driver";
-import { startSerialRun } from "./serial-run/entry";
-import {
-  nodeLoadSerialRun,
-  nodeSerialControllerCaps,
-  nodeSerialRunStartDeps,
-} from "./serial-run/node";
+import { makeSerialRunCommands } from "./serial-run/commands";
 import { makeSessionSwitch } from "./session/session-switch";
 import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { registerToolScriptSink } from "./tool-script/sink";
@@ -1213,128 +1206,16 @@ const { runHandoff, approveHandoff, rejectHandoff, noteGenerated, noteSettled, h
     retireAfterSessionSwitch,
   });
 
-/**
- * `/serial-implement <plans>` (plan 02): parse an ordered plan queue, record a durable, re-openable
- * serial run, and hand off to a dedicated session that implements the plans strictly one managed
- * worktree at a time (merge + delete each green tree; halt on the first red/conflict). The launching
- * session is freed by the handoff; the create/implement/merge/delete lifecycle runs in the spawned run.
- */
-async function runSerialImplement(args: string): Promise<void> {
-  if (await blockedFromWorkspaceSwitch("/serial-implement", "start a serial run")) {
-    return;
-  }
-  try {
-    const result = await startSerialRun(
-      args,
-      nodeSerialRunStartDeps({
-        workspace: WORKSPACE_ROOT,
-        stateHome: TREVOR_STATE_HOME,
-        newRunId: () => crypto.randomUUID(),
-        now: () => new Date().toISOString(),
-        handoff: (prompt) =>
-          runDirectHandoff(prompt, handoffDeps()).then((r) => ({
-            ok: r.ok,
-            ...(r.targetSessionId ? { targetSessionId: r.targetSessionId } : {}),
-          })),
-      }),
-    );
-    await emit(
-      events.commandResult({ command: "/serial-implement", text: result.text, ok: result.ok }),
-    );
-    if (result.ok) {
-      log("host", "serial run started", { runId: result.runId, to: result.targetSessionId });
-    }
-  } catch (error) {
-    warn("host", "serial-implement failed", { error: msg(error) });
-    await emit(
-      events.commandResult({
-        command: "/serial-implement",
-        text: `Failed to start serial run: ${msg(error)}`,
-        ok: false,
-      }),
-    );
-  }
-}
-
-/** The host-driven controller caps for a serial run, rooted at the current cwd (resolves the base repo). */
-function serialControllerCaps() {
-  return nodeSerialControllerCaps({
-    manager: worktrees,
-    cwd: process.cwd(),
-    stateHome: TREVOR_STATE_HOME,
-    now: () => new Date().toISOString(),
-  });
-}
-
-/**
- * `/serial-next <runId>` (plan 02): the host-driven half of the serial loop. Create + enter the next
- * queued plan's managed worktree and advance the durable journal to `tree-created`, then tell the run's
- * agent which plan to implement. The agent implements in the tree and calls `/serial-dispose` to merge it.
- */
-async function runSerialNext(runId: string): Promise<void> {
-  const id = runId.trim();
-  const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
-  if (!run) {
-    await emit(
-      events.commandResult({
-        command: "/serial-next",
-        text: `unknown serial run: ${id}`,
-        ok: false,
-      }),
-    );
-    return;
-  }
-  const { plan } = await serialNext(run, serialControllerCaps());
-  const text = !plan
-    ? "serial run is complete or halted"
-    : plan.phase === "merged"
-      ? "all plans merged"
-      : `next: implement ${plan.planId} in its worktree, then run /serial-dispose ${id}`;
-  await emit(events.commandResult({ command: "/serial-next", text, ok: true }));
-}
-
-/**
- * `/serial-dispose <runId> [fail <reason>]` (plan 02): the host-driven disposition. After the agent
- * implemented the in-progress plan, run the single green gate (clean -> merge -> delete) on a green
- * report, or halt the run on `fail <reason>` - advancing the durable journal either way.
- */
-async function runSerialDispose(args: string): Promise<void> {
-  const [id, verb, ...rest] = args.trim().split(/\s+/);
-  if (!id) {
-    await emit(
-      events.commandResult({
-        command: "/serial-dispose",
-        text: "usage: /serial-dispose <runId> [fail <reason>]",
-        ok: false,
-      }),
-    );
-    return;
-  }
-  const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
-  if (!run) {
-    await emit(
-      events.commandResult({
-        command: "/serial-dispose",
-        text: `unknown serial run: ${id}`,
-        ok: false,
-      }),
-    );
-    return;
-  }
-  const outcome =
-    verb === "fail" ? { green: false, detail: rest.join(" ") || "reported red" } : { green: true };
-  const updated = await disposeCurrentPlan(run, serialControllerCaps(), outcome);
-  const halted = updated.plans.find((p) => p.phase === "halted");
-  const text =
-    updated.status === "halted"
-      ? `⚠ halted on ${halted?.planId}: ${halted?.haltReason} - tree left intact for inspection`
-      : updated.status === "complete"
-        ? "✓ all plans merged"
-        : `✓ merged; run /serial-next ${id} for the next plan`;
-  await emit(
-    events.commandResult({ command: "/serial-dispose", text, ok: updated.status !== "halted" }),
-  );
-}
+// The /serial-implement|next|dispose command handlers (plan 02), extracted to serial-run/commands
+// (plan 22.2 M2): built once over the shared workspace-switch gate + the handoff execution deps;
+// the destructured consts keep the same local names so the command-lane dispatch below is
+// unchanged.
+const { runSerialImplement, runSerialNext, runSerialDispose } = makeSerialRunCommands({
+  emit,
+  blockedFromWorkspaceSwitch,
+  handoffDeps,
+  worktrees,
+});
 
 // The programmatic /worktree-* handlers (D-091), extracted to worktrees/commands (plan 22.2 M2):
 // built once over the manager + the shared workspace-switch gate/mechanic; the destructured consts
