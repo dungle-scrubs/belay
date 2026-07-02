@@ -4,9 +4,6 @@ import { join, resolve } from "node:path";
 import { parseFrontmatter, sortedVisibleEntries, trimStr } from "@host/boot/manifest-discovery";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import type { Command } from "@host/commands/commands";
-// Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildSkillTool`/
-// `discoverSkills` at top level, so importing the barrel here would be a fatal initialization cycle
-// (the barrel re-exports these same names for external consumers).
 import { ToolInputError } from "@host/tools/errors";
 import { runCommand } from "@host/tools/run-shell";
 import { cap } from "@host/tools/shared";

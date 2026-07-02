@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M3 - Relocate Loose Files into By-Domain Dirs
-- Current cutoff blockers: 28
+- Current focus: M5 - Header Docstrings and Architecture Map
+- Current cutoff blockers: 12
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 11
+- Completed current work: 27
 
 ## Current Cutoff Blockers
 
@@ -36,28 +36,28 @@
 
 #### M3: Relocate Loose Files into By-Domain Dirs
 
-- [ ] RED: Capture the current failing root-flatness guard against the inventory.
-- [ ] GREEN: `git mv` the loose files into `boot/`, `transport/`, `session/`, `commands/`, `skills/`, `subagents/`, `processes/`, `prefs/`, `metrics/`, `handoff/` - pure moves, no content edits.
-- [ ] GREEN: Move files that belong to settled dirs into them flat (`turn`/`turn-preflight` -> `agent/`, `git-status` -> `worktrees/`, `clip` -> merge into `tools/clipboard`).
-- [ ] GREEN: Update imports for moved files to `@host/*` (or local relative within a dir).
-- [ ] RED: Re-run the root-flatness guard and typecheck; capture remaining failures.
-- [ ] REFACTOR: Batch related moves by destination dir so each commit is reviewable and bisectable.
+- [x] RED: Capture the current failing root-flatness guard against the inventory.
+- [x] GREEN: `git mv` the loose files into `boot/`, `transport/`, `session/`, `commands/`, `skills/`, `subagents/`, `processes/`, `prefs/`, `metrics/`, `handoff/` - pure moves, no content edits.
+- [x] GREEN: Move files that belong to settled dirs into them flat (`turn`/`turn-preflight` -> `agent/`, `git-status` -> `worktrees/`, `clip` -> merge into `tools/clipboard`).
+- [x] GREEN: Update imports for moved files to `@host/*` (or local relative within a dir).
+- [x] RED: Re-run the root-flatness guard and typecheck; capture remaining failures.
+- [x] REFACTOR: Batch related moves by destination dir so each commit is reviewable and bisectable.
 
 #### M4: Semantic Renames and Init-Cycle Removal
 
-- [ ] RED: Run typecheck to expose stale imports for the renames.
-- [ ] GREEN: `git mv` `context/` -> `project-context/`, `config-file.ts` -> `boot/config.ts`, `agents.ts` -> `subagents/`, `artifacts.ts` -> `agent/image-resolution.ts`; update all references.
-- [ ] GREEN: Move `tasks.ts` -> `tools/tasks/` and remove the leaf-import cycle-avoidance workaround.
-- [ ] RED: Search for remaining references to old paths/dir names across docs, tests, and snapshots.
-- [ ] GREEN: Update those references; leave exported symbol names unchanged.
-- [ ] REFACTOR: Delete obsolete cycle-avoidance comments and any temporary shims.
+- [x] RED: Run typecheck to expose stale imports for the renames.
+- [x] GREEN: `git mv` `context/` -> `project-context/`, `config-file.ts` -> `boot/config.ts`, `agents.ts` -> `subagents/`, `artifacts.ts` -> `agent/image-resolution.ts`; update all references.
+- [x] GREEN: Move `tasks.ts` -> `tools/tasks/` and remove the leaf-import cycle-avoidance workaround.
+- [x] RED: Search for remaining references to old paths/dir names across docs, tests, and snapshots.
+- [x] GREEN: Update those references; leave exported symbol names unchanged.
+- [x] REFACTOR: Delete obsolete cycle-avoidance comments and any temporary shims.
 
 ### Gate 2 -> 3
 
-- [ ] No file remains loose under `src/` root except the allowlist.
-- [ ] Typecheck passes; no stale path references remain.
-- [ ] Unit, web, integration, turn, and e2e lanes pass.
-- [ ] The host starts and runs a turn with no module-resolution errors.
+- [x] No file remains loose under `src/` root except the allowlist.
+- [x] Typecheck passes; no stale path references remain.
+- [x] Unit, web, integration, turn, and e2e lanes pass.
+- [x] The host starts and runs a turn with no module-resolution errors.
 
 ### Phase 3: Headers, Architecture Map, and Enforcement
 

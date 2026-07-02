@@ -1,6 +1,3 @@
-// Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildTaskTools()` at top
-// level, so importing the barrel here would be a fatal initialization cycle (the barrel re-exports
-// these same names for external consumers).
 import { ToolExecutionError } from "@host/tools/errors";
 import type { Tool } from "@host/tools/types";
 import { msg } from "@host/transport/messages";

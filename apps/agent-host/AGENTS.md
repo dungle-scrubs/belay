@@ -43,11 +43,11 @@ file. Concretely, follow the patterns already in the tree:
 
 - **Errors are `Data.TaggedError`** in the typed `E` channel, never bare `Error` +
   `try/catch`. See `src/providers/errors.ts`, `src/tools/errors.ts`, and `InvariantError`
-  in `src/log.ts`. New failure modes get a named tagged error, not a string or a generic
+  in `src/transport/log.ts`. New failure modes get a named tagged error, not a string or a generic
   `Error`.
 - **Streaming is `Stream`.** A provider step is `stream(): Stream<ProviderEvent,
   ProviderError>` (`src/providers/types.ts`, `pi-ai.ts`); the agent loop (`src/agent/loop.ts`)
-  and `publishTurn` (`src/turn.ts`) compose Streams/Effects. Don't reintroduce
+  and `publishTurn` (`src/agent/turn.ts`) compose Streams/Effects. Don't reintroduce
   `AsyncIterable` or hand-rolled async generators across the pipeline.
 - **Cancellation is fiber interruption.** A turn is a forked fiber; `user.cancel`
   interrupts it (`src/main.ts`). The provider Stream's scope aborts the underlying request
@@ -57,7 +57,7 @@ file. Concretely, follow the patterns already in the tree:
   `signal?.aborted` checks or thread an `AbortSignal` through the pipeline; interrupt the
   fiber instead. The D-010 race-and-abandon fallback is held in reserve, not used.
 - **Dependencies are services + `Layer`.** Emission is the `Emit` `Context.Tag` service
-  (`src/services.ts`); `main` provides `EmitLive`, tests provide a collecting layer
+  (`src/transport/services.ts`); `main` provides `EmitLive`, tests provide a collecting layer
   (`test/support/fake-provider.ts`). Add new cross-cutting collaborators as `Context.Tag` services
   with a live Layer and a test Layer - don't thread callbacks.
 - **Tools return `Effect<string, ToolError>`** (`src/tools/types.ts`); the executor renders
@@ -74,10 +74,10 @@ fights their design. Do not "fix" them into Effect:
 
 - The **Richter WebSocket connection + replay dispatch** in `src/main.ts` - the transport
   edge; the Effect program runs to it via `runFork`/`runPromise`.
-- The **pure, time-injected lease state machine** (`src/lease.ts`) - driven by
+- The **pure, time-injected lease state machine** (`src/session/lease.ts`) - driven by
   `tick()`/`observe()` with an injected clock, kept synchronous and unit-testable.
-- The **`Ring` buffer** (`src/processes.ts`) and the **`log` / `warn` leaf logger**
-  (`src/log.ts`) - thin synchronous utilities.
+- The **`Ring` buffer** (`src/processes/processes.ts`) and the **`log` / `warn` leaf logger**
+  (`src/transport/log.ts`) - thin synchronous utilities.
 
 Observability tracing (`Effect.withSpan`, `Effect.log`) is a future add on the turn/tool
 Effects when an OTel exporter is wanted; until then the plain `log`/`warn` leaf stays.
@@ -109,10 +109,10 @@ regime has been folded into the tiers and removed. Host specifics:
   Vitest test (see `test/turn.test.ts`) is the default; reach for `@effect/vitest`'s
   `it.effect` for an Effect-native case. Do not eyeball a script's stdout.
 - **Time-injected machines take the clock as an argument.** The lease state machine
-  (`src/lease.ts`) is driven by `tick`/`observe` with an explicit time (`src/lease.test.ts`),
+  (`src/session/lease.ts`) is driven by `tick`/`observe` with an explicit time (`src/session/lease.test.ts`),
   so election, deferral, and ttl takeover are deterministic with no real waiting; use
   `@effect/vitest`'s `TestClock` for Effect-timed code.
-- **Inject collaborators as test `Layer`s.** Provide `Emit` (`src/services.ts`) via a
+- **Inject collaborators as test `Layer`s.** Provide `Emit` (`src/transport/services.ts`) via a
   collecting layer to assert the emitted event sequence; the deterministic **fake provider**
   (`test/support/fake-provider.ts`) stands in for a model so a turn does not depend on a
   model choosing to call a tool.

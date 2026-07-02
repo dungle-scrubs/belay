@@ -55,7 +55,14 @@ function freshKey(): string {
 function spawnActor(mode: string, key: string, ownerId: string, hostId: string): ChildProcess {
   return spawn(process.execPath, [TSX_CLI, ACTOR, mode, key, ownerId, hostId], {
     cwd: REPO_ROOT,
-    env: { ...process.env, TREVOR_STATE_HOME: stateHome, TREVOR_DEBUG: "0" },
+    // The actor is host source run by tsx from the repo root; the @host/* alias (22.1 D-007)
+    // resolves through the host tsconfig, which tsx only finds via an explicit pointer here.
+    env: {
+      ...process.env,
+      TREVOR_STATE_HOME: stateHome,
+      TREVOR_DEBUG: "0",
+      TSX_TSCONFIG_PATH: join(REPO_ROOT, "apps/agent-host/tsconfig.json"),
+    },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
   });
