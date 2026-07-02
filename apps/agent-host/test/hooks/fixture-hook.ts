@@ -1,7 +1,10 @@
+import { writeFileSync } from "node:fs";
+
 /**
  * The scriptable hook FIXTURE the runner integration tests spawn (plan 25 M3): a tiny node
  * process whose first argv token selects a behavior - echo argv back as a decision (the
  * no-shell proof), echo stdin back (payload delivery), print a literal (JSON contract cases),
+ * record stdin to a file then exit silently (payload capture + the implicit-allow shape, 25 M5),
  * hang (timeout ladder, optionally ignoring SIGTERM to force the SIGKILL rung), spew bytes
  * (output caps), fail with stderr + exit code, or report cwd/env (spawn hygiene).
  *
@@ -34,6 +37,18 @@ switch (mode) {
   }
   case "print": {
     process.stdout.write(process.argv[3] ?? "");
+    break;
+  }
+  case "record": {
+    // Payload capture: write stdin verbatim to the file at argv[3], then exit 0 with NO stdout -
+    // the observe-only hook shape that M5's implicit allow covers. The file's existence doubles
+    // as the "did this hook execute at all?" probe for gate/short-circuit tests.
+    let payload = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk: string) => {
+      payload += chunk;
+    });
+    process.stdin.on("end", () => writeFileSync(process.argv[3] ?? "", payload));
     break;
   }
   case "cwd": {

@@ -10,7 +10,8 @@ import type { HookTrustStatus } from "./trust";
  * a `diagnostic` (observable, NEVER blocking: it surfaces through events/Doctor while the turn
  * proceeds). Command failure, invalid JSON, and timeout are diagnostics BY DEFAULT - a hook
  * only blocks by succeeding and saying so - and a failed command's stdout is untrusted, so a
- * deny printed by a crashing hook is still command_failed. This is a plain result union rather
+ * deny printed by a crashing hook is still command_failed. A SILENT success (exit 0, empty
+ * stdout) is an implicit allow (25 M5): the observe-only hook shape gates nothing. This is a plain result union rather
  * than a Data.TaggedError channel on purpose: under D-007 none of these outcomes is an error a
  * caller branches on with catch - every variant is ordinary data on the happy path. Diagnostic
  * details quote hook output, so they are redacted (D-009) and bounded.
@@ -70,6 +71,12 @@ export function hookExecutionOutcome(execution: HookExecution): HookOutcome {
     );
   }
 
+  if (execution.stdout.text.trim().length === 0) {
+    // Silent success is implicit allow (25 M5): exit 0 with no stdout is the observe-only hook
+    // shape (a logger/recorder that gates nothing). Demanding a JSON verb here would turn every
+    // such hook into a per-call diagnostic; anything non-empty must still parse as a decision.
+    return { kind: "decision", decision: { decision: "allow" } };
+  }
   const parsed = parseHookDecision(execution.stdout.text);
   if (!parsed.ok) {
     return diagnostic(parsed.reason, parsed.detail);

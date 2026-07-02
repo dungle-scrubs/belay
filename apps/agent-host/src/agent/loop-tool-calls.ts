@@ -1,12 +1,16 @@
 /**
  * Responsible for: the agent loop's pure per-tool-call helpers - composing a guardrail decision
- * onto the model-facing result (guardedToolResult), the trailing-announcement heuristic
- * (looksUnfinished), and partitioning a step's tool batch into concurrent-read / serial-barrier
- * segments (partitionToolCalls).
- * Not for: executing tools or dispatching the segments - the loop (loop.ts) owns that.
+ * onto the model-facing result (guardedToolResult), rendering PreToolUse hook outcomes at the
+ * boundary (parsedToolInput, hookBlockedResult, hookHaltStop), the trailing-announcement
+ * heuristic (looksUnfinished), and partitioning a step's tool batch into concurrent-read /
+ * serial-barrier segments (partitionToolCalls).
+ * Not for: executing tools or dispatching the segments - the loop (loop.ts) owns that - or
+ * hook dispatch semantics (@host/hooks/runtime).
  */
+import type { PreToolUseOutcome } from "@host/hooks/runtime";
 import type { ToolCall } from "@host/providers";
 import { READ_ONLY_TOOLS } from "@host/tools";
+import type { TurnStop } from "@trevor/session";
 import type { GuardrailDecision } from "./tool-guardrails";
 
 /**
@@ -27,6 +31,52 @@ export function guardedToolResult(rawResult: string, decision: GuardrailDecision
     return decision.guidance;
   }
   return rawResult;
+}
+
+/**
+ * The tool call's arguments as the PreToolUse payload's `toolInput` (25 M5, D-003): the parsed
+ * object when the raw JSON parses (an empty string is the empty object, matching the executor),
+ * else the raw string verbatim - a hook should see exactly what the tool boundary would.
+ */
+export function parsedToolInput(argsJson: string): unknown {
+  try {
+    return JSON.parse(argsJson || "{}");
+  } catch {
+    return argsJson;
+  }
+}
+
+/** Names the blocking hook + reason in one bounded clause, shared by the result/stop renderers. */
+function hookBlockClause(outcome: PreToolUseOutcome): string {
+  const hook = outcome.hook ?? "unknown";
+  return `PreToolUse hook "${hook}"${outcome.reason ? `: ${outcome.reason}` : ""}`;
+}
+
+/**
+ * The model-facing result of a hook-blocked tool call (25 M5, D-003): error-shaped (so guardrail
+ * failure tracking sees a repeated denial) and explicit that the tool DID NOT run, naming the
+ * hook and its stated reason. A halt gets the same paired result so the assistant's tool_call
+ * never dangles without a tool message, even though the turn then terminates.
+ */
+export function hookBlockedResult(outcome: PreToolUseOutcome): string {
+  if (outcome.decision === "halt") {
+    return `error: halted by ${hookBlockClause(outcome)} - the tool was not executed and the turn was stopped.`;
+  }
+  return `error: denied by ${hookBlockClause(outcome)} - the tool was not executed. Change your approach; repeating the same call will be denied again.`;
+}
+
+/**
+ * The terminal stop a PreToolUse halt carries onto the turn completion (25 M5): the same
+ * `TurnStop` mechanism the budget/stall pauses use, with an open `hook_halt` cause (the
+ * TurnStopCause vocabulary is forward-open by design) and the hook's visible reason as summary.
+ */
+export function hookHaltStop(outcome: PreToolUseOutcome, steps: number): TurnStop {
+  return {
+    cause: "hook_halt",
+    action: "paused",
+    summary: `Halted by ${hookBlockClause(outcome)}.`,
+    steps,
+  };
 }
 
 /**

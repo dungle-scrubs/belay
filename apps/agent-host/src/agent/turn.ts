@@ -32,7 +32,7 @@ import {
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
 import type { HistoryImageResolver } from "./image-resolution";
-import { type AgentEvent, type DelegateCapability, runAgent } from "./loop";
+import { type AgentEvent, type DelegateCapability, runAgent, type TurnHooks } from "./loop";
 import type { TurnLoopConfig } from "./loop-config";
 import type { SwitchCell } from "./switch-cell";
 import { prepareTurn } from "./turn-preflight";
@@ -60,6 +60,9 @@ export function publishTurn(
     readonly toolNames?: ReadonlySet<string>;
     /** The delegation capability for a PARENT turn (D-048); absent on a child turn (depth-1). */
     readonly delegate?: DelegateCapability;
+    /** The PreToolUse hook capability (plan 25 M5): the host binds the hooks runtime plus this
+     *  turn's session/caller identity so hooks gate every tool call. Absent = no hooks fire. */
+    readonly hooks?: TurnHooks;
     readonly resolveImages?: HistoryImageResolver;
     /** Optional turn-loop config overrides (e.g. a small `emergencyMaxSteps` for tests); the loop
      *  fills the rest from `DEFAULT_TURN_LOOP_CONFIG`. Absent in production. */
@@ -397,6 +400,7 @@ export function publishTurn(
         toolNames,
         delegate,
         telemetry: sink,
+        ...(options.hooks ? { hooks: options.hooks } : {}),
         ...(loop ? { loop } : {}),
         ...(seedUsage ? { seedUsage } : {}),
         ...(switchCell ? { switch: switchCell } : {}),

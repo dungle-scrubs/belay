@@ -6,6 +6,7 @@ import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
 import { buildCommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
+import { hooksRuntime } from "@host/hooks/host-runtime";
 import { lspManager } from "@host/lsp/host-runtime";
 import { mcpRuntime } from "@host/mcp/host-runtime";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
@@ -489,6 +490,9 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
     parentSessionId: SESSION_ID,
     producerId: PRODUCER_ID,
     mintChildSessionId: () => `${SESSION_ID}::sub::${crypto.randomUUID()}`,
+    // Child turns share the host-wide hooks runtime (plan 25 M5): a delegated subagent's tool
+    // calls pass the same PreToolUse gate, attributed to its own child session.
+    hooks: { dispatchPreToolUse: hooksRuntime.dispatchPreToolUse, cwd: process.cwd() },
   };
   // The host owns the background lifecycle: a background child OUTLIVES this turn, so it runs detached
   // here against the SESSION-level registry + cap, publishing its terminal delegated.to to the parent
@@ -538,6 +542,14 @@ function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): Ac
       delegate,
       telemetry: hostTelemetry,
       providerTrace,
+      // The PreToolUse gate (plan 25 M5): every tool call this turn executes passes the
+      // host-wide hooks runtime, identified as a main-loop or restricted /clip call.
+      hooks: {
+        dispatchPreToolUse: hooksRuntime.dispatchPreToolUse,
+        sessionId: SESSION_ID,
+        callerKind: restricted ? ("clip" as const) : ("main" as const),
+        cwd: process.cwd(),
+      },
       ...(restricted ? { toolNames: CLIPBOARD_TOOL_NAMES } : {}),
       ...(seedUsage ? { seedUsage } : {}),
       ...(switchCell ? { switch: switchCell } : {}),

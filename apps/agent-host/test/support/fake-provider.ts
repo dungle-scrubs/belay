@@ -134,6 +134,7 @@ export async function runTurn(
     readonly runId: string;
     readonly reasoning?: string;
     readonly loop?: Parameters<typeof publishTurn>[2]["loop"];
+    readonly hooks?: Parameters<typeof publishTurn>[2]["hooks"];
   },
 ): Promise<TrevorEventInput[]> {
   const { layer, events } = collectingEmit();

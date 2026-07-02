@@ -6,7 +6,7 @@ import { events, type SessionTransport, type TrevorEventInput } from "@trevor/se
 import { Effect, Layer } from "effect";
 import type { ChatMessage, Provider, ToolDef } from "../providers";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
-import type { DelegateCapability } from "./loop";
+import type { DelegateCapability, TurnHooks } from "./loop";
 import { publishTurn } from "./turn";
 
 /**
@@ -33,6 +33,10 @@ export interface DelegationContext {
   readonly parentSessionId: string;
   readonly producerId: string;
   readonly mintChildSessionId: () => string;
+  /** PreToolUse hook wiring for CHILD turns (plan 25 M5): the host-lifetime dispatcher plus the
+   *  hook cwd. The child-specific identity (its session id, callerKind "subagent") is bound per
+   *  child in runDelegatedChild. Absent = children run without hooks (tests). */
+  readonly hooks?: Pick<TurnHooks, "dispatchPreToolUse" | "cwd">;
 }
 
 export interface DelegationRequest {
@@ -143,6 +147,19 @@ export async function runDelegatedChild(
         toolNames: resolveChildTools(req),
         // A subagent's local-model work queues behind foreground user turns sharing the runtime (D-004).
         priority: "background",
+        // A child's tool calls go through the SAME executeTool boundary as the parent's, so the
+        // PreToolUse gate applies to them too (plan 25 M5) - bound to the child's own session id
+        // and identified as a subagent-initiated call.
+        ...(ctx.hooks
+          ? {
+              hooks: {
+                dispatchPreToolUse: ctx.hooks.dispatchPreToolUse,
+                sessionId: childSessionId,
+                callerKind: "subagent" as const,
+                cwd: ctx.hooks.cwd,
+              },
+            }
+          : {}),
       }).pipe(Effect.provide(childEmit)),
     );
   } catch (cause) {

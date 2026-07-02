@@ -82,6 +82,24 @@ describe("hookExecutionOutcome - failures are diagnostics, never throws (D-007)"
   });
 });
 
+describe("hookExecutionOutcome - silent success is implicit allow (25 M5)", () => {
+  test("exit 0 with empty stdout is an implicit allow decision, not a diagnostic", () => {
+    const outcome = hookExecutionOutcome(execution());
+    expect(outcome).toEqual({ kind: "decision", decision: { decision: "allow" } });
+    expect(isBlockingHookOutcome(outcome)).toBe(false);
+  });
+
+  test("exit 0 with whitespace-only stdout is still an implicit allow", () => {
+    const outcome = hookExecutionOutcome(execution({ stdout: { text: " \n", truncated: false } }));
+    expect(outcome).toEqual({ kind: "decision", decision: { decision: "allow" } });
+  });
+
+  test("a FAILED run with empty stdout stays a command_failed diagnostic, never implicit allow", () => {
+    const outcome = hookExecutionOutcome(execution({ exitCode: 1 }));
+    expect(outcome).toMatchObject({ kind: "diagnostic", reason: "command_failed" });
+  });
+});
+
 describe("hookExecutionOutcome - explicit decisions from successful runs are preserved (D-007)", () => {
   test("an allow decision passes through and does not block", () => {
     const outcome = hookExecutionOutcome(
