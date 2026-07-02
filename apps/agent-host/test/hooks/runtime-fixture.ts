@@ -118,6 +118,8 @@ export function hooksRuntimeHarness(
       approvalsPath,
       workspaceRoot,
       userConfigDir,
+      // Isolate the M10 legacy HOOK.md scan from the developer's real ~/.trevor/hooks.
+      legacyUserHooksDir: join(root, "legacy-user-hooks"),
     }),
     workspaceRoot,
     scratchPath,

@@ -12,6 +12,7 @@ import type { HookDecision, HookDecisionKind } from "./decision";
 import {
   defaultHookDiscoveryRoots,
   discoverHooks,
+  discoverLegacyHookFiles,
   type HookDiscoveryReport,
   type HookDiscoveryRoots,
   type LegacyHookFile,
@@ -198,6 +199,9 @@ export interface HooksRuntimeOptions {
   readonly workspaceRoot?: string;
   /** Trust anchor for user hooks (default TREVOR_HOME). */
   readonly userConfigDir?: string;
+  /** The V1 user hooks dir the legacy HOOK.md scan checks (M10); default `~/.trevor/hooks`.
+   *  Injectable so tests never touch the real legacy home. */
+  readonly legacyUserHooksDir?: string;
   /** Runner tunables passed through to every execution; injectable for tests. */
   readonly runnerOptions?: Omit<HookRunnerOptions, "cwd">;
 }
@@ -455,7 +459,8 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
 
   // The doctor-facing picture (M9): trust is evaluated FRESH per snapshot (approvals re-read,
   // fingerprints recomputed) so /doctor reflects an approval or a script edit immediately, on
-  // the same cached discovery every dispatch uses. `legacy` is M10's HOOK.md migration scan.
+  // the same cached discovery every dispatch uses. `legacy` is the M10 HOOK.md migration scan -
+  // report-only, per snapshot (a migration or a new stray file shows up without a restart).
   const statusSnapshot = (): HooksStatusSnapshot => {
     const report = discovery();
     const approvals = loadHookApprovals(approvalsPath);
@@ -472,7 +477,10 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
         };
       }),
       issues: report.issues,
-      legacy: [],
+      legacy: discoverLegacyHookFiles({
+        workspaceRoot,
+        ...(options.legacyUserHooksDir ? { legacyUserHooksDir: options.legacyUserHooksDir } : {}),
+      }),
     };
   };
 

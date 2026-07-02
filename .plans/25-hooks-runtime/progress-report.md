@@ -150,6 +150,33 @@
 - [ ] GREEN: Manual EZE repro: approve a project hook, deny one tool, allow another, halt one final answer, and verify Doctor/trust diagnostics.
 - [ ] REFACTOR: Record exact verification commands and any accepted follow-up.
 
+##### M10 Verification Record (2026-07-02)
+
+Exact commands run at the M9+M10 cutoff, all green:
+
+```bash
+pnpm lint                          # biome check + filename policy - clean
+pnpm typecheck                     # tsgo across all workspaces - clean
+pnpm test                          # ALL projects: unit + integration + web + e2e
+tests/browser/update-storybook-baselines.sh   # regenerated in the pinned container (Hooks
+                                              # doctor story + panel snapshots changed; 8 PNGs)
+tests/browser/check-storybook-baselines.sh    # container drift check over the committed PNGs - clean
+```
+
+Manual EZE (headless, scripted through the testing surface; temporary
+`apps/agent-host/test/hooks/eze-manual.test.ts`, run then deleted): a scratch workspace with a
+real `.trevor/hooks.json`, two real node hook scripts (`tool-guard.mjs` denies bash / allows
+read; `final-review.mjs` halts Stop), a legacy `.trevor/hooks/old-fmt/HOOK.md`, approvals
+written via the approval store API (`computeHookTrustFingerprint` + `approveHook` +
+`saveHookApprovals` - the approval UX surface is the ask-user tool integration, satisfied at
+the API level per the plan 01 dependency), then one fake-provider turn through `publishTurn`.
+Observed: doctor pre-approval showed `2 awaiting approval` + the `hooks.approval` and
+`hooks.legacy` warnings; post-approval showed `2 approved`; the turn emitted
+`hook.decision` deny (bash) with the model-facing denial result, ran read normally with NO
+allow event, and emitted `hook.decision` halt (Stop) with the `hook_halt` stop on the
+completion (final text intact); doctor afterwards showed `2 approved`, `3 runs` in the debug
+histogram, and the legacy migration finding.
+
 ### Done Gate
 
 - [ ] Only `PreToolUse` and `Stop` hooks exist.
