@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M6 - Light Enforcement and Full Verification
-- Current cutoff blockers: 7
+- Current focus: complete - all milestones done
+- Current cutoff blockers: 0
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 32
+- Completed current work: 39
 
 ## Current Cutoff Blockers
 
@@ -71,16 +71,17 @@
 
 #### M6: Light Enforcement and Full Verification
 
-- [ ] RED: Prove a new loose `src/` root file fails the root-flatness guard and a header-less file fails the header check.
-- [ ] GREEN: Wire both checks into the standard verification path (Vitest project / CI), independent of the current file list.
-- [ ] GREEN: Run lint, typecheck, all relevant Vitest projects, and the hermetic e2e lane.
-- [ ] REFACTOR: Record exact completed verification commands and confirm the heavy module-map manifest remains deferred.
+- [x] RED: Prove a new loose `src/` root file fails the root-flatness guard and a header-less file fails the header check.
+- [x] GREEN: Wire both checks into the standard verification path (Vitest project / CI), independent of the current file list.
+- [x] GREEN: Run lint, typecheck, all relevant Vitest projects, and the hermetic e2e lane.
+- [x] REFACTOR: Record exact completed verification commands and confirm the heavy module-map manifest remains deferred.
+  - Ran: `pnpm lint` / `pnpm typecheck` / `pnpm test` (unit+integration+web+e2e: 2891 passed, 3 gated skips) / `git log --follow` across boot/config.ts + agent/turn.ts. Module-map manifest stays deferred (D-009).
 
 ### Done Gate
 
-- [ ] No loose source files under `src/` root (allowlist only); header check green across host source.
-- [ ] AGENTS.md, the host `ARCHITECTURE.md`, and the automated checks agree on the same conventions.
-- [ ] `git log --follow` resolves history across the moved files (pure-move commits verified).
+- [x] No loose source files under `src/` root (allowlist only); header check green across host source.
+- [x] AGENTS.md, the host `ARCHITECTURE.md`, and the automated checks agree on the same conventions.
+- [x] `git log --follow` resolves history across the moved files (pure-move commits verified).
 
 ## Accepted/Deferred Follow-Up
 
