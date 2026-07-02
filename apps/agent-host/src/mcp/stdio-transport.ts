@@ -1,21 +1,27 @@
 import { spawn } from "node:child_process";
+import { msg } from "@host/transport/messages";
 import type { McpStdioServerConfig } from "./config";
 import {
+  isMcpTransportError,
   McpClosedError,
   McpMalformedResponseError,
-  McpRpcError,
   McpServerCrashError,
   type McpTransportError,
+  type McpTransportErrorTag,
 } from "./errors";
 import { createFrameParser, encodeFrame } from "./framing";
 import {
   armRequestTimeout,
-  decodeInitializeResult,
-  MCP_PROTOCOL_VERSION,
+  decodeRpcError,
   type McpInitializeResult,
   type McpServerRequestHandler,
   type McpTransport,
   type McpTransportState,
+  notificationEnvelope,
+  performHandshake,
+  requestEnvelope,
+  responseEnvelope,
+  serverRequestOutcome,
 } from "./transport";
 
 /**
@@ -23,10 +29,13 @@ import {
  * speaks JSON-RPC 2.0 over Content-Length-framed pipes - the initialize handshake with
  * protocolVersion negotiation, request/response correlation by id, per-request timeouts,
  * pending-request draining on every death path (crash, close, poisoned stream), and graceful
- * shutdown. Plain async at the I/O edge (per the host's transport-edge convention), but every
- * failure is a typed ./errors class, never a bare string. D-004: the child receives ONLY the
+ * shutdown. Any handshake failure (negotiation reject, timeout, rpc error) is TERMINAL: the
+ * transport parks in "failed" and the child is reaped, never left as a wedged zombie. Plain
+ * async at the I/O edge (per the host's transport-edge convention), but every failure is a
+ * typed ./errors class, never a bare string. D-004: the child receives ONLY the
  * {@link STDIO_CHILD_ENV_ALLOWLIST} vars plus the server config's explicit env - provider/API
- * keys and TREVOR_* state never reach an MCP child.
+ * keys and TREVOR_* state never reach an MCP child - and any server env VALUE that leaks into
+ * the child's stderr is scrubbed before the tail reaches crash details.
  *
  * Responsible for: the stdio child lifecycle, the MCP handshake, and framed JSON-RPC
  * request/response plumbing with classified failures, behind the shared ./transport contract.
@@ -88,6 +97,7 @@ export function spawnStdioTransport(
   let initialized = false;
   let protocolVersion: string | undefined;
   let lastError: string | undefined;
+  let lastErrorTag: McpTransportErrorTag | undefined;
   /** The terminal failure every pending and future request gets; null while alive. */
   let fate: McpTransportError | null = null;
   let exited = false;
@@ -98,6 +108,25 @@ export function spawnStdioTransport(
   const pending = new Map<number, PendingRequest>();
   const parser = createFrameParser();
   const exitWaiters: (() => void)[] = [];
+
+  /** Records the failure as the transport's last error (message + machine-readable tag). */
+  const fail = <E extends McpTransportError>(error: E): E => {
+    lastError = error.message;
+    lastErrorTag = error._tag;
+    return error;
+  };
+
+  /** The stderr tail with every server env VALUE scrubbed - crash details flow to /doctor and
+   *  the UI, and a server that echoes its own secrets must not smuggle them there. */
+  const scrubbedStderrTail = (): string => {
+    let tail = stderrTail.trim();
+    for (const value of Object.values(server.env)) {
+      if (value.length > 0) {
+        tail = tail.split(value).join("[redacted]");
+      }
+    }
+    return tail;
+  };
 
   const settle = (id: number): PendingRequest | undefined => {
     const entry = pending.get(id);
@@ -116,7 +145,7 @@ export function spawnStdioTransport(
     }
     fate = error;
     status = terminalStatus;
-    lastError = error.message;
+    fail(error);
     for (const id of [...pending.keys()]) {
       settle(id)?.reject(error);
     }
@@ -137,7 +166,7 @@ export function spawnStdioTransport(
     let message: Record<string, unknown>;
     try {
       const parsed: unknown = JSON.parse(body);
-      if (typeof parsed !== "object" || parsed === null) {
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
         throw new Error("not an object");
       }
       message = parsed as Record<string, unknown>;
@@ -158,15 +187,7 @@ export function spawnStdioTransport(
         return; // a late response after timeout/close - nothing to correlate
       }
       if ("error" in message) {
-        const error = (message.error ?? {}) as { code?: unknown; message?: unknown };
-        const failure = new McpRpcError({
-          server: server.name,
-          method: entry.method,
-          ...(typeof error.code === "number" ? { code: error.code } : {}),
-          detail: typeof error.message === "string" ? error.message : "JSON-RPC error",
-        });
-        lastError = failure.message;
-        entry.reject(failure);
+        entry.reject(fail(decodeRpcError(server.name, entry.method, message.error)));
         return;
       }
       entry.resolve(message.result);
@@ -174,38 +195,14 @@ export function spawnStdioTransport(
     }
 
     if (typeof message.method === "string") {
-      // A server-initiated request or notification. Requests (they carry an id) go to the
-      // injected mediation handler (M6); without one, method-not-found - per JSON-RPC.
+      // A server-initiated request or notification. Requests (they carry an id) run through
+      // the shared outcome ladder over the injected mediation handler (M6).
       if (message.id !== undefined && !fate) {
         const id = message.id as number | string;
-        const method = message.method;
-        const handler = options.onServerRequest;
-        if (!handler) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32601, message: `method not supported: ${method}` },
-          });
-          return;
-        }
-        void handler(method, message.params).then(
+        void serverRequestOutcome(options.onServerRequest, message.method, message.params).then(
           (outcome) => {
             if (!fate) {
-              send(
-                "result" in outcome
-                  ? { jsonrpc: "2.0", id, result: outcome.result }
-                  : { jsonrpc: "2.0", id, error: outcome.error },
-              );
-            }
-          },
-          // The mediator answers structurally; this backstop covers a defect in it.
-          () => {
-            if (!fate) {
-              send({
-                jsonrpc: "2.0",
-                id,
-                error: { code: -32603, message: "host mediation failed internally" },
-              });
+              send(responseEnvelope(id, outcome));
             }
           },
         );
@@ -214,14 +211,15 @@ export function spawnStdioTransport(
     }
 
     const entryId = typeof message.id === "number" ? message.id : undefined;
-    const malformed = new McpMalformedResponseError({
-      server: server.name,
-      detail: "response carries neither result nor error",
-    });
+    const malformed = fail(
+      new McpMalformedResponseError({
+        server: server.name,
+        detail: "response carries neither result nor error",
+      }),
+    );
     if (entryId !== undefined) {
       settle(entryId)?.reject(malformed);
     }
-    lastError = malformed.message;
   };
 
   child.stdout.on("data", (chunk: Buffer) => {
@@ -230,10 +228,7 @@ export function spawnStdioTransport(
       frames = parser.push(chunk);
     } catch (error) {
       terminate(
-        new McpMalformedResponseError({
-          server: server.name,
-          detail: error instanceof Error ? error.message : String(error),
-        }),
+        new McpMalformedResponseError({ server: server.name, detail: msg(error) }),
         "failed",
       );
       return;
@@ -259,12 +254,13 @@ export function spawnStdioTransport(
     for (const wake of exitWaiters.splice(0)) {
       wake();
     }
+    const tail = scrubbedStderrTail();
     terminate(
       new McpServerCrashError({
         server: server.name,
         detail:
           `child exited (code ${code ?? "null"}, signal ${signal ?? "null"})` +
-          (stderrTail ? `; stderr tail: ${stderrTail.trim()}` : ""),
+          (tail ? `; stderr tail: ${tail}` : ""),
       }),
       "failed",
     );
@@ -291,38 +287,36 @@ export function spawnStdioTransport(
         (timeout) => {
           const entry = settle(id);
           if (entry) {
-            lastError = timeout.message;
-            entry.reject(timeout);
+            entry.reject(fail(timeout));
           }
         },
       );
       pending.set(id, { method, resolve, reject, cancelTimeout });
-      send({ jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) });
+      send(requestEnvelope(id, method, params));
     });
 
   const notify = (method: string, params?: unknown): void => {
     if (fate) {
       return;
     }
-    send({ jsonrpc: "2.0", method, ...(params === undefined ? {} : { params }) });
+    send(notificationEnvelope(method, params));
   };
 
   const doInitialize = async (): Promise<McpInitializeResult> => {
-    const raw = await request("initialize", {
-      protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo,
-    });
-    const outcome = decodeInitializeResult(server.name, raw);
-    if ("failure" in outcome) {
-      terminate(outcome.failure, "failed");
-      throw outcome.failure;
+    try {
+      const result = await performHandshake(server.name, clientInfo, request, notify);
+      initialized = true;
+      protocolVersion = result.protocolVersion;
+      status = "ready";
+      return result;
+    } catch (error) {
+      // ANY handshake failure is terminal: without a completed handshake the child is a
+      // zombie, so it is reaped and the transport parks in "failed" (never "configured").
+      if (isMcpTransportError(error)) {
+        terminate(error, "failed");
+      }
+      throw error;
     }
-    notify("notifications/initialized");
-    initialized = true;
-    protocolVersion = outcome.result.protocolVersion;
-    status = "ready";
-    return outcome.result;
   };
 
   const awaitExit = (timeoutMs: number): Promise<boolean> =>
@@ -367,6 +361,7 @@ export function spawnStdioTransport(
       initialized,
       ...(protocolVersion ? { protocolVersion } : {}),
       ...(lastError ? { lastError } : {}),
+      ...(lastErrorTag ? { lastErrorTag } : {}),
     }),
   };
 }

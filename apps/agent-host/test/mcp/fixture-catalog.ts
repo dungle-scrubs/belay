@@ -134,11 +134,19 @@ export const BIG_FIXTURE_CHARS = 20_000;
 
 /** Expands a FIXTURE_PROMPTS entry for prompts/get (M6): server-side argument substitution per
  *  the MCP spec. Shared so the stdio and http fixtures expand identically. Returns undefined
- *  for an unknown prompt (the fixture answers with a JSON-RPC error). */
+ *  for an unknown prompt (the fixture answers with a JSON-RPC error). `verbose` is readable
+ *  but deliberately unlisted (like fixture://big): an OVERSIZED description for the
+ *  description-bounding tests. */
 export function fixturePromptResult(
   name: string | undefined,
   args: Record<string, unknown> | undefined,
 ): { description: string; messages: unknown[] } | undefined {
+  if (name === "verbose") {
+    return {
+      description: "d".repeat(BIG_FIXTURE_CHARS),
+      messages: [{ role: "user", content: { type: "text", text: "verbose prompt body" } }],
+    };
+  }
   if (name === "summarize") {
     return {
       description: "summarize the given text",

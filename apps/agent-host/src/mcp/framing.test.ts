@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { createFrameParser, encodeFrame, MAX_FRAME_BODY_BYTES } from "./framing";
+import {
+  createFrameParser,
+  encodeFrame,
+  MAX_FRAME_BODY_BYTES,
+  MAX_FRAME_HEADER_BYTES,
+} from "./framing";
 
 function frame(body: string, header = `Content-Length: ${Buffer.byteLength(body)}`): Buffer {
   return Buffer.from(`${header}\r\n\r\n${body}`, "utf8");
@@ -91,5 +96,28 @@ describe("createFrameParser", () => {
     expect(() =>
       parser.push(Buffer.from(`Content-Length: ${MAX_FRAME_BODY_BYTES + 1}\r\n\r\n`)),
     ).toThrowError(expect.objectContaining({ _tag: "McpFramingError" }));
+  });
+
+  test("an unframed garbage stream errors at the header cap instead of buffering forever", () => {
+    const parser = createFrameParser();
+    const junk = Buffer.alloc(16 * 1024, 0x61); // "a"s: no terminator, no Content-Length
+    expect(() => {
+      for (let pushed = 0; pushed <= MAX_FRAME_HEADER_BYTES + junk.length; pushed += junk.length) {
+        parser.push(junk);
+      }
+    }).toThrowError(expect.objectContaining({ _tag: "McpFramingError" }));
+    expect(parser.buffered()).toBeLessThanOrEqual(MAX_FRAME_HEADER_BYTES + junk.length);
+  });
+
+  test("assembles a large body fed in many small chunks", () => {
+    const parser = createFrameParser();
+    const body = JSON.stringify({ data: "x".repeat(64 * 1024) });
+    const whole = encodeFrame(body);
+    const frames: string[] = [];
+    for (let at = 0; at < whole.length; at += 1_024) {
+      frames.push(...parser.push(whole.subarray(at, at + 1_024)));
+    }
+    expect(frames).toEqual([body]);
+    expect(parser.buffered()).toBe(0);
   });
 });

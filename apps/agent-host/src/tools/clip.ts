@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@host/providers/index";
 import { msg } from "@host/transport/messages";
 import type { ClipboardWriter } from "./clipboard";
+import { clipLine } from "./shared";
 
 /**
  * The clipboard convenience surface behind `/clip` (plan 06): the immediate bare-`/clip` copy of
@@ -20,11 +21,8 @@ export const CLIPBOARD_TOOL_NAMES: ReadonlySet<string> = new Set(["clipboard_wri
 /** Longest single-line preview of copied text shown in a command result. */
 const PREVIEW_MAX = 80;
 
-/** A bounded single-line preview of `text` for a visible result (collapses whitespace). */
-function preview(text: string): string {
-  const oneLine = text.replace(/\s+/gu, " ").trim();
-  return oneLine.length > PREVIEW_MAX ? `${oneLine.slice(0, PREVIEW_MAX)}…` : oneLine;
-}
+/** A bounded single-line preview of `text` for a visible result (the shared clipLine). */
+const preview = (text: string): string => clipLine(text, PREVIEW_MAX);
 
 /**
  * The last copyable item in the current session view: the most recent user or assistant message

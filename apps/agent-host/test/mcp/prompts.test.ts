@@ -80,6 +80,17 @@ describe("mcp prompts - imported artifacts", () => {
     });
   });
 
+  it("bounds an oversized prompt DESCRIPTION - no unbounded server string reaches the model", async () => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
+      const artifact = await Effect.runPromise(runtime.getPrompt("alpha:verbose"));
+      expect(artifact.truncated).toBe(true);
+      expect(artifact.description?.length).toBeLessThanOrEqual(
+        MAX_OUTPUT + "\n…[truncated]".length,
+      );
+      expect(artifact.description?.endsWith("…[truncated]")).toBe(true);
+    });
+  });
+
   it("imports prompts over http too", async () => {
     const fixture = await startFixtureHttpServer();
     try {

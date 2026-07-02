@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { McpServerConfig } from "@host/mcp/config";
+import { McpServerCrashError, McpTimeoutError } from "@host/mcp/errors";
 import { createMcpRuntime, type McpServerStatusEntry } from "@host/mcp/runtime";
 import { test } from "vitest";
 import { buildLiveDoctorSnapshot, type DoctorProbeResults } from "./build";
@@ -8,9 +9,11 @@ import { mcpDebugSummary, mcpPeripheralState } from "./mcp-status";
 /**
  * Plan 23 M8: the /doctor MCP rollup - injected runtime status snapshots folded into the one
  * PeripheralState the doctor MCP area renders. Pins the full state matrix (unconfigured /
- * configured-lazy / ready / auth-needed / failed / closed / timeout), the multi-server rollup
- * precedence (auth-needed over error over closed), the D-009 detail contents (counts,
- * transports, freshness, sanitized last error), and that no secret survives into the state.
+ * configured-lazy / ready / auth-needed / failed with tag-classified timeout / closed), the
+ * multi-server rollup precedence (auth-needed over error over closed), the D-009 detail
+ * contents (counts, transports, freshness, sanitized last error), and that no secret survives
+ * into the state. Failure classification rides the machine-readable lastErrorTag, so entries
+ * here carry REAL errors.ts tags, never sniffable message shapes.
  */
 
 const NOW = Date.parse("2026-07-02T12:00:00.000Z");
@@ -124,13 +127,18 @@ test("any enabled server needing auth folds to auth-needed, naming it with its r
 });
 
 test("any enabled failed server folds to error carrying the sanitized last error", () => {
+  const crash = new McpServerCrashError({
+    server: "github",
+    detail: "child exited (code 127, signal null)",
+  });
   const state = mcpPeripheralState(
     [
       entry(),
       entry({
         server: "github",
         status: "failed",
-        lastError: 'MCP server "github" crashed: child exited (code 127, signal null)',
+        lastError: crash.message,
+        lastErrorTag: crash._tag,
       }),
     ],
     NOW,
@@ -148,18 +156,25 @@ test("closed servers fold to unavailable (configured but not serving)", () => {
   assert.ok(state.kind === "unavailable" && state.detail?.includes("closed"));
 });
 
-test("a handshake that timed out folds to timeout with the sanitized message", () => {
+test("a handshake that timed out folds to timeout, classified by TAG not message shape", () => {
+  // A handshake timeout is terminal: the transport parks in "failed" carrying the timeout tag.
+  const timeout = new McpTimeoutError({ server: "alpha", method: "initialize", timeoutMs: 30_000 });
   const state = mcpPeripheralState(
-    [
-      entry({
-        status: "configured",
-        lastError: 'MCP request "initialize" to "alpha" timed out after 30000ms',
-      }),
-    ],
+    [entry({ status: "failed", lastError: timeout.message, lastErrorTag: timeout._tag })],
     NOW,
   );
   assert.equal(state.kind, "timeout");
   assert.ok(state.kind === "timeout" && state.detail?.includes("timed out after 30000ms"));
+});
+
+test("a per-request timeout on a READY server stays ready (never the timeout state)", () => {
+  const timeout = new McpTimeoutError({ server: "alpha", method: "tools/call", timeoutMs: 5_000 });
+  const state = mcpPeripheralState(
+    [entry({ status: "ready", lastError: timeout.message, lastErrorTag: timeout._tag })],
+    NOW,
+  );
+  assert.equal(state.kind, "ready");
+  assert.ok(state.kind === "ready" && state.detail.includes("last error"));
 });
 
 test("rollup precedence: auth-needed beats error beats closed (the plan's ladder)", () => {

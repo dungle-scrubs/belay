@@ -111,6 +111,11 @@ export type McpTransportError =
   | McpMalformedResponseError
   | McpAuthRequiredError;
 
+/** The machine-readable failure classification a transport carries in its state (and the
+ *  status snapshot forwards), so callers like /doctor discriminate by tag, never by parsing
+ *  the human-readable message. */
+export type McpTransportErrorTag = McpTransportError["_tag"];
+
 const TRANSPORT_ERROR_TAGS: ReadonlySet<string> = new Set([
   "McpFramingError",
   "McpHandshakeError",

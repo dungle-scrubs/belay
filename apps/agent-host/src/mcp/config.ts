@@ -1,5 +1,7 @@
+import { asPositiveInt } from "@host/boot/coerce";
 import { loadJsonConfig } from "@host/boot/config";
 import { USER_MCP_SERVERS_JSON } from "@host/boot/paths";
+import { asNonEmptyString, asRecord } from "./decode";
 
 /**
  * The normalized MCP server config model (plan 23 M1). MCP is a generalized host-owned runtime
@@ -41,7 +43,9 @@ export interface McpStdioServerConfig {
   readonly requestTimeoutMs: number;
   /** Server-originated sampling (sampling/createMessage) opt-in. OFF unless the entry says
    *  `"sampling": true`; the flag is only ever PRESENT (as `true`) when opted in, so the
-   *  default is structural - absent means denied (plan 23 M6). */
+   *  default is structural - absent means denied (plan 23 M6). Note: the HOST-side sampling
+   *  handler seam is wired by a later surface; until then an opted-in server is still denied
+   *  (the host has sampling disabled), and this flag alone cannot enable it. */
   readonly sampling?: true;
 }
 
@@ -305,20 +309,6 @@ function asHttpEndpoint(raw: unknown): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
-}
-
-function asNonEmptyString(raw: unknown): string | undefined {
-  return typeof raw === "string" && raw.trim().length > 0 ? raw : undefined;
-}
-
-function asPositiveInt(raw: unknown): number | undefined {
-  return typeof raw === "number" && Number.isInteger(raw) && raw > 0 ? raw : undefined;
 }
 
 function stringArray(raw: unknown): readonly string[] {

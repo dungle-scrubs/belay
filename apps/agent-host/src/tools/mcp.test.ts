@@ -231,4 +231,26 @@ describe("mcp tool - search caps (D-003)", () => {
     expect(refreshed).toEqual(["fresh"]);
     expect(result).toContain("echo");
   });
+
+  test("search skips servers whose transport fate is sealed (failed/closed)", async () => {
+    // A dead server cannot answer discovery; retrying it would add its latency to every search.
+    const refreshed: string[] = [];
+    const runtime = fakeRuntime(
+      [
+        entry({ server: "fresh" }),
+        entry({ server: "dead", status: "failed" }),
+        entry({ server: "gone", status: "closed" }),
+      ],
+      {
+        capabilities: fakeCache({
+          refreshCapabilities: (server) => {
+            refreshed.push(server);
+            return Promise.resolve(undefined);
+          },
+        }),
+      },
+    );
+    await run(runtime, { action: "search", query: "echo" });
+    expect(refreshed).toEqual(["fresh"]);
+  });
 });

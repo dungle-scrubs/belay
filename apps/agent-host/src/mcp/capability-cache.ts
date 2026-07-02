@@ -1,3 +1,4 @@
+import { msg } from "@host/transport/messages";
 import {
   discoverCapabilities,
   type McpCapabilityRecord,
@@ -9,10 +10,11 @@ import type { McpTransport } from "./transport";
 /**
  * The per-server MCP capability cache (plan 23 M4): holds the latest ./capabilities discovery
  * per named server with freshness metadata, re-discovers on demand (refreshCapabilities), and
- * exposes the catalog ONLY through capped, ranked substring search (searchCapabilities) -
- * D-003: a large catalog never dumps wholesale into a prompt; the search result is the only
- * exposure. snapshot() is the /doctor projection (D-009): plain serializable freshness/count
- * data, readable without touching any transport.
+ * exposes the catalog through capped, ranked substring search (searchCapabilities) - D-003:
+ * a large catalog never dumps wholesale into a prompt; discovery is capped search here, and
+ * the per-family list surfaces above (the runtime's resource/prompt listers and the mcp
+ * tool's actions over them) cap their own rendering. snapshot() is the /doctor projection
+ * (D-009): plain serializable freshness/count data, readable without touching any transport.
  *
  * Responsible for: caching discovery results, on-demand refresh, capped ranked search, and
  * the plain-data freshness snapshot.
@@ -98,7 +100,7 @@ export function createMcpCapabilityCache(
       entry.lastError = undefined;
       return capabilities;
     } catch (error) {
-      entry.lastError = error instanceof Error ? error.message : String(error);
+      entry.lastError = msg(error);
       throw error;
     }
   };

@@ -1,73 +1,29 @@
+import type { FixtureCatalogMode } from "./fixture-catalog";
 import {
-  BIG_FIXTURE_CHARS,
-  catalogPage,
-  catalogToolsFor,
-  FIXTURE_ELICITATION_PARAMS,
-  FIXTURE_PROMPTS,
-  FIXTURE_RESOURCE_CONTENTS,
-  FIXTURE_RESOURCES,
-  FIXTURE_SAMPLING_PARAMS,
-  type FixtureCatalogMode,
-  fixturePromptResult,
-} from "./fixture-catalog";
+  createFixtureDispatcher,
+  createFixtureServerRequests,
+  type JsonRpcIn,
+  observedResponseText,
+  probeRequest,
+} from "./fixture-dispatch";
 
 /**
  * A minimal MCP stdio fixture server for the transport integration tests (plan 23 M2/M4/M5).
  * Speaks JSON-RPC 2.0 over LSP-style Content-Length frames with its OWN tiny framing
  * implementation (deliberately independent of src/mcp/framing.ts, so the tests are
- * cross-implementation, not self-confirming). Implements initialize + paginated
- * tools/resources/prompts lists (the shared ./fixture-catalog) + resources/read over the
- * shared FIXTURE_RESOURCE_CONTENTS + trivial tools, plus error triggers:
- *   echo       - returns the given text
- *   env_probe  - returns JSON.stringify(process.env) (for the D-004 env-allowlist probe)
- *   args_probe - returns JSON.stringify(arguments) (for the M5 argument round-trip test)
- *   big        - returns `chars` (default BIG_FIXTURE_CHARS) characters (for bounding tests)
- *   soft_fail  - returns an isError result with content (for the M5 isError path)
- *   boom       - responds with a JSON-RPC error
- *   hang       - never responds (for timeout tests)
+ * cross-implementation, not self-confirming). Method dispatch - initialize, the paginated
+ * ./fixture-catalog lists, prompts/get, resources/read, and the common tools/call behaviors
+ * (echo, env_probe, args_probe, big, soft_fail, boom, hang) - is the shared
+ * ./fixture-dispatch; only the wire mechanics and stdio-specific triggers live here:
  *   crash      - exits the process without responding
+ *   crash_loud - writes the server env secret to stderr, then exits (C5 scrub tests)
  *   garbage    - responds with a well-framed but non-JSON body
- * M6 mediation probes - each sends a server-originated REQUEST mid tools/call, waits for the
- * client's JSON-RPC response, and answers the original call with that response as JSON text
- * (so tests read exactly what this server saw):
- *   elicit_probe   - sends elicitation/create (FIXTURE_ELICITATION_PARAMS)
- *   sampling_probe - sends sampling/createMessage (FIXTURE_SAMPLING_PARAMS)
- * prompts/get expands the shared ./fixture-catalog prompts with argument substitution.
- * `--protocol=<v>` forces the initialize result's protocolVersion (for negotiation tests);
- * by default it echoes the client's requested version. `--catalog=large|counting` selects a
- * ./fixture-catalog mode (discovery/search-cap tests). Exits 0 when stdin ends.
+ * M6 mediation probes (elicit_probe / sampling_probe) send a server-originated REQUEST mid
+ * tools/call and answer the original call with the client's JSON-RPC response as JSON text.
+ * Flags: `--protocol=<v>` forces the initialize result's protocolVersion (negotiation tests);
+ * `--catalog=large|counting` selects a ./fixture-catalog mode; `--init=hang` never answers
+ * initialize (handshake-timeout tests). Exits 0 when stdin ends.
  */
-
-interface JsonRpcIn {
-  readonly jsonrpc?: string;
-  readonly id?: number | string;
-  readonly method?: string;
-  readonly params?: {
-    readonly protocolVersion?: string;
-    readonly cursor?: string;
-    readonly name?: string;
-    readonly uri?: string;
-    readonly arguments?: Record<string, unknown>;
-  };
-  readonly result?: unknown;
-  readonly error?: unknown;
-}
-
-/** Server-originated requests awaiting the client's response, keyed by our request id. */
-const pendingServerRequests = new Map<string, (response: JsonRpcIn) => void>();
-let serverRequestSeq = 0;
-
-/** Sends a server-originated request and invokes `onResponse` with the client's response. */
-function sendServerRequest(
-  method: string,
-  params: unknown,
-  onResponse: (response: JsonRpcIn) => void,
-): void {
-  serverRequestSeq += 1;
-  const id = `srv-${serverRequestSeq}`;
-  pendingServerRequests.set(id, onResponse);
-  send({ jsonrpc: "2.0", id, method, params });
-}
 
 const protocolOverride = process.argv
   .find((arg) => arg.startsWith("--protocol="))
@@ -77,7 +33,15 @@ const catalogMode = (process.argv
   .find((arg) => arg.startsWith("--catalog="))
   ?.slice("--catalog=".length) ?? "default") as FixtureCatalogMode;
 
-let toolsListCalls = 0;
+const initMode = process.argv.find((arg) => arg.startsWith("--init="))?.slice("--init=".length);
+
+const dispatcher = createFixtureDispatcher({
+  serverInfoName: "trevor-mcp-fixture",
+  protocolVersion: protocolOverride,
+  catalog: catalogMode,
+});
+
+const serverRequests = createFixtureServerRequests();
 
 let buffer = Buffer.alloc(0);
 
@@ -117,153 +81,52 @@ function send(message: unknown): void {
   sendRaw(JSON.stringify(message));
 }
 
-function result(id: JsonRpcIn["id"], value: unknown): void {
-  send({ jsonrpc: "2.0", id, result: value });
-}
-
-function rpcError(id: JsonRpcIn["id"], code: number, message: string): void {
-  send({ jsonrpc: "2.0", id, error: { code, message } });
-}
-
 function handle(message: JsonRpcIn): void {
   if (message.method === undefined) {
     // A JSON-RPC RESPONSE to one of our server-originated requests (M6 probes).
-    const pending =
-      message.id === undefined ? undefined : pendingServerRequests.get(String(message.id));
-    if (pending) {
-      pendingServerRequests.delete(String(message.id));
-      pending(message);
-    }
+    serverRequests.settle(message);
     return;
   }
-  if (message.method === "initialize") {
-    result(message.id, {
-      protocolVersion: protocolOverride ?? message.params?.protocolVersion ?? "2025-06-18",
-      capabilities: { tools: {} },
-      serverInfo: { name: "trevor-mcp-fixture", version: "0.0.1" },
-    });
-    return;
-  }
-  if (message.method === "notifications/initialized") {
-    return; // notification: no response
-  }
-  if (message.method === "tools/list") {
-    if (message.params?.cursor === undefined) {
-      toolsListCalls += 1;
-    }
-    const { page, nextCursor } = catalogPage(
-      catalogToolsFor(catalogMode, toolsListCalls),
-      message.params?.cursor,
-    );
-    result(message.id, { tools: page, ...(nextCursor ? { nextCursor } : {}) });
-    return;
-  }
-  if (message.method === "resources/list") {
-    const { page, nextCursor } = catalogPage(FIXTURE_RESOURCES, message.params?.cursor);
-    result(message.id, { resources: page, ...(nextCursor ? { nextCursor } : {}) });
-    return;
-  }
-  if (message.method === "prompts/list") {
-    const { page, nextCursor } = catalogPage(FIXTURE_PROMPTS, message.params?.cursor);
-    result(message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
-    return;
-  }
-  if (message.method === "prompts/get") {
-    const expanded = fixturePromptResult(message.params?.name, message.params?.arguments);
-    if (!expanded) {
-      rpcError(message.id, -32602, `unknown prompt ${String(message.params?.name)}`);
-      return;
-    }
-    result(message.id, expanded);
-    return;
-  }
-  if (message.method === "resources/read") {
-    const uri = message.params?.uri;
-    const contents = uri === undefined ? undefined : FIXTURE_RESOURCE_CONTENTS[uri];
-    if (!contents) {
-      rpcError(message.id, -32002, `resource not found: ${String(uri)}`);
-      return;
-    }
-    result(message.id, {
-      contents: [
-        {
-          uri,
-          mimeType: contents.mimeType,
-          ...(contents.text !== undefined ? { text: contents.text } : { blob: contents.blob }),
-        },
-      ],
-    });
-    return;
+  if (message.method === "initialize" && initMode === "hang") {
+    return; // deliberately never answers the handshake (C1 handshake-timeout tests)
   }
   if (message.method === "tools/call") {
     const name = message.params?.name;
-    if (name === "echo") {
-      result(message.id, {
-        content: [{ type: "text", text: String(message.params?.arguments?.text ?? "") }],
-      });
-      return;
-    }
-    if (name === "env_probe") {
-      result(message.id, { content: [{ type: "text", text: JSON.stringify(process.env) }] });
-      return;
-    }
-    if (name === "args_probe") {
-      result(message.id, {
-        content: [{ type: "text", text: JSON.stringify(message.params?.arguments ?? {}) }],
-      });
-      return;
-    }
-    if (name === "big") {
-      const chars = Number(message.params?.arguments?.chars ?? BIG_FIXTURE_CHARS);
-      result(message.id, { content: [{ type: "text", text: "b".repeat(chars) }] });
-      return;
-    }
-    if (name === "soft_fail") {
-      result(message.id, {
-        content: [{ type: "text", text: "external service exploded" }],
-        isError: true,
-      });
-      return;
-    }
-    if (name === "elicit_probe" || name === "sampling_probe") {
-      const callId = message.id;
-      sendServerRequest(
-        name === "elicit_probe" ? "elicitation/create" : "sampling/createMessage",
-        name === "elicit_probe" ? FIXTURE_ELICITATION_PARAMS : FIXTURE_SAMPLING_PARAMS,
-        (response) => {
-          result(callId, {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  ...(response.result !== undefined ? { result: response.result } : {}),
-                  ...(response.error !== undefined ? { error: response.error } : {}),
-                }),
-              },
-            ],
-          });
-        },
-      );
-      return;
-    }
-    if (name === "boom") {
-      rpcError(message.id, -32001, "boom tool always fails");
-      return;
-    }
-    if (name === "hang") {
-      return; // deliberately never responds
-    }
     if (name === "crash") {
       process.exit(7);
+    }
+    if (name === "crash_loud") {
+      // C5: leak the explicit server env to stderr, then die - the transport must scrub it.
+      process.stderr.write(
+        `fatal: secret=${process.env.MCP_FIXTURE_SECRET ?? "unset"} exploded\n`,
+        () => setTimeout(() => process.exit(9), 50),
+      );
+      return;
     }
     if (name === "garbage") {
       sendRaw("this is not json {");
       return;
     }
-    rpcError(message.id, -32601, `unknown tool ${String(name)}`);
-    return;
+    if (name === "elicit_probe" || name === "sampling_probe") {
+      const callId = message.id;
+      const { method, params } = probeRequest(name);
+      send(
+        serverRequests.open(method, params, (response) => {
+          send({
+            jsonrpc: "2.0",
+            id: callId,
+            result: { content: [{ type: "text", text: observedResponseText(response) }] },
+          });
+        }),
+      );
+      return;
+    }
   }
-  if (message.id !== undefined) {
-    rpcError(message.id, -32601, `method not found: ${String(message.method)}`);
+  const reply = dispatcher.dispatch(message);
+  if (reply.kind === "result") {
+    send({ jsonrpc: "2.0", id: reply.id, result: reply.value });
+  } else if (reply.kind === "error") {
+    send({ jsonrpc: "2.0", id: reply.id, error: { code: reply.code, message: reply.message } });
   }
+  // "none": deliberately no reply (hang, notifications).
 }

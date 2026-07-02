@@ -18,6 +18,7 @@ function mediator(
 ): ReturnType<typeof createMcpServerMediator> {
   return createMcpServerMediator({
     server: "alpha",
+    requestTimeoutMs: 5_000,
     sampling: { enabled: false, consumeBudget: () => true },
     ...overrides,
   });
@@ -103,6 +104,23 @@ describe("mediator - elicitation", () => {
     const outcome = await handle("elicitation/create", { message: "?" });
     expect(outcome).toEqual({ error: { code: -32603, message: expect.any(String) } });
   });
+
+  test("the deadline clamps to the enclosing request deadline (requestTimeoutMs)", async () => {
+    const startedAt = Date.now();
+    const handle = mediator({
+      requestTimeoutMs: 40,
+      elicitation: {
+        handler: () =>
+          new Promise(() => {
+            /* never settles */
+          }),
+        timeoutMs: 60_000, // would outlive the enclosing request without the clamp
+      },
+    });
+    const outcome = await handle("elicitation/create", { message: "?" });
+    expect(outcome).toEqual({ result: { action: "cancel" } });
+    expect(Date.now() - startedAt).toBeLessThan(5_000);
+  });
 });
 
 describe("mediator - sampling", () => {
@@ -123,6 +141,26 @@ describe("mediator - sampling", () => {
       error: { code: -32601, message: expect.stringContaining("disabled") },
     });
     expect(calls).toBe(0);
+  });
+
+  test("no handler wired: the denial says the HOST has sampling disabled, never points at config", async () => {
+    // Config cannot help here - "sampling": true without a host-side handler is still denied.
+    const handle = mediator(); // sampling disabled AND no handler
+    const outcome = await handle("sampling/createMessage", SAMPLING_PARAMS);
+    expect(outcome).toMatchObject({ error: { code: -32601 } });
+    const message = "error" in outcome ? outcome.error.message : "";
+    expect(message).toContain("host has sampling disabled");
+    expect(message).not.toContain("mcp-servers.json");
+    expect(message).not.toContain('"sampling": true');
+  });
+
+  test("enabled in config but no handler: still the host-side denial, no config pointer", async () => {
+    const handle = mediator({ sampling: { enabled: true, consumeBudget: () => true } });
+    const outcome = await handle("sampling/createMessage", SAMPLING_PARAMS);
+    expect(outcome).toMatchObject({ error: { code: -32601 } });
+    const message = "error" in outcome ? outcome.error.message : "";
+    expect(message).toContain("host has sampling disabled");
+    expect(message).not.toContain("mcp-servers.json");
   });
 
   test("enabled: passes a sanitized request to the handler and returns only its output", async () => {

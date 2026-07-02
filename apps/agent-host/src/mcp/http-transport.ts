@@ -1,22 +1,28 @@
 import { type McpHttpServerConfig, redactMcpEndpoint } from "./config";
+import { asRecord } from "./decode";
 import {
   isMcpTransportError,
   McpAuthRequiredError,
   McpClosedError,
   McpMalformedResponseError,
-  McpRpcError,
   McpTimeoutError,
   type McpTransportError,
+  type McpTransportErrorTag,
 } from "./errors";
+import { MAX_FRAME_BODY_BYTES } from "./framing";
 import { createSseParser } from "./sse";
 import {
   armRequestTimeout,
-  decodeInitializeResult,
-  MCP_PROTOCOL_VERSION,
+  decodeRpcError,
   type McpInitializeResult,
   type McpServerRequestHandler,
   type McpTransport,
   type McpTransportState,
+  notificationEnvelope,
+  performHandshake,
+  requestEnvelope,
+  responseEnvelope,
+  serverRequestOutcome,
 } from "./transport";
 
 /**
@@ -25,15 +31,16 @@ import {
  * text/event-stream whose SSE events carry the JSON-RPC messages (./sse decodes the events).
  * The server-issued `mcp-session-id` response header is captured and echoed on every
  * subsequent request (and best-effort DELETEd on close), bearer auth comes from config and
- * never survives into an error or state string (endpoints are redacted via ./config), and
- * every request gets the shared per-request deadline. Failures are classified through
- * ./errors: 401/403 parks the transport in "auth_needed", a handshake failure in "failed";
- * other request failures (timeout, rpc error, malformed reply, severed stream) stay
- * per-request because each POST is its own exchange.
+ * never survives into an error or state string (endpoints are redacted via ./config), every
+ * request gets the shared per-request deadline, and every reply body - JSON or SSE
+ * accumulation - is capped at the same 32MiB bound the stdio framing enforces. Failures are
+ * classified through ./errors: 401/403 parks the transport in "auth_needed", a handshake
+ * failure in "failed"; other request failures (timeout, rpc error, malformed reply, severed
+ * stream) stay per-request because each POST is its own exchange.
  *
  * Responsible for: the Streamable HTTP/SSE exchange lifecycle - session identity, bearer
- * auth, reply parsing, and classified failures.
- * Not for: SSE line mechanics (./sse) or the shared contract/handshake decoding (./transport).
+ * auth, bounded reply parsing, and classified failures.
+ * Not for: SSE line mechanics (./sse) or the shared contract/protocol helpers (./transport).
  */
 
 export interface HttpTransportOptions {
@@ -41,6 +48,8 @@ export interface HttpTransportOptions {
   /** Answers server-originated requests riding a response stream (M6 mediation); absent
    *  means method-not-found. The answer is POSTed back per the Streamable HTTP spec. */
   readonly onServerRequest?: McpServerRequestHandler;
+  /** Reply-size cap in bytes (default the shared 32MiB frame bound); injectable for tests. */
+  readonly maxResponseBytes?: number;
 }
 
 /** The pure request-header assembly: JSON body, dual accept, optional bearer/session/version. */
@@ -64,12 +73,14 @@ export function createHttpTransport(
 ): McpTransport {
   const clientInfo = options.clientInfo ?? { name: "trevor", version: "dev" };
   const redacted = redactMcpEndpoint(server.endpoint);
+  const maxResponseBytes = options.maxResponseBytes ?? MAX_FRAME_BODY_BYTES;
 
   let status: McpTransportState["status"] = "configured";
   let initialized = false;
   let protocolVersion: string | undefined;
   let sessionId: string | undefined;
   let lastError: string | undefined;
+  let lastErrorTag: McpTransportErrorTag | undefined;
   /** The terminal failure every later request gets; null while usable. */
   let fate: McpTransportError | null = null;
   let nextId = 1;
@@ -79,6 +90,7 @@ export function createHttpTransport(
 
   const fail = <E extends McpTransportError>(error: E): E => {
     lastError = error.message;
+    lastErrorTag = error._tag;
     return error;
   };
 
@@ -91,7 +103,7 @@ export function createHttpTransport(
     }
     fate = error;
     status = terminalStatus;
-    lastError = error.message;
+    fail(error);
   };
 
   /** Interprets one JSON-RPC message as the reply to request `id`; undefined = not ours. */
@@ -104,27 +116,19 @@ export function createHttpTransport(
       return undefined;
     }
     if ("error" in message) {
-      const error = (message.error ?? {}) as { code?: unknown; message?: unknown };
-      throw fail(
-        new McpRpcError({
-          server: server.name,
-          method,
-          ...(typeof error.code === "number" ? { code: error.code } : {}),
-          detail: typeof error.message === "string" ? error.message : "JSON-RPC error",
-        }),
-      );
+      throw fail(decodeRpcError(server.name, method, message.error));
     }
     return { value: message.result };
   };
 
   const parseJsonObject = (text: string): Record<string, unknown> => {
+    let record: Record<string, unknown> | undefined;
     try {
-      const parsed: unknown = JSON.parse(text);
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        throw new Error("not an object");
-      }
-      return parsed as Record<string, unknown>;
+      record = asRecord(JSON.parse(text));
     } catch {
+      record = undefined;
+    }
+    if (!record) {
       throw fail(
         new McpMalformedResponseError({
           server: server.name,
@@ -132,6 +136,31 @@ export function createHttpTransport(
         }),
       );
     }
+    return record;
+  };
+
+  /** Reads a reply body as text, bounded: crossing the reply cap is a malformed response. */
+  const readBodyText = async (response: Response): Promise<string> => {
+    const body = response.body;
+    if (!body) {
+      return "";
+    }
+    const decoder = new TextDecoder();
+    let text = "";
+    let received = 0;
+    for await (const chunk of body) {
+      received += chunk.length;
+      if (received > maxResponseBytes) {
+        throw fail(
+          new McpMalformedResponseError({
+            server: server.name,
+            detail: `response body from ${redacted} exceeds the ${maxResponseBytes}-byte cap`,
+          }),
+        );
+      }
+      text += decoder.decode(chunk, { stream: true });
+    }
+    return text + decoder.decode();
   };
 
   /** A non-2xx reply: a JSON-RPC error body keeps its classification, anything else is malformed. */
@@ -141,20 +170,9 @@ export function createHttpTransport(
     method: string,
   ): McpTransportError => {
     try {
-      const parsed: unknown = JSON.parse(text);
-      const error =
-        typeof parsed === "object" && parsed !== null
-          ? (parsed as { error?: { code?: unknown; message?: unknown } }).error
-          : undefined;
-      if (typeof error === "object" && error !== null) {
-        return fail(
-          new McpRpcError({
-            server: server.name,
-            method,
-            ...(typeof error.code === "number" ? { code: error.code } : {}),
-            detail: typeof error.message === "string" ? error.message : `HTTP ${httpStatus}`,
-          }),
-        );
+      const error = asRecord(JSON.parse(text))?.error;
+      if (asRecord(error)) {
+        return fail(decodeRpcError(server.name, method, error, `HTTP ${httpStatus}`));
       }
     } catch {
       // fall through: a non-JSON failure body is malformed
@@ -174,21 +192,12 @@ export function createHttpTransport(
     params: unknown,
     id: number | string,
   ): Promise<void> => {
-    const handler = options.onServerRequest;
-    const outcome = handler
-      ? await handler(method, params).then(
-          (value) => value,
-          // The mediator answers structurally; this backstop covers a defect in it.
-          () => ({ error: { code: -32603, message: "host mediation failed internally" } }) as const,
-        )
-      : ({ error: { code: -32601, message: `method not supported: ${method}` } } as const);
-    const payload =
-      "result" in outcome
-        ? { jsonrpc: "2.0", id, result: outcome.result }
-        : { jsonrpc: "2.0", id, error: outcome.error };
+    const outcome = await serverRequestOutcome(options.onServerRequest, method, params);
     // A JSON-RPC response has no reply of its own (the server answers 202 Accepted), so it
-    // rides the notification-shaped exchange; delivery failures already updated lastError.
-    await exchange(`${method} (response)`, payload, undefined).catch(() => {});
+    // rides the notification-shaped exchange; delivery failures update lastError there.
+    await exchange(`${method} (response)`, responseEnvelope(id, outcome), undefined).catch(
+      () => {},
+    );
   };
 
   /** Reads an SSE reply stream until the message correlated to `id` arrives. */
@@ -199,7 +208,17 @@ export function createHttpTransport(
   ): Promise<unknown> => {
     const decoder = new TextDecoder();
     const parser = createSseParser();
+    let received = 0;
     for await (const chunk of body) {
+      received += chunk.length;
+      if (received > maxResponseBytes) {
+        throw fail(
+          new McpMalformedResponseError({
+            server: server.name,
+            detail: `event stream from ${redacted} exceeds the ${maxResponseBytes}-byte reply cap`,
+          }),
+        );
+      }
       for (const data of parser.push(decoder.decode(chunk, { stream: true }))) {
         const message = parseJsonObject(data);
         const reply = interpretReply(message, id, method);
@@ -230,7 +249,8 @@ export function createHttpTransport(
   };
 
   /**
-   * One POST exchange. `id === undefined` means notification: delivered, reply discarded.
+   * One POST exchange. `id === undefined` means notification: delivered, reply discarded
+   * (but a non-2xx delivery failure is still classified and recorded as lastError).
    * Every failure leaves here as a typed ./errors class.
    */
   const exchange = async (
@@ -269,15 +289,15 @@ export function createHttpTransport(
         await response.body?.cancel().catch(() => {});
         throw failure;
       }
+      if (!response.ok) {
+        throw classifyHttpFailure(response.status, await readBodyText(response), method);
+      }
       if (id === undefined) {
         await response.body?.cancel().catch(() => {});
         return undefined;
       }
 
       const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
-      if (!response.ok) {
-        throw classifyHttpFailure(response.status, await response.text(), method);
-      }
       if (contentType.includes("text/event-stream")) {
         if (!response.body) {
           throw fail(
@@ -297,7 +317,7 @@ export function createHttpTransport(
           }),
         );
       }
-      const reply = interpretReply(parseJsonObject(await response.text()), id, method);
+      const reply = interpretReply(parseJsonObject(await readBodyText(response)), id, method);
       if (!reply) {
         throw fail(
           new McpMalformedResponseError({
@@ -327,49 +347,31 @@ export function createHttpTransport(
   const request = (method: string, params?: unknown): Promise<unknown> => {
     const id = nextId;
     nextId += 1;
-    return exchange(
-      method,
-      { jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) },
-      id,
-    );
+    return exchange(method, requestEnvelope(id, method, params), id);
   };
 
   const notify = (method: string, params?: unknown): void => {
     if (fate) {
       return;
     }
-    void exchange(
-      method,
-      { jsonrpc: "2.0", method, ...(params === undefined ? {} : { params }) },
-      undefined,
-    ).catch(() => {
+    void exchange(method, notificationEnvelope(method, params), undefined).catch(() => {
       // fire-and-forget: delivery failures already updated lastError via the exchange path
     });
   };
 
   const doInitialize = async (): Promise<McpInitializeResult> => {
     try {
-      const raw = await request("initialize", {
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo,
-      });
-      const outcome = decodeInitializeResult(server.name, raw);
-      if ("failure" in outcome) {
-        throw fail(outcome.failure);
-      }
-      notify("notifications/initialized");
+      const result = await performHandshake(server.name, clientInfo, request, notify);
       initialized = true;
-      protocolVersion = outcome.result.protocolVersion;
+      protocolVersion = result.protocolVersion;
       status = "ready";
-      return outcome.result;
+      return result;
     } catch (error) {
       // Any handshake failure is terminal for the transport; auth keeps its own status.
       if (isMcpTransportError(error)) {
         terminate(error, error._tag === "McpAuthRequiredError" ? "auth_needed" : "failed");
-        throw error;
       }
-      throw error; // not reachable: exchange only rejects typed
+      throw error;
     }
   };
 
@@ -406,6 +408,7 @@ export function createHttpTransport(
       ...(protocolVersion ? { protocolVersion } : {}),
       ...(sessionId ? { sessionId } : {}),
       ...(lastError ? { lastError } : {}),
+      ...(lastErrorTag ? { lastErrorTag } : {}),
     }),
   };
 }

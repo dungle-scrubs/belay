@@ -1,4 +1,5 @@
 import type { McpServerConfig } from "./config";
+import { asNonEmptyString, asRecord } from "./decode";
 import { isMcpTransportError } from "./errors";
 import type { McpTransport } from "./transport";
 
@@ -56,7 +57,7 @@ export interface McpServerCapabilities {
 }
 
 /** The D-005 qualified identity: `<server>:<name>` (config bans `:` inside server names). */
-export function qualifyCapabilityName(server: string, name: string): string {
+function qualifyCapabilityName(server: string, name: string): string {
   return `${server}:${name}`;
 }
 
@@ -171,14 +172,4 @@ function decodePrompt(server: string, raw: unknown): McpPromptRecord | undefined
     ...(typeof record.description === "string" ? { description: record.description } : {}),
     ...(record.arguments !== undefined ? { arguments: record.arguments } : {}),
   };
-}
-
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
-}
-
-function asNonEmptyString(raw: unknown): string | undefined {
-  return typeof raw === "string" && raw.trim().length > 0 ? raw : undefined;
 }

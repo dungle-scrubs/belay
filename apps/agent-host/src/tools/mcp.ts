@@ -13,7 +13,7 @@ import type {
 } from "@host/mcp/runtime";
 import { Effect, Schema } from "effect";
 import { type ToolError, ToolInputError } from "./errors";
-import { cap, clamp } from "./shared";
+import { cap, clamp, clipLine } from "./shared";
 import type { Tool } from "./types";
 
 /**
@@ -93,25 +93,22 @@ const MCP_DESCRIPTION =
 const inputError = (detail: string): Effect.Effect<never, ToolError> =>
   Effect.fail(new ToolInputError({ tool: "mcp", detail }));
 
-/** Clips a description onto one list line; newlines flattened, overlong text cut with an ellipsis. */
-function clipLine(text: string): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > LINE_DESCRIPTION_CHARS ? `${flat.slice(0, LINE_DESCRIPTION_CHARS)}…` : flat;
-}
+/** A description clipped onto one list line (the shared clipLine at this surface's limit). */
+const clipDescription = (text: string): string => clipLine(text, LINE_DESCRIPTION_CHARS);
 
 function searchLine(record: McpCapabilityRecord): string {
-  const description = record.description ? ` ${clipLine(record.description)}` : "";
+  const description = record.description ? ` ${clipDescription(record.description)}` : "";
   return `- ${record.qualifiedName} [${record.kind}]${description}`;
 }
 
 function resourceLine(record: McpResourceRecord): string {
   const mime = record.mimeType ? ` (${record.mimeType})` : "";
-  const description = record.description ? ` - ${clipLine(record.description)}` : "";
+  const description = record.description ? ` - ${clipDescription(record.description)}` : "";
   return `- ${record.qualifiedName} ${record.uri}${mime}${description}`;
 }
 
 function promptLine(record: McpPromptRecord): string {
-  const description = record.description ? ` - ${clipLine(record.description)}` : "";
+  const description = record.description ? ` - ${clipDescription(record.description)}` : "";
   return `- ${record.qualifiedName}${description}`;
 }
 
@@ -163,12 +160,20 @@ export function buildMcpTool(runtime: McpRuntime): Tool<McpArgs> {
   };
 
   /** Discovers any enabled, not-yet-discovered server, tolerantly: one unreachable server
-   *  contributes nothing (its failure lands in the status snapshot), never blocks the rest. */
+   *  contributes nothing (its failure lands in the status snapshot), never blocks the rest.
+   *  A server whose transport fate is already sealed (failed/closed) is SKIPPED - it cannot
+   *  answer, so retrying it would only add its timeout to every search. */
   const ensureDiscovered = (): Effect.Effect<void> =>
     Effect.promise(async () => {
       const pending = runtime
         .statusSnapshot()
-        .filter((entry) => entry.enabled && !entry.capabilities.discovered);
+        .filter(
+          (entry) =>
+            entry.enabled &&
+            !entry.capabilities.discovered &&
+            entry.status !== "failed" &&
+            entry.status !== "closed",
+        );
       await Promise.all(
         pending.map((entry) =>
           runtime.capabilities.refreshCapabilities(entry.server).catch(() => undefined),

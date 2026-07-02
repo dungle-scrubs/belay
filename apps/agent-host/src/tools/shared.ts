@@ -1,6 +1,7 @@
 /**
- * Responsible for: the simpleTool builder, output capping, the lenient numeric clamp, stream
- * merging, the skip-dirs policy, and the toolInput/toolExecution failure helpers.
+ * Responsible for: the simpleTool builder, output capping, the one-line clip helper, the
+ * lenient numeric clamp, stream merging, the skip-dirs policy, and the toolInput/toolExecution
+ * failure helpers.
  * Not for: the failure classes themselves - errors.ts.
  */
 import { msg } from "@host/transport/messages";
@@ -20,6 +21,14 @@ export const SKIP_DIRS = /(^|\/)(node_modules|\.git|dist|\.next)\//u;
 /** Caps tool output at MAX_OUTPUT characters, with a truncation marker. */
 export function cap(text: string): string {
   return text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}${TRUNCATION_NOTICE}` : text;
+}
+
+/** Collapses `text` onto one line (whitespace runs become single spaces) and cuts it at
+ *  `maxChars` with an ellipsis. The shared one-line preview: list lines (tools/mcp) and copy
+ *  confirmations (tools/clip) pass their own limits. */
+export function clipLine(text: string, maxChars: number): string {
+  const flat = text.replace(/\s+/gu, " ").trim();
+  return flat.length > maxChars ? `${flat.slice(0, maxChars)}…` : flat;
 }
 
 /** Clamps a lenient numeric arg into [floor, ceiling], falling back when absent/non-finite. Shared

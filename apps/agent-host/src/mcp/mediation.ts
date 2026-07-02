@@ -1,3 +1,4 @@
+import { asRecord } from "./decode";
 import type { McpServerRequestHandler, McpServerRequestOutcome } from "./transport";
 
 /**
@@ -9,8 +10,9 @@ import type { McpServerRequestHandler, McpServerRequestOutcome } from "./transpo
  *   - Elicitation is answered through an injected handler seam - the UI rides the host's
  *     existing pending-question surface (agent/provider-questions.ts) when wired. No handler
  *     (headless host, no UI) DECLINES; a handler that never answers is CANCELLED at the
- *     deadline; a handler crash is a structured internal error. The server only ever sees
- *     accept/decline/cancel - never why.
+ *     deadline, which is clamped to the server's own requestTimeoutMs so a mid-call question
+ *     can never outlive the enclosing request; a handler crash is a structured internal
+ *     error. The server only ever sees accept/decline/cancel - never why.
  *   - Sampling is OFF by default: unless the server's config says `"sampling": true`, the
  *     request is denied with a method-level JSON-RPC error and the handler is never invoked.
  *     When enabled, the request is SANITIZED into a narrow projection (role/text messages,
@@ -66,7 +68,8 @@ export type McpSamplingHandler = (request: McpSamplingRequest) => Promise<McpSam
 /** How many sampling calls one runtime (one host session) grants across all servers. */
 export const DEFAULT_MCP_SAMPLING_BUDGET = 8;
 
-/** How long an elicitation waits for the user before answering `cancel`. */
+/** How long an elicitation waits for the user before answering `cancel` (further clamped to
+ *  the server's requestTimeoutMs, the enclosing request's own deadline). */
 export const DEFAULT_MCP_ELICITATION_TIMEOUT_MS = 300_000;
 
 export interface SamplingBudget {
@@ -93,6 +96,9 @@ export function createSamplingBudget(limit: number = DEFAULT_MCP_SAMPLING_BUDGET
 
 export interface McpMediatorOptions {
   readonly server: string;
+  /** The server's per-request deadline: mid-call mediation (an elicitation waiting on the
+   *  user) may never outlive the enclosing request, so its timeout clamps to this. */
+  readonly requestTimeoutMs: number;
   readonly elicitation?: {
     readonly handler?: McpElicitationHandler;
     readonly timeoutMs?: number;
@@ -136,10 +142,13 @@ async function mediateElicitation(
     ...(record?.requestedSchema !== undefined ? { requestedSchema: record.requestedSchema } : {}),
   };
   try {
-    const answer = await withTimeout(
-      handler(request),
+    // Clamp to the enclosing request deadline: an elicitation that outlived it would answer
+    // a request the server already timed out.
+    const timeoutMs = Math.min(
       options.elicitation?.timeoutMs ?? DEFAULT_MCP_ELICITATION_TIMEOUT_MS,
+      options.requestTimeoutMs,
     );
+    const answer = await withTimeout(handler(request), timeoutMs);
     if (answer === TIMED_OUT) {
       // The user never answered inside the deadline: a cancel, not a decline - they did not
       // choose anything. The late answer (if any) resolves into the void.
@@ -158,20 +167,22 @@ async function mediateSampling(
   options: McpMediatorOptions,
   params: unknown,
 ): Promise<McpServerRequestOutcome> {
+  const handler = options.sampling.handler;
+  if (!handler) {
+    // Checked FIRST: without a host-side handler no config flag can help, so the denial must
+    // not point the server (or the user reading its logs) at mcp-servers.json.
+    return {
+      error: {
+        code: -32601,
+        message: `sampling is unavailable: this host has sampling disabled (no sampling handler is wired)`,
+      },
+    };
+  }
   if (!options.sampling.enabled) {
     return {
       error: {
         code: -32601,
         message: `sampling is disabled for MCP server "${options.server}" (enable it with "sampling": true in mcp-servers.json)`,
-      },
-    };
-  }
-  const handler = options.sampling.handler;
-  if (!handler) {
-    return {
-      error: {
-        code: -32601,
-        message: `sampling is enabled for MCP server "${options.server}" but the host has no sampling handler wired`,
       },
     };
   }
@@ -253,10 +264,4 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | typ
       },
     );
   });
-}
-
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
 }

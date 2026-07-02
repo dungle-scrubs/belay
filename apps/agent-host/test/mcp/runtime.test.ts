@@ -151,18 +151,27 @@ describe("mcp runtime - failures", () => {
 
 describe("mcp runtime - cancellation", () => {
   it("interrupts a hanging call like any other tool and keeps the server usable", async () => {
-    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
-      // Warm the connection so the interrupt hits the in-flight request, not the handshake.
-      await call(runtime, "alpha:echo", { text: "warm" });
-      const fiber = Effect.runFork(runtime.callTool("alpha:hang"));
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const exit = await Effect.runPromise(Fiber.interrupt(fiber));
-      expect(Exit.isInterrupted(exit)).toBe(true);
-      // The transport is not wedged: the same server still answers.
-      await expect(call(runtime, "alpha:echo", { text: "after interrupt" })).resolves.toBe(
-        "after interrupt",
-      );
-    });
+    const fixture = await startFixtureHttpServer();
+    try {
+      await withRuntime([httpFixtureConfig("beta", fixture.endpoint)], async (runtime) => {
+        // Warm the connection so the interrupt hits the in-flight request, not the handshake.
+        await call(runtime, "beta:echo", { text: "warm" });
+        const fiber = Effect.runFork(runtime.callTool("beta:hang"));
+        // The condition, not a fixed sleep: the hang request has REACHED the server (the warm
+        // echo was tools/call #1, the hang is #2), so the interrupt hits an in-flight request.
+        await expect
+          .poll(() => fixture.requests().filter((entry) => entry.method === "tools/call").length)
+          .toBeGreaterThanOrEqual(2);
+        const exit = await Effect.runPromise(Fiber.interrupt(fiber));
+        expect(Exit.isInterrupted(exit)).toBe(true);
+        // The transport is not wedged: the same server still answers.
+        await expect(call(runtime, "beta:echo", { text: "after interrupt" })).resolves.toBe(
+          "after interrupt",
+        );
+      });
+    } finally {
+      await fixture.close();
+    }
   });
 });
 
@@ -242,5 +251,26 @@ describe("mcp runtime - resources as context records", () => {
       );
       expect(error).toBeInstanceOf(ToolInputError);
     });
+  });
+});
+
+describe("mcp runtime - status snapshot failure detail", () => {
+  it("surfaces a failed discovery in the snapshot's capability freshness (with error tags)", async () => {
+    await withRuntime(
+      [
+        stdioFixtureConfig("alpha", {
+          command: "/nonexistent/trevor-mcp-fixture-binary",
+          args: [],
+        }),
+      ],
+      async (runtime) => {
+        await Effect.runPromise(Effect.flip(runtime.listResources("alpha")));
+        const entry = runtime.statusSnapshot()[0];
+        expect(entry?.status).toBe("failed");
+        expect(entry?.lastErrorTag).toBe("McpServerCrashError");
+        expect(entry?.capabilities.discovered).toBe(false);
+        expect(entry?.capabilities.lastError).toContain("crashed");
+      },
+    );
   });
 });

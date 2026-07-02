@@ -73,6 +73,25 @@ describe("stdio transport - handshake", () => {
       },
     );
   });
+
+  it("a handshake timeout is TERMINAL: the transport fails instead of wedging as configured", async () => {
+    await withTransport(
+      fixtureConfig({ requestTimeoutMs: 300, args: stdioFixtureArgs(["--init=hang"]) }),
+      async (transport) => {
+        await expect(transport.initialize()).rejects.toMatchObject({ _tag: "McpTimeoutError" });
+        // No zombie: the child is reaped and the state is machine-classifiable for /doctor.
+        expect(transport.state()).toMatchObject({
+          status: "failed",
+          initialized: false,
+          lastErrorTag: "McpTimeoutError",
+        });
+        // The sealed fate answers later requests too - nothing ever waits on the dead child.
+        await expect(transport.request("tools/list")).rejects.toMatchObject({
+          _tag: "McpTimeoutError",
+        });
+      },
+    );
+  });
 });
 
 describe("stdio transport - requests", () => {
@@ -186,6 +205,28 @@ describe("stdio transport - lifecycle", () => {
     await transport.close();
     await transport.close();
     expect(transport.state().status).toBe("closed");
+  });
+});
+
+describe("stdio transport - stderr scrubbing (crash details reach /doctor and the UI)", () => {
+  it("scrubs server env VALUES out of the crash detail's stderr tail", async () => {
+    await withTransport(
+      fixtureConfig({ env: { MCP_FIXTURE_SECRET: "stderr-s3cret-value" } }),
+      async (transport) => {
+        await transport.initialize();
+        const failure = await callTool(transport, "crash_loud").then(
+          () => {
+            throw new Error("crash_loud should have failed");
+          },
+          (error: unknown) => error as { _tag: string; message: string },
+        );
+        expect(failure._tag).toBe("McpServerCrashError");
+        expect(failure.message).toContain("stderr tail");
+        expect(failure.message).toContain("[redacted]");
+        expect(failure.message).not.toContain("stderr-s3cret-value");
+        expect(transport.state().lastError).not.toContain("stderr-s3cret-value");
+      },
+    );
   });
 });
 

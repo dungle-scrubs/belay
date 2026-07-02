@@ -1,4 +1,5 @@
 import { MAX_OUTPUT, TRUNCATION_NOTICE } from "@host/tools/shared";
+import { asRecord } from "./decode";
 
 /**
  * Tolerant decoding of MCP result payloads into model-safe text (plan 23 M5). Every decoder
@@ -169,10 +170,4 @@ function contentBlockText(block: unknown): string {
     return `[resource ${typeof record.uri === "string" ? record.uri : "unknown"}]`;
   }
   return type.length > 0 ? `[${type} content]` : "";
-}
-
-function asRecord(raw: unknown): Record<string, unknown> | undefined {
-  return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-    ? (raw as Record<string, unknown>)
-    : undefined;
 }

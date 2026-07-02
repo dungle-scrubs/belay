@@ -142,6 +142,23 @@ describe.each(["json", "sse"] as const)("http transport over %s responses", (mod
       });
     });
   });
+
+  it("caps an oversized reply against the response-size bound as malformed", async () => {
+    const fixture = await startFixtureHttpServer({ responseMode: mode });
+    const transport = createHttpTransport(httpConfig(fixture.endpoint), {
+      maxResponseBytes: 4_096,
+    });
+    try {
+      await transport.initialize(); // the initialize reply is tiny - well under the cap
+      await expect(callTool(transport, "big", { chars: 50_000 })).rejects.toMatchObject({
+        _tag: "McpMalformedResponseError",
+      });
+      expect(transport.state().lastError).toContain("cap");
+    } finally {
+      await transport.close();
+      await fixture.close();
+    }
+  });
 });
 
 describe("http transport - bearer auth", () => {
@@ -182,6 +199,26 @@ describe("http transport - bearer auth", () => {
         expect(transport.state().lastError).not.toContain("wrong-token-value");
       },
     );
+  });
+});
+
+describe("http transport - notification delivery failures", () => {
+  it("records a non-2xx notification response as lastError without failing the transport", async () => {
+    const fixture = await startFixtureHttpServer({ notificationStatus: 500 });
+    const transport = createHttpTransport(httpConfig(fixture.endpoint));
+    try {
+      // initialize fires the notifications/initialized notification; the fixture rejects it.
+      await transport.initialize();
+      await expect.poll(() => transport.state().lastError ?? "").toContain("HTTP 500");
+      // A notification delivery failure is recorded, never terminal.
+      expect(transport.state().status).toBe("ready");
+      expect(await callTool(transport, "echo", { text: "still up" })).toMatchObject({
+        content: [{ type: "text", text: "still up" }],
+      });
+    } finally {
+      await transport.close();
+      await fixture.close();
+    }
   });
 });
 

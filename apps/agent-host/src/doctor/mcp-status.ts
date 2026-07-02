@@ -8,19 +8,17 @@ import type { PeripheralState } from "./probe-input";
  * histogram. Pure over already-redacted data - every field it reads (targets, last errors) was
  * sanitized at the runtime/transport boundary, so nothing here can leak a secret it was never
  * given. Multi-server rollup precedence (the plan's ladder): unconfigured when nothing can run,
- * then auth-needed if ANY enabled server needs credentials (a user action fixes it), then error
- * if any failed, then unavailable if any is closed, then timeout if a handshake deadline
- * expired, else ready with the D-009 facts (counts, transports, freshness, last error).
+ * then auth-needed if ANY enabled server needs credentials (a user action fixes it), then a
+ * failed server - classified by its machine-readable lastErrorTag as timeout (a handshake
+ * deadline expired; handshake failures are terminal, so the transport parks in "failed") or a
+ * generic error - then unavailable if any is closed, else ready with the D-009 facts (counts,
+ * transports, freshness, last error).
  *
  * Responsible for: folding MCP runtime status entries into the doctor PeripheralState and the
  * debug summary line.
  * Not for: reading live runtime state (host-facts.ts injects the snapshot) or rendering the
  * area (areas-connectivity.ts peripheralArea).
  */
-
-/** The runtime's timeout message shape (errors.ts McpTimeoutError); matched to classify a
- *  never-completed handshake as a timeout rather than a generic non-ready state. */
-const TIMED_OUT = /timed out after \d+ms/;
 
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -50,6 +48,15 @@ export function mcpPeripheralState(
 
   const failed = enabled.find((entry) => entry.status === "failed");
   if (failed) {
+    // Classified by TAG, never by message-sniffing: a handshake timeout is terminal (the
+    // transport fails and the child is reaped), so it arrives here carrying its timeout tag.
+    // A per-request timeout on a READY server never lands in this branch.
+    if (failed.lastErrorTag === "McpTimeoutError") {
+      return {
+        kind: "timeout",
+        detail: failed.lastError ?? `MCP server ${serverRef(failed)} timed out`,
+      };
+    }
     return {
       kind: "error",
       detail: failed.lastError ?? `MCP server ${serverRef(failed)} failed`,
@@ -62,16 +69,6 @@ export function mcpPeripheralState(
       kind: "unavailable",
       detail: closed.lastError ?? `MCP connection to "${closed.server}" is closed`,
     };
-  }
-
-  // A handshake that never completed within its deadline: the transport stays "configured"
-  // (a per-request timeout on a READY server does not park here) with the timeout as lastError.
-  const timedOut = enabled.find(
-    (entry) =>
-      entry.status !== "ready" && entry.lastError !== undefined && TIMED_OUT.test(entry.lastError),
-  );
-  if (timedOut) {
-    return { kind: "timeout", detail: timedOut.lastError as string };
   }
 
   return { kind: "ready", detail: readyDetail(enabled, nowMs) };

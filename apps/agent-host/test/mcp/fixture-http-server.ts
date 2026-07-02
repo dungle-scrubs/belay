@@ -1,46 +1,37 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import type { FixtureCatalogMode } from "./fixture-catalog";
 import {
-  BIG_FIXTURE_CHARS,
-  catalogPage,
-  catalogToolsFor,
-  FIXTURE_ELICITATION_PARAMS,
-  FIXTURE_PROMPTS,
-  FIXTURE_RESOURCE_CONTENTS,
-  FIXTURE_RESOURCES,
-  FIXTURE_SAMPLING_PARAMS,
-  type FixtureCatalogMode,
-  fixturePromptResult,
-} from "./fixture-catalog";
+  createFixtureDispatcher,
+  createFixtureServerRequests,
+  type JsonRpcIn,
+  observedResponseText,
+  probeRequest,
+} from "./fixture-dispatch";
 
 /**
  * A minimal MCP Streamable HTTP fixture server for the http transport integration tests
- * (plan 23 M3/M4/M5). A REAL node:http server with its own inline JSON-RPC handling (deliberately
- * independent of src/mcp, so the tests are cross-implementation, not self-confirming). Clients
- * POST JSON-RPC to the endpoint; replies come back as application/json or - in
- * `responseMode: "sse"` - as a text/event-stream event, per the Streamable HTTP spec. The
- * fixture ALWAYS issues an `mcp-session-id` on initialize and rejects any follow-up without a
- * known one (404 + JSON-RPC error), so a passing follow-up proves the client echoed the id.
- * Lists (tools/resources/prompts) come paginated from the shared ./fixture-catalog;
- * resources/read serves the shared FIXTURE_RESOURCE_CONTENTS. Behavior triggers, mirroring the
- * stdio fixture's tools:
- *   echo       - returns the given text
- *   args_probe - returns JSON.stringify(arguments) (for the M5 argument round-trip test)
- *   big        - returns `chars` (default BIG_FIXTURE_CHARS) characters (for bounding tests)
- *   soft_fail  - returns an isError result with content (for the M5 isError path)
- *   boom       - responds with a JSON-RPC error
- *   hang       - never responds (for timeout tests)
- *   garbage    - responds with a non-JSON body (or a non-JSON SSE data event)
- *   sever      - destroys the socket mid-response (SSE mode: after headers + a comment event)
+ * (plan 23 M3/M4/M5). A REAL node:http server, deliberately independent of src/mcp, so the
+ * tests are cross-implementation, not self-confirming. Clients POST JSON-RPC to the endpoint;
+ * replies come back as application/json or - in `responseMode: "sse"` - as a text/event-stream
+ * event, per the Streamable HTTP spec. The fixture ALWAYS issues an `mcp-session-id` on
+ * initialize and rejects any follow-up without a known one (404 + JSON-RPC error), so a
+ * passing follow-up proves the client echoed the id. Method dispatch - initialize, the
+ * paginated ./fixture-catalog lists, prompts/get, resources/read, and the common tools/call
+ * behaviors (echo, args_probe, big, soft_fail, boom, hang) - is the shared ./fixture-dispatch;
+ * only the wire mechanics and http-specific triggers live here:
+ *   garbage - responds with a non-JSON body (or a non-JSON SSE data event)
+ *   sever   - destroys the socket mid-response (SSE mode: after headers + a comment event)
  * M6 mediation probes (SSE mode only - a plain-JSON reply has no stream to carry a
  * server-originated request): `elicit_probe` / `sampling_probe` open the response stream,
- * emit an elicitation/create / sampling/createMessage REQUEST event, wait for the client to
- * POST the JSON-RPC response back (answered 202 per the spec), then emit the original call's
- * result carrying that response as JSON text. prompts/get expands the shared
- * ./fixture-catalog prompts with argument substitution.
+ * emit the ./fixture-dispatch probe REQUEST event, wait for the client to POST the JSON-RPC
+ * response back (answered 202 per the spec), then emit the original call's result carrying
+ * that response as JSON text.
  * Options: `requireBearer` (401 without/with a wrong token), `protocolVersion` (forces the
- * initialize result's version, for negotiation tests), `catalog` (a ./fixture-catalog mode).
+ * initialize result's version), `catalog` (a ./fixture-catalog mode), `notificationStatus`
+ * (the HTTP status notifications get, default 202 - a non-2xx exercises the transport's
+ * notification-failure recording).
  */
 
 export interface FixtureHttpServerOptions {
@@ -52,6 +43,8 @@ export interface FixtureHttpServerOptions {
   readonly protocolVersion?: string;
   /** Which shared catalog the list methods serve (default: the two M2 tools). */
   readonly catalog?: FixtureCatalogMode;
+  /** The HTTP status notifications are answered with (default 202 per the spec). */
+  readonly notificationStatus?: number;
 }
 
 /** One observed JSON-RPC request, for session-preservation assertions. */
@@ -69,33 +62,19 @@ export interface FixtureHttpServer {
   readonly close: () => Promise<void>;
 }
 
-interface JsonRpcIn {
-  readonly jsonrpc?: string;
-  readonly id?: number | string;
-  readonly method?: string;
-  readonly params?: {
-    readonly protocolVersion?: string;
-    readonly cursor?: string;
-    readonly name?: string;
-    readonly uri?: string;
-    readonly arguments?: Record<string, unknown>;
-  };
-  readonly result?: unknown;
-  readonly error?: unknown;
-}
-
 export async function startFixtureHttpServer(
   options: FixtureHttpServerOptions = {},
 ): Promise<FixtureHttpServer> {
   const responseMode = options.responseMode ?? "json";
-  const catalogMode = options.catalog ?? "default";
   const issued: string[] = [];
   const sessions = new Set<string>();
   const recorded: RecordedFixtureRequest[] = [];
-  let toolsListCalls = 0;
-  /** Server-originated requests awaiting the client's POSTed response, keyed by request id. */
-  const pendingServerRequests = new Map<string, (response: JsonRpcIn) => void>();
-  let serverRequestSeq = 0;
+  const dispatcher = createFixtureDispatcher({
+    serverInfoName: "trevor-mcp-http-fixture",
+    protocolVersion: options.protocolVersion,
+    catalog: options.catalog ?? "default",
+  });
+  const serverRequests = createFixtureServerRequests();
 
   const reply = (
     response: ServerResponse,
@@ -153,31 +132,16 @@ export async function startFixtureHttpServer(
     response.socket?.destroy();
   };
 
-  const handleToolCall = (response: ServerResponse, message: JsonRpcIn): void => {
+  /** The http-only tools/call triggers; false hands the call to the shared dispatcher. */
+  const handleWireToolCall = (response: ServerResponse, message: JsonRpcIn): boolean => {
     const name = message.params?.name;
-    if (name === "echo") {
-      replyResult(response, message.id, {
-        content: [{ type: "text", text: String(message.params?.arguments?.text ?? "") }],
-      });
-      return;
+    if (name === "garbage") {
+      replyGarbage(response);
+      return true;
     }
-    if (name === "args_probe") {
-      replyResult(response, message.id, {
-        content: [{ type: "text", text: JSON.stringify(message.params?.arguments ?? {}) }],
-      });
-      return;
-    }
-    if (name === "big") {
-      const chars = Number(message.params?.arguments?.chars ?? BIG_FIXTURE_CHARS);
-      replyResult(response, message.id, { content: [{ type: "text", text: "b".repeat(chars) }] });
-      return;
-    }
-    if (name === "soft_fail") {
-      replyResult(response, message.id, {
-        content: [{ type: "text", text: "external service exploded" }],
-        isError: true,
-      });
-      return;
+    if (name === "sever") {
+      sever(response);
+      return true;
     }
     if (name === "elicit_probe" || name === "sampling_probe") {
       if (responseMode !== "sse") {
@@ -187,50 +151,24 @@ export async function startFixtureHttpServer(
           -32603,
           `${name} needs the sse response mode (a plain-JSON reply has no stream for a server-originated request)`,
         );
-        return;
+        return true;
       }
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.write(": fixture stream open\n\n");
-      serverRequestSeq += 1;
-      const requestId = `srv-${serverRequestSeq}`;
-      pendingServerRequests.set(requestId, (clientResponse) => {
-        const observed = JSON.stringify({
-          ...(clientResponse.result !== undefined ? { result: clientResponse.result } : {}),
-          ...(clientResponse.error !== undefined ? { error: clientResponse.error } : {}),
-        });
+      const { method, params } = probeRequest(name);
+      const request = serverRequests.open(method, params, (clientResponse) => {
         const body = JSON.stringify({
           jsonrpc: "2.0",
           id: message.id,
-          result: { content: [{ type: "text", text: observed }] },
+          result: { content: [{ type: "text", text: observedResponseText(clientResponse) }] },
         });
         response.write(`event: message\ndata: ${body}\n\n`);
         response.end();
       });
-      const request = JSON.stringify({
-        jsonrpc: "2.0",
-        id: requestId,
-        method: name === "elicit_probe" ? "elicitation/create" : "sampling/createMessage",
-        params: name === "elicit_probe" ? FIXTURE_ELICITATION_PARAMS : FIXTURE_SAMPLING_PARAMS,
-      });
-      response.write(`event: message\ndata: ${request}\n\n`);
-      return;
+      response.write(`event: message\ndata: ${JSON.stringify(request)}\n\n`);
+      return true;
     }
-    if (name === "boom") {
-      replyRpcError(response, message.id, -32001, "boom tool always fails");
-      return;
-    }
-    if (name === "hang") {
-      return; // deliberately never responds; close() reaps the socket
-    }
-    if (name === "garbage") {
-      replyGarbage(response);
-      return;
-    }
-    if (name === "sever") {
-      sever(response);
-      return;
-    }
-    replyRpcError(response, message.id, -32601, `unknown tool ${String(name)}`);
+    return false;
   };
 
   const handle = (request: IncomingMessage, response: ServerResponse, body: string): void => {
@@ -284,17 +222,10 @@ export async function startFixtureHttpServer(
       const sessionId = randomUUID();
       issued.push(sessionId);
       sessions.add(sessionId);
-      replyResult(
-        response,
-        message.id,
-        {
-          protocolVersion:
-            options.protocolVersion ?? message.params?.protocolVersion ?? "2025-06-18",
-          capabilities: { tools: {} },
-          serverInfo: { name: "trevor-mcp-http-fixture", version: "0.0.1" },
-        },
-        { "mcp-session-id": sessionId },
-      );
+      const dispatched = dispatcher.dispatch(message);
+      if (dispatched.kind === "result") {
+        replyResult(response, dispatched.id, dispatched.value, { "mcp-session-id": sessionId });
+      }
       return;
     }
 
@@ -314,82 +245,26 @@ export async function startFixtureHttpServer(
     if (message.method === undefined) {
       // A JSON-RPC RESPONSE POSTed back for one of our server-originated requests (M6):
       // acknowledge with 202 per the Streamable HTTP spec and complete the waiting call.
-      const pending =
-        message.id === undefined ? undefined : pendingServerRequests.get(String(message.id));
-      response.writeHead(pending ? 202 : 400);
+      const settled = serverRequests.settle(message);
+      response.writeHead(settled ? 202 : 400);
       response.end();
-      if (pending) {
-        pendingServerRequests.delete(String(message.id));
-        pending(message);
-      }
       return;
     }
     if (message.method.startsWith("notifications/")) {
-      response.writeHead(202);
+      response.writeHead(options.notificationStatus ?? 202);
       response.end();
       return;
     }
-    if (message.method === "tools/list") {
-      if (message.params?.cursor === undefined) {
-        toolsListCalls += 1;
-      }
-      const { page, nextCursor } = catalogPage(
-        catalogToolsFor(catalogMode, toolsListCalls),
-        message.params?.cursor,
-      );
-      replyResult(response, message.id, { tools: page, ...(nextCursor ? { nextCursor } : {}) });
+    if (message.method === "tools/call" && handleWireToolCall(response, message)) {
       return;
     }
-    if (message.method === "resources/list") {
-      const { page, nextCursor } = catalogPage(FIXTURE_RESOURCES, message.params?.cursor);
-      replyResult(response, message.id, {
-        resources: page,
-        ...(nextCursor ? { nextCursor } : {}),
-      });
-      return;
+    const dispatched = dispatcher.dispatch(message);
+    if (dispatched.kind === "result") {
+      replyResult(response, dispatched.id, dispatched.value);
+    } else if (dispatched.kind === "error") {
+      replyRpcError(response, dispatched.id, dispatched.code, dispatched.message);
     }
-    if (message.method === "prompts/list") {
-      const { page, nextCursor } = catalogPage(FIXTURE_PROMPTS, message.params?.cursor);
-      replyResult(response, message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
-      return;
-    }
-    if (message.method === "prompts/get") {
-      const expanded = fixturePromptResult(message.params?.name, message.params?.arguments);
-      if (!expanded) {
-        replyRpcError(
-          response,
-          message.id,
-          -32602,
-          `unknown prompt ${String(message.params?.name)}`,
-        );
-        return;
-      }
-      replyResult(response, message.id, expanded);
-      return;
-    }
-    if (message.method === "resources/read") {
-      const uri = message.params?.uri;
-      const contents = uri === undefined ? undefined : FIXTURE_RESOURCE_CONTENTS[uri];
-      if (!contents) {
-        replyRpcError(response, message.id, -32002, `resource not found: ${String(uri)}`);
-        return;
-      }
-      replyResult(response, message.id, {
-        contents: [
-          {
-            uri,
-            mimeType: contents.mimeType,
-            ...(contents.text !== undefined ? { text: contents.text } : { blob: contents.blob }),
-          },
-        ],
-      });
-      return;
-    }
-    if (message.method === "tools/call") {
-      handleToolCall(response, message);
-      return;
-    }
-    replyRpcError(response, message.id, -32601, `method not found: ${String(message.method)}`);
+    // "none": deliberately no reply (hang); close() reaps the socket.
   };
 
   const server = createServer((request, response) => {

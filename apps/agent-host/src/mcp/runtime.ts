@@ -14,7 +14,7 @@ import {
   decodeToolCallResult,
   type McpPromptMessage,
 } from "./content";
-import { isMcpTransportError, McpClosedError } from "./errors";
+import { isMcpTransportError, McpClosedError, type McpTransportErrorTag } from "./errors";
 import { createHttpTransport } from "./http-transport";
 import {
   createMcpServerMediator,
@@ -87,10 +87,15 @@ export interface McpServerStatusEntry {
   readonly exposure: McpExposure;
   readonly protocolVersion?: string;
   readonly lastError?: string;
+  /** The machine-readable classification of lastError (errors.ts `_tag`); /doctor
+   *  discriminates on this, never on the message text. */
+  readonly lastErrorTag?: McpTransportErrorTag;
   readonly capabilities: {
     readonly discovered: boolean;
     readonly discoveredAt?: number;
     readonly counts: McpCapabilityCounts;
+    /** The last DISCOVERY failure the cache recorded (freshness detail for /doctor). */
+    readonly lastError?: string;
   };
 }
 
@@ -181,6 +186,7 @@ export function createMcpRuntime(
   const mediatorFor = (config: McpServerConfig): McpServerRequestHandler =>
     createMcpServerMediator({
       server: config.name,
+      requestTimeoutMs: config.requestTimeoutMs,
       elicitation: {
         ...(options.elicitationHandler ? { handler: options.elicitationHandler } : {}),
         ...(options.elicitationTimeoutMs !== undefined
@@ -232,12 +238,9 @@ export function createMcpRuntime(
   });
 
   const cache = createMcpCapabilityCache(
-    servers
-      .filter((config) => config.enabled)
-      .map((config) => {
-        const connection = connections.get(config.name);
-        return { config, transport: lazySource(connection ?? { config }) };
-      }),
+    [...connections.values()]
+      .filter((connection) => connection.config.enabled)
+      .map((connection) => ({ config: connection.config, transport: lazySource(connection) })),
     options.now ? { now: options.now } : {},
   );
 
@@ -396,14 +399,18 @@ export function createMcpRuntime(
         Effect.map((raw) => {
           const decoded = decodePromptMessages(raw);
           const bounded = boundPromptMessages(decoded.messages);
+          // The description is a server-controlled string too: bound it (content.ts's
+          // contract - nothing unbounded reaches the model) and fold its cut into `truncated`.
+          const description =
+            decoded.description !== undefined ? boundText(decoded.description) : undefined;
           return {
             kind: "mcp_prompt" as const,
             server: resolved.connection.config.name,
             name: resolved.name,
             qualifiedName,
-            ...(decoded.description !== undefined ? { description: decoded.description } : {}),
+            ...(description !== undefined ? { description: description.text } : {}),
             messages: bounded.messages,
-            truncated: bounded.truncated,
+            truncated: bounded.truncated || description?.truncated === true,
           };
         }),
       );
@@ -443,9 +450,11 @@ export function createMcpRuntime(
 
   const statusSnapshot = (): readonly McpServerStatusEntry[] => {
     const discovery = new Map(cache.snapshot().map((entry) => [entry.server, entry]));
-    return registry.list().map((config) => {
-      const connection = connections.get(config.name);
-      const state = connection ? stateOf(connection) : stateOf({ config });
+    // The connections map holds EVERY configured server in config order (built from the same
+    // list the registry wraps), so it is the one iteration source - no fallback needed.
+    return [...connections.values()].map((connection) => {
+      const { config } = connection;
+      const state = stateOf(connection);
       const discovered = discovery.get(config.name);
       return {
         server: config.name,
@@ -456,12 +465,14 @@ export function createMcpRuntime(
         exposure: config.exposure,
         ...(state.protocolVersion ? { protocolVersion: state.protocolVersion } : {}),
         ...(state.lastError ? { lastError: state.lastError } : {}),
+        ...(state.lastErrorTag ? { lastErrorTag: state.lastErrorTag } : {}),
         capabilities: {
           discovered: discovered?.discovered ?? false,
           ...(discovered?.discoveredAt !== undefined
             ? { discoveredAt: discovered.discoveredAt }
             : {}),
           counts: discovered?.counts ?? { tools: 0, resources: 0, prompts: 0 },
+          ...(discovered?.lastError !== undefined ? { lastError: discovered.lastError } : {}),
         },
       };
     });

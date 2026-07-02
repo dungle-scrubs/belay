@@ -21,6 +21,9 @@ export interface SseParser {
 /** Creates an incremental parser; one instance per event stream. */
 export function createSseParser(): SseParser {
   let buffer = "";
+  /** No line break exists before this buffer offset; each push resumes scanning here instead
+   *  of re-scanning the whole pending line. */
+  let scanFrom = 0;
   let dataLines: string[] = [];
 
   const handleLine = (line: string, events: string[]): void => {
@@ -48,19 +51,25 @@ export function createSseParser(): SseParser {
     push(chunk) {
       buffer += chunk;
       const events: string[] = [];
-      while (true) {
-        const match = /[\r\n]/.exec(buffer);
-        if (!match) {
-          break; // partial line - wait for more text
+      let lineStart = 0;
+      let at = scanFrom;
+      while (at < buffer.length) {
+        const code = buffer.charCodeAt(at);
+        if (code !== 13 && code !== 10) {
+          at += 1;
+          continue;
         }
-        const at = match.index;
-        if (buffer[at] === "\r" && at === buffer.length - 1) {
+        if (code === 13 && at === buffer.length - 1) {
           break; // the next chunk may open with the "\n" of a split "\r\n"
         }
-        const next = buffer[at] === "\r" && buffer[at + 1] === "\n" ? at + 2 : at + 1;
-        handleLine(buffer.slice(0, at), events);
-        buffer = buffer.slice(next);
+        const next = code === 13 && buffer.charCodeAt(at + 1) === 10 ? at + 2 : at + 1;
+        handleLine(buffer.slice(lineStart, at), events);
+        lineStart = next;
+        at = next;
       }
+      // ONE slice per push: everything consumed drops off, the partial line stays buffered.
+      buffer = buffer.slice(lineStart);
+      scanFrom = at - lineStart;
       return events;
     },
     buffered: () => buffer.length + dataLines.reduce((sum, line) => sum + line.length, 0),

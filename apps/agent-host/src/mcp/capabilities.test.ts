@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { discoverCapabilities, qualifyCapabilityName } from "./capabilities";
+import { discoverCapabilities } from "./capabilities";
 import type { McpExposure } from "./config";
 import { McpRpcError, McpTimeoutError } from "./errors";
 import type { McpTransport } from "./transport";
@@ -56,12 +56,6 @@ const CANNED = (method: string): unknown => {
   }
   throw new Error(`unexpected method ${method}`);
 };
-
-describe("qualifyCapabilityName (D-005 qualified identity)", () => {
-  test("joins server and simple name with a colon", () => {
-    expect(qualifyCapabilityName("github", "search")).toBe("github:search");
-  });
-});
 
 describe("discoverCapabilities", () => {
   test("maps tools, resources, and prompts to provenance-carrying qualified records", async () => {
