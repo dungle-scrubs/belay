@@ -1,10 +1,10 @@
-import { join } from "node:path";
 import { ToolExecutionError, ToolInputError } from "@host/tools/errors";
 import { MAX_OUTPUT } from "@host/tools/shared";
 import { Effect, Exit, Fiber } from "effect";
 import { describe, expect, it } from "vitest";
 import type { McpServerConfig } from "../../src/mcp/config";
 import { createMcpRuntime, type McpRuntime } from "../../src/mcp/runtime";
+import { httpFixtureConfig, stdioFixtureConfig } from "./fixture-config";
 import { startFixtureHttpServer } from "./fixture-http-server";
 
 /**
@@ -13,38 +13,6 @@ import { startFixtureHttpServer } from "./fixture-http-server";
  * bounded results, redacted typed failures, cancellation, and resource list/read as
  * provenance-carrying context records.
  */
-
-const FIXTURE = join(import.meta.dirname, "fixture-server.ts");
-
-function stdioConfig(name: string, overrides: Partial<McpServerConfig> = {}): McpServerConfig {
-  return {
-    name,
-    enabled: true,
-    transport: "stdio",
-    command: process.execPath,
-    args: ["--import", "tsx", FIXTURE],
-    env: {},
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-    ...overrides,
-  } as McpServerConfig;
-}
-
-function httpConfig(
-  name: string,
-  endpoint: string,
-  overrides: Partial<McpServerConfig> = {},
-): McpServerConfig {
-  return {
-    name,
-    enabled: true,
-    transport: "http",
-    endpoint,
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-    ...overrides,
-  } as McpServerConfig;
-}
 
 async function withRuntime(
   servers: readonly McpServerConfig[],
@@ -66,7 +34,7 @@ const flipCall = (runtime: McpRuntime, name: string, args?: Record<string, unkno
 
 describe("mcp runtime - qualified tool calls", () => {
   it("calls a qualified tool over stdio, connecting lazily on first use", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       expect(runtime.statusSnapshot()[0]?.status).toBe("configured");
       await expect(call(runtime, "alpha:echo", { text: "hello over stdio" })).resolves.toBe(
         "hello over stdio",
@@ -82,7 +50,7 @@ describe("mcp runtime - qualified tool calls", () => {
   it("calls a qualified tool over http", async () => {
     const fixture = await startFixtureHttpServer();
     try {
-      await withRuntime([httpConfig("beta", fixture.endpoint)], async (runtime) => {
+      await withRuntime([httpFixtureConfig("beta", fixture.endpoint)], async (runtime) => {
         await expect(call(runtime, "beta:echo", { text: "hello over http" })).resolves.toBe(
           "hello over http",
         );
@@ -97,7 +65,7 @@ describe("mcp runtime - qualified tool calls", () => {
     const fixture = await startFixtureHttpServer();
     try {
       await withRuntime(
-        [stdioConfig("alpha"), httpConfig("beta", fixture.endpoint)],
+        [stdioFixtureConfig("alpha"), httpFixtureConfig("beta", fixture.endpoint)],
         async (runtime) => {
           const [fromAlpha, fromBeta] = await Promise.all([
             call(runtime, "alpha:echo", { text: "alpha says" }),
@@ -113,7 +81,7 @@ describe("mcp runtime - qualified tool calls", () => {
   });
 
   it("passes JSON-schema'd arguments through unchanged", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const args = {
         text: "héllo 世界",
         count: 3,
@@ -125,7 +93,7 @@ describe("mcp runtime - qualified tool calls", () => {
   });
 
   it("caps an oversized tool result with the host truncation marker", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const result = await call(runtime, "alpha:big", { chars: MAX_OUTPUT * 3 });
       expect(result.length).toBeLessThanOrEqual(MAX_OUTPUT + "\n…[truncated]".length);
       expect(result.endsWith("…[truncated]")).toBe(true);
@@ -135,7 +103,7 @@ describe("mcp runtime - qualified tool calls", () => {
 
 describe("mcp runtime - failures", () => {
   it("classifies a JSON-RPC tool failure as a typed ToolExecutionError", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const error = await flipCall(runtime, "alpha:boom");
       expect(error).toBeInstanceOf(ToolExecutionError);
       expect(error.message).toContain("boom tool always fails");
@@ -145,7 +113,7 @@ describe("mcp runtime - failures", () => {
   });
 
   it("classifies an isError tool result as a ToolExecutionError with the bounded content", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const error = await flipCall(runtime, "alpha:soft_fail");
       expect(error).toBeInstanceOf(ToolExecutionError);
       expect(error.message).toContain("external service exploded");
@@ -156,7 +124,7 @@ describe("mcp runtime - failures", () => {
     const fixture = await startFixtureHttpServer({ requireBearer: "sekret-token" });
     try {
       await withRuntime(
-        [httpConfig("beta", fixture.endpoint, { auth: { bearerToken: "wrong-token" } })],
+        [httpFixtureConfig("beta", fixture.endpoint, { auth: { bearerToken: "wrong-token" } })],
         async (runtime) => {
           const error = await flipCall(runtime, "beta:echo", { text: "hi" });
           expect(error).toBeInstanceOf(ToolExecutionError);
@@ -173,7 +141,7 @@ describe("mcp runtime - failures", () => {
   });
 
   it("attributes an unknown-tool call to the qualified name", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const error = await flipCall(runtime, "alpha:no_such_tool");
       expect(error).toBeInstanceOf(ToolExecutionError);
       expect((error as ToolExecutionError).tool).toBe("alpha:no_such_tool");
@@ -183,7 +151,7 @@ describe("mcp runtime - failures", () => {
 
 describe("mcp runtime - cancellation", () => {
   it("interrupts a hanging call like any other tool and keeps the server usable", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       // Warm the connection so the interrupt hits the in-flight request, not the handshake.
       await call(runtime, "alpha:echo", { text: "warm" });
       const fiber = Effect.runFork(runtime.callTool("alpha:hang"));
@@ -200,7 +168,7 @@ describe("mcp runtime - cancellation", () => {
 
 describe("mcp runtime - resources as context records", () => {
   it("lists resources with server provenance and qualified identity", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const resources = await Effect.runPromise(runtime.listResources("alpha"));
       expect(resources).toMatchObject([
         {
@@ -216,7 +184,7 @@ describe("mcp runtime - resources as context records", () => {
   });
 
   it("reads a resource into a bounded, provenance-carrying context record", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const record = await Effect.runPromise(runtime.readResource("alpha", "fixture://readme"));
       expect(record).toMatchObject({
         kind: "mcp_resource",
@@ -230,7 +198,7 @@ describe("mcp runtime - resources as context records", () => {
   });
 
   it("bounds an oversized resource and flags the truncation", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const record = await Effect.runPromise(runtime.readResource("alpha", "fixture://big"));
       expect(record.truncated).toBe(true);
       expect(record.text.length).toBeLessThanOrEqual(MAX_OUTPUT + "\n…[truncated]".length);
@@ -238,7 +206,7 @@ describe("mcp runtime - resources as context records", () => {
   });
 
   it("describes a binary resource instead of dumping base64", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const record = await Effect.runPromise(runtime.readResource("alpha", "fixture://blob"));
       expect(record.text).toMatch(/^\[binary application\/octet-stream, \d+ base64 chars\]$/);
     });
@@ -247,7 +215,7 @@ describe("mcp runtime - resources as context records", () => {
   it("reads resources over http too", async () => {
     const fixture = await startFixtureHttpServer();
     try {
-      await withRuntime([httpConfig("beta", fixture.endpoint)], async (runtime) => {
+      await withRuntime([httpFixtureConfig("beta", fixture.endpoint)], async (runtime) => {
         const record = await Effect.runPromise(runtime.readResource("beta", "fixture://readme"));
         expect(record).toMatchObject({ server: "beta", uri: "fixture://readme" });
         expect(record.text).toContain("fixture readme");
@@ -258,7 +226,7 @@ describe("mcp runtime - resources as context records", () => {
   });
 
   it("fails a read of an unknown resource as a typed execution error", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const error = await Effect.runPromise(
         Effect.flip(runtime.readResource("alpha", "fixture://nope")),
       );
@@ -268,7 +236,7 @@ describe("mcp runtime - resources as context records", () => {
   });
 
   it("rejects resource reads on an unknown server with a typed input error", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const error = await Effect.runPromise(
         Effect.flip(runtime.readResource("nope", "fixture://readme")),
       );

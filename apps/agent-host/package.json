@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./testing": "./test/support/index.ts"
+    "./testing": "./test/support/index.ts",
+    "./testing/mcp-fixtures": "./test/support/mcp-fixtures.ts"
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",

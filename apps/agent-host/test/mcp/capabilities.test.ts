@@ -1,11 +1,11 @@
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { discoverCapabilities } from "../../src/mcp/capabilities";
-import type { McpHttpServerConfig, McpStdioServerConfig } from "../../src/mcp/config";
+import type { McpStdioServerConfig } from "../../src/mcp/config";
 import { createHttpTransport } from "../../src/mcp/http-transport";
 import { spawnStdioTransport } from "../../src/mcp/stdio-transport";
 import type { McpTransport } from "../../src/mcp/transport";
 import { LARGE_CATALOG_SIZE } from "./fixture-catalog";
+import { httpFixtureConfig, stdioFixtureArgs, stdioFixtureConfig } from "./fixture-config";
 import { startFixtureHttpServer } from "./fixture-http-server";
 
 /**
@@ -14,25 +14,6 @@ import { startFixtureHttpServer } from "./fixture-http-server";
  * filtering (D-002), paginated large catalogs, and duplicate simple names across two servers
  * on two different transports.
  */
-
-const FIXTURE = join(import.meta.dirname, "fixture-server.ts");
-
-function stdioConfig(
-  name: string,
-  overrides: Partial<McpStdioServerConfig> = {},
-): McpStdioServerConfig {
-  return {
-    name,
-    enabled: true,
-    transport: "stdio",
-    command: process.execPath,
-    args: ["--import", "tsx", FIXTURE],
-    env: {},
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-    ...overrides,
-  };
-}
 
 async function withStdioTransport(
   config: McpStdioServerConfig,
@@ -48,7 +29,7 @@ async function withStdioTransport(
 
 describe("capability discovery over a real stdio server", () => {
   it("discovers qualified tool/resource/prompt records with provenance and schemas", async () => {
-    await withStdioTransport(stdioConfig("alpha"), async (transport) => {
+    await withStdioTransport(stdioFixtureConfig("alpha"), async (transport) => {
       const discovered = await discoverCapabilities(
         { name: "alpha", exposure: { tools: true, resources: true, prompts: true } },
         transport,
@@ -90,7 +71,7 @@ describe("capability discovery over a real stdio server", () => {
   });
 
   it("honors exposure flags: a switched-off family is not discovered (D-002)", async () => {
-    await withStdioTransport(stdioConfig("alpha"), async (transport) => {
+    await withStdioTransport(stdioFixtureConfig("alpha"), async (transport) => {
       const discovered = await discoverCapabilities(
         { name: "alpha", exposure: { tools: true, resources: false, prompts: false } },
         transport,
@@ -102,9 +83,8 @@ describe("capability discovery over a real stdio server", () => {
   });
 
   it("follows pagination to discover the full large catalog", async () => {
-    const config = stdioConfig("big");
     await withStdioTransport(
-      stdioConfig("big", { args: [...config.args, "--catalog=large"] }),
+      stdioFixtureConfig("big", { args: stdioFixtureArgs(["--catalog=large"]) }),
       async (transport) => {
         const discovered = await discoverCapabilities(
           { name: "big", exposure: { tools: true, resources: true, prompts: true } },
@@ -119,17 +99,10 @@ describe("capability discovery over a real stdio server", () => {
 describe("capability discovery across two servers (D-005 duplicate names)", () => {
   it("keeps same-named tools from different servers apart via qualified identity", async () => {
     const fixture = await startFixtureHttpServer();
-    const httpConfig: McpHttpServerConfig = {
-      name: "beta",
-      enabled: true,
-      transport: "http",
-      endpoint: fixture.endpoint,
-      exposure: { tools: true, resources: true, prompts: true },
-      requestTimeoutMs: 10_000,
-    };
+    const httpConfig = httpFixtureConfig("beta", fixture.endpoint);
     const httpTransport = createHttpTransport(httpConfig);
     try {
-      await withStdioTransport(stdioConfig("alpha"), async (stdioTransport) => {
+      await withStdioTransport(stdioFixtureConfig("alpha"), async (stdioTransport) => {
         const [alpha, beta] = await Promise.all([
           discoverCapabilities({ name: "alpha", exposure: httpConfig.exposure }, stdioTransport),
           discoverCapabilities({ name: "beta", exposure: httpConfig.exposure }, httpTransport),

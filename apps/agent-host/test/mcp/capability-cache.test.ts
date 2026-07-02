@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { McpCapabilityCache, McpCapabilitySource } from "../../src/mcp/capability-cache";
 import {
@@ -9,6 +8,7 @@ import {
 import type { McpStdioServerConfig } from "../../src/mcp/config";
 import { spawnStdioTransport } from "../../src/mcp/stdio-transport";
 import { type FixtureCatalogMode, LARGE_CATALOG_SIZE } from "./fixture-catalog";
+import { stdioFixtureArgs, stdioFixtureConfig } from "./fixture-config";
 
 /**
  * Capability cache integration (plan 23 M4): refresh and capped search over REAL fixture
@@ -17,19 +17,12 @@ import { type FixtureCatalogMode, LARGE_CATALOG_SIZE } from "./fixture-catalog";
  * is plain data with no transport access.
  */
 
-const FIXTURE = join(import.meta.dirname, "fixture-server.ts");
-
+/** The shared stdio fixture config, optionally serving a non-default ./fixture-catalog mode. */
 function stdioConfig(name: string, catalog?: FixtureCatalogMode): McpStdioServerConfig {
-  return {
+  return stdioFixtureConfig(
     name,
-    enabled: true,
-    transport: "stdio",
-    command: process.execPath,
-    args: ["--import", "tsx", FIXTURE, ...(catalog ? [`--catalog=${catalog}`] : [])],
-    env: {},
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-  };
+    catalog ? { args: stdioFixtureArgs([`--catalog=${catalog}`]) } : {},
+  );
 }
 
 async function withCache(

@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import type { McpServerConfig } from "../../src/mcp/config";
 import { createMcpRuntime, type McpRuntime } from "../../src/mcp/runtime";
+import { httpFixtureConfig, stdioFixtureConfig } from "./fixture-config";
 import { startFixtureHttpServer } from "./fixture-http-server";
 
 /**
@@ -15,22 +16,6 @@ import { startFixtureHttpServer } from "./fixture-http-server";
  * server-side argument substitution and bounded expansion - and are explicitly NOT Trevor
  * slash commands.
  */
-
-const FIXTURE = join(import.meta.dirname, "fixture-server.ts");
-
-function stdioConfig(name: string, overrides: Partial<McpServerConfig> = {}): McpServerConfig {
-  return {
-    name,
-    enabled: true,
-    transport: "stdio",
-    command: process.execPath,
-    args: ["--import", "tsx", FIXTURE],
-    env: {},
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-    ...overrides,
-  } as McpServerConfig;
-}
 
 async function withRuntime(
   servers: readonly McpServerConfig[],
@@ -46,7 +31,7 @@ async function withRuntime(
 
 describe("mcp prompts - imported artifacts", () => {
   it("lists prompts with provenance and qualified identity", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const prompts = await Effect.runPromise(runtime.listPrompts("alpha"));
       expect(prompts).toMatchObject([
         {
@@ -61,7 +46,7 @@ describe("mcp prompts - imported artifacts", () => {
   });
 
   it("gets a prompt with arguments substituted server-side (MCP spec) into an artifact", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const artifact = await Effect.runPromise(
         runtime.getPrompt("alpha:summarize", { text: "the quick brown fox" }),
       );
@@ -78,14 +63,14 @@ describe("mcp prompts - imported artifacts", () => {
   });
 
   it("gets an argument-less prompt", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const artifact = await Effect.runPromise(runtime.getPrompt("alpha:greet"));
       expect(artifact.messages).toEqual([{ role: "user", text: "Hello from the fixture prompt!" }]);
     });
   });
 
   it("bounds an oversized prompt expansion and flags the truncation", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const artifact = await Effect.runPromise(
         runtime.getPrompt("alpha:summarize", { text: "x".repeat(MAX_OUTPUT * 3) }),
       );
@@ -98,32 +83,20 @@ describe("mcp prompts - imported artifacts", () => {
   it("imports prompts over http too", async () => {
     const fixture = await startFixtureHttpServer();
     try {
-      await withRuntime(
-        [
-          {
-            name: "beta",
-            enabled: true,
-            transport: "http",
-            endpoint: fixture.endpoint,
-            exposure: { tools: true, resources: true, prompts: true },
-            requestTimeoutMs: 10_000,
-          } as McpServerConfig,
-        ],
-        async (runtime) => {
-          const artifact = await Effect.runPromise(
-            runtime.getPrompt("beta:summarize", { text: "http substitution" }),
-          );
-          expect(artifact.server).toBe("beta");
-          expect(artifact.messages[0]?.text).toContain("http substitution");
-        },
-      );
+      await withRuntime([httpFixtureConfig("beta", fixture.endpoint)], async (runtime) => {
+        const artifact = await Effect.runPromise(
+          runtime.getPrompt("beta:summarize", { text: "http substitution" }),
+        );
+        expect(artifact.server).toBe("beta");
+        expect(artifact.messages[0]?.text).toContain("http substitution");
+      });
     } finally {
       await fixture.close();
     }
   });
 
   it("fails an unknown prompt as a typed execution error", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const error = await Effect.runPromise(Effect.flip(runtime.getPrompt("alpha:no_such")));
       expect(error).toBeInstanceOf(ToolExecutionError);
     });
@@ -131,7 +104,7 @@ describe("mcp prompts - imported artifacts", () => {
 
   it("rejects prompts on a server that does not expose them (D-002)", async () => {
     await withRuntime(
-      [stdioConfig("alpha", { exposure: { tools: true, resources: true, prompts: false } })],
+      [stdioFixtureConfig("alpha", { exposure: { tools: true, resources: true, prompts: false } })],
       async (runtime) => {
         const error = await Effect.runPromise(Effect.flip(runtime.getPrompt("alpha:greet")));
         expect(error).toBeInstanceOf(ToolInputError);
@@ -143,7 +116,7 @@ describe("mcp prompts - imported artifacts", () => {
 
 describe("mcp prompts - NOT Trevor slash commands", () => {
   it("importing prompts registers nothing in the host slash-command registry", async () => {
-    await withRuntime([stdioConfig("alpha")], async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       await Effect.runPromise(runtime.getPrompt("alpha:summarize", { text: "hi" }));
       const names = buildCommandRegistry().specs.map((spec) => spec.name);
       expect(names).not.toContain("/summarize");

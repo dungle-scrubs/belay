@@ -1,9 +1,9 @@
-import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import type { McpServerConfig } from "../../src/mcp/config";
 import type { McpElicitationRequest, McpSamplingRequest } from "../../src/mcp/mediation";
 import { createMcpRuntime, type McpRuntime, type McpRuntimeOptions } from "../../src/mcp/runtime";
+import { httpFixtureConfig, stdioFixtureConfig } from "./fixture-config";
 import { startFixtureHttpServer } from "./fixture-http-server";
 
 /**
@@ -14,22 +14,6 @@ import { startFixtureHttpServer } from "./fixture-http-server";
  * The fixture answers the original tool call with the JSON-RPC response it received, so every
  * assertion reads what the SERVER saw.
  */
-
-const FIXTURE = join(import.meta.dirname, "fixture-server.ts");
-
-function stdioConfig(name: string, overrides: Partial<McpServerConfig> = {}): McpServerConfig {
-  return {
-    name,
-    enabled: true,
-    transport: "stdio",
-    command: process.execPath,
-    args: ["--import", "tsx", FIXTURE],
-    env: {},
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-    ...overrides,
-  } as McpServerConfig;
-}
 
 async function withRuntime(
   servers: readonly McpServerConfig[],
@@ -57,7 +41,7 @@ describe("elicitation mediation over stdio", () => {
   it("accept: the handler's content reaches the server", async () => {
     const seen: McpElicitationRequest[] = [];
     await withRuntime(
-      [stdioConfig("alpha")],
+      [stdioFixtureConfig("alpha")],
       {
         elicitationHandler: (request) => {
           seen.push(request);
@@ -86,7 +70,7 @@ describe("elicitation mediation over stdio", () => {
 
   it("decline: the server sees a decline with no content", async () => {
     await withRuntime(
-      [stdioConfig("alpha")],
+      [stdioFixtureConfig("alpha")],
       { elicitationHandler: () => Promise.resolve({ action: "decline" }) },
       async (runtime) => {
         await expect(observedByServer(runtime, "alpha:elicit_probe")).resolves.toEqual({
@@ -98,7 +82,7 @@ describe("elicitation mediation over stdio", () => {
 
   it("cancel: the server sees a cancel", async () => {
     await withRuntime(
-      [stdioConfig("alpha")],
+      [stdioFixtureConfig("alpha")],
       { elicitationHandler: () => Promise.resolve({ action: "cancel" }) },
       async (runtime) => {
         await expect(observedByServer(runtime, "alpha:elicit_probe")).resolves.toEqual({
@@ -110,7 +94,7 @@ describe("elicitation mediation over stdio", () => {
 
   it("timeout: an unanswered question cancels at the deadline", async () => {
     await withRuntime(
-      [stdioConfig("alpha")],
+      [stdioFixtureConfig("alpha")],
       {
         elicitationHandler: () =>
           new Promise(() => {
@@ -128,7 +112,7 @@ describe("elicitation mediation over stdio", () => {
   });
 
   it("unavailable: with no UI handler wired the server sees a decline", async () => {
-    await withRuntime([stdioConfig("alpha")], {}, async (runtime) => {
+    await withRuntime([stdioFixtureConfig("alpha")], {}, async (runtime) => {
       await expect(observedByServer(runtime, "alpha:elicit_probe")).resolves.toEqual({
         result: { action: "decline" },
       });
@@ -141,16 +125,7 @@ describe("elicitation mediation over http/sse", () => {
     const fixture = await startFixtureHttpServer({ responseMode: "sse" });
     try {
       await withRuntime(
-        [
-          {
-            name: "beta",
-            enabled: true,
-            transport: "http",
-            endpoint: fixture.endpoint,
-            exposure: { tools: true, resources: true, prompts: true },
-            requestTimeoutMs: 10_000,
-          } as McpServerConfig,
-        ],
+        [httpFixtureConfig("beta", fixture.endpoint)],
         {
           elicitationHandler: () =>
             Promise.resolve({ action: "accept", content: { color: "green" } }),
@@ -171,7 +146,7 @@ describe("sampling mediation", () => {
   it("is denied by default with a structured method-level error, handler never called", async () => {
     let handlerCalls = 0;
     await withRuntime(
-      [stdioConfig("alpha")], // no `sampling: true` in config
+      [stdioFixtureConfig("alpha")], // no `sampling: true` in config
       {
         samplingHandler: () => {
           handlerCalls += 1;
@@ -191,7 +166,7 @@ describe("sampling mediation", () => {
   it("enabled: returns ONLY the handler's output plus sanitized usage", async () => {
     const seen: McpSamplingRequest[] = [];
     await withRuntime(
-      [stdioConfig("alpha", { sampling: true })],
+      [stdioFixtureConfig("alpha", { sampling: true })],
       {
         samplingHandler: (request) => {
           seen.push(request);
@@ -231,7 +206,7 @@ describe("sampling mediation", () => {
 
   it("gates on the budget: the call over budget is denied", async () => {
     await withRuntime(
-      [stdioConfig("alpha", { sampling: true })],
+      [stdioFixtureConfig("alpha", { sampling: true })],
       {
         samplingHandler: () => Promise.resolve({ text: "within budget" }),
         samplingBudget: 1,

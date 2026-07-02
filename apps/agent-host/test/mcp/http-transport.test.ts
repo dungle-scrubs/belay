@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { McpHttpServerConfig } from "../../src/mcp/config";
 import { createHttpTransport } from "../../src/mcp/http-transport";
 import { MCP_PROTOCOL_VERSION, type McpTransport } from "../../src/mcp/transport";
+import { httpFixtureConfig } from "./fixture-config";
 import {
   type FixtureHttpServer,
   type FixtureHttpServerOptions,
@@ -15,19 +16,12 @@ import {
  * which must behave identically to the caller.
  */
 
+/** The shared http fixture config under this suite's name and tighter 5s deadline. */
 function httpConfig(
   endpoint: string,
   overrides: Partial<McpHttpServerConfig> = {},
 ): McpHttpServerConfig {
-  return {
-    name: "http-fixture",
-    enabled: true,
-    transport: "http",
-    endpoint,
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 5_000,
-    ...overrides,
-  };
+  return httpFixtureConfig("http-fixture", endpoint, { requestTimeoutMs: 5_000, ...overrides });
 }
 
 async function withTransport(

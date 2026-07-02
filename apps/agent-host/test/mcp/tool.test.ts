@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { DEFAULT_MCP_SEARCH_LIMIT, MAX_MCP_SEARCH_RESULTS } from "@host/mcp/capability-cache";
 import type { McpServerConfig } from "@host/mcp/config";
 import { createMcpRuntime, type McpRuntime } from "@host/mcp/runtime";
@@ -6,6 +5,7 @@ import { ToolInputError } from "@host/tools/errors";
 import { buildMcpTool, type McpArgs } from "@host/tools/mcp";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
+import { httpFixtureConfig, stdioFixtureArgs, stdioFixtureConfig } from "./fixture-config";
 import { startFixtureHttpServer } from "./fixture-http-server";
 
 /**
@@ -13,33 +13,6 @@ import { startFixtureHttpServer } from "./fixture-http-server";
  * (lazy discovery + caps), call, resources list/read, prompt list/get, status - through the
  * host tool boundary, over stdio and http, with qualified identity and redacted status output.
  */
-
-const FIXTURE = join(import.meta.dirname, "fixture-server.ts");
-
-function stdioConfig(name: string, overrides: Partial<McpServerConfig> = {}): McpServerConfig {
-  return {
-    name,
-    enabled: true,
-    transport: "stdio",
-    command: process.execPath,
-    args: ["--import", "tsx", FIXTURE],
-    env: {},
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-    ...overrides,
-  } as McpServerConfig;
-}
-
-function httpConfig(name: string, endpoint: string): McpServerConfig {
-  return {
-    name,
-    enabled: true,
-    transport: "http",
-    endpoint,
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 10_000,
-  };
-}
 
 async function withTool(
   servers: readonly McpServerConfig[],
@@ -59,7 +32,7 @@ describe("mcp tool - search across live servers", () => {
     const fixture = await startFixtureHttpServer();
     try {
       await withTool(
-        [stdioConfig("alpha"), httpConfig("beta", fixture.endpoint)],
+        [stdioFixtureConfig("alpha"), httpFixtureConfig("beta", fixture.endpoint)],
         async (execute) => {
           const result = await execute({ action: "search", query: "echo" });
           expect(result).toContain("alpha:echo");
@@ -74,7 +47,7 @@ describe("mcp tool - search across live servers", () => {
 
   it("caps results from a large catalog whatever limit is requested (D-003)", async () => {
     await withTool(
-      [stdioConfig("big", { args: ["--import", "tsx", FIXTURE, "--catalog=large"] })],
+      [stdioFixtureConfig("big", { args: stdioFixtureArgs(["--catalog=large"]) })],
       async (execute) => {
         const capped = await execute({ action: "search", query: "bulk", limit: 10_000 });
         const cappedLines = capped.split("\n").filter((line) => line.startsWith("- "));
@@ -90,7 +63,7 @@ describe("mcp tool - search across live servers", () => {
 
 describe("mcp tool - call", () => {
   it("runs a qualified tool call end to end", async () => {
-    await withTool([stdioConfig("alpha")], async (execute) => {
+    await withTool([stdioFixtureConfig("alpha")], async (execute) => {
       await expect(
         execute({ action: "call", name: "alpha:echo", args: { text: "via the tool" } }),
       ).resolves.toBe("via the tool");
@@ -98,7 +71,7 @@ describe("mcp tool - call", () => {
   });
 
   it("rejects an unknown server with a helpful typed input error", async () => {
-    await withTool([stdioConfig("alpha")], async (_execute, runtime) => {
+    await withTool([stdioFixtureConfig("alpha")], async (_execute, runtime) => {
       const tool = buildMcpTool(runtime);
       const error = await Effect.runPromise(
         Effect.flip(tool.execute({ action: "call", name: "nope:echo" })),
@@ -111,7 +84,7 @@ describe("mcp tool - call", () => {
 
 describe("mcp tool - resources", () => {
   it("lists resources with provenance", async () => {
-    await withTool([stdioConfig("alpha")], async (execute) => {
+    await withTool([stdioFixtureConfig("alpha")], async (execute) => {
       const result = await execute({ action: "resources" });
       expect(result).toContain("alpha:readme");
       expect(result).toContain("fixture://readme");
@@ -120,7 +93,7 @@ describe("mcp tool - resources", () => {
   });
 
   it("reads one resource as an attributed context record", async () => {
-    await withTool([stdioConfig("alpha")], async (execute) => {
+    await withTool([stdioFixtureConfig("alpha")], async (execute) => {
       const result = await execute({
         action: "resources",
         server: "alpha",
@@ -135,7 +108,7 @@ describe("mcp tool - resources", () => {
 
 describe("mcp tool - prompts", () => {
   it("lists prompts with qualified identity", async () => {
-    await withTool([stdioConfig("alpha")], async (execute) => {
+    await withTool([stdioFixtureConfig("alpha")], async (execute) => {
       const result = await execute({ action: "prompt" });
       expect(result).toContain("alpha:summarize");
       expect(result).toContain("alpha:greet");
@@ -143,7 +116,7 @@ describe("mcp tool - prompts", () => {
   });
 
   it("expands one prompt with server-side argument substitution", async () => {
-    await withTool([stdioConfig("alpha")], async (execute) => {
+    await withTool([stdioFixtureConfig("alpha")], async (execute) => {
       const result = await execute({
         action: "prompt",
         name: "alpha:summarize",
@@ -158,12 +131,7 @@ describe("mcp tool - prompts", () => {
 describe("mcp tool - status", () => {
   it("reports per-server health with redacted targets and no secrets", async () => {
     await withTool(
-      [
-        stdioConfig("alpha", {
-          args: ["--import", "tsx", FIXTURE],
-          env: { FIXTURE_SECRET: "s3cret-env-value" },
-        }),
-      ],
+      [stdioFixtureConfig("alpha", { env: { FIXTURE_SECRET: "s3cret-env-value" } })],
       async (execute) => {
         await execute({ action: "call", name: "alpha:echo", args: { text: "warm" } });
         const result = await execute({ action: "status" });
@@ -176,7 +144,7 @@ describe("mcp tool - status", () => {
   });
 
   it("shows capability counts and freshness once discovered", async () => {
-    await withTool([stdioConfig("alpha")], async (execute) => {
+    await withTool([stdioFixtureConfig("alpha")], async (execute) => {
       await execute({ action: "search", query: "echo" });
       const result = await execute({ action: "status" });
       expect(result).toMatch(/tools 2/);

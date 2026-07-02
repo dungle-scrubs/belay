@@ -18,6 +18,18 @@ export {
   executeFinalizedHandoff,
   runDirectHandoff,
 } from "@host/handoff/handoff-flow";
+// The MCP seam (plan 23 M9): the config loader, runtime constructor, host singleton, and
+// model-facing tool builder, so cross-service e2e can drive every capability path over hermetic
+// fixture servers (see ./mcp-fixtures) through the exact construction the host uses.
+export { loadMcpServersConfig, type McpServerConfig } from "@host/mcp/config";
+export { mcpRuntime } from "@host/mcp/host-runtime";
+export type {
+  McpElicitationAnswer,
+  McpElicitationRequest,
+  McpSamplingCompletion,
+  McpSamplingRequest,
+} from "@host/mcp/mediation";
+export { createMcpRuntime, type McpRuntime } from "@host/mcp/runtime";
 // The background-job promotion runtime (plan 09), so cross-service e2e can drive a real promotable shell
 // command through the supervisor (promote -> tracked pN -> kill) the way the bash tool / shell lane do.
 export { ProcessRegistry } from "@host/processes/process-registry";
@@ -25,6 +37,10 @@ export type { ChatMessage, Provider, ProviderEvent } from "@host/providers";
 // The typed provider error, so cross-service e2e can drive a retryable transport drop through a real
 // store (the DeepSeek-style thinking-only reconnect path) without reaching into host internals.
 export { ProviderUnavailable } from "@host/providers/errors";
+// The typed tool failures + the model-facing mcp tool builder (plan 23 M9), so the e2e MCP
+// capability suite discriminates failures and drives the same action surface the model sees.
+export { ToolExecutionError, ToolInputError } from "@host/tools/errors";
+export { buildMcpTool, type McpArgs } from "@host/tools/mcp";
 export { runPromotable } from "@host/tools/promote-runner";
 export * from "./fake-provider";
 // The hermetic fake-LM-Studio residency fixture (plan 11.1 M7), so cross-service e2e can drive two host

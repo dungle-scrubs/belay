@@ -1,8 +1,8 @@
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { McpStdioServerConfig } from "../../src/mcp/config";
 import { STDIO_CHILD_ENV_ALLOWLIST, spawnStdioTransport } from "../../src/mcp/stdio-transport";
 import { MCP_PROTOCOL_VERSION, type McpTransport } from "../../src/mcp/transport";
+import { stdioFixtureArgs, stdioFixtureConfig } from "./fixture-config";
 
 /**
  * Stdio transport integration (plan 23 M2): drives the REAL fixture MCP server (a spawned child
@@ -10,20 +10,9 @@ import { MCP_PROTOCOL_VERSION, type McpTransport } from "../../src/mcp/transport
  * triggers, lifecycle edges, and the D-004 env probe.
  */
 
-const FIXTURE = join(import.meta.dirname, "fixture-server.ts");
-
+/** The shared stdio fixture config under this suite's name and tighter 5s deadline. */
 function fixtureConfig(overrides: Partial<McpStdioServerConfig> = {}): McpStdioServerConfig {
-  return {
-    name: "fixture",
-    enabled: true,
-    transport: "stdio",
-    command: process.execPath,
-    args: ["--import", "tsx", FIXTURE],
-    env: {},
-    exposure: { tools: true, resources: true, prompts: true },
-    requestTimeoutMs: 5_000,
-    ...overrides,
-  };
+  return stdioFixtureConfig("fixture", { requestTimeoutMs: 5_000, ...overrides });
 }
 
 async function withTransport(
@@ -62,9 +51,8 @@ describe("stdio transport - handshake", () => {
   });
 
   it("rejects an unsupported server protocol version as a handshake failure", async () => {
-    const config = fixtureConfig();
     await withTransport(
-      fixtureConfig({ args: [...config.args, "--protocol=1999-01-01"] }),
+      fixtureConfig({ args: stdioFixtureArgs(["--protocol=1999-01-01"]) }),
       async (transport) => {
         await expect(transport.initialize()).rejects.toMatchObject({
           _tag: "McpHandshakeError",
