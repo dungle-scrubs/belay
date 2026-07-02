@@ -26,7 +26,7 @@ import {
   MAX_BACKGROUND_CHILDREN_PER_SESSION,
   runDelegatedChild,
 } from "./delegate";
-import { createSwitchCell, type SwitchCell } from "./switch-cell";
+import { type ActiveSwitchRef, createSwitchCell, type SwitchCell } from "./switch-cell";
 import { publishTurn } from "./turn";
 import { type ActiveTurn, isAnswerablePrompt, type TurnScheduler } from "./turn-scheduler";
 
@@ -78,9 +78,9 @@ export interface StartTurnDeps {
   /** Mark/clear the actively-executing run. */
   setRunningRunId(runId: string | null): void;
   /** The active turn's mid-turn-switch cell, or null (main.ts's mutable `activeSwitch`). */
-  getActiveSwitch(): { readonly runId: string; readonly cell: SwitchCell } | null;
+  getActiveSwitch(): ActiveSwitchRef;
   /** Register/clear the active turn's switch cell. */
-  setActiveSwitch(next: { readonly runId: string; readonly cell: SwitchCell } | null): void;
+  setActiveSwitch(next: ActiveSwitchRef): void;
 }
 
 /** Builds the turn fork over the host's live state; main.ts wires it once. */

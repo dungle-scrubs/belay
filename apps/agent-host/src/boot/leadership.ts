@@ -1,4 +1,5 @@
 import { ADMISSION_HEARTBEAT_MS } from "@host/admission/store";
+import type { CompactionCommandsApi } from "@host/agent/compaction-commands";
 import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import type { InternetMonitor } from "@host/connectivity/probe";
@@ -67,7 +68,7 @@ export interface LeadershipDeps {
   /** Clear/set the dangling-/compact marker. */
   setCompactPending(value: boolean): void;
   /** The in-flight MANUAL /compact fold, or null (agent/compaction-commands' getter). */
-  manualCompactFiber(): Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null;
+  manualCompactFiber: CompactionCommandsApi["manualCompactFiber"];
   /** Claim the cwd advisory lock as the new mutating owner (main.ts's acquireWorkspaceCwdLock). */
   acquireWorkspaceCwdLock(): void;
   /** The cwd lock's owner identity (main.ts's cwdLockOwner). */

@@ -185,3 +185,6 @@ export function makeCompactionCommands(deps: CompactionCommandsDeps) {
 
   return { needsCompaction, startCompaction, forceCompact, manualCompactFiber };
 }
+
+/** The factory's product surface, so consumers derive signatures instead of re-declaring them. */
+export type CompactionCommandsApi = ReturnType<typeof makeCompactionCommands>;

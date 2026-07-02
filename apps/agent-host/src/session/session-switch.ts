@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import type { CompactionCommandsApi } from "@host/agent/compaction-commands";
 import type { BackgroundChildInfo } from "@host/agent/delegate";
 import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
@@ -53,7 +54,7 @@ export interface SessionSwitchDeps {
   /** The turn machine: a switch is blocked while a prior run is still being reconciled. */
   readonly turnMachine: Pick<TurnMachine, "hasInFlight">;
   /** The in-flight MANUAL /compact fold, or null (main.ts's mutable `manualCompactFiber`). */
-  manualCompactFiber(): Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null;
+  manualCompactFiber: CompactionCommandsApi["manualCompactFiber"];
   /** Background subagents currently running across the session (main.ts's registry). */
   readonly backgroundChildren: ReadonlyMap<string, BackgroundChildInfo>;
   /** The runtime debug flag (main.ts's mutable `debugMode`), carried across a re-exec. */

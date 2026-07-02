@@ -3,6 +3,7 @@ import { log } from "@host/transport/log";
 import type { EmitEvent } from "@host/transport/services";
 import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Fiber } from "effect";
+import type { CompactionCommandsApi } from "./compaction-commands";
 import type { TurnMachine } from "./turn-machine";
 import type { TurnScheduler } from "./turn-scheduler";
 
@@ -29,7 +30,7 @@ export interface RunLifecycleDeps {
   /** The run this host is ACTIVELY executing, or null (main.ts's mutable `runningRunId`). */
   runningRunId(): string | null;
   /** The in-flight MANUAL /compact fold, or null (abortRuns interrupts it). */
-  manualCompactFiber(): Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null;
+  manualCompactFiber: CompactionCommandsApi["manualCompactFiber"];
 }
 
 /** Builds the run-lifecycle teardown over the host's live turn state; main.ts wires it once. */

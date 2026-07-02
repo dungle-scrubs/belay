@@ -18,6 +18,7 @@ import {
   type SessionEvent,
   type SessionTransport,
 } from "@trevor/session";
+import type { CompactionCommandsApi } from "./compaction-commands";
 import type { CompactionController } from "./compaction-controller";
 import {
   CONTINUATION_PREFIX,
@@ -64,7 +65,7 @@ export interface ControlPromptsDeps {
   /** The turn machine: the last termination reason labels an auto-resume's continuation. */
   readonly turnMachine: Pick<TurnMachine, "lastTermination">;
   /** Runs the manual /compact fold now (main.ts's forceCompact, via agent/compaction-commands). */
-  forceCompact(): Promise<string>;
+  forceCompact: CompactionCommandsApi["forceCompact"];
 }
 
 /** Builds the control-prompt + continuation lane over the host's live state; main.ts wires it once. */

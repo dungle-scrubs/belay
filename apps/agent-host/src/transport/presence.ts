@@ -7,10 +7,10 @@ import { supervisor } from "@host/processes/processes";
 import type { CatalogSnapshot } from "@host/providers/catalog";
 import { DEFAULT_PROVIDER, type ProviderRegistry } from "@host/providers/index";
 import { describeAgent, discoverAgents } from "@host/subagents/discovery";
-import type { EmitEvent } from "@host/transport/services";
 import { nodeGitRunner, readGitStatus } from "@host/worktrees/git-status";
 import type { WorktreeManager } from "@host/worktrees/manager";
 import { events, type GitStatus, gitRefLabel } from "@trevor/session";
+import type { EmitEvent } from "./services";
 
 /**
  * The host presence surface, extracted from main.ts (plan 22.3): main.ts constructs

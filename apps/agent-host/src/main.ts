@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type { ActiveSwitchRef } from "@host/agent/switch-cell";
 import { leaseOptions, makeLeadership } from "@host/boot/leadership";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
@@ -313,7 +314,7 @@ let runningRunId: string | null = null;
  * turn is in flight, so a switch request with no active turn is a loop no-op (the web keeps its
  * next-turn selection - today's behavior).
  */
-let activeSwitch: { readonly runId: string; readonly cell: SwitchCell } | null = null;
+let activeSwitch: ActiveSwitchRef = null;
 
 /** The live Emit service: the turn program's events go to the Richter log via emit(). A second
  *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
@@ -398,12 +399,6 @@ const lease = new Lease(
   leaseOptions(),
 );
 
-/**
- * The turn machine: owns when turns run (one at a time, deferred FIFO, leader catch-up).
- * Each prompt is recorded through `start`, which admits it to the prompt view and - only
- * when this host is the live leader - forks its turn. On replay the prompt is recorded
- * without being answered.
- */
 /** True between a `/compact` command and its `command.result`. If a host dies mid-fold the command
  *  is left with no result (a dangling `/compact` that looks broken); the next leader gives it one. */
 let compactPending = false;
@@ -413,9 +408,26 @@ let compactPending = false;
  *  cap holds across turns and /doctor can report active children. An entry clears when the child settles. */
 const backgroundChildren = new Map<string, BackgroundChildInfo>();
 
+// The compaction command lane (plan 22.3, agent/compaction-commands): the between-turn fold gate
+// + trigger, the manual /compact fold (with its ESC-interruptible fiber, read back through the
+// manualCompactFiber getter), and the fold-progress throttle. Constructed BEFORE the scheduler -
+// whose compaction gate takes needsCompaction/startCompaction below - so the scheduler half is
+// threaded lazily.
+const { needsCompaction, startCompaction, forceCompact, manualCompactFiber } =
+  makeCompactionCommands({
+    producerId: PRODUCER_ID,
+    emit,
+    compactionController,
+    historyEvents: () => historyEvents,
+    live: () => live,
+    lease,
+    scheduler: () => scheduler,
+  });
+
 // The host-issued control prompts + continuation lane (plan 22.3, agent/control-prompts): the
 // control/clip prompt shapes, the continue/retry/compress flows, the /clip lane, and the bounded
-// auto-resume - wired over the live projection + transport. The LoopStore runner above closes over
+// auto-resume - wired over the live projection + transport (constructed after the compaction lane so
+// forceCompact passes directly). The LoopStore runner above closes over
 // `publishControlPrompt` and only dereferences it when a loop iteration fires (runtime), so this
 // destructure sitting after the store's construction is TDZ-safe.
 const {
@@ -436,25 +448,15 @@ const {
   historyEvents: () => historyEvents,
   compactionController,
   turnMachine,
-  forceCompact: () => forceCompact(),
+  forceCompact,
 });
 
-// The compaction command lane (plan 22.3, agent/compaction-commands): the between-turn fold gate
-// + trigger, the manual /compact fold (with its ESC-interruptible fiber, read back through the
-// manualCompactFiber getter), and the fold-progress throttle. Constructed BEFORE the scheduler -
-// whose compaction gate takes needsCompaction/startCompaction below - so the scheduler half is
-// threaded lazily.
-const { needsCompaction, startCompaction, forceCompact, manualCompactFiber } =
-  makeCompactionCommands({
-    producerId: PRODUCER_ID,
-    emit,
-    compactionController,
-    historyEvents: () => historyEvents,
-    live: () => live,
-    lease,
-    scheduler: () => scheduler,
-  });
-
+/**
+ * The turn machine: owns when turns run (one at a time, deferred FIFO, leader catch-up).
+ * Each prompt is recorded through `start`, which admits it to the prompt view and - only
+ * when this host is the live leader - forks its turn. On replay the prompt is recorded
+ * without being answered.
+ */
 const scheduler = new TurnScheduler({
   isLeader: () => lease.isLeader(),
   start: (event) => {
