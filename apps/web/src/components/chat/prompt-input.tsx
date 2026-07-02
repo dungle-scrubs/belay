@@ -14,6 +14,7 @@ import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { Button } from "@/components/ui/button";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
+import { vimCaretClass } from "@/vim/caret";
 import { useVim } from "@/vim/use-vim";
 
 /**
@@ -237,6 +238,7 @@ export function PromptInput({
                 loopPreview
                   ? "font-mono text-transparent caret-foreground placeholder:text-transparent"
                   : null,
+                vimCaretClass(vim.mode),
               )}
             />
           </div>

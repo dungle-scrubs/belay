@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M1: Cursor shape (block in normal/visual, thin line in insert)
+> Current focus: M2: Indicator left-alignment
 
 - Total checklist items: 17
-- Completed: 2
-- Current cutoff blockers: 15
+- Completed: 7
+- Current cutoff blockers: 10
 
 ## 0. Hard Dependencies
 
@@ -15,11 +15,11 @@
 
 ## M1: Cursor shape (block in normal/visual, thin line in insert)
 
-- [ ] RED: Composer component test - focused Vim composer carries the block caret-shape class after Escape (normal) and `v` (visual), and the thin/default class in insert (initial + after `i`)
-- [ ] GREEN: Add the `vim.mode`→caret-shape class (`[caret-shape:block]` in normal/visual, thin default otherwise) to the textarea in `prompt-input.tsx`
-- [ ] RED: Full-surface editor test - same block-in-normal/visual, thin-in-insert assertion in `prompt-surface-editor.test.tsx`
-- [ ] GREEN: Apply the identical `vim.mode`→caret-shape class to the editor textarea in `prompt-surface-editor.tsx`
-- [ ] REFACTOR: Extract the mode→caret-shape class mapping to one shared helper co-located with the Vim layer; confirm the disabled (non-Vim) path adds no caret-shape class
+- [x] RED: Composer component test - focused Vim composer carries the block caret-shape class after Escape (normal) and `v` (visual), and the thin/default class in insert (initial + after `i`)
+- [x] GREEN: Add the `vim.mode`→caret-shape class (`[caret-shape:block]` in normal/visual, thin default otherwise) to the textarea in `prompt-input.tsx`
+- [x] RED: Full-surface editor test - same block-in-normal/visual, thin-in-insert assertion in `prompt-surface-editor.test.tsx`
+- [x] GREEN: Apply the identical `vim.mode`→caret-shape class to the editor textarea in `prompt-surface-editor.tsx`
+- [x] REFACTOR: Extract the mode→caret-shape class mapping to one shared helper co-located with the Vim layer; confirm the disabled (non-Vim) path adds no caret-shape class
 
 ## M2: Indicator left-alignment
 

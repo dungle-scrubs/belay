@@ -20,8 +20,8 @@ type ComposerInput = Pick<
   | "removeAttachment"
 >;
 
-function PromptHarness(props: { readonly initialDraft: string }) {
-  const { initialDraft } = props;
+function PromptHarness(props: { readonly initialDraft: string; readonly vimEnabled?: boolean }) {
+  const { initialDraft, vimEnabled = false } = props;
   const [draft, setDraft] = useState(initialDraft);
   const composer: ComposerInput = {
     attachments: [],
@@ -45,9 +45,41 @@ function PromptHarness(props: { readonly initialDraft: string }) {
       onKeyDown={vi.fn()}
       onSubmit={(event) => event.preventDefault()}
       placeholder="message"
+      vimEnabled={vimEnabled}
     />
   );
 }
+
+describe("PromptInput Vim caret shape (06.1)", () => {
+  test("block caret in normal and visual mode, thin default in insert", () => {
+    render(<PromptHarness initialDraft="hello" vimEnabled />);
+    const input = screen.getByRole("textbox");
+
+    // A freshly rendered Vim composer is in insert: the native thin bar, no block class.
+    expect(input.className).not.toContain("[caret-shape:block]");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.getByLabelText("Vim mode: normal")).toBeTruthy();
+    expect(input.className).toContain("[caret-shape:block]");
+
+    fireEvent.keyDown(input, { key: "v" });
+    expect(screen.getByLabelText("Vim mode: visual")).toBeTruthy();
+    expect(input.className).toContain("[caret-shape:block]");
+
+    // v again leaves visual -> normal; i -> insert restores the thin bar.
+    fireEvent.keyDown(input, { key: "v" });
+    fireEvent.keyDown(input, { key: "i" });
+    expect(screen.getByLabelText("Vim mode: insert")).toBeTruthy();
+    expect(input.className).not.toContain("[caret-shape:block]");
+  });
+
+  test("with Vim disabled the caret class never appears", () => {
+    render(<PromptHarness initialDraft="hello" />);
+    const input = screen.getByRole("textbox");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.className).not.toContain("caret-shape");
+  });
+});
 
 describe("PromptInput loop helper wiring", () => {
   test("renders the loop helper for an active /loop line only", () => {

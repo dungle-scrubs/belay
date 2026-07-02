@@ -2,6 +2,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { cn } from "@/lib/utils";
+import { vimCaretClass } from "@/vim/caret";
 import { useVim } from "@/vim/use-vim";
 
 /**
@@ -92,6 +93,7 @@ export function PromptSurfaceEditor({
         className={cn(
           "flex-1 resize-none rounded-md border border-border bg-background p-3 font-mono text-sm text-foreground",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          vimCaretClass(vim.mode),
         )}
         placeholder="Write your prompt…"
       />

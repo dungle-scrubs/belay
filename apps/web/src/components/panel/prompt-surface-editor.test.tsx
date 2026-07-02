@@ -90,6 +90,31 @@ test("Vim Escape enters normal-mode and does NOT close the editor; a second Esca
   assert.equal(onConfirm.mock.calls.length, 1, "a second Escape (in normal) closes");
 });
 
+test("Vim caret shape (06.1): block in normal/visual, thin default in insert", () => {
+  renderEditor("hello", undefined, true);
+  const ta = screen.getByRole("textbox") as HTMLTextAreaElement;
+
+  assert.ok(!ta.className.includes("[caret-shape:block]"), "insert starts with the thin bar");
+
+  fireEvent.keyDown(ta, { key: "Escape" }); // -> normal
+  assert.ok(ta.className.includes("[caret-shape:block]"), "normal mode shows the block caret");
+
+  fireEvent.keyDown(ta, { key: "v" }); // -> visual
+  assert.ok(screen.getByLabelText("Vim mode: visual"));
+  assert.ok(ta.className.includes("[caret-shape:block]"), "visual mode keeps the block caret");
+
+  fireEvent.keyDown(ta, { key: "v" }); // -> normal
+  fireEvent.keyDown(ta, { key: "i" }); // -> insert
+  assert.ok(!ta.className.includes("[caret-shape:block]"), "insert restores the thin bar");
+});
+
+test("with Vim disabled the caret class never appears on the editor textarea", () => {
+  renderEditor("hello", undefined, false);
+  const ta = screen.getByRole("textbox") as HTMLTextAreaElement;
+  fireEvent.keyDown(ta, { key: "Escape" });
+  assert.ok(!ta.className.includes("caret-shape"), "no caret-shape class with Vim off");
+});
+
 test("Cmd/Ctrl-Enter confirms even in Vim mode, regardless of mode", () => {
   const { onConfirm } = renderEditor("hello", undefined, true);
   const ta = screen.getByRole("textbox") as HTMLTextAreaElement;
