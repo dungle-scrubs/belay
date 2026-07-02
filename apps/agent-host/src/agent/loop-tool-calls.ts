@@ -1,0 +1,79 @@
+/**
+ * Responsible for: the agent loop's pure per-tool-call helpers - composing a guardrail decision
+ * onto the model-facing result (guardedToolResult), the trailing-announcement heuristic
+ * (looksUnfinished), and partitioning a step's tool batch into concurrent-read / serial-barrier
+ * segments (partitionToolCalls).
+ * Not for: executing tools or dispatching the segments - the loop (loop.ts) owns that.
+ */
+import type { ToolCall } from "@host/providers";
+import { READ_ONLY_TOOLS } from "@host/tools";
+import type { GuardrailDecision } from "./tool-guardrails";
+
+/**
+ * Composes a guardrail decision onto the model-facing tool result (M4/M6 / D-007). A `warn` appends
+ * the action-oriented guidance after the raw result, so the model both keeps the output and reads the
+ * advice to change approach. A `block` (opt-in hard stop) SUBSTITUTES the synthetic, retryable
+ * guidance for the repeated output: the tool still executed (D-003), but its stale repeat is withheld
+ * so the model stops re-reading it and changes course; the turn continues normally toward synthesis or
+ * a typed terminal stop. Any other action returns the raw result unchanged. The guidance names only the
+ * tool and a count - never raw arguments or output - so it is safe on the tool result; the redacted
+ * guardrail event (M5) is the separate telemetry surface.
+ */
+export function guardedToolResult(rawResult: string, decision: GuardrailDecision): string {
+  if (decision.action === "warn" && decision.guidance) {
+    return `${rawResult}\n\n${decision.guidance}`;
+  }
+  if (decision.action === "block" && decision.guidance) {
+    return decision.guidance;
+  }
+  return rawResult;
+}
+
+/**
+ * Heuristic: did the model END a turn by ANNOUNCING an imminent action without calling a tool?
+ * A weaker model sometimes trails off ("Let me continue reading the remaining files:") and stops
+ * instead of emitting the next tool batch, which the loop would otherwise accept as a final answer.
+ * Deliberately conservative - it only fires on a clear trailing announcement (a dangling colon, or a
+ * closing "let me read…/I'll continue…" clause), so a genuine final answer is never mistaken for one.
+ * Worst case on a false positive is one wasted nudge step, bounded to once per turn.
+ */
+export function looksUnfinished(text: string): boolean {
+  const trimmed = text.trimEnd();
+  if (trimmed.endsWith(":")) {
+    return true; // "...let me read these files:" - about to list/act, then stopped
+  }
+  const tail = trimmed.slice(-160).toLowerCase();
+  return /\b(let me|i'?ll|i will|now i|next,? i)\b.{0,90}\b(continue|read|look|check|explore|examine|review|proceed|start|dive|go through)\b[^.!?]*$/.test(
+    tail,
+  );
+}
+
+/** One ordered segment of a step's tool batch: a maximal run of consecutive read-only calls
+ *  (run concurrently) OR a single mutating call (a serial barrier). Each entry keeps the call's
+ *  original index so its result commits to the right `conversation` slot in CALL order. */
+export type ToolSegment = ReadonlyArray<{ readonly call: ToolCall; readonly index: number }>;
+
+/**
+ * Partitions a step's tool batch into ordered segments for concurrent dispatch (D-050).
+ * Consecutive read-only calls (per `READ_ONLY_TOOLS`) coalesce into one maximal run; every
+ * mutating call breaks the run and forms its own singleton barrier. Segment order preserves
+ * emission order, so a mutating call still executes in place relative to the reads around it.
+ */
+export function partitionToolCalls(calls: readonly ToolCall[]): readonly ToolSegment[] {
+  const segments: { call: ToolCall; index: number }[][] = [];
+  let run: { call: ToolCall; index: number }[] | null = null;
+  calls.forEach((call, index) => {
+    if (READ_ONLY_TOOLS.has(call.name)) {
+      if (!run) {
+        run = [];
+        segments.push(run);
+      }
+      run.push({ call, index });
+    } else {
+      // A mutating call is its own barrier and ends any open read run.
+      segments.push([{ call, index }]);
+      run = null;
+    }
+  });
+  return segments;
+}

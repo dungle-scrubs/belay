@@ -4,13 +4,9 @@ import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
-import {
-  type AgentEvent,
-  looksUnfinished,
-  type RunAgentOptions,
-  runAgent,
-  withToolStallTimeout,
-} from "./loop";
+import { type AgentEvent, type RunAgentOptions, runAgent } from "./loop";
+import { withToolStallTimeout } from "./loop-stalls";
+import { looksUnfinished } from "./loop-tool-calls";
 
 /**
  * Phase 2 (graceful turn-budget termination, D-051..D-053): a turn must never end silently

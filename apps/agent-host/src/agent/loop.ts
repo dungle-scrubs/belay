@@ -4,8 +4,7 @@
  * mid-turn switches.
  * Not for: publishing the turn as session events - publishTurn (turn.ts).
  */
-import { envNumber } from "@host/boot/env";
-import { debug, warn } from "@host/transport/log";
+import { debug } from "@host/transport/log";
 import {
   constrainReasoning,
   type ModelRef,
@@ -15,7 +14,7 @@ import {
   type TurnStop,
 } from "@trevor/session";
 import { NOOP_SINK, SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
-import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
+import { Duration, Effect, Option, Stream } from "effect";
 import type {
   ChatMessage,
   ModelEvent,
@@ -25,14 +24,7 @@ import type {
   ToolCall,
   ToolDef,
 } from "../providers";
-import {
-  ProviderUnavailable,
-  protocolAnomalyDiagnostic,
-  providerDiagnostic,
-  providerFailureEvidence,
-} from "../providers";
-import { buildProviderFailureLogFields } from "../providers/failure-record-schema";
-import { recordObservation } from "../providers/observation-store";
+import { ProviderUnavailable, protocolAnomalyDiagnostic, providerDiagnostic } from "../providers";
 import {
   classifyProviderProtocolAnomaly,
   type ProviderProtocolDiagnostic,
@@ -41,6 +33,10 @@ import { spanEffect } from "../telemetry/span";
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
 import { fitsAfterSwitch } from "./context-guard";
 import { normalizeConversationForProvider } from "./cross-model";
+import { type TurnLoopConfig, turnLoopConfig } from "./loop-config";
+import { logProviderFailure, observeUnknownFailure } from "./loop-failures";
+import { withStallTimeout, withToolStallTimeout } from "./loop-stalls";
+import { guardedToolResult, looksUnfinished, partitionToolCalls } from "./loop-tool-calls";
 import { trimLargestToolResult } from "./overflow-recovery";
 import { cheapestReasoning, reduceReasoning } from "./reasoning-levels";
 import type { SwitchCell, SwitchEndpoint, SwitchInitiator } from "./switch-cell";
@@ -49,100 +45,8 @@ import {
   type GuardrailConfig,
   type GuardrailDecision,
 } from "./tool-guardrails";
-import { deriveTurnBudget, EMERGENCY_MAX_STEPS, type TurnBudget } from "./turn-budget";
+import { deriveTurnBudget, type TurnBudget } from "./turn-budget";
 import { TurnTerminationGate } from "./turn-policy";
-
-/**
- * Emits the structured, redacted provider-failure log line (D-076 M6): the classification, retry
- * decision, attempt number, source/model, phase, and stable fingerprint - behind the verbose
- * `provider` debug scope, where the richer shape metadata (status/code/field names) is useful. Never
- * logs a raw payload; the detail is re-redacted by the field builder.
- */
-function logProviderFailure(
-  provider: Provider,
-  error: ProviderError,
-  attempt: number,
-  outcome: "reconnect" | "terminal",
-): void {
-  debug(
-    "provider",
-    outcome === "reconnect" ? "reconnect" : "failure",
-    buildProviderFailureLogFields({
-      ...providerFailureEvidence(error),
-      provider: provider.id,
-      model: provider.model,
-      phase: "model-step",
-      attempt,
-      outcome,
-    }),
-  );
-}
-
-/**
- * Best-effort: when a model step fails terminally with an UNKNOWN provider failure shape, record it
- * as a redacted, deduped observation under TREVOR_STATE_HOME (D-076 M5). Emits nothing and never
- * fails - the underlying store swallows any write error - so it can be `concat`-ed ahead of the real
- * failure without changing the turn's outcome. Only `unknown` is observed; well-classified terminal
- * failures (auth, quota, model/runtime unavailable, request rejected) already carry their own action.
- */
-function observeUnknownFailure(
-  provider: Provider,
-  error: ProviderError,
-  outputStarted: boolean,
-): Stream.Stream<never, never> {
-  if (error._tag !== "ProviderUnavailable" || error.classification !== "unknown") {
-    return Stream.empty;
-  }
-  const evidence = providerFailureEvidence(error);
-  return Stream.fromEffect(
-    Effect.promise(() =>
-      recordObservation(
-        {
-          provider: error.provider,
-          model: provider.model,
-          phase: "model-step",
-          classification: "unknown",
-          retryable: evidence.retryable,
-          status: evidence.status,
-          code: evidence.code,
-          message: error.detail,
-          shapeFields: evidence.shapeFields,
-          outputStarted,
-        },
-        new Date().toISOString(),
-      ),
-    ),
-  ).pipe(Stream.drain);
-}
-
-/**
- * Provider-stream idle watchdog (ms): if a model stream produces no event for this long, treat it as
- * a stalled (half-open) connection and fail it, so the loop retries or goes terminal instead of
- * hanging forever - the fix for the 18-minute "Working" stall where a half-open Codex stream sent no
- * tokens, close, or error. Env-overridable; set to 0 to disable. Default 90s (xhigh reasoning can
- * pause for a while, so the gap is generous - it only catches a genuinely dead stream).
- */
-const DEFAULT_STREAM_STALL_MS = envNumber("TREVOR_STREAM_STALL_MS", 90_000);
-
-/**
- * Per-tool-call wall-clock watchdog (ms): the tool-side analog of the provider-stream idle watchdog
- * above, which only covers the MODEL stream - not tool execution. A tool that returns no result for
- * this long is treated as a hung call (a half-open socket, a wedged subprocess, a delegation waiting on
- * a dead child) and aborted, so the loop continues instead of latching "Working" forever. Generous by
- * default: bash self-bounds at 30s (run-shell.ts) and reads/greps/edits are local, so the ceiling only
- * trips on a genuine hang, never on legitimately slow work. Env-overridable; set to 0 to disable.
- * Default 300s.
- */
-const DEFAULT_TOOL_STALL_MS = envNumber("TREVOR_TOOL_STALL_MS", 300_000);
-
-/**
- * Tools that block by design and must be EXEMPT from the per-tool stall watchdog: `ask_user` pauses the
- * turn on a human answer with no upper bound (a slow human is not a hung tool). Delegation tools are not
- * listed because the loop routes them to the injected runner (not `executeTool`), where the child turn's
- * own stream + tool watchdogs bound them transitively - capping them here too would double-bound a
- * legitimately long child.
- */
-const UNBOUNDED_TOOLS: ReadonlySet<string> = new Set(["ask_user"]);
 
 /** The progress guard threshold (02.17 D-003): a step-budget checkpoint auto-continues only if the
  *  prompt grew by at least this many tokens since the previous checkpoint. Tiny relative to a real
@@ -150,210 +54,6 @@ const UNBOUNDED_TOOLS: ReadonlySet<string> = new Set(["ask_user"]);
  *  loop that the same-tool stall detector misses adds ~0 and trips it, pausing instead of running to
  *  the emergency ceiling. */
 const CHECKPOINT_MIN_ADVANCE_TOKENS = 1_024;
-
-export interface TurnLoopConfig {
-  /** Absolute runaway ceiling, independent of the adaptive per-step budget (D-011): the loop derives
-   *  an effective step budget each round (see turn-budget.ts) and clamps it to never exceed this. Only
-   *  binds when the adaptive budget would exceed it or telemetry is unusable - the genuine backstop. */
-  readonly emergencyMaxSteps: number;
-  /** Max read-only tool calls a single step runs concurrently. */
-  readonly toolConcurrency: number;
-  /** Prompt-token fraction of the context window where the loop stops opening tool rounds. */
-  readonly contextBudgetFraction: number;
-  /** Per-turn cap on in-loop overflow-recovery adjustments. */
-  readonly maxRecovery: number;
-  /** Provider-stream idle watchdog in ms; 0 disables it. */
-  readonly streamStallMs: number;
-  /** Per-tool-call wall-clock watchdog in ms; 0 disables it. */
-  readonly toolStallMs: number;
-  /** Reconnect backoff before retries; length + 1 is the attempt budget. */
-  readonly reconnectBackoffsMs: readonly number[];
-}
-
-export const DEFAULT_TURN_LOOP_CONFIG: TurnLoopConfig = {
-  emergencyMaxSteps: EMERGENCY_MAX_STEPS,
-  toolConcurrency: 8,
-  contextBudgetFraction: 0.8,
-  maxRecovery: 2,
-  streamStallMs: DEFAULT_STREAM_STALL_MS,
-  toolStallMs: DEFAULT_TOOL_STALL_MS,
-  // 9 backoffs -> 10 total attempts (the initial + 9 retries). The curve ramps then caps at 15s, for
-  // ~75s cumulative across all retries - deliberately under the 90s per-attempt stream-stall watchdog,
-  // so the watchdog still bounds any single hung attempt while a genuinely flaky upstream gets a wide
-  // budget to recover. Retries fire only before any token streams (safeToRetry), so the wider budget
-  // never duplicates partial output. <!-- D-001 D-002 -->
-  reconnectBackoffsMs: [500, 1000, 2000, 4000, 8000, 15000, 15000, 15000, 15000],
-};
-
-function turnLoopConfig(overrides?: Partial<TurnLoopConfig>): TurnLoopConfig {
-  return {
-    ...DEFAULT_TURN_LOOP_CONFIG,
-    ...overrides,
-    reconnectBackoffsMs:
-      overrides?.reconnectBackoffsMs ?? DEFAULT_TURN_LOOP_CONFIG.reconnectBackoffsMs,
-  };
-}
-
-/**
- * Wraps a provider stream with the idle watchdog: a scoped fiber polls the time since the last event
- * and, past the configured stall timeout, fails the stream with a RETRYABLE ProviderUnavailable. The loop's
- * existing reconnect `catchAll` then retries (when nothing has streamed yet) or, once tokens have
- * flowed, surfaces it as a clear terminal error. A normal end, the stall failure, or an interrupt
- * (ESC/cancel) all close the stream scope and tear the watchdog down.
- */
-function withStallTimeout<A>(
-  source: Stream.Stream<A, ProviderError>,
-  providerName: string,
-  streamStallMs: number,
-): Stream.Stream<A, ProviderError> {
-  if (streamStallMs <= 0) {
-    return source;
-  }
-  return Stream.unwrapScoped(
-    Effect.gen(function* () {
-      const lastSeen = yield* Ref.make(yield* Clock.currentTimeMillis);
-      const stalled = yield* Deferred.make<never, ProviderError>();
-      const bump = Clock.currentTimeMillis.pipe(Effect.flatMap((now) => Ref.set(lastSeen, now)));
-      yield* Effect.forkScoped(
-        Effect.gen(function* () {
-          for (;;) {
-            yield* Effect.sleep(Duration.millis(Math.min(streamStallMs, 5_000)));
-            const idle = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastSeen));
-            if (idle >= streamStallMs) {
-              yield* Deferred.fail(
-                stalled,
-                new ProviderUnavailable({
-                  provider: providerName,
-                  detail: `model stream stalled (no output for ${Math.round(streamStallMs / 1000)}s)`,
-                  retryable: true,
-                }),
-              );
-              return;
-            }
-          }
-        }),
-      );
-      const guarded = source.pipe(Stream.tap(() => bump));
-      const failOnStall: Stream.Stream<never, ProviderError> = Stream.fromEffect(
-        Deferred.await(stalled),
-      );
-      // haltStrategy "left": the merged stream ends when the SOURCE ends (we don't wait on the
-      // never-resolving watchdog); a stall failure still propagates immediately from either side.
-      return Stream.merge(guarded, failOnStall, { haltStrategy: "left" });
-    }),
-  );
-}
-
-/**
- * Wraps a single tool-call execution with the per-tool wall-clock watchdog (`toolStallMs`). Unlike the
- * provider-stream watchdog this does NOT fail the turn: `executeTool` resolves to a string and never
- * throws, so on timeout we resolve to an `error:` string the model reads as the tool result. The turn
- * keeps going - the other concurrent results in the batch still commit, and the model gets to react to
- * the timeout - rather than the whole turn going terminal or latching "Working" forever.
- *
- * `toolStallMs <= 0` disables it; tools in {@link UNBOUNDED_TOOLS} are passed through (they block by
- * design). The timeout interrupts the tool's Effect, which frees the loop; an underlying uncancelable
- * promise (a raw fetch, a detached subprocess) may still run to completion in the background, but it no
- * longer blocks the turn.
- */
-export function withToolStallTimeout(
-  name: string,
-  effect: Effect.Effect<string>,
-  toolStallMs: number,
-): Effect.Effect<string> {
-  if (toolStallMs <= 0 || UNBOUNDED_TOOLS.has(name)) {
-    return effect;
-  }
-  return effect.pipe(
-    Effect.timeoutTo({
-      duration: Duration.millis(toolStallMs),
-      onSuccess: (result: string) => result,
-      onTimeout: () => {
-        warn("tool", "stalled", { name, ms: toolStallMs });
-        return (
-          `error: tool "${name}" produced no result after ${Math.round(toolStallMs / 1000)}s and was ` +
-          "aborted as a hung call; do not retry it blindly - try a different approach or a smaller scope"
-        );
-      },
-    }),
-  );
-}
-
-/**
- * Composes a guardrail decision onto the model-facing tool result (M4/M6 / D-007). A `warn` appends
- * the action-oriented guidance after the raw result, so the model both keeps the output and reads the
- * advice to change approach. A `block` (opt-in hard stop) SUBSTITUTES the synthetic, retryable
- * guidance for the repeated output: the tool still executed (D-003), but its stale repeat is withheld
- * so the model stops re-reading it and changes course; the turn continues normally toward synthesis or
- * a typed terminal stop. Any other action returns the raw result unchanged. The guidance names only the
- * tool and a count - never raw arguments or output - so it is safe on the tool result; the redacted
- * guardrail event (M5) is the separate telemetry surface.
- */
-export function guardedToolResult(rawResult: string, decision: GuardrailDecision): string {
-  if (decision.action === "warn" && decision.guidance) {
-    return `${rawResult}\n\n${decision.guidance}`;
-  }
-  if (decision.action === "block" && decision.guidance) {
-    return decision.guidance;
-  }
-  return rawResult;
-}
-
-/**
- * Bounded auto-reconnect for a transient provider outage (D-076…D-079): backoff (ms) BEFORE each
- * retry. Nine entries = ten total attempts (the initial plus nine retries), ramping then capped at 15s
- * for ~75s cumulative - under the 90s stream-stall watchdog that bounds each single attempt. A small
- * jitter is added so simultaneous turns don't reconnect in lockstep. The budget is per-step and
- * independent of the step and overflow-recovery budgets, so reconnection can never spin.
- */
-/**
- * Heuristic: did the model END a turn by ANNOUNCING an imminent action without calling a tool?
- * A weaker model sometimes trails off ("Let me continue reading the remaining files:") and stops
- * instead of emitting the next tool batch, which the loop would otherwise accept as a final answer.
- * Deliberately conservative - it only fires on a clear trailing announcement (a dangling colon, or a
- * closing "let me read…/I'll continue…" clause), so a genuine final answer is never mistaken for one.
- * Worst case on a false positive is one wasted nudge step, bounded to once per turn.
- */
-export function looksUnfinished(text: string): boolean {
-  const trimmed = text.trimEnd();
-  if (trimmed.endsWith(":")) {
-    return true; // "...let me read these files:" - about to list/act, then stopped
-  }
-  const tail = trimmed.slice(-160).toLowerCase();
-  return /\b(let me|i'?ll|i will|now i|next,? i)\b.{0,90}\b(continue|read|look|check|explore|examine|review|proceed|start|dive|go through)\b[^.!?]*$/.test(
-    tail,
-  );
-}
-
-/** One ordered segment of a step's tool batch: a maximal run of consecutive read-only calls
- *  (run concurrently) OR a single mutating call (a serial barrier). Each entry keeps the call's
- *  original index so its result commits to the right `conversation` slot in CALL order. */
-type ToolSegment = ReadonlyArray<{ readonly call: ToolCall; readonly index: number }>;
-
-/**
- * Partitions a step's tool batch into ordered segments for concurrent dispatch (D-050).
- * Consecutive read-only calls (per `READ_ONLY_TOOLS`) coalesce into one maximal run; every
- * mutating call breaks the run and forms its own singleton barrier. Segment order preserves
- * emission order, so a mutating call still executes in place relative to the reads around it.
- */
-export function partitionToolCalls(calls: readonly ToolCall[]): readonly ToolSegment[] {
-  const segments: { call: ToolCall; index: number }[][] = [];
-  let run: { call: ToolCall; index: number }[] | null = null;
-  calls.forEach((call, index) => {
-    if (READ_ONLY_TOOLS.has(call.name)) {
-      if (!run) {
-        run = [];
-        segments.push(run);
-      }
-      run.push({ call, index });
-    } else {
-      // A mutating call is its own barrier and ends any open read run.
-      segments.push([{ call, index }]);
-      run = null;
-    }
-  });
-  return segments;
-}
 
 /** One event from the agent loop: the shared model-step events (`ModelEvent`: text,
  *  thinking, usage, overflow) forwarded unchanged from the provider, plus the loop-only

@@ -32,7 +32,8 @@ import {
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
 import type { HistoryImageResolver } from "./image-resolution";
-import { type AgentEvent, type DelegateCapability, runAgent, type TurnLoopConfig } from "./loop";
+import { type AgentEvent, type DelegateCapability, runAgent } from "./loop";
+import type { TurnLoopConfig } from "./loop-config";
 import type { SwitchCell } from "./switch-cell";
 import { prepareTurn } from "./turn-preflight";
 import { recordTurnStop } from "./turn-stop-metrics";
