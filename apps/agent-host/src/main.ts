@@ -1,5 +1,4 @@
-import { execFile, spawn } from "node:child_process";
-import { join } from "node:path";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { publishTurn } from "@host/agent/turn";
 import { envNumber } from "@host/boot/env";
@@ -32,7 +31,6 @@ import {
   type StopOutcome,
   stopSession,
 } from "@host/session/session-lifecycle";
-import { resolveCdTarget } from "@host/session/workspace-switch";
 import { skillRegistry } from "@host/skills/skills";
 import { describeAgent, discoverAgents } from "@host/subagents/discovery";
 import { CLIPBOARD_TOOL_NAMES, copyLastCopyable, routeClip } from "@host/tools/clip";
@@ -48,7 +46,6 @@ import {
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
-  freshSessionId,
   type GitStatus,
   gitRefLabel,
   inputEstimateTokens,
@@ -121,6 +118,7 @@ import {
   nodeSerialControllerCaps,
   nodeSerialRunStartDeps,
 } from "./serial-run/node";
+import { makeSessionSwitch } from "./session/session-switch";
 import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { registerToolScriptSink } from "./tool-script/sink";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
@@ -1176,201 +1174,28 @@ async function runShellCommand(requestId: string, command: string): Promise<void
   announceOnline();
 }
 
-function spawnReplacementHost(opts: {
-  readonly cwd: string;
-  readonly sessionId: string;
-  readonly workspace: string;
-}): { readonly pid: number } {
-  // Re-exec with the SAME node invocation that started THIS process. Under the dev/start lanes the
-  // host runs via tsx, which installs its TypeScript loader through process.execArgv (--require
-  // preflight, --import loader) - NOT argv. Dropping execArgv respawns a bare `node src/main.ts`, which
-  // dies instantly on the first extensionless `.ts` import (ERR_MODULE_NOT_FOUND); with stdio:"ignore"
-  // that death is silent, so /cd, /clear, and /restart would leave the new session hostless ("starting
-  // host…" forever). Carrying execArgv through reproduces the full launch; it's empty under a compiled
-  // binary, so this is a no-op there.
-  const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
-    cwd: opts.cwd,
-    detached: true,
-    stdio: "ignore",
-    env: {
-      ...process.env,
-      SESSION_ID: opts.sessionId,
-      TREVOR_WORKSPACE: opts.workspace,
-      TREVOR_MANAGED_HOST: "1",
-      // tsx resolves tsconfig `paths` from the child's cwd, and the replacement's cwd is the TARGET
-      // project - which has no @host/* mapping - so without this pointer the re-exec dies on its
-      // first @host import (silently: stdio is "ignore"). Self-anchored so it also covers hosts
-      // whose launcher didn't set it.
-      TSX_TSCONFIG_PATH:
-        process.env.TSX_TSCONFIG_PATH ?? join(import.meta.dirname, "..", "tsconfig.json"),
-      // Carry the CURRENT debug flag (which may have been toggled at runtime via /debug, so it
-      // isn't in process.env) across the re-exec, so a debug session stays in debug after /restart.
-      ...(debugMode ? { TREVOR_DEBUG: "1" } : {}),
-    },
-  });
-  child.unref();
-  if (!child.pid) {
-    throw new Error("replacement host did not report a pid");
-  }
-  return { pid: child.pid };
-}
-
-function retireAfterSessionSwitch(): void {
-  const timer = setTimeout(() => {
-    supervisor.killAll();
-    if (process.env.TREVOR_MANAGED_HOST === "1") {
-      process.exit(0);
-    }
-  }, 750);
-  timer.unref();
-}
-
-async function clearToFreshSession(): Promise<void> {
-  const nextSessionId = freshSessionId();
-  try {
-    await transport.ensureSession(nextSessionId);
-    const spawned = spawnReplacementHost({
-      cwd: process.cwd(),
-      sessionId: nextSessionId,
-      workspace: WORKSPACE_ROOT,
-    });
-    await emit(
-      events.commandResult({
-        command: "/clear",
-        text: `✓ started fresh session ${nextSessionId}`,
-        ok: true,
-      }),
-    );
-    await emit(events.sessionSwitch({ sessionId: nextSessionId, reason: "clear" }));
-    log("host", "clear: switched session", {
-      from: SESSION_ID,
-      to: nextSessionId,
-      pid: spawned.pid,
-    });
-    retireAfterSessionSwitch();
-  } catch (error) {
-    warn("host", "clear: failed to switch session", { error: msg(error) });
-    await emit(
-      events.commandResult({
-        command: "/clear",
-        text: `Failed to start a fresh session: ${msg(error)}`,
-        ok: false,
-      }),
-    );
-  }
-}
-
-function workspaceSwitchBlocker(): string | null {
-  const turns = scheduler.debug();
-  if (scheduler.isBusy() || turns.queued > 0) {
-    return "a turn is running or queued";
-  }
-  if (turns.compacting || manualCompactFiber) {
-    return "compaction is running";
-  }
-  if (turnMachine.hasInFlight) {
-    return "a prior run is still being reconciled";
-  }
-  if (backgroundChildren.size > 0) {
-    return "background subagents are running";
-  }
-  const jobs = supervisor.list().filter((job) => job.status === "running");
-  if (jobs.length > 0) {
-    return `background jobs are running (${jobs.map((job) => job.id).join(", ")})`;
-  }
-  return null;
-}
-
-/**
- * The workspace-switch precondition the /cd, /handoff, and /worktree-* handlers all share: if a turn,
- * compaction, background subagent, or shell job is in flight, emit the command's bail result
- * ("Cannot <verb> while <blocker>.") and return true so the handler stops; otherwise false. One guard,
- * so a new switch command can't forget the blocker or word the bail differently.
- */
-async function blockedFromWorkspaceSwitch(command: string, verb: string): Promise<boolean> {
-  const blocker = workspaceSwitchBlocker();
-  if (!blocker) {
-    return false;
-  }
-  await emit(
-    events.commandResult({ command, text: `Cannot ${verb} while ${blocker}.`, ok: false }),
-  );
-  return true;
-}
-
-async function cdToFreshSession(args: string): Promise<void> {
-  if (await blockedFromWorkspaceSwitch("/cd", "switch directories")) {
-    return;
-  }
-
-  const target = resolveCdTarget(args, { cwd: process.cwd() });
-  if (!target.ok) {
-    await emit(events.commandResult({ command: "/cd", text: target.error, ok: false }));
-    return;
-  }
-
-  try {
-    await transport.ensureSession(target.value.sessionId);
-    const spawned = spawnReplacementHost(target.value);
-    await emit(
-      events.commandResult({
-        command: "/cd",
-        text: `✓ switched to ${target.value.cwd}`,
-        ok: true,
-      }),
-    );
-    await emit(events.sessionSwitch({ sessionId: target.value.sessionId, reason: "cd" }));
-    log("host", "cd: switched session", {
-      cwd: target.value.cwd,
-      from: SESSION_ID,
-      pid: spawned.pid,
-      to: target.value.sessionId,
-      workspace: target.value.workspace,
-    });
-    scheduler.clearPending();
-    contextRegistry.reset();
-    retireAfterSessionSwitch();
-  } catch (error) {
-    warn("host", "cd: failed to switch session", { error: msg(error) });
-    await emit(
-      events.commandResult({
-        command: "/cd",
-        text: `Failed to switch directories: ${msg(error)}`,
-        ok: false,
-      }),
-    );
-  }
-}
-
-/**
- * The shared workspace-switch mechanic (D-091): ensure the target session, spawn the replacement
- * host at the new cwd/workspace/session, publish the session.switch the browser follows, reset the
- * scheduler + lazy context, and retire this host. Used by worktree create/switch; `/cd` keeps its
- * own copy with its bespoke result text.
- */
-async function switchToWorkspace(opts: {
-  readonly cwd: string;
-  readonly sessionId: string;
-  readonly workspace: string;
-  readonly reason: "cd" | "worktree";
-}): Promise<void> {
-  await transport.ensureSession(opts.sessionId);
-  const spawned = spawnReplacementHost({
-    cwd: opts.cwd,
-    sessionId: opts.sessionId,
-    workspace: opts.workspace,
-  });
-  await emit(events.sessionSwitch({ sessionId: opts.sessionId, reason: opts.reason }));
-  log("host", `${opts.reason}: switched session`, {
-    cwd: opts.cwd,
-    from: SESSION_ID,
-    pid: spawned.pid,
-    to: opts.sessionId,
-  });
-  scheduler.clearPending();
-  contextRegistry.reset();
-  retireAfterSessionSwitch();
-}
+// The session-switch mechanics (/clear, /cd, and the shared workspace-switch gate + mechanic),
+// extracted to session/session-switch (plan 22.2 M2): built once over the live scheduler/turn/
+// supervisor state; the destructured consts keep the same local names so the command-lane dispatch
+// and the handoff/worktree/lifecycle factories below are unchanged.
+const {
+  spawnReplacementHost,
+  retireAfterSessionSwitch,
+  clearToFreshSession,
+  blockedFromWorkspaceSwitch,
+  cdToFreshSession,
+  switchToWorkspace,
+} = makeSessionSwitch({
+  sessionId: SESSION_ID,
+  transport,
+  emit,
+  scheduler,
+  turnMachine,
+  manualCompactFiber: () => manualCompactFiber,
+  backgroundChildren,
+  supervisor,
+  debugMode: () => debugMode,
+});
 
 // The /handoff orchestration (02/02.10), extracted to handoff/orchestrator (plan 22.2 M2): built once
 // over the live switch mechanics + control-model resolution; the destructured consts keep the same
