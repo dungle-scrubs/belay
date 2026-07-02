@@ -1,14 +1,8 @@
 import { publishTurn } from "@host/agent/turn";
+import type { ChatMessage, Provider, ProviderError, ProviderEvent, ToolDef } from "@host/providers";
 import { Emit } from "@host/transport/services";
 import { events, type SessionTransport, type TrevorEventInput } from "@trevor/session";
 import { Effect, Layer, Stream } from "effect";
-import type {
-  ChatMessage,
-  Provider,
-  ProviderError,
-  ProviderEvent,
-  ToolDef,
-} from "../../src/providers";
 
 /**
  * The deterministic fake provider: it stands in for a real model so a turn test never

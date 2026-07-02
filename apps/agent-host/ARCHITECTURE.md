@@ -1,9 +1,9 @@
 # Agent Host Architecture Map
 
 The by-domain map of `apps/agent-host/src` (plan 22.1): what each subsystem owns and where a
-reader should look first. Every module opens with a `Responsible for:` header (see
-[AGENTS.md](./AGENTS.md) "Structure and naming"); this file is the directory-level view, kept
-honest by `test/architecture-map.test.ts`.
+reader should look first. Every module carries a `Responsible for:` header in its first block
+comment (see [AGENTS.md](./AGENTS.md) "Structure and naming"); this file is the directory-level
+view, kept honest by `test/architecture-map.test.ts`.
 
 The host is a Node + Effect Richter participant: it joins a session's durable event stream,
 elects a leader through the session lease, and runs the agent loop (model <-> tools) for each
@@ -39,7 +39,7 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 - `providers/` - model providers and their shared contracts: the pi-ai adapters, LM Studio
   client/native adapters, auth, model metadata, capabilities, and the system prompt.
 - `project-context/` - project instruction discovery: AGENTS.md/CLAUDE.md registry, scoping,
-  and migration (renamed from `context/`, D-006).
+  and migration (renamed from the old `context` dir, D-006).
 - `manifest/` - the capabilities manifest the host announces: build, sections, and the expert
   keyword routing.
 
@@ -74,6 +74,7 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 
 - Plural dir = a collection of peers; singular dir = one cohesive subsystem.
 - No catch-all dirs; a leaf helper joins the subsystem that owns its concept.
-- Imports use `@host/*`; same-dir imports stay relative; no `index.ts` barrels.
+- Cross-subsystem imports in new/moved code use `@host/*`; same-dir imports stay relative; no
+  new `index.ts` barrels.
 - Enforced by `test/structure.test.ts` (root flatness), `test/header-check.test.ts` (module
   headers), and `test/architecture-map.test.ts` (this map).

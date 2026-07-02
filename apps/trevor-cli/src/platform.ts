@@ -244,6 +244,10 @@ async function spawnHost(opts: {
       SESSION_ID: opts.sessionId,
       TREVOR_WORKSPACE: opts.root,
       TREVOR_MANAGED_HOST: "1",
+      // tsx resolves tsconfig `paths` from the child's cwd (the project root here), and only the
+      // host's own tsconfig carries the @host/* mapping (22.1 D-007) - without this pointer the
+      // host dies on its first @host import before it can log anything.
+      TSX_TSCONFIG_PATH: join(repoRoot(), "apps", "agent-host", "tsconfig.json"),
       // Debug mode (`trevor --debug`): the host boots with its debug command surface on (incl.
       // /restart). The flag rides the env so it survives the host's own /restart re-exec.
       ...(opts.debug ? { TREVOR_DEBUG: "1" } : {}),

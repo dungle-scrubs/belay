@@ -13,21 +13,15 @@ import { test } from "vitest";
 const SRC_ROOT = join(import.meta.dirname, "..", "src");
 
 function sourceFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return sourceFiles(path);
-    }
-    if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) {
-      return [];
-    }
-    return [path];
-  });
+  return readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .filter((path) => path.endsWith(".ts") && !path.endsWith(".test.ts"))
+    .map((path) => join(dir, path));
 }
 
-/** The first block comment in the file, or null. */
+/** The first line-leading block comment in the file, or null. Anchoring to a line start keeps a
+ *  `/*` inside a string or regex literal from mis-slicing the scan. */
 function firstBlockComment(text: string): string | null {
-  const start = text.indexOf("/*");
+  const start = text.search(/^\s*\/\*/m);
   if (start < 0) {
     return null;
   }

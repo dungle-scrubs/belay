@@ -17,10 +17,9 @@ const SRC_ROOT = join(import.meta.dirname, "..", "src");
 const ROOT_ALLOWLIST: readonly string[] = ["main.ts"];
 
 /**
- * The relocation-debt ledger (plan 22.1 M1, D-004) is EMPTY: every loose file from the M1
- * inventory (57 entries) landed in its by-domain home in M3/M4. The guard is now the plain
- * "main.ts only" rule (M6) - any new loose file under `src/` root fails it. See the M1 commit
- * for the full inventory this tree was migrated against.
+ * Empty: no relocation is currently parked. Add an entry (filename -> target dir) only to
+ * deliberately defer a move; the guard fails stale entries, so the ledger can only shrink back
+ * to empty, where the rule is plain "main.ts only".
  */
 const RELOCATION_DEBT: ReadonlyMap<string, string> = new Map();
 

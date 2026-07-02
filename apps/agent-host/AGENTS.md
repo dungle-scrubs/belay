@@ -15,11 +15,14 @@ Every module has a predictable by-domain home; `ARCHITECTURE.md` is the map.
   cohesive subsystem** (`boot/`, `transport/`, `session/`, `handoff/`, `agent/`, `doctor/`).
 - **No catch-all dirs.** Never add `lib/`, `utils/`, `helpers/`, `misc/`, or `common/`; a
   leaf helper joins the subsystem that owns its concept.
-- **Imports use the `@host/*` alias** (`@host/session/lease`) instead of deep relative
-  paths; same-dir imports stay relative (`./lease`). No `index.ts` barrels - import the
-  concrete module.
-- **Every source file opens with a structured header** so modules are self-describing and
-  doc-generatable, in this fixed shape (enforced by `test/header-check.test.ts`):
+- **Cross-subsystem imports in new or moved code use the `@host/*` alias**
+  (`@host/session/lease`); same-dir imports stay relative (`./lease`). Pre-22.1 one-up
+  relatives (`../providers`) remain valid until the importing file is next touched.
+- **No new `index.ts` barrels** - import the concrete module. The two pre-existing barrels
+  (`providers/index.ts`, `worktrees/index.ts`) are deliberate package surfaces.
+- **Every source file's first block comment is the structured module header** so modules are
+  self-describing and doc-generatable, in this fixed shape (enforced by
+  `test/header-check.test.ts`; in older files the block may sit below the import block):
 
   ```ts
   /**

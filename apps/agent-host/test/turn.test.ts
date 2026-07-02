@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { publishTurn } from "@host/agent/turn";
+import type { ChatMessage, Provider, ProviderEvent } from "@host/providers";
+import { providerIncidents } from "@host/providers";
+import { ProviderUnavailable } from "@host/providers/errors";
 import type { TrevorEventInput } from "@trevor/session";
 import { METRIC_NAMES, SPAN_NAMES } from "@trevor/session/telemetry";
 import type {
@@ -9,9 +12,6 @@ import type {
 import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
-import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
-import { providerIncidents } from "../src/providers";
-import { ProviderUnavailable } from "../src/providers/errors";
 import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
 
 /**

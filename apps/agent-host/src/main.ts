@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { publishTurn } from "@host/agent/turn";
 import { envNumber } from "@host/boot/env";
@@ -162,7 +163,7 @@ import { nodeWorktreeManager } from "./worktrees";
  *
  * Many hosts may share one session (each with a distinct participant id so
  * Richter lets them coexist), but only the lease LEADER answers turns; others
- * stand by and take over if the leader goes quiet (see ./lease).
+ * stand by and take over if the leader goes quiet (see @host/session/lease).
  *
  * Responsible for: composition root: wiring transport, session lease, command lane, turn dispatch.
  * Not for: new pure logic - behavior lives in the modules this file wires.
@@ -1347,6 +1348,12 @@ function spawnReplacementHost(opts: {
       SESSION_ID: opts.sessionId,
       TREVOR_WORKSPACE: opts.workspace,
       TREVOR_MANAGED_HOST: "1",
+      // tsx resolves tsconfig `paths` from the child's cwd, and the replacement's cwd is the TARGET
+      // project - which has no @host/* mapping - so without this pointer the re-exec dies on its
+      // first @host import (silently: stdio is "ignore"). Self-anchored so it also covers hosts
+      // whose launcher didn't set it.
+      TSX_TSCONFIG_PATH:
+        process.env.TSX_TSCONFIG_PATH ?? join(import.meta.dirname, "..", "tsconfig.json"),
       // Carry the CURRENT debug flag (which may have been toggled at runtime via /debug, so it
       // isn't in process.env) across the re-exec, so a debug session stays in debug after /restart.
       ...(debugMode ? { TREVOR_DEBUG: "1" } : {}),

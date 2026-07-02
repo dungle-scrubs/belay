@@ -19,6 +19,21 @@ function subsystemDirs(): string[] {
     .sort();
 }
 
+function allDirsUnderSrc(): Set<string> {
+  const dirs = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        dirs.add(entry.name);
+        walk(join(dir, entry.name));
+      }
+    }
+  };
+  walk(join(HOST_ROOT, "src"));
+  dirs.add("src");
+  return dirs;
+}
+
 test("ARCHITECTURE.md exists and describes every subsystem dir under src/", () => {
   const mapPath = join(HOST_ROOT, "ARCHITECTURE.md");
   assert.ok(existsSync(mapPath), "apps/agent-host/ARCHITECTURE.md is missing");
@@ -29,5 +44,17 @@ test("ARCHITECTURE.md exists and describes every subsystem dir under src/", () =
     missing,
     [],
     `ARCHITECTURE.md lacks a \`dir/\` mention for: ${missing.join(", ")}`,
+  );
+
+  // The reverse direction: a dir the map still names must exist somewhere under src/, so a
+  // rename/deletion cannot leave its paragraph behind undetected.
+  const real = allDirsUnderSrc();
+  const stale = [...map.matchAll(/`([a-z][a-z0-9-]*)\/`/g)]
+    .map((match) => match[1] as string)
+    .filter((dir) => !real.has(dir));
+  assert.deepEqual(
+    stale,
+    [],
+    `ARCHITECTURE.md names dirs that no longer exist: ${stale.join(", ")}`,
   );
 });
