@@ -3,14 +3,11 @@ import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { contextRegistry } from "@host/project-context/registry";
 import type { ChatMessage } from "@host/providers/index";
+import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import {
-  events,
-  freshSessionId,
-  type SessionTransport,
-  type TrevorEventInput,
-} from "@trevor/session";
+import type { EmitEvent } from "@host/transport/services";
+import { events, freshSessionId, type SessionTransport } from "@trevor/session";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { parseHandoff } from "./handoff";
 import {
@@ -47,7 +44,7 @@ export interface HandoffOrchestratorDeps {
   /** The durable-log transport: target-session creation + cross-session publishes. */
   readonly transport: Pick<SessionTransport, "publishEvent" | "ensureSession">;
   /** Publish one host-authored event to THIS session's log (main.ts's emit). */
-  emit(event: TrevorEventInput): Promise<void>;
+  readonly emit: EmitEvent;
   /** The prompt projection right now (main.ts's mutable `history`). */
   history(): readonly ChatMessage[];
   /** The draft's provider - the source's last-turn provider, else the default. */
@@ -55,17 +52,13 @@ export interface HandoffOrchestratorDeps {
   /** The provider + model the target's first prompt resolves to (main.ts's controlModel). */
   controlModel(): HandoffModel;
   /** The shared workspace-switch precondition: emits the bail result and returns true when blocked. */
-  blockedFromWorkspaceSwitch(command: string, verb: string): Promise<boolean>;
+  readonly blockedFromWorkspaceSwitch: SessionSwitchApi["blockedFromWorkspaceSwitch"];
   /** Spawn the replacement host for the target session (main.ts's spawnReplacementHost). */
-  spawnReplacementHost(target: {
-    readonly cwd: string;
-    readonly sessionId: string;
-    readonly workspace: string;
-  }): { readonly pid: number };
+  readonly spawnReplacementHost: SessionSwitchApi["spawnReplacementHost"];
   /** Drop the deferred prompt queue before retiring (the switch mechanic's scheduler half). */
   readonly scheduler: Pick<TurnScheduler, "clearPending">;
   /** Retire this host after the session.switch (main.ts's retireAfterSessionSwitch). */
-  retireAfterSessionSwitch(): void;
+  readonly retireAfterSessionSwitch: SessionSwitchApi["retireAfterSessionSwitch"];
 }
 
 /** Builds the /handoff orchestration over the host's live switch mechanics; main.ts wires it once. */

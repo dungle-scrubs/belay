@@ -1,6 +1,6 @@
 /**
- * Responsible for: the simpleTool builder, output capping, stream merging, the skip-dirs
- * policy, and the toolInput/toolExecution failure helpers.
+ * Responsible for: the simpleTool builder, output capping, the lenient numeric clamp, stream
+ * merging, the skip-dirs policy, and the toolInput/toolExecution failure helpers.
  * Not for: the failure classes themselves - errors.ts.
  */
 import { msg } from "@host/transport/messages";
@@ -17,6 +17,21 @@ export const SKIP_DIRS = /(^|\/)(node_modules|\.git|dist|\.next)\//u;
 /** Caps tool output at MAX_OUTPUT characters, with a truncation marker. */
 export function cap(text: string): string {
   return text.length > MAX_OUTPUT ? `${text.slice(0, MAX_OUTPUT)}\n…[truncated]` : text;
+}
+
+/** Clamps a lenient numeric arg into [floor, ceiling], falling back when absent/non-finite. Shared
+ *  by the tools whose schemas advertise bounded integer caps but decode leniently (docs, web_fetch). */
+export function clamp(
+  value: number | undefined,
+  floor: number,
+  ceiling: number,
+  fallback: number,
+): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(Math.trunc(value), floor), ceiling);
 }
 
 /** Merges a command's stdout + stderr into one block: each side trimmed, blanks dropped, joined by a

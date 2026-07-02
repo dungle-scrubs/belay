@@ -30,7 +30,7 @@ import { describeAgent, discoverAgents } from "@host/subagents/discovery";
 import { CLIPBOARD_TOOL_NAMES, copyLastCopyable, routeClip } from "@host/tools/clip";
 import { taskRegistry } from "@host/tools/tasks/tasks";
 import { log, warn } from "@host/transport/log";
-import { msg } from "@host/transport/messages";
+import { commas, msg } from "@host/transport/messages";
 import { Emit } from "@host/transport/services";
 import { nodeGitRunner, readGitStatus } from "@host/worktrees/git-status";
 import * as Sentry from "@sentry/node";
@@ -85,7 +85,7 @@ import { makeLifecycleCommands } from "./commands/lifecycle";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { buildLiveDoctorSnapshot, collectDoctorProbeResults } from "./doctor/build";
-import { commas, makeHostFacts } from "./doctor/host-facts";
+import { makeHostFacts } from "./doctor/host-facts";
 import { currentDoctorSnapshot, registerDoctorSnapshotSource } from "./doctor/source";
 import { makeHandoffOrchestrator } from "./handoff/orchestrator";
 import { createLoopPersistence } from "./loop/persistence";
@@ -245,14 +245,6 @@ function refreshCatalog(): void {
     .catch((error) => warn("catalog", "load failed", { error: msg(error) }));
 }
 
-// Host-driven source SIGN-IN (D-065 M5), extracted to providers/source-signin (plan 22.2 M2): the
-// chooser's authenticate action runs an OAuth device-code flow through the host. Built once over
-// emit + the catalog refresh; the destructured consts keep the same local names so the command-lane
-// dispatch below is unchanged.
-const { startSourceSignIn, cancelSignIn, submitSignInCode } = makeSourceSignIn({
-  emit,
-  refreshCatalog,
-});
 // Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_STATE_HOME, with the
 // shared home-abbreviation as its display closure.
 const worktrees = nodeWorktreeManager(abbrevHome);
@@ -261,7 +253,8 @@ const worktrees = nodeWorktreeManager(abbrevHome);
 // runtime by `/debug`) that gates a collection of dev-only host commands - hidden from a normal
 // session. `/restart` re-execs the host to pick up code changes on demand; `/archive`, `/unarchive`,
 // and `/stop` are the debug lifecycle controls (D-094 M4). The gated set + the `/stop` confirm live in
-// debug-commands.ts (pure, unit-tested); the handlers stay here (they touch the live host state).
+// debug-commands.ts (pure, unit-tested); the flag stays here (announceOnline and the replacement-host
+// env read it), and the handlers in commands/lifecycle.ts are wired over it via {getDebug, setDebug}.
 let debugMode = process.env.TREVOR_DEBUG === "1";
 
 /** Stable per-process identity: shared producerId on events, unique stream id + instance. */
@@ -1163,10 +1156,15 @@ async function runShellCommand(requestId: string, command: string): Promise<void
   announceOnline();
 }
 
-// The session-switch mechanics (/clear, /cd, and the shared workspace-switch gate + mechanic),
-// extracted to session/session-switch (plan 22.2 M2): built once over the live scheduler/turn/
-// supervisor state; the destructured consts keep the same local names so the command-lane dispatch
-// and the handoff/worktree/lifecycle factories below are unchanged.
+// Host-driven source SIGN-IN (D-065 M5, providers/source-signin): wired over emit + the catalog
+// refresh.
+const { startSourceSignIn, cancelSignIn, submitSignInCode } = makeSourceSignIn({
+  emit,
+  refreshCatalog,
+});
+
+// The session-switch mechanics (/clear, /cd, and the shared workspace-switch gate + mechanic,
+// session/session-switch): wired over the live scheduler/turn/subagent state + the debug flag.
 const {
   spawnReplacementHost,
   retireAfterSessionSwitch,
@@ -1182,14 +1180,11 @@ const {
   turnMachine,
   manualCompactFiber: () => manualCompactFiber,
   backgroundChildren,
-  supervisor,
   debugMode: () => debugMode,
 });
 
-// The /handoff orchestration (02/02.10), extracted to handoff/orchestrator (plan 22.2 M2): built once
-// over the live switch mechanics + control-model resolution; the destructured consts keep the same
-// local names so the command-lane dispatch, handleEvent arms, and /serial-implement below are
-// unchanged. noteGenerated/noteSettled are the handleEvent lifecycle arms' pending-draft mutations.
+// The /handoff orchestration (02/02.10, handoff/orchestrator): wired over the live switch
+// mechanics + control-model resolution.
 const { runHandoff, approveHandoff, rejectHandoff, noteGenerated, noteSettled, handoffDeps } =
   makeHandoffOrchestrator({
     sessionId: SESSION_ID,
@@ -1206,10 +1201,8 @@ const { runHandoff, approveHandoff, rejectHandoff, noteGenerated, noteSettled, h
     retireAfterSessionSwitch,
   });
 
-// The /serial-implement|next|dispose command handlers (plan 02), extracted to serial-run/commands
-// (plan 22.2 M2): built once over the shared workspace-switch gate + the handoff execution deps;
-// the destructured consts keep the same local names so the command-lane dispatch below is
-// unchanged.
+// The /serial-implement|next|dispose command handlers (plan 02, serial-run/commands): wired over
+// the shared workspace-switch gate + the handoff execution deps.
 const { runSerialImplement, runSerialNext, runSerialDispose } = makeSerialRunCommands({
   emit,
   blockedFromWorkspaceSwitch,
@@ -1217,9 +1210,8 @@ const { runSerialImplement, runSerialNext, runSerialDispose } = makeSerialRunCom
   worktrees,
 });
 
-// The programmatic /worktree-* handlers (D-091), extracted to worktrees/commands (plan 22.2 M2):
-// built once over the manager + the shared workspace-switch gate/mechanic; the destructured consts
-// keep the same local names so the command-lane dispatch below is unchanged.
+// The programmatic /worktree-* handlers (D-091, worktrees/commands): wired over the manager + the
+// shared workspace-switch gate/mechanic.
 const { worktreeSwitch, worktreeNew, worktreeMerge, worktreeDelete, worktreeReconcile } =
   makeWorktreeCommands({
     worktrees,
@@ -1231,10 +1223,8 @@ const { worktreeSwitch, worktreeNew, worktreeMerge, worktreeDelete, worktreeReco
   });
 
 // The debug lifecycle commands (/debug, /restart, /archive, /unarchive, /stop) and the graceful
-// stop, extracted to commands/lifecycle (plan 22.2 M2): built once over the live switch mechanics +
-// teardown seams; the destructured consts keep the same local names so the command-lane dispatch
-// and the SIGTERM handler below are unchanged. The runtime debug flag stays main.ts state (read by
-// announceOnline and the replacement-host env), threaded through as {getDebug, setDebug}.
+// stop (D-094, commands/lifecycle): wired over the live switch mechanics + teardown seams + the
+// {getDebug, setDebug} debug-flag threading.
 const { toggleDebug, restartHost, performGracefulStop, setArchived, stopCurrentSession } =
   makeLifecycleCommands({
     sessionId: SESSION_ID,
@@ -1250,13 +1240,11 @@ const { toggleDebug, restartHost, performGracefulStop, setArchived, stopCurrentS
     residency,
     abortRuns,
     scheduler,
-    supervisor,
   });
 
-// The live host facts /doctor reads (D-073), extracted to doctor/host-facts (plan 22.2 M2): the
-// reader is constructed once over the host's live singletons; the thin `doctorFacts` const keeps
-// the registerDoctorSnapshotSource / runCommand call sites unchanged.
-const hostFacts = makeHostFacts({
+// The live host facts /doctor reads (D-073, doctor/host-facts): wired over the host's live
+// singletons, so the /doctor command and the model-facing `doctor` tool draw from the same state.
+const { doctorFacts } = makeHostFacts({
   scheduler,
   turnMachine,
   compactionController,
@@ -1275,7 +1263,6 @@ const hostFacts = makeHostFacts({
   hostTelemetry,
   cwdLockCaps,
 });
-const doctorFacts = hostFacts.doctorFacts;
 
 // The `doctor` tool (D-073 M6) has no CommandContext, so the host registers the snapshot accessor it
 // reads: the SAME builder + facts the /doctor command uses, so command and tool never disagree.

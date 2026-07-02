@@ -1,11 +1,13 @@
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
-import type { ProcessSupervisor } from "@host/processes/processes";
+import { supervisor } from "@host/processes/processes";
 import type { HostResidency } from "@host/residency/host";
 import { type StopOutcome, stopSession } from "@host/session/session-lifecycle";
+import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import { events, type TrevorEventInput } from "@trevor/session";
+import type { EmitEvent } from "@host/transport/services";
+import { events } from "@trevor/session";
 import { isStopConfirmed } from "./debug-commands";
 
 /**
@@ -29,7 +31,7 @@ export interface LifecycleCommandsDeps {
   /** The current session's id (main.ts's SESSION_ID, computed from env). */
   readonly sessionId: string;
   /** Publish one host-authored event to the durable log (main.ts's emit). */
-  emit(event: TrevorEventInput): Promise<void>;
+  readonly emit: EmitEvent;
   /** Re-announce host.online so every client's command set (and slash menu) reflects the new surface. */
   announceOnline(): void;
   /** Read the runtime debug flag (main.ts's mutable `debugMode`). */
@@ -37,13 +39,9 @@ export interface LifecycleCommandsDeps {
   /** Flip the runtime debug flag. */
   setDebug(on: boolean): void;
   /** Spawn the replacement host (session/session-switch, wired through main.ts). */
-  spawnReplacementHost(opts: {
-    readonly cwd: string;
-    readonly sessionId: string;
-    readonly workspace: string;
-  }): { readonly pid: number };
+  readonly spawnReplacementHost: SessionSwitchApi["spawnReplacementHost"];
   /** Retire this host once the replacement spawns (session/session-switch, wired through main.ts). */
-  retireAfterSessionSwitch(): void;
+  readonly retireAfterSessionSwitch: SessionSwitchApi["retireAfterSessionSwitch"];
   /** Free the cwd advisory lock for the next owner (main.ts's releaseWorkspaceCwdLock). */
   releaseWorkspaceCwdLock(): void;
   /** The host's local-model residency: its claim is released on a graceful stop. */
@@ -52,8 +50,6 @@ export interface LifecycleCommandsDeps {
   abortRuns(runId: string): void;
   /** The turn scheduler: the stop clears its queue and reports its busy/queued state. */
   readonly scheduler: Pick<TurnScheduler, "clearPending" | "isBusy" | "debug">;
-  /** The process supervisor: background jobs are torn down on stop. */
-  readonly supervisor: Pick<ProcessSupervisor, "killAll">;
 }
 
 /** Builds the lifecycle commands over the host's live teardown seams; main.ts wires it once. */
@@ -70,7 +66,6 @@ export function makeLifecycleCommands(deps: LifecycleCommandsDeps) {
     residency,
     abortRuns,
     scheduler,
-    supervisor,
   } = deps;
 
   /** Toggles debug-command mode and re-announces, so the slash menu reveals/hides the debug set. */

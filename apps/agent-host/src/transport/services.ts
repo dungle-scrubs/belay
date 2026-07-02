@@ -1,10 +1,15 @@
 /**
- * Responsible for: the Emit service tag - the DI seam for publishing events to the Richter log.
+ * Responsible for: the Emit service tag and the EmitEvent callback type - the seams for
+ * publishing events to the Richter log.
  * Not for: the live publisher implementation - main provides it via a Layer.
  */
 
 import type { TrevorEventInput } from "@trevor/session";
 import { Context, type Effect } from "effect";
+
+/** Publishes one host-authored event to the durable log - the shape of main.ts's `emit`, threaded
+ *  into the command/factory modules as a plain async callback (the imperative sibling of {@link Emit}). */
+export type EmitEvent = (event: TrevorEventInput) => Promise<void>;
 
 /**
  * Publishes one trevor event to the durable Richter log. Modeled as a service (not a

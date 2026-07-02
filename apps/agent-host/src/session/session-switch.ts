@@ -4,11 +4,12 @@ import type { BackgroundChildInfo } from "@host/agent/delegate";
 import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
-import type { ProcessSupervisor } from "@host/processes/processes";
+import { supervisor } from "@host/processes/processes";
 import { contextRegistry } from "@host/project-context/registry";
 import type { ProviderError } from "@host/providers/index";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
+import type { EmitEvent } from "@host/transport/services";
 import {
   events,
   freshSessionId,
@@ -21,9 +22,9 @@ import { resolveCdTarget } from "./workspace-switch";
 /**
  * The session-switch mechanics (/clear, /cd, and the shared workspace-switch gate + mechanic),
  * extracted from main.ts (plan 22.2 M2): main.ts constructs {@link makeSessionSwitch} once over
- * its live scheduler/turn/supervisor state and keeps dispatching from its command lane under the
- * same local names; the handoff orchestrator, worktree commands, and lifecycle commands receive
- * these functions through main.ts's wiring rather than importing them here.
+ * its live scheduler/turn state and keeps dispatching from its command lane under the same local
+ * names; the handoff orchestrator, worktree commands, and lifecycle commands receive these
+ * functions through main.ts's wiring rather than importing them here.
  *
  * Responsible for: spawning the replacement host, retiring this one after a session.switch, the
  * /clear and /cd fresh-session flows, and the shared workspace-switch blocker + mechanic.
@@ -32,14 +33,21 @@ import { resolveCdTarget } from "./workspace-switch";
  * wires these mechanics into those as deps.
  */
 
-/** The live main.ts state the switch mechanics read - the scheduler/turn/supervisor seams. */
+/** The replacement host's destination: the directory, session, and workspace root it starts on. */
+export type WorkspaceTarget = {
+  readonly cwd: string;
+  readonly sessionId: string;
+  readonly workspace: string;
+};
+
+/** The live main.ts state the switch mechanics read - the scheduler/turn seams. */
 export interface SessionSwitchDeps {
   /** The current session's id (main.ts's SESSION_ID, computed from env). */
   readonly sessionId: string;
   /** The durable-log transport: the target session is ensured before the switch. */
   readonly transport: Pick<SessionTransport, "ensureSession">;
   /** Publish one host-authored event to the durable log (main.ts's emit). */
-  emit(event: TrevorEventInput): Promise<void>;
+  readonly emit: EmitEvent;
   /** The turn scheduler: the switch blocker reads its busy/queue state; a switch drops its queue. */
   readonly scheduler: Pick<TurnScheduler, "isBusy" | "debug" | "clearPending">;
   /** The turn machine: a switch is blocked while a prior run is still being reconciled. */
@@ -48,8 +56,6 @@ export interface SessionSwitchDeps {
   manualCompactFiber(): Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null;
   /** Background subagents currently running across the session (main.ts's registry). */
   readonly backgroundChildren: ReadonlyMap<string, BackgroundChildInfo>;
-  /** The process supervisor: running jobs block a switch; retirement tears them down. */
-  readonly supervisor: Pick<ProcessSupervisor, "list" | "killAll">;
   /** The runtime debug flag (main.ts's mutable `debugMode`), carried across a re-exec. */
   debugMode(): boolean;
 }
@@ -64,15 +70,10 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     turnMachine,
     manualCompactFiber,
     backgroundChildren,
-    supervisor,
     debugMode,
   } = deps;
 
-  function spawnReplacementHost(opts: {
-    readonly cwd: string;
-    readonly sessionId: string;
-    readonly workspace: string;
-  }): { readonly pid: number } {
+  function spawnReplacementHost(opts: WorkspaceTarget): { readonly pid: number } {
     // Re-exec with the SAME node invocation that started THIS process. Under the dev/start lanes the
     // host runs via tsx, which installs its TypeScript loader through process.execArgv (--require
     // preflight, --import loader) - NOT argv. Dropping execArgv respawns a bare `node src/main.ts`, which
@@ -240,12 +241,9 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
    * scheduler + lazy context, and retire this host. Used by worktree create/switch; `/cd` keeps its
    * own copy with its bespoke result text.
    */
-  async function switchToWorkspace(opts: {
-    readonly cwd: string;
-    readonly sessionId: string;
-    readonly workspace: string;
-    readonly reason: "cd" | "worktree";
-  }): Promise<void> {
+  async function switchToWorkspace(
+    opts: WorkspaceTarget & { readonly reason: "cd" | "worktree" },
+  ): Promise<void> {
     await transport.ensureSession(opts.sessionId);
     const spawned = spawnReplacementHost({
       cwd: opts.cwd,
@@ -273,3 +271,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     switchToWorkspace,
   };
 }
+
+/** The wired switch mechanics' shape - consumer deps derive member types from this (e.g.
+ *  `SessionSwitchApi["switchToWorkspace"]`) instead of re-declaring the signatures. */
+export type SessionSwitchApi = ReturnType<typeof makeSessionSwitch>;

@@ -25,13 +25,6 @@ export interface TurnLoopConfig {
   readonly reconnectBackoffsMs: readonly number[];
 }
 
-/**
- * Bounded auto-reconnect for a transient provider outage (D-076…D-079): backoff (ms) BEFORE each
- * retry. Nine entries = ten total attempts (the initial plus nine retries), ramping then capped at 15s
- * for ~75s cumulative - under the 90s stream-stall watchdog that bounds each single attempt. A small
- * jitter is added so simultaneous turns don't reconnect in lockstep. The budget is per-step and
- * independent of the step and overflow-recovery budgets, so reconnection can never spin.
- */
 export const DEFAULT_TURN_LOOP_CONFIG: TurnLoopConfig = {
   emergencyMaxSteps: EMERGENCY_MAX_STEPS,
   toolConcurrency: 8,

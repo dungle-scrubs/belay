@@ -1,9 +1,11 @@
 import { TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { type DirectHandoffDeps, runDirectHandoff } from "@host/handoff/handoff-flow";
+import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
+import type { EmitEvent } from "@host/transport/services";
 import type { WorktreeManager } from "@host/worktrees/manager";
-import { events, type TrevorEventInput } from "@trevor/session";
+import { events } from "@trevor/session";
 import { disposeCurrentPlan, serialNext } from "./driver";
 import { startSerialRun } from "./entry";
 import { nodeLoadSerialRun, nodeSerialControllerCaps, nodeSerialRunStartDeps } from "./node";
@@ -24,9 +26,9 @@ import { nodeLoadSerialRun, nodeSerialControllerCaps, nodeSerialRunStartDeps } f
 /** The live main.ts seams the serial-run commands run through. */
 export interface SerialRunCommandsDeps {
   /** Publish one host-authored event to the durable log (main.ts's emit). */
-  emit(event: TrevorEventInput): Promise<void>;
+  readonly emit: EmitEvent;
   /** The shared workspace-switch precondition: emits the bail result and returns true when blocked. */
-  blockedFromWorkspaceSwitch(command: string, verb: string): Promise<boolean>;
+  readonly blockedFromWorkspaceSwitch: SessionSwitchApi["blockedFromWorkspaceSwitch"];
   /** The live /handoff execution deps (handoff/orchestrator's handoffDeps, wired through main.ts). */
   handoffDeps(): DirectHandoffDeps;
   /** The managed-worktree manager the serial controller creates/merges/deletes trees through. */

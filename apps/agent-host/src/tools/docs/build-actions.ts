@@ -68,9 +68,9 @@ function buildDiagnostics(
 
 /**
  * Discovers, fetches, normalizes, and persists a corpus for one (subject|url, version). This is the
- * shared pipeline behind `resolve` and `refresh`; freshness-based reuse of an existing corpus lands in
- * Phase 5, so for now both always rebuild. A failed page read marks the corpus partial rather than
- * throwing the turn; a corpus with zero usable pages reports a typed error with the read diagnostics.
+ * shared pipeline behind `resolve` and `refresh`. A failed page read marks the corpus partial rather
+ * than throwing the turn; a corpus with zero usable pages reports a typed error with the read
+ * diagnostics.
  */
 async function buildAndStore(
   action: DocsAction,

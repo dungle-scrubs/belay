@@ -1,4 +1,5 @@
-import { events, type TrevorEventInput } from "@trevor/session";
+import type { EmitEvent } from "@host/transport/services";
+import { events } from "@trevor/session";
 import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./provider-auth";
 
 /**
@@ -17,7 +18,7 @@ import { runSourceSignIn, SOURCE_AUTH_PATH, signInTargetFor } from "./provider-a
 /** The live main.ts effects the flow runs through - the event publisher and the catalog refresh. */
 export interface SourceSignInDeps {
   /** Publish one host-authored event to the durable log (main.ts's emit). */
-  emit(event: TrevorEventInput): Promise<void>;
+  readonly emit: EmitEvent;
   /** Re-read auth + re-query sources so a fresh credential flips the source to ready. */
   refreshCatalog(): void;
 }

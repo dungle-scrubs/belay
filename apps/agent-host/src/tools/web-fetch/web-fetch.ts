@@ -13,7 +13,7 @@
 
 import { lookup } from "node:dns/promises";
 import { Schema } from "effect";
-import { simpleTool, toolInput } from "../shared";
+import { clamp, simpleTool, toolInput } from "../shared";
 import type { FetchAttempt, FetchBackend, WebFetchResult } from "./envelope";
 import { serializeResult } from "./envelope";
 import { boundContent, classifyStatic, extractHtml } from "./extract";
@@ -84,19 +84,6 @@ export interface WebFetchDeps {
   /** `FIRECRAWL_API_KEY` - Firecrawl is gated entirely behind this; absent means the backend is
    *  unavailable and yields a typed `failed` attempt rather than a request. */
   readonly firecrawlApiKey?: string;
-}
-
-function clamp(
-  value: number | undefined,
-  floor: number,
-  ceiling: number,
-  fallback: number,
-): number {
-  if (value === undefined || !Number.isFinite(value)) {
-    return fallback;
-  }
-
-  return Math.min(Math.max(Math.trunc(value), floor), ceiling);
 }
 
 /**

@@ -21,6 +21,7 @@ import {
 } from "@host/session/cwd-lock";
 import type { Lease } from "@host/session/lease";
 import { discoverAgents } from "@host/subagents/discovery";
+import { commas } from "@host/transport/messages";
 import { relativeTime, type WorktreeSummary } from "@trevor/session";
 import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
 import type { DoctorRuntimeFacts } from "./build";
@@ -62,11 +63,6 @@ export interface HostFactsDeps {
   /** The host telemetry sink's optional drop counter (file exporter only). */
   readonly hostTelemetry: { readonly stats?: () => { readonly dropped: number } };
   readonly cwdLockCaps: CwdLockCaps;
-}
-
-/** Formats an integer with thousands separators for display (e.g. 104616 -> "104,616"). */
-export function commas(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
 }
 
 /** Builds the /doctor runtime-fact readers over the host's live state; main.ts wires it once. */

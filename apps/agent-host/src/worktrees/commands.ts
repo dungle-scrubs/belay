@@ -1,8 +1,10 @@
 import { abbrevHome } from "@host/boot/paths";
 import { type CwdLockCaps, cwdSwitchConflict } from "@host/session/cwd-lock";
+import type { SessionSwitchApi } from "@host/session/session-switch";
 import { warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import { events, type TrevorEventInput } from "@trevor/session";
+import type { EmitEvent } from "@host/transport/services";
+import { events } from "@trevor/session";
 import type { WorktreeManager } from "./manager";
 
 /**
@@ -22,16 +24,11 @@ export interface WorktreeCommandsDeps {
   readonly worktrees: WorktreeManager;
   readonly cwdLockCaps: CwdLockCaps;
   /** Publish one host-authored event to the durable log (main.ts's emit). */
-  emit(event: TrevorEventInput): Promise<void>;
+  readonly emit: EmitEvent;
   /** The shared workspace-switch precondition: emits the bail result and returns true when blocked. */
-  blockedFromWorkspaceSwitch(command: string, verb: string): Promise<boolean>;
+  readonly blockedFromWorkspaceSwitch: SessionSwitchApi["blockedFromWorkspaceSwitch"];
   /** The shared workspace-switch mechanic (D-091): ensure session, spawn, session.switch, retire. */
-  switchToWorkspace(opts: {
-    readonly cwd: string;
-    readonly sessionId: string;
-    readonly workspace: string;
-    readonly reason: "cd" | "worktree";
-  }): Promise<void>;
+  readonly switchToWorkspace: SessionSwitchApi["switchToWorkspace"];
   /** Re-announce host.online so every client's worktree rows refresh. */
   announceOnline(): void;
 }

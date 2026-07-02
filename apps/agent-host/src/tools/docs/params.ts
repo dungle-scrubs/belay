@@ -83,16 +83,7 @@ export const DocsParams = Schema.Struct({
 
 export type DocsArgs = typeof DocsParams.Type;
 
-/** Clamps a lenient numeric arg into [floor, ceiling], falling back when absent/non-finite. */
-export function clamp(
-  value: number | undefined,
-  floor: number,
-  ceiling: number,
-  fallback: number,
-): number {
-  if (value === undefined || !Number.isFinite(value)) {
-    return fallback;
-  }
-
-  return Math.min(Math.max(Math.trunc(value), floor), ceiling);
-}
+// The lenient clamp itself lives in tools/shared (web_fetch enforces its caps with the same one);
+// re-exported here because it is part of this param contract - the runtime guarantee behind the
+// advertised bounds.
+export { clamp } from "../shared";
