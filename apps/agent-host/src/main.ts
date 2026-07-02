@@ -14,7 +14,6 @@ import {
   runDirectHandoff,
 } from "@host/handoff/handoff-flow";
 import { generateHandoffPrompt, hasGenerableContext } from "@host/handoff/handoff-generate";
-import { activeStylePref } from "@host/prefs/style-store";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
 import { vimEnabled } from "@host/prefs/vim-store";
 import { supervisor } from "@host/processes/processes";
@@ -27,9 +26,7 @@ import {
 import {
   acquireCwdLock,
   CWD_LOCK_HEARTBEAT_MS,
-  type CwdLockDoctorFact,
   type CwdLockOwner,
-  cwdLockDoctorFact,
   cwdSwitchConflict,
   nodeCwdLockCaps,
   refreshCwdLock,
@@ -66,22 +63,19 @@ import {
   PRODUCER_IDS,
   type PublishInput,
   RUNTIME_KIND,
-  relativeTime,
   resolveUserTurnModel,
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
-import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
+import { resolveTelemetryConfig } from "@trevor/session/telemetry";
 import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, Fiber, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
-import { isResidencyResourceKey } from "./admission/contract";
-import { admissionDoctorSummary } from "./admission/doctor";
 import { createLocalAdmissionGate } from "./admission/service";
-import { ADMISSION_HEARTBEAT_MS, nodeAdmissionCaps, snapshotAdmission } from "./admission/store";
+import { ADMISSION_HEARTBEAT_MS, nodeAdmissionCaps } from "./admission/store";
 import { CompactionController } from "./agent/compaction-controller";
 import {
   type BackgroundChildInfo,
@@ -105,12 +99,8 @@ import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
-import {
-  buildLiveDoctorSnapshot,
-  collectDoctorProbeResults,
-  type DoctorRuntimeFacts,
-} from "./doctor/build";
-import type { TelemetryDoctorSummary } from "./doctor/snapshot";
+import { buildLiveDoctorSnapshot, collectDoctorProbeResults } from "./doctor/build";
+import { commas, makeHostFacts } from "./doctor/host-facts";
 import { currentDoctorSnapshot, registerDoctorSnapshotSource } from "./doctor/source";
 import { createLoopPersistence } from "./loop/persistence";
 import { createLoopIterationRunner, defaultProcessSeam } from "./loop/runner";
@@ -474,88 +464,6 @@ const internet = new InternetMonitor(
   },
 );
 
-/** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
-function hostState(): Record<string, unknown> {
-  const turns = scheduler.debug();
-  return {
-    live,
-    activeRun: turns.active,
-    queued: turns.queued,
-    history: history.length,
-    lastAnswerSeq: turns.lastAnswerSeq,
-    // Why the most recent turn ended (Phase 2 M4): answered | step_limit | overflow | noReply |
-    // cancelled | interrupted | error. Omitted until the first turn completes.
-    ...(turnMachine.lastTermination ? { lastTurn: turnMachine.lastTermination } : {}),
-    compacting: turns.compacting,
-    // Subagents (D-045..D-048): the discovered roster + the depth policy. Delegation is depth-1 (a
-    // child is given no delegation capability); inline blocks, background fans out read-only (≤cap).
-    subagents: `${discoverAgents().length} agents · depth≤1 · inline+background (≤${MAX_BACKGROUND_CHILDREN_PER_SESSION})`,
-    // Active background subagents right now (D-048), so /doctor shows the live fan-out + the cap.
-    ...(backgroundChildren.size > 0
-      ? {
-          background: `${backgroundChildren.size}/${MAX_BACKGROUND_CHILDREN_PER_SESSION} active: ${[
-            ...backgroundChildren.values(),
-          ]
-            .map((c) => c.agent)
-            .join(", ")}`,
-        }
-      : {}),
-    ...(compactionController.lastFold
-      ? {
-          lastFold: `seq≤${compactionController.lastFold.throughSeq} ~${commas(compactionController.lastFold.tokensBefore)}→${commas(compactionController.lastFold.tokensAfter)}tok`,
-        }
-      : {}),
-    // Ingested AGENTS.md context (D-080): how many files, from which scopes, bytes used vs dropped,
-    // and whether anything was truncated - surfaced so a budget drop is never silent (unlike Codex).
-    ...contextState(),
-    // Managed worktrees (D-091): the current row + count, plus any stale (missing-path) entries, so
-    // a worktree/session mismatch is visible at a glance.
-    ...worktreeState(),
-    // Public-internet reachability (D-060): the advisory status + last-probe age/error, distinct
-    // from provider health and session-store presence.
-    internet: internetState(),
-  };
-}
-
-/** A compact internet-status line for /doctor (status + checking + last-probe age + sanitized error). */
-function internetState(): string {
-  const snap = internet.current();
-  // Same formatter the web's internet-status uses on this snapshot's checkedAt, so /doctor and the
-  // browser can't drift on the probe-age label.
-  const age = snap.checkedAt !== null ? ` ${relativeTime(snap.checkedAt, Date.now())}` : "";
-  const checking = snap.checking ? " · checking…" : "";
-  const error = snap.status !== "online" && snap.error ? ` · ${snap.error}` : "";
-  return `${snap.status}${age}${checking} · probe ${snap.targetClass}${error}`;
-}
-
-/** The managed-worktree summary for /doctor: the current row, the managed count, and stale entries. */
-function worktreeState(): Record<string, string> {
-  const rows = currentWorktrees();
-  const managed = rows.filter((w) => !w.baseline);
-  if (managed.length === 0) {
-    return {};
-  }
-  const current = rows.find((w) => w.current);
-  const stale = managed.filter((w) => w.missing).length;
-  return {
-    worktrees: `${managed.length} managed · on ${current?.branch ?? "?"}${
-      stale > 0 ? ` · ${stale} stale` : ""
-    }`,
-  };
-}
-
-/** The AGENTS.md context summary for /doctor: files, scopes, bytes used (+ dropped/truncated). */
-function contextState(): Record<string, string> {
-  const ctx = contextRegistry.report();
-  if (ctx.files.length === 0) {
-    return {};
-  }
-  const dropped = ctx.truncated ? ` (-${commas(ctx.bytesDropped)}B truncated)` : "";
-  return {
-    context: `${ctx.files.length} AGENTS.md [${ctx.scopes.join(", ")}] ${commas(ctx.bytesUsed)}B${dropped}`,
-  };
-}
-
 /**
  * Loudly flags a broken turn-machine rule without throwing. These are self-imposed
  * invariants the comments promise (one turn at a time; history stays strictly paired
@@ -605,11 +513,6 @@ const lease = new Lease(
   },
   leaseOptions(),
 );
-
-/** Formats an integer with thousands separators for display (e.g. 104616 -> "104,616"). */
-function commas(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
-}
 
 /**
  * Forks the agent turn for a user.message and returns its handle for the scheduler to
@@ -2223,64 +2126,29 @@ async function worktreeReconcile(): Promise<void> {
   }
 }
 
-/**
- * The live host facts /doctor reads (D-073). Assembled once here from the host's singletons so the
- * `/doctor` command (via CommandContext) and the model-facing `doctor` tool (via the registered
- * snapshot source below) draw from the exact same state.
- */
-function doctorFacts(): DoctorRuntimeFacts {
-  const cwdLock = workspaceCwdLockFact();
-  const style = activeStylePref();
-  return {
-    cwd: abbrevHome(process.cwd()),
-    workspace: abbrevHome(WORKSPACE_ROOT),
-    instanceId: INSTANCE_ID.slice(0, 8),
-    role: lease.isLeader() ? "leader" : "standby",
-    host: hostState(),
-    internet: internet.current(),
-    branch: currentGit().branch,
-    catalog: catalog.sources,
-    activeStyle: { id: style.activeStyle, source: style.source },
-    ...(cwdLock ? { cwdLock } : {}),
-    // Residency claims share the admission store, so exclude them from the admission summary (they have
-    // their own `residency` projection) - otherwise a resident model would double-count as a lease holder.
-    admission: admissionDoctorSummary(
-      snapshotAdmission(admissionCaps).filter((v) => !isResidencyResourceKey(v.key)),
-      Date.now(),
-    ),
-    residency: residency.summary(),
-    telemetry: telemetryDoctorFacts(),
-  };
-}
-
-/** The telemetry mode + exporter health for /doctor (plan 13 M7). Derived from the resolved config + the
- *  host sink's drop count + a live redaction self-test; never exposes a DSN, endpoint, prompt, or path. */
-function telemetryDoctorFacts(): TelemetryDoctorSummary {
-  const config = resolveTelemetryConfig();
-  // Redaction self-test: a known-sensitive probe key MUST be dropped and a benign one kept.
-  const probe = safeAttributes({ prompt: "secret-probe", ok: 1 });
-  const redactionOk = !("prompt" in probe) && probe.ok === 1;
-  return {
-    exporter: config.otelExporter,
-    remoteEnabled: config.remoteEnabled,
-    sentryConfigured: config.sentryDsn !== null,
-    providerTrace: config.providerTrace,
-    suppressed: config.suppressedReason,
-    drops: hostTelemetry.stats?.().dropped ?? 0,
-    redactionOk,
-  };
-}
-
-/** The cwd advisory-lock state for /doctor (plan 01), with the lock-file path home-abbreviated.
- *  Best-effort: a probe failure just omits the fact rather than breaking the health report. */
-function workspaceCwdLockFact(): CwdLockDoctorFact | undefined {
-  try {
-    const fact = cwdLockDoctorFact(WORKSPACE_ROOT, SESSION_ID, cwdLockCaps);
-    return { ...fact, path: abbrevHome(fact.path) };
-  } catch {
-    return undefined;
-  }
-}
+// The live host facts /doctor reads (D-073), extracted to doctor/host-facts (plan 22.2 M2): the
+// reader is constructed once over the host's live singletons; the thin `doctorFacts` const keeps
+// the registerDoctorSnapshotSource / runCommand call sites unchanged.
+const hostFacts = makeHostFacts({
+  scheduler,
+  turnMachine,
+  compactionController,
+  internet,
+  live: () => live,
+  historyLength: () => history.length,
+  backgroundChildren,
+  currentWorktrees,
+  currentGit,
+  catalog: () => catalog,
+  lease,
+  instanceId: INSTANCE_ID,
+  sessionId: SESSION_ID,
+  admissionCaps,
+  residency,
+  hostTelemetry,
+  cwdLockCaps,
+});
+const doctorFacts = hostFacts.doctorFacts;
 
 // The `doctor` tool (D-073 M6) has no CommandContext, so the host registers the snapshot accessor it
 // reads: the SAME builder + facts the /doctor command uses, so command and tool never disagree.
