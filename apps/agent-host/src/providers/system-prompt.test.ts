@@ -194,6 +194,39 @@ test("a local-repo question is routed to files/search/tests, not docs (workspace
   );
 });
 
+// --- Plan 23 M7: MCP guidance is generic, bounded, and prefers built-in tools (D-001/D-003) ---
+
+test("buildSystemPrompt frames mcp as the configured-external-integrations tool, preferring built-ins", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  // It names MCP generically as the route to the user's configured external integrations...
+  assert.ok(
+    prompt.includes("The mcp tool talks to the user's configured MCP servers"),
+    "the prompt describes mcp as the configured MCP-server surface",
+  );
+  // ...and pins the preference order: built-in Trevor tools first, MCP only when they don't fit.
+  assert.ok(
+    prompt.includes("prefer Trevor's built-in tools when they fit"),
+    "the prompt prefers built-in tools over MCP",
+  );
+});
+
+test("MCP guidance uses qualified identity and capped discovery, never a catalog dump (D-003/D-005)", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.ok(
+    prompt.includes("'<server>:<tool>'"),
+    "the guidance addresses capabilities by their qualified identity",
+  );
+  assert.ok(
+    prompt.includes("never expect or dump a full server catalog"),
+    "the guidance forbids full-catalog dumps",
+  );
+});
+
+test("generic MCP guidance never names tool_proxy (D-001)", () => {
+  const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
+  assert.doesNotMatch(prompt, /tool[-_ ]proxy/i, "tool-proxy must not appear in generic guidance");
+});
+
 // --- Phase 7 M2: nested AGENTS.md context injected into the per-turn prompt (D-080) ---
 
 test("buildSystemPrompt injects the AGENTS.md context block when a file exists", () => {

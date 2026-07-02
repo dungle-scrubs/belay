@@ -6,6 +6,7 @@ import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
 import { buildCommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
+import { mcpRuntime } from "@host/mcp/host-runtime";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
 import { vimEnabled } from "@host/prefs/vim-store";
 import { supervisor } from "@host/processes/processes";
@@ -1866,6 +1867,9 @@ function connect(): void {
 process.once("SIGINT", () => {
   releaseWorkspaceCwdLock();
   supervisor.killAll();
+  // Best-effort MCP teardown (plan 23 M7): close() ends every connected stdio child's stdin
+  // synchronously before the first await, and a child orphaned by the exit sees pipe EOF anyway.
+  void mcpRuntime.close();
   process.exit(0);
 });
 
@@ -1886,6 +1890,7 @@ process.once("SIGTERM", () => {
     warn("host", "graceful stop failed; tearing down anyway", { error: msg(error) });
     supervisor.killAll();
   }
+  void mcpRuntime.close();
   process.exit(0);
 });
 

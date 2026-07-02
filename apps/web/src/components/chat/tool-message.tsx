@@ -332,6 +332,9 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   // `tool_script` returns its bounded structured result (or a typed error line) as text; the rich
   // source/bridge-calls/budgets live in the detail takeover (plan 16 M8), not the transcript row.
   tool_script: renderOutput,
+  // `mcp` (plan 23 M7) returns bounded flat text for every action (search hits, call output,
+  // resource/prompt records, server status), so it renders like other text-output tools.
+  mcp: renderOutput,
   clipboard_write: renderClipboard,
   bash: renderOutput,
   write: renderDiff,

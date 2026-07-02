@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createMcpRuntime } from "@host/mcp/runtime";
 import { supervisor } from "@host/processes/processes";
 import { buildSkillTool } from "@host/skills/skills";
 import { buildTaskTools } from "@host/tools/tasks/tasks";
@@ -16,6 +17,7 @@ import { editTool } from "./edit";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./index";
+import { buildMcpTool } from "./mcp";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
 import { readTool } from "./read";
@@ -58,7 +60,15 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
 });
 
 test("a tool without the readOnly flag is absent from READ_ONLY_TOOLS", () => {
-  for (const tool of [editTool, writeTool, multiEditTool, archiveUnpackTool, bashTool]) {
+  for (const tool of [
+    editTool,
+    writeTool,
+    multiEditTool,
+    archiveUnpackTool,
+    bashTool,
+    // mcp mutates EXTERNAL service state (plan 23 D-008): always a serial barrier.
+    buildMcpTool(createMcpRuntime([])),
+  ]) {
     assert.equal(tool.readOnly, undefined, `${tool.name} should leave readOnly unset`);
     assert.ok(
       !READ_ONLY_TOOLS.has(tool.name),
@@ -98,6 +108,8 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     astGrepTool,
     doctorTool,
     trevorExpertTool,
+    // The mcp tool's name/readOnly nature is config-independent; an empty runtime suffices here.
+    buildMcpTool(createMcpRuntime([])),
     buildToolScriptTool({
       execute: () => Promise.resolve(""),
       cwd: "/w",

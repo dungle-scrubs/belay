@@ -5,6 +5,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mcpRuntime } from "@host/mcp/host-runtime";
 import { supervisor } from "@host/processes/processes";
 import { buildSkillTool, discoverSkills } from "@host/skills/skills";
 import { buildTaskTools } from "@host/tools/tasks/tasks";
@@ -25,6 +26,7 @@ import { editTool } from "./edit";
 import { ToolInputError } from "./errors";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
+import { buildMcpTool } from "./mcp";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
 import { readTool } from "./read";
@@ -66,6 +68,9 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   skillViewTool,
   doctorTool,
   trevorExpertTool,
+  // mcp (plan 23 M7): the model-facing surface over the host-wide MCP runtime singleton (the
+  // supervisor/taskRegistry DI pattern); never readOnly - external calls are serial barriers (D-008).
+  buildMcpTool(mcpRuntime),
   // tool_script (plan 16): the bridge routes allowed read-only calls back through THIS registry's
   // executeTool (hoisted; referenced lazily at call time), gated by the request's toolsets. The child runs
   // out-of-process in a deny-first sandbox; its scratch dir is an ephemeral, per-run temp dir.
