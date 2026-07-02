@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M2 - `@host/*` Path Alias Scaffolding
-- Current cutoff blockers: 34
+- Current focus: M3 - Relocate Loose Files into By-Domain Dirs
+- Current cutoff blockers: 28
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 5
+- Completed current work: 11
 
 ## Current Cutoff Blockers
 
@@ -22,15 +22,15 @@
 
 #### M2: `@host/*` Path Alias Scaffolding
 
-- [ ] RED: Add a test/module that imports through `@host/...` and fails because the alias is unconfigured.
-- [ ] GREEN: Configure the alias in `apps/agent-host/tsconfig.json` and the Vitest config so it resolves under typecheck and tests.
-- [ ] REFACTOR: Document the alias in AGENTS.md beside the naming rule.
+- [x] RED: Add a test/module that imports through `@host/...` and fails because the alias is unconfigured.
+- [x] GREEN: Configure the alias in `apps/agent-host/tsconfig.json` and the Vitest config so it resolves under typecheck and tests.
+- [x] REFACTOR: Document the alias in AGENTS.md beside the naming rule.
 
 ### Gate 1 -> 2
 
-- [ ] Root-flatness guard exists and currently fails against the loose-file inventory.
-- [ ] AGENTS.md states the naming rule, no-catch-all rule, header standard, and `@host/*` alias.
-- [ ] `@host/*` resolves under both typecheck and Vitest.
+- [x] Root-flatness guard exists and currently fails against the loose-file inventory.
+- [x] AGENTS.md states the naming rule, no-catch-all rule, header standard, and `@host/*` alias.
+- [x] `@host/*` resolves under both typecheck and Vitest.
 
 ### Phase 2: Mechanical Relocation and Renames
 

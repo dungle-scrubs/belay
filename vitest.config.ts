@@ -1,6 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+// The agent host's `@host/*` path alias (plan 22.1, D-007): mirrors the `paths` entry in
+// apps/agent-host/tsconfig.json so host modules resolve identically under typecheck and Vitest.
+const hostAlias = { "@host": fileURLToPath(new URL("./apps/agent-host/src", import.meta.url)) };
+
 // One runner, four projects, split by scope (see repo-root AGENTS.md "Testing"):
 //   unit        - co-located *.test.ts beside source; pure, fast, no I/O
 //   integration - a package's test/ dir; real local deps (sockets, temp dirs)
@@ -11,6 +15,7 @@ export default defineConfig({
   test: {
     projects: [
       {
+        resolve: { alias: hostAlias },
         test: {
           name: "unit",
           include: ["apps/*/src/**/*.test.ts", "packages/*/src/**/*.test.ts"],
@@ -18,6 +23,7 @@ export default defineConfig({
         },
       },
       {
+        resolve: { alias: hostAlias },
         test: {
           name: "integration",
           include: ["apps/*/test/**/*.test.ts", "packages/*/test/**/*.test.ts"],
@@ -27,6 +33,7 @@ export default defineConfig({
         },
       },
       {
+        resolve: { alias: hostAlias },
         test: {
           name: "e2e",
           include: ["e2e/**/*.test.ts"],
