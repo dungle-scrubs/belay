@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the Emit service tag - the DI seam for publishing events to the Richter log.
+ * Not for: the live publisher implementation - main provides it via a Layer.
+ */
+
 import type { TrevorEventInput } from "@trevor/session";
 import { Context, type Effect } from "effect";
 

@@ -1,3 +1,6 @@
+/**
+ * Responsible for: the ignore-pruned workspace file walk shared by the init and CLAUDE.md scans.
+ */
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 

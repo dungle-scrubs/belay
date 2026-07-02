@@ -7,6 +7,8 @@
  * A spec token is either a bare number (`03`, `4`, `03.1`) or a full plan id (`03-nested-command-menu`).
  * Each resolves to exactly one available plan by its numeric prefix; an unknown or ambiguous token fails
  * the whole parse (we never silently drop or guess a plan we are about to mutate a worktree for).
+ *
+ * Responsible for: parsing free-text plan requests into a validated, ordered plan-id queue.
  */
 
 /** A parsed queue, or a human-readable reason the request could not be turned into one. */

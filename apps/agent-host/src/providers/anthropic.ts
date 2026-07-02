@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the Anthropic (Claude Pro/Max) OAuth provider - the pi-ai base wired with the
+ * anthropic registry lookup and the OAuth credential strategy.
+ */
 import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
 import { lookupPiModel } from "./pi-model";

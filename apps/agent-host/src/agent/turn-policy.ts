@@ -8,6 +8,10 @@ import type { TurnStop } from "@trevor/session";
  * tool loop is still making progress). The fixed step ceiling remains a high
  * circuit breaker; at low context it pauses with diagnostics instead of posing
  * as a normal answer.
+ *
+ * Responsible for: the pure turn-termination gate - evaluating step, context-pressure, and
+ * loop-health observations into the turn's stop/continue decision.
+ * Not for: deriving the step budget itself - turn-budget.ts.
  */
 
 export interface TurnPolicyObservation {

@@ -14,6 +14,9 @@ import { simpleTool } from "./shared";
  * The result is a JSON envelope (like web_search): the model reads the findings + sources; the web
  * parses the same payload into the recall transcript surface. Recall is read-only - it only reads
  * durable logs - so the loop may run it concurrently with other reads.
+ *
+ * Responsible for: the session_recall tool - searching durable project conversation memory.
+ * Not for: codebase search - read/grep/glob.
  */
 
 const Params = Schema.Struct({

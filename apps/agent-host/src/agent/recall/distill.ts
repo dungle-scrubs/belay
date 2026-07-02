@@ -13,6 +13,9 @@ import type { RecallNeighborhood, RecallRecord } from "./types";
  * "Isolated subagent" here is a fresh, read-only model call with its own small context, not a
  * full delegated child session: there is nothing to write back and no tools to gate, so the
  * lighter seam (modeled on the compaction summarizer) is the right shape.
+ *
+ * Responsible for: the isolated tool-less model pass distilling recalled neighborhoods into a
+ * bounded, source-cited answer.
  */
 
 /** Distilled-answer char cap - the recall finding rides back into the main turn, so keep it small. */

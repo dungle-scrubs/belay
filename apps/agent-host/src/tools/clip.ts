@@ -9,6 +9,9 @@ import type { ClipboardWriter } from "./clipboard";
  * restricted-turn shape; main.ts wires it into the command lane and the turn machine. There is no
  * persisted clipboard state here (D-004) - copied content is visible only as the command/tool
  * result it returns.
+ *
+ * Responsible for: the /clip surface - copyable-text extraction, routing, and turn framing.
+ * Not for: the actual system clipboard write - clipboard.ts owns that boundary.
  */
 
 /** The single tool a `/clip <request>` turn is allowed to offer + run (D-007). */

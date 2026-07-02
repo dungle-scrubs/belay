@@ -14,6 +14,10 @@ import { createRunnerCore } from "./runner-core";
  * stdout - announces `start`, and exits when stdin closes.
  *
  * Powered by an OS sandbox (M4) when available; the process boundary alone is the deny-first floor.
+ *
+ * Responsible for: the spawnable child-process shell - stdio wiring, the start announcement, and
+ * neutralizing network globals.
+ * Not for: script execution semantics - see runner-core.ts.
  */
 
 const MAX_LINE_BYTES = 1_000_000;

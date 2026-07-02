@@ -6,6 +6,10 @@
  * Pure and deterministic - no IO, no clock - and deliberately separate from the freshness policy, so
  * ranking and refresh never entangle. Every result is capped, with a `nextOffset` continuation cursor,
  * so a large corpus never dumps wholesale into the prompt.
+ *
+ * Responsible for: pure corpus query ranking, cited excerpts, bounded page views, and the
+ * shared citation format.
+ * Not for: deciding when a corpus needs a refresh - freshness.ts.
  */
 
 import type { Page, PageView, QueryExcerpt } from "./corpus";

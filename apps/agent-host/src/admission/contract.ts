@@ -15,6 +15,10 @@ import { shortHash } from "@trevor/session";
  * reasons, refusal classes, and the acquire outcome shape. The shared store ({@link ./store}) owns the
  * durable leases/queue; the provider integration owns where admission is acquired. Cloud providers are
  * never admitted here - admission is scoped to `kind: "local"` targets (D-003).
+ *
+ * Responsible for: the admission vocabulary - resource keys, priority classes, owner/estimate
+ * shapes, release reasons, refusal classes, and acquire/poll outcome types.
+ * Not for: durable leases/queues (./store) or the wait/hold loop (./runtime).
  */
 
 /**

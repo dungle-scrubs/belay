@@ -4,6 +4,9 @@
  * shape - clean attributable fields plus the extracted content - and records which
  * backend produced the content and what each attempt did, so a later fallback ladder
  * (Jina, Firecrawl) slots in without changing the contract.
+ *
+ * Responsible for: the web_fetch result envelope types and their serialized wire form.
+ * Not for: the docs tool's envelope - ../docs/envelope.ts.
  */
 
 /** The backends the fetch ladder can route through. Only "static" is wired today; the

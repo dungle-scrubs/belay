@@ -5,6 +5,9 @@
  * whitespace, keep links and code) over a heavy dependency. Tolerant of malformed HTML, since the
  * input is arbitrary public pages. The classifier decides usable | thin | blocked | failed so auto
  * mode knows when to hand off to Jina/Firecrawl later.
+ *
+ * Responsible for: deterministic HTML-to-markdown extraction, content bounding, and the
+ * usable/thin/blocked/failed static-result classifier.
  */
 
 import type { FetchAttemptStatus } from "./envelope";

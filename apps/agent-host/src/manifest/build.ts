@@ -35,6 +35,10 @@ import {
  * inputs ({@link ManifestDeps}) into the full provider set and composes a {@link CapabilityManifest} at a
  * requested scope. It is pure over its deps - main.ts reads the live registries once and hands them here -
  * so the whole capability surface composes in a unit test without booting a host.
+ *
+ * Responsible for: assembling the full section-provider set and composing a CapabilityManifest
+ * from one ManifestDeps snapshot at a requested scope.
+ * Not for: what each section contains - the adapters in core-sections / runtime-sections own that.
  */
 
 /** One snapshot of everything the manifest sections read. main.ts assembles this per export. */

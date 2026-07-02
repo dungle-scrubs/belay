@@ -9,6 +9,9 @@ import { parseSerialQueue } from "./queue";
  * id (re-openable), and the launching session is never blocked on the run (handoff moves it on).
  *
  * `handoff-flow` stays generic: this is just a consumer that builds the run's seed prompt and calls it.
+ *
+ * Responsible for: starting a serial run - parse the queue, record the journal, hand off.
+ * Not for: driving the run itself - driver.ts executes the queue.
  */
 
 /** The effects starting a serial run orchestrates; the host wires the real listing/mint/persist/handoff. */

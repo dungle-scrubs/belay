@@ -12,6 +12,11 @@ import { asPositiveInt } from "@host/boot/coerce";
  * NOT fetch (the two callers own their own HTTP) and it does NOT build a CatalogEntry (the catalog owns
  * the read model). Parse defensively: a shape drift across LM Studio versions degrades field-by-field
  * rather than throwing, so a missing field falls back to the id-only shape instead of dropping a model.
+ *
+ * Responsible for: decoding LM Studio's native /api/v0 model records and their pure derivations
+ * (is-vision, supports-tools).
+ * Not for: fetching /api/v0 (source-models.ts, lmstudio-client.ts) or building catalog entries
+ * (catalog.ts).
  */
 
 /** One LM Studio model as the native `/api/v0` endpoint reports it (a list item or a single-model lookup). */

@@ -13,6 +13,9 @@ import { cheapestReasoning } from "./reasoning-levels";
  * `onProgress` is advisory (a no-op when omitted): it fires an immediate 0-token tick BEFORE the stream
  * (so a live bar appears the instant the pass begins, even while the model ingests a large prompt before
  * its first output token), then once per streamed chunk with the tokens produced so far and the budget.
+ *
+ * Responsible for: the shared budget-capped tool-less summarization step (distillToBudget)
+ * behind compaction and recall distillation.
  */
 export interface DistillOptions {
   readonly tokenBudget: number;

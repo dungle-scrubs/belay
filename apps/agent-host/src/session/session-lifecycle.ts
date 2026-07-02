@@ -18,6 +18,8 @@ import type { TurnStop } from "@trevor/session";
  * process, and nothing here has any handle to delete or rewrite it. The operations are pure over
  * injected effects so the cancel-vs-stop distinction and stop's full teardown are unit-tested without
  * a running host; `main.ts` wires the real scheduler / supervisor / transport behind them.
+ *
+ * Responsible for: cancel/stop teardown, termination reasons, and the auto-resume policy + cap.
  */
 
 /** The single effect CANCEL needs: abort the active turn (publish its cancelled completion + interrupt

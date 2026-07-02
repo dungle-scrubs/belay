@@ -14,6 +14,9 @@ import { Effect, Schema } from "effect";
  * V1 semantics are preserved: the full status set, blockedBy/blocks dependencies
  * (a task can't start until its blockers complete), and the automatic clear -
  * completing the last open task wipes the finished checklist so it doesn't linger.
+ *
+ * Responsible for: the task_create/task_update tools and the live in-memory task ledger,
+ * including dependency rules and the auto-clear.
  */
 
 interface Task {

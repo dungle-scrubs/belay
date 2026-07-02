@@ -10,6 +10,10 @@ import { createLineReader, decodeRunnerToHost, encodeMessage, type RunnerToHost 
  * pin the runtime - while this module owns only the process<->protocol wiring: stdout is line-split +
  * decoded, stdout/stderr are byte-capped (a spam-happy child never floods the host), and exit/kill are
  * surfaced to the manager.
+ *
+ * Responsible for: spawning the runner process and adapting its stdio to the ManagedChild seam
+ * (line decoding, byte caps, exit/kill surfacing).
+ * Not for: the run lifecycle or budgets - see host-manager.ts.
  */
 
 const MAX_LINE_BYTES = 1_000_000;

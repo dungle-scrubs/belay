@@ -1,3 +1,8 @@
+/**
+ * Responsible for: per-entry archive content processing - text/csv/pdf previews, image
+ * metadata sniffing (png/jpeg), and the manifest-only fallback.
+ * Not for: selecting or decompressing entries - zip.ts owns parsing.
+ */
 import { createHash } from "node:crypto";
 
 export type ArchiveProcessorName = "text" | "csv" | "image" | "pdf" | "manifest";

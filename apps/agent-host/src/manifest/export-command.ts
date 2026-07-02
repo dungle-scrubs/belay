@@ -17,6 +17,10 @@ import { currentManifest } from "./source";
  * arg parser is pure and unit-tested; the command is a thin shell over it, so the surface stays small.
  *
  * It is READ-ONLY: it composes and prints a description of the host's capabilities and changes nothing.
+ *
+ * Responsible for: parsing /trevor-export args and shelling the parsed plan into a rendered
+ * manifest export.
+ * Not for: composing or redacting the manifest - build.ts and the shared renderer own that.
  */
 
 /** A parsed export invocation: the scope to build at and the render request. */

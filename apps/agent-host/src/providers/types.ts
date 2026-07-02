@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the shared provider contract - the Provider interface, the DescribableProvider
+ * base, and the event/message/tool/readiness/capability types every adapter speaks.
+ */
 import type { ArtifactRef, PastePayload, ProviderModel, Usage } from "@trevor/session";
 import type { Effect, Stream } from "effect";
 import type { LocalModelTarget } from "../admission/contract";

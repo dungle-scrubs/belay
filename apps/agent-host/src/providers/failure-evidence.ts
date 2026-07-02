@@ -9,6 +9,9 @@
  *
  * Extracted from the pi-ai boundary so the shape-reading is a pure, fixture-testable function rather
  * than a closure inside the stream mapper.
+ *
+ * Responsible for: normalizing a raw thrown SDK/HTTP error into sanitized FailureEvidence.
+ * Not for: classifying the failure into the taxonomy; that lives in failure-taxonomy.ts.
  */
 
 /** The sanitized structured evidence carried off a provider failure (names + shape, never values). */

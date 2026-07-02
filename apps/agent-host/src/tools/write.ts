@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the write tool - unconfined UTF-8 file writes with parent-dir creation
+ * and the lazy AGENTS.md context note.
+ * Not for: in-place edits - edit.ts and multi-edit.ts.
+ */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { contextRegistry } from "@host/project-context/registry";

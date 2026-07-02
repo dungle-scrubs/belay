@@ -4,6 +4,9 @@
  * SSRF guard before it is requested), caps the redirect count, enforces a short timeout, and stops
  * reading once a byte cap is hit. It sends NO cookies and NO authorization - web_fetch reads only
  * public URLs, never an authenticated session. IO is injected so the whole path is deterministic.
+ *
+ * Responsible for: the static HTTP backend - guarded manual-redirect fetch with byte and
+ * time caps, no cookies or auth.
  */
 
 import { assertSafeRedirect, assertSafeUrl, type ResolveHost, UnsafeUrlError } from "./url-guard";

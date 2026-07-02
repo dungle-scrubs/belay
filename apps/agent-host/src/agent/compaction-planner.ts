@@ -1,3 +1,8 @@
+/**
+ * Responsible for: pure compaction fold planning - decomposing the baseline into turns and
+ * choosing the folded prefix + token estimates (COMPACT_WHEN / COMPACT_TO live here).
+ * Not for: the summarization model call and the context.compacted event - compactor.ts.
+ */
 import { estimateTokens } from "@host/metrics/breakdown";
 import {
   type CompactionManifest,

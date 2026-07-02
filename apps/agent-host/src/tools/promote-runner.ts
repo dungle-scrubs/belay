@@ -12,6 +12,9 @@ import { cap, combineStreams } from "./shared";
  * shared pure {@link decidePromotion} policy; this runner only owns spawning, the threshold race, and
  * the output capture - safety, cwd, env, output cap, and spawn-error handling all come from the same
  * registry/bash code the foreground path uses.
+ *
+ * Responsible for: spawning promotable shell commands and racing exit against the threshold.
+ * Not for: the promote/fail/refuse decision itself - promote-policy.ts.
  */
 
 export interface PromotableOptions {

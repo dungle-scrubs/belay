@@ -32,6 +32,10 @@ import {
  * own config closures resolve before this base runs. Cloud providers are always warm; readiness
  * is just "can we resolve a credential". This base owns the pi-ai integration; the concrete
  * classes (codex.ts / pi-key.ts) are reduced to strategy + config.
+ *
+ * Responsible for: the shared cloud-provider template (stream/readiness/capabilities/warm) over
+ * pi-ai, parameterized by credential strategy and model resolution.
+ * Not for: stream event mapping (pi-ai.ts) or credential storage/reads (provider-auth.ts).
  */
 export interface PiAiProviderParams {
   readonly id: string;

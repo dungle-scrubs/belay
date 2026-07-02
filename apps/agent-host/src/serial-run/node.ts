@@ -15,6 +15,9 @@ import { loadRun, type SerialRun, saveRun } from "./journal";
  * narrow {@link SerialWorktreeOps} interface so the caps wiring is unit-tested with an in-memory fake.
  *
  * This is the per-leaf seam `46-worktree-fleet` reuses (D-005): the same caps, driven N-at-a-time.
+ *
+ * Responsible for: the node-backed wiring - real worktree ops, journal persistence, start deps.
+ * Not for: orchestration logic - driver.ts owns the lifecycle these caps feed.
  */
 
 /** The worktree operations the serial driver needs, narrowed so the caps wiring is testable. */

@@ -163,6 +163,9 @@ import { nodeWorktreeManager } from "./worktrees";
  * Many hosts may share one session (each with a distinct participant id so
  * Richter lets them coexist), but only the lease LEADER answers turns; others
  * stand by and take over if the leader goes quiet (see ./lease).
+ *
+ * Responsible for: composition root: wiring transport, session lease, command lane, turn dispatch.
+ * Not for: new pure logic - behavior lives in the modules this file wires.
  */
 
 const SESSION_ID = process.env.SESSION_ID ?? DEFAULT_SESSION_ID;

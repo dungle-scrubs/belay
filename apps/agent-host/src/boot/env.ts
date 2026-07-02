@@ -5,6 +5,9 @@
  * so the empty/NaN/zero edge behavior drifted per callsite. These give every numeric override one
  * policy: unset, blank, or non-finite falls back; a finite value (including 0) is honored. Per-provider
  * model-name and URL env reads stay decentralized by existing design; this is only for the numbers.
+ *
+ * Responsible for: numeric + flag env-var reads with one unset/blank/non-finite fallback policy.
+ * Not for: JSON config files - boot/config.ts owns those.
  */
 
 /** The parsed finite number for env var `name`, or `fallback` when it is unset, blank, or non-finite. */

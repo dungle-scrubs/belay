@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the web_search tool - running the web-search package (Brave, Serper
+ * fallback) and serializing its JSON envelope, plus the runWebSearch reuse seam docs uses.
+ */
 import { Effect, Layer, Schema } from "effect";
 import {
   FRESHNESS,

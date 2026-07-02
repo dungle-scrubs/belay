@@ -8,6 +8,9 @@
  * It owns only the in-memory match + replace; reading/writing files and confinement stay
  * with the tools. `replace()` uses String.prototype.replace on a known-unique match, so a
  * `$`-sequence in the replacement is interpreted exactly as the tools always did.
+ *
+ * Responsible for: the unique-substring match + replace rule and its miss wording.
+ * Not for: file IO or confinement - edit-core.ts and the edit tools.
  */
 
 export type ReplaceMiss =

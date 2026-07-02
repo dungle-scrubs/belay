@@ -1,3 +1,8 @@
+/**
+ * Responsible for: ~/.pi/auth.json credential access - the static-key and OAuth credential
+ * resolvers, presence predicates, and the interactive source sign-in flow.
+ * Not for: choosing which strategy a provider uses; each adapter picks its own resolver.
+ */
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { msg } from "@host/transport/messages";

@@ -9,6 +9,9 @@ import type { CommandSpec } from "@trevor/session";
  *
  * Lifecycle commands here are STOP/ARCHIVE/UNARCHIVE only. KILL is deliberately absent: a wedged host
  * cannot process its own kill, so force-termination stays external (the CLI's `trevor kill`).
+ *
+ * Responsible for: the debug-gated command vocabulary and the `/stop` confirm predicate.
+ * Not for: the command handlers - main.ts wires those to the live scheduler/lease/transport.
  */
 
 /** Always-present toggle; flips debug mode and re-announces the command set. */

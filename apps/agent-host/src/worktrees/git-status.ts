@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the GitRunner seam + reading a structured GitStatus for one directory.
+ * Not for: worktree mutations (add/remove/prune/merge) - git.ts owns those.
+ */
 import { spawnSync } from "node:child_process";
 import type { GitStatus } from "@trevor/session";
 

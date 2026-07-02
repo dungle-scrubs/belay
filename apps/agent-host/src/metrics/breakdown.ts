@@ -33,6 +33,9 @@ export { CHARS_PER_TOKEN, estimateTokens };
  * `BREAKDOWN_CATEGORIES` descriptor in @trevor/session; the wire `UsageBreakdown`,
  * this accumulator's totals/session-roll-up, and the web treemap all derive from it,
  * so adding a category is one edit and the surfaces cannot drift.
+ *
+ * Responsible for: the per-turn usage-breakdown accumulator and its logged session roll-up.
+ * Not for: the token-estimate heuristic - @trevor/session owns it (re-exported here).
  */
 
 const pct = (part: number, whole: number): number =>

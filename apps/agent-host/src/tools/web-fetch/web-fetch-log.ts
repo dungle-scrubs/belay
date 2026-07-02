@@ -5,6 +5,9 @@
  * elapsed time, byte/cap sizes, and a coarse error CATEGORY. A key, header, response body, fetched
  * CONTENT, or query string never enters a log field or the doctor; the fetched content lives only in
  * the tool result/session event, never in a debug log.
+ *
+ * Responsible for: redacted per-attempt web_fetch logging and the last-error snapshot the
+ * /doctor Web area reads.
  */
 
 import { log } from "@host/transport/log";

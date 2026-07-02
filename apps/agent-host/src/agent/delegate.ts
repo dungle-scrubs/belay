@@ -20,6 +20,10 @@ import { publishTurn } from "./turn";
  *     the CHILD session, and capture its final message as the result.
  * The tool SURFACE that triggers this (delegate_inline / delegate_background) and the depth/cap
  * policy are layered on top (M3); this module is agnostic to who calls it.
+ *
+ * Responsible for: running a delegated subagent in an isolated child session to a distilled
+ * result, plus the delegate_inline / delegate_background tool surface layered on it.
+ * Not for: agent definition discovery and tool resolution - @host/subagents/discovery.
  */
 
 /** What a delegation needs from the host: the transport, the parent session + producer to link on,

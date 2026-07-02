@@ -16,6 +16,10 @@ import { staticKeyCredentialResolver } from "./provider-auth";
  * PiAiProviderBase template with the static-key strategy, so this stays a thin model-construction
  * shim. Reasoning is left off by default: a model pi-ai doesn't know has no verified thinking format,
  * and sending the wrong one would break the turn; that enrichment is a follow-up per model family.
+ *
+ * Responsible for: providers for OpenAI-compatible endpoints outside pi-ai's registry - direct
+ * Model construction over the shared pi-ai base.
+ * Not for: registry-backed static-key providers; those live in pi-key.ts.
  */
 export interface OpenAICompatConfig {
   /** Host source/provider id used in the error envelope + roster, e.g. "ollama". */

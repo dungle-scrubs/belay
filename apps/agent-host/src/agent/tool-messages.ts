@@ -13,6 +13,9 @@ import type { ChatMessage, ToolCall } from "../providers";
  * the same grouper drives a flat cross-turn projection or a per-turn decomposition). `reset` marks a
  * turn boundary (a user.message or assistant.completed). `canEmitAssistant` lets the projection
  * refuse a leading tool-call message before any user turn (the prompt must open on a user message).
+ *
+ * Responsible for: the one shared rule grouping tool.started/completed events into assistant
+ * tool-call messages and their tool results.
  */
 export function toolCallGrouper(emit: (message: ChatMessage) => void) {
   let pending: ToolCall[] = [];

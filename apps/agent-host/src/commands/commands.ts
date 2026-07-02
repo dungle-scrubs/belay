@@ -29,6 +29,9 @@ import type {
  * slashes are commands and can drive a slash menu) plus a run() that returns the
  * text to render. New commands are one entry here - they surface in /help and the
  * announced inventory automatically.
+ *
+ * Responsible for: the immediate-command registry - specs, narrow context slices, run dispatch.
+ * Not for: debug-gated specs (debug-commands.ts) or `!` interpolation gating (interpolation.ts).
  */
 
 /**

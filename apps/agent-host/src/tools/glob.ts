@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the glob tool - listing workspace paths for a pattern with a capped,
+ * honestly-truncated result.
+ * Not for: the shared workspace walk - search.ts.
+ */
 import { Schema } from "effect";
 import { collectWorkspace } from "./search";
 import { simpleTool } from "./shared";

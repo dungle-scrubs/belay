@@ -18,6 +18,8 @@ import {
  * the copied prefix followed by a trailing `session.forkedFrom` marker), ensures the child, and appends the
  * plan in order. The child is then a SELF-CONTAINED linear session; the trailing marker makes it fork-ready
  * only once the whole prefix is copied (a crash mid-copy leaves an un-marked, ignored child).
+ *
+ * Responsible for: forking a session - copying a parent prefix into a fresh child, marker last.
  */
 
 /** The effects a fork orchestrates; main.ts supplies the real transport read/ensure/append. */

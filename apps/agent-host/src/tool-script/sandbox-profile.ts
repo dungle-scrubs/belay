@@ -22,6 +22,10 @@ import { shortSha16 } from "./hash";
  * The OS sandbox is blast-radius reduction, NOT the authoritative control - the host bridge (M5) is - so a
  * profile that cannot launch degrades per the launch policy without weakening the bridge. The policy hash
  * lets `/doctor` report WHICH profile ran without leaking its paths.
+ *
+ * Responsible for: generating the deny-first Seatbelt profile, the sandbox-exec command wrapper,
+ * the policy hash, and the sandbox environment probe.
+ * Not for: deciding when the profile applies or probing that it boots - see launch.ts.
  */
 
 /** The macOS sandbox launcher. */

@@ -4,6 +4,8 @@ import type { RecallRecord, RecallSessionRef } from "./types";
  * Test fixtures for the recall record model, shared by the recall search/neighborhood/distill tests
  * so they stop re-spelling the six-field `RecallRecord` defaults (a `user` record, 1-wide range,
  * null run/tool/fold). Not a `*.test.ts`, so vitest never runs it; nothing in production imports it.
+ *
+ * Responsible for: shared RecallRecord / RecallSessionRef fixtures for the recall unit tests.
  */
 
 /** A `RecallSessionRef` fixture: a sibling session; `over` sets sessionId/label/project/origin. */

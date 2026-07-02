@@ -8,6 +8,9 @@ import { dirname, join } from "node:path";
  * per-platform package (`@ast-grep/cli-<platform>-<arch>`); we resolve that package relative to
  * `@ast-grep/cli` and point at its `ast-grep` executable - the same detection its postinstall uses,
  * but without depending on the postinstall having run. Resolved once and memoized.
+ *
+ * Responsible for: resolving the packaged @ast-grep/cli platform binary path (memoized).
+ * Not for: running searches - ast-grep.ts.
  */
 
 function detectPackageName(): string | null {

@@ -5,6 +5,9 @@
  * same on-disk corpus and a re-read of the same page URL targets the same page file. This module is
  * pure (types + hashing only); persistence lives in `corpus-store.ts` and the result envelope in
  * `envelope.ts`, so neither imports the other.
+ *
+ * Responsible for: the docs corpus/page domain types and deterministic corpus/page id hashing.
+ * Not for: persistence (corpus-store.ts) or the result envelope (envelope.ts).
  */
 
 import { createHash } from "node:crypto";

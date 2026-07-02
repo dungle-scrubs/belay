@@ -21,6 +21,9 @@
  *
  * Pure and time-injectable: the host drives it via tick()/observe() with
  * Date.now(); no internal clock, so the state machine is unit-testable.
+ *
+ * Responsible for: single-leader election among hosts sharing one session (probe/beat/takeover).
+ * Not for: cwd resource ownership across sessions - session/cwd-lock.ts guards that.
  */
 
 import { debug } from "@host/transport/log";

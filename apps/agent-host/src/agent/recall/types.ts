@@ -10,6 +10,9 @@ import type { RecallKind, RecallOrigin } from "@trevor/session";
  * RecallStatus, RecallOrigin, RecallKind) are the cross-surface wire contract and live in
  * `@trevor/session`; they are re-exported here so the engine reads one set of names. The types
  * below (records, anchors, neighborhoods, filters) never cross the boundary, so they stay local.
+ *
+ * Responsible for: the recall engine's internal record/anchor/neighborhood/filter types, plus
+ * re-exports of the serializable wire-contract result types.
  */
 
 export type {

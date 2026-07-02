@@ -1,3 +1,7 @@
+/**
+ * Responsible for: coalescing streamed text deltas and flushing them in chunks at boundaries.
+ */
+
 import { Effect } from "effect";
 
 /** Stream deltas are coalesced until this many chars accumulate, then flushed. */

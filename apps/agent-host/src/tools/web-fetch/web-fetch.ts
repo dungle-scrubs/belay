@@ -6,6 +6,9 @@
  * Jina, then Firecrawl - each only when the prior backend is unusable; "static" mode never falls
  * back and "rendered" mode goes straight to Firecrawl. The backend dispatch (`fetchVia`) is the seam
  * those backends slot into, and every attempt (including skips/failures) lands in `attempts[]`.
+ *
+ * Responsible for: the web_fetch tool entry - URL guarding, the static/Jina/Firecrawl
+ * backend ladder, and envelope serialization.
  */
 
 import { lookup } from "node:dns/promises";

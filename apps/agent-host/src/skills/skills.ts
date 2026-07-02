@@ -27,6 +27,9 @@ import { Effect, Schema } from "effect";
  * Shell interpolation (H-175) is opt-in: when enabled, expanding a body runs the
  * two command forms and substitutes their stdout, through the same runCommand floor
  * the bash tool uses. Off by default because it executes commands at load time.
+ *
+ * Responsible for: skill discovery/registry across roots + progressive disclosure (roster, tool).
+ * Not for: the `!command` interpolation trust gate - commands/interpolation.ts.
  */
 
 /** The configured/global skills root: TREVOR_SKILLS_DIR when set, else ~/.agents/skills. */

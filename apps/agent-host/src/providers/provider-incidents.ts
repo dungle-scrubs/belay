@@ -10,6 +10,9 @@ import type { ProviderDiagnostic } from "@trevor/session";
  * In-memory and best-effort: it informs diagnostics, never gates a turn. The diagnostic detail is
  * already redacted at the provider boundary before it arrives, so no secret, prompt body, header, or
  * raw tool result is stored here.
+ *
+ * Responsible for: the latest-incident-per-provider store and /doctor incident categorization.
+ * Not for: the counted recent-failures ring; that lives in provider-failure-log.ts.
  */
 
 /** The actionable category a provider incident falls into, for the `/doctor` finding it drives. */

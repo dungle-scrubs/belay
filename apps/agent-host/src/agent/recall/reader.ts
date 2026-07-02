@@ -18,6 +18,9 @@ import type { RecallDiagnostic, RecallSessionRef } from "./types";
  * Every failure mode - inventory down, a session that won't read, a read that times out - becomes
  * a visible {@link RecallDiagnostic} rather than a silent gap, so a recall result can always say
  * what it could not reach.
+ *
+ * Responsible for: read-only enumeration and replay of the project's sibling session logs, with
+ * every failure surfaced as a RecallDiagnostic.
  */
 
 /** Most recent sibling sessions to read per recall (bounds sockets + work; the rest are skipped). */

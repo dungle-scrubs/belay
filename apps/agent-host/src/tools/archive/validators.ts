@@ -4,6 +4,8 @@ import { ArchiveToolError } from "./errors";
 /**
  * Archive trust-boundary validators: entry names and extraction destinations are normalized before
  * bytes are processed or written, so zip parsing and extraction share one safety contract.
+ *
+ * Responsible for: normalizing archive entry names and containing extraction targets (zip-slip).
  */
 
 export function normalizeArchiveEntryName(rawName: string): string {

@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the per-turn switch cell - the latest-write-wins handoff of a mid-turn
+ * model/reasoning switch request into the loop's step boundary.
+ * Not for: applying the switch (loop.ts) or the context-fit guard (context-guard.ts).
+ */
 import type { ModelRef, ModelSwitchEndpoint, ModelSwitchInitiator } from "@trevor/session";
 
 // The initiator + endpoint shapes are the wire contract (@trevor/session); the host binds to them under

@@ -12,6 +12,9 @@ import { events, type ModelRef, type TrevorEventInput } from "@trevor/session";
  * so the spawned target host replays a log that already carries the work and the browser lands on a
  * running turn. An empty prompt fails early (`handoff.failed`) and never switches - the source session
  * stays exactly as it was.
+ *
+ * Responsible for: executing a finalized handoff - target session mint, prompt injection, switch.
+ * Not for: parsing /handoff args (handoff.ts) or drafting the prompt (handoff-generate.ts).
  */
 
 /** The provider/model the target's first prompt runs on - the source's last-turn selection. */

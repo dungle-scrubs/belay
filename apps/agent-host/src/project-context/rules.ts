@@ -1,3 +1,7 @@
+/**
+ * Responsible for: .trevor/rules collection - frontmatter + folder metadata, globs, inclusion.
+ * Not for: AGENTS.md ingestion or per-session lazy state - agents-md.ts / registry.ts own those.
+ */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";

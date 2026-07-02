@@ -1,3 +1,9 @@
+/**
+ * Responsible for: the model<->tools agent loop composition for one turn (runAgent) - stepping
+ * the provider stream, running tool calls, and applying budgets, guardrails, watchdogs, and
+ * mid-turn switches.
+ * Not for: publishing the turn as session events - publishTurn (turn.ts).
+ */
 import { envNumber } from "@host/boot/env";
 import { debug, warn } from "@host/transport/log";
 import {

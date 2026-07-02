@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the shared foreground shell runner - safety floor, timeout, output cap,
+ * never-rejecting CommandResult.
+ * Not for: background-job promotion - promote-runner.ts.
+ */
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { classifyAlwaysPreventedBashCommand } from "./bash-safety";

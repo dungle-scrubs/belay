@@ -12,6 +12,10 @@ import type { HostToRunner, RunnerContext, RunnerToHost } from "./protocol";
  * NOTE: the in-child global shadowing is defense-in-depth, NOT the safety boundary - the OS sandbox (M4)
  * and the host bridge policy (M5) are. A synchronous infinite loop cannot be interrupted from inside JS;
  * the host enforces the hard stop by killing the child on timeout/cancel.
+ *
+ * Responsible for: the in-child script execution - the AsyncFunction build, global shadowing, the
+ * tools bridge proxy, and complete/fail reporting.
+ * Not for: stdio wiring (runner-entry.ts) or host-side call policy (bridge.ts).
  */
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (

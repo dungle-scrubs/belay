@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the static-key pi-ai cloud providers (DeepSeek, Z.ai/GLM, MiniMax) - the
+ * PI_KEY_PROVIDERS registry, sibling-synthesis model resolution, and their factories.
+ * Not for: endpoints outside pi-ai's registry; those live in openai-compat.ts.
+ */
 import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";

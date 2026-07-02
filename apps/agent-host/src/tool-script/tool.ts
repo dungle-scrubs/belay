@@ -25,6 +25,10 @@ import { spawnRunner } from "./spawn";
  * routes the script's calls through the toolset-gated bridge (M5) with budgets (M6), and formats the result
  * (or a typed failure) into the tool's string output. All the heavy pieces are injected, so the tool
  * unit-tests without the real registry and the real spawn.
+ *
+ * Responsible for: the model-facing tool_script tool - request validation, launch/spawn/bridge
+ * wiring, span emission, and result formatting.
+ * Not for: the run mechanics themselves - launch.ts / host-manager.ts / bridge.ts own those.
  */
 
 export const TOOL_SCRIPT_DESCRIPTION =

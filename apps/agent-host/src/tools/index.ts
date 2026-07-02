@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the tool registry - assembling TOOLS, deriving provider JSON Schemas,
+ * offered-def filtering, and the executeTool decode/dispatch/error boundary.
+ */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

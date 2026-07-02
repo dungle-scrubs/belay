@@ -1,3 +1,7 @@
+/**
+ * Responsible for: detecting tool-call markup leaked into assistant text and classifying it as a
+ * retryable protocol anomaly for the providers known to exhibit it.
+ */
 import type { ToolCall } from "./types";
 
 export interface ProviderProtocolDiagnostic {

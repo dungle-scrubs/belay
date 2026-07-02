@@ -7,6 +7,9 @@ import type { LoopLifecycle, LoopSpec, LoopStopReason } from "@trevor/session";
  * is a total function returning either the next state or a rejection reason, so the runtime can never drive
  * a loop into an illegal state and every rejection is explainable. The status/stop-reason vocabulary is the
  * shared {@link LoopLifecycle}/{@link LoopStopReason}.
+ *
+ * Responsible for: the pure loop state machine - legal transitions, stop reasons, bound rules.
+ * Not for: scheduling, execution, or persistence (scheduler.ts / runner.ts / persistence.ts).
  */
 
 /** The immutable runtime state of one loop. Transitions return a NEW state; nothing here mutates. */

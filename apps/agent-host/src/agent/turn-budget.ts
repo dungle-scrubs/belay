@@ -10,6 +10,10 @@
  * It is intentionally pure: it imports no provider and reads no I/O. `loop.ts` feeds it live facts and
  * passes `effectiveMaxSteps` into the turn-termination gate; `turn-policy.ts` stays ignorant of how the
  * number was derived (D-019). The constants below are the whole tuning surface (D-021…D-024).
+ *
+ * Responsible for: deriving the adaptive per-turn step budget from window, pressure, progress,
+ * and reasoning facts.
+ * Not for: comparing steps against the budget - the termination gate in turn-policy.ts.
  */
 
 /** Base healthy step budget per served context-window tier (D-021). Ordered high→low so the first

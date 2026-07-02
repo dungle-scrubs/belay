@@ -4,6 +4,9 @@
  * delay so iterations run back-to-back. Either way there is exactly one pending timer per loop id - a
  * (re)schedule always cancels the prior one - so a loop can never double-fire or leak a timer. Time is
  * injected ({@link SchedulerClock}) so cadence + next-run are deterministically testable without real waits.
+ *
+ * Responsible for: the one-timer-per-loop scheduler and next-run clock.
+ * Not for: what a fire does - the store's tick owns iteration + lifecycle.
  */
 
 /** The injectable time source: a cancelable timer and a monotonic clock. */

@@ -13,6 +13,9 @@
  * `/catalog-refresh` via {@link reloadModelOverrides}); absent or malformed, it contributes nothing.
  * {@link MODEL_METADATA_OVERRIDES} below is the empty BUILT-IN baseline the config layers over - kept
  * for a code-level correction we'd ship ahead of any user edit; the user file always wins.
+ *
+ * Responsible for: per-model metadata corrections (models.json), learned overflow windows, and
+ * the resolveContextWindow precedence.
  */
 
 import { readFileSync } from "node:fs";

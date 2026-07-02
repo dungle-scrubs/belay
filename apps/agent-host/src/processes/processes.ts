@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the model-facing `process` tool and the host-wide supervisor singleton.
+ * Not for: job spawn/track/output mechanics - process-registry.ts.
+ */
 import { type ProcessError, type ToolExecutionError, ToolInputError } from "@host/tools/errors";
 import { cap } from "@host/tools/shared";
 import type { Tool } from "@host/tools/types";

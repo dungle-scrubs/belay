@@ -12,6 +12,9 @@ import type { DoctorFinding } from "@trevor/session";
  * The overall-budget clock is injected (`now`), so budget exhaustion is deterministic in tests; the
  * per-check timeout uses a real timer (race). The runner mutates nothing - it only reads each probe
  * and returns fresh findings - so it satisfies "/doctor does not mutate state" by construction.
+ *
+ * Responsible for: bounded probe execution - per-check timeouts, an overall budget, cache reuse.
+ * Not for: what to probe - build.ts collects the actual provider/root checks.
  */
 
 /** A live diagnostic probe: a stable id/title plus either an authoritative cached result or a runner. */

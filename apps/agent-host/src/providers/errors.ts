@@ -6,6 +6,9 @@ import type { ProviderFailureClass, ProviderUserAction } from "./failure-taxonom
  * Typed provider failures as Data.TaggedError, so they ride the Effect `E` channel and
  * callers discriminate by `_tag` instead of pattern-matching a message. Each names the
  * failure mode, computes a human message, and preserves the underlying `cause`.
+ *
+ * Responsible for: the typed provider failure errors and their flat evidence projection.
+ * Not for: extracting evidence from raw thrown causes; that lives in failure-evidence.ts.
  */
 
 /**

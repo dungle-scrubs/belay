@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the grep tool - ripgrep-backed workspace text search with match caps.
+ * Not for: structural AST search (ast-grep.ts) or the process runner (search-process.ts).
+ */
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { rgPath } from "@vscode/ripgrep";
 import { Schema } from "effect";

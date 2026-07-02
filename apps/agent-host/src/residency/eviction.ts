@@ -12,6 +12,9 @@ import type { LocalResidencyRegistry } from "./registry";
  * instance loaded are eviction-eligible (D-004): a manually-loaded or another-app model is never in the
  * registry and never touched. The sweep is idempotent - the gates are re-checked inside the lease, so two
  * concurrent sweeps cannot double-unload and a claim/generation arriving mid-sweep cancels the unload.
+ *
+ * Responsible for: the eviction sweep - unloading orphaned Trevor-loaded models under the lease.
+ * Not for: choosing which model to keep resident - the policy lives in controller.ts.
  */
 
 /** Why a candidate was not unloaded (skip reason), for events + /doctor. */

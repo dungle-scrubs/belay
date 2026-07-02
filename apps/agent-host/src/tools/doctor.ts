@@ -14,6 +14,8 @@ import { simpleTool } from "./shared";
  * the model to call it only when the user asks about Trevor's own health/setup or why a turn failed,
  * never for ordinary coding work. Read-only - it only probes already-sanitized host state - so the
  * loop may run it concurrently with other reads.
+ *
+ * Responsible for: the doctor tool - rendering Trevor's own host health report for the model.
  */
 
 // A no-arg tool: an EMPTY object params schema. The explicit `jsonSchema` annotation is load-bearing -

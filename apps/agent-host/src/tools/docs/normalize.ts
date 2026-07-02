@@ -5,6 +5,10 @@
  * dense link menus) without ever touching the inside of a fenced code block, collapses runs of blank
  * lines, and reports the heading outline and outgoing links so the fetch step can detect thin pages
  * and record in-corpus navigation. Pure and deterministic - no IO, no DOM.
+ *
+ * Responsible for: stripping nav clutter from fetched docs markdown and reporting the heading
+ * outline and outgoing links (pure).
+ * Not for: HTML-to-markdown extraction - ../web-fetch/extract.ts.
  */
 
 /** A run of this many consecutive lone-link lines is treated as a nav menu and dropped. */

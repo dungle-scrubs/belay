@@ -1,3 +1,9 @@
+/**
+ * Responsible for: the pi-ai stream adapter - projecting host messages/tools into pi-ai context
+ * and mapping stream events onto ProviderEvents with normalized, redacted failures.
+ * Not for: failure classification rules (failure-taxonomy.ts / error-classifier.ts) or
+ * reasoning-effort policy (reasoning-policy.ts).
+ */
 import {
   type Api,
   type Context,

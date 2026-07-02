@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the clipboard_write tool and the platform clipboard write boundary
+ * (pbcopy/clip/wl-copy), including the test-capture writer seam.
+ * Not for: the /clip command surface - clip.ts.
+ */
 import { spawn } from "node:child_process";
 import { platform } from "node:os";
 import { msg } from "@host/transport/messages";

@@ -18,6 +18,9 @@ import { Cause, Clock, Effect, Exit } from "effect";
  * `ok` on success, `error` on failure/defect (with a redacted cause), and an `interrupted`-tagged error
  * span on cancellation - so a cancelled turn is observable, not silent. The sink call is guarded and the
  * exit is passed through unchanged: a span is observability, never flow control.
+ *
+ * Responsible for: the Effect-aware span combinator (one finished span per effect exit).
+ * Not for: Promise/sync spans - `withSpan`/`withSpanSync` in @trevor/session/telemetry.
  */
 export function spanEffect<A, E, R>(
   sink: TelemetrySink,

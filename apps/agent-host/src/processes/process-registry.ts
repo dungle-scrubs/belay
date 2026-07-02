@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the background job registry and its per-job output rings and snapshots.
+ * Not for: the `process` tool wrapper (processes.ts) or pid liveness (process-liveness.ts).
+ */
 import { type ChildProcess, spawn } from "node:child_process";
 import { classifyAlwaysPreventedBashCommand } from "@host/tools/bash-safety";
 import { ProcessError, ToolExecutionError, ToolInputError } from "@host/tools/errors";

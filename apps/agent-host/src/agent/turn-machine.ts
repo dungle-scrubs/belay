@@ -1,3 +1,8 @@
+/**
+ * Responsible for: per-run turn bookkeeping - in-flight/completed tracking, last usage, and the
+ * terminal assistant.completed minted for cancelled/interrupted/reaped runs.
+ * Not for: deciding when turns run - turn-scheduler.ts owns dispatch.
+ */
 import { terminationReason } from "@host/session/session-lifecycle";
 import {
   type DecodedEvent,

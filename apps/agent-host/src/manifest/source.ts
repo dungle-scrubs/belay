@@ -7,6 +7,10 @@ import type { CapabilityManifest, ManifestScope } from "@trevor/session";
  * and both the `/trevor-export` command and the built-in `trevor-expert` read the manifest through
  * {@link currentManifest} without importing the host's heavy wiring. A TYPE-only leaf module, so the
  * consumers can depend on it with no cycle back into main.ts.
+ *
+ * Responsible for: the registerManifestSource / currentManifest seam that decouples manifest
+ * consumers from the host's live wiring.
+ * Not for: building the manifest - the registered accessor (main.ts via build.ts) does that.
  */
 
 /** Produces a freshly composed manifest at `scope` from the host's live state. */

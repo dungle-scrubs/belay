@@ -1,5 +1,8 @@
 /** Shared host command-argument parsing helpers (kept tiny + pure, so each command parser tests in
- *  isolation). */
+ *  isolation).
+ *
+ * Responsible for: pure helpers for parsing host command arguments (matched-quote stripping).
+ */
 
 /**
  * Strips ONE surrounding pair of matched quotes from a shell-style argument (`"do the thing"` ->

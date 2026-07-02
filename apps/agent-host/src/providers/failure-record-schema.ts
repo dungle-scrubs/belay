@@ -9,6 +9,10 @@ import { redactSecrets } from "./failure-taxonomy";
  * durable observation store and the in-memory recent-failure log: message sanitizing, stable message
  * skeletons, fingerprints, and the pure record builders. Persistence and ring management stay in
  * their own modules.
+ *
+ * Responsible for: the redaction-safe failure record shapes - sanitizing, message skeletons,
+ * fingerprints, and the pure record/log-field builders.
+ * Not for: persistence (observation-store.ts) or the in-memory ring (provider-failure-log.ts).
  */
 
 /** Redacts a human provider-failure detail defensively before it reaches logs or disk. */

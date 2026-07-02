@@ -22,6 +22,10 @@ import { elide, sectionBody } from "./section-helpers";
  * debug + non-available capabilities tagged by scope, the compact/subagent/expert views drop them and cap
  * counts. Sections summarize - counts, status, a `detail` pointer - and never inline bodies, secrets, or
  * on-disk paths.
+ *
+ * Responsible for: the registry-derived section adapters - tools, commands, command families,
+ * styles, skills, and agents.
+ * Not for: dynamic/runtime surfaces (MCP/LSP/hooks/docs/catalog/doctor) - see runtime-sections.ts.
  */
 
 /** Tool defs as advertised to the model (name + description), plus the read-only classification set. */

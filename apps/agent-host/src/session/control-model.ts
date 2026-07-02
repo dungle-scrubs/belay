@@ -1,3 +1,6 @@
+/**
+ * Responsible for: resolving the model/provider a host-issued control prompt resumes a turn on.
+ */
 import { decodeTrevorEvent, type ModelRef, type SessionEvent } from "@trevor/session";
 
 /**

@@ -4,6 +4,8 @@
  * serialized envelope their owning tool produces (web_fetch / web_search); docs parses the JSON it
  * needs and never reaches past these seams - in particular it never touches a backend (e.g. the
  * rendered backend web_fetch owns) directly.
+ *
+ * Responsible for: the WebFetchReader/WebSearchReader seam types docs depends on for network IO.
  */
 
 /**

@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the pure refuse/complete/fail/promote decision for shell commands, plus
+ * the PromotionConfig defaults.
+ * Not for: spawning or detaching processes - promote-runner.ts.
+ */
 import { classifyAlwaysPreventedBashCommand } from "./bash-safety";
 
 /**

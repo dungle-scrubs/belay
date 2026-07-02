@@ -5,6 +5,10 @@ import type { ManifestItem, SectionBody, SectionProvenance } from "@trevor/sessi
  * turns its items into a {@link SectionBody} through ONE of these, so capping, the empty/unavailable
  * status, freshness, and provenance are computed identically everywhere. A section can never invent its own
  * truncation shape or forget provenance.
+ *
+ * Responsible for: the shared SectionBody builders - elide previews, freshness checks, and
+ * capped/empty/unavailable bodies with provenance.
+ * Not for: the scope policy (caps per scope, hidden visibility) - see scope.ts.
  */
 
 /** Freshness input in the shape the catalog/source registries expose (`refreshedAt` + `stale`). */

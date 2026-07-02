@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the per-instance keep-current policy - claim/release + sweep on model switch.
+ * Not for: claim mechanics (claims.ts) or the unload decision (eviction.ts).
+ */
+
 import type { LocalResidencyClaims, ResidencyClaimTarget } from "./claims";
 import type { LocalResidencyEviction } from "./eviction";
 

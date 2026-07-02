@@ -6,6 +6,8 @@
  * window - so the loop and the future auto-router share one rule. A non-fitting switch is REFUSED (v1):
  * the active provider is left unchanged and the refusal is recorded with a user-visible reason; reduce-
  * then-switch (compact, then retry) is a deferred enhancement.
+ *
+ * Responsible for: the pure larger->smaller context-fit decision for a mid-turn model switch.
  */
 
 /** Tokens reserved for the model's reply on top of the carried conversation when checking fit. */

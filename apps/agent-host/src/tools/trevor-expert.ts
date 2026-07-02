@@ -15,6 +15,9 @@ import { simpleTool } from "./shared";
  *
  * READ-ONLY and DIAGNOSTIC: it describes Trevor's own capabilities and never inspects the user's code,
  * mutates state, grants a permission, or starts work - so the loop may run it concurrently with other reads.
+ *
+ * Responsible for: the trevor_expert tool - answering capability questions from bounded,
+ * redacted manifest export slices.
  */
 
 const Params = Schema.Struct({

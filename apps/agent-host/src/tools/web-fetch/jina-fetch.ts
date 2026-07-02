@@ -5,6 +5,9 @@
  * works keyless, so the `Authorization: Bearer` header is sent ONLY when a key is configured, and a
  * key is never echoed into a sanitized detail. IO and the key are injected so the path is
  * deterministic under test.
+ *
+ * Responsible for: the Jina Reader backend - the ladder's first, keyless-capable fallback.
+ * Not for: choosing when to fall back - web-fetch.ts owns the ladder.
  */
 
 import type { FetchAttemptStatus } from "./envelope";

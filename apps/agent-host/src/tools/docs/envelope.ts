@@ -5,6 +5,9 @@
  * an outcome carries one. Absent optional fields are omitted so the wire form stays lean. Every
  * action resolves to one of the typed outcomes here, including `unavailable` (a dependency is
  * missing) and `not-implemented` (a later phase owns that action), so no docs call throws the turn.
+ *
+ * Responsible for: the docs tool's typed outcome envelope and its result constructors.
+ * Not for: web_fetch's own envelope - ../web-fetch/envelope.ts.
  */
 
 import type { CorpusListing, CorpusSummary, PageView, QueryExcerpt, QueryResult } from "./corpus";

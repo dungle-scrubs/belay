@@ -30,6 +30,9 @@ export {
  *   overrides and default directory names. Browser code imports only browser-safe subpaths.
  * - Workspace (D-028): `WORKSPACE_ROOT` plus the confinement policy that was previously in
  *   tools/workspace.ts. These are workspace/path concepts, not tool internals.
+ *
+ * Responsible for: the host's path constants (user config files, workspace root) + confinement.
+ * Not for: root resolution/env overrides - @trevor/session/node-paths owns those (re-exported).
  */
 
 /** The user-global `AGENTS.md`, the lowest-precedence (loaded-first) source of the eager context (D-080). */

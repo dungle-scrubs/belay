@@ -1,3 +1,8 @@
+/**
+ * Responsible for: within-turn overflow recovery - trimming this turn's largest tool result in
+ * place to reclaim context.
+ * Not for: cross-turn history folding - that governor is compactor.ts.
+ */
 import type { ChatMessage } from "../providers";
 
 /** Chars kept from the start / end of a trimmed tool result. */

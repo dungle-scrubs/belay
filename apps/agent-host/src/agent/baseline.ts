@@ -1,3 +1,7 @@
+/**
+ * Responsible for: computing the shared Baseline - post-/clear start, latest fold, goal pin, and
+ * live tasks - in one decoded-log pass for the prompt projection and the compaction planner.
+ */
 import type {
   ArtifactRef,
   DecodedEvent,

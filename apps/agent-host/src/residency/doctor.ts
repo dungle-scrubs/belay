@@ -7,6 +7,9 @@ import type { ResidentModel } from "./registry";
  * the doctor Local-admission area renders alongside admission leases. Pure read model - it never loads,
  * unloads, or claims. Every field is bounded and carries no secret: a model id and an LM Studio endpoint
  * (provider:host:port) are diagnosis handles, never credentials, so they surface as-is (D-004).
+ *
+ * Responsible for: the /doctor read model: resident models, claim counts, and the last eviction.
+ * Not for: the host-wide doctor areas/snapshot - ../doctor/snapshot.ts folds this summary in.
  */
 
 /** One resident model row: where it lives, the context it holds, and how many live instances claim it. */

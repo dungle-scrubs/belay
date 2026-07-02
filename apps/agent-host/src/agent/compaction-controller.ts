@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the host's cross-turn compaction bookkeeping - the retained replay/budget
+ * window, last measured usage, fold snapshots, and the needed()/planFold() surface callers drive.
+ * Not for: fold planning or summarization - compaction-planner.ts and compactor.ts.
+ */
 import type { SessionEvent, TrevorEventInput } from "@trevor/session";
 import type { Effect } from "effect";
 import type { Provider, ProviderError } from "../providers";

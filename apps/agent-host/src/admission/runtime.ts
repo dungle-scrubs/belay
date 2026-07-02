@@ -28,6 +28,10 @@ import {
  * no-op handle (logged via the injected reporter) and lets the work proceed, because admission is a
  * coordination + visibility layer, not a hard gate - it must never wedge a user turn shut. The genuine
  * serialization value (one generation at a time per resource) comes from the WAIT, which still applies.
+ *
+ * Responsible for: the admit() wait/hold lifecycle - queue polling, hold heartbeats, abort
+ * handling, and fail-open no-op handles over the store's acquire/poll/release primitives.
+ * Not for: lease persistence (./store) or host/provider wiring (./service).
  */
 
 /** A held admission reservation: release it (idempotently) when the work ends. A no-op handle (refused /

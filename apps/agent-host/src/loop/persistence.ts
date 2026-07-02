@@ -9,6 +9,9 @@ import type { LoopState } from "./domain";
  * A durable loop survives a host restart with its status, counters, and next-run time intact; a `session`
  * loop is never written here. This is the ONLY loop file IO - the store stays transient and calls `save`
  * on each durable change, then rehydrates from `load` at startup, keeping the two clearly separated (D-072).
+ *
+ * Responsible for: durable loop storage - the loops.json save/load under the state root.
+ * Not for: deciding when to persist - store.ts calls save on each durable change.
  */
 
 /** A persisted durable loop: its domain state plus the epoch-ms next-run time it was scheduled for. */

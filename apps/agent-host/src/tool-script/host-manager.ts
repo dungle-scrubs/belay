@@ -21,6 +21,10 @@ import type { HostToRunner, RunnerContext, RunnerToHost } from "./protocol";
  * The manager is the authoritative control plane: every bridge call is counted (a runaway script is stopped
  * at the max-bridge-calls budget), a timeout/cancel KILLS the child (the hard stop for a synchronous loop),
  * and a child that dies early resolves as a failure rather than hanging the turn.
+ *
+ * Responsible for: driving one child runner over the IPC protocol to a single ToolScriptResult -
+ * bridge routing, budget enforcement, and timeout/cancel kills.
+ * Not for: spawning the process (spawn.ts) or gating which tools may run (bridge.ts).
  */
 
 /** The child process, abstracted for testability (stdin write / stdout messages / exit / kill). */

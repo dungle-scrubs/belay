@@ -22,6 +22,9 @@ import {
  * Every non-"off" level goes through pi-ai's own per-model `clampThinkingLevel` unchanged, so each of
  * the hundreds of models keeps its native level menu + remapping. The net difference vs `streamSimple`
  * is exactly the graded-family "off" case.
+ *
+ * Responsible for: reasoning-level policy - the default-level preference and the reasoningEffort
+ * fields handed to pi-ai's stream().
  */
 
 /**

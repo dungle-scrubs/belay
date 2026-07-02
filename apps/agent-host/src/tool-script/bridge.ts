@@ -26,6 +26,10 @@ import type { ToolScriptBridge } from "./host-manager";
  *
  * `execute` is injected (not imported) so this stays free of the heavy tool registry and unit-tests in
  * isolation; the host wires the real registry at registration time.
+ *
+ * Responsible for: toolset-gating and workspace-confining every script bridge call before routing
+ * it through the injected host tool execute.
+ * Not for: driving the child run or enforcing call budgets - see host-manager.ts.
  */
 
 /** Runs one host tool by name with JSON-encoded args, returning its (string) output. */

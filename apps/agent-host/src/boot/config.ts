@@ -6,6 +6,9 @@ import { warn } from "@host/transport/log";
  * The shared scaffold for the host's small optional JSON config files under the config home (models.json,
  * style.json, ...), so each one stops re-spelling the same read/parse/warn and mkdir+write. Pure over the
  * injected `read`/`write` capabilities, so a load/save is unit-tested without touching disk.
+ *
+ * Responsible for: the read/parse/warn + mkdir/write scaffold for optional JSON config files.
+ * Not for: env-var overrides - boot/env.ts owns those.
  */
 
 /**

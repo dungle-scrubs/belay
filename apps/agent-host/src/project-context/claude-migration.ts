@@ -1,3 +1,7 @@
+/**
+ * Responsible for: inventorying CLAUDE.md files (pointer vs needs-migration) for AGENTS.md moves.
+ * Not for: writing any file - it reports; the /init proposal flow (init-agents.ts) drafts content.
+ */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { AGENTS_FILE } from "./agents-md";

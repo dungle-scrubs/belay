@@ -6,6 +6,9 @@
  * module owns the param contract, the dependency-readiness gate, and the action router. A missing
  * dependency resolves to a typed `unavailable` outcome rather than throwing the turn, and each action
  * routes to its own service seam (stubs returning a typed `not-implemented` until their phase lands).
+ *
+ * Responsible for: the docs tool entry - param contract, dependency-readiness gate, and the
+ * action router over resolve/query/read/list/refresh.
  */
 
 import { storagePathByName } from "@trevor/session/node-paths";

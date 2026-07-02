@@ -18,6 +18,10 @@ import { currentManifest } from "./source";
  * manifest through the gate-independent {@link currentManifest} host seam (D-004), so it works whether or
  * not general interpolation is enabled. It is read-only end to end: it never mutates state, grants a
  * permission, or starts work - it reads a description and renders it.
+ *
+ * Responsible for: routing a trevor-expert question to a bounded set of manifest sections and
+ * rendering the answer from the live manifest.
+ * Not for: composing the manifest itself - build.ts and the ./source seam own that.
  */
 
 /** The model-facing tool name (its def is the discovery metadata - discoverable, but not dumped). */

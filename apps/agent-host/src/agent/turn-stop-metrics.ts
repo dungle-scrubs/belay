@@ -1,3 +1,7 @@
+/**
+ * Responsible for: recording turn stops - the durable turn-stops.jsonl metric plus the structured
+ * "turn stop" boundary log, in one sink.
+ */
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { TREVOR_STATE_HOME } from "@host/boot/paths";

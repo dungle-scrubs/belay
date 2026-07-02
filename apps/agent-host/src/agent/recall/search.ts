@@ -6,6 +6,9 @@ import type { RecallAnchor, RecallFilters, RecallRecord } from "./types";
  * BM25, then collapse same-neighborhood hits and cap the result so one long exchange cannot
  * dominate. Pure over the corpus - the BM25 index is built on demand from the filtered
  * records, so search has no lifecycle of its own.
+ *
+ * Responsible for: filtering and BM25-ranking the recall corpus into deduped, capped anchors
+ * with excerpts.
  */
 
 /** Default number of anchors returned after dedupe. */

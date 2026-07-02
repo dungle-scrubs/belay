@@ -10,6 +10,10 @@ import { ADMISSION_DEFAULT_CAPACITY, ADMISSION_STALE_MS } from "./store";
  * as a new default - in a hand-edited `<TREVOR_HOME>/admission.json`, mirroring how `models.json` carries
  * per-model overrides. Capacity must be opted into; it is never inferred. The stale-owner TTL is tunable
  * the same way. Pure decoder + resolver, so parsing + precedence are unit-tested without disk or env.
+ *
+ * Responsible for: parsing admission.json and resolving effective admission capacity + stale-TTL
+ * settings (file defaults, env overrides, per-resource capacity resolver).
+ * Not for: enforcing capacity - the lease/queue store (./store) applies what this resolves.
  */
 
 export interface AdmissionConfig {

@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the typed ArchiveToolError and its failure-code vocabulary
+ * (URL rejected, too large, invalid zip, unsafe entry, over-expansion).
+ */
 import { Data } from "effect";
 
 export type ArchiveFailureCode =

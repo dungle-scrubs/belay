@@ -6,6 +6,9 @@ import type { RecallAnchor, RecallNeighborhood, RecallRecord } from "./types";
  * reply referenced. This expands each anchor into a bounded window of surrounding records from
  * the SAME session, capped per-neighborhood and across the whole recall so one long session
  * cannot exhaust the recall context budget. Pure over the corpus + anchors.
+ *
+ * Responsible for: expanding search anchors into bounded windows of surrounding same-session
+ * records under per-neighborhood and total caps.
  */
 
 export interface NeighborhoodCaps {

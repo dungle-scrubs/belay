@@ -15,6 +15,9 @@ import type { ChatMessage } from "../providers";
  *
  * Same-provider swaps need none of this (the encodings already match), so the loop only runs this at the
  * cross-provider boundary. Pure: returns a new array, never mutates its input.
+ *
+ * Responsible for: normalizing a carried conversation for a cross-provider swap - neutral
+ * tool-call ids and stripped thinking blocks.
  */
 
 const THINKING_BLOCK = /<thinking>[\s\S]*?<\/thinking>/gu;

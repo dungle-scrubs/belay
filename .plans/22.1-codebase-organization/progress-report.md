@@ -2,11 +2,11 @@
 
 ## Summary
 
-- Current focus: M5 - Header Docstrings and Architecture Map
-- Current cutoff blockers: 12
+- Current focus: M6 - Light Enforcement and Full Verification
+- Current cutoff blockers: 7
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
-- Completed current work: 27
+- Completed current work: 32
 
 ## Current Cutoff Blockers
 
@@ -63,11 +63,11 @@
 
 #### M5: Header Docstrings and Architecture Map
 
-- [ ] RED: Add the header presence/format check; it fails because host source files lack headers.
-- [ ] GREEN: Add structured `Responsible for / Not for` headers to host source files in the fixed shape.
-- [ ] RED: Add a check that `apps/agent-host/ARCHITECTURE.md` lists every subsystem dir; it fails initially.
-- [ ] GREEN: Write `ARCHITECTURE.md` describing each subsystem dir and its responsibility.
-- [ ] REFACTOR: Confirm the header shape is mechanically parseable for doc generation.
+- [x] RED: Add the header presence/format check; it fails because host source files lack headers.
+- [x] GREEN: Add structured `Responsible for / Not for` headers to host source files in the fixed shape.
+- [x] RED: Add a check that `apps/agent-host/ARCHITECTURE.md` lists every subsystem dir; it fails initially.
+- [x] GREEN: Write `ARCHITECTURE.md` describing each subsystem dir and its responsibility.
+- [x] REFACTOR: Confirm the header shape is mechanically parseable for doc generation.
 
 #### M6: Light Enforcement and Full Verification
 

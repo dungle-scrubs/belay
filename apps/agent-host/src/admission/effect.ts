@@ -9,6 +9,9 @@ import type { AdmissionHandle } from "./runtime";
  * (`acquireRelease`), so Effect guarantees the finalizer (release) runs exactly once no matter how the
  * stream ends. The acquire is interruptible via the AbortSignal Effect hands `Effect.promise`, so
  * cancelling a queued turn aborts its wait and frees the lease.
+ *
+ * Responsible for: binding admission lease acquire/release to an Effect Stream's scope lifecycle.
+ * Not for: deciding admission (./store) or building the handle being held (./runtime).
  */
 
 /** Maps a stream-scope exit to the admission release reason: interrupted -> cancelled, failed ->

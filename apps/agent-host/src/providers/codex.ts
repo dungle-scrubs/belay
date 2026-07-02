@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the OpenAI Codex (GPT-5.x) OAuth provider - the pi-ai base wired with the
+ * openai-codex registry lookup and the OAuth credential strategy.
+ */
 import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
 import { lookupPiModel } from "./pi-model";

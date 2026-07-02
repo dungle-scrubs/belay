@@ -28,6 +28,9 @@ import {
  * reconciles stale entries, and runs the merge-back/diff inspection. Every external dependency -
  * filesystem, git, clock, id minting, path abbreviation - is injected, so the orchestration is
  * unit-tested with in-memory fakes and never touches a real repo in the unit tier.
+ *
+ * Responsible for: managed-worktree lifecycle orchestration - rows, create/remove/switch, merge.
+ * Not for: raw git commands or record persistence - git.ts and registry.ts own those.
  */
 export interface WorktreeManagerDeps {
   readonly fs: import("./registry").WorktreeFs;

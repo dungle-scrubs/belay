@@ -10,6 +10,10 @@ import type { ProviderFailureClass } from "./failure-taxonomy";
  * the prompt-too-big sites can't drift. Extracting it leaves pi-ai.ts a normalized adapter (map
  * pi-ai events -> host ProviderEvents) rather than a policy hub. The typed errors and log payloads
  * the adapter emits are unchanged - this only relocates the decision.
+ *
+ * Responsible for: provider error-text predicates - auth refusal, context overflow, retryability,
+ * overflow-window parsing, and the prompt-too-big wording.
+ * Not for: full taxonomy verdicts; classifyProviderFailure lives in failure-taxonomy.ts.
  */
 
 /**

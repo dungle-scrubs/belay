@@ -40,6 +40,10 @@ import {
  *
  * NOT responsible for: WHERE admission is acquired (the provider integration owns that), the token
  * ESTIMATE itself (the caller computes it), or status presentation (the protocol + web own that).
+ *
+ * Responsible for: the durable per-resource lease + queue files - acquire/poll/heartbeat/release,
+ * stale reaping, priority drain, and mutex-serialized cross-process mutation.
+ * Not for: where admission is acquired, token estimates, or status presentation (see above).
  */
 
 /** Heartbeat-age (ms) past which a holder/waiter whose pid still appears alive is treated as stale and

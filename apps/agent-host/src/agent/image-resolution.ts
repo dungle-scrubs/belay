@@ -15,6 +15,9 @@ const execAsync = promisify(exec);
  * image bytes from the blob store beside Richter and inline them as base64 onto the
  * message (`images`) so the model can actually see them. Non-image artifacts are left
  * as refs - the provider surfaces them as a short text note.
+ *
+ * Responsible for: fetching image artifact bytes from the blob store and inlining them as
+ * base64 onto history messages for vision-capable providers.
  */
 
 const BLOB_STORE_URL = process.env.BLOB_STORE_URL ?? serviceUrl("blob");

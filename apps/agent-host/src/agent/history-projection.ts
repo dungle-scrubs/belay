@@ -1,3 +1,8 @@
+/**
+ * Responsible for: projecting the durable session event log into the model-safe ChatMessage[]
+ * prompt view for a turn (buildHistory - folds, pins, tool reconstruction, /clear).
+ * Not for: when turns run or the one-turn-at-a-time gate - turn-scheduler.ts.
+ */
 import type { ArtifactRef, PastePayload, SessionEvent, TaskSnapshot } from "@trevor/session";
 import type { ChatMessage } from "../providers";
 import { CompactionPlanner } from "./compaction-planner";

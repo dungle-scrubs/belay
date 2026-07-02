@@ -17,6 +17,10 @@ export { redactSecrets } from "@trevor/session/telemetry";
  * paths; this taxonomy still NAMES them (`auth`, `context_overflow`) so a normalized
  * `ProviderUnavailable` that happens to be one of those reads consistently, but it never turns either
  * into an outage retry.
+ *
+ * Responsible for: the normalized ProviderFailureClass vocabulary and classifyProviderFailure.
+ * Not for: raw-error evidence extraction (failure-evidence.ts) or the low-level text predicates
+ * (error-classifier.ts).
  */
 export type ProviderFailureClass =
   | "auth" // credential refused / re-auth needed (terminal)

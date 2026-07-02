@@ -22,6 +22,10 @@ import { elide, isFresh, sectionBody, unavailableBody } from "./section-helpers"
  *
  * Like the core adapters (M3) these are pure over already-read data and share the section-body helpers, so
  * capping/freshness/provenance stay uniform.
+ *
+ * Responsible for: the dynamic section adapters - peripherals (MCP/LSP/hooks/docs), the doctor
+ * roll-up, the catalog summary, and the runtime/protocol/workspace facts.
+ * Not for: static registry sections (tools/commands/skills/...) - see core-sections.ts.
  */
 
 /** How many distinct aggregated values (capabilities, quant labels, archs) to join before eliding. */

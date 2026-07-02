@@ -13,6 +13,9 @@ import { Effect, Stream } from "effect";
  * `provider.stream`. Provider-specific concerns (which model, reasoning) stay out of the builder - the
  * caller picks the provider (the source's last-turn model, via the compaction controller). The draft
  * is never authoritative: the user approves, edits, or rejects it before any target session launches.
+ *
+ * Responsible for: drafting the generated-handoff continuation prompt in one tool-less model call.
+ * Not for: executing the approved handoff - handoff-flow.ts.
  */
 
 /** Soft cap on the generated prompt length (tokens). The model is asked to stay near this; a hard char

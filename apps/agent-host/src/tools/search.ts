@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the shared workspace file walk (glob + SKIP_DIRS) and its capped collector
+ * used by the glob and grep tools.
+ */
 import { glob } from "node:fs/promises";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { SKIP_DIRS } from "./shared";

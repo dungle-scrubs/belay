@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the LM Studio Provider adapter - the env-resolving factory and the
+ * admission-gated Effect/Provider shim over LmStudioClient.
+ * Not for: the load lifecycle and context reloads; those live in lmstudio-client.ts.
+ */
 import { envNumber } from "@host/boot/env";
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { Effect, FiberRef, Stream } from "effect";

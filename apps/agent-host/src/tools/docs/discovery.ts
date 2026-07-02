@@ -8,6 +8,9 @@
  * Enumeration is fenced by caps (max pages, max bytes, max depth), same-origin/path scope, and
  * robots.txt disallow rules, and every drop or clipped cap is surfaced as a visible diagnostic so a
  * partial result is never mistaken for an exhaustive one.
+ *
+ * Responsible for: resolving a bounded, diagnosed candidate-URL list for a docs subject or root.
+ * Not for: fetching or storing page content - fetch-pages.ts.
  */
 
 import { canonicalUrl, type PageDiagnostic } from "./corpus";

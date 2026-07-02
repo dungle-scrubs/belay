@@ -36,6 +36,9 @@ import {
  * two surfaces can never report a different health picture. The bounded, redacted probing is kept
  * explicit in {@link collectDoctorProbeResults}; the snapshot builder only combines runtime facts
  * with already-probed facts before delegating to {@link buildDoctorSnapshot}.
+ *
+ * Responsible for: probing live host facts and assembling the /doctor snapshot + command result.
+ * Not for: the pure area/finding fold (snapshot.ts) or the tool registration seam (source.ts).
  */
 
 /**

@@ -8,6 +8,9 @@ import { shortHash } from "@trevor/session";
  * is unit-tested with an in-memory fake. The base-repo identity is the realpath'd repo root,
  * hashed - so the same repo reached by a different spelling, a symlink, or a nested cwd groups
  * to ONE bucket, and the on-disk directory names never leak the full project path.
+ *
+ * Responsible for: persisting worktree records + the grouped/hashed on-disk path layout.
+ * Not for: running git or lifecycle decisions - git.ts / manager.ts own those.
  */
 
 /** The small synchronous filesystem the registry needs (mirrors the launcher's seam). */

@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the pre-turn gate (prepareTurn) - provider readiness/capabilities, the
+ * minimum-context check, and resolving history images before the loop starts.
+ */
 import { envNumber } from "@host/boot/env";
 import type { ChatMessage, Provider } from "@host/providers/index";
 import type { ModelCapabilities } from "@host/providers/types";

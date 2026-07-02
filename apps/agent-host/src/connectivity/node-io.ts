@@ -7,6 +7,9 @@ import type { ProbeIo, ProbeTargets } from "./probe";
  * each bounded by a short timeout so a wedged network degrades to offline rather than hanging. The
  * targets are configurable via env so an operator can point at their own endpoints; the decision
  * logic stays in {@link probeInternet}, which this only feeds.
+ *
+ * Responsible for: live probe IO - timeout-bounded DNS + HTTPS checks, env-configured targets.
+ * Not for: the online/offline decision and the monitor - probe.ts.
  */
 
 /** Per-check timeout: a slow/blackholed network settles as offline instead of hanging the probe. */

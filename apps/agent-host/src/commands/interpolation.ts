@@ -12,6 +12,9 @@ import { collapsePaths, redactSecrets } from "@trevor/session/telemetry";
  * through the direct host seam (`manifest/source.ts` `currentManifest`), so it works whether or not general
  * interpolation is enabled. This module governs ONLY untrusted `!command` expansion inside skill/command
  * files.
+ *
+ * Responsible for: the `!command` interpolation trust gate - opt-in, allow-list, output policy.
+ * Not for: skill-load shell interpolation (TREVOR_SKILL_SHELL) - skills/skills.ts.
  */
 
 /** The env var that gates general interpolation. Only the exact opt-in "1" enables it. */

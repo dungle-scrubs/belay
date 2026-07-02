@@ -13,6 +13,9 @@ import { USER_AGENTS_MD } from "@host/boot/paths";
  * field-merged; the model is told later/closer takes precedence. Every read is reported (files,
  * scopes, bytes used vs dropped, truncated) - a budget overflow truncates the LEAST specific sources
  * first and is surfaced, never silently dropped.
+ *
+ * Responsible for: pure AGENTS.md ingestion - eager collection, @import expansion, budgeted render.
+ * Not for: the lazy below-cwd set and per-session state - ContextRegistry (registry.ts) owns those.
  */
 
 /** The cross-tool context filename (agents.md standard), not CLAUDE.md. */

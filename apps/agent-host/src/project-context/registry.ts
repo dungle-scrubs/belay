@@ -20,6 +20,9 @@ import { RuleCollector, type TrevorRuleSource } from "./rules";
  * disk each render, and the accumulated lazy set is re-injected. `/clear` resets it.
  *
  * A single module instance mirrors `taskRegistry`: the host is one session per process.
+ *
+ * Responsible for: the session's live context state - the lazy below-cwd AGENTS.md + rules sets.
+ * Not for: reading/rendering AGENTS.md itself - the pure core lives in agents-md.ts.
  */
 export class ContextRegistry {
   /** Below-cwd AGENTS.md that have been lazily loaded, keyed by their directory (so each loads once). */

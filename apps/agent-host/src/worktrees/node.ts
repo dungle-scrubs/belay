@@ -1,3 +1,7 @@
+/**
+ * Responsible for: node-backed wiring for the worktree manager (real fs, git runner, ids, clock).
+ * Not for: the orchestration itself - manager.ts owns the lifecycle logic these deps feed.
+ */
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";

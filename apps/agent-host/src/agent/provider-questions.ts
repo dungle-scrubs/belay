@@ -28,6 +28,10 @@ import { ToolInputError } from "../tools/errors";
  * The emitter is injected once at host startup so this module stays free of transport details; tests
  * inject a collecting emitter. Raw answer bodies never enter the resolved `summary` (security): only a
  * sanitized outcome + question count.
+ *
+ * Responsible for: the pending-question runtime behind ask_user - blocking a tool call until the
+ * user's answer resolves it, emitting the question lifecycle events.
+ * Not for: the ask_user tool definition itself - that surface is src/tools/ask-user.ts.
  */
 
 /** Where a `submitAnswer` landed, so the inbound lane can log AQ001/AQ002 without touching runs. */

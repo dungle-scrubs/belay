@@ -29,6 +29,9 @@ import type { ResidencyDoctorSummary } from "../residency/doctor";
  *
  * This is health + repair guidance, NOT raw runtime internals (that stays in host.debugInfo): every
  * value here is a sanitized fact, and findings carry a next action where one applies.
+ *
+ * Responsible for: the pure fold from probed facts into doctor areas, findings, and facts.
+ * Not for: probing or IO - build.ts gathers the facts this folds.
  */
 
 /** One provider's probed reachability, fed in by the command handler. */

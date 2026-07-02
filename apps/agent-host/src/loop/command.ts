@@ -20,6 +20,9 @@ import type { LoopController } from "./store";
  * the pending/confirm flow is for the web builder + the deferred NL layer), `/loop list` reports the
  * inventory, and a control verb (`stop`/`pause`/`resume`/`run-now`/`delete`) drives that loop. With no
  * runtime available it falls back to a structured parse preview.
+ *
+ * Responsible for: the /loop command entries - routing explicit submissions to the runtime.
+ * Not for: loop state or execution - store.ts owns the runtime it drives.
  */
 
 /** Renders a parsed `/loop` line into a stable, UI-neutral, structured text result (no rows/chips/colors). */

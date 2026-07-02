@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the shared 16-hex-char SHA-256 content hash (shortSha16) used for tool_script
+ * span, bridge-call, artifact, and sandbox-policy ids.
+ */
 import { createHash } from "node:crypto";
 
 /**

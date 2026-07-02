@@ -12,6 +12,9 @@
  * This is a BEST-EFFORT DEFENSE-IN-DEPTH FLOOR, not a sandbox: a determined
  * adversary can still evade normalization. It exists to stop accidents and lazy
  * disguises, and must never be advertised as containment.
+ *
+ * Responsible for: classifying always-prevented destructive bash commands (the deny floor).
+ * Not for: running commands - run-shell.ts and promote-runner.ts consult this before spawning.
  */
 import { homedir } from "node:os";
 

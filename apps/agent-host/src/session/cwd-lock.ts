@@ -22,6 +22,8 @@ import { Data } from "effect";
  * NOT responsible for: per-session / per-process ownership (that stays the launcher's host-registry
  * lock), worktree records (the worktree registry owns those), or repairing / mutating locks from
  * /doctor (inspection is read-only - reclaiming a stale lock happens only on the next acquire).
+ *
+ * Responsible for: the realpath-keyed advisory lock guarding a working directory across sessions.
  */
 
 /** Heartbeat-age (ms) beyond which a lock whose pid still appears alive is nonetheless treated as

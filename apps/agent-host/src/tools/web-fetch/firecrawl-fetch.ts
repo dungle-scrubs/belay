@@ -6,6 +6,9 @@
  * profiles/cookies/custom headers/proxy. The target is re-guarded (SSRF) before any request, the key
  * is injected (so it is never echoed into a detail), and every failure - including a missing key -
  * returns a typed `failed` outcome rather than throwing the turn.
+ *
+ * Responsible for: the Firecrawl scrape backend - the ladder's gated final fallback.
+ * Not for: choosing when to fall back - web-fetch.ts owns the ladder.
  */
 
 import type { FetchAttemptStatus } from "./envelope";

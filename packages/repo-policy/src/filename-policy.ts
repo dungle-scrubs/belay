@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path/posix";
 
 const CONVENTIONAL_DOCUMENT_NAMES = new Set([
   "AGENTS.md",
+  "ARCHITECTURE.md",
   "CHANGELOG.md",
   "CLAUDE.md",
   "CONTEXT.md",

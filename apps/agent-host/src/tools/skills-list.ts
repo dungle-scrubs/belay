@@ -7,6 +7,9 @@ import { simpleTool } from "./shared";
  * descriptions, trigger summaries, provenance, and status - never full bodies. The model calls it
  * when the ambient roster is missing, truncated, too broad, or insufficient; it then loads exactly
  * one chosen skill with `skill_view`. Bounded by a default + max limit so results can't bloat context.
+ *
+ * Responsible for: the skills_list tool - bounded, searchable skill-registry metadata.
+ * Not for: loading a skill body - skill-view.ts.
  */
 
 const DEFAULT_LIMIT = 20;

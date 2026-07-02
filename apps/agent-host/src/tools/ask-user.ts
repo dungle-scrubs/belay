@@ -13,6 +13,9 @@ import type { Tool, ToolContext } from "./types";
  * form (`questions[]`); `normalizeAskUserInput` (shared) coerces either into the canonical contract.
  * Choice structs are inlined per use so the derived JSON Schema stays flat (no `$defs`); previews are
  * plain ASCII strings on the model boundary.
+ *
+ * Responsible for: the ask_user tool - shaping and validating turn-pausing user questions.
+ * Not for: the blocking/answer runtime - agent/provider-questions.ts.
  */
 
 const choiceFields = {

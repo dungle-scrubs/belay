@@ -7,6 +7,9 @@ import { shortSha16 } from "./hash";
  * output past the per-call budget is SUMMARIZED to a bounded artifact ref - an id, the original byte count,
  * and a short preview - and the full content is carried NOWHERE. The final result is likewise size-checked
  * so a script cannot return an unbounded blob.
+ *
+ * Responsible for: summarizing oversized bridge outputs into bounded artifact refs and checking
+ * the final result against its byte budget.
  */
 
 const ARTIFACT_PREVIEW_BYTES = 512;

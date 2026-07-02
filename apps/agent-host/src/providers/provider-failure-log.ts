@@ -14,6 +14,10 @@ import {
  *
  * In-memory and best-effort: it informs diagnostics, it never gates a turn. Counts and fingerprints
  * only - no prompt, key, token, or raw payload ever lands here.
+ *
+ * Responsible for: the in-memory recent terminal-failure ring and its /doctor summary.
+ * Not for: durable observations (observation-store.ts) or record building
+ * (failure-record-schema.ts).
  */
 
 /** The redaction-safe summary `/doctor` reads: the two terminal categories, kept distinct. */

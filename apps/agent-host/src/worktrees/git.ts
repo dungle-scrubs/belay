@@ -7,6 +7,9 @@ import { type GitRunner, readGitStatus } from "./git-status";
  * runner is cwd-bound by the caller (`nodeGitRunner(path)`), so the same helpers read the base
  * repo or any worktree by pointing the runner at that directory. Read helpers degrade a failed
  * command to a null/empty value; mutating helpers return a typed ok/error result.
+ *
+ * Responsible for: worktree-level git reads + mutations (roots, add/remove/prune, merge, diff).
+ * Not for: registry records or lifecycle policy - registry.ts / manager.ts own those.
  */
 
 export type GitResult = { readonly ok: true } | { readonly ok: false; readonly error: string };

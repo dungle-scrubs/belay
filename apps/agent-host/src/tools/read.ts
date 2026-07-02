@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the read tool - UTF-8 file reads plus the lazy directory-scoped
+ * AGENTS.md context note (D-080).
+ */
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { contextRegistry } from "@host/project-context/registry";

@@ -10,6 +10,9 @@ import { runCommand } from "../tools/run-shell";
  * Each path is an injected SEAM so the runtime unit-tests without a live turn machine or a real subagent;
  * the process seam defaults to the real {@link runCommand} (the shared safety floor + timeout + output cap),
  * and main.ts wires the prompt/background seams to the ordinary turn/session and background-agent paths.
+ *
+ * Responsible for: running one iteration body via its runner-type seam and redacting the outcome.
+ * Not for: scheduling or lifecycle - store.ts decides when an iteration runs.
  */
 
 /** The outcome of running one iteration: success plus a short, REDACTED summary (never raw process output). */

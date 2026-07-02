@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the shared confine -> read -> replace edit preparation used by edit and
+ * multi_edit, producing new file content in memory without writing.
+ * Not for: writing the file - edit.ts and multi-edit.ts own the write.
+ */
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { confine, WORKSPACE_ROOT } from "@host/boot/paths";

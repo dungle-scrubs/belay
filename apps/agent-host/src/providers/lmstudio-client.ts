@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the LM Studio load lifecycle - probing the native /api/v0 endpoint, learning
+ * model capabilities, and (re)loading the model at max context via the lms CLI.
+ * Not for: the Effect/Provider contract; lmstudio.ts adapts this client to it.
+ */
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Model } from "@earendil-works/pi-ai/compat";

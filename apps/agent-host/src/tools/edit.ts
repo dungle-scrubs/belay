@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the edit tool - one unique exact-substring replacement in a workspace file.
+ * Not for: batched edits (multi-edit.ts) or the match rule itself (replace.ts).
+ */
 import { writeFile } from "node:fs/promises";
 import { Schema } from "effect";
 import { readAndPrepareEdit } from "./edit-core";

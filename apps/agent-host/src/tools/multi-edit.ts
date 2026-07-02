@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the multi_edit tool - ordered, all-or-nothing exact-substring edits
+ * across one or more workspace files.
+ * Not for: the single-edit case (edit.ts) or the match rule (replace.ts).
+ */
 import { writeFile } from "node:fs/promises";
 import { Schema } from "effect";
 import { type PreparedEdit, readAndPrepareEdit } from "./edit-core";

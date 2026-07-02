@@ -12,6 +12,9 @@ import {
  * source of truth - this is its view of the PUBLIC internet, deliberately independent of provider
  * health, the session store, and the browser. The IO (DNS resolve, HTTPS reach) is injected so the
  * decision logic is deterministic and testable; the live host supplies node `dns` + `fetch` impls.
+ *
+ * Responsible for: the internet-probe decision logic and the cached, deduped InternetMonitor.
+ * Not for: the live DNS/fetch implementations - node-io.ts.
  */
 
 /** Configured probe targets (a public DNS name + a public HTTPS URL), and whether probing is on. */

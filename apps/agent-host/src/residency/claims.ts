@@ -26,6 +26,9 @@ import {
  *
  * A claim is a reference-count REGISTRATION, not a mutex, so the residency resource is given effectively
  * unbounded capacity: every live instance's claim is admitted immediately and none ever queue.
+ *
+ * Responsible for: registering + counting cross-instance residency claims on local models.
+ * Not for: deciding when to unload - eviction.ts reads these counts.
  */
 
 /** The concrete local model an instance claims residency on (the shared local-model target). */

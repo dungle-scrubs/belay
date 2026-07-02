@@ -1,3 +1,8 @@
+/**
+ * Responsible for: fetching each source's live model list - LM Studio's native /api/v0, the
+ * OpenAI-compatible /v1/models, and the pi-ai static-registry fallback - with staleness.
+ * Not for: building catalog entries or source summaries; catalog.ts owns the read model.
+ */
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import { debug } from "@host/transport/log";
 import { msg } from "@host/transport/messages";

@@ -17,6 +17,9 @@ import type { ToolDef } from "./types";
  * touch files (that is tool-execution timing, not prompt assembly), and the task tools still
  * mutate `taskRegistry`. The builder is the single READ point for prompt assembly, not the
  * owner of when those registries change.
+ *
+ * Responsible for: per-turn system-prompt assembly and the shared prompt-overhead estimate.
+ * Not for: tool execution or registry mutation; the tools drive those as they run.
  */
 
 /** Oxford-comma join: "a", "a and b", "a, b, and c" - matches the prompt's prose. */

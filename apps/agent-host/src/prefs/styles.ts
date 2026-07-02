@@ -7,6 +7,9 @@ import type { CommandMenuPayload } from "@trevor/session";
  * bare `/style` command renders as a nested command-menu payload (so the web needs no style-specific
  * code); selecting a row dispatches `/style <id>` back through the command path. Pure + data-driven, so
  * the metadata is reusable by settings, `/doctor`, and future surfaces, and every branch is unit-tested.
+ *
+ * Responsible for: the built-in output-style catalog and pure /style handling (menu/select/reset).
+ * Not for: persisting the selection - style-store.ts.
  */
 
 export interface OutputStyle {

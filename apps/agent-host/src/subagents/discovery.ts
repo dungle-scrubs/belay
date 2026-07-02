@@ -24,6 +24,9 @@ import { READ_ONLY_TOOLS, TOOL_DEFS } from "@host/tools/index";
  * are discovered from `<TREVOR_AGENTS_DIR>/<id>/AGENT.md` (frontmatter + body) like skills, and
  * override a built-in of the same id. The discovered roster is announced in host.online so the model
  * can choose one by description.
+ *
+ * Responsible for: subagent discovery (built-ins + AGENT.md) and tool/skill allow-list resolution.
+ * Not for: running a delegated child - agent/delegate.ts.
  */
 
 /** Configurable agents root; one agent per `<dir>/<id>/AGENT.md`. */

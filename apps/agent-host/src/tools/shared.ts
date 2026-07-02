@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the simpleTool builder, output capping, stream merging, the skip-dirs
+ * policy, and the toolInput/toolExecution failure helpers.
+ * Not for: the failure classes themselves - errors.ts.
+ */
 import { msg } from "@host/transport/messages";
 import { Effect, type Schema } from "effect";
 import { type ToolError, ToolExecutionError, ToolInputError } from "./errors";

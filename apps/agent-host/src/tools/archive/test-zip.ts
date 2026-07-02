@@ -1,3 +1,7 @@
+/**
+ * Responsible for: building tiny in-memory zip and PNG fixtures (stored, deflated,
+ * central-directory variants) for the archive test suites.
+ */
 import { deflateRawSync } from "node:zlib";
 
 export function storedZip(

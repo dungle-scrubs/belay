@@ -6,6 +6,9 @@
  * points at a private address is still blocked; resolution that fails or is unavailable degrades to
  * "unknown" and rejects rather than fetching blind. Pure and resolver-injectable so it is reusable
  * and deterministically testable.
+ *
+ * Responsible for: the SSRF guard - rejecting unsafe schemes, hosts, and resolved addresses
+ * before any network IO, for every fetch backend.
  */
 
 /** Resolves a hostname to its IP literals. Injected so tests are deterministic and so a backend can

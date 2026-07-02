@@ -28,6 +28,9 @@ import { LoopScheduler } from "./scheduler";
  *
  * Transient state (the in-memory map + timers) is kept separate from durability: the store calls `persist`
  * on each durable-loop change and rehydrates via {@link LoopStore.hydrate} at startup; it never does file IO.
+ *
+ * Responsible for: the runtime loop registry: confirmation flow, scheduling, and iteration runs.
+ * Not for: file IO (persistence.ts) or the transition rules (domain.ts).
  */
 
 /** The sink the store publishes each loop's status snapshot to (wired to `emit(events.loopStatus(...))`). */

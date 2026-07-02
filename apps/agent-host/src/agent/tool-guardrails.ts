@@ -13,6 +13,10 @@ import { createHash } from "node:crypto";
  *     output, and a prior result is never replayed or used to skip execution.
  *   - Same input can change over time (D-004): a repeated argument fingerprint is only a signal;
  *     no-progress detection requires a READ-ONLY tool to return the SAME result fingerprint repeatedly.
+ *
+ * Responsible for: classifying repeating tool calls into typed allow/warn/block guardrail
+ * decisions from redacted fingerprints.
+ * Not for: executing tools or applying the decision - runAgent (loop.ts) owns runtime effects.
  */
 
 /** The decision verb the loop acts on. `allow` proceeds; `warn` appends model guidance; `block`

@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the archive_read and archive_unpack tools - param contracts, default limits,
+ * the read/unpack pipelines, and preview-budget bounding.
+ * Not for: zip parsing (zip.ts), byte acquisition (source.ts), or entry previews (processors.ts).
+ */
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";

@@ -11,6 +11,10 @@ import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
  * live beside the continuation-prefix encoding that the WRITER (`continueAfterStop`) and these READERS
  * share, so the writer/reader sync hazard closes by colocation and the projection is unit-testable
  * apart from a running host. The pure firing policy stays in session-lifecycle.ts.
+ *
+ * Responsible for: the auto-resume log projection - trailing-turn state, last user prompt,
+ * restart-resume streak, and the shared continuation-prefix encoding.
+ * Not for: deciding whether an auto-resume fires - that policy is session-lifecycle.ts.
  */
 
 /** The prefix every host-issued continuation prompt shares; recognising it in the log is how the

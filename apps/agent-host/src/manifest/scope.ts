@@ -7,6 +7,10 @@ import type { ManifestScope } from "@trevor/session";
  * `expert` views drop those and cap counts to protect the token budget. Centralizing the policy keeps
  * every section consistent - a capability is never visible in one section's compact view but hidden in
  * another's. Body/truncation/provenance helpers live next door in section-helpers.ts.
+ *
+ * Responsible for: the shared scope policy - which scopes surface hidden/debug items and the
+ * per-section item cap.
+ * Not for: body construction/truncation shapes - see section-helpers.ts.
  */
 
 /** The full-fidelity scopes that surface hidden/debug/non-available capabilities (tagged, not dropped). */

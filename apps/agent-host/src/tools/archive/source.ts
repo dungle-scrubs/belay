@@ -1,3 +1,8 @@
+/**
+ * Responsible for: acquiring archive bytes from a local path or an SSRF-guarded http(s) URL,
+ * enforcing byte caps, redirect guarding, and download timeouts.
+ * Not for: parsing the zip itself - zip.ts.
+ */
 import { lookup } from "node:dns/promises";
 import { readFile, stat } from "node:fs/promises";
 import {

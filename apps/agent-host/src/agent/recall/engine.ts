@@ -23,6 +23,9 @@ import type {
  * The impure inputs - reading the current session, enumerating + reading project siblings, and
  * the reasoning provider - are behind {@link RecallDeps}, so `runRecall` is testable end to end
  * with a fake reader + fake provider.
+ *
+ * Responsible for: orchestrating one recall end to end (corpus -> search -> neighborhoods ->
+ * distill) behind injectable deps, projecting a typed RecallResult.
  */
 
 /** The current session's live state the engine reads from host memory (no transport). */

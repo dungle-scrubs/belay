@@ -10,6 +10,9 @@ import type { DoctorSnapshot } from "@trevor/session";
  * command does - and the `doctor` tool reads it through {@link currentDoctorSnapshot}. Keeping this a
  * leaf module (a TYPE-only import, no runtime edges) means the tools graph can depend on it without a
  * cycle back into the host's heavy provider/observation wiring.
+ *
+ * Responsible for: the registration seam giving the doctor tool the live snapshot builder.
+ * Not for: building the snapshot - build.ts does; main.ts registers it here.
  */
 
 /** Produces a fresh, sanitized `doctor.current` snapshot from the host's live state. */

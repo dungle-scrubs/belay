@@ -1,3 +1,8 @@
+/**
+ * Responsible for: when turns run - the one-turn-at-a-time gate, the deferred-prompt FIFO, leader
+ * catch-up, and holding turns behind a compaction fold.
+ * Not for: building the prompt the model sees - history-projection.ts.
+ */
 import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
 
 /**

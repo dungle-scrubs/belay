@@ -10,6 +10,9 @@
  * `lmstudio,lease`). Use it for internal tracing - pi-ai stream events, lease tick
  * decisions - that would be noise in normal operation but is what you want when a
  * specific module is misbehaving.
+ *
+ * Responsible for: the structured boundary logger (log/warn/debug) and InvariantError/invariant.
+ * Not for: error->message normalization (messages.ts) or event publishing (services.ts).
  */
 
 import { Data } from "effect";

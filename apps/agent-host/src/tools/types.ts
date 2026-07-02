@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the Tool and ToolContext contracts every model-facing tool implements.
+ * Not for: the failure types - errors.ts.
+ */
 import type { Effect, Schema } from "effect";
 import type { ToolError } from "./errors";
 

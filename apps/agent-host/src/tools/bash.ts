@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the bash tool - foreground shell commands with promotion to background jobs.
+ * Not for: the promotion decision (promote-policy.ts) or the threshold race (promote-runner.ts).
+ */
 import type { ProcessRegistry } from "@host/processes/process-registry";
 import { Schema } from "effect";
 import type { PromotionConfig } from "./promote-policy";

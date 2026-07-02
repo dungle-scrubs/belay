@@ -1,3 +1,7 @@
+/**
+ * Responsible for: pure helpers over a provider's ordered reasoning levels - the cheapest level
+ * for mechanical calls and the next level down.
+ */
 /** The cheapest reasoning level for a mechanical (non-thinking) call - "off" when supported, else
  *  the lowest level (reasoningLevels is ordered low→high). Used by the summarizer and the forced
  *  final-answer synthesis, neither of which benefits from thinking. */

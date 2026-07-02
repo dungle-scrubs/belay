@@ -6,6 +6,9 @@
  * query module's concern), and it never reads the wall clock (the caller injects `now`), so the
  * staleness boundary is deterministic under test. Keeping it apart from query ranking means refresh
  * and ranking never entangle.
+ *
+ * Responsible for: the stale-vs-fresh policy for cached corpora (injected clock, no fetching).
+ * Not for: ranking or excerpting corpus content - query.ts.
  */
 
 import type { Corpus } from "./corpus";

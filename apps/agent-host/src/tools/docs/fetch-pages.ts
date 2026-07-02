@@ -6,6 +6,10 @@
  * from. Empty/failed reads become page/corpus diagnostics rather than thrown turns; thin pages are
  * kept but flagged; and pages are de-duplicated by canonical final URL and by content hash so a redirect
  * collision or a mirror page does not bloat the corpus.
+ *
+ * Responsible for: fetching discovered candidates via the web_fetch seam and normalizing +
+ * de-duplicating them into citeable corpus pages.
+ * Not for: choosing the candidates - discovery.ts.
  */
 
 import type { WebFetchResult } from "../web-fetch/envelope";

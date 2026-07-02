@@ -1,3 +1,7 @@
+/**
+ * Responsible for: resolving a /cd target - validated cwd, workspace root, and fresh session id.
+ * Not for: blocking a switch on cwd ownership - cwd-lock.ts's cwdSwitchConflict gates that.
+ */
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";

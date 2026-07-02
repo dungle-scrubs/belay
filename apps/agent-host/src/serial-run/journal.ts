@@ -10,6 +10,9 @@ import { readJson, type WorktreeFs, writeJson } from "../worktrees/registry";
  *
  * This module owns ONLY the persisted run state and the pure resume/status derivations; the worktree
  * lifecycle and the green gate live in `driver.ts`, which calls in here to record each step.
+ *
+ * Responsible for: the persisted run journal - plan phases, resume/status derivations, run IO.
+ * Not for: the worktree lifecycle or the green gate (driver.ts).
  */
 
 /** A queued plan's position in the per-plan lifecycle. `merged` is terminal-success (tree merged +

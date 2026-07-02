@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the providers package barrel - the public re-exports plus the host provider
+ * registry (buildProviders / pickProvider).
+ * Not for: per-provider construction; each adapter module owns its own factory and env reads.
+ */
 import type { LocalAdmissionGate } from "../admission/service";
 import type { ResidencyRecorder } from "../residency/registry";
 import { codexProvider } from "./codex";

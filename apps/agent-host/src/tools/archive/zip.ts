@@ -1,3 +1,8 @@
+/**
+ * Responsible for: parsing zip entries (central directory or local headers) with entry,
+ * expansion, encryption, and symlink safety limits.
+ * Not for: entry-name safety rules - validators.ts owns that contract.
+ */
 import { matchesGlob } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { ArchiveToolError } from "./errors";

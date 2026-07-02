@@ -10,6 +10,9 @@ import type { LocalAdmissionContext } from "./service";
  * fiber when it acquires a generation lease, so a queued turn emits a `admission.status` event attributed
  * to the right run - WITHOUT threading per-turn arguments through the fixed `Provider.stream` signature.
  * Off-turn (no local work) the ref is null and the provider acquires with its default context.
+ *
+ * Responsible for: the fiber-local AdmissionTurnRef reporter and mapping runtime status updates to
+ * admission.status protocol events.
  */
 
 /** The per-turn admission context + status emitter, carried on the turn's fiber. */

@@ -1,3 +1,7 @@
+/**
+ * Responsible for: launching the local editor CLI (zed or TREVOR_EDITOR) at path:line:column
+ * for the browser's editor.open side-channel requests.
+ */
 import { execFile } from "node:child_process";
 
 /**

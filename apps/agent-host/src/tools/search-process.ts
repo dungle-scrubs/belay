@@ -1,3 +1,8 @@
+/**
+ * Responsible for: the argv-array process runner (timeout, output cap, exit-code capture)
+ * behind the binary-backed search tools grep and ast_grep.
+ * Not for: shell commands - run-shell.ts owns the bash floor.
+ */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 

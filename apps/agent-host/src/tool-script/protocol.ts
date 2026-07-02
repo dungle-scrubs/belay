@@ -36,6 +36,10 @@ const oneOf = <T extends string>(opts: readonly T[], v: unknown, fallback: T): T
  * protocol (plus the session contract) - never the agent-host tool registry - so user script code runs in a
  * process with no ambient Trevor authority. The codec is permissive (malformed lines decode to null, not a
  * throw) and the line reader caps buffered bytes, so a crashing or spam-happy child is contained.
+ *
+ * Responsible for: the host<->runner NDJSON message types, the permissive line codecs, and the
+ * byte-capped line reader.
+ * Not for: spawning or driving the exchange - see spawn.ts / host-manager.ts.
  */
 
 export const RUNNER_PROTOCOL_VERSION = 1;

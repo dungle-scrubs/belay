@@ -7,6 +7,8 @@
  * the INITIAL connect the same resilience. Pure and injectable (the ensure call, the
  * clock, and the retry hook are parameters) so it is unit-tested with no real store and
  * no process exit.
+ *
+ * Responsible for: retrying the initial ensureSession until the session store is reachable.
  */
 export interface EnsureRetryOptions {
   /** Total attempts before giving up (default 30 -> ~30s with the default delay). */

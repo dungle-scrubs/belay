@@ -45,6 +45,9 @@ import { recordTurnStop } from "./turn-stop-metrics";
  * normal end -> {}, a fiber interrupt (cancel) -> {cancelled}, a provider failure ->
  * {error}. Owns the buffering and the AgentEvent -> event mapping so the host's connect
  * path stays about transport, not turn bookkeeping.
+ *
+ * Responsible for: publishing one turn's provider stream as session events.
+ * Not for: the model<->tools loop composition - runAgent (loop.ts).
  */
 export function publishTurn(
   provider: Provider,

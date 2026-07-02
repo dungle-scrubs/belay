@@ -13,6 +13,9 @@ import type { HandoffMode } from "@trevor/session";
  *
  * A surrounding pair of matching quotes around the prompt is stripped, so a shell-style quoted argument
  * (`--direct "do the thing"`) yields the inner text.
+ *
+ * Responsible for: parsing `/handoff` arguments to a mode + prompt.
+ * Not for: running the handoff - handoff-flow.ts (wired by main.ts).
  */
 
 export interface ParsedHandoff {

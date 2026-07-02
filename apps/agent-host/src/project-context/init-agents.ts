@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the /init proposal - collecting repo evidence and drafting a root AGENTS.md.
+ * Not for: CLAUDE.md migration inventory - claude-migration.ts owns that.
+ */
 import { readFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { AGENTS_FILE } from "./agents-md";

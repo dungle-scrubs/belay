@@ -28,6 +28,9 @@ export {
  *
  * `/doctor` (M6) reads the deduped records to report counts and fingerprints for unclassified
  * provider failures, again without exposing any secret.
+ *
+ * Responsible for: persisting deduped, redacted failure observations to disk and summarizing them.
+ * Not for: the record shapes and fingerprints themselves; those live in failure-record-schema.ts.
  */
 
 /** The JSON file backing the store: `<TREVOR_STATE_HOME>/provider-observations.json`. */

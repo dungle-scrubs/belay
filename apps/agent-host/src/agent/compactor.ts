@@ -24,6 +24,10 @@ export { COMPACT_TO, COMPACT_WHEN, SUMMARY_TOKEN_BUDGET } from "./compaction-pla
  *
  * The provider is the routing SEAM: the caller passes the turn's provider for now; per-fold
  * local↔cloud routing (D-046) reuses this entry point later without changing the call sites.
+ *
+ * Responsible for: running one cross-turn compaction fold end to end - the overBudget trigger,
+ * the planned fold, and the tool-less summary yielding the context.compacted event.
+ * Not for: within-turn context recovery - that airbag is overflow-recovery.ts.
  */
 
 /** Hard cap on the summary length (chars), independent of whether the model respected the budget. */

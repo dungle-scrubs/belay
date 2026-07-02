@@ -1,3 +1,6 @@
+/**
+ * Responsible for: frontmatter + directory-listing primitives for skill/subagent manifests.
+ */
 import { readdirSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 

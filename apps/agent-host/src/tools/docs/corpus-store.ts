@@ -6,6 +6,10 @@
  * healthy. A load recomputes each page's content hash and cross-checks the page count, so a corrupt
  * or truncated file surfaces as a diagnostic. Filesystem access goes through the injected `DocsFs`
  * seam, so tests run against a fake and never touch real disk.
+ *
+ * Responsible for: persisting and loading docs corpora as manifest + page JSON files, with
+ * completeness flags and integrity checks on load.
+ * Not for: corpus types and id derivation - corpus.ts.
  */
 
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";

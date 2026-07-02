@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the ast_grep tool - structural AST pattern search over the workspace.
+ * Not for: text/regex search (grep.ts) or binary resolution (ast-grep-bin.ts).
+ */
 import { confine, WORKSPACE_ROOT } from "@host/boot/paths";
 import { Schema } from "effect";
 import { astGrepPath } from "./ast-grep-bin";

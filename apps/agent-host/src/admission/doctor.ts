@@ -7,6 +7,9 @@ import type { AdmissionRecordView, AdmissionResourceView } from "./store";
  * depth, the oldest wait, and any stale holder (a dead pid still listed active). Pure read model: it
  * reads the snapshot, never mutates. Resource keys (provider:host:port:model) carry no secret, so they
  * surface as-is for operator diagnosis.
+ *
+ * Responsible for: folding raw admission resource views into the /doctor summary read model.
+ * Not for: reading or reaping the lease files themselves - that lives in ./store.
  */
 
 /** One resource row in the doctor admission summary. */

@@ -5,6 +5,9 @@
  * this host module); the host keeps the short `msg` name its ~20 callsites use by re-exporting it.
  * This module is NOT tool-specific (the tool error envelope lives in tools/shared.ts) and does NOT
  * format log lines (that is log.ts).
+ *
+ * Responsible for: re-exporting the shared error->message normalizer as the host's `msg` helper.
+ * Not for: the tool error envelope (tools/shared.ts) or log-line formatting (log.ts).
  */
 
 import { errorMessage } from "@trevor/session";

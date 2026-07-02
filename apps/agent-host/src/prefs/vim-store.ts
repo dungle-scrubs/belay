@@ -9,6 +9,9 @@ import { USER_VIM_JSON } from "@host/boot/paths";
  * per-tab browser state. Disabled by default: a missing, malformed, or `{ enabled: false }` file all
  * resolve to off, and a malformed file is reported (by the shared config scaffold) without blocking
  * startup. Read/write are injectable so the store is unit-tested without touching disk.
+ *
+ * Responsible for: the persisted Vim prompt-motions preference (vim.json load/save/toggle/cache).
+ * Not for: the /vim command spec - commands/commands.ts.
  */
 
 export interface VimPreference {

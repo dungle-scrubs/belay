@@ -24,6 +24,10 @@ import { ADMISSION_DEFAULT_CAPACITY, type AdmissionCaps, nodeAdmissionCaps } fro
  * per-turn context (priority, session/run/agent ids) through an injected resolver so a foreground turn
  * outranks a background subagent without the provider needing per-turn arguments. Only local providers
  * are given a gate, so cloud providers bypass admission entirely (D-005).
+ *
+ * Responsible for: the LocalAdmissionGate - wiring host identity, per-turn context, capacity, and
+ * caps into generation/lifecycle admits for the local provider.
+ * Not for: the wait/hold mechanics (./runtime) or resource key formats (./contract).
  */
 
 /** The concrete local target a request is for (the generation key is per model, lifecycle per endpoint). */

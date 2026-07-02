@@ -4,6 +4,8 @@
  * overlap, which is deterministic, cheap, and fully unit-testable. The index is pure - it
  * holds no IO and is rebuilt per query from the (already filtered) corpus, so there is no
  * stale-index lifecycle to manage.
+ *
+ * Responsible for: the pure BM25 lexical index and shared tokenizer that recall search ranks with.
  */
 
 /** Okapi BM25 term-saturation parameter (standard default). */

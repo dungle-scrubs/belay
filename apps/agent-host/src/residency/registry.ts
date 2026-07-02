@@ -13,6 +13,9 @@
  * doctor surface (M6) read one host-level view rather than reaching into each client. The client only
  * RECORDS loads/unloads here (via {@link ResidencyRecorder}); the cross-INSTANCE claim + eviction logic
  * lives above it (M3-M5) on plan 11's shared store.
+ *
+ * Responsible for: tracking which local models THIS instance loaded (eviction eligibility).
+ * Not for: cross-instance claims or unloading - claims.ts and eviction.ts own those.
  */
 
 /** One local model this instance loaded: the provider + endpoint it lives on, its id, and the context it

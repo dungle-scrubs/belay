@@ -13,6 +13,8 @@ import { LocalResidencyRegistry, type ResidencyRecorder } from "./registry";
  * loads register here; `onActiveModelChanged` is called when a turn resolves its provider (claim the new
  * local model, release + sweep the prior); `heartbeat` keeps the current claim alive on a host timer;
  * `shutdown` releases + sweeps on a clean stop; `summary` is the /doctor projection (M6).
+ *
+ * Responsible for: composing registry, claims, eviction, and policy into one host-facing object.
  */
 
 export interface HostResidencyDeps {

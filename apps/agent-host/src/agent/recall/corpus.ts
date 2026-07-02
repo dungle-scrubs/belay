@@ -13,6 +13,9 @@ import type { RecallRecord, RecallSessionRef } from "./types";
  * re-surface them. Current-session records are therefore restricted to the compacted-away
  * span (seq <= the latest fold's throughSeq) with the fold summaries themselves dropped,
  * while sibling sessions - none of which is in the active prompt - contribute in full.
+ *
+ * Responsible for: building the recallable record corpus from decoded session logs, enforcing
+ * the current-session exclusion rule.
  */
 
 /** Per-record text cap so one huge tool result cannot dominate the index or an excerpt. */

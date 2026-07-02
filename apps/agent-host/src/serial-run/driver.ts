@@ -11,6 +11,9 @@ import { advancePlan, nextPlan, type PlanEntry, type SerialRun } from "./journal
  * {@link driveOnePlan} is the reusable per-plan lifecycle unit; `46-worktree-fleet` parallelizes exactly
  * this unit per leaf (D-005). The driver never holds two mutating trees at once: the next plan's tree is
  * created only after the prior plan reaches `merged`, because {@link nextPlan} does not advance until then.
+ *
+ * Responsible for: the serial plan lifecycle - create tree, implement, green gate, merge/halt.
+ * Not for: journal state shape (journal.ts) or real git wiring (node.ts).
  */
 
 /** Create + enter a managed worktree for a plan (acquiring the 01 cwd lock). Discriminated so a

@@ -32,6 +32,10 @@ import type { Provider } from "./types";
  *
  * The host is the source of truth for source status + auth state + the catalog; the browser renders
  * these read models and never hardcodes a model list (mirrors the doctor snapshot).
+ *
+ * Responsible for: the source registry, catalog snapshot building, and source-to-Provider dispatch.
+ * Not for: fetching live model lists (source-models.ts) or per-model metadata corrections
+ * (model-metadata-overrides.ts).
  */
 
 /** A configurable source: the stable id, its type, label, and how to reach + authenticate it. */

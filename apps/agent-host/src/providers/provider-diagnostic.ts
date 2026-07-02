@@ -13,6 +13,11 @@ import type { Provider, ProviderError } from "./types";
  * assistant events and /doctor correlation. It lives beside the failure taxonomy (not in the loop) so
  * provider-failure shape knowledge has one home: the loop just hands it the error + partials. The
  * evidence projection ({@link providerFailureEvidence}) owns the `instanceof`/`evidence?` unpacking.
+ *
+ * Responsible for: building the structured ProviderDiagnostic for stream failures and protocol
+ * anomalies.
+ * Not for: storing incidents (provider-incidents.ts) or the recent-failures ring
+ * (provider-failure-log.ts).
  */
 
 /** Maps a provider failure to its coarse incident reason for the diagnostic. */

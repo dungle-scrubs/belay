@@ -1,3 +1,7 @@
+/**
+ * Responsible for: the tolerant pi-ai registry model lookup - normalizing undefined-or-throw
+ * misses and owning the literal casts the registry's strict typing needs.
+ */
 import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 

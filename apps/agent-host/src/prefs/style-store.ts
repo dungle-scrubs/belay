@@ -9,6 +9,9 @@ import { DEFAULT_STYLE_ID, findStyle, resolveStyle } from "./styles";
  * attribution; written when `/style` selects a style. An unknown / retired / missing id falls back to the
  * built-in default (and is reported as `source: "default"`). Read/write are injectable so the store is
  * unit-tested without touching disk.
+ *
+ * Responsible for: persisting + caching the active output-style preference (style.json).
+ * Not for: style metadata and /style argument handling - styles.ts.
  */
 
 export interface StylePreference {

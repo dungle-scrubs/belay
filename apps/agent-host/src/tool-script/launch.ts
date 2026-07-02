@@ -23,6 +23,10 @@ import { defaultRunnerCommand } from "./spawn";
  * probe fails - a Seatbelt profile that Node cannot start under is common - it DEGRADES to the plain
  * child-process command and reports `child-process` mode. The bridge policy is never weakened by this
  * fallback (D-003): the OS sandbox is blast-radius reduction, the host bridge is the authoritative control.
+ *
+ * Responsible for: resolving the child runner's launch - sandbox mode selection, profile wiring,
+ * the boot probe, and the fail-closed unsandboxed refusal.
+ * Not for: the profile text itself (sandbox-profile.ts) or the actual spawn (spawn.ts).
  */
 
 /**
