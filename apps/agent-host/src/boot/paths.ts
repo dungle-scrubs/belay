@@ -67,6 +67,13 @@ export const USER_VIM_JSON = join(TREVOR_HOME, "vim.json");
 export const USER_ADMISSION_JSON = join(TREVOR_HOME, "admission.json");
 
 /**
+ * The named MCP server registry file (plan 23): an optional `{ servers: { "<name>": ... } }` JSON
+ * under the config home, read at host startup to configure MCP servers (tool-proxy is just one
+ * ordinary named entry, D-001). Absent means no MCP servers. Host-owned + portable.
+ */
+export const USER_MCP_SERVERS_JSON = join(TREVOR_HOME, "mcp-servers.json");
+
+/**
  * The directory the workspace-confined tools operate inside. Point the agent at a
  * target repo with TREVOR_WORKSPACE; defaults to the host's working directory.
  * Confinement is a path-escape guard (no `../` or absolute path may leave the
