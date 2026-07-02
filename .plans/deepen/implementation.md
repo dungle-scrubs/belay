@@ -75,6 +75,39 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
   touches one module.
 - **Churn:** low-moderate (2-3 files; preserve record-before-complete ordering).
 
+
+#### M21: `apps/agent-host/src/tools/web-fetch/url-guard.ts` async SSRF boundary (pass 2)
+
+- **Symptom:** leaky abstraction - the guard exposes a SYNC ResolveHost, forcing every caller to
+  re-implement the async->sync DNS bridge.
+- **Evidence:** three byte-equivalent `syncResolverFor` copies (static-fetch.ts:142-163,
+  archive/source.ts:245-265, web-fetch.ts:378-394); duplicated guardUrl/guardRedirect wrappers with
+  a hand-maintained divergence (archive try/catches the resolve, static-fetch does not);
+  jina-fetch.ts/firecrawl-fetch.ts `resolveHost` deps carry a single-host closure whose type claims
+  general resolution.
+- **Proposed boundary:** `assertSafeUrlAsync(raw, asyncResolveHost)` +
+  `assertSafeRedirectAsync(hop, seen, asyncResolveHost)` in url-guard doing the one-host
+  pre-resolution internally; callers keep only their error mapping; backend deps take the real
+  async resolver.
+- **Payoff:** ~90 duplicated lines across 4 files; the DNS-safety subtlety cannot drift between
+  backends; signatures stop lying.
+- **Churn:** medium (url-guard exports + tests; three callers; jina/firecrawl dep types).
+
+#### M22: `apps/web/src` per-tool argument schema owner (pass 2)
+
+- **Symptom:** information leakage + duplicated per-tool dispatch.
+- **Evidence:** "which fields does tool X's args carry and which is salient" reconstructed at four
+  sites off the shared parseToolArgs: tool-detail/detail-args.ts:23-152 (typed extractors, imported
+  only by detail-body), tool-message.tsx:75-305 (same knowledge inline in ~8 render arms),
+  derive.ts:156-174 toolSummary, compact-display.ts:261-277 compactToolSummary; the tool->family
+  grouping duplicated between detail-body.tsx:43-66 and TOOL_RENDERERS.
+- **Proposed boundary:** promote detail-args.ts to a neutral `tool-args.ts` single schema owner
+  (typed extractor per tool + declared salient field); all four consumers read it. Scope narrowly
+  to the arg schema, not render formatters (rejected in pass 1).
+- **Payoff:** transcript row, compact summary, and detail takeover cannot drift on a tool's args;
+  new tool args touch one module.
+- **Churn:** moderate (~6 render arms + two summary fns re-pointed; all four sites unit-tested).
+
 ### Medium
 
 #### M5: `apps/agent-host/src/{mcp,lsp}` framed JSON-RPC child connection
@@ -190,6 +223,20 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
 - **Payoff:** ~12-18 call sites shed setup lines; the join contract centralizes.
 - **Churn:** low (two helpers + mechanical e2e edits).
 
+
+#### M23: `apps/session-store/src/server.ts` session fan-out hub (pass 2)
+
+- **Symptom:** conjoined maps + temporal orchestration at call sites.
+- **Evidence:** parallel `subscribers` + `hosts` Maps with nine free closures (server.ts:57-127);
+  the connection handler must run readFrames->send->replayComplete->subscribe then
+  addHost+broadcastPresence in order (246-261); the close handler manually keeps both maps in
+  lockstep (263-270); OPEN-readyState guard + instanceId dedup live beside the routes.
+- **Proposed boundary:** a `SessionHub` owning both maps behind attach(sessionId, socket,
+  {host?})/detach/publish/presence; server.ts reduces to HTTP routing + replay + WS wiring.
+- **Payoff:** the "subscriber+presence torn down together" invariant lives once and becomes
+  unit-testable without a WS harness.
+- **Churn:** moderate (~90-line module; server.ts 274 -> ~190 lines; store tests cover e2e).
+
 ### Low
 
 #### M14: `apps/agent-host/src/agent` ActiveRun cell
@@ -272,6 +319,39 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
 - **Payoff:** one place to register a kind; compact and full cannot drift.
 - **Churn:** moderate-high with real over-abstraction risk - scope strictly to
   icon/status/quiet-flag.
+
+
+#### M24: `apps/agent-host/src/tools/docs/corpus-store.ts` requireLoadedCorpus (pass 2)
+
+- **Symptom:** callsite boilerplate - the 3-state LoadResult union hand-unwrapped per action.
+- **Evidence:** the missing->errorResult / corrupt->corruptResult mapping (with verbatim wording)
+  duplicated at query-actions.ts:46-58, 110-116, 212-223 and build-actions.ts:215-224.
+- **Proposed boundary:** `requireLoadedCorpus(action, loaded, ref)` returning LoadedCorpus or a
+  ready failure envelope; four actions collapse to a guard line.
+- **Payoff:** the load-union -> wire-envelope mapping becomes single-owner (~24 lines removed).
+- **Churn:** low (one helper + four call sites; action tests cover behavior).
+
+#### M25: `apps/agent-host/src/worktrees/manager.ts` summaryRow builder (pass 2)
+
+- **Symptom:** internal duplication - the 13-field WorktreeSummary built three times.
+- **Evidence:** manager.ts:99-161 - baseline row (105-120), missing row (124-139), live row
+  (142-157) each re-spell the six git-state-derived field expressions.
+- **Proposed boundary:** `summaryRow(identity, role, state | null)` mapping git state (null =>
+  missing-row zeros) once; the three sites pass identity + role flags.
+- **Payoff:** ~35 lines collapse; the "missing rows read zeroed, not stale" invariant lives once;
+  a unit-test seam for row construction without a live repo.
+- **Churn:** low (single file; summaries() already tested).
+
+## Considered and rejected (pass 2)
+
+- recall/admission/residency/loop/serial-run/manifest/telemetry internals (uniformly deep); loop
+  runner twin switch arms (D-009 divergence expected); serial-run SerialWorktreeOps double
+  interface (deliberate sync->async narrowing seam); manifest core-sections combinator (marginal);
+  blob-store get/head readMeta (~12 lines, small+correct); telemetry-file-sink vs provider-trace
+  (both delegate to the shared capped-jsonl writer); side-panel vs artifact-panel (only one is
+  resizable); command menu/modal/palette (distinct contracts); chat/loop views (thin over a shared
+  view-model by design); node-paths (data-driven taxonomy, deep); use-model-selection (logic lives
+  in model-selection + session transitions).
 
 ## Considered and rejected (pass 1)
 

@@ -7,9 +7,9 @@
 
 > Current focus: M1: SessionTransport read/await/identity helpers
 
-- Total checklist items: 20
+- Total checklist items: 25
 - Completed: 0
-- Current cutoff blockers: 20
+- Current cutoff blockers: 25
 
 ## High
 
@@ -17,6 +17,9 @@
 - [ ] M2: child-spawn hygiene primitive (agent-host processes/)
 - [ ] M3: hostAnnouncement projection (web derive.ts)
 - [ ] M4: provider-failure sink (agent-host agent/ + loop-failures)
+
+- [ ] M21: url-guard async SSRF boundary (tools/web-fetch; pass 2)
+- [ ] M22: per-tool argument schema owner (web; pass 2)
 
 ## Medium
 
@@ -30,6 +33,8 @@
 - [ ] M12: startStore boot helper (server-kit)
 - [ ] M13: joinSession + waitForType (test-kit)
 
+- [ ] M23: session fan-out hub (session-store; pass 2)
+
 ## Low
 
 - [ ] M14: ActiveRun cell (runningRunId + activeSwitch)
@@ -39,3 +44,5 @@
 - [ ] M18: compaction planner forwarders (agent/compactor)
 - [ ] M19: shellMessageStatus (web tool-status)
 - [ ] M20: transcript message-kind descriptor registry (web renderers)
+- [ ] M24: requireLoadedCorpus (tools/docs; pass 2)
+- [ ] M25: worktree summaryRow builder (worktrees/manager; pass 2)
