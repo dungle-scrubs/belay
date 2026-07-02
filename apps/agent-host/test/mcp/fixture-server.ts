@@ -2,10 +2,13 @@ import {
   BIG_FIXTURE_CHARS,
   catalogPage,
   catalogToolsFor,
+  FIXTURE_ELICITATION_PARAMS,
   FIXTURE_PROMPTS,
   FIXTURE_RESOURCE_CONTENTS,
   FIXTURE_RESOURCES,
+  FIXTURE_SAMPLING_PARAMS,
   type FixtureCatalogMode,
+  fixturePromptResult,
 } from "./fixture-catalog";
 
 /**
@@ -24,6 +27,12 @@ import {
  *   hang       - never responds (for timeout tests)
  *   crash      - exits the process without responding
  *   garbage    - responds with a well-framed but non-JSON body
+ * M6 mediation probes - each sends a server-originated REQUEST mid tools/call, waits for the
+ * client's JSON-RPC response, and answers the original call with that response as JSON text
+ * (so tests read exactly what this server saw):
+ *   elicit_probe   - sends elicitation/create (FIXTURE_ELICITATION_PARAMS)
+ *   sampling_probe - sends sampling/createMessage (FIXTURE_SAMPLING_PARAMS)
+ * prompts/get expands the shared ./fixture-catalog prompts with argument substitution.
  * `--protocol=<v>` forces the initialize result's protocolVersion (for negotiation tests);
  * by default it echoes the client's requested version. `--catalog=large|counting` selects a
  * ./fixture-catalog mode (discovery/search-cap tests). Exits 0 when stdin ends.
@@ -40,6 +49,24 @@ interface JsonRpcIn {
     readonly uri?: string;
     readonly arguments?: Record<string, unknown>;
   };
+  readonly result?: unknown;
+  readonly error?: unknown;
+}
+
+/** Server-originated requests awaiting the client's response, keyed by our request id. */
+const pendingServerRequests = new Map<string, (response: JsonRpcIn) => void>();
+let serverRequestSeq = 0;
+
+/** Sends a server-originated request and invokes `onResponse` with the client's response. */
+function sendServerRequest(
+  method: string,
+  params: unknown,
+  onResponse: (response: JsonRpcIn) => void,
+): void {
+  serverRequestSeq += 1;
+  const id = `srv-${serverRequestSeq}`;
+  pendingServerRequests.set(id, onResponse);
+  send({ jsonrpc: "2.0", id, method, params });
 }
 
 const protocolOverride = process.argv
@@ -99,6 +126,16 @@ function rpcError(id: JsonRpcIn["id"], code: number, message: string): void {
 }
 
 function handle(message: JsonRpcIn): void {
+  if (message.method === undefined) {
+    // A JSON-RPC RESPONSE to one of our server-originated requests (M6 probes).
+    const pending =
+      message.id === undefined ? undefined : pendingServerRequests.get(String(message.id));
+    if (pending) {
+      pendingServerRequests.delete(String(message.id));
+      pending(message);
+    }
+    return;
+  }
   if (message.method === "initialize") {
     result(message.id, {
       protocolVersion: protocolOverride ?? message.params?.protocolVersion ?? "2025-06-18",
@@ -129,6 +166,15 @@ function handle(message: JsonRpcIn): void {
   if (message.method === "prompts/list") {
     const { page, nextCursor } = catalogPage(FIXTURE_PROMPTS, message.params?.cursor);
     result(message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
+    return;
+  }
+  if (message.method === "prompts/get") {
+    const expanded = fixturePromptResult(message.params?.name, message.params?.arguments);
+    if (!expanded) {
+      rpcError(message.id, -32602, `unknown prompt ${String(message.params?.name)}`);
+      return;
+    }
+    result(message.id, expanded);
     return;
   }
   if (message.method === "resources/read") {
@@ -177,6 +223,27 @@ function handle(message: JsonRpcIn): void {
         content: [{ type: "text", text: "external service exploded" }],
         isError: true,
       });
+      return;
+    }
+    if (name === "elicit_probe" || name === "sampling_probe") {
+      const callId = message.id;
+      sendServerRequest(
+        name === "elicit_probe" ? "elicitation/create" : "sampling/createMessage",
+        name === "elicit_probe" ? FIXTURE_ELICITATION_PARAMS : FIXTURE_SAMPLING_PARAMS,
+        (response) => {
+          result(callId, {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  ...(response.result !== undefined ? { result: response.result } : {}),
+                  ...(response.error !== undefined ? { error: response.error } : {}),
+                }),
+              },
+            ],
+          });
+        },
+      );
       return;
     }
     if (name === "boom") {

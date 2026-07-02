@@ -2,16 +2,34 @@ import { type ToolError, ToolExecutionError, ToolInputError } from "@host/tools/
 import { cap } from "@host/tools/shared";
 import { msg } from "@host/transport/messages";
 import { Effect } from "effect";
-import type { McpResourceRecord } from "./capabilities";
+import type { McpPromptRecord, McpResourceRecord, McpServerCapabilities } from "./capabilities";
 import type { McpCapabilityCounts } from "./capability-cache";
 import { createMcpCapabilityCache, type McpCapabilityCache } from "./capability-cache";
 import { type McpExposure, type McpServerConfig, redactMcpEndpoint } from "./config";
-import { boundText, decodeResourceContents, decodeToolCallResult } from "./content";
+import {
+  boundPromptMessages,
+  boundText,
+  decodePromptMessages,
+  decodeResourceContents,
+  decodeToolCallResult,
+  type McpPromptMessage,
+} from "./content";
 import { isMcpTransportError, McpClosedError } from "./errors";
 import { createHttpTransport } from "./http-transport";
+import {
+  createMcpServerMediator,
+  createSamplingBudget,
+  type McpElicitationHandler,
+  type McpSamplingHandler,
+} from "./mediation";
 import { createMcpRegistry } from "./registry";
 import { spawnStdioTransport } from "./stdio-transport";
-import type { McpTransport, McpTransportState, McpTransportStatus } from "./transport";
+import type {
+  McpServerRequestHandler,
+  McpTransport,
+  McpTransportState,
+  McpTransportStatus,
+} from "./transport";
 
 /**
  * The host-lifetime MCP runtime (plan 23 M5): the ONE seam wiring the named-server registry to
@@ -33,14 +51,18 @@ import type { McpTransport, McpTransportState, McpTransportStatus } from "./tran
  *
  * Resources are attributable CONTEXT records, not tool execution: list/read return
  * provenance-carrying records (server + uri + mime) with bounded content, for the M7 surface
- * to expose.
+ * to expose. Prompts are imported ARTIFACTS the same way (M6): provenance-carrying records
+ * with server-side argument substitution and bounded expansion - explicitly NOT Trevor slash
+ * commands (nothing here touches the command registry). Server-originated requests
+ * (elicitation, sampling) are answered by the per-server ./mediation mediator wired into each
+ * transport at construction; sampling shares ONE budget across every server.
  *
  * Responsible for: the runtime seam - lazy per-server connections, qualified-identity call
- * execution, resource list/read records, the capability cache wiring, the /doctor status
- * snapshot, and shutdown.
+ * execution, resource/prompt records, mediation wiring, the capability cache wiring, the
+ * /doctor status snapshot, and shutdown.
  * Not for: wire mechanics (./stdio-transport, ./http-transport), discovery decoding
- * (./capabilities), caching/search policy (./capability-cache), or payload decoding
- * (./content).
+ * (./capabilities), caching/search policy (./capability-cache), payload decoding
+ * (./content), or the mediation decisions themselves (./mediation).
  */
 
 /** A resource read as an attributable context record: bounded content plus provenance. */
@@ -72,12 +94,32 @@ export interface McpServerStatusEntry {
   };
 }
 
+/** An imported MCP prompt (M6): a provenance-carrying artifact, NOT a Trevor slash command. */
+export interface McpPromptArtifact {
+  readonly kind: "mcp_prompt";
+  readonly server: string;
+  readonly name: string;
+  readonly qualifiedName: string;
+  readonly description?: string;
+  readonly messages: readonly McpPromptMessage[];
+  readonly truncated: boolean;
+}
+
 export interface McpRuntimeOptions {
   readonly clientInfo?: { readonly name: string; readonly version: string };
   /** The host env the stdio transports filter (default `process.env`); injectable for tests. */
   readonly hostEnv?: NodeJS.ProcessEnv;
   /** The clock behind capability freshness (default `Date.now`); injectable for tests. */
   readonly now?: () => number;
+  /** The user-question seam behind elicitation (M6); absent means every elicitation declines
+   *  (the unavailable-UI path). The host wires this onto its pending-question surface. */
+  readonly elicitationHandler?: McpElicitationHandler;
+  readonly elicitationTimeoutMs?: number;
+  /** The model-turn seam behind sampling (M6); only reachable for a server whose config says
+   *  `"sampling": true`, and gated by the runtime-wide budget. */
+  readonly samplingHandler?: McpSamplingHandler;
+  /** Max sampling calls this runtime (session) grants across ALL servers. */
+  readonly samplingBudget?: number;
 }
 
 export interface McpRuntime {
@@ -96,6 +138,16 @@ export interface McpRuntime {
     serverName: string,
     uri: string,
   ) => Effect.Effect<McpResourceContext, ToolError>;
+  /** Discovered prompt records: one server's (strict) or every enabled server's (tolerant). */
+  readonly listPrompts: (
+    serverName?: string,
+  ) => Effect.Effect<readonly McpPromptRecord[], ToolError>;
+  /** Expands `<server>:<prompt>` (arguments substituted server-side per the MCP spec) into a
+   *  bounded imported artifact. */
+  readonly getPrompt: (
+    qualifiedName: string,
+    args?: Record<string, string>,
+  ) => Effect.Effect<McpPromptArtifact, ToolError>;
   /** The capability cache (M4): refresh, cached records, capped search, freshness snapshot. */
   readonly capabilities: McpCapabilityCache;
   /** The per-server /doctor projection (D-009). */
@@ -121,6 +173,27 @@ export function createMcpRuntime(
   let closed = false;
   let closePromise: Promise<void> | null = null;
 
+  // ONE sampling budget across every server (M6): a chatty server cannot starve the counter
+  // for itself and then ride another server's allowance.
+  const samplingBudget = createSamplingBudget(options.samplingBudget);
+
+  /** The per-server mediation handler answering elicitation/sampling requests (M6). */
+  const mediatorFor = (config: McpServerConfig): McpServerRequestHandler =>
+    createMcpServerMediator({
+      server: config.name,
+      elicitation: {
+        ...(options.elicitationHandler ? { handler: options.elicitationHandler } : {}),
+        ...(options.elicitationTimeoutMs !== undefined
+          ? { timeoutMs: options.elicitationTimeoutMs }
+          : {}),
+      },
+      sampling: {
+        enabled: config.sampling === true,
+        ...(options.samplingHandler ? { handler: options.samplingHandler } : {}),
+        consumeBudget: samplingBudget.consume,
+      },
+    });
+
   /** The lazy-connect point: every transport construction funnels through here (D-007). */
   const transportOf = (connection: Connection): McpTransport => {
     if (closed) {
@@ -134,9 +207,11 @@ export function createMcpRuntime(
         ? spawnStdioTransport(connection.config, {
             ...(options.clientInfo ? { clientInfo: options.clientInfo } : {}),
             ...(options.hostEnv ? { hostEnv: options.hostEnv } : {}),
+            onServerRequest: mediatorFor(connection.config),
           })
         : createHttpTransport(connection.config, {
             ...(options.clientInfo ? { clientInfo: options.clientInfo } : {}),
+            onServerRequest: mediatorFor(connection.config),
           });
     return connection.transport;
   };
@@ -252,40 +327,86 @@ export function createMcpRuntime(
       );
     });
 
-  /** Cached records for one server, discovering on first use (cache reads stay cache reads). */
-  const discoveredResources = async (serverName: string): Promise<readonly McpResourceRecord[]> => {
-    if (cache.capabilitiesFor(serverName) === undefined) {
-      await cache.refreshCapabilities(serverName);
-    }
-    return cache.capabilitiesFor(serverName)?.resources ?? [];
-  };
-
-  const listResources = (
-    serverName?: string,
-  ): Effect.Effect<readonly McpResourceRecord[], ToolError> =>
-    Effect.suspend(() => {
-      if (serverName !== undefined) {
-        const resolved = resolveServer(serverName, "resources");
-        if (resolved instanceof ToolInputError) {
-          return Effect.fail<ToolError>(resolved);
+  /**
+   * Builds a family lister (resources, prompts) over the cache: cached records for one server
+   * (strict, discovering on first use) or for every eligible enabled server (tolerant: one
+   * unreachable server must not hide the rest; its failure is already recorded on the
+   * cache/transport for the status snapshot).
+   */
+  const listRecords =
+    <R>(
+      family: "resources" | "prompts",
+      recordsOf: (caps: McpServerCapabilities) => readonly R[],
+    ) =>
+    (serverName?: string): Effect.Effect<readonly R[], ToolError> =>
+      Effect.suspend(() => {
+        const discovered = async (name: string): Promise<readonly R[]> => {
+          if (cache.capabilitiesFor(name) === undefined) {
+            await cache.refreshCapabilities(name);
+          }
+          const capabilities = cache.capabilitiesFor(name);
+          return capabilities ? recordsOf(capabilities) : [];
+        };
+        if (serverName !== undefined) {
+          const resolved = resolveServer(serverName, family);
+          if (resolved instanceof ToolInputError) {
+            return Effect.fail<ToolError>(resolved);
+          }
+          return Effect.tryPromise({
+            try: () => discovered(serverName),
+            catch: (cause) => classify(serverName, cause),
+          });
         }
-        return Effect.tryPromise({
-          try: () => discoveredResources(serverName),
-          catch: (cause) => classify(serverName, cause),
+        return Effect.promise(async () => {
+          const eligible = registry
+            .enabled()
+            .filter((config) => config.exposure[family])
+            .map((config) => config.name);
+          const listed = await Promise.all(
+            eligible.map((name) => discovered(name).catch((): readonly R[] => [])),
+          );
+          return listed.flat();
         });
-      }
-      // The every-server listing is tolerant: one unreachable server must not hide the rest;
-      // its failure is already recorded on the cache/transport for the status snapshot.
-      return Effect.promise(async () => {
-        const eligible = registry
-          .enabled()
-          .filter((config) => config.exposure.resources)
-          .map((config) => config.name);
-        const listed = await Promise.all(
-          eligible.map((name) => discoveredResources(name).catch(() => [])),
-        );
-        return listed.flat();
       });
+
+  const listResources = listRecords<McpResourceRecord>("resources", (caps) => caps.resources);
+  const listPrompts = listRecords<McpPromptRecord>("prompts", (caps) => caps.prompts);
+
+  const getPrompt = (
+    qualifiedName: string,
+    args?: Record<string, string>,
+  ): Effect.Effect<McpPromptArtifact, ToolError> =>
+    Effect.suspend(() => {
+      const resolved = resolveQualified(qualifiedName, "prompts");
+      if (resolved instanceof ToolInputError) {
+        return Effect.fail<ToolError>(resolved);
+      }
+      return Effect.tryPromise({
+        try: async () => {
+          const transport = transportOf(resolved.connection);
+          await transport.initialize();
+          // Argument substitution is server-side, per the MCP prompts/get spec.
+          return transport.request("prompts/get", {
+            name: resolved.name,
+            ...(args ? { arguments: args } : {}),
+          });
+        },
+        catch: (cause) => classify(qualifiedName, cause),
+      }).pipe(
+        Effect.map((raw) => {
+          const decoded = decodePromptMessages(raw);
+          const bounded = boundPromptMessages(decoded.messages);
+          return {
+            kind: "mcp_prompt" as const,
+            server: resolved.connection.config.name,
+            name: resolved.name,
+            qualifiedName,
+            ...(decoded.description !== undefined ? { description: decoded.description } : {}),
+            messages: bounded.messages,
+            truncated: bounded.truncated,
+          };
+        }),
+      );
     });
 
   const readResource = (
@@ -355,6 +476,8 @@ export function createMcpRuntime(
     callTool,
     listResources,
     readResource,
+    listPrompts,
+    getPrompt,
     capabilities: cache,
     statusSnapshot,
     close: () => {

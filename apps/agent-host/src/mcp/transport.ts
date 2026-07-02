@@ -53,6 +53,24 @@ export interface McpTransport {
   readonly state: () => McpTransportState;
 }
 
+/** The JSON-RPC answer to one server-originated request: a result or a structured error. */
+export type McpServerRequestOutcome =
+  | { readonly result: unknown }
+  | { readonly error: { readonly code: number; readonly message: string } };
+
+/**
+ * Answers a server-originated request (elicitation/create, sampling/createMessage) riding the
+ * connection mid-call (plan 23 M6). Both transports accept one of these in their options and
+ * send its outcome back as the JSON-RPC response; without a handler they answer
+ * method-not-found, exactly as before. The handler must never throw - the mediator
+ * (../mcp/mediation.ts) owns turning failures into structured errors - but a defensive
+ * internal-error response backs a rejection anyway.
+ */
+export type McpServerRequestHandler = (
+  method: string,
+  params: unknown,
+) => Promise<McpServerRequestOutcome>;
+
 /**
  * Decodes a raw initialize result into the negotiated {@link McpInitializeResult}, in the
  * outcome-union style of ./config's normalizeServer: an unsupported or missing

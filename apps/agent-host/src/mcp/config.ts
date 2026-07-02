@@ -39,6 +39,10 @@ export interface McpStdioServerConfig {
   readonly env: Readonly<Record<string, string>>;
   readonly exposure: McpExposure;
   readonly requestTimeoutMs: number;
+  /** Server-originated sampling (sampling/createMessage) opt-in. OFF unless the entry says
+   *  `"sampling": true`; the flag is only ever PRESENT (as `true`) when opted in, so the
+   *  default is structural - absent means denied (plan 23 M6). */
+  readonly sampling?: true;
 }
 
 export interface McpHttpServerConfig {
@@ -49,6 +53,8 @@ export interface McpHttpServerConfig {
   readonly auth?: McpAuthConfig;
   readonly exposure: McpExposure;
   readonly requestTimeoutMs: number;
+  /** Server-originated sampling opt-in; see McpStdioServerConfig.sampling. */
+  readonly sampling?: true;
 }
 
 export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
@@ -193,6 +199,9 @@ function normalizeServer(
   const enabled = typeof entry.enabled === "boolean" ? entry.enabled : true;
   const exposure = normalizeExposure(entry.exposure);
   const requestTimeoutMs = asPositiveInt(entry.requestTimeoutMs) ?? DEFAULT_MCP_REQUEST_TIMEOUT_MS;
+  // Sampling stays a structural opt-in: anything but a literal `true` (absent, false, junk)
+  // normalizes to an ABSENT flag, so a typo can never silently enable server-originated model calls.
+  const sampling = entry.sampling === true ? ({ sampling: true } as const) : {};
 
   if (entry.transport === "stdio") {
     const command = asNonEmptyString(entry.command);
@@ -215,6 +224,7 @@ function normalizeServer(
         env: stringRecord(entry.env),
         exposure,
         requestTimeoutMs,
+        ...sampling,
       },
     };
   }
@@ -240,6 +250,7 @@ function normalizeServer(
         ...(auth ? { auth } : {}),
         exposure,
         requestTimeoutMs,
+        ...sampling,
       },
     };
   }

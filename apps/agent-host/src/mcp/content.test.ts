@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { boundText, decodeResourceContents, decodeToolCallResult } from "./content";
+import {
+  boundPromptMessages,
+  boundText,
+  decodePromptMessages,
+  decodeResourceContents,
+  decodeToolCallResult,
+} from "./content";
 
 describe("decodeToolCallResult", () => {
   test("joins text blocks and reports no error", () => {
@@ -80,6 +86,70 @@ describe("decodeResourceContents", () => {
     expect(decodeResourceContents(undefined)).toEqual({ text: "" });
     expect(decodeResourceContents({ contents: "nope" })).toEqual({ text: "" });
     expect(decodeResourceContents({ contents: [null, 4] })).toEqual({ text: "" });
+  });
+});
+
+describe("decodePromptMessages", () => {
+  test("decodes description and role/text messages", () => {
+    const outcome = decodePromptMessages({
+      description: "a fixture prompt",
+      messages: [
+        { role: "user", content: { type: "text", text: "hello" } },
+        { role: "assistant", content: { type: "text", text: "hi back" } },
+      ],
+    });
+    expect(outcome).toEqual({
+      description: "a fixture prompt",
+      messages: [
+        { role: "user", text: "hello" },
+        { role: "assistant", text: "hi back" },
+      ],
+    });
+  });
+
+  test("describes non-text prompt content and tolerates malformed entries", () => {
+    const outcome = decodePromptMessages({
+      messages: [
+        { role: "user", content: { type: "image", mimeType: "image/png", data: "AAAA" } },
+        { content: { type: "text", text: "roleless" } },
+        null,
+      ],
+    });
+    expect(outcome.messages).toEqual([
+      { role: "user", text: "[image image/png]" },
+      { role: "user", text: "roleless" },
+    ]);
+    expect(outcome.description).toBeUndefined();
+  });
+
+  test("tolerates a malformed result", () => {
+    expect(decodePromptMessages(undefined)).toEqual({ messages: [] });
+    expect(decodePromptMessages({ messages: "nope" })).toEqual({ messages: [] });
+  });
+});
+
+describe("boundPromptMessages", () => {
+  test("keeps a small expansion intact", () => {
+    const bounded = boundPromptMessages([{ role: "user", text: "short" }], 100);
+    expect(bounded).toEqual({
+      messages: [{ role: "user", text: "short" }],
+      truncated: false,
+    });
+  });
+
+  test("bounds the TOTAL expansion across messages and drops the overflow", () => {
+    const bounded = boundPromptMessages(
+      [
+        { role: "user", text: "a".repeat(80) },
+        { role: "user", text: "b".repeat(80) },
+        { role: "user", text: "c".repeat(80) },
+      ],
+      100,
+    );
+    expect(bounded.truncated).toBe(true);
+    const total = bounded.messages.reduce((sum, message) => sum + message.text.length, 0);
+    expect(total).toBeLessThanOrEqual(100 + "\n…[truncated]".length);
+    expect(bounded.messages.length).toBeLessThan(3);
   });
 });
 

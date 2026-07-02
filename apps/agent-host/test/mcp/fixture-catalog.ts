@@ -132,6 +132,55 @@ export const FIXTURE_PROMPTS = [
  *  the host's MAX_OUTPUT (8000), so bounding is observable. */
 export const BIG_FIXTURE_CHARS = 20_000;
 
+/** Expands a FIXTURE_PROMPTS entry for prompts/get (M6): server-side argument substitution per
+ *  the MCP spec. Shared so the stdio and http fixtures expand identically. Returns undefined
+ *  for an unknown prompt (the fixture answers with a JSON-RPC error). */
+export function fixturePromptResult(
+  name: string | undefined,
+  args: Record<string, unknown> | undefined,
+): { description: string; messages: unknown[] } | undefined {
+  if (name === "summarize") {
+    return {
+      description: "summarize the given text",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Summarize the following text:\n${String(args?.text ?? "")}`,
+          },
+        },
+      ],
+    };
+  }
+  if (name === "greet") {
+    return {
+      description: "produce a fixture greeting",
+      messages: [
+        { role: "user", content: { type: "text", text: "Hello from the fixture prompt!" } },
+      ],
+    };
+  }
+  return undefined;
+}
+
+/** The elicitation request the probe tools send (M6); shared so assertions are fixture-agnostic. */
+export const FIXTURE_ELICITATION_PARAMS = {
+  message: "What is your favorite color?",
+  requestedSchema: {
+    type: "object",
+    properties: { color: { type: "string" } },
+    required: ["color"],
+  },
+} as const;
+
+/** The sampling request the probe tools send (M6). */
+export const FIXTURE_SAMPLING_PARAMS = {
+  messages: [{ role: "user", content: { type: "text", text: "please sample" } }],
+  systemPrompt: "you are a fixture",
+  maxTokens: 16,
+} as const;
+
 export interface FixtureResourceContents {
   readonly mimeType: string;
   readonly text?: string;

@@ -58,8 +58,10 @@ edge, replay dispatch, the command lane, and turn dispatch together.
   HTTP/SSE transport with session identity and redacted bearer auth, capability discovery +
   the per-server cache with qualified identity and capped search, and the host-lifetime
   runtime seam (`runtime.ts`): lazy per-server connections, qualified tool calls through the
-  host tool contract, resources as bounded provenance-carrying context records, and the
-  redacted per-server status snapshot.
+  host tool contract, resources as bounded provenance-carrying context records, prompts as
+  imported artifacts (never slash commands), host-owned mediation of server-originated
+  elicitation and budget-gated off-by-default sampling (`mediation.ts`), and the redacted
+  per-server status snapshot.
 - `skills/` - skill discovery and progressive disclosure behind the skills tools.
 - `subagents/` - subagent discovery (`discovery.ts`) for delegated agents.
 - `serial-run/` - the serialized multi-plan run lane.

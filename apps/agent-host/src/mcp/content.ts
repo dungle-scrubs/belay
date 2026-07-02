@@ -7,8 +7,8 @@ import { MAX_OUTPUT, TRUNCATION_NOTICE } from "@host/tools/shared";
  * size - never dumped, and everything that reaches the model is bounded by the host's normal
  * output norms (tools/shared.ts MAX_OUTPUT + truncation marker).
  *
- * Responsible for: decoding tools/call content blocks and resources/read contents to text,
- * and the shared boundText cap-with-flag helper.
+ * Responsible for: decoding tools/call content blocks, resources/read contents, and
+ * prompts/get messages to text, and the shared boundText / boundPromptMessages bounding.
  * Not for: execution, identity, or provenance - ./runtime owns those.
  */
 
@@ -74,6 +74,74 @@ export function decodeResourceContents(raw: unknown): McpResourceContentsOutcome
   }
 
   return { text: parts.join("\n"), ...(mimeType !== undefined ? { mimeType } : {}) };
+}
+
+export interface McpPromptMessage {
+  readonly role: string;
+  readonly text: string;
+}
+
+export interface McpPromptMessagesOutcome {
+  readonly description?: string;
+  readonly messages: readonly McpPromptMessage[];
+}
+
+/**
+ * Decodes a `prompts/get` result: the description plus each message's role and content text
+ * (non-text content described, per contentBlockText). A malformed message is dropped; a
+ * missing role defaults to "user". Unbounded; the caller bounds the expansion.
+ */
+export function decodePromptMessages(raw: unknown): McpPromptMessagesOutcome {
+  const record = asRecord(raw);
+  const entries = Array.isArray(record?.messages) ? record.messages : [];
+  const messages = entries.flatMap((entry): McpPromptMessage[] => {
+    const message = asRecord(entry);
+    if (!message) {
+      return [];
+    }
+    // The spec sends one content block per message; an array is tolerated and joined.
+    const text = Array.isArray(message.content)
+      ? message.content
+          .map(contentBlockText)
+          .filter((part) => part.length > 0)
+          .join("\n")
+      : contentBlockText(message.content);
+    return [{ role: typeof message.role === "string" ? message.role : "user", text }];
+  });
+  return {
+    ...(typeof record?.description === "string" ? { description: record.description } : {}),
+    messages,
+  };
+}
+
+export interface BoundedPromptMessages {
+  readonly messages: readonly McpPromptMessage[];
+  readonly truncated: boolean;
+}
+
+/**
+ * Bounds a prompt expansion by TOTAL text across messages: the message that crosses the
+ * budget is cut with the truncation marker and everything after it is dropped, so an
+ * imported prompt can never exceed the host's output norms however many messages it carries.
+ */
+export function boundPromptMessages(
+  messages: readonly McpPromptMessage[],
+  maxChars: number = MAX_OUTPUT,
+): BoundedPromptMessages {
+  const bounded: McpPromptMessage[] = [];
+  let used = 0;
+
+  for (const [index, message] of messages.entries()) {
+    const remaining = maxChars - used;
+    const cut = boundText(message.text, remaining);
+    bounded.push({ role: message.role, text: cut.text });
+    if (cut.truncated || (used + message.text.length >= maxChars && index < messages.length - 1)) {
+      return { messages: bounded, truncated: true };
+    }
+    used += message.text.length;
+  }
+
+  return { messages: bounded, truncated: false };
 }
 
 /** One content block to its text: real text passes through, everything else is described. */

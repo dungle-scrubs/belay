@@ -14,6 +14,7 @@ import {
   decodeInitializeResult,
   MCP_PROTOCOL_VERSION,
   type McpInitializeResult,
+  type McpServerRequestHandler,
   type McpTransport,
   type McpTransportState,
 } from "./transport";
@@ -37,6 +38,9 @@ import {
 
 export interface HttpTransportOptions {
   readonly clientInfo?: { readonly name: string; readonly version: string };
+  /** Answers server-originated requests riding a response stream (M6 mediation); absent
+   *  means method-not-found. The answer is POSTed back per the Streamable HTTP spec. */
+  readonly onServerRequest?: McpServerRequestHandler;
 }
 
 /** The pure request-header assembly: JSON body, dual accept, optional bearer/session/version. */
@@ -163,6 +167,30 @@ export function createHttpTransport(
     );
   };
 
+  /** Mediates one server-originated request off a response stream and POSTs the JSON-RPC
+   *  response back to the endpoint, per the Streamable HTTP spec (M6). Never throws. */
+  const answerServerRequest = async (
+    method: string,
+    params: unknown,
+    id: number | string,
+  ): Promise<void> => {
+    const handler = options.onServerRequest;
+    const outcome = handler
+      ? await handler(method, params).then(
+          (value) => value,
+          // The mediator answers structurally; this backstop covers a defect in it.
+          () => ({ error: { code: -32603, message: "host mediation failed internally" } }) as const,
+        )
+      : ({ error: { code: -32601, message: `method not supported: ${method}` } } as const);
+    const payload =
+      "result" in outcome
+        ? { jsonrpc: "2.0", id, result: outcome.result }
+        : { jsonrpc: "2.0", id, error: outcome.error };
+    // A JSON-RPC response has no reply of its own (the server answers 202 Accepted), so it
+    // rides the notification-shaped exchange; delivery failures already updated lastError.
+    await exchange(`${method} (response)`, payload, undefined).catch(() => {});
+  };
+
   /** Reads an SSE reply stream until the message correlated to `id` arrives. */
   const readSseReply = async (
     body: NonNullable<Response["body"]>,
@@ -178,8 +206,11 @@ export function createHttpTransport(
         if (reply) {
           return reply.value; // breaking out of for-await cancels the rest of the stream
         }
-        // Not our reply: server-initiated notifications/requests in the stream are ignored
-        // here; elicitation/sampling mediation are later milestones.
+        // Not our reply: a server-originated REQUEST mid-stream is mediated and answered
+        // (the stream then continues toward our reply); notifications are ignored.
+        if (typeof message.method === "string" && message.id !== undefined) {
+          await answerServerRequest(message.method, message.params, message.id as number | string);
+        }
       }
     }
     throw fail(

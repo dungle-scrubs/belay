@@ -13,6 +13,7 @@ import {
   decodeInitializeResult,
   MCP_PROTOCOL_VERSION,
   type McpInitializeResult,
+  type McpServerRequestHandler,
   type McpTransport,
   type McpTransportState,
 } from "./transport";
@@ -59,6 +60,8 @@ export interface StdioTransportOptions {
   readonly clientInfo?: { readonly name: string; readonly version: string };
   /** How long close() waits for a voluntary exit before SIGKILL. */
   readonly closeGraceMs?: number;
+  /** Answers server-originated requests (M6 mediation); absent means method-not-found. */
+  readonly onServerRequest?: McpServerRequestHandler;
 }
 
 interface PendingRequest {
@@ -171,14 +174,41 @@ export function spawnStdioTransport(
     }
 
     if (typeof message.method === "string") {
-      // A server-initiated request or notification. Elicitation/sampling mediation are later
-      // milestones; per JSON-RPC, answer requests (they carry an id) with method-not-found.
+      // A server-initiated request or notification. Requests (they carry an id) go to the
+      // injected mediation handler (M6); without one, method-not-found - per JSON-RPC.
       if (message.id !== undefined && !fate) {
-        send({
-          jsonrpc: "2.0",
-          id: message.id as number | string,
-          error: { code: -32601, message: `method not supported: ${message.method}` },
-        });
+        const id = message.id as number | string;
+        const method = message.method;
+        const handler = options.onServerRequest;
+        if (!handler) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            error: { code: -32601, message: `method not supported: ${method}` },
+          });
+          return;
+        }
+        void handler(method, message.params).then(
+          (outcome) => {
+            if (!fate) {
+              send(
+                "result" in outcome
+                  ? { jsonrpc: "2.0", id, result: outcome.result }
+                  : { jsonrpc: "2.0", id, error: outcome.error },
+              );
+            }
+          },
+          // The mediator answers structurally; this backstop covers a defect in it.
+          () => {
+            if (!fate) {
+              send({
+                jsonrpc: "2.0",
+                id,
+                error: { code: -32603, message: "host mediation failed internally" },
+              });
+            }
+          },
+        );
       }
       return;
     }

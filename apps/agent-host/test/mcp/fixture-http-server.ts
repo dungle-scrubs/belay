@@ -5,10 +5,13 @@ import {
   BIG_FIXTURE_CHARS,
   catalogPage,
   catalogToolsFor,
+  FIXTURE_ELICITATION_PARAMS,
   FIXTURE_PROMPTS,
   FIXTURE_RESOURCE_CONTENTS,
   FIXTURE_RESOURCES,
+  FIXTURE_SAMPLING_PARAMS,
   type FixtureCatalogMode,
+  fixturePromptResult,
 } from "./fixture-catalog";
 
 /**
@@ -30,6 +33,12 @@ import {
  *   hang       - never responds (for timeout tests)
  *   garbage    - responds with a non-JSON body (or a non-JSON SSE data event)
  *   sever      - destroys the socket mid-response (SSE mode: after headers + a comment event)
+ * M6 mediation probes (SSE mode only - a plain-JSON reply has no stream to carry a
+ * server-originated request): `elicit_probe` / `sampling_probe` open the response stream,
+ * emit an elicitation/create / sampling/createMessage REQUEST event, wait for the client to
+ * POST the JSON-RPC response back (answered 202 per the spec), then emit the original call's
+ * result carrying that response as JSON text. prompts/get expands the shared
+ * ./fixture-catalog prompts with argument substitution.
  * Options: `requireBearer` (401 without/with a wrong token), `protocolVersion` (forces the
  * initialize result's version, for negotiation tests), `catalog` (a ./fixture-catalog mode).
  */
@@ -71,6 +80,8 @@ interface JsonRpcIn {
     readonly uri?: string;
     readonly arguments?: Record<string, unknown>;
   };
+  readonly result?: unknown;
+  readonly error?: unknown;
 }
 
 export async function startFixtureHttpServer(
@@ -82,6 +93,9 @@ export async function startFixtureHttpServer(
   const sessions = new Set<string>();
   const recorded: RecordedFixtureRequest[] = [];
   let toolsListCalls = 0;
+  /** Server-originated requests awaiting the client's POSTed response, keyed by request id. */
+  const pendingServerRequests = new Map<string, (response: JsonRpcIn) => void>();
+  let serverRequestSeq = 0;
 
   const reply = (
     response: ServerResponse,
@@ -165,6 +179,42 @@ export async function startFixtureHttpServer(
       });
       return;
     }
+    if (name === "elicit_probe" || name === "sampling_probe") {
+      if (responseMode !== "sse") {
+        replyRpcError(
+          response,
+          message.id,
+          -32603,
+          `${name} needs the sse response mode (a plain-JSON reply has no stream for a server-originated request)`,
+        );
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write(": fixture stream open\n\n");
+      serverRequestSeq += 1;
+      const requestId = `srv-${serverRequestSeq}`;
+      pendingServerRequests.set(requestId, (clientResponse) => {
+        const observed = JSON.stringify({
+          ...(clientResponse.result !== undefined ? { result: clientResponse.result } : {}),
+          ...(clientResponse.error !== undefined ? { error: clientResponse.error } : {}),
+        });
+        const body = JSON.stringify({
+          jsonrpc: "2.0",
+          id: message.id,
+          result: { content: [{ type: "text", text: observed }] },
+        });
+        response.write(`event: message\ndata: ${body}\n\n`);
+        response.end();
+      });
+      const request = JSON.stringify({
+        jsonrpc: "2.0",
+        id: requestId,
+        method: name === "elicit_probe" ? "elicitation/create" : "sampling/createMessage",
+        params: name === "elicit_probe" ? FIXTURE_ELICITATION_PARAMS : FIXTURE_SAMPLING_PARAMS,
+      });
+      response.write(`event: message\ndata: ${request}\n\n`);
+      return;
+    }
     if (name === "boom") {
       replyRpcError(response, message.id, -32001, "boom tool always fails");
       return;
@@ -222,10 +272,13 @@ export async function startFixtureHttpServer(
       response.end(JSON.stringify({ error: "body is not JSON" }));
       return;
     }
-    recorded.push({
-      method: String(message.method),
-      ...(sessionHeader ? { sessionId: sessionHeader } : {}),
-    });
+    if (message.method !== undefined) {
+      // JSON-RPC responses (M6 mediation) are not requests; only real methods are recorded.
+      recorded.push({
+        method: message.method,
+        ...(sessionHeader ? { sessionId: sessionHeader } : {}),
+      });
+    }
 
     if (message.method === "initialize") {
       const sessionId = randomUUID();
@@ -258,7 +311,20 @@ export async function startFixtureHttpServer(
       return;
     }
 
-    if (message.method?.startsWith("notifications/")) {
+    if (message.method === undefined) {
+      // A JSON-RPC RESPONSE POSTed back for one of our server-originated requests (M6):
+      // acknowledge with 202 per the Streamable HTTP spec and complete the waiting call.
+      const pending =
+        message.id === undefined ? undefined : pendingServerRequests.get(String(message.id));
+      response.writeHead(pending ? 202 : 400);
+      response.end();
+      if (pending) {
+        pendingServerRequests.delete(String(message.id));
+        pending(message);
+      }
+      return;
+    }
+    if (message.method.startsWith("notifications/")) {
       response.writeHead(202);
       response.end();
       return;
@@ -285,6 +351,20 @@ export async function startFixtureHttpServer(
     if (message.method === "prompts/list") {
       const { page, nextCursor } = catalogPage(FIXTURE_PROMPTS, message.params?.cursor);
       replyResult(response, message.id, { prompts: page, ...(nextCursor ? { nextCursor } : {}) });
+      return;
+    }
+    if (message.method === "prompts/get") {
+      const expanded = fixturePromptResult(message.params?.name, message.params?.arguments);
+      if (!expanded) {
+        replyRpcError(
+          response,
+          message.id,
+          -32602,
+          `unknown prompt ${String(message.params?.name)}`,
+        );
+        return;
+      }
+      replyResult(response, message.id, expanded);
       return;
     }
     if (message.method === "resources/read") {

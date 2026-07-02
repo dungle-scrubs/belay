@@ -141,6 +141,23 @@ describe("normalizeMcpServersConfig - flags and knobs", () => {
     expect(servers[1]?.exposure).toEqual({ tools: true, resources: false, prompts: true });
   });
 
+  test("sampling is OFF unless the entry explicitly opts in with a boolean true", () => {
+    const { servers } = normalizeMcpServersConfig({
+      servers: {
+        silent: httpEntry,
+        opted: { ...httpEntry, sampling: true },
+        explicit_off: { ...httpEntry, sampling: false },
+        junk: { ...httpEntry, sampling: "yes" },
+      },
+    });
+    expect(servers.map((server) => [server.name, server.sampling === true])).toEqual([
+      ["silent", false],
+      ["opted", true],
+      ["explicit_off", false],
+      ["junk", false],
+    ]);
+  });
+
   test("requestTimeoutMs accepts a positive integer and defaults anything else", () => {
     const { servers } = normalizeMcpServersConfig({
       servers: {
