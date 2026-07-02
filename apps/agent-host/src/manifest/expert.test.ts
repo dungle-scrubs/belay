@@ -1,7 +1,7 @@
+import { resolveInterpolationConfig } from "@host/commands/interpolation";
 import type { CapabilityManifest, ManifestScope, ManifestSection } from "@trevor/session";
 import { MANIFEST_VERSION } from "@trevor/session";
 import { describe, expect, it } from "vitest";
-import { resolveInterpolationConfig } from "../interpolation";
 import {
   answerExpertQuery,
   MAX_EXPERT_SECTIONS,

@@ -1,9 +1,14 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseFrontmatter, sortedVisibleEntries, strList, trimStr } from "./manifest-discovery";
-import { discoverSkills } from "./skills";
-import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
+import {
+  parseFrontmatter,
+  sortedVisibleEntries,
+  strList,
+  trimStr,
+} from "@host/boot/manifest-discovery";
+import { discoverSkills } from "@host/skills/skills";
+import { READ_ONLY_TOOLS, TOOL_DEFS } from "@host/tools/index";
 
 /**
  * Subagent discovery + allow-list resolution (D-045…D-049), modeled on skills.ts.

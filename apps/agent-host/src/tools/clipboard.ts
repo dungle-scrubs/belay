@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { platform } from "node:os";
+import { msg } from "@host/transport/messages";
 import { Schema } from "effect";
-import { msg } from "../messages";
 import { simpleTool, toolExecution } from "./shared";
 import type { Tool } from "./types";
 

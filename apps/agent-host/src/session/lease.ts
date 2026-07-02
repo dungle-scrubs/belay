@@ -23,8 +23,8 @@
  * Date.now(); no internal clock, so the state machine is unit-testable.
  */
 
+import { debug } from "@host/transport/log";
 import type { HostRole } from "@trevor/session";
-import { debug } from "./log";
 
 /** Lease roles: the wire-visible `HostRole` (leader/standby) plus the private "probing"
  *  start state the lease occupies before it has claimed or deferred. */

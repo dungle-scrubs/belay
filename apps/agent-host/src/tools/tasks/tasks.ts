@@ -1,11 +1,11 @@
-import { type TaskSnapshot, type TaskStatus, taskSnapshotReplaces } from "@trevor/session";
-import { Effect, Schema } from "effect";
-import { msg } from "./messages";
 // Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildTaskTools()` at top
 // level, so importing the barrel here would be a fatal initialization cycle (the barrel re-exports
 // these same names for external consumers).
-import { ToolExecutionError } from "./tools/errors";
-import type { Tool } from "./tools/types";
+import { ToolExecutionError } from "@host/tools/errors";
+import type { Tool } from "@host/tools/types";
+import { msg } from "@host/transport/messages";
+import { type TaskSnapshot, type TaskStatus, taskSnapshotReplaces } from "@trevor/session";
+import { Effect, Schema } from "effect";
 
 /**
  * The agent's working checklist (the V2 port of the V1 task ledger, H-023). The

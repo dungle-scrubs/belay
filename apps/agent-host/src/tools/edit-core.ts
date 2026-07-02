@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { contextRegistry } from "../context/registry";
-import { msg } from "../messages";
-import { confine, WORKSPACE_ROOT } from "../paths";
+import { confine, WORKSPACE_ROOT } from "@host/boot/paths";
+import { contextRegistry } from "@host/project-context/registry";
+import { msg } from "@host/transport/messages";
 import { applyUniqueReplacement, replaceMissMessage } from "./replace";
 
 /** A file read + edited in memory but not yet written: where it lives and its new content. */

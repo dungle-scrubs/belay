@@ -1,11 +1,11 @@
+import { warn } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import type {
   SessionEvent,
   SessionIdentity,
   SessionSummary,
   SessionTransport,
 } from "@trevor/session";
-import { warn } from "../../log";
-import { msg } from "../../messages";
 import { engineDiagnostic, type SiblingRead, type SiblingSession } from "./engine";
 import type { RecallDiagnostic, RecallSessionRef } from "./types";
 

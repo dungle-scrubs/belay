@@ -1,4 +1,7 @@
 import { basename } from "node:path";
+import type { OutputStyle } from "@host/prefs/styles";
+import type { SkillEntry } from "@host/skills/skills";
+import type { AgentDescriptor } from "@host/subagents/discovery";
 import {
   buildManifest,
   type CapabilityManifest,
@@ -8,10 +11,7 @@ import {
   type ManifestScope,
   type SectionProvider,
 } from "@trevor/session";
-import type { AgentDescriptor } from "../agents";
 import type { CatalogSnapshot } from "../providers/catalog";
-import type { SkillEntry } from "../skills";
-import type { OutputStyle } from "../style/styles";
 import {
   agentsSection,
   commandFamiliesSection,

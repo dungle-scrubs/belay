@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { WORKSPACE_ROOT } from "../../src/paths";
 import { executeTool } from "../../src/tools/index";
 
 /**

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { publishTurn } from "@host/agent/turn";
 import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import { createSwitchCell } from "../src/agent/switch-cell";
 import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
-import { publishTurn } from "../src/turn";
 import { collectingEmit } from "./support/fake-provider";
 
 /**

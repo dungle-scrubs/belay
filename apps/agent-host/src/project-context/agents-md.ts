@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { USER_AGENTS_MD } from "../paths";
+import { USER_AGENTS_MD } from "@host/boot/paths";
 
 /**
  * Nested AGENTS.md context loading (D-080), using Claude Code's loading model: eager up-tree from the

@@ -1,5 +1,5 @@
-import { loadJsonConfig, writeJsonConfig } from "../config-file";
-import { USER_STYLE_JSON } from "../paths";
+import { loadJsonConfig, writeJsonConfig } from "@host/boot/config";
+import { USER_STYLE_JSON } from "@host/boot/paths";
 import { DEFAULT_STYLE_ID, findStyle, resolveStyle } from "./styles";
 
 /**

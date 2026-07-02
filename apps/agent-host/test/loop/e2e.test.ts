@@ -1,5 +1,5 @@
+import { buildCommandRegistry, type CommandContext } from "@host/commands/commands";
 import { describe, expect, it } from "vitest";
-import { buildCommandRegistry, type CommandContext } from "../../src/commands";
 import type { LoopIterationRunner } from "../../src/loop/runner";
 import { LoopStore } from "../../src/loop/store";
 

@@ -1,7 +1,6 @@
 import { basename } from "node:path";
 import type { WorktreeSummary } from "@trevor/session";
 import { projectSessionId } from "@trevor/session";
-import type { GitRunner } from "../git-status";
 import {
   addWorktree,
   diffStat,
@@ -13,6 +12,7 @@ import {
   removeWorktree,
   worktreeGitState,
 } from "./git";
+import type { GitRunner } from "./git-status";
 import {
   loadWorktrees,
   removeWorktreeRecord,

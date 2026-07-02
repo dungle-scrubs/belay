@@ -7,7 +7,7 @@
  * the tool result/session event, never in a debug log.
  */
 
-import { log } from "../../log";
+import { log } from "@host/transport/log";
 import type { FetchAttempt, FetchBackend } from "./envelope";
 
 const SCOPE = "web_fetch";

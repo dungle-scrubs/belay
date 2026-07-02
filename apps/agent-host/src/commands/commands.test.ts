@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { buildSkillCommand } from "@host/skills/skills";
 import { test } from "vitest";
 import { buildCommandRegistry, type CommandContext } from "./commands";
-import { buildSkillCommand } from "./skills";
 
 /**
  * The /compact command (Phase 3 / D-040): the immediate command lane triggers the host's

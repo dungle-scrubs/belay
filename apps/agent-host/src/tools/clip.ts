@@ -1,6 +1,6 @@
-import { msg } from "./messages";
-import type { ChatMessage } from "./providers";
-import type { ClipboardWriter } from "./tools/clipboard";
+import type { ChatMessage } from "@host/providers/index";
+import { msg } from "@host/transport/messages";
+import type { ClipboardWriter } from "./clipboard";
 
 /**
  * The clipboard convenience surface behind `/clip` (plan 06): the immediate bare-`/clip` copy of

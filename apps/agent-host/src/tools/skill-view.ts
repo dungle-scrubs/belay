@@ -1,5 +1,5 @@
+import { expandSkill, type SkillEntry, skillRegistry } from "@host/skills/skills";
 import { Schema } from "effect";
-import { expandSkill, type SkillEntry, skillRegistry } from "../skills";
 import { simpleTool, toolInput } from "./shared";
 
 /**

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { formatSkillsList } from "@host/tools/skills-list";
 import { afterEach, test } from "vitest";
 import { buildSkillRegistry, type SkillRoot } from "./skills";
-import { formatSkillsList } from "./tools/skills-list";
 
 /**
  * D-075 M1/M3: the skill REGISTRY (every entry tagged available/shadowed/disabled/malformed +

@@ -1,5 +1,9 @@
+import {
+  countRestartResumes,
+  type ResumeInputs,
+  type ResumeMarker,
+} from "@host/session/session-lifecycle";
 import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
-import { countRestartResumes, type ResumeInputs, type ResumeMarker } from "../session-lifecycle";
 
 /**
  * The durable-log projection the auto-resume path reads. The trailing-turn state, the last user

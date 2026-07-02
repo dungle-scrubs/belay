@@ -1,5 +1,5 @@
-import { loadJsonConfig, writeJsonConfig } from "../config-file";
-import { USER_VIM_JSON } from "../paths";
+import { loadJsonConfig, writeJsonConfig } from "@host/boot/config";
+import { USER_VIM_JSON } from "@host/boot/paths";
 
 /**
  * The Vim-mode prompt preference store (plan 06). Whether the opt-in Vim motions are enabled persists as

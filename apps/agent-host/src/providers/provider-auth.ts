@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { msg } from "@host/transport/messages";
 import type { SourceSignInState } from "@trevor/session";
-import { msg } from "../messages";
 import { ProviderAuthError } from "./errors";
 
 export const AUTH_PATH = `${homedir()}/.pi/auth.json`;

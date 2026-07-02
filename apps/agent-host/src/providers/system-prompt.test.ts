@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isWorkspaceConfined, WORKSPACE_CONFINED_TOOLS } from "@host/boot/paths";
+import { contextRegistry } from "@host/project-context/registry";
 import { test } from "vitest";
-import { contextRegistry } from "../context/registry";
-import { isWorkspaceConfined, WORKSPACE_CONFINED_TOOLS } from "../paths";
 import { buildSystemPrompt, SystemPromptBuilder, systemPromptBuilder } from "./system-prompt";
 
 /**

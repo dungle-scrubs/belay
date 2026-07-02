@@ -1,17 +1,17 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
-import type { Command } from "./commands";
-import { parseFrontmatter, sortedVisibleEntries, trimStr } from "./manifest-discovery";
-import { WORKSPACE_ROOT } from "./paths";
+import { parseFrontmatter, sortedVisibleEntries, trimStr } from "@host/boot/manifest-discovery";
+import { WORKSPACE_ROOT } from "@host/boot/paths";
+import type { Command } from "@host/commands/commands";
 // Leaf imports, not the `./tools` barrel: the barrel's TOOLS array calls `buildSkillTool`/
 // `discoverSkills` at top level, so importing the barrel here would be a fatal initialization cycle
 // (the barrel re-exports these same names for external consumers).
-import { ToolInputError } from "./tools/errors";
-import { runCommand } from "./tools/run-shell";
-import { cap } from "./tools/shared";
-import type { Tool } from "./tools/types";
+import { ToolInputError } from "@host/tools/errors";
+import { runCommand } from "@host/tools/run-shell";
+import { cap } from "@host/tools/shared";
+import type { Tool } from "@host/tools/types";
+import { Effect, Schema } from "effect";
 
 /**
  * Skill discovery + progressive disclosure.

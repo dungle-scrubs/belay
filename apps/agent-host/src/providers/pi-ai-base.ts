@@ -4,8 +4,8 @@ import {
   type Model,
   type ThinkingLevel,
 } from "@earendil-works/pi-ai/compat";
+import { msg } from "@host/transport/messages";
 import { Effect, Stream } from "effect";
-import { msg } from "../messages";
 import { ProviderAuthError } from "./errors";
 import { resolveContextWindow } from "./model-metadata-overrides";
 import { streamPiAiModel } from "./pi-ai";

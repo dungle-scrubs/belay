@@ -1,7 +1,7 @@
+import { CHARS_PER_TOKEN } from "@host/metrics/breakdown";
 import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@trevor/session";
 import { Effect } from "effect";
 import type { ChatMessage, Provider, ProviderError } from "../providers";
-import { CHARS_PER_TOKEN } from "../usage/breakdown";
 import { CompactionPlanner, type FoldPlan, SUMMARY_TOKEN_BUDGET } from "./compaction-planner";
 import { distillToBudget } from "./tool-less-summary";
 

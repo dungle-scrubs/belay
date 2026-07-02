@@ -1,3 +1,4 @@
+import type { Command } from "@host/commands/commands";
 import {
   isManifestSectionId,
   isPromptScope,
@@ -7,7 +8,6 @@ import {
   type ManifestSectionId,
   renderManifestExport,
 } from "@trevor/session";
-import type { Command } from "../commands";
 import { currentManifest } from "./source";
 
 /**

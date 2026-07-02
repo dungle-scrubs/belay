@@ -1,13 +1,13 @@
+import { discoverSkills } from "@host/skills/skills";
+import type { AgentDefinition } from "@host/subagents/discovery";
+import { resolveAgentTools } from "@host/subagents/discovery";
+import { Emit } from "@host/transport/services";
 import { events, type SessionTransport, type TrevorEventInput } from "@trevor/session";
 import { Effect, Layer } from "effect";
-import type { AgentDefinition } from "../agents";
-import { resolveAgentTools } from "../agents";
 import type { ChatMessage, Provider, ToolDef } from "../providers";
-import { Emit } from "../services";
-import { discoverSkills } from "../skills";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
-import { publishTurn } from "../turn";
 import type { DelegateCapability } from "./loop";
+import { publishTurn } from "./turn";
 
 /**
  * The subagent delegation MECHANISM (D-046/D-047): run a delegated agent in its OWN isolated child

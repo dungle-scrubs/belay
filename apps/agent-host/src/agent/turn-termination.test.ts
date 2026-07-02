@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
 import {
   type CompletionOutcome,
   countRestartResumes,
@@ -7,7 +6,8 @@ import {
   type ResumeInputs,
   resumeAfterStop,
   terminationReason,
-} from "./session-lifecycle";
+} from "@host/session/session-lifecycle";
+import { test } from "vitest";
 
 /** A clean answered completion; each test overrides only the flag under test. */
 const answered: CompletionOutcome = {

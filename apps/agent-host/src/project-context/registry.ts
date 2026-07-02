@@ -1,5 +1,5 @@
 import { dirname, resolve, sep } from "node:path";
-import { WORKSPACE_ROOT } from "../paths";
+import { WORKSPACE_ROOT } from "@host/boot/paths";
 import {
   AGENTS_FILE,
   type ContextReport,

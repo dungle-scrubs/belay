@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { ProcessError, ToolInputError } from "@host/tools/errors";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { ProcessSupervisor } from "./processes";
-import { ProcessError, ToolInputError } from "./tools/errors";
 
 /**
  * Characterization tests for the `process` tool now that the supervisor owns its own

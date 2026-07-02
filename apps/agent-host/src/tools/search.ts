@@ -1,5 +1,5 @@
 import { glob } from "node:fs/promises";
-import { WORKSPACE_ROOT } from "../paths";
+import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { SKIP_DIRS } from "./shared";
 
 /**

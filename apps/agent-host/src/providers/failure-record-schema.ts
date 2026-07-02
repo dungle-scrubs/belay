@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Fields } from "../log";
+import type { Fields } from "@host/transport/log";
 import type { ProviderFailureEvidence } from "./errors";
 import type { ProviderFailureClass, ProviderUserAction } from "./failure-taxonomy";
 import { redactSecrets } from "./failure-taxonomy";

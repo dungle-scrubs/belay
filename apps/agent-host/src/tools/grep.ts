@@ -1,6 +1,6 @@
+import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { rgPath } from "@vscode/ripgrep";
 import { Schema } from "effect";
-import { WORKSPACE_ROOT } from "../paths";
 import { firstLine, runSearchProcess } from "./search-process";
 import { simpleTool, toolExecution, toolInput } from "./shared";
 

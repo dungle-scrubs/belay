@@ -1,8 +1,8 @@
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
+import { debug } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import type { SourceType } from "@trevor/session";
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
-import { debug } from "../log";
-import { msg } from "../messages";
 import { type LmStudioModelRecord, parseLmStudioModelList } from "./lmstudio-native";
 
 /** The LM Studio OpenAI-compatible base URL, read at CALL time (not a module constant) so

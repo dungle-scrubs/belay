@@ -10,9 +10,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { processAlive } from "@host/processes/process-liveness";
 import { idSlug } from "@trevor/session";
 import { storagePathByName } from "@trevor/session/node-paths";
-import { processAlive } from "../process-liveness";
 import {
   type AdmissionAcquireOutcome,
   type AdmissionEstimate,

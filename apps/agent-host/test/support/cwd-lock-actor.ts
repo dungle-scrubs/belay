@@ -4,7 +4,7 @@ import {
   nodeCwdLockCaps,
   refreshCwdLock,
   releaseCwdLock,
-} from "../../src/cwd-lock";
+} from "@host/session/cwd-lock";
 
 /**
  * A standalone cwd-lock actor for the cross-process smoke (plan 01, M3). It runs the EXACT host lock

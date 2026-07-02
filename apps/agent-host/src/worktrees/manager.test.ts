@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { projectSessionId } from "@trevor/session";
 import { test } from "vitest";
-import type { GitRunner } from "../git-status";
+import type { GitRunner } from "./git-status";
 import { WorktreeManager, type WorktreeManagerDeps } from "./manager";
 import { loadWorktrees, type WorktreeFs } from "./registry";
 

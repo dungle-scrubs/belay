@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
+import { supervisor } from "@host/processes/processes";
+import { buildSkillTool } from "@host/skills/skills";
+import { buildTaskTools } from "@host/tools/tasks/tasks";
 import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { test } from "vitest";
-import { supervisor } from "../processes";
-import { buildSkillTool } from "../skills";
-import { buildTaskTools } from "../tasks";
 import { buildToolScriptTool } from "../tool-script/tool";
 import { archiveReadTool, archiveUnpackTool } from "./archive/tool";
 import { askUserTool } from "./ask-user";

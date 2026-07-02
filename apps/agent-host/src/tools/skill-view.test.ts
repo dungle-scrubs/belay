@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildSkillRegistry, type SkillRoot } from "@host/skills/skills";
 import { afterEach, test } from "vitest";
-import { buildSkillRegistry, type SkillRoot } from "../skills";
 import { resolveSkillView } from "./skill-view";
 
 /**

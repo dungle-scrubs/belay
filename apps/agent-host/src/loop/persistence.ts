@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { TREVOR_STATE_HOME } from "../paths";
+import { TREVOR_STATE_HOME } from "@host/boot/paths";
 import type { LoopState } from "./domain";
 
 /**

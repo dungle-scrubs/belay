@@ -1,4 +1,4 @@
-import { asPositiveInt } from "../coerce";
+import { asPositiveInt } from "@host/boot/coerce";
 
 /**
  * The LM Studio native `/api/v0` model-record shape + its tolerant parser - the ONE place `/api/v0`

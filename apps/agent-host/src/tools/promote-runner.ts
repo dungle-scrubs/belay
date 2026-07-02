@@ -1,4 +1,4 @@
-import type { JobOrigin, ProcessRegistry } from "../process-registry";
+import type { JobOrigin, ProcessRegistry } from "@host/processes/process-registry";
 import { classifyAlwaysPreventedBashCommand } from "./bash-safety";
 import { type CommandOutcome, decidePromotion, type PromotionDecision } from "./promote-policy";
 import { cap, combineStreams } from "./shared";

@@ -1,8 +1,8 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Model } from "@earendil-works/pi-ai/compat";
-import { debug, log, warn } from "../log";
-import { msg } from "../messages";
+import { debug, log, warn } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import type { ResidencyRecorder } from "../residency/registry";
 import { ModelLoadError, ProviderUnavailable } from "./errors";
 import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";

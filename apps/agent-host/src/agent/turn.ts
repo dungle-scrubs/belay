@@ -1,3 +1,26 @@
+import type { AdmissionPriority } from "@host/admission/contract";
+import {
+  AdmissionTurnRef,
+  type AdmissionTurnReporter,
+  admissionStatusEvent,
+} from "@host/admission/turn-ref";
+import { BreakdownAccumulator, logUsageBreakdown } from "@host/metrics/breakdown";
+import {
+  type ChatMessage,
+  type Provider,
+  ProviderUnavailable,
+  providerFailureEvidence,
+  type Usage,
+} from "@host/providers/index";
+import { providerFailures } from "@host/providers/provider-failure-log";
+import { providerIncidents } from "@host/providers/provider-incidents";
+import { buildSystemPrompt, promptOverheadChars } from "@host/providers/system-prompt";
+import { spanEffect } from "@host/telemetry/span";
+import { offeredToolDefs } from "@host/tools/index";
+import { MAX_OUTPUT } from "@host/tools/shared";
+import { DeltaBuffer } from "@host/transport/delta-buffer";
+import { debug } from "@host/transport/log";
+import { Emit } from "@host/transport/services";
 import { events, type ModelRef, type ProviderDiagnostic, type TurnStop } from "@trevor/session";
 import {
   METRIC_NAMES,
@@ -8,39 +31,11 @@ import {
 } from "@trevor/session/telemetry";
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, FiberRef, Option, Stream } from "effect";
-import type { AdmissionPriority } from "./admission/contract";
-import {
-  AdmissionTurnRef,
-  type AdmissionTurnReporter,
-  admissionStatusEvent,
-} from "./admission/turn-ref";
-import {
-  type AgentEvent,
-  type DelegateCapability,
-  runAgent,
-  type TurnLoopConfig,
-} from "./agent/loop";
-import type { SwitchCell } from "./agent/switch-cell";
-import { recordTurnStop } from "./agent/turn-stop-metrics";
-import type { HistoryImageResolver } from "./artifacts";
-import { DeltaBuffer } from "./delta-buffer";
-import { debug } from "./log";
-import {
-  type ChatMessage,
-  type Provider,
-  ProviderUnavailable,
-  providerFailureEvidence,
-  type Usage,
-} from "./providers";
-import { providerFailures } from "./providers/provider-failure-log";
-import { providerIncidents } from "./providers/provider-incidents";
-import { buildSystemPrompt, promptOverheadChars } from "./providers/system-prompt";
-import { Emit } from "./services";
-import { spanEffect } from "./telemetry/span";
-import { offeredToolDefs } from "./tools";
-import { MAX_OUTPUT } from "./tools/shared";
+import type { HistoryImageResolver } from "./image-resolution";
+import { type AgentEvent, type DelegateCapability, runAgent, type TurnLoopConfig } from "./loop";
+import type { SwitchCell } from "./switch-cell";
 import { prepareTurn } from "./turn-preflight";
-import { BreakdownAccumulator, logUsageBreakdown } from "./usage/breakdown";
+import { recordTurnStop } from "./turn-stop-metrics";
 
 /**
  * Runs the agent loop for one turn as an Effect and publishes its lifecycle through the

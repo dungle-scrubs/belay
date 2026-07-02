@@ -1,8 +1,8 @@
+import { envNumber } from "@host/boot/env";
+import type { ChatMessage, Provider } from "@host/providers/index";
+import type { ModelCapabilities } from "@host/providers/types";
 import { Effect } from "effect";
-import { type HistoryImageResolver, resolveHistoryImages } from "./artifacts";
-import { envNumber } from "./env";
-import type { ChatMessage, Provider } from "./providers";
-import type { ModelCapabilities } from "./providers/types";
+import { type HistoryImageResolver, resolveHistoryImages } from "./image-resolution";
 
 const MIN_CONTEXT_TOKENS = envNumber("TREVOR_MIN_CONTEXT", 16_384);
 

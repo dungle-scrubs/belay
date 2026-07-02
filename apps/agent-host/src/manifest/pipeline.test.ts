@@ -1,6 +1,6 @@
+import type { SkillEntry } from "@host/skills/skills";
 import { renderManifestExport } from "@trevor/session";
 import { describe, expect, it } from "vitest";
-import type { SkillEntry } from "../skills";
 import { assembleManifest, type ManifestDeps } from "./build";
 import { answerExpertQuery } from "./expert";
 import { currentManifest, registerManifestSource } from "./source";

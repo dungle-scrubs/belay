@@ -1,10 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { classifyAlwaysPreventedBashCommand } from "@host/tools/bash-safety";
+import { ProcessError, ToolExecutionError, ToolInputError } from "@host/tools/errors";
+import { combineStreams } from "@host/tools/shared";
+import { invariant } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import type { JobLifecycle, JobSource } from "@trevor/session";
-import { invariant } from "./log";
-import { msg } from "./messages";
-import { classifyAlwaysPreventedBashCommand } from "./tools/bash-safety";
-import { ProcessError, ToolExecutionError, ToolInputError } from "./tools/errors";
-import { combineStreams } from "./tools/shared";
 
 const RING_LIMIT = 64 * 1024;
 /** How much combined output tail a job snapshot carries for the detail takeover (host.online is announced

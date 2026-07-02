@@ -1,7 +1,7 @@
-import { asPositiveInt } from "../coerce";
-import { loadJsonConfig } from "../config-file";
-import { envNumber } from "../env";
-import { USER_ADMISSION_JSON } from "../paths";
+import { asPositiveInt } from "@host/boot/coerce";
+import { loadJsonConfig } from "@host/boot/config";
+import { envNumber } from "@host/boot/env";
+import { USER_ADMISSION_JSON } from "@host/boot/paths";
 import { ADMISSION_DEFAULT_CAPACITY, ADMISSION_STALE_MS } from "./store";
 
 /**

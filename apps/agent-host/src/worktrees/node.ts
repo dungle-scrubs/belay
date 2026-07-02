@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { nodeGitRunner } from "../git-status";
-import { TREVOR_STATE_HOME } from "../paths";
+import { TREVOR_STATE_HOME } from "@host/boot/paths";
+import { nodeGitRunner } from "./git-status";
 import { WorktreeManager } from "./manager";
 import type { WorktreeFs } from "./registry";
 

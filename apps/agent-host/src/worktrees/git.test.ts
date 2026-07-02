@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { GitRunner } from "../git-status";
 import { addWorktree, hasConflict, mainWorktreeRoot, mergeBranch, removeWorktree } from "./git";
+import type { GitRunner } from "./git-status";
 
 function fakeGit(fixtures: Record<string, { status: number; stdout: string }>): GitRunner {
   return (args) => fixtures[args.join(" ")] ?? { status: 1, stdout: "" };

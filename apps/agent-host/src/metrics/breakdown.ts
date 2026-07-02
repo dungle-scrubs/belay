@@ -1,3 +1,4 @@
+import { log } from "@host/transport/log";
 import {
   BREAKDOWN_CATEGORIES,
   type BreakdownPool,
@@ -5,7 +6,6 @@ import {
   estimateTokens,
   type UsageBreakdown,
 } from "@trevor/session";
-import { log } from "../log";
 import type { ChatMessage, Usage } from "../providers";
 
 // Re-exported from the canonical owner in @trevor/session so host modules keep importing the

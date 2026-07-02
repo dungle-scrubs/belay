@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, test } from "vitest";
-import type { AgentDefinition } from "./agents";
+import type { AgentDefinition } from "./discovery";
 
 /**
  * Subagent discovery + allow-list resolution (M1 / D-045). TREVOR_AGENTS_DIR points at a temp
@@ -38,7 +38,7 @@ const prev = process.env.TREVOR_AGENTS_DIR;
 process.env.TREVOR_AGENTS_DIR = dir;
 
 const { discoverAgents, resolveAgentTools, resolveAgentSkills, describeAgent } = await import(
-  "./agents"
+  "./discovery"
 );
 
 afterAll(() => {

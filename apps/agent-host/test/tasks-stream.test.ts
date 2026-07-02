@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { buildTaskTools, TaskRegistry } from "@host/tools/tasks/tasks";
 import {
   decodeTrevorEvent,
   events,
@@ -9,7 +10,6 @@ import {
 import { storedEvent } from "@trevor/test-kit";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { buildTaskTools, TaskRegistry } from "../src/tasks";
 
 /**
  * The task checklist end to end through the host's stream wiring (plan 09 M8): the real task_create /

@@ -1,8 +1,8 @@
-import type { ContextRegistry } from "../context/registry";
-import { contextRegistry } from "../context/registry";
-import { HOST_CWD_TOOLS, WORKSPACE_CONFINED_TOOLS, WORKSPACE_ROOT } from "../paths";
-import type { TaskRegistry } from "../tasks";
-import { taskRegistry } from "../tasks";
+import { HOST_CWD_TOOLS, WORKSPACE_CONFINED_TOOLS, WORKSPACE_ROOT } from "@host/boot/paths";
+import type { ContextRegistry } from "@host/project-context/registry";
+import { contextRegistry } from "@host/project-context/registry";
+import type { TaskRegistry } from "@host/tools/tasks/tasks";
+import { taskRegistry } from "@host/tools/tasks/tasks";
 import type { ToolDef } from "./types";
 
 /**

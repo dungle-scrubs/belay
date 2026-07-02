@@ -1,6 +1,6 @@
+import { warn } from "@host/transport/log";
 import type { SessionEvent } from "@trevor/session";
 import { Effect } from "effect";
-import { warn } from "../../log";
 import type { Provider } from "../../providers";
 import { assembleCorpus, type SessionInput } from "./corpus";
 import { distillRecall } from "./distill";

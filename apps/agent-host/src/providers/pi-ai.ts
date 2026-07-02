@@ -6,6 +6,9 @@ import {
   type ThinkingLevel,
   type TSchema,
 } from "@earendil-works/pi-ai/compat";
+import { activeStyleGuidance } from "@host/prefs/style-store";
+import { debug } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import {
   type PastePayload,
   parseImageTokens,
@@ -13,9 +16,6 @@ import {
   stripImageTokens,
 } from "@trevor/session";
 import { Effect, Stream } from "effect";
-import { debug } from "../log";
-import { msg } from "../messages";
-import { activeStyleGuidance } from "../style/style-store";
 import {
   classifyResponseOverflow,
   isAuthFailure,

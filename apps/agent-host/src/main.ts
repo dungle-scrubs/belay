@@ -1,5 +1,55 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { publishTurn } from "@host/agent/turn";
+import { envNumber } from "@host/boot/env";
+import { abbrevHome, TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { ensureSessionWithRetry } from "@host/boot/startup";
+import { buildCommandRegistry } from "@host/commands/commands";
+import { debugCommandSpecs, isStopConfirmed } from "@host/commands/debug-commands";
+import { parseHandoff } from "@host/handoff/handoff";
+import {
+  type DirectHandoffDeps,
+  executeFinalizedHandoff,
+  runDirectHandoff,
+} from "@host/handoff/handoff-flow";
+import { generateHandoffPrompt, hasGenerableContext } from "@host/handoff/handoff-generate";
+import { activeStylePref } from "@host/prefs/style-store";
+import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
+import { vimEnabled } from "@host/prefs/vim-store";
+import { supervisor } from "@host/processes/processes";
+import { contextRegistry } from "@host/project-context/registry";
+import {
+  buildControlTurns,
+  controlPromptModel,
+  controlPromptProvider,
+} from "@host/session/control-model";
+import {
+  acquireCwdLock,
+  CWD_LOCK_HEARTBEAT_MS,
+  type CwdLockDoctorFact,
+  type CwdLockOwner,
+  cwdLockDoctorFact,
+  cwdSwitchConflict,
+  nodeCwdLockCaps,
+  refreshCwdLock,
+  releaseCwdLock,
+} from "@host/session/cwd-lock";
+import { Lease } from "@host/session/lease";
+import {
+  MAX_RESTART_RESUMES,
+  resumeAfterStop,
+  type StopOutcome,
+  stopSession,
+} from "@host/session/session-lifecycle";
+import { resolveCdTarget } from "@host/session/workspace-switch";
+import { skillRegistry } from "@host/skills/skills";
+import { describeAgent, discoverAgents } from "@host/subagents/discovery";
+import { CLIPBOARD_TOOL_NAMES, copyLastCopyable, routeClip } from "@host/tools/clip";
+import { taskRegistry } from "@host/tools/tasks/tasks";
+import { log, warn } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
+import { Emit } from "@host/transport/services";
+import { nodeGitRunner, readGitStatus } from "@host/worktrees/git-status";
 import * as Sentry from "@sentry/node";
 import {
   type ArtifactRef,
@@ -52,25 +102,8 @@ import {
 import { createSwitchCell, type SwitchCell } from "./agent/switch-cell";
 import { TurnMachine } from "./agent/turn-machine";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
-import { describeAgent, discoverAgents } from "./agents";
-import { CLIPBOARD_TOOL_NAMES, copyLastCopyable, routeClip } from "./clip";
-import { buildCommandRegistry } from "./commands";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
-import { contextRegistry } from "./context/registry";
-import { buildControlTurns, controlPromptModel, controlPromptProvider } from "./control-model";
-import {
-  acquireCwdLock,
-  CWD_LOCK_HEARTBEAT_MS,
-  type CwdLockDoctorFact,
-  type CwdLockOwner,
-  cwdLockDoctorFact,
-  cwdSwitchConflict,
-  nodeCwdLockCaps,
-  refreshCwdLock,
-  releaseCwdLock,
-} from "./cwd-lock";
-import { debugCommandSpecs, isStopConfirmed } from "./debug-commands";
 import {
   buildLiveDoctorSnapshot,
   collectDoctorProbeResults,
@@ -78,21 +111,11 @@ import {
 } from "./doctor/build";
 import type { TelemetryDoctorSummary } from "./doctor/snapshot";
 import { currentDoctorSnapshot, registerDoctorSnapshotSource } from "./doctor/source";
-import { envNumber } from "./env";
-import { nodeGitRunner, readGitStatus } from "./git-status";
-import { parseHandoff } from "./handoff";
-import { type DirectHandoffDeps, executeFinalizedHandoff, runDirectHandoff } from "./handoff-flow";
-import { generateHandoffPrompt, hasGenerableContext } from "./handoff-generate";
-import { Lease } from "./lease";
-import { log, warn } from "./log";
 import { createLoopPersistence } from "./loop/persistence";
 import { createLoopIterationRunner, defaultProcessSeam } from "./loop/runner";
 import { LoopStore } from "./loop/store";
 import { assembleManifest } from "./manifest/build";
 import { registerManifestSource } from "./manifest/source";
-import { msg } from "./messages";
-import { abbrevHome, TREVOR_STATE_HOME, WORKSPACE_ROOT } from "./paths";
-import { supervisor } from "./processes";
 import {
   buildProviders,
   type ChatMessage,
@@ -113,18 +136,6 @@ import {
   nodeSerialControllerCaps,
   nodeSerialRunStartDeps,
 } from "./serial-run/node";
-import { Emit } from "./services";
-import {
-  MAX_RESTART_RESUMES,
-  resumeAfterStop,
-  type StopOutcome,
-  stopSession,
-} from "./session-lifecycle";
-import { skillRegistry } from "./skills";
-import { ensureSessionWithRetry } from "./startup";
-import { activeStylePref } from "./style/style-store";
-import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "./style/styles";
-import { taskRegistry } from "./tasks";
 import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { registerToolScriptSink } from "./tool-script/sink";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
@@ -132,9 +143,6 @@ import { getClipboardWriter } from "./tools/clipboard";
 import { openInEditor } from "./tools/open-editor";
 import { DEFAULT_PROMOTION_CONFIG } from "./tools/promote-policy";
 import { promotedResultText, runPromotable } from "./tools/promote-runner";
-import { publishTurn } from "./turn";
-import { vimEnabled } from "./vim/vim-store";
-import { resolveCdTarget } from "./workspace-switch";
 import { nodeWorktreeManager } from "./worktrees";
 
 /**

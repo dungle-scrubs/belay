@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { contextRegistry } from "@host/project-context/registry";
 import { Schema } from "effect";
-import { contextRegistry } from "../../context/registry";
 import { simpleTool, toolInput } from "../shared";
 import { ArchiveToolError } from "./errors";
 import type { ArchiveProcessorName, ArchiveProcessorResult } from "./processors";

@@ -1,6 +1,6 @@
+import { buildHistory } from "@host/agent/history-projection";
 import type { PublishInput, SessionEvent } from "@trevor/session";
 import { describe, expect, it } from "vitest";
-import { buildHistory } from "./agent/history-projection";
 import { type ForkFlowDeps, forkSession } from "./fork-flow";
 
 function ev(

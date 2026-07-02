@@ -1,3 +1,5 @@
+import { envNumber } from "@host/boot/env";
+import { debug, warn } from "@host/transport/log";
 import {
   constrainReasoning,
   type ModelRef,
@@ -8,8 +10,6 @@ import {
 } from "@trevor/session";
 import { NOOP_SINK, SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
 import { Clock, Deferred, Duration, Effect, Option, Ref, Stream } from "effect";
-import { envNumber } from "../env";
-import { debug, warn } from "../log";
 import type {
   ChatMessage,
   ModelEvent,

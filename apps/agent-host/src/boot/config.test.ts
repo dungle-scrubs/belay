@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { loadJsonConfig, writeJsonConfig } from "./config-file";
+import { loadJsonConfig, writeJsonConfig } from "./config";
 
 const parse = (raw: unknown): { n: number } => ({
   n: typeof (raw as { n?: unknown })?.n === "number" ? (raw as { n: number }).n : 0,

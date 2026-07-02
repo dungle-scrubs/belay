@@ -1,5 +1,5 @@
 import type { GitStatus } from "@trevor/session";
-import { type GitRunner, readGitStatus } from "../git-status";
+import { type GitRunner, readGitStatus } from "./git-status";
 
 /**
  * Worktree-level git operations (D-091), each pure over the injectable `GitRunner` so the

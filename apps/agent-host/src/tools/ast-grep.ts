@@ -1,5 +1,5 @@
+import { confine, WORKSPACE_ROOT } from "@host/boot/paths";
 import { Schema } from "effect";
-import { confine, WORKSPACE_ROOT } from "../paths";
 import { astGrepPath } from "./ast-grep-bin";
 import { firstLine, runSearchProcess } from "./search-process";
 import { simpleTool, toolExecution, toolInput } from "./shared";

@@ -1,5 +1,5 @@
+import { type SkillEntry, skillRegistry, splitDescription } from "@host/skills/skills";
 import { Schema } from "effect";
-import { type SkillEntry, skillRegistry, splitDescription } from "../skills";
 import { simpleTool } from "./shared";
 
 /**

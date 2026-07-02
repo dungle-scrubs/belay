@@ -1,8 +1,8 @@
+import { type ProcessError, type ToolExecutionError, ToolInputError } from "@host/tools/errors";
+import { cap } from "@host/tools/shared";
+import type { Tool } from "@host/tools/types";
 import { Effect, Schema } from "effect";
 import { ProcessRegistry } from "./process-registry";
-import { type ProcessError, type ToolExecutionError, ToolInputError } from "./tools/errors";
-import { cap } from "./tools/shared";
-import type { Tool } from "./tools/types";
 
 export type {
   JobInfo,

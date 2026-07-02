@@ -1,3 +1,4 @@
+import { estimateTokens } from "@host/metrics/breakdown";
 import {
   type CompactionManifest,
   type DecodedEvent,
@@ -5,7 +6,6 @@ import {
   type SessionEvent,
 } from "@trevor/session";
 import type { ChatMessage } from "../providers";
-import { estimateTokens } from "../usage/breakdown";
 import { analyzeBaseline } from "./baseline";
 import { toolCallGrouper } from "./tool-messages";
 

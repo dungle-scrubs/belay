@@ -1,10 +1,10 @@
+import type { Fields } from "@host/transport/log";
 import {
   type InternetSnapshot,
   type InternetStatus,
   isSnapshotStale,
   UNKNOWN_INTERNET,
 } from "@trevor/session";
-import type { Fields } from "../log";
 
 /**
  * The host-owned internet probe (D-060 M1): a small DNS + HTTPS reachability check against

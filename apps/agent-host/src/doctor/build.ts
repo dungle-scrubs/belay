@@ -1,5 +1,8 @@
 import { existsSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
+import { abbrevHome } from "@host/boot/paths";
+import { type CwdLockDoctorFact, cwdLockSummary } from "@host/session/cwd-lock";
+import { fmtFields } from "@host/transport/log";
 import {
   type DoctorSnapshot,
   formatDoctorReport,
@@ -12,9 +15,6 @@ import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-mig
 import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
 import { Effect } from "effect";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
-import { type CwdLockDoctorFact, cwdLockSummary } from "../cwd-lock";
-import { fmtFields } from "../log";
-import { abbrevHome } from "../paths";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
 import { providerFailures } from "../providers/provider-failure-log";

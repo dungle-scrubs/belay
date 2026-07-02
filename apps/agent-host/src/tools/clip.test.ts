@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { buildCommandRegistry } from "@host/commands/commands";
+import type { ChatMessage } from "@host/providers/index";
+import { buildTaskTools } from "@host/tools/tasks/tasks";
 import { events } from "@trevor/session";
 import { test } from "vitest";
 import {
@@ -8,11 +11,8 @@ import {
   lastCopyableText,
   routeClip,
 } from "./clip";
-import { buildCommandRegistry } from "./commands";
-import type { ChatMessage } from "./providers";
-import { buildTaskTools } from "./tasks";
-import { offeredToolDefs } from "./tools";
-import { CaptureClipboard, clipboardWriteTool } from "./tools/clipboard";
+import { CaptureClipboard, clipboardWriteTool } from "./clipboard";
+import { offeredToolDefs } from "./index";
 
 /**
  * M2 - bare `/clip` copies the last copyable transcript item through the host clipboard

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { publishTurn } from "@host/agent/turn";
 import type { TrevorEventInput } from "@trevor/session";
 import { METRIC_NAMES, SPAN_NAMES } from "@trevor/session/telemetry";
 import type {
@@ -11,7 +12,6 @@ import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../src/providers";
 import { providerIncidents } from "../src/providers";
 import { ProviderUnavailable } from "../src/providers/errors";
-import { publishTurn } from "../src/turn";
 import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
 
 /**

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { ProcessRegistry } from "@host/processes/process-registry";
 import { Effect } from "effect";
 import { afterEach, test } from "vitest";
-import { ProcessRegistry } from "../process-registry";
 import { buildBashTool } from "./bash";
 import { ToolInputError } from "./errors";
 import { promotedResultText } from "./promote-runner";

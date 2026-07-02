@@ -1,22 +1,22 @@
+import { buildDoctorCommandResult } from "@host/doctor/build";
+import { buildLoopCommands } from "@host/loop/command";
+import type { LoopController } from "@host/loop/store";
+import { buildTrevorExportCommand } from "@host/manifest/export-command";
+import { loadStylePref, saveStylePref } from "@host/prefs/style-store";
+import { handleStyleCommand } from "@host/prefs/styles";
+import { resolveVimToggle, saveVimPref, vimEnabled } from "@host/prefs/vim-store";
+import { supervisor } from "@host/processes/processes";
+import { buildInitProposal } from "@host/project-context/init-agents";
+import type { ProviderRegistry } from "@host/providers/index";
+import { buildSkillCommand } from "@host/skills/skills";
+import { runCommand } from "@host/tools/run-shell";
+import { msg } from "@host/transport/messages";
 import type {
   CommandMenuPayload,
   CommandSpec,
   InternetSnapshot,
   SourceSummary,
 } from "@trevor/session";
-import { buildInitProposal } from "./context/init-agents";
-import { buildDoctorCommandResult } from "./doctor/build";
-import { buildLoopCommands } from "./loop/command";
-import type { LoopController } from "./loop/store";
-import { buildTrevorExportCommand } from "./manifest/export-command";
-import { msg } from "./messages";
-import { supervisor } from "./processes";
-import type { ProviderRegistry } from "./providers";
-import { buildSkillCommand } from "./skills";
-import { loadStylePref, saveStylePref } from "./style/style-store";
-import { handleStyleCommand } from "./style/styles";
-import { runCommand } from "./tools/run-shell";
-import { resolveVimToggle, saveVimPref, vimEnabled } from "./vim/vim-store";
 
 /**
  * Immediate host commands (slash commands): the host runs these directly and

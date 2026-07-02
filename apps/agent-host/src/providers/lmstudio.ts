@@ -1,10 +1,10 @@
+import { envNumber } from "@host/boot/env";
 import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { Effect, FiberRef, Stream } from "effect";
 import type { LocalModelTarget } from "../admission/contract";
 import { admittedStream } from "../admission/effect";
 import type { LocalAdmissionGate } from "../admission/service";
 import { AdmissionTurnRef } from "../admission/turn-ref";
-import { envNumber } from "../env";
 import type { ResidencyRecorder } from "../residency/registry";
 import { LmStudioClient } from "./lmstudio-client";
 import { streamPiAiModel } from "./pi-ai";

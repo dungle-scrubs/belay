@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { warn } from "./log";
+import { warn } from "@host/transport/log";
 
 /**
  * The shared scaffold for the host's small optional JSON config files under the config home (models.json,

@@ -1,5 +1,5 @@
+import type { ProcessRegistry } from "@host/processes/process-registry";
 import { Schema } from "effect";
-import type { ProcessRegistry } from "../process-registry";
 import type { PromotionConfig } from "./promote-policy";
 import { promotedResultText, runPromotable } from "./promote-runner";
 import { simpleTool, toolExecution, toolInput } from "./shared";

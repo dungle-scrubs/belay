@@ -1,8 +1,8 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { TREVOR_STATE_HOME } from "@host/boot/paths";
+import { log } from "@host/transport/log";
 import type { TurnStop } from "@trevor/session";
-import { log } from "../log";
-import { TREVOR_STATE_HOME } from "../paths";
 
 export interface TurnStopRecord {
   readonly runId: string;

@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { dirname } from "node:path";
+import { WORKSPACE_ROOT } from "@host/boot/paths";
 import {
   fallbackSandboxMode,
   type SandboxEnvironment,
   type SandboxMode,
   selectSandboxMode,
 } from "@trevor/session";
-import { WORKSPACE_ROOT } from "../paths";
 import {
   buildDenyFirstProfile,
   probeSandboxEnvironment,

@@ -1,5 +1,5 @@
+import { msg } from "@host/transport/messages";
 import { Effect, type Schema } from "effect";
-import { msg } from "../messages";
 import { type ToolError, ToolExecutionError, ToolInputError } from "./errors";
 import type { Tool } from "./types";
 

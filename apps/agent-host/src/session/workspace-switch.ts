@@ -1,9 +1,9 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { stripMatchingQuotes } from "@host/boot/args";
+import { msg } from "@host/transport/messages";
 import { freshSessionId } from "@trevor/session";
-import { stripMatchingQuotes } from "./args";
-import { msg } from "./messages";
 
 export interface WorkspaceSwitchFs {
   exists(path: string): boolean;

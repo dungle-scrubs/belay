@@ -3,9 +3,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { ChatImage, ChatMessage } from "@host/providers/index";
 import { type ArtifactRef, fetchBlobBytes } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
-import type { ChatImage, ChatMessage } from "./providers";
 
 const execAsync = promisify(exec);
 

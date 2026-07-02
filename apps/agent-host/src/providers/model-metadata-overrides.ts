@@ -16,8 +16,8 @@
  */
 
 import { readFileSync } from "node:fs";
-import { warn } from "../log";
-import { USER_MODELS_JSON } from "../paths";
+import { USER_MODELS_JSON } from "@host/boot/paths";
+import { warn } from "@host/transport/log";
 
 export interface ModelMetadataOverride {
   /** The corrected context window (tokens) when pi-ai's bundled value is stale. */

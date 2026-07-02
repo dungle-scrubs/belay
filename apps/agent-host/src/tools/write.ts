@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { contextRegistry } from "@host/project-context/registry";
 import { Schema } from "effect";
-import { contextRegistry } from "../context/registry";
 import { simpleTool } from "./shared";
 
 const Params = Schema.Struct({

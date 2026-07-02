@@ -1,4 +1,10 @@
 import {
+  CWD_LOCK_FORCE_CLEAR_HINT,
+  type CwdLockDoctorFact,
+  cwdLockSummary,
+  isCwdLockWarn,
+} from "@host/session/cwd-lock";
+import {
   type DoctorArea,
   type DoctorAreaId,
   type DoctorFact,
@@ -11,12 +17,6 @@ import {
 } from "@trevor/session";
 import type { RootCategoryId } from "@trevor/session/node-paths";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
-import {
-  CWD_LOCK_FORCE_CLEAR_HINT,
-  type CwdLockDoctorFact,
-  cwdLockSummary,
-  isCwdLockWarn,
-} from "../cwd-lock";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
 import type { ResidencyDoctorSummary } from "../residency/doctor";
 

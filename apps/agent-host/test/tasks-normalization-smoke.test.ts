@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { buildTaskTools, TaskRegistry } from "@host/tools/tasks/tasks";
 import {
   decodeTrevorEvent,
   events,
@@ -9,7 +10,6 @@ import {
 import { storedEvent } from "@trevor/test-kit";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { buildTaskTools, TaskRegistry } from "../src/tasks";
 
 /**
  * Smoke coverage for task-id NORMALIZATION (09.1), driven end to end through the REAL task_create /

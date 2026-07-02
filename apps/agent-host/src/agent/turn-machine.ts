@@ -1,3 +1,4 @@
+import { terminationReason } from "@host/session/session-lifecycle";
 import {
   type DecodedEvent,
   events,
@@ -5,7 +6,6 @@ import {
   type Usage,
   type UsageBreakdown,
 } from "@trevor/session";
-import { terminationReason } from "../session-lifecycle";
 
 type CompletedEvent = Extract<ReturnType<typeof events.assistantCompleted>, { type: string }>;
 type DecodedCompleted = Extract<DecodedEvent, { type: "assistant.completed" }>;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { ProcessRegistry } from "@host/processes/process-registry";
 import { afterEach, describe, test } from "vitest";
-import { ProcessRegistry } from "../process-registry";
 import { type PromotableOptions, runPromotable } from "./promote-runner";
 
 /**

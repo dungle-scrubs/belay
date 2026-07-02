@@ -17,71 +17,12 @@ const SRC_ROOT = join(import.meta.dirname, "..", "src");
 const ROOT_ALLOWLIST: readonly string[] = ["main.ts"];
 
 /**
- * The authoritative relocation inventory (plan 22.1 M1, D-004): every loose `src/` root file and
- * the by-domain dir it moves to in M3/M4. Sorted by filename. THIS LIST MUST ONLY SHRINK - the
- * guard fails when a file is moved but stays listed, and when a NEW loose file appears that is in
- * neither the allowlist nor this ledger. When the list is empty the guard is the plain
- * "main.ts only" rule (M6).
+ * The relocation-debt ledger (plan 22.1 M1, D-004) is EMPTY: every loose file from the M1
+ * inventory (57 entries) landed in its by-domain home in M3/M4. The guard is now the plain
+ * "main.ts only" rule (M6) - any new loose file under `src/` root fails it. See the M1 commit
+ * for the full inventory this tree was migrated against.
  */
-const RELOCATION_DEBT: ReadonlyMap<string, string> = new Map([
-  ["agents.test.ts", "subagents/"],
-  ["agents.ts", "subagents/ (as discovery.ts)"],
-  ["args.ts", "boot/"],
-  ["artifacts.ts", "agent/ (as image-resolution.ts)"],
-  ["clip.test.ts", "tools/"],
-  ["clip.ts", "tools/"],
-  ["coerce.ts", "boot/"],
-  ["commands.test.ts", "commands/"],
-  ["commands.ts", "commands/"],
-  ["config-file.test.ts", "boot/ (as config.test.ts)"],
-  ["config-file.ts", "boot/ (as config.ts)"],
-  ["control-model.test.ts", "session/"],
-  ["control-model.ts", "session/"],
-  ["cwd-lock.test.ts", "session/"],
-  ["cwd-lock.ts", "session/"],
-  ["debug-commands.test.ts", "commands/"],
-  ["debug-commands.ts", "commands/"],
-  ["delta-buffer.ts", "transport/"],
-  ["env.ts", "boot/"],
-  ["fork-flow.test.ts", "session/"],
-  ["fork-flow.ts", "session/"],
-  ["git-status.test.ts", "worktrees/"],
-  ["git-status.ts", "worktrees/"],
-  ["handoff-flow.test.ts", "handoff/"],
-  ["handoff-flow.ts", "handoff/"],
-  ["handoff-generate.test.ts", "handoff/"],
-  ["handoff-generate.ts", "handoff/"],
-  ["handoff.test.ts", "handoff/"],
-  ["handoff.ts", "handoff/"],
-  ["interpolation.test.ts", "commands/"],
-  ["interpolation.ts", "commands/"],
-  ["lease.test.ts", "session/"],
-  ["lease.ts", "session/"],
-  ["log.ts", "transport/"],
-  ["manifest-discovery.ts", "boot/"],
-  ["messages.ts", "transport/"],
-  ["paths.ts", "boot/"],
-  ["process-liveness.ts", "processes/"],
-  ["process-registry.test.ts", "processes/"],
-  ["process-registry.ts", "processes/"],
-  ["processes.test.ts", "processes/"],
-  ["processes.ts", "processes/"],
-  ["services.ts", "transport/"],
-  ["session-lifecycle.test.ts", "session/"],
-  ["session-lifecycle.ts", "session/"],
-  ["skill-registry.test.ts", "skills/"],
-  ["skills.test.ts", "skills/"],
-  ["skills.ts", "skills/"],
-  ["startup.test.ts", "boot/"],
-  ["startup.ts", "boot/"],
-  ["tasks.test.ts", "tools/tasks/"],
-  ["tasks.ts", "tools/tasks/"],
-  ["turn-preflight.ts", "agent/"],
-  ["turn-termination.test.ts", "agent/"],
-  ["turn.ts", "agent/"],
-  ["workspace-switch.test.ts", "session/"],
-  ["workspace-switch.ts", "session/"],
-]);
+const RELOCATION_DEBT: ReadonlyMap<string, string> = new Map();
 
 /**
  * The pure guard: which loose `src/` root files violate the structure rule? A violation is a

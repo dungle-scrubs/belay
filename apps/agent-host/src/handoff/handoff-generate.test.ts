@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import type { ChatMessage, Provider, ProviderEvent } from "@host/providers/index";
+import { ProviderUnavailable } from "@host/providers/index";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import {
@@ -7,8 +9,6 @@ import {
   HANDOFF_CONTEXT_TURN_LIMIT,
   hasGenerableContext,
 } from "./handoff-generate";
-import type { ChatMessage, Provider, ProviderEvent } from "./providers";
-import { ProviderUnavailable } from "./providers";
 
 /**
  * Generated-handoff prompt generation (02.10, M5/M6). The builder tests are pure (no provider); the

@@ -1,13 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { supervisor } from "@host/processes/processes";
+import { buildSkillTool, discoverSkills } from "@host/skills/skills";
+import { buildTaskTools } from "@host/tools/tasks/tasks";
+import { log, warn } from "@host/transport/log";
 import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
 import { Effect, Either, JSONSchema, ParseResult, Schema } from "effect";
-import { log, warn } from "../log";
-import { supervisor } from "../processes";
 import type { ToolDef } from "../providers";
-import { buildSkillTool, discoverSkills } from "../skills";
-import { buildTaskTools } from "../tasks";
 import { buildToolScriptTool } from "../tool-script/tool";
 import { archiveReadTool, archiveUnpackTool } from "./archive/tool";
 import { askUserTool } from "./ask-user";
