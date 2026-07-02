@@ -312,62 +312,83 @@ export const webDocsStale: DoctorArea = {
 };
 
 // --- MCP -------------------------------------------------------------------
+// These mirror the HOST's real MCP area shape (plan 23 M8): the runtime status snapshot is
+// folded by doctor/mcp-status into ONE PeripheralState whose detail string becomes both the
+// verdict and the single `mcp.status` finding via the generic peripheralArea mapping - no
+// facts, no per-server findings, redacted targets only, and never any tool-proxy naming (D-001).
+
+const MCP_READY_DETAIL =
+  "2 servers (stdio+http) · 2 ready · 11 tools / 3 resources / 2 prompts · checked 2m ago";
 
 export const mcpOk: DoctorArea = {
   id: "mcp",
   label: "MCP",
   status: "ok",
-  verdict: "2 servers connected.",
-  facts: [
-    { label: "servers", value: "2 connected", status: "ok" },
-    { label: "tools", value: "11 available" },
-  ],
+  verdict: MCP_READY_DETAIL,
+  findings: [{ id: "mcp.status", status: "ok", title: "MCP", message: MCP_READY_DETAIL }],
 };
 
 export const mcpUnconfigured: DoctorArea = {
   id: "mcp",
   label: "MCP",
   status: "not_checked",
-  verdict: "No MCP servers configured.",
-  facts: [{ label: "servers", value: "none", status: "not_checked" }],
-  nextAction: { label: "Add a server to enable MCP tools" },
+  verdict: "MCP is not configured.",
+  findings: [
+    { id: "mcp.status", status: "not_checked", title: "MCP", message: "MCP is not configured." },
+  ],
 };
+
+const MCP_AUTH_DETAIL = 'MCP server "linear" (https://mcp.linear.app/mcp) needs authentication';
 
 export const mcpAuthNeeded: DoctorArea = {
   id: "mcp",
   label: "MCP",
   status: "warn",
-  verdict: "1 of 2 servers needs authentication.",
-  facts: [
-    { label: "servers", value: "2 configured" },
-    { label: "connected", value: "1 of 2", status: "warn" },
-  ],
+  verdict: MCP_AUTH_DETAIL,
   findings: [
     {
-      id: "mcp.gmail.auth",
+      id: "mcp.status",
       status: "warn",
-      title: "Gmail server needs auth",
-      message:
-        "The server is configured but unauthenticated; its tools stay unavailable until you sign in.",
-      nextAction: { label: "Authenticate the server" },
+      title: "MCP",
+      message: MCP_AUTH_DETAIL,
+      nextAction: { label: "Authenticate MCP" },
     },
   ],
 };
+
+const MCP_ERROR_DETAIL =
+  'MCP server "github" crashed: child exited (code 127, signal null); stderr tail: command not found: github-mcp';
 
 export const mcpError: DoctorArea = {
   id: "mcp",
   label: "MCP",
   status: "error",
-  verdict: "1 server failed to start.",
-  facts: [{ label: "connected", value: "1 of 2", status: "error" }],
+  verdict: MCP_ERROR_DETAIL,
   findings: [
     {
-      id: "mcp.toolproxy.error",
+      id: "mcp.status",
       status: "error",
-      title: "tool-proxy failed to start",
-      message: "The MCP server exited during startup; its tools won't be offered this session.",
-      evidence: "spawn tool-proxy\nError: command not found: tool-proxy\nexit code 127",
-      nextAction: { label: "Check the server command and restart" },
+      title: "MCP",
+      message: MCP_ERROR_DETAIL,
+      nextAction: { label: "Inspect the MCP integration" },
+    },
+  ],
+};
+
+const MCP_TIMEOUT_DETAIL = 'MCP request "initialize" to "notion" timed out after 30000ms';
+
+export const mcpTimeout: DoctorArea = {
+  id: "mcp",
+  label: "MCP",
+  status: "not_checked",
+  verdict: MCP_TIMEOUT_DETAIL,
+  findings: [
+    {
+      id: "mcp.status",
+      status: "not_checked",
+      title: "MCP",
+      message: MCP_TIMEOUT_DETAIL,
+      nextAction: { label: "Re-run /doctor to retry" },
     },
   ],
 };

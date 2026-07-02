@@ -25,6 +25,7 @@ import type {
   DoctorProviderIncident,
   DoctorProviderProbe,
   DoctorRootProbe,
+  PeripheralState,
   TelemetryDoctorSummary,
 } from "./probe-input";
 import { buildDoctorSnapshot } from "./snapshot";
@@ -68,6 +69,9 @@ export interface DoctorRuntimeFacts {
   readonly residency?: ResidencyDoctorSummary;
   /** Telemetry mode + exporter health (plan 13 M7), surfaced in the Telemetry area. */
   readonly telemetry?: TelemetryDoctorSummary;
+  /** The MCP runtime rollup (plan 23 M8, D-009): the runtime's per-server status snapshot folded
+   *  by doctor/mcp-status into one peripheral state. Absent (not probed) means unconfigured. */
+  readonly mcp?: PeripheralState;
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
@@ -326,11 +330,12 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
       node: process.version,
       runtime: RUNTIME_KIND.host,
     },
-    // MCP / LSP / Hooks are not integrated in this build, so each reports `unconfigured` (not an
-    // error) - the area builder maps later states (unavailable/auth-needed/error/timeout) once a
-    // real integration feeds them.
+    // MCP reports the runtime's REAL rollup (plan 23 M8) fed in by host-facts; LSP / Hooks are
+    // not integrated in this build, so each reports `unconfigured` (not an error) - the area
+    // builder maps later states (unavailable/auth-needed/error/timeout) once an integration
+    // feeds them.
     peripherals: {
-      mcp: { kind: "unconfigured" },
+      mcp: facts.mcp ?? { kind: "unconfigured" },
       lsp: { kind: "unconfigured" },
       hooks: { kind: "unconfigured" },
     },

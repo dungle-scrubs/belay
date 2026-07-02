@@ -10,6 +10,7 @@ import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import type { InternetMonitor } from "@host/connectivity/probe";
+import type { McpRuntime } from "@host/mcp/runtime";
 import { activeStylePref } from "@host/prefs/style-store";
 import { contextRegistry } from "@host/project-context/registry";
 import type { CatalogSnapshot } from "@host/providers/catalog";
@@ -25,6 +26,7 @@ import { commas } from "@host/transport/messages";
 import { relativeTime, type WorktreeSummary } from "@trevor/session";
 import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
 import type { DoctorRuntimeFacts } from "./build";
+import { mcpDebugSummary, mcpPeripheralState } from "./mcp-status";
 import type { TelemetryDoctorSummary } from "./probe-input";
 
 /**
@@ -63,6 +65,8 @@ export interface HostFactsDeps {
   /** The host telemetry sink's optional drop counter (file exporter only). */
   readonly hostTelemetry: { readonly stats?: () => { readonly dropped: number } };
   readonly cwdLockCaps: CwdLockCaps;
+  /** The host MCP runtime (plan 23 M8): its status snapshot feeds the /doctor MCP area + debug. */
+  readonly mcp: Pick<McpRuntime, "statusSnapshot">;
 }
 
 /** Builds the /doctor runtime-fact readers over the host's live state; main.ts wires it once. */
@@ -85,6 +89,7 @@ export function makeHostFacts(deps: HostFactsDeps) {
     residency,
     hostTelemetry,
     cwdLockCaps,
+    mcp,
   } = deps;
 
   /** A snapshot of the live turn machine for /doctor: what the host is doing right now. */
@@ -121,6 +126,9 @@ export function makeHostFacts(deps: HostFactsDeps) {
       // Ingested AGENTS.md context (D-080): how many files, from which scopes, bytes used vs dropped,
       // and whether anything was truncated - surfaced so a budget drop is never silent (unlike Codex).
       ...contextState(),
+      // MCP runtime status (plan 23 M8): a compact per-status histogram of the configured servers,
+      // absent when none are configured. Redaction-safe: server counts + status words only.
+      ...mcpState(),
       // Managed worktrees (D-091): the current row + count, plus any stale (missing-path) entries, so
       // a worktree/session mismatch is visible at a glance.
       ...worktreeState(),
@@ -139,6 +147,12 @@ export function makeHostFacts(deps: HostFactsDeps) {
     const checking = snap.checking ? " · checking…" : "";
     const error = snap.status !== "online" && snap.error ? ` · ${snap.error}` : "";
     return `${snap.status}${age}${checking} · probe ${snap.targetClass}${error}`;
+  }
+
+  /** The compact MCP debug line for /doctor's host record; nothing when unconfigured. */
+  function mcpState(): Record<string, string> {
+    const summary = mcpDebugSummary(mcp.statusSnapshot());
+    return summary ? { mcp: summary } : {};
   }
 
   /** The managed-worktree summary for /doctor: the current row, the managed count, and stale entries. */
@@ -196,6 +210,9 @@ export function makeHostFacts(deps: HostFactsDeps) {
       ),
       residency: residency.summary(),
       telemetry: telemetryDoctorFacts(),
+      // The MCP runtime rollup (plan 23 M8, D-009): per-server status folded into the one
+      // peripheral state the doctor MCP area renders; every field is already redacted.
+      mcp: mcpPeripheralState(mcp.statusSnapshot(), Date.now()),
     };
   }
 

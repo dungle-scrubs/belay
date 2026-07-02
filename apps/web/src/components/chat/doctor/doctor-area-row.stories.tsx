@@ -17,6 +17,7 @@ import {
   mcpAuthNeeded,
   mcpError,
   mcpOk,
+  mcpTimeout,
   mcpUnconfigured,
   providersAuthMissing,
   providersCloudUnreachable,
@@ -118,9 +119,10 @@ export const WebDocs: Story = {
   render: () => <RowPanel areas={[webOk, webFetchUnavailable, webFirecrawlAbsent, webDocsStale]} />,
 };
 
-/** MCP: connected, unconfigured, auth needed, server error. */
+/** MCP (plan 23 M8): ready with counts, unconfigured, auth needed, server failure, handshake
+ *  timeout - the host's real per-state detail strings through the generic peripheral row. */
 export const Mcp: Story = {
-  render: () => <RowPanel areas={[mcpOk, mcpUnconfigured, mcpAuthNeeded, mcpError]} />,
+  render: () => <RowPanel areas={[mcpOk, mcpUnconfigured, mcpAuthNeeded, mcpError, mcpTimeout]} />,
 };
 
 /** LSP: ready, command missing, probe timed out, diagnostic warnings. */

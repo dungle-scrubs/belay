@@ -95,3 +95,23 @@ test("refresh and copy flags combine with structured views without changing the 
   assert.equal(isJson(await buildDoctorCommandResult("full refresh copy", facts())), true);
   assert.equal(isJson(await buildDoctorCommandResult("json copy", facts())), true);
 });
+
+test("the structured snapshot renders the injected MCP rollup in the MCP area (plan 23 M8)", async () => {
+  const detail = "2 servers (stdio+http) · 2 ready · 11 tools / 3 resources / 2 prompts";
+  const result = await buildDoctorCommandResult("", {
+    ...facts(),
+    mcp: { kind: "ready", detail },
+  });
+  const areas = JSON.parse(result).areas as { id: string; status: string; verdict: string }[];
+  const mcp = areas.find((area) => area.id === "mcp");
+  assert.equal(mcp?.status, "ok");
+  assert.equal(mcp?.verdict, detail);
+});
+
+test("without an injected MCP state the MCP area stays unconfigured (not an error)", async () => {
+  const result = await buildDoctorCommandResult("", facts());
+  const areas = JSON.parse(result).areas as { id: string; status: string; verdict: string }[];
+  const mcp = areas.find((area) => area.id === "mcp");
+  assert.equal(mcp?.status, "not_checked");
+  assert.match(mcp?.verdict ?? "", /not configured/);
+});

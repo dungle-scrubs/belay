@@ -176,3 +176,16 @@ test("a plain command result carries no menu, unchanged (03 M1 backward-compat)"
   assert.equal(menu, undefined);
   assert.ok(text.length > 0);
 });
+
+test("/doctor's select threads the MCP rollup through to the snapshot (plan 23 M8)", async () => {
+  const registry = buildCommandRegistry();
+  const { ok, text } = await registry.run("/doctor", "", {
+    ...baseCtx,
+    mcp: { kind: "auth-needed", detail: 'MCP server "linear" needs authentication' },
+  });
+  assert.equal(ok, true);
+  const areas = JSON.parse(text).areas as { id: string; status: string; verdict: string }[];
+  const mcp = areas.find((area) => area.id === "mcp");
+  assert.equal(mcp?.status, "warn", "the injected MCP state survives the command's context slice");
+  assert.match(mcp?.verdict ?? "", /"linear"/);
+});
