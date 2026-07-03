@@ -7,6 +7,8 @@
  * for filesystem search (the host owns that).
  */
 
+import { isMentionBoundaryBefore } from "@trevor/session";
+
 /** An active `@`-mention token: the `[start, end)` span of `@<query>` and the query body after `@`. */
 export interface ActiveMention {
   /** The `@` character index (inclusive) - the start of the replaceable token. */
@@ -15,18 +17,6 @@ export interface ActiveMention {
   readonly end: number;
   /** The token body after `@` (may contain `/`, `.`, `-`, `_`; never whitespace). The search query. */
   readonly query: string;
-}
-
-/** Characters that, like whitespace, count as a safe boundary immediately before the opening `@`. */
-const OPEN_PUNCTUATION = new Set(["(", "[", "{", "<"]);
-
-/** Whether the position just before `at` is a safe mention boundary: start, whitespace, or open punct. */
-function isBoundaryBefore(text: string, at: number): boolean {
-  if (at === 0) {
-    return true;
-  }
-  const prev = text[at - 1];
-  return prev === undefined || /\s/u.test(prev) || OPEN_PUNCTUATION.has(prev);
 }
 
 /**
@@ -53,7 +43,7 @@ export function activeMention(text: string, caret: number): ActiveMention | null
     }
     start -= 1;
   }
-  if (start < 0 || text[start] !== "@" || !isBoundaryBefore(text, start)) {
+  if (start < 0 || text[start] !== "@" || !isMentionBoundaryBefore(text, start)) {
     return null;
   }
   // The token extends right from `@` to the next whitespace (or the end of the text).

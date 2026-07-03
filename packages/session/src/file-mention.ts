@@ -34,6 +34,64 @@ export function fileMentionText(path: string): string {
   return `@${path}`;
 }
 
+/** Characters that, like whitespace, count as a safe boundary immediately before an opening `@`. */
+const MENTION_OPEN_PUNCTUATION = new Set(["(", "[", "{", "<"]);
+
+/**
+ * Whether the position just before `at` is a safe mention boundary: the start of the text, whitespace,
+ * or open punctuation. The ONE trigger rule shared by the picker (what opens on an active `@`) and the
+ * submit-time derivation (what counts as a mention), so an email or a mid-word `@` is never a mention
+ * in either place.
+ */
+export function isMentionBoundaryBefore(text: string, at: number): boolean {
+  if (at <= 0) {
+    return true;
+  }
+  const prev = text[at - 1];
+  return prev === undefined || /\s/u.test(prev) || MENTION_OPEN_PUNCTUATION.has(prev);
+}
+
+/** A resolved file mention located in a submitted prompt: the visible `@<path>` token span + path. */
+export interface FileMention {
+  readonly path: string;
+  /** The `@` character index (inclusive). */
+  readonly start: number;
+  /** The index just past the path (exclusive). */
+  readonly end: number;
+}
+
+/**
+ * Derives the structured file mentions from a prompt's visible text: every `@<token>` at a safe
+ * boundary whose token `isKnownPath` (a real workspace file). Stateless - derived from the text
+ * itself, so the metadata can never drift from what the user sees after edits - and it never invents a
+ * mention for an ordinary `@word` or an email. The path-selection slice ships the visible text as the
+ * prompt; this derivation is the structured half a later content-injection plan builds on.
+ */
+export function fileMentionsIn(
+  text: string,
+  isKnownPath: (path: string) => boolean,
+): FileMention[] {
+  const mentions: FileMention[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== "@" || !isMentionBoundaryBefore(text, i)) {
+      continue;
+    }
+    let end = i + 1;
+    while (end < text.length) {
+      const ch = text[end];
+      if (ch === undefined || /\s/u.test(ch)) {
+        break;
+      }
+      end += 1;
+    }
+    const path = text.slice(i + 1, end);
+    if (path !== "" && isKnownPath(path)) {
+      mentions.push({ path, start: i, end });
+    }
+  }
+  return mentions;
+}
+
 /**
  * The index of the first character of `needle` in `haystack` when `needle` is a subsequence of it (its
  * characters appear in order, not necessarily adjacent), or -1. An empty needle matches at 0.

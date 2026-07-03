@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M4: Live Composer Integration
+> Current focus: M5: Test and E2E Coverage
 
 - Total checklist items: 37
-- Completed: 24
-- Current cutoff blockers: 13
+- Completed: 31
+- Current cutoff blockers: 6
 
 ## 0. Hard Dependencies
 
@@ -46,13 +46,13 @@
 
 ## M4: Live Composer Integration
 
-- [ ] RED: Web tests for loading, stale host, no results, capped results, keyboard pick, mouse pick, and preserving surrounding draft text
-- [ ] GREEN: Wire live search into `useFileMentionMenu` with debounce and request identity
-- [ ] RED: Submission tests for visible text plus structured mention metadata alignment
-- [ ] GREEN: Add mention metadata to composer state or derive selected mentions at submit
-- [ ] RED: Regression tests that unselected `@foo` remains plain text
-- [ ] GREEN: Submit selected mention metadata only if this protocol slice is included; otherwise ship visible text first
-- [ ] REFACTOR: Remove duplicated menu filtering
+- [x] RED: Web tests for loading, stale host, no results, capped results, keyboard pick, mouse pick, and preserving surrounding draft text
+- [x] GREEN: Wire live search into `useFileMentionMenu` with debounce and request identity
+- [x] RED: Submission tests for visible text plus structured mention metadata alignment
+- [x] GREEN: Add mention metadata to composer state or derive selected mentions at submit
+- [x] RED: Regression tests that unselected `@foo` remains plain text
+- [x] GREEN: Submit selected mention metadata only if this protocol slice is included; otherwise ship visible text first
+- [x] REFACTOR: Remove duplicated menu filtering
 
 ## M5: Test and E2E Coverage
 

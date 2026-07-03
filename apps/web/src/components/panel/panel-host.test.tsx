@@ -83,6 +83,7 @@ function PanelHostHarness(props: {
           index: 0,
           query: "",
           truncated: false,
+          loading: false,
           onPick: vi.fn(),
         },
         onCaretChange: vi.fn(),

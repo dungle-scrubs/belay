@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   activeTurnRunId,
   DEFAULT_SESSION_ID,
-  type FileMatch,
   type LoopControl,
   type ModelRef,
 } from "@trevor/session";
@@ -48,6 +47,7 @@ import { jobToDetailModel, runningSubagents } from "@/support-panel/support-pane
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
+import { activeMention } from "./composer/active-mention";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeTurnStartedAt,
@@ -87,6 +87,7 @@ import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useScrollFollow } from "./hooks/use-scroll-follow";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { useSlashMenu } from "./hooks/use-slash-menu";
+import { fileIndexFrom, useWorkspaceFileSearch } from "./hooks/use-workspace-file-search";
 import {
   archiveSession,
   deleteSession,
@@ -119,9 +120,6 @@ const BUILT_IN_COMMANDS = [
  *  the host always announces; we don't want it cluttering the picker). Stays in `commandNames` so
  *  `parseCommand` routes it as a command, just filtered out of the menu list. */
 const HIDDEN_COMMANDS: ReadonlySet<string> = new Set(["/debug"]);
-
-// A stable empty result set for the `@`-file-mention menu until the live host search is wired (M4).
-const NO_FILE_MATCHES: readonly FileMatch[] = [];
 
 function targetFromLocation(): string {
   return new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
@@ -251,6 +249,7 @@ export function App() {
     switchModel,
     command,
     shell,
+    requestFileIndex,
     openInEditor,
     refreshCatalog,
     signInSource,
@@ -457,18 +456,41 @@ export function App() {
   // The composer caret, mirrored up from PromptInput (onCaretChange), so the `@`-file-mention menu can
   // detect the active token under the cursor. Only this feature needs it; the slash lane is caret-free.
   const [composerCaret, setComposerCaret] = useState(0);
-  // The `@`-file-mention menu (plan 30), the sibling of the slash menu. It coexists with the loop
-  // helper (D-003): suppressed while the caret sits on a `/loop` line, so at most one composer overlay
-  // owns a given line. Its live results come from the host search (M4); empty until then.
+  // The `@`-file-mention search (plan 30, D-004): the host answers ONE index request per session; the
+  // browser fuzzy-filters that cached index LOCALLY per keystroke. Suppressed on `/loop` lines (D-003)
+  // so at most one composer overlay owns a given line.
+  const onLoopLine = loopPreviewForLine(draft, composerCaret) !== null;
+  const activeMentionQuery = onLoopLine
+    ? null
+    : (activeMention(draft, composerCaret)?.query ?? null);
+  const fileIndex = useMemo(() => fileIndexFrom(events), [events]);
+  const fileSearch = useWorkspaceFileSearch(activeMentionQuery, fileIndex);
   const fileMenu = useFileMentionMenu({
     draft,
     caret: composerCaret,
-    results: NO_FILE_MATCHES,
-    suppressed: loopPreviewForLine(draft, composerCaret) !== null,
+    results: fileSearch.results,
+    truncated: fileSearch.truncated,
+    suppressed: onLoopLine,
     inputRef,
     setDraft,
     setCaret: setComposerCaret,
   });
+  // Ask the leader for the workspace index the first time `@` is used in this session (and once a
+  // leader is present); the browser caches the reply and filters it locally. `crypto.randomUUID` ids
+  // the request so a later refresh's result supersedes it (see fileIndexFrom).
+  const fileIndexRequestedRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: requestFileIndex is a stable action.
+  useEffect(() => {
+    if (
+      activeMentionQuery !== null &&
+      !fileIndex.ready &&
+      !fileIndexRequestedRef.current &&
+      host.leaderId
+    ) {
+      fileIndexRequestedRef.current = true;
+      void requestFileIndex(crypto.randomUUID());
+    }
+  }, [activeMentionQuery, fileIndex.ready, host.leaderId]);
   // Focus the composer on load, once the session resolves and the input is enabled.
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
@@ -1102,6 +1124,7 @@ export function App() {
             index: fileMenu.menuIndex,
             query: fileMenu.query ?? "",
             truncated: fileMenu.truncated,
+            loading: fileMenu.menuOpen && !fileIndex.ready,
             onPick: fileMenu.acceptFile,
           },
           onCaretChange: setComposerCaret,

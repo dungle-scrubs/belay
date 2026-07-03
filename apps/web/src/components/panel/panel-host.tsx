@@ -122,6 +122,7 @@ export interface ComposeWiring {
     readonly index: number;
     readonly query: string;
     readonly truncated: boolean;
+    readonly loading: boolean;
     readonly onPick: (path: string) => void;
   };
   /** Report the composer caret up to App, so it can detect the active `@` token (mention menu). */
@@ -514,6 +515,7 @@ export function PanelHost(props: {
                   activeIndex={compose.fileMenu.index}
                   query={compose.fileMenu.query}
                   truncated={compose.fileMenu.truncated}
+                  loading={compose.fileMenu.loading}
                   onPick={compose.fileMenu.onPick}
                 />
               ) : null}

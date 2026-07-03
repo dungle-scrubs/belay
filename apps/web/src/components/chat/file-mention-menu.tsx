@@ -20,6 +20,8 @@ export interface FileMentionMenuProps {
   readonly onPick: (path: string) => void;
   /** True when the host capped the result set, so the summary says "more exist - narrow your query". */
   readonly truncated?: boolean;
+  /** True while the host has not yet answered the index request; the empty state reads "loading". */
+  readonly loading?: boolean;
   readonly className?: string;
 }
 
@@ -47,6 +49,7 @@ export function FileMentionMenu({
   query,
   onPick,
   truncated,
+  loading,
   className,
 }: FileMentionMenuProps) {
   const rows: AutocompleteRow[] = matches.map((match) => {
@@ -79,7 +82,7 @@ export function FileMentionMenu({
       onPick={onPick}
       ariaLabel="Workspace files"
       summary={summary}
-      empty="No matching files"
+      empty={loading ? "Loading workspace files…" : "No matching files"}
     />
   );
 }

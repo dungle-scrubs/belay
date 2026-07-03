@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   type FileMatch,
+  fileMentionsIn,
   fileMentionText,
   searchWorkspaceFiles,
   splitWorkspacePath,
@@ -83,4 +84,39 @@ test("results are capped, with truncation reported when more matched", () => {
   const result = searchWorkspaceFiles(index("app1.ts", "app2.ts", "app3.ts"), "app", 2);
   assert.equal(result.matches.length, 2);
   assert.equal(result.truncated, true);
+});
+
+const known = (...items: string[]) => {
+  const set = new Set(items);
+  return (path: string) => set.has(path);
+};
+
+test("fileMentionsIn locates @<path> tokens for known workspace files, aligned to the text", () => {
+  const text = "see @apps/web/src/app.tsx and @README.md please";
+  const mentions = fileMentionsIn(text, known("apps/web/src/app.tsx", "README.md"));
+  assert.deepEqual(mentions, [
+    { path: "apps/web/src/app.tsx", start: 4, end: 25 },
+    { path: "README.md", start: 30, end: 40 },
+  ]);
+  // The spans align with the visible text (derived, never stored - so they cannot drift after edits).
+  for (const m of mentions) {
+    assert.equal(text.slice(m.start, m.end), `@${m.path}`);
+  }
+});
+
+test("fileMentionsIn does not invent metadata for an unselected @word or an email", () => {
+  const text = "ping @foo, mail joe@work.com, and @apps/web/src/app.tsx";
+  const mentions = fileMentionsIn(text, known("apps/web/src/app.tsx"));
+  assert.deepEqual(
+    mentions.map((m) => m.path),
+    ["apps/web/src/app.tsx"],
+  );
+});
+
+test("fileMentionsIn stays aligned after an edit shifts the token", () => {
+  const before = "@README.md";
+  const after = `edited later: ${before}`;
+  const m = fileMentionsIn(after, known("README.md"));
+  assert.equal(m.length, 1);
+  assert.equal(after.slice(m[0]?.start, m[0]?.end), "@README.md");
 });

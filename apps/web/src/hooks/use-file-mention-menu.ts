@@ -75,8 +75,12 @@ export function useFileMentionMenu({
       if (!mention) {
         return;
       }
+      // Insert `@path ` and collapse any whitespace the token already abutted, so a mention dropped
+      // before existing text (`see @app here`) reads `see @path here`, never with a double space. The
+      // trailing space closes the token (the parked caret sits after whitespace -> the menu closes).
+      const rest = draft.slice(mention.end).replace(/^\s+/u, "");
       const insertion = `${fileMentionText(path)} `;
-      const next = draft.slice(0, mention.start) + insertion + draft.slice(mention.end);
+      const next = draft.slice(0, mention.start) + insertion + rest;
       const cursor = mention.start + insertion.length;
       setDraft(next);
       setCaret(cursor);
