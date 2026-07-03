@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M5: Required-Response Proposal
-- Current cutoff blockers: 35 unchecked
+> Current focus: M7: Doctor, UI, And CLI Surfacing
+- Current cutoff blockers: 18 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -64,29 +64,29 @@
 
 ### M5: Required-Response Proposal
 
-- [ ] RED: Add host flow tests proving a detected migration blocks on required user response before writes occur.
-- [ ] GREEN: Add a required-response proposal event or reuse the existing ask-user/request pattern with structured options.
-- [ ] RED: Add tests for create, merge, leave unchanged, ignore once, and ignore permanently responses.
-- [ ] GREEN: Implement response handling with durable decision state for ignored files.
-- [ ] RED: Add tests for grouped nested proposals where different files can receive different actions.
-- [ ] GREEN: Support multi-item proposals while keeping each file's action explicit.
-- [ ] REFACTOR: Keep proposal generation separate from filesystem mutation.
+- [x] RED: Add host flow tests proving a detected migration blocks on required user response before writes occur.
+- [x] GREEN: Add a required-response proposal event or reuse the existing ask-user/request pattern with structured options.
+- [x] RED: Add tests for create, merge, leave unchanged, ignore once, and ignore permanently responses.
+- [x] GREEN: Implement response handling with durable decision state for ignored files.
+- [x] RED: Add tests for grouped nested proposals where different files can receive different actions.
+- [x] GREEN: Support multi-item proposals while keeping each file's action explicit.
+- [x] REFACTOR: Keep proposal generation separate from filesystem mutation.
 
 ### M6: Conversion, Merge, And Pointer Rewrite
 
-- [ ] RED: Add filesystem tests for creating a sibling `AGENTS.md` from `CLAUDE.md` content with provenance.
-- [ ] GREEN: Implement create conversion and atomic write behavior.
-- [ ] RED: Add tests for merging into an existing sibling `AGENTS.md` with clear migrated-section markers.
-- [ ] GREEN: Implement merge conversion without losing existing `AGENTS.md` content.
-- [ ] RED: Add tests proving successful create/merge rewrites `CLAUDE.md` into an idempotent pointer to `AGENTS.md`.
-- [ ] GREEN: Implement pointer rewrite and rollback-safe error handling.
-- [ ] REFACTOR: Keep file operations explicit, auditable, and never triggered without the recorded user response.
+- [x] RED: Add filesystem tests for creating a sibling `AGENTS.md` from `CLAUDE.md` content with provenance.
+- [x] GREEN: Implement create conversion and atomic write behavior.
+- [x] RED: Add tests for merging into an existing sibling `AGENTS.md` with clear migrated-section markers.
+- [x] GREEN: Implement merge conversion without losing existing `AGENTS.md` content.
+- [x] RED: Add tests proving successful create/merge rewrites `CLAUDE.md` into an idempotent pointer to `AGENTS.md`.
+- [x] GREEN: Implement pointer rewrite and rollback-safe error handling.
+- [x] REFACTOR: Keep file operations explicit, auditable, and never triggered without the recorded user response.
 
 ### Gate 3 to 4
 
-- [ ] Root and nested `CLAUDE.md` detection is covered.
-- [ ] Conversion and merge never run without required user response.
-- [ ] Pointer rewrite is idempotent and does not re-trigger migration prompts.
+- [x] Root and nested `CLAUDE.md` detection is covered.
+- [x] Conversion and merge never run without required user response.
+- [x] Pointer rewrite is idempotent and does not re-trigger migration prompts.
 
 ### M7: Doctor, UI, And CLI Surfacing
 

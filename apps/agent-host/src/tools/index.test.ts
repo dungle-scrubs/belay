@@ -25,6 +25,7 @@ import { buildLspHoverTool } from "./lsp-hover";
 import { buildLspStatusTool } from "./lsp-status";
 import { buildLspWorkspaceSymbolsTool } from "./lsp-workspace-symbols";
 import { buildMcpTool } from "./mcp";
+import { migrateClaudeTool } from "./migrate-claude";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
 import { readTool } from "./read";
@@ -153,6 +154,9 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     astGrepTool,
     doctorTool,
     trevorExpertTool,
+    // migrate_claude_md (plan 26): a required-response serial barrier; its name/readOnly nature is
+    // config-independent (it reads cwd + the runtime singleton at call time).
+    migrateClaudeTool,
     // The mcp tool's name/readOnly nature is config-independent; an empty runtime suffices here.
     buildMcpTool(createMcpRuntime([])),
     // The lsp_* tools' name/readOnly nature is likewise config-independent (plan 24).

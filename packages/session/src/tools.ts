@@ -48,6 +48,8 @@ export const TOOL_DESCRIPTORS = [
   { name: "skill_view", readOnly: true },
   // trevor_expert only reads the host-generated capability manifest; a serial-safe pure read.
   { name: "trevor_expert", readOnly: true },
+  // migrate_claude_md pauses the turn for a required-response decision, then mutates files: a serial barrier.
+  { name: "migrate_claude_md", readOnly: false },
   // mcp calls external MCP servers, which mutate EXTERNAL service state (a different risk axis
   // than workspace mutation), so it is always a mutating serial barrier (plan 23 D-008).
   { name: "mcp", readOnly: false },

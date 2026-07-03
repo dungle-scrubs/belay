@@ -359,6 +359,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     relativePath: "docs",
     description: "Cached external-documentation corpora (docs tool).",
   },
+  {
+    name: "claude-migration-ignores",
+    category: "state",
+    relativePath: "claude-migration-ignores.json",
+    description:
+      "Per-project permanently-ignored CLAUDE.md migration paths (plan 26): { <projectRoot>: [relPath, ...] }.",
+  },
   // legacy (~/.trevor) - detect-only
   {
     name: "legacy-root",

@@ -31,7 +31,12 @@ function read(path: string): string {
   }
 }
 
-function isPointer(body: string): boolean {
+/**
+ * Whether a CLAUDE.md body is an already-converted pointer to its sibling AGENTS.md (D-011). A pointer
+ * mentions AGENTS.md and one of the migration verbs, so re-discovery recognizes it and does not
+ * re-propose the file. Exported so the writer can short-circuit a redundant conversion idempotently.
+ */
+export function isClaudePointer(body: string): boolean {
   return /AGENTS\.md/u.test(body) && /moved|see|use|source of truth|pointer/i.test(body);
 }
 
@@ -46,7 +51,7 @@ export function discoverClaudeMigrations(cwd: string): ClaudeMigrationInventory 
     (path): ClaudeMigrationItem => {
       const body = read(path);
       const dir = dirname(path);
-      const pointer = isPointer(body);
+      const pointer = isClaudePointer(body);
       return {
         agentsPath: relative(root, join(dir, AGENTS_FILE)),
         claudePath: relative(root, path),

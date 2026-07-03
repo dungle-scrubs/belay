@@ -50,7 +50,9 @@ interface Pending {
   readonly runId: string;
   readonly toolCallId: string;
   readonly contract: ProviderQuestionContract;
-  readonly resolve: (result: string) => void;
+  /** Resolves the blocked caller with whatever shape it asked for (a string for `ask`, the
+   *  structured answer for `askForAnswer`); set by the variant that registered the waiter. */
+  readonly deliver: (answer: ProviderQuestionAnswer) => void;
 }
 
 export class ProviderQuestionRuntime {
@@ -78,31 +80,66 @@ export class ProviderQuestionRuntime {
   }
 
   /**
-   * The `ask_user` tool's blocking entry: emit the request, then suspend until an answer arrives. A
-   * malformed contract fails fast as a ToolInputError (the model sees the reason). `runId`/`toolCallId`
-   * correlate the request to the active turn + tool call for the UI; `questionId` is the lifecycle key.
+   * The `ask_user` tool's blocking entry: emit the request, then suspend until an answer arrives, and
+   * resume with the model-facing tool-result string. A malformed contract fails fast as a
+   * ToolInputError (the model sees the reason). `runId`/`toolCallId` correlate the request to the
+   * active turn + tool call for the UI; `questionId` is the lifecycle key.
    */
   ask(
     contract: ProviderQuestionContract,
     runId: string,
     toolCallId: string,
   ): Effect.Effect<string, ToolInputError> {
+    return this.block(contract, runId, toolCallId, "ask_user", "ask_user", formatToolResult);
+  }
+
+  /**
+   * The structured sibling of {@link ask} for HOST-owned required-response proposals (e.g. the CLAUDE.md
+   * migration, plan 26): it rides the exact same `provider.question.*` events and blocking lifecycle,
+   * but resumes with the full {@link ProviderQuestionAnswer} so the caller can act on the chosen options
+   * (the tool-result string discards the structured selection). `toolName`/`adapter` tag the surface so
+   * the request is distinguishable from an ask_user question while reusing its renderer.
+   */
+  askForAnswer(
+    contract: ProviderQuestionContract,
+    runId: string,
+    toolCallId: string,
+    toolName: string,
+    adapter: string,
+  ): Effect.Effect<ProviderQuestionAnswer, ToolInputError> {
+    return this.block(contract, runId, toolCallId, toolName, adapter, (answer) => answer);
+  }
+
+  /**
+   * The shared blocking core behind {@link ask} and {@link askForAnswer}: validate, emit the request,
+   * register the waiter, and suspend until `submitAnswer` delivers an answer - which `toResult` maps to
+   * the caller's chosen shape. Interrupting the Effect (the turn was cancelled / the run ended before an
+   * answer, AQ003) drops the waiter and emits a `cancelled` resolution.
+   */
+  private block<A>(
+    contract: ProviderQuestionContract,
+    runId: string,
+    toolCallId: string,
+    toolName: string,
+    adapter: string,
+    toResult: (answer: ProviderQuestionAnswer) => A,
+  ): Effect.Effect<A, ToolInputError> {
     const issues = validateContract(contract);
     if (issues.length > 0) {
       return Effect.fail(
-        new ToolInputError({ tool: "ask_user", detail: issues.map((i) => i.message).join("; ") }),
+        new ToolInputError({ tool: toolName, detail: issues.map((i) => i.message).join("; ") }),
       );
     }
-    return Effect.async<string, ToolInputError>((resume) => {
+    return Effect.async<A, ToolInputError>((resume) => {
       const questionId = randomUUID();
       this.pending.set(questionId, {
         questionId,
         runId,
         toolCallId,
         contract,
-        resolve: (result) => {
+        deliver: (answer) => {
           this.pending.delete(questionId);
-          resume(Effect.succeed(result));
+          resume(Effect.succeed(toResult(answer)));
         },
       });
       this.emit(
@@ -110,8 +147,8 @@ export class ProviderQuestionRuntime {
           questionId,
           runId,
           toolCallId,
-          toolName: "ask_user",
-          adapter: "ask_user",
+          toolName,
+          adapter,
           contract,
         }),
       );
@@ -149,7 +186,7 @@ export class ProviderQuestionRuntime {
         return { status: "invalid", issues: issues.map((i) => i.message) };
       }
     }
-    entry.resolve(formatToolResult(answer));
+    entry.deliver(answer);
     const outcome: ResolvedOutcome =
       answer.action === "accept"
         ? "answered"

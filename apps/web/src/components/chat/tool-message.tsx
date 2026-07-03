@@ -329,6 +329,9 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   doctor: renderOutput,
   // `trevor_expert` answers capability questions from the manifest as flat, already-redacted text.
   trevor_expert: renderOutput,
+  // `migrate_claude_md` (plan 26) surfaces its per-file decision as a required-response question card
+  // (the provider-question surface); this row is the flat summary it returns after the answer.
+  migrate_claude_md: renderOutput,
   // `tool_script` returns its bounded structured result (or a typed error line) as text; the rich
   // source/bridge-calls/budgets live in the detail takeover (plan 16 M8), not the transcript row.
   tool_script: renderOutput,

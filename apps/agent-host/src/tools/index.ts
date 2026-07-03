@@ -34,6 +34,7 @@ import { buildLspHoverTool } from "./lsp-hover";
 import { buildLspStatusTool } from "./lsp-status";
 import { buildLspWorkspaceSymbolsTool } from "./lsp-workspace-symbols";
 import { buildMcpTool } from "./mcp";
+import { migrateClaudeTool } from "./migrate-claude";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
 import { readTool } from "./read";
@@ -75,6 +76,9 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   skillViewTool,
   doctorTool,
   trevorExpertTool,
+  // migrate_claude_md (plan 26, D-005/D-010): detect legacy CLAUDE.md files and propose migrating each
+  // to a sibling AGENTS.md; a required-response serial barrier that blocks the turn and then mutates.
+  migrateClaudeTool,
   // mcp (plan 23 M7): the model-facing surface over the host-wide MCP runtime singleton (the
   // supervisor/taskRegistry DI pattern); never readOnly - external calls are serial barriers (D-008).
   buildMcpTool(mcpRuntime),
