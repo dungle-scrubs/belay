@@ -223,8 +223,8 @@ export function makeHostFacts(deps: HostFactsDeps) {
    * The project-context summary for /doctor (D-012): AGENTS.md vs `.trevor/rules` (with inclusion
    * reasons), bytes used/dropped, plus a `claudeMd` line distinguishing detected CLAUDE.md files,
    * converted pointers, still-to-migrate (required-response), and ignored ones. Count-only - no rule or
-   * instruction body is ever dumped. The migration inventory is a bounded workspace walk done on demand
-   * (a /doctor build), not per turn.
+   * instruction body is ever dumped. The migration inventory runs on demand (a /doctor build, not per
+   * turn) over the ignore-pruned walk, which is bounded by walk.ts's depth and entry caps.
    */
   function contextState(): Record<string, string> {
     const cwd = process.cwd();
