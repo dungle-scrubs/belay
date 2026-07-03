@@ -478,19 +478,20 @@ export function App() {
   // Ask the leader for the workspace index the first time `@` is used in this session (and once a
   // leader is present); the browser caches the reply and filters it locally. `crypto.randomUUID` ids
   // the request so a later refresh's result supersedes it (see fileIndexFrom).
-  const fileIndexRequestedRef = useRef(false);
+  // Keyed by session so switching sessions in this tab re-requests the new workspace's index.
+  const fileIndexRequestedForRef = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: requestFileIndex is a stable action.
   useEffect(() => {
     if (
       activeMentionQuery !== null &&
       !fileIndex.ready &&
-      !fileIndexRequestedRef.current &&
+      fileIndexRequestedForRef.current !== sessionId &&
       host.leaderId
     ) {
-      fileIndexRequestedRef.current = true;
+      fileIndexRequestedForRef.current = sessionId;
       void requestFileIndex(crypto.randomUUID());
     }
-  }, [activeMentionQuery, fileIndex.ready, host.leaderId]);
+  }, [activeMentionQuery, fileIndex.ready, host.leaderId, sessionId]);
   // Focus the composer on load, once the session resolves and the input is enabled.
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
