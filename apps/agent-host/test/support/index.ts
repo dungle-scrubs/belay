@@ -37,6 +37,12 @@ export { createMcpRuntime, type McpRuntime } from "@host/mcp/runtime";
 // The background-job promotion runtime (plan 09), so cross-service e2e can drive a real promotable shell
 // command through the supervisor (promote -> tracked pN -> kill) the way the bash tool / shell lane do.
 export { ProcessRegistry } from "@host/processes/process-registry";
+// The project-context system (plan 26 M8): the pure eager render + the session ContextRegistry (eager +
+// lazy AGENTS.md and .trevor/rules) + the /init proposal builder, so cross-service e2e can exercise real
+// context ordering, lazy loading, and /init drafting over a hermetic temp workspace.
+export { collectEagerSources, renderContext } from "@host/project-context/agents-md";
+export { buildInitProposal } from "@host/project-context/init-agents";
+export { ContextRegistry } from "@host/project-context/registry";
 export type { ChatMessage, Provider, ProviderEvent } from "@host/providers";
 // The typed provider error, so cross-service e2e can drive a retryable transport drop through a real
 // store (the DeepSeek-style thinking-only reconnect path) without reaching into host internals.

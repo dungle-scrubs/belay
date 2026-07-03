@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M8: E2E And Regression Coverage
-- Current cutoff blockers: 12 unchecked
+> Current focus: Complete - all milestones (M1-M8) and gates landed.
+- Current cutoff blockers: 0 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -99,18 +99,18 @@
 
 ### M8: E2E And Regression Coverage
 
-- [ ] RED: Add hermetic e2e coverage for `/init` in a repo with root `AGENTS.md`, nested `AGENTS.md`, and `.trevor/rules`.
-- [ ] GREEN: Prove prompt context ordering and lazy loading remain stable.
-- [ ] RED: Add hermetic e2e coverage for root and nested `CLAUDE.md` migration proposals.
-- [ ] GREEN: Drive create, merge, skip, and pointer-idempotence paths end to end.
-- [ ] RED: Add regression tests proving existing D-080 lazy `AGENTS.md` behavior is unchanged when no rules or `CLAUDE.md` files exist.
-- [ ] GREEN: Stabilize the no-op path so projects without the new files get byte-for-byte existing prompt behavior where possible.
-- [ ] REFACTOR: Keep test fixtures small and focused on source ordering, required response, and file mutation safety.
+- [x] RED: Add hermetic e2e coverage for `/init` in a repo with root `AGENTS.md`, nested `AGENTS.md`, and `.trevor/rules`.
+- [x] GREEN: Prove prompt context ordering and lazy loading remain stable.
+- [x] RED: Add hermetic e2e coverage for root and nested `CLAUDE.md` migration proposals.
+- [x] GREEN: Drive create, merge, skip, and pointer-idempotence paths end to end.
+- [x] RED: Add regression tests proving existing D-080 lazy `AGENTS.md` behavior is unchanged when no rules or `CLAUDE.md` files exist.
+- [x] GREEN: Stabilize the no-op path so projects without the new files get byte-for-byte existing prompt behavior where possible.
+- [x] REFACTOR: Keep test fixtures small and focused on source ordering, required response, and file mutation safety.
 
 ### Gate 3 to Done
 
-- [ ] `pnpm test --project unit` passes for context parsing and migration logic.
-- [ ] `pnpm test --project integration` passes for host proposal and filesystem flows.
-- [ ] `pnpm test --project web` passes if migration proposal UI changes.
-- [ ] `pnpm test --project e2e` passes for hermetic context and migration workflows.
-- [ ] D-080 shipped behavior remains unchanged for projects without `.trevor/rules` or `CLAUDE.md`.
+- [x] `pnpm test --project unit` passes for context parsing and migration logic.
+- [x] `pnpm test --project integration` passes for host proposal and filesystem flows.
+- [x] `pnpm test --project web` passes if migration proposal UI changes.
+- [x] `pnpm test --project e2e` passes for hermetic context and migration workflows.
+- [x] D-080 shipped behavior remains unchanged for projects without `.trevor/rules` or `CLAUDE.md`.
