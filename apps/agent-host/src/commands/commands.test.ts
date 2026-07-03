@@ -14,9 +14,12 @@ import { buildCommandRegistry, type CommandContext } from "./commands";
 const baseCtx: CommandContext = {
   providers: {},
   cwd: "~",
-  workspace: "~",
-  instanceId: "abc",
-  role: "leader",
+  doctor: {
+    cwd: "~",
+    workspace: "~",
+    instanceId: "abc",
+    role: "leader",
+  },
 };
 
 function tree(): string {
@@ -78,7 +81,7 @@ test("/init drafts AGENTS.md from repo evidence without writing", async () => {
   write(join(root, "CLAUDE.md"), "legacy");
 
   const registry = buildCommandRegistry();
-  const { text, ok } = await registry.run("/init", "", { ...baseCtx, cwd: root, workspace: root });
+  const { text, ok } = await registry.run("/init", "", { ...baseCtx, cwd: root });
 
   assert.equal(ok, true);
   assert.match(text, /No files were written/);
@@ -181,7 +184,10 @@ test("/doctor's select threads the MCP rollup through to the snapshot (plan 23 M
   const registry = buildCommandRegistry();
   const { ok, text } = await registry.run("/doctor", "", {
     ...baseCtx,
-    mcp: { kind: "auth-needed", detail: 'MCP server "linear" needs authentication' },
+    doctor: {
+      ...baseCtx.doctor,
+      mcp: { kind: "auth-needed", detail: 'MCP server "linear" needs authentication' },
+    },
   });
   assert.equal(ok, true);
   const areas = JSON.parse(text).areas as { id: string; status: string; verdict: string }[];

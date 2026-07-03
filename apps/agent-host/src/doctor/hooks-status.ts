@@ -3,6 +3,7 @@ import type { HooksStatusSnapshot } from "@host/hooks/runtime";
 import type { HookStatsEntry } from "@host/hooks/stats";
 import type { DoctorFinding } from "@trevor/session";
 import { plural, statusHistogram } from "./format";
+import { classifyPeripheral } from "./peripheral-classifier";
 import type { PeripheralState } from "./probe-input";
 
 /**
@@ -32,11 +33,12 @@ export const SLOW_RUNS_THRESHOLD = 3;
 
 /** Folds the runtime status snapshot into the doctor Hooks peripheral state. */
 export function hooksPeripheralState(snapshot: HooksStatusSnapshot): PeripheralState {
-  if (snapshot.hooks.length === 0 && snapshot.issues.length === 0 && snapshot.legacy.length === 0) {
-    // Nothing configured and nothing legacy: the steady "not set up" state, never an error.
-    return { kind: "unconfigured" };
-  }
-  return { kind: "ready", detail: readyDetail(snapshot) };
+  return classifyPeripheral([snapshot], {
+    configured: (entry) =>
+      entry.hooks.length > 0 || entry.issues.length > 0 || entry.legacy.length > 0,
+    rules: [],
+    ready: ([entry]) => ({ kind: "ready", detail: readyDetail(entry) }),
+  });
 }
 
 /** The D-009 ready line: counts by event type, the trust rollup, disabled + issue counts. */

@@ -2,6 +2,7 @@
  * Responsible for: computing the shared Baseline - post-/clear start, latest fold, goal pin, and
  * live tasks - in one decoded-log pass for the prompt projection and the compaction planner.
  */
+
 import type {
   ArtifactRef,
   DecodedEvent,
@@ -9,6 +10,7 @@ import type {
   SessionEvent,
   TaskSnapshot,
 } from "@trevor/session";
+import { isSelfProducer } from "@trevor/session";
 
 /**
  * The baseline that both the prompt projection (history-projection.ts) and the compaction planner
@@ -42,8 +44,6 @@ export function analyzeBaseline(
   decoded: readonly (DecodedEvent | null)[],
   selfProducerId: string | undefined,
 ): Baseline {
-  const isSelf = (event: SessionEvent): boolean =>
-    selfProducerId !== undefined && event.producerId === selfProducerId;
   let start = 0;
   let fold: Baseline["fold"] = null;
   let goal: Baseline["goal"] = null;
@@ -54,14 +54,18 @@ export function analyzeBaseline(
     if (!event || !d) {
       continue;
     }
-    if (d.type === "user.command" && d.command === "/clear" && !isSelf(event)) {
+    if (
+      d.type === "user.command" &&
+      d.command === "/clear" &&
+      !isSelfProducer(event.producerId, selfProducerId)
+    ) {
       // A clear resets the baseline, dropping any fold + pins before it. Self-authored clears are
       // the host's own echo - ignored.
       start = i + 1;
       fold = null;
       goal = null;
       tasks = [];
-    } else if (d.type === "user.message" && !isSelf(event)) {
+    } else if (d.type === "user.message" && !isSelfProducer(event.producerId, selfProducerId)) {
       goal ??= { text: d.text, artifacts: d.artifacts, pastes: d.pastes };
     } else if (d.type === "tasks.current") {
       tasks = d.tasks;

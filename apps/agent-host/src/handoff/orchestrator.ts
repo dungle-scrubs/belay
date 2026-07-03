@@ -1,14 +1,13 @@
 import type { CompactionController } from "@host/agent/compaction-controller";
-import type { TurnScheduler } from "@host/agent/turn-scheduler";
+import type { ConversationLog } from "@host/agent/conversation-log";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
-import { contextRegistry } from "@host/project-context/registry";
-import type { ChatMessage } from "@host/providers/index";
 import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
 import { events, freshSessionId, type SessionTransport } from "@trevor/session";
-import { Cause, Effect, Exit, Fiber } from "effect";
+import { Effect, Fiber } from "effect";
+import { interpretFiberExit, interruptFiber } from "../effect/fiber-exit";
 import { parseHandoff } from "./handoff";
 import {
   type DirectHandoffDeps,
@@ -45,8 +44,8 @@ export interface HandoffOrchestratorDeps {
   readonly transport: Pick<SessionTransport, "publishEvent" | "ensureSession">;
   /** Publish one host-authored event to THIS session's log (main.ts's emit). */
   readonly emit: EmitEvent;
-  /** The prompt projection right now (main.ts's mutable `history`). */
-  history(): readonly ChatMessage[];
+  /** The live conversation log owner; handoff reads prompt history and owned snapshots. */
+  readonly conversationLog: Pick<ConversationLog, "history" | "historySnapshot">;
   /** The draft's provider - the source's last-turn provider, else the default. */
   readonly compactionController: Pick<CompactionController, "providerOrDefault">;
   /** The provider + model the target's first prompt resolves to (main.ts's controlModel). */
@@ -55,10 +54,8 @@ export interface HandoffOrchestratorDeps {
   readonly blockedFromWorkspaceSwitch: SessionSwitchApi["blockedFromWorkspaceSwitch"];
   /** Spawn the replacement host for the target session (main.ts's spawnReplacementHost). */
   readonly spawnReplacementHost: SessionSwitchApi["spawnReplacementHost"];
-  /** Drop the deferred prompt queue before retiring (the switch mechanic's scheduler half). */
-  readonly scheduler: Pick<TurnScheduler, "clearPending">;
-  /** Retire this host after the session.switch (main.ts's retireAfterSessionSwitch). */
-  readonly retireAfterSessionSwitch: SessionSwitchApi["retireAfterSessionSwitch"];
+  /** Publish the session.switch, drop session-local state, and retire this host. */
+  readonly announceSwitchAndRetire: SessionSwitchApi["announceSwitchAndRetire"];
 }
 
 /** Builds the /handoff orchestration over the host's live switch mechanics; main.ts wires it once. */
@@ -69,13 +66,12 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
     controlProducerId: CONTROL_PRODUCER_ID,
     transport,
     emit,
-    history,
+    conversationLog,
     compactionController,
     controlModel,
     blockedFromWorkspaceSwitch,
     spawnReplacementHost,
-    scheduler,
-    retireAfterSessionSwitch,
+    announceSwitchAndRetire,
   } = deps;
 
   /**
@@ -118,10 +114,7 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
         spawnReplacementHost(target);
       },
       switchAndRetire: async (targetSessionId) => {
-        await emit(events.sessionSwitch({ sessionId: targetSessionId, reason: "handoff" }));
-        scheduler.clearPending();
-        contextRegistry.reset();
-        retireAfterSessionSwitch();
+        await announceSwitchAndRetire(targetSessionId, "handoff");
       },
     };
   }
@@ -177,7 +170,7 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
       await emit(events.commandResult({ command: "/handoff", text: resultText, ok: false }));
     };
 
-    if (!hasGenerableContext(history())) {
+    if (!hasGenerableContext(conversationLog.history())) {
       await fail(
         "empty_context",
         "No conversation to summarize into a handoff.",
@@ -209,7 +202,7 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
     // bounded by a timeout so a hung provider can't hang it forever.
     const fiber = Effect.runFork(
       generateHandoffPrompt(provider, {
-        history: history().slice(),
+        history: conversationLog.historySnapshot(),
         cwd: process.cwd(),
         workspace: WORKSPACE_ROOT,
         ...(request.trim() ? { request: request.trim() } : {}),
@@ -218,14 +211,15 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
     handoffDraftFiber = fiber;
     const exit = await Effect.runPromise(Fiber.await(fiber));
     handoffDraftFiber = null;
+    const result = interpretFiberExit(exit);
 
-    if (Exit.isFailure(exit)) {
+    if (result.tag === "cancelled") {
       // Interruption = the user cancelled mid-draft (rejectHandoff already acknowledged + cleared the
       // surface), so emit nothing further. Any other failure (provider error / timeout) fails the handoff.
-      if (Cause.isInterruptedOnly(exit.cause)) {
-        return;
-      }
-      warn("host", "handoff generation failed", { cause: Cause.pretty(exit.cause) });
+      return;
+    }
+    if (result.tag === "failed") {
+      warn("host", "handoff generation failed", { cause: result.cause });
       await fail(
         "generation_failed",
         "The provider failed or timed out while generating the handoff.",
@@ -233,7 +227,7 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
       );
       return;
     }
-    const draft = exit.value.trim();
+    const draft = result.value.trim();
     if (!draft) {
       await fail(
         "empty_generation",
@@ -304,7 +298,7 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
     if (handoffDraftFiber) {
       const fiber = handoffDraftFiber;
       handoffDraftFiber = null;
-      Effect.runFork(Fiber.interrupt(fiber));
+      interruptFiber(fiber);
     }
     await emit(
       events.commandResult({

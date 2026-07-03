@@ -16,7 +16,7 @@ export interface CompactionFoldSnapshot {
 
 /** The per-fold pieces a caller supplies; the controller fills the rest (provider, window, input) from
  *  its captured state, so a fold call site stops re-threading the controller's internals. */
-export interface FoldPlan {
+export interface CompactionFoldRequest {
   readonly provider: Provider;
   readonly events: readonly SessionEvent[];
   readonly producerId: string;
@@ -70,7 +70,7 @@ export class CompactionController {
    * positional arg list. The caller forks the returned Effect; its `context.compacted` result (or
    * null on nothing-to-fold) flows back through the normal echo path.
    */
-  planFold(plan: FoldPlan): Effect.Effect<TrevorEventInput | null, ProviderError> {
+  planFold(plan: CompactionFoldRequest): Effect.Effect<TrevorEventInput | null, ProviderError> {
     return runCompaction(
       plan.provider,
       plan.events,

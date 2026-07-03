@@ -10,17 +10,14 @@ import {
   type ChatMessage,
   type Provider,
   ProviderUnavailable,
-  providerFailureEvidence,
   type Usage,
 } from "@host/providers/index";
-import { providerFailures } from "@host/providers/provider-failure-log";
-import { providerIncidents } from "@host/providers/provider-incidents";
 import { buildSystemPrompt, promptOverheadChars } from "@host/providers/system-prompt";
 import { spanEffect } from "@host/telemetry/span";
 import { offeredToolDefs } from "@host/tools/index";
 import { MAX_OUTPUT } from "@host/tools/shared";
 import { DeltaBuffer } from "@host/transport/delta-buffer";
-import { debug, warn } from "@host/transport/log";
+import { warn } from "@host/transport/log";
 import { Emit } from "@host/transport/services";
 import {
   events,
@@ -38,10 +35,12 @@ import {
 } from "@trevor/session/telemetry";
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, Fiber, FiberRef, Option, Stream } from "effect";
+import { interpretFiberExit } from "../effect/fiber-exit";
 import { withHookDecisionEvents } from "./hook-events";
 import type { HistoryImageResolver } from "./image-resolution";
 import { type AgentEvent, type DelegateCapability, runAgent, type TurnHooks } from "./loop";
 import { type TurnLoopConfig, turnLoopConfig } from "./loop-config";
+import { recordProviderIncident, recordTerminalProviderFailure } from "./loop-failures";
 import { withStallTimeout } from "./loop-stalls";
 import {
   continuationMessages,
@@ -371,27 +370,6 @@ export function publishTurn(
       }
     });
 
-    // Records the terminal incident into the per-provider latest-incident store and emits the
-    // structured provider-incident log line (D-007), keyed by runId, provider, model, phase, reason,
-    // retryability, and attempt. The detail is already redacted at the provider boundary; this carries
-    // no prompt body, header, key, or raw tool result. Best-effort - a no-op when there is no incident.
-    const recordIncident = (incident: ProviderDiagnostic | undefined) =>
-      incident
-        ? Effect.sync(() => {
-            providerIncidents.record(incident, new Date().toISOString(), runId);
-            debug("provider", "incident", {
-              runId,
-              provider: incident.provider,
-              model: incident.model,
-              phase: incident.phase,
-              reason: incident.reason,
-              retryable: incident.retryable,
-              safeToRetry: incident.safeToRetry,
-              attempt: incident.attempt,
-            });
-          })
-        : Effect.void;
-
     const handle = (event: AgentEvent) =>
       Effect.gen(function* () {
         // Hook decisions queued during the previous execution window publish first (M9), so a
@@ -589,6 +567,7 @@ export function publishTurn(
         Effect.gen(function* () {
           yield* flushAll;
           yield* Effect.sync(() => logUsageBreakdown(runId, breakdown, usage));
+          const result = interpretFiberExit(exit);
 
           // The Stop dispatch rule (25 M7): only a genuine terminal assistant result - the
           // success exit, including budget/halt/no-reply stops - is reviewable. It runs before
@@ -597,7 +576,7 @@ export function publishTurn(
           // fault in a hooks BINDING (a broken discovery/approvals layer in a hand-wired
           // TurnHooks) must never suppress the terminal completion - it downgrades to a warn
           // and the completion below publishes unconditionally.
-          if (Exit.isSuccess(exit)) {
+          if (result.tag === "ok") {
             yield* stopHookGate.pipe(
               Effect.catchAllCause((cause) =>
                 Effect.sync(() =>
@@ -618,9 +597,9 @@ export function publishTurn(
           // vocabularies - never a run id or prompt - so this aggregates cleanly.
           const stopCause =
             stop?.cause ??
-            (Exit.isSuccess(exit)
+            (result.tag === "ok"
               ? "answered"
-              : Cause.isInterruptedOnly(exit.cause)
+              : result.tag === "cancelled"
                 ? "cancelled"
                 : "failed");
           recordMetric(sink, METRIC_NAMES.turnStop, 1, {
@@ -637,57 +616,29 @@ export function publishTurn(
             });
           }
 
-          if (Exit.isSuccess(exit)) {
+          if (result.tag === "ok") {
             // A clean end OR a malformed-protocol anomaly (which ends the stream successfully with a
             // typed diagnostic): record the latter as the provider's latest incident.
-            yield* recordIncident(diagnostic);
+            yield* recordProviderIncident(diagnostic, { runId });
             yield* complete({});
-          } else if (Cause.isInterruptedOnly(exit.cause)) {
+          } else if (result.tag === "cancelled") {
             yield* complete({ cancelled: true });
           } else {
-            const failure = Cause.failureOption(exit.cause);
+            const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none();
             // Record the terminal provider failure for /doctor (D-076 M6), tagged retry-exhausted
             // (the loop emitted reconnect attempts and still failed) vs non-retryable terminal. The
             // detail is the already-sanitized error message; the log re-redacts defensively.
             if (Option.isSome(failure)) {
-              const error = failure.value;
-              const evidence = providerFailureEvidence(error);
-              yield* Effect.sync(() =>
-                providerFailures.record({
-                  provider: provider.id,
-                  model: provider.model,
-                  classification: evidence.classification,
-                  userAction: evidence.userAction,
-                  retryExhausted: reconnectAttempts > 0,
-                  attempts: reconnectAttempts,
-                  status: evidence.status,
-                  code: evidence.code,
-                  shapeFields: evidence.shapeFields,
-                  detail: error.message,
-                  at: new Date().toISOString(),
-                }),
-              );
-              // The opt-in deep provider-attempt trace (plan 13 M6): the terminal failure's class + retry
-              // state + redacted detail, for debugging a flaky provider. A no-op writer when disabled.
-              yield* Effect.sync(() =>
-                traceWriter?.record({
-                  provider: provider.id,
-                  model: provider.model,
-                  attemptId: runId,
-                  outcome: "error",
-                  failureClass: evidence.classification,
-                  retryable: evidence.retryable,
-                  attempt: reconnectAttempts + 1,
-                  durationMs: 0,
-                  detail: error.message,
-                }),
-              );
+              yield* recordTerminalProviderFailure(provider, failure.value, {
+                reconnectAttempts,
+                runId,
+                ...(traceWriter ? { traceWriter } : {}),
+              });
             }
             const unavailable =
               Option.isSome(failure) && failure.value instanceof ProviderUnavailable
                 ? failure.value
                 : undefined;
-            yield* recordIncident(unavailable?.diagnostic);
             yield* complete({
               error: Option.isSome(failure) ? failure.value.message : "stream failed",
               ...(unavailable?.diagnostic ? { diagnostic: unavailable.diagnostic } : {}),

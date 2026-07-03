@@ -2,10 +2,15 @@ import { CHARS_PER_TOKEN } from "@host/metrics/breakdown";
 import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@trevor/session";
 import { Effect } from "effect";
 import type { ChatMessage, Provider, ProviderError } from "../providers";
-import { CompactionPlanner, type FoldPlan, SUMMARY_TOKEN_BUDGET } from "./compaction-planner";
+import { planCompaction, SUMMARY_TOKEN_BUDGET } from "./compaction-planner";
 import { distillToBudget } from "./tool-less-summary";
 
-export { COMPACT_TO, COMPACT_WHEN, SUMMARY_TOKEN_BUDGET } from "./compaction-planner";
+export {
+  COMPACT_TO,
+  COMPACT_WHEN,
+  planCompaction,
+  SUMMARY_TOKEN_BUDGET,
+} from "./compaction-planner";
 
 /**
  * Owns history FOLDING for cross-turn compaction (D-040..D-043), end to end: the optional trigger
@@ -36,24 +41,6 @@ const SUMMARY_CHAR_CAP = SUMMARY_TOKEN_BUDGET * CHARS_PER_TOKEN;
 /** True when the latest prompt size crosses `fraction` of the window (window 0 = unknown → false). */
 export function overBudget(input: number, window: number, fraction: number): boolean {
   return window > 0 && input >= fraction * window;
-}
-
-/**
- * Plans the fold. Auto path: keep the largest suffix of recent turns that still fits under
- * COMPACT_TO of the window (more verbatim context is better), fold the rest. `force` path (manual
- * /compact): the user asked, so fold EVERY completed turn regardless of the window - budget 0, no
- * window requirement - down to just the pins + summary. Returns null when there is nothing worth
- * folding (no turns, or the foldable content is smaller than the summary that would replace it).
- * Pure - no model call, no IO.
- */
-export function planCompaction(
-  events: readonly SessionEvent[],
-  window: number,
-  selfProducerId: string,
-  tokensBefore: number,
-  force = false,
-): FoldPlan | null {
-  return CompactionPlanner.plan(events, window, selfProducerId, tokensBefore, force);
 }
 
 /**

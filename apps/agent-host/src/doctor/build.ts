@@ -45,8 +45,7 @@ import { buildDoctorSnapshot } from "./snapshot";
  */
 
 /**
- * The live host facts the snapshot is assembled from - the narrow slice of runtime state /doctor
- * reads. Optionality mirrors CommandContext so the command can pass its context slice directly.
+ * The live host facts the snapshot is assembled from - the opaque runtime fact bag /doctor reads.
  * `cwd`/`workspace` are already abbreviated by the caller; `host` is the live turn-machine record
  * the session facts (active run, queue, last termination) are read off.
  */

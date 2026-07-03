@@ -3,9 +3,15 @@
  * prompt view for a turn (buildHistory - folds, pins, tool reconstruction, /clear).
  * Not for: when turns run or the one-turn-at-a-time gate - turn-scheduler.ts.
  */
-import type { ArtifactRef, PastePayload, SessionEvent, TaskSnapshot } from "@trevor/session";
+import {
+  type ArtifactRef,
+  isSelfProducer,
+  type PastePayload,
+  type SessionEvent,
+  type TaskSnapshot,
+} from "@trevor/session";
 import type { ChatMessage } from "../providers";
-import { CompactionPlanner } from "./compaction-planner";
+import { analyzeCompactionLog } from "./compaction-planner";
 import { toolCallGrouper } from "./tool-messages";
 
 /**
@@ -69,8 +75,6 @@ export function buildHistory(
   options: { readonly selfProducerId?: string } = {},
 ): ChatMessage[] {
   const { selfProducerId } = options;
-  const isSelf = (event: SessionEvent): boolean =>
-    selfProducerId !== undefined && event.producerId === selfProducerId;
   const toUserTurn = (decoded: {
     text: string;
     artifacts: readonly ArtifactRef[];
@@ -86,7 +90,7 @@ export function buildHistory(
   // Shared with the compaction planner so the fold and goal can't drift. The pins
   // (D-040) re-enter the prompt OUTSIDE the fold: the original goal keeps the model anchored on the
   // objective after older turns collapse to a summary, and the live task list rides in the fold.
-  const analysis = CompactionPlanner.analyze(events, selfProducerId);
+  const analysis = analyzeCompactionLog(events, selfProducerId);
   const goal = analysis.goal ? toUserTurn(analysis.goal) : null;
 
   // Pass 2 - project the baseline. When folded, the pins + rolling summary lead, then only the
@@ -124,7 +128,7 @@ export function buildHistory(
       continue; // folded away - the summary stands in for it
     }
     if (decoded.type === "user.message") {
-      if (isSelf(event)) {
+      if (isSelfProducer(event.producerId, selfProducerId)) {
         continue;
       }
       tools.reset();

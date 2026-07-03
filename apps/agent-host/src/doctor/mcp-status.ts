@@ -1,6 +1,7 @@
 import type { McpServerStatusEntry } from "@host/mcp/runtime";
 import { relativeTime } from "@trevor/session";
 import { plural, statusHistogram } from "./format";
+import { classifyPeripheral, type PeripheralClassificationRule } from "./peripheral-classifier";
 import type { PeripheralState } from "./probe-input";
 
 /**
@@ -29,49 +30,51 @@ export function mcpPeripheralState(
   entries: readonly McpServerStatusEntry[],
   nowMs: number,
 ): PeripheralState {
-  const enabled = entries.filter((entry) => entry.enabled);
-  if (enabled.length === 0) {
-    // Nothing configured, or nothing enabled: the steady "not set up" state, never an error.
-    return { kind: "unconfigured" };
-  }
+  return classifyPeripheral(entries, {
+    configured: (entry) => entry.enabled,
+    rules: mcpRules,
+    ready: (enabled) => ({ kind: "ready", detail: readyDetail(enabled, nowMs) }),
+  });
+}
 
-  const authNeeded = enabled.filter((entry) => entry.status === "auth_needed");
-  if (authNeeded.length > 0) {
-    const first = authNeeded[0] as McpServerStatusEntry;
-    const more = authNeeded.length > 1 ? ` (+${authNeeded.length - 1} more)` : "";
-    return {
-      kind: "auth-needed",
-      detail: `MCP server ${serverRef(first)} needs authentication${more}`,
-    };
-  }
-
-  const failed = enabled.find((entry) => entry.status === "failed");
-  if (failed) {
+const mcpRules = [
+  {
+    when: (entry) => entry.status === "auth_needed",
+    state: (authNeeded) => {
+      const [first] = authNeeded;
+      const more = authNeeded.length > 1 ? ` (+${authNeeded.length - 1} more)` : "";
+      return {
+        kind: "auth-needed",
+        detail: `MCP server ${serverRef(first)} needs authentication${more}`,
+      };
+    },
+  },
+  {
     // Classified by TAG, never by message-sniffing: a handshake timeout is terminal (the
     // transport fails and the child is reaped), so it arrives here carrying its timeout tag.
     // A per-request timeout on a READY server never lands in this branch.
-    if (failed.lastErrorTag === "McpTimeoutError") {
+    when: (entry) => entry.status === "failed",
+    state: ([failed]) => {
+      if (failed.lastErrorTag === "McpTimeoutError") {
+        return {
+          kind: "timeout",
+          detail: failed.lastError ?? `MCP server ${serverRef(failed)} timed out`,
+        };
+      }
       return {
-        kind: "timeout",
-        detail: failed.lastError ?? `MCP server ${serverRef(failed)} timed out`,
+        kind: "error",
+        detail: failed.lastError ?? `MCP server ${serverRef(failed)} failed`,
       };
-    }
-    return {
-      kind: "error",
-      detail: failed.lastError ?? `MCP server ${serverRef(failed)} failed`,
-    };
-  }
-
-  const closed = enabled.find((entry) => entry.status === "closed");
-  if (closed) {
-    return {
+    },
+  },
+  {
+    when: (entry) => entry.status === "closed",
+    state: ([closed]) => ({
       kind: "unavailable",
       detail: closed.lastError ?? `MCP connection to "${closed.server}" is closed`,
-    };
-  }
-
-  return { kind: "ready", detail: readyDetail(enabled, nowMs) };
-}
+    }),
+  },
+] satisfies readonly PeripheralClassificationRule<McpServerStatusEntry>[];
 
 /** The D-009 ready line: counts, transport kinds, capability totals, freshness, last error. */
 function readyDetail(enabled: readonly McpServerStatusEntry[], nowMs: number): string {

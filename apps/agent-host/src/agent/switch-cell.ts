@@ -53,6 +53,3 @@ export function createSwitchCell(): SwitchCell {
     },
   };
 }
-
-/** The active switchable turn marker main.ts holds between fork and fiber exit. */
-export type ActiveSwitchRef = { readonly runId: string; readonly cell: SwitchCell } | null;

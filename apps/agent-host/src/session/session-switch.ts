@@ -7,17 +7,10 @@ import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { supervisor } from "@host/processes/processes";
 import { contextRegistry } from "@host/project-context/registry";
-import type { ProviderError } from "@host/providers/index";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import {
-  events,
-  freshSessionId,
-  type SessionTransport,
-  type TrevorEventInput,
-} from "@trevor/session";
-import type { Fiber } from "effect";
+import { events, freshSessionId, type SessionTransport } from "@trevor/session";
 import { resolveCdTarget } from "./workspace-switch";
 
 /**
@@ -119,6 +112,20 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     timer.unref();
   }
 
+  function dropSessionLocalState(): void {
+    scheduler.clearPending();
+    contextRegistry.reset();
+  }
+
+  async function announceSwitchAndRetire(
+    targetSessionId: string,
+    reason: "clear" | "cd" | "worktree" | "handoff",
+  ): Promise<void> {
+    await emit(events.sessionSwitch({ sessionId: targetSessionId, reason }));
+    dropSessionLocalState();
+    retireAfterSessionSwitch();
+  }
+
   async function clearToFreshSession(): Promise<void> {
     const nextSessionId = freshSessionId();
     try {
@@ -135,13 +142,12 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
           ok: true,
         }),
       );
-      await emit(events.sessionSwitch({ sessionId: nextSessionId, reason: "clear" }));
+      await announceSwitchAndRetire(nextSessionId, "clear");
       log("host", "clear: switched session", {
         from: SESSION_ID,
         to: nextSessionId,
         pid: spawned.pid,
       });
-      retireAfterSessionSwitch();
     } catch (error) {
       warn("host", "clear: failed to switch session", { error: msg(error) });
       await emit(
@@ -213,7 +219,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
           ok: true,
         }),
       );
-      await emit(events.sessionSwitch({ sessionId: target.value.sessionId, reason: "cd" }));
+      await announceSwitchAndRetire(target.value.sessionId, "cd");
       log("host", "cd: switched session", {
         cwd: target.value.cwd,
         from: SESSION_ID,
@@ -221,9 +227,6 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
         to: target.value.sessionId,
         workspace: target.value.workspace,
       });
-      scheduler.clearPending();
-      contextRegistry.reset();
-      retireAfterSessionSwitch();
     } catch (error) {
       warn("host", "cd: failed to switch session", { error: msg(error) });
       await emit(
@@ -251,21 +254,20 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
       sessionId: opts.sessionId,
       workspace: opts.workspace,
     });
-    await emit(events.sessionSwitch({ sessionId: opts.sessionId, reason: opts.reason }));
+    await announceSwitchAndRetire(opts.sessionId, opts.reason);
     log("host", `${opts.reason}: switched session`, {
       cwd: opts.cwd,
       from: SESSION_ID,
       pid: spawned.pid,
       to: opts.sessionId,
     });
-    scheduler.clearPending();
-    contextRegistry.reset();
-    retireAfterSessionSwitch();
   }
 
   return {
     spawnReplacementHost,
     retireAfterSessionSwitch,
+    dropSessionLocalState,
+    announceSwitchAndRetire,
     clearToFreshSession,
     blockedFromWorkspaceSwitch,
     cdToFreshSession,

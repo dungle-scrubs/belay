@@ -1,7 +1,12 @@
 /**
  * Responsible for: resolving the model/provider a host-issued control prompt resumes a turn on.
  */
-import { decodeTrevorEvent, type ModelRef, type SessionEvent } from "@trevor/session";
+import {
+  decodeTrevorEvent,
+  isControlProducer,
+  type ModelRef,
+  type SessionEvent,
+} from "@trevor/session";
 
 /**
  * The model a host-issued control prompt (auto-continue after a step-cap pause, retry, compact-then-
@@ -62,7 +67,7 @@ export function controlPromptProvider(
 export interface ControlTurn {
   readonly provider?: string;
   readonly model?: ModelRef;
-  /** True when this is one of the host's OWN control prompts (producer === `controlProducerId`). */
+  /** True when this is one of the host's own derived control prompts. */
   readonly control: boolean;
 }
 
@@ -74,7 +79,7 @@ export interface ControlTurn {
  */
 export function buildControlTurns(
   events: readonly SessionEvent[],
-  controlProducerId: string,
+  selfProducerId: string,
 ): ControlTurn[] {
   const turns: ControlTurn[] = [];
   for (const event of events) {
@@ -83,7 +88,7 @@ export function buildControlTurns(
       turns.push({
         provider: decoded.provider,
         model: decoded.model,
-        control: event.producerId === controlProducerId,
+        control: isControlProducer(event.producerId, selfProducerId),
       });
     }
   }

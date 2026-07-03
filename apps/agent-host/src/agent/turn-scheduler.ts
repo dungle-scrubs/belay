@@ -3,7 +3,7 @@
  * catch-up, and holding turns behind a compaction fold.
  * Not for: building the prompt the model sees - history-projection.ts.
  */
-import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
+import { decodeTrevorEvent, isAnswerableProducer, type SessionEvent } from "@trevor/session";
 
 /**
  * Whether this host should ANSWER a `user.message`, i.e. it is not the host's own echo. A browser
@@ -15,7 +15,7 @@ import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
  * into, say, a `startsWith(self)` check that would wrongly swallow `${self}:control`.
  */
 export function isAnswerablePrompt(producerId: string, selfProducerId: string): boolean {
-  return producerId !== selfProducerId;
+  return isAnswerableProducer(producerId, selfProducerId);
 }
 
 /** A turn in flight: its run id and a function to abort it (interrupts its fiber). */

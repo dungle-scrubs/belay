@@ -1,8 +1,6 @@
-import type { ProviderError } from "@host/providers/index";
 import { log } from "@host/transport/log";
 import type { EmitEvent } from "@host/transport/services";
-import type { TrevorEventInput } from "@trevor/session";
-import { Effect, Fiber } from "effect";
+import { interruptFiber } from "../effect/fiber-exit";
 import type { CompactionCommandsApi } from "./compaction-commands";
 import type { TurnMachine } from "./turn-machine";
 import type { TurnScheduler } from "./turn-scheduler";
@@ -61,7 +59,7 @@ export function makeRunLifecycle(deps: RunLifecycleDeps) {
   function abortRuns(runId: string): void {
     const compactFiber = manualCompactFiber();
     if (compactFiber) {
-      Effect.runFork(Fiber.interrupt(compactFiber));
+      interruptFiber(compactFiber);
     }
     const targets = runId ? [runId] : turnMachine.inFlightIds();
     for (const target of targets) {

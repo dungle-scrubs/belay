@@ -6,7 +6,8 @@ import {
   safeEmitSpan,
   type TelemetrySink,
 } from "@trevor/session/telemetry";
-import { Cause, Clock, Effect, Exit } from "effect";
+import { Clock, Effect, type Exit } from "effect";
+import { interpretFiberExit } from "../effect/fiber-exit";
 
 /**
  * The host's Effect-aware span combinator (plan 13, M3). The shared `withSpan`/`withSpanSync` in
@@ -38,12 +39,13 @@ export function spanEffect<A, E, R>(
     });
   };
   const recordExit = (exit: Exit.Exit<unknown, unknown>, durationMs: number): void => {
-    if (Exit.isSuccess(exit)) {
+    const result = interpretFiberExit(exit);
+    if (result.tag === "ok") {
       record("ok", durationMs);
-    } else if (Cause.isInterruptedOnly(exit.cause)) {
+    } else if (result.tag === "cancelled") {
       record("error", durationMs, "interrupted");
     } else {
-      record("error", durationMs, redactAttributeValue(Cause.pretty(exit.cause)));
+      record("error", durationMs, redactAttributeValue(result.cause));
     }
   };
   return (effect) =>

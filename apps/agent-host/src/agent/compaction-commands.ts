@@ -3,9 +3,11 @@ import type { Lease } from "@host/session/lease";
 import { warn } from "@host/transport/log";
 import { commas } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events, type SessionEvent, type TrevorEventInput } from "@trevor/session";
-import { Cause, Effect, Exit, Fiber } from "effect";
+import { events, type TrevorEventInput } from "@trevor/session";
+import { Cause, Effect, Fiber } from "effect";
+import { interpretFiberExit } from "../effect/fiber-exit";
 import type { CompactionController } from "./compaction-controller";
+import type { ConversationLog } from "./conversation-log";
 import type { TurnScheduler } from "./turn-scheduler";
 
 /**
@@ -37,8 +39,8 @@ export interface CompactionCommandsDeps {
     CompactionController,
     "providerOrDefault" | "planFold" | "needed" | "markFloorReached"
   >;
-  /** The durable event log right now (main.ts's mutable `historyEvents`). */
-  historyEvents(): readonly SessionEvent[];
+  /** The live conversation log owner; compaction reads an owned durable-event snapshot per fold. */
+  readonly conversationLog: Pick<ConversationLog, "eventsSnapshot">;
   /** Whether replay has completed and the host is answering (main.ts's mutable `live` flag). */
   live(): boolean;
   /** The lease: only the leader gates/folds. */
@@ -50,7 +52,7 @@ export interface CompactionCommandsDeps {
 
 /** Builds the compaction command lane over the host's live state; main.ts wires it once. */
 export function makeCompactionCommands(deps: CompactionCommandsDeps) {
-  const { producerId, emit, compactionController, historyEvents, live, lease, scheduler } = deps;
+  const { producerId, emit, compactionController, conversationLog, live, lease, scheduler } = deps;
 
   /** The in-flight MANUAL `/compact` fold, so ESC can interrupt it (the user asked, so they can take
    *  it back). Only the manual fold is tracked - automatic folds are not interruptible (the blocking
@@ -109,7 +111,7 @@ export function makeCompactionCommands(deps: CompactionCommandsDeps) {
       compactionController
         .planFold({
           provider,
-          events: historyEvents().slice(),
+          events: conversationLog.eventsSnapshot(),
           producerId,
           foldId,
           onProgress: compactionProgress(foldId),
@@ -158,7 +160,7 @@ export function makeCompactionCommands(deps: CompactionCommandsDeps) {
     const fiber = Effect.runFork(
       compactionController.planFold({
         provider,
-        events: historyEvents().slice(),
+        events: conversationLog.eventsSnapshot(),
         producerId,
         foldId,
         onProgress: compactionProgress(foldId),
@@ -168,14 +170,15 @@ export function makeCompactionCommands(deps: CompactionCommandsDeps) {
     manualCompactFiberValue = fiber;
     const exit = await Effect.runPromise(Fiber.await(fiber));
     manualCompactFiberValue = null;
-    if (Exit.isFailure(exit)) {
-      if (Cause.isInterruptedOnly(exit.cause)) {
-        return "Compaction cancelled."; // the user pressed ESC; no fold applied
-      }
-      warn("host", "compaction failed", { cause: Cause.pretty(exit.cause) });
+    const result = interpretFiberExit(exit);
+    if (result.tag === "cancelled") {
+      return "Compaction cancelled."; // the user pressed ESC; no fold applied
+    }
+    if (result.tag === "failed") {
+      warn("host", "compaction failed", { cause: result.cause });
       return "Compaction failed.";
     }
-    const event = exit.value;
+    const event = result.value;
     if (!event) {
       return "Nothing to compact — no completed turns to fold yet.";
     }

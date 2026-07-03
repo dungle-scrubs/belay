@@ -50,6 +50,25 @@ export interface FingerprintParts {
   readonly message: string;
 }
 
+type FingerprintEvidence = Pick<
+  ProviderFailureEvidence,
+  "classification" | "status" | "code" | "shapeFields" | "detail"
+>;
+
+function fingerprintPartsFromEvidence(
+  provider: string,
+  evidence: FingerprintEvidence,
+): FingerprintParts {
+  return {
+    provider,
+    classification: evidence.classification ?? "unknown",
+    status: evidence.status,
+    code: evidence.code,
+    shapeFields: evidence.shapeFields,
+    message: evidence.detail,
+  };
+}
+
 /** A stable fingerprint for a failure shape, shared by every provider-failure surface. */
 export function failureFingerprint(parts: FingerprintParts): string {
   const joined = [
@@ -63,25 +82,34 @@ export function failureFingerprint(parts: FingerprintParts): string {
   return createHash("sha256").update(joined).digest("hex").slice(0, 16);
 }
 
+/** A stable fingerprint from the shared provider-failure evidence projection. */
+export function failureFingerprintFromEvidence(
+  provider: string,
+  evidence: FingerprintEvidence,
+): string {
+  return failureFingerprint(fingerprintPartsFromEvidence(provider, evidence));
+}
+
+type ObservationEvidenceInput = Omit<
+  ProviderFailureEvidence,
+  "classification" | "userAction" | "requestId" | "retryAfterMs" | "detail"
+> & {
+  readonly classification: ProviderFailureClass;
+  /** A human message; redacted again here so a caller that forgot to sanitize still can't leak. */
+  readonly message: string;
+};
+
 /** The inputs needed to record one observation. */
-export interface ObservationInput {
+export type ObservationInput = ObservationEvidenceInput & {
   readonly provider: string;
   readonly model?: string;
   /** "oauth" | "api-key" | "none" | "unknown" - the auth strategy, NOT any credential. */
   readonly authMode?: string;
   /** Where in the turn the failure surfaced, e.g. "model-step". */
   readonly phase: string;
-  readonly classification: ProviderFailureClass;
-  readonly retryable: boolean;
-  readonly status?: number;
-  readonly code?: string;
-  /** A human message; redacted again here so a caller that forgot to sanitize still can't leak. */
-  readonly message: string;
-  /** Top-level field NAMES of the raw error (names only, never values). */
-  readonly shapeFields?: readonly string[];
   /** Whether any text/thinking/tool output had streamed when the failure hit. */
   readonly outputStarted: boolean;
-}
+};
 
 /** One persisted, deduped observation: the input shape plus first/last-seen timestamps and a count. */
 export interface ProviderObservation {
@@ -104,7 +132,14 @@ export interface ProviderObservation {
 
 /** A stable fingerprint for an observation. */
 export function fingerprintObservation(input: ObservationInput): string {
-  return failureFingerprint(input);
+  return failureFingerprint({
+    provider: input.provider,
+    classification: input.classification,
+    status: input.status,
+    code: input.code,
+    shapeFields: input.shapeFields,
+    message: input.message,
+  });
 }
 
 /** Builds a fresh observation record from an input at time `nowIso`, message re-redacted. */
@@ -172,13 +207,9 @@ export function buildProviderFailureLogFields(input: ProviderFailureLogInput): F
     status: input.status,
     code: input.code,
     shapeFields: input.shapeFields?.length ? input.shapeFields.join(",") : undefined,
-    fingerprint: failureFingerprint({
-      provider: input.provider,
+    fingerprint: failureFingerprintFromEvidence(input.provider, {
+      ...input,
       classification,
-      status: input.status,
-      code: input.code,
-      shapeFields: input.shapeFields,
-      message: input.detail,
     }),
     detail: sanitizeFailureDetail(input.detail),
   };
@@ -202,19 +233,18 @@ export interface ProviderFailureRecord {
 }
 
 /** The inputs the turn consumer records on a terminal provider failure (detail re-redacted here). */
-export interface RecordFailureInput {
+type RecordFailureEvidenceInput = Pick<
+  ProviderFailureEvidence,
+  "classification" | "userAction" | "status" | "code" | "shapeFields" | "detail"
+>;
+
+export type RecordFailureInput = RecordFailureEvidenceInput & {
   readonly provider: string;
   readonly model: string;
-  readonly classification?: ProviderFailureClass;
-  readonly userAction?: ProviderUserAction;
   readonly retryExhausted: boolean;
   readonly attempts: number;
-  readonly status?: number;
-  readonly code?: string;
-  readonly shapeFields?: readonly string[];
-  readonly detail: string;
   readonly at: string;
-}
+};
 
 /** Builds one sanitized recent-failure record from a terminal provider failure input. */
 export function buildProviderFailureRecord(input: RecordFailureInput): ProviderFailureRecord {
@@ -225,14 +255,7 @@ export function buildProviderFailureRecord(input: RecordFailureInput): ProviderF
     userAction: input.userAction,
     retryExhausted: input.retryExhausted,
     attempts: input.attempts,
-    fingerprint: failureFingerprint({
-      provider: input.provider,
-      classification: input.classification ?? "unknown",
-      status: input.status,
-      code: input.code,
-      shapeFields: input.shapeFields,
-      message: input.detail,
-    }),
+    fingerprint: failureFingerprintFromEvidence(input.provider, input),
     detail: sanitizeFailureDetail(input.detail),
     at: input.at,
   };

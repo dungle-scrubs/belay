@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type ModelRef, events as sessionEvents } from "@trevor/session";
+import { controlProducerId, type ModelRef, events as sessionEvents } from "@trevor/session";
 import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import { buildControlTurns, controlPromptModel, controlPromptProvider } from "./control-model";
@@ -60,7 +60,8 @@ test("ignores blank providers and returns undefined when no real turn carries on
  * control prompts. Combined with the two scanners it reproduces the host's three-tier resume resolution,
  * so these guard the whole 02.13 fix against real events (the producer-skip wiring included).
  */
-const CONTROL = "host:control";
+const HOST = "host";
+const CONTROL = controlProducerId(HOST);
 let seq = 0;
 const nextSeq = (): number => {
   seq += 1;
@@ -74,7 +75,7 @@ const userMsg = (
 
 // The host's three-tier resolution, reproduced over real turns: ModelRef → last real provider → default.
 const resolve = (events: ReturnType<typeof userMsg>[]) => {
-  const turns = buildControlTurns(events, CONTROL);
+  const turns = buildControlTurns(events, HOST);
   return {
     provider: controlPromptProvider(turns) ?? "qwen-default",
     model: controlPromptModel(turns),
@@ -91,7 +92,7 @@ test("buildControlTurns keeps user turns and tags the host's control prompts", (
       ),
       userMsg({ text: "control resume", provider: "qwen" }, CONTROL),
     ],
-    CONTROL,
+    HOST,
   );
   assert.equal(turns.length, 2, "only user.message turns are projected");
   assert.equal(turns[0]?.control, false);

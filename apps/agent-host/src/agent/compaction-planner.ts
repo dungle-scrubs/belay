@@ -8,6 +8,7 @@ import {
   type CompactionManifest,
   type DecodedEvent,
   decodeTrevorEvent,
+  isAnswerableProducer,
   type SessionEvent,
 } from "@trevor/session";
 import type { ChatMessage } from "../providers";
@@ -37,7 +38,7 @@ export interface AnalyzedLog {
   readonly tasks: ReturnType<typeof analyzeBaseline>["tasks"];
 }
 
-export interface FoldPlan {
+export interface CompactionPlan {
   readonly throughSeq: number;
   readonly foldedTurns: readonly ChatMessage[];
   readonly priorSummary: string | null;
@@ -47,7 +48,7 @@ export interface FoldPlan {
   readonly manifest: CompactionManifest;
 }
 
-function analyzeLog(
+export function analyzeCompactionLog(
   events: readonly SessionEvent[],
   selfProducerId: string | undefined,
 ): AnalyzedLog {
@@ -79,7 +80,7 @@ function decomposeTurns(
     if (!event || !decoded) {
       continue;
     }
-    if (decoded.type === "user.message" && event.producerId !== selfProducerId) {
+    if (decoded.type === "user.message" && isAnswerableProducer(event.producerId, selfProducerId)) {
       startSeq = event.seq;
       messages = [{ role: "user", content: decoded.text }];
       open = true;
@@ -114,7 +115,7 @@ function planFromAnalysis(
   selfProducerId: string | undefined,
   tokensBefore: number,
   force: boolean,
-): FoldPlan | null {
+): CompactionPlan | null {
   if (!force && window <= 0) {
     return null;
   }
@@ -187,23 +188,18 @@ function planFromAnalysis(
   };
 }
 
-export const CompactionPlanner = {
-  analyze(events: readonly SessionEvent[], selfProducerId?: string): AnalyzedLog {
-    return analyzeLog(events, selfProducerId);
-  },
-  plan(
-    events: readonly SessionEvent[],
-    window: number,
-    selfProducerId: string,
-    tokensBefore: number,
-    force = false,
-  ): FoldPlan | null {
-    return planFromAnalysis(
-      analyzeLog(events, selfProducerId),
-      window,
-      selfProducerId,
-      tokensBefore,
-      force,
-    );
-  },
-};
+export function planCompaction(
+  events: readonly SessionEvent[],
+  window: number,
+  selfProducerId: string,
+  tokensBefore: number,
+  force = false,
+): CompactionPlan | null {
+  return planFromAnalysis(
+    analyzeCompactionLog(events, selfProducerId),
+    window,
+    selfProducerId,
+    tokensBefore,
+    force,
+  );
+}

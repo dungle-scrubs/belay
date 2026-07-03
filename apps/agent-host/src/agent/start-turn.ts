@@ -10,6 +10,8 @@ import { log, warn } from "@host/transport/log";
 import type { Emit } from "@host/transport/services";
 import {
   decodeTrevorEvent,
+  isAnswerableProducer,
+  isClipProducer,
   type ModelRef,
   resolveUserTurnModel,
   type SessionEvent,
@@ -17,7 +19,9 @@ import {
 } from "@trevor/session";
 import type { TelemetrySink } from "@trevor/session/telemetry";
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
-import { Cause, Effect, Exit, Fiber, type Layer } from "effect";
+import { Effect, type Layer } from "effect";
+import { interpretFiberExit, interruptFiber } from "../effect/fiber-exit";
+import type { ActiveRun } from "./active-run";
 import type { CompactionController } from "./compaction-controller";
 import {
   type BackgroundChildInfo,
@@ -26,9 +30,9 @@ import {
   MAX_BACKGROUND_CHILDREN_PER_SESSION,
   runDelegatedChild,
 } from "./delegate";
-import { type ActiveSwitchRef, createSwitchCell, type SwitchCell } from "./switch-cell";
+import { createSwitchCell } from "./switch-cell";
 import { publishTurn } from "./turn";
-import { type ActiveTurn, isAnswerablePrompt, type TurnScheduler } from "./turn-scheduler";
+import type { ActiveTurn, TurnScheduler } from "./turn-scheduler";
 
 /**
  * The turn fork, extracted from main.ts (plan 22.3): main.ts constructs {@link makeStartTurn} once
@@ -49,8 +53,6 @@ export interface StartTurnDeps {
   readonly sessionId: string;
   /** The host's shared producer id: the self-echo gate + child-turn attribution. */
   readonly producerId: string;
-  /** The clip control producer id: such a prompt runs a restricted clipboard-only turn. */
-  readonly clipProducerId: string;
   /** The durable-log transport, handed to the delegation context for child sessions. */
   readonly transport: SessionTransport;
   /** The registered providers the legacy provider-string path picks from. */
@@ -73,14 +75,8 @@ export interface StartTurnDeps {
   readonly scheduler: Pick<TurnScheduler, "settle">;
   /** Background subagents currently running across the session (main.ts's registry, D-048). */
   readonly backgroundChildren: Map<string, BackgroundChildInfo>;
-  /** The run this host is ACTIVELY executing, or null (main.ts's mutable `runningRunId`). */
-  getRunningRunId(): string | null;
-  /** Mark/clear the actively-executing run. */
-  setRunningRunId(runId: string | null): void;
-  /** The active turn's mid-turn-switch cell, or null (main.ts's mutable `activeSwitch`). */
-  getActiveSwitch(): ActiveSwitchRef;
-  /** Register/clear the active turn's switch cell. */
-  setActiveSwitch(next: ActiveSwitchRef): void;
+  /** The active run owner: run id plus optional switch cell move together. */
+  readonly activeRun: Pick<ActiveRun, "open" | "clear">;
 }
 
 /** Builds the turn fork over the host's live state; main.ts wires it once. */
@@ -88,7 +84,6 @@ export function makeStartTurn(deps: StartTurnDeps) {
   const {
     sessionId: SESSION_ID,
     producerId: PRODUCER_ID,
-    clipProducerId: CLIP_PRODUCER_ID,
     transport,
     providers,
     compactionController,
@@ -100,10 +95,7 @@ export function makeStartTurn(deps: StartTurnDeps) {
     emitLive: EmitLive,
     scheduler,
     backgroundChildren,
-    getRunningRunId,
-    setRunningRunId,
-    getActiveSwitch,
-    setActiveSwitch,
+    activeRun,
   } = deps;
 
   /**
@@ -116,7 +108,7 @@ export function makeStartTurn(deps: StartTurnDeps) {
    * is no "already active" case to guard here.
    */
   function startTurn(event: SessionEvent, turnHistory: readonly ChatMessage[]): ActiveTurn | null {
-    if (!isAnswerablePrompt(event.producerId, PRODUCER_ID) || !lease.isLeader()) {
+    if (!isAnswerableProducer(event.producerId, PRODUCER_ID) || !lease.isLeader()) {
       return null;
     }
     const decoded = decodeTrevorEvent(event);
@@ -182,7 +174,7 @@ export function makeStartTurn(deps: StartTurnDeps) {
     // A restricted `/clip <request>` turn (plan 06): narrow the surface to clipboard_write only and
     // withhold delegation entirely, so the model can neither see another tool nor hand work to a
     // subagent that could. A normal turn gets the full registry + delegation.
-    const restricted = event.producerId === CLIP_PRODUCER_ID;
+    const restricted = isClipProducer(event.producerId, PRODUCER_ID);
     const delegate = restricted
       ? undefined
       : buildDelegateCapability(delegationCtx, {
@@ -192,12 +184,11 @@ export function makeStartTurn(deps: StartTurnDeps) {
           mintRunId: () => crypto.randomUUID(),
           background,
         });
-    setRunningRunId(runId);
     // The per-turn mid-turn-switch cell (09.1): a `/clip` turn is not switchable (restricted surface), an
     // ordinary turn is. Registered so `handleEvent` can route a `model.switch.requested` for this run into
     // it; the loop reads it at the next step boundary.
     const switchCell = restricted ? undefined : createSwitchCell();
-    setActiveSwitch(switchCell ? { runId, cell: switchCell } : null);
+    activeRun.open(runId, switchCell);
     // Carry the prior turn's measured context forward (03.1 D-002): when compaction has floored out and
     // the turn legitimately starts at/above the fraction, this lets the context-pressure gate synthesize
     // at step 0 instead of opening one doomed tool round. Absent on a session's first turn.
@@ -243,17 +234,12 @@ export function makeStartTurn(deps: StartTurnDeps) {
     fiber.addObserver((exit) => {
       // The fiber is no longer running this turn: clear the active marker so a reconnect reconcile treats
       // a lingering in-flight entry for it as an orphan (its terminal completion may have been lost).
-      if (getRunningRunId() === runId) {
-        setRunningRunId(null);
-      }
-      // Drop the switch cell for this run so a late switch request can't write into a dead turn.
-      if (getActiveSwitch()?.runId === runId) {
-        setActiveSwitch(null);
-      }
+      activeRun.clear(runId);
       // publishTurn handles provider failures internally, so a non-interrupt failure here
       // is an unexpected defect worth surfacing.
-      if (Exit.isFailure(exit) && !Cause.isInterruptedOnly(exit.cause)) {
-        warn("host", "turn died", { run: runId.slice(0, 8), cause: Cause.pretty(exit.cause) });
+      const result = interpretFiberExit(exit);
+      if (result.tag === "failed") {
+        warn("host", "turn died", { run: runId.slice(0, 8), cause: result.cause });
       }
       scheduler.settle(runId);
     });
@@ -261,7 +247,7 @@ export function makeStartTurn(deps: StartTurnDeps) {
       runId,
       cancel: () => {
         log("host", "cancel: interrupting run", { run: runId.slice(0, 8) });
-        Effect.runFork(Fiber.interrupt(fiber));
+        interruptFiber(fiber);
       },
     };
   }

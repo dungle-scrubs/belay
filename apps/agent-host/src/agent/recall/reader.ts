@@ -62,38 +62,9 @@ function sameProject(summary: SessionSummary, opts: SiblingReaderOptions): boole
 
 /** Reads one session's full durable log over the transport (replay then close), with a timeout. */
 function readSessionLog(opts: SiblingReaderOptions, sessionId: string): Promise<SessionEvent[]> {
-  return new Promise<SessionEvent[]>((resolve, reject) => {
-    const collected: SessionEvent[] = [];
-    let settled = false;
-
-    const finish = (fn: () => void) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      connection.close();
-      fn();
-    };
-
-    const timer = setTimeout(
-      () => finish(() => reject(new Error("read timed out"))),
-      READ_TIMEOUT_MS,
-    );
-
-    const connection = opts.transport.connectSession({
-      sessionId,
-      identity: opts.identity,
-      afterSeq: 0,
-      onEvent: (event) => collected.push(event),
-      onReplayComplete: () => finish(() => resolve(collected)),
-      onStatus: (status) => {
-        if (status === "closed" && !settled) {
-          finish(() => reject(new Error("socket closed before replay completed")));
-        }
-      },
-    });
-  });
+  return opts.transport
+    .readLog(sessionId, opts.identity, { afterSeq: 0, timeoutMs: READ_TIMEOUT_MS })
+    .then((events) => [...events]);
 }
 
 /** A stable recall session ref for a sibling, labeled by its inventory title. */

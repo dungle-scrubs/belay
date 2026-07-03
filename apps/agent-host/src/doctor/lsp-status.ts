@@ -4,6 +4,7 @@ import type { LspServerStatus } from "@host/lsp/contract";
 import { clipLine } from "@host/tools/shared";
 import { type DoctorFinding, relativeTime } from "@trevor/session";
 import { plural, statusHistogram } from "./format";
+import { classifyPeripheral, type PeripheralClassificationRule } from "./peripheral-classifier";
 import type { DoctorLspDiagnostics, PeripheralState } from "./probe-input";
 
 /**
@@ -46,44 +47,44 @@ export function lspPeripheralState(
   entries: readonly LspServerStatus[],
   nowMs: number,
 ): PeripheralState {
-  const configured = entries.filter((entry) => entry.status !== "missing");
-  if (configured.length === 0) {
-    // No adapter matched any workspace: the steady "not set up" state, never an error.
-    return { kind: "unconfigured" };
-  }
+  return classifyPeripheral(entries, {
+    configured: (entry) => entry.status !== "missing",
+    rules: lspRules,
+    ready: (configured) => ({ kind: "ready", detail: readyDetail(configured, nowMs) }),
+  });
+}
 
-  // Parked initialize timeouts first: the manager already classified them by machine tag.
-  const timedOut = configured.find((entry) => entry.status === "timeout");
-  if (timedOut) {
-    return {
+const lspRules = [
+  {
+    // Parked initialize timeouts first: the manager already classified them by machine tag.
+    when: (entry) => entry.status === "timeout",
+    state: ([timedOut]) => ({
       kind: "timeout",
       detail: scrub(timedOut.lastError ?? `${serverName([timedOut])} timed out during initialize`),
-    };
-  }
-
-  const failed = configured.find((entry) => entry.status === "error");
-  if (failed) {
-    return {
+    }),
+  },
+  {
+    when: (entry) => entry.status === "error",
+    state: ([failed]) => ({
       kind: "error",
       detail: scrub(failed.lastError ?? `${serverName([failed])} failed`),
-    };
-  }
-
-  // Missing binary (or a closed manager): configured but nothing can serve.
-  const unavailable = configured.find((entry) => entry.status === "unavailable");
-  if (unavailable) {
-    const server = serverName([unavailable]);
-    return {
-      kind: "unavailable",
-      detail: scrub(
-        `${server} is not installed (checked ${unavailable.workspaceRoot}/node_modules/.bin ` +
-          `and PATH); install: pnpm add -g ${server}`,
-      ),
-    };
-  }
-
-  return { kind: "ready", detail: readyDetail(configured, nowMs) };
-}
+    }),
+  },
+  {
+    // Missing binary (or a closed manager): configured but nothing can serve.
+    when: (entry) => entry.status === "unavailable",
+    state: ([unavailable]) => {
+      const server = serverName([unavailable]);
+      return {
+        kind: "unavailable",
+        detail: scrub(
+          `${server} is not installed (checked ${unavailable.workspaceRoot}/node_modules/.bin ` +
+            `and PATH); install: pnpm add -g ${server}`,
+        ),
+      };
+    },
+  },
+] satisfies readonly PeripheralClassificationRule<LspServerStatus>[];
 
 /** The D-008 ready line: server name, lifecycle word, diagnostic counts, freshness, last error. */
 function readyDetail(configured: readonly LspServerStatus[], nowMs: number): string {

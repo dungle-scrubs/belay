@@ -1,5 +1,8 @@
-import { buildDoctorCommandResult } from "@host/doctor/build";
-import type { DoctorLspDiagnostics, PeripheralState } from "@host/doctor/probe-input";
+import {
+  buildDoctorCommandResult,
+  type DoctorCommandInput,
+  type DoctorRuntimeFacts,
+} from "@host/doctor/build";
 import { buildLoopCommands } from "@host/loop/command";
 import type { LoopController } from "@host/loop/store";
 import { buildTrevorExportCommand } from "@host/manifest/export-command";
@@ -12,12 +15,7 @@ import type { ProviderRegistry } from "@host/providers/index";
 import { buildSkillCommand } from "@host/skills/skills";
 import { runCommand } from "@host/tools/run-shell";
 import { msg } from "@host/transport/messages";
-import type {
-  CommandMenuPayload,
-  CommandSpec,
-  InternetSnapshot,
-  SourceSummary,
-} from "@trevor/session";
+import type { CommandMenuPayload, CommandSpec } from "@trevor/session";
 
 /**
  * Immediate host commands (slash commands): the host runs these directly and
@@ -44,25 +42,8 @@ import type {
 export interface CommandContext {
   readonly providers: ProviderRegistry;
   readonly cwd: string;
-  readonly workspace: string;
-  readonly instanceId: string;
-  readonly role: string;
-  /** Live turn-machine snapshot (host orchestrator state), for /doctor. */
-  readonly host?: Record<string, unknown>;
-  /** The host's public-internet snapshot (D-060), for the /doctor Internet area. */
-  readonly internet?: InternetSnapshot;
-  /** The current branch (or `detached <sha>`), for the /doctor Workspace area. */
-  readonly branch?: string;
-  /** Election internals (lease.debugInfo), for /doctor. */
-  readonly lease?: Record<string, unknown>;
-  /** Redacted provider catalog source summaries, for /doctor. */
-  readonly catalog?: readonly SourceSummary[];
-  /** The MCP runtime rollup (plan 23 M8, D-009), for the /doctor MCP area. */
-  readonly mcp?: PeripheralState;
-  /** The LSP manager rollup (plan 24 M8, D-008), for the /doctor LSP area. */
-  readonly lsp?: PeripheralState;
-  /** Stored LSP diagnostics counts (plan 24 M8), for the LSP area's diagnostic-warning finding. */
-  readonly lspDiagnostics?: DoctorLspDiagnostics;
+  /** The opaque /doctor fact bag. A new doctor fact changes host-facts, not CommandContext. */
+  readonly doctor: DoctorRuntimeFacts;
   /** Forces one cross-turn compaction fold now and resolves with a human-readable result line
    *  (D-040), for /compact. Absent when the host cannot compact (e.g. not the live leader). */
   readonly compact?: () => Promise<string>;
@@ -71,8 +52,8 @@ export interface CommandContext {
   readonly loops?: LoopController;
 }
 
-/** The /doctor slice: the host-health facts it reports (no compaction hook). */
-export type DoctorInput = Omit<CommandContext, "compact">;
+/** The /doctor slice: the host-health facts plus provider registry it reports. */
+export type DoctorInput = DoctorCommandInput;
 
 /** The /compact slice: just the optional compaction hook. */
 export interface CompactInput {
@@ -137,35 +118,7 @@ function buildDoctorCommand(): Command<DoctorInput> {
       name: "/doctor",
       summary: "Host health dashboard (providers, internet, tools, workspace)",
     },
-    select: ({
-      providers,
-      cwd,
-      workspace,
-      instanceId,
-      role,
-      host,
-      internet,
-      branch,
-      lease,
-      catalog,
-      mcp,
-      lsp,
-      lspDiagnostics,
-    }) => ({
-      providers,
-      cwd,
-      workspace,
-      instanceId,
-      role,
-      host,
-      internet,
-      branch,
-      lease,
-      catalog,
-      mcp,
-      lsp,
-      lspDiagnostics,
-    }),
+    select: ({ providers, doctor }) => ({ ...doctor, providers }),
     run: (args, input) => buildDoctorCommandResult(args, input),
   };
 }

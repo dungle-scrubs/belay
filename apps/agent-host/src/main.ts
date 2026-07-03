@@ -1,17 +1,16 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { ActiveSwitchRef } from "@host/agent/switch-cell";
 import { leaseOptions, makeLeadership } from "@host/boot/leadership";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
 import { buildCommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
+import { createProgrammaticCommandDispatcher } from "@host/commands/programmatic-command";
 import { hooksRuntime } from "@host/hooks/host-runtime";
 import { lspManager } from "@host/lsp/host-runtime";
 import { mcpRuntime } from "@host/mcp/host-runtime";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
 import { supervisor } from "@host/processes/processes";
-import { contextRegistry } from "@host/project-context/registry";
 import {
   acquireCwdLock,
   type CwdLockOwner,
@@ -28,15 +27,20 @@ import { Emit } from "@host/transport/services";
 import * as Sentry from "@sentry/node";
 import {
   catalogEntryFor,
+  clipProducerId,
+  controlProducerId,
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
+  hostIdentity,
   inputEstimateTokens,
+  isAnswerableProducer,
   PRODUCER_IDS,
-  RUNTIME_KIND,
+  recallProducerId,
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
+  viewerIdentity,
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
 import { resolveTelemetryConfig } from "@trevor/session/telemetry";
@@ -46,19 +50,19 @@ import { Effect, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
 import { nodeAdmissionCaps } from "./admission/store";
+import { ActiveRun } from "./agent/active-run";
 import { makeCompactionCommands } from "./agent/compaction-commands";
 import { CompactionController } from "./agent/compaction-controller";
 import { makeControlPrompts } from "./agent/control-prompts";
+import { ConversationLog } from "./agent/conversation-log";
 import type { BackgroundChildInfo } from "./agent/delegate";
-import { buildHistory } from "./agent/history-projection";
 import { providerQuestionRuntime } from "./agent/provider-questions";
 import { recallEngine } from "./agent/recall/engine";
 import { createSiblingReader } from "./agent/recall/reader";
 import { makeRunLifecycle } from "./agent/run-lifecycle";
 import { makeStartTurn } from "./agent/start-turn";
-import type { SwitchCell } from "./agent/switch-cell";
 import { TurnMachine } from "./agent/turn-machine";
-import { isAnswerablePrompt, TurnScheduler } from "./agent/turn-scheduler";
+import { TurnScheduler } from "./agent/turn-scheduler";
 import { makeLifecycleCommands } from "./commands/lifecycle";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
@@ -72,7 +76,7 @@ import { LoopStore } from "./loop/store";
 import { assembleManifest } from "./manifest/build";
 import { registerManifestSource } from "./manifest/source";
 import { makeShellLane } from "./processes/shell-lane";
-import { buildProviders, type ChatMessage, DEFAULT_PROVIDER, lmsBin } from "./providers";
+import { buildProviders, DEFAULT_PROVIDER, lmsBin } from "./providers";
 import { type CatalogSnapshot, loadCatalog } from "./providers/catalog";
 import { parseOverflowWindow } from "./providers/error-classifier";
 import { recordLearnedWindow } from "./providers/model-metadata-overrides";
@@ -113,11 +117,11 @@ import { makeWorktreeCommands } from "./worktrees/commands";
 
 const SESSION_ID = process.env.SESSION_ID ?? DEFAULT_SESSION_ID;
 const PRODUCER_ID = PRODUCER_IDS.host;
-const CONTROL_PRODUCER_ID = `${PRODUCER_ID}:control`;
+const CONTROL_PRODUCER_ID = controlProducerId(PRODUCER_ID);
 // Host-issued prompts for a restricted `/clip <request>` turn (plan 06): a distinct control
 // producer so `startTurn` narrows the turn's tool surface to clipboard_write only. Answerable
 // (not the bare host id), but tagged so it is never treated as a normal full-surface turn.
-const CLIP_PRODUCER_ID = `${PRODUCER_ID}:clip`;
+const CLIP_PRODUCER_ID = clipProducerId(PRODUCER_ID);
 // Backend selection (the plugin seam): default to the local session-store; set
 // RICHTER_URL to opt into the Richter durable substrate instead. The host speaks
 // the SessionTransport contract either way.
@@ -274,15 +278,7 @@ function releaseWorkspaceCwdLock(): void {
 
 // Single live connection's state (rebuilt from replay on each connect).
 let live = false;
-/** The prompt projection: `history === buildHistory(historyEvents)` at every turn boundary. The
- *  event log is what the host folds (now including the turn's tool.started/tool.completed, which
- *  buildHistory carries across turns). A deferred mid-turn prompt is admitted only when it drains
- *  (the scheduler defers it out of the log), so the projection stays strictly paired. Tool events
- *  are RECORDED (pushed) but not re-projected per call - `history` is only read at turn boundaries,
- *  where the next admit rebuilds with them - so a tool-heavy turn doesn't re-fold the whole log on
- *  every call. */
-let history: ChatMessage[] = [];
-let historyEvents: SessionEvent[] = [];
+const conversationLog = new ConversationLog({ selfProducerId: PRODUCER_ID });
 // The turn-dispatch state (active run, deferred FIFO, catch-up watermarks) lives in
 // the TurnScheduler constructed below, not in module mutables.
 
@@ -300,21 +296,7 @@ providerQuestionRuntime.configure((event) => {
 const turnMachine = new TurnMachine();
 const compactionController = new CompactionController(providers[DEFAULT_PROVIDER]);
 
-/**
- * The run this host is ACTIVELY executing (its turn fiber is alive), or null. Set when a turn forks and
- * cleared when its fiber exits, so the reconnect reconcile (`reapOrphans` from `goLive`) can tell a
- * genuinely-live turn from an orphan whose terminal completion was lost to a store outage.
- */
-let runningRunId: string | null = null;
-
-/**
- * The active turn's mid-turn-switch cell (plan 09.1), keyed by its runId. `startTurn` sets it when a
- * switchable turn forks; the fiber observer clears it. `handleEvent` writes a `model.switch.requested`
- * into it so the loop re-resolves model+reasoning at its next step boundary. Null when no switchable
- * turn is in flight, so a switch request with no active turn is a loop no-op (the web keeps its
- * next-turn selection - today's behavior).
- */
-let activeSwitch: ActiveSwitchRef = null;
+const activeRun = new ActiveRun();
 
 /** The live Emit service: the turn program's events go to the Richter log via emit(). A second
  *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
@@ -418,7 +400,7 @@ const { needsCompaction, startCompaction, forceCompact, manualCompactFiber } =
     producerId: PRODUCER_ID,
     emit,
     compactionController,
-    historyEvents: () => historyEvents,
+    conversationLog,
     live: () => live,
     lease,
     scheduler: () => scheduler,
@@ -440,12 +422,12 @@ const {
   maybeAutoResume,
 } = makeControlPrompts({
   sessionId: SESSION_ID,
+  producerId: PRODUCER_ID,
   controlProducerId: CONTROL_PRODUCER_ID,
   clipProducerId: CLIP_PRODUCER_ID,
   transport,
   emit,
-  history: () => history,
-  historyEvents: () => historyEvents,
+  conversationLog,
   compactionController,
   turnMachine,
   forceCompact,
@@ -461,7 +443,7 @@ const scheduler = new TurnScheduler({
   isLeader: () => lease.isLeader(),
   start: (event) => {
     admit(event);
-    return live ? startTurn(event, history.slice()) : null;
+    return live ? startTurn(event, conversationLog.historySnapshot()) : null;
   },
   compaction: { needed: needsCompaction, run: startCompaction },
 });
@@ -473,7 +455,7 @@ const { abortRuns, reapOrphans } = makeRunLifecycle({
   turnMachine,
   scheduler,
   emit,
-  runningRunId: () => runningRunId,
+  runningRunId: () => activeRun.runId(),
   manualCompactFiber,
 });
 
@@ -485,7 +467,6 @@ const { abortRuns, reapOrphans } = makeRunLifecycle({
 const { startTurn } = makeStartTurn({
   sessionId: SESSION_ID,
   producerId: PRODUCER_ID,
-  clipProducerId: CLIP_PRODUCER_ID,
   transport,
   providers,
   compactionController,
@@ -497,14 +478,7 @@ const { startTurn } = makeStartTurn({
   emitLive: EmitLive,
   scheduler,
   backgroundChildren,
-  getRunningRunId: () => runningRunId,
-  setRunningRunId: (runId) => {
-    runningRunId = runId;
-  },
-  getActiveSwitch: () => activeSwitch,
-  setActiveSwitch: (next) => {
-    activeSwitch = next;
-  },
+  activeRun,
 });
 
 // The host presence surface (plan 22.3, transport/presence): the git/worktree projections + the
@@ -574,6 +548,8 @@ const { startSourceSignIn, cancelSignIn, submitSignInCode } = makeSourceSignIn({
 const {
   spawnReplacementHost,
   retireAfterSessionSwitch,
+  dropSessionLocalState,
+  announceSwitchAndRetire,
   clearToFreshSession,
   blockedFromWorkspaceSwitch,
   cdToFreshSession,
@@ -598,13 +574,12 @@ const { runHandoff, approveHandoff, rejectHandoff, noteGenerated, noteSettled, h
     controlProducerId: CONTROL_PRODUCER_ID,
     transport,
     emit,
-    history: () => history,
+    conversationLog,
     compactionController,
     controlModel,
     blockedFromWorkspaceSwitch,
     spawnReplacementHost,
-    scheduler,
-    retireAfterSessionSwitch,
+    announceSwitchAndRetire,
   });
 
 // The /serial-implement|next|dispose command handlers (plan 02, serial-run/commands): wired over
@@ -656,7 +631,7 @@ const { doctorFacts } = makeHostFacts({
   compactionController,
   internet,
   live: () => live,
-  historyLength: () => history.length,
+  historyLength: () => conversationLog.history().length,
   backgroundChildren,
   currentWorktrees,
   currentGit,
@@ -740,9 +715,9 @@ registerManifestSource(async (scope) => {
  */
 async function runCommand(name: string, args: string): Promise<void> {
   const { text, ok, menu } = await commands.run(name, args, {
-    ...doctorFacts(),
     providers,
-    lease: lease.debugInfo(Date.now()),
+    cwd: process.cwd(),
+    doctor: { ...doctorFacts(), lease: lease.debugInfo(Date.now()) },
     compact: forceCompact,
     loops,
   });
@@ -754,12 +729,75 @@ async function runCommand(name: string, args: string): Promise<void> {
   }
 }
 
+const programmaticCommands = createProgrammaticCommandDispatcher({
+  handlers: [
+    { name: "/clear", run: () => clearToFreshSession() },
+    { name: "/cd", run: (args) => cdToFreshSession(args) },
+    {
+      name: "/continue",
+      run: async (args) => {
+        await continueAfterStop(args.trim() || turnMachine.lastTermination || "manual continue");
+        await emit(
+          events.commandResult({
+            command: "/continue",
+            text: "Continuing from the paused turn.",
+            ok: true,
+          }),
+        );
+      },
+    },
+    {
+      name: "/compress",
+      run: async () => {
+        const result = await compressThenContinue();
+        await emit(events.commandResult({ command: "/compress", ...result }));
+      },
+    },
+    {
+      name: "/retry",
+      run: async () => {
+        const result = await retryLastPrompt();
+        await emit(events.commandResult({ command: "/retry", ...result }));
+      },
+    },
+    { name: "/internet-refresh", run: () => internet.refresh() },
+    { name: "/catalog-refresh", run: () => refreshCatalog() },
+    { name: "/source-signin", run: (args) => startSourceSignIn(args.trim()) },
+    { name: "/source-signin-cancel", run: () => cancelSignIn() },
+    { name: "/source-signin-code", run: (args) => submitSignInCode(args.trim()) },
+    { name: "/worktree-switch", run: (args) => worktreeSwitch(args.trim()) },
+    { name: "/worktree-new", run: (args) => worktreeNew(args) },
+    { name: "/worktree-merge", run: (args) => worktreeMerge(args) },
+    { name: "/worktree-delete", run: (args) => worktreeDelete(args) },
+    { name: "/worktree-reconcile", run: () => worktreeReconcile() },
+    { name: "/debug", run: () => toggleDebug() },
+    { name: "/restart", run: (args) => restartHost(args) },
+    { name: "/archive", run: () => setArchived(true) },
+    { name: "/unarchive", run: () => setArchived(false) },
+    { name: "/stop", run: (args) => stopCurrentSession(args) },
+    { name: "/handoff", run: (args) => runHandoff(args) },
+    { name: "/serial-implement", run: (args) => runSerialImplement(args) },
+    { name: "/serial-next", run: (args) => runSerialNext(args) },
+    { name: "/serial-dispose", run: (args) => runSerialDispose(args) },
+    { name: "/clip", run: (args) => runClip(args) },
+    {
+      name: "/tasks-clear",
+      run: () => {
+        // The task panel's dismiss control (09.1): retire a checklist the model abandoned on a topic
+        // change. The empty tasks.current snapshot emitted via taskRegistry.onChange is the
+        // confirmation (the panel hides itself when the list is empty).
+        taskRegistry.clear();
+      },
+    },
+  ],
+  fallback: (command, args) => runCommand(command, args),
+});
+
 /** Admits one event to the prompt projection and recomputes the derived history.
  *  The fold (mapping, artifacts, blank-filter, user collapse, /clear reset, tool reconstruction)
  *  is owned by buildHistory; this is the only place `history` is rebuilt. */
 function admit(event: SessionEvent): void {
-  historyEvents.push(event);
-  history = buildHistory(historyEvents, { selfProducerId: PRODUCER_ID });
+  conversationLog.admit(event);
 }
 
 /** Pushes an event into the durable history WITHOUT rebuilding the projection - for events that
@@ -769,7 +807,7 @@ function admit(event: SessionEvent): void {
  *  the following user.message) rebuilds with them - a tool-heavy turn, or a burst of task updates,
  *  never re-folds the whole log per event. */
 function recordEvent(event: SessionEvent): void {
-  historyEvents.push(event);
+  conversationLog.record(event);
 }
 
 /** Applies one live or replayed session event to the host's in-memory state. */
@@ -778,7 +816,7 @@ function handleEvent(message: SessionEvent): void {
   if (!decoded) {
     return;
   }
-  if (decoded.type === "user.message" && isAnswerablePrompt(message.producerId, PRODUCER_ID)) {
+  if (decoded.type === "user.message" && isAnswerableProducer(message.producerId, PRODUCER_ID)) {
     scheduler.noteTurn(message);
   } else if (decoded.type === "assistant.started") {
     // Track the run as in flight (a started with no completion) so a later leader can reap it if a
@@ -812,7 +850,8 @@ function handleEvent(message: SessionEvent): void {
     // pre-admit projection; buildHistory then drops a blank/whitespace-only completion
     // (the empty-reply poison) and appends only a real reply.
     if (decoded.text.trim()) {
-      const last = history[history.length - 1];
+      const currentHistory = conversationLog.history();
+      const last = currentHistory[currentHistory.length - 1];
       checkTurn(last?.role === "user", "assistant reply with no preceding user turn", {
         last: last?.role ?? "none",
       });
@@ -892,24 +931,24 @@ function handleEvent(message: SessionEvent): void {
     // active switchable turn (or with no active turn) is a loop no-op - the web keeps its next-turn
     // selection (today's behavior). Like a cancel this is an ACTION, not state to rebuild on replay, so
     // it is gated live+leader and never re-applied during reconnect.
-    if (
-      decoded.model &&
-      activeSwitch &&
-      (decoded.runId === "" || activeSwitch.runId === decoded.runId)
-    ) {
+    const switchCell = activeRun.switchCellFor(decoded.runId);
+    if (decoded.model && switchCell) {
       const target = decoded.model;
       const reasoning = target.reasoning;
       // The target model's context window from the catalog (09.1 M7), so the loop can run the
       // larger->smaller fit guard; absent when the source/model is not in the catalog (guard then off).
       const targetWindow = catalogEntryFor(catalog.catalogBySource, target)?.contextLength;
-      activeSwitch.cell.request({
+      switchCell.request({
         model: target,
         ...(reasoning != null ? { reasoning } : {}),
         initiator: decoded.initiator,
         ...(targetWindow != null ? { targetWindow } : {}),
       });
     }
-  } else if (decoded.type === "user.command" && message.producerId !== PRODUCER_ID) {
+  } else if (
+    decoded.type === "user.command" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
     if (decoded.command === "/compact") {
       compactPending = true; // cleared by its command.result; reaped if a restart interrupts it
     }
@@ -920,183 +959,14 @@ function handleEvent(message: SessionEvent): void {
       // assistant turn if a clear lands mid-answer. The scheduler drops its queued
       // prompts + catch-up target alongside (the active run is left to finish).
       admit(message);
-      scheduler.clearPending();
-      // Drop the lazily-loaded below-cwd AGENTS.md set too, so the fresh conversation starts with only
-      // the eager scope (the eager up-tree is re-read from disk each turn regardless).
-      contextRegistry.reset();
+      dropSessionLocalState();
     }
     // Immediate command lane: only the leader answers, and only when live (commands
     // are actions, not state to rebuild on replay).
     if (live && lease.isLeader()) {
       const { command, args } = decoded;
       log("host", "command", { command, args: args || undefined });
-      if (command === "/clear") {
-        clearToFreshSession().catch((error) =>
-          warn("host", "clear failed", { command, error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/cd") {
-        cdToFreshSession(args).catch((error) =>
-          warn("host", "cd failed", { command, error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/continue") {
-        continueAfterStop(args.trim() || turnMachine.lastTermination || "manual continue")
-          .then(() =>
-            emit(
-              events.commandResult({
-                command,
-                text: "Continuing from the paused turn.",
-                ok: true,
-              }),
-            ),
-          )
-          .catch((error) => warn("host", "continue failed", { error: msg(error) }));
-        return;
-      }
-      if (command === "/compress") {
-        compressThenContinue()
-          .then((result) => emit(events.commandResult({ command, ...result })))
-          .catch((error) => warn("host", "compress failed", { error: msg(error) }));
-        return;
-      }
-      if (command === "/retry") {
-        retryLastPrompt()
-          .then((result) => emit(events.commandResult({ command, ...result })))
-          .catch((error) => warn("host", "retry failed", { error: msg(error) }));
-        return;
-      }
-      // Explicit internet refresh (D-060 M2): the advisory's refresh button asks the host to run a
-      // fresh public-internet probe NOW. Like the worktree actions it is a programmatic command, not
-      // a typed slash, and produces no command.result - the monitor's `checking` start + settled
-      // result ride the host.internet events the refresh already emits. refresh() never throws and
-      // dedupes a probe already in flight, so a double-click is harmless.
-      if (command === "/internet-refresh") {
-        internet.refresh().catch(() => {});
-        return;
-      }
-      // Catalog refresh (D-065): the chooser's "Refresh catalog" action re-queries each source's live
-      // /models and re-announces sources+catalog. Programmatic (not a typed slash); produces no
-      // command.result - the refreshed catalog rides the host.online re-announce.
-      if (command === "/catalog-refresh") {
-        refreshCatalog();
-        return;
-      }
-      // Source sign-in (D-065 M5): start/cancel a host-owned OAuth device-code flow for a source.
-      // Programmatic (sent by the chooser's authenticate action), not a typed slash; the flow's
-      // progress rides host.sourceAuth events, so there is no command.result.
-      if (command === "/source-signin") {
-        startSourceSignIn(args.trim());
-        return;
-      }
-      if (command === "/source-signin-cancel") {
-        cancelSignIn();
-        return;
-      }
-      // The user-pasted code for a browser+paste sign-in (Anthropic): resolve the host's pending wait.
-      if (command === "/source-signin-code") {
-        submitSignInCode(args.trim());
-        return;
-      }
-      // Programmatic worktree actions (D-091): sent by the web switcher, not typed by users, so
-      // they're intercepted here rather than registered as slash commands.
-      if (command === "/worktree-switch") {
-        worktreeSwitch(args.trim()).catch((error) =>
-          warn("host", "worktree-switch failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/worktree-new") {
-        worktreeNew(args).catch((error) =>
-          warn("host", "worktree-new failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/worktree-merge") {
-        worktreeMerge(args).catch((error) =>
-          warn("host", "worktree-merge failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/worktree-delete") {
-        worktreeDelete(args).catch((error) =>
-          warn("host", "worktree-delete failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/worktree-reconcile") {
-        worktreeReconcile().catch((error) =>
-          warn("host", "worktree-reconcile failed", { error: msg(error) }),
-        );
-        return;
-      }
-      // Debug surface: /debug toggles the mode (always available); /restart is gated inside its
-      // handler unless called with `force` (the sidebar restart button bypasses the gate).
-      if (command === "/debug") {
-        toggleDebug();
-        return;
-      }
-      if (command === "/restart") {
-        restartHost(args).catch((error) => warn("host", "restart failed", { error: msg(error) }));
-        return;
-      }
-      // Debug lifecycle controls (D-094 M4): archive/unarchive flip the durable session flag; /stop is
-      // graceful shutdown behind an explicit confirm. Each handler re-checks debug mode. Kill is NOT
-      // here - a wedged host can't self-kill, so force-termination stays the CLI's `trevor kill`.
-      if (command === "/archive") {
-        setArchived(true).catch((error) => warn("host", "archive failed", { error: msg(error) }));
-        return;
-      }
-      if (command === "/unarchive") {
-        setArchived(false).catch((error) =>
-          warn("host", "unarchive failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/stop") {
-        stopCurrentSession(args).catch((error) =>
-          warn("host", "stop failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/handoff") {
-        runHandoff(args).catch((error) => warn("host", "handoff failed", { error: msg(error) }));
-        return;
-      }
-      if (command === "/serial-implement") {
-        runSerialImplement(args).catch((error) =>
-          warn("host", "serial-implement failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/serial-next") {
-        runSerialNext(args).catch((error) =>
-          warn("host", "serial-next failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/serial-dispose") {
-        runSerialDispose(args).catch((error) =>
-          warn("host", "serial-dispose failed", { error: msg(error) }),
-        );
-        return;
-      }
-      if (command === "/clip") {
-        runClip(args).catch((error) => warn("host", "clip failed", { error: msg(error) }));
-        return;
-      }
-      if (command === "/tasks-clear") {
-        // The task panel's dismiss control (09.1): retire a checklist the model abandoned on a topic
-        // change. The empty tasks.current snapshot emitted via taskRegistry.onChange is the
-        // confirmation (the panel hides itself when the list is empty).
-        taskRegistry.clear();
-        return;
-      }
-      runCommand(command, args).catch((error) =>
-        warn("host", "command failed", { command, error: msg(error) }),
-      );
+      programmaticCommands.dispatch(command, args);
     }
   } else if (decoded.type === "command.result") {
     // A /compact resolved (✓ / nothing / cancelled / failed): it no longer needs a result. Tracked
@@ -1104,7 +974,10 @@ function handleEvent(message: SessionEvent): void {
     if (decoded.command === "/compact") {
       compactPending = false;
     }
-  } else if (decoded.type === "editor.open" && message.producerId !== PRODUCER_ID) {
+  } else if (
+    decoded.type === "editor.open" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
     // Side-channel action (like commands): only the live leader acts, never on
     // replay - opening a file is a one-shot effect, not state to rebuild.
     if (live && lease.isLeader() && decoded.path) {
@@ -1113,7 +986,10 @@ function handleEvent(message: SessionEvent): void {
         warn("host", "editor.open failed", { path: decoded.path, error: msg(error) }),
       );
     }
-  } else if (decoded.type === "user.shell" && message.producerId !== PRODUCER_ID) {
+  } else if (
+    decoded.type === "user.shell" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
     // The prompt shell lane (D-082): a leading `!` ran a command. Like commands and editor.open it
     // is an ACTION, not state to rebuild - only the live leader executes it, never on replay or a
     // standby, so a reload never re-runs the command. The result is published as a `shell.result`
@@ -1123,7 +999,10 @@ function handleEvent(message: SessionEvent): void {
         warn("host", "shell failed", { error: msg(error) }),
       );
     }
-  } else if (decoded.type === "provider.question.answer" && message.producerId !== PRODUCER_ID) {
+  } else if (
+    decoded.type === "provider.question.answer" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
     // The browser answered a pending ask_user question. Only the live leader (which owns the blocked
     // tool call) resolves it; the runtime validates the answer, unblocks the tool, and emits the
     // resolution. An unknown id (AQ001) or an answer that fails validation (AQ002) is logged and left
@@ -1146,7 +1025,10 @@ function handleEvent(message: SessionEvent): void {
   } else if (decoded.type === "handoff.accepted" || decoded.type === "handoff.failed") {
     // Terminal lifecycle: the draft is resolved, so drop it from the pending set (replay-safe).
     noteSettled(decoded.handoffId);
-  } else if (decoded.type === "handoff.approved" && message.producerId !== PRODUCER_ID) {
+  } else if (
+    decoded.type === "handoff.approved" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
     // The browser approved a generated handoff draft. Like commands it is an ACTION (it spawns + switches),
     // so only the live leader runs it, never on replay or a standby. `prompt` is set only when the user
     // edited the draft in the prompt editor; otherwise approveHandoff falls back to the stored draft.
@@ -1159,7 +1041,7 @@ function handleEvent(message: SessionEvent): void {
     // Terminal cleanup on every host (replay-safe); only the live leader acknowledges with one command
     // result. `rejectHandoff` re-drops the (already-cleared) draft idempotently and leaves source active.
     noteSettled(decoded.handoffId);
-    if (live && lease.isLeader() && message.producerId !== PRODUCER_ID) {
+    if (live && lease.isLeader() && isAnswerableProducer(message.producerId, PRODUCER_ID)) {
       rejectHandoff(decoded.handoffId).catch((error) =>
         warn("host", "handoff reject failed", { error: msg(error) }),
       );
@@ -1191,14 +1073,7 @@ function handleEvent(message: SessionEvent): void {
 
 /** A short label for the current session (its first user message), for recall source citations. */
 function currentLabel(): string {
-  for (const event of historyEvents) {
-    const decoded = decodeTrevorEvent(event);
-    if (decoded?.type === "user.message" && decoded.text.trim()) {
-      const text = decoded.text.trim().replace(/\s+/g, " ");
-      return text.length > 60 ? `${text.slice(0, 60)}…` : text;
-    }
-  }
-  return SESSION_ID;
+  return conversationLog.label(SESSION_ID);
 }
 
 /** Basename of a path (after home-abbreviation), matching the inventory's project projection. */
@@ -1220,19 +1095,18 @@ function configureRecall(): void {
       sessionId: SESSION_ID,
       label: currentLabel(),
       project: projectName(WORKSPACE_ROOT),
-      events: historyEvents.slice(),
+      events: conversationLog.eventsSnapshot(),
       foldThroughSeq: compactionController.lastFold?.throughSeq ?? null,
     }),
     siblings: createSiblingReader({
       transport,
       // A passive viewer identity (web runtime kind), so reading a sibling never registers this
       // host as a live host presence on that session.
-      identity: {
+      identity: viewerIdentity({
         displayName: "trevor-recall",
-        runtimeKind: RUNTIME_KIND.web,
         instanceId: INSTANCE_ID,
-        participantId: `${PRODUCER_ID}:recall`,
-      },
+        participantId: recallProducerId(PRODUCER_ID),
+      }),
       currentSessionId: SESSION_ID,
       currentWorkspace: abbrevHome(WORKSPACE_ROOT),
       currentProject: projectName(WORKSPACE_ROOT),
@@ -1244,20 +1118,14 @@ function configureRecall(): void {
 /** Connects to the session stream (replay-then-tail) with simple reconnect. */
 function connect(): void {
   live = false;
-  history = [];
-  historyEvents = [];
+  conversationLog.reset();
   // Rebuilt from replay; an in-flight turn's active run is left intact (its turn keeps
   // emitting over REST and its replayed completed clears it - resetting could race a
   // concurrent turn). The deferred queue + catch-up watermarks are rebuilt from replay.
   scheduler.resetForReconnect();
   transport.connectSession({
     sessionId: SESSION_ID,
-    identity: {
-      displayName: "trevor-host",
-      runtimeKind: RUNTIME_KIND.host,
-      instanceId: INSTANCE_ID,
-      participantId: PARTICIPANT_ID,
-    },
+    identity: hostIdentity({ instanceId: INSTANCE_ID, participantId: PARTICIPANT_ID }),
     onEvent: handleEvent,
     onReplayComplete: () => {
       live = true;

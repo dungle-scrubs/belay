@@ -1,4 +1,4 @@
-import { type ChatMessage, DEFAULT_PROVIDER } from "@host/providers/index";
+import { DEFAULT_PROVIDER } from "@host/providers/index";
 import {
   buildControlTurns,
   controlPromptModel,
@@ -15,11 +15,11 @@ import {
   events,
   type ModelRef,
   type PublishInput,
-  type SessionEvent,
   type SessionTransport,
 } from "@trevor/session";
 import type { CompactionCommandsApi } from "./compaction-commands";
 import type { CompactionController } from "./compaction-controller";
+import type { ConversationLog } from "./conversation-log";
 import {
   CONTINUATION_PREFIX,
   lastUserPrompt,
@@ -48,6 +48,8 @@ import type { TurnMachine } from "./turn-machine";
 export interface ControlPromptsDeps {
   /** The current session's id (main.ts's SESSION_ID, computed from env). */
   readonly sessionId: string;
+  /** The host's bare producer id; used to recognize its derived control lanes. */
+  readonly producerId: string;
   /** The control producer id host-issued prompts ride (never the bare host id). */
   readonly controlProducerId: string;
   /** The clip control producer id, so `startTurn` narrows a `/clip` turn's tool surface. */
@@ -56,10 +58,8 @@ export interface ControlPromptsDeps {
   readonly transport: Pick<SessionTransport, "publishEvent">;
   /** Publish one host-authored event to the durable log (main.ts's emit). */
   readonly emit: EmitEvent;
-  /** The prompt projection right now (main.ts's mutable `history`). */
-  history(): readonly ChatMessage[];
-  /** The durable event log right now (main.ts's mutable `historyEvents`). */
-  historyEvents(): readonly SessionEvent[];
+  /** The live conversation log owner; control prompts read prompt history and durable events. */
+  readonly conversationLog: Pick<ConversationLog, "history" | "events">;
   /** The compaction controller: the last turn's provider anchors the control-prompt resolution. */
   readonly compactionController: Pick<CompactionController, "providerOrDefault">;
   /** The turn machine: the last termination reason labels an auto-resume's continuation. */
@@ -72,12 +72,12 @@ export interface ControlPromptsDeps {
 export function makeControlPrompts(deps: ControlPromptsDeps) {
   const {
     sessionId: SESSION_ID,
+    producerId: PRODUCER_ID,
     controlProducerId: CONTROL_PRODUCER_ID,
     clipProducerId: CLIP_PRODUCER_ID,
     transport,
     emit,
-    history,
-    historyEvents,
+    conversationLog,
     compactionController,
     turnMachine,
     forceCompact,
@@ -102,7 +102,7 @@ export function makeControlPrompts(deps: ControlPromptsDeps) {
    * continuation/retry/handoff path shares.
    */
   function controlModel(): { readonly provider: string; readonly model: ModelRef | undefined } {
-    const turns = buildControlTurns(historyEvents(), CONTROL_PRODUCER_ID);
+    const turns = buildControlTurns(conversationLog.events(), PRODUCER_ID);
     return {
       provider: controlPromptProvider(turns) ?? controlProvider(),
       model: controlPromptModel(turns),
@@ -149,7 +149,7 @@ export function makeControlPrompts(deps: ControlPromptsDeps) {
   }
 
   async function retryLastPrompt(): Promise<{ readonly ok: boolean; readonly text: string }> {
-    const last = lastUserPrompt(historyEvents());
+    const last = lastUserPrompt(conversationLog.events());
     if (!last) {
       return { ok: false, text: "No prior user prompt to retry." };
     }
@@ -188,7 +188,7 @@ export function makeControlPrompts(deps: ControlPromptsDeps) {
   async function runClip(args: string): Promise<void> {
     const route = routeClip(args);
     if (route.kind === "copy") {
-      const result = await copyLastCopyable(history(), getClipboardWriter());
+      const result = await copyLastCopyable(conversationLog.history(), getClipboardWriter());
       await emit(events.commandResult({ command: "/clip", text: result.text, ok: result.ok }));
       return;
     }
@@ -219,7 +219,7 @@ export function makeControlPrompts(deps: ControlPromptsDeps) {
    * so the crash-loop bound survives the very restarts it guards.
    */
   function maybeAutoResume(): void {
-    const { turn, inputs } = resumeProjection(historyEvents());
+    const { turn, inputs } = resumeProjection(conversationLog.events());
     if (!turn || !inputs || turn.continued || autoContinuedRuns.has(turn.runId)) {
       return;
     }

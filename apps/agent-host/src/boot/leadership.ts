@@ -3,7 +3,7 @@ import type { CompactionCommandsApi } from "@host/agent/compaction-commands";
 import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import type { InternetMonitor } from "@host/connectivity/probe";
-import { DEFAULT_PROVIDER, type ProviderError, type ProviderRegistry } from "@host/providers/index";
+import { DEFAULT_PROVIDER, type ProviderRegistry } from "@host/providers/index";
 import type { HostResidency } from "@host/residency/host";
 import {
   CWD_LOCK_HEARTBEAT_MS,
@@ -14,8 +14,8 @@ import {
 import type { Lease } from "@host/session/lease";
 import { log, warn } from "@host/transport/log";
 import type { EmitEvent } from "@host/transport/services";
-import { events, type TrevorEventInput } from "@trevor/session";
-import { Cause, Effect, type Fiber } from "effect";
+import { events } from "@trevor/session";
+import { Cause, Effect } from "effect";
 import { envNumber } from "./env";
 import { WORKSPACE_ROOT } from "./paths";
 
