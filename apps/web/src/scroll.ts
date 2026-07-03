@@ -20,6 +20,12 @@ export function distanceFromBottom(geo: ScrollGeometry): number {
   return geo.scrollHeight - geo.clientHeight - geo.scrollTop;
 }
 
+/** The scrollTop of the live bottom edge (the maximum scroll offset) - the target every follow write
+ *  aims for. Takes just the two lengths so callers holding an element (or flat scalars) can use it. */
+export function liveEdgeOffset(geo: Pick<ScrollGeometry, "scrollHeight" | "clientHeight">): number {
+  return geo.scrollHeight - geo.clientHeight;
+}
+
 /**
  * True when the viewport is at (or within tolerance of) the live bottom edge. Content shorter than
  * the viewport (`scrollHeight <= clientHeight`, scrollTop 0) reads as at-bottom, so a short session

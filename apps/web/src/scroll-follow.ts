@@ -6,14 +6,16 @@
  * Responsible for:
  *   - The pin state machine. Unpin is DIRECTION-BASED and SYNCHRONOUS: any upward user gesture unpins
  *     in the same call, with no `atBottomOf` precondition and no intent window; an unattributed
- *     scrollTop DECREASE (scrollbar drag, keyboard) also unpins. Re-pin happens only on a deliberate
- *     return to the bottom (a downward user scroll ending within the tolerance band), the jump button,
- *     or prompt submit - upward transit through the band never re-pins.
+ *     upward scroll (touch drag, keyboard, a scrollbar where one is shown) also unpins. Re-pin happens
+ *     only on a genuine user arrival at the bottom - any input kind, recognized from the scroll event
+ *     moving DOWN and ending within the tolerance band - the jump button, or prompt submit. Upward
+ *     transit through the band never re-pins.
  *   - Write arbitration. While pinned, follow-class writes are allowed; while unpinned every
- *     follow-class write is denied and only anchor-compensation writes (which keep the viewport
- *     visually stationary) pass.
+ *     follow-class write is denied, and anchor-compensation writes (which keep the viewport visually
+ *     stationary) pass UNLESS they would land at the live edge - that is a follow in disguise.
  *   - Self-write bookkeeping, so a scroll event caused by a write this controller approved is not
- *     misread as user movement.
+ *     misread as user movement. An edge-targeting write is also recognized by LANDING at the edge,
+ *     because its exact offset can clamp/drift a few px as the column re-measures in flight.
  *   - A debug snapshot (pinned, last transition reason, last denied write) and a change subscription
  *     for the React adapter's jump-button render.
  *
@@ -37,14 +39,31 @@ export type PinReason =
  *   - `follow`: go to the live edge (append follow, streaming growth, the settle loop, the pinned rAF).
  *     Allowed only while pinned.
  *   - `anchor-compensation`: adjust scrollTop to keep the viewport VISUALLY STATIONARY while content
- *     above the fold re-measures. Allowed always - it never moves the user, it cancels a shift.
+ *     above re-measures. Allowed while unpinned too - unless it would land at the live edge.
  */
 export type WriteClass = "follow" | "anchor-compensation";
 
+/** The writers that may request a programmatic scroll write - a closed union so a typo'd writer label
+ *  cannot silently drift past review (each names the effect that asked, for the denied-write log). */
+export type ScrollWriter =
+  | "append"
+  | "pinned-change"
+  | "post-ready"
+  | "settle-loop"
+  | "total-size"
+  | "virtualizer";
+
+/** The machine-readable outcome of a write request. */
+export type WriteReason =
+  | "pinned-allows-follow"
+  | "unpinned-denies-follow"
+  | "anchor-allowed"
+  | "anchor-denied-lands-at-edge";
+
 export interface DeniedWrite {
   readonly writeClass: WriteClass;
-  /** A label for the writer that was denied, so a future tug names itself instead of being silent. */
-  readonly writer: string;
+  /** The writer that was denied, so a future tug names itself instead of being silent. */
+  readonly writer: ScrollWriter;
 }
 
 export interface ScrollFollowSnapshot {
@@ -55,16 +74,21 @@ export interface ScrollFollowSnapshot {
 
 export interface WriteDecision {
   readonly allowed: boolean;
-  /** A short machine-readable reason, handy in the dev log and in tests. */
-  readonly reason: string;
+  readonly reason: WriteReason;
 }
 
 export interface RequestWriteOptions {
-  /** Names the writer for the debug snapshot + dev log (e.g. "append", "settle-loop", "scroll-to-fn"). */
-  readonly writer?: string;
+  /** Names the writer for the debug snapshot + dev log. */
+  readonly writer: ScrollWriter;
   /** The scrollTop the element will hold after this write, if known, so the resulting scroll event is
    *  recognized as a self-write rather than reinterpreted as user movement. */
   readonly resultingOffset?: number;
+  /** The element's two lengths at request time, as flat scalars (this path runs per re-measure at
+   *  streaming rate - no geometry literal per call). With `resultingOffset` they let the controller
+   *  (a) deny an unpinned anchor-compensation that would land at the live edge and (b) recognize a
+   *  clamped edge landing as a self-write. */
+  readonly scrollHeight?: number;
+  readonly clientHeight?: number;
 }
 
 export interface ScrollFollowController {
@@ -77,28 +101,40 @@ export interface ScrollFollowController {
   /** A directional user gesture (wheel `deltaY` sign, touch-move delta). Upward unpins synchronously. */
   gesture(direction: "up" | "down"): void;
   /** A scroll event from the element, with its current geometry. Reconciles self-writes, unpins on an
-   *  unattributed upward move, and re-pins on a deliberate return to the bottom. */
+   *  unattributed upward move, and re-pins on a genuine user arrival at the bottom. */
   scrolled(geo: ScrollGeometry): void;
   /** An explicit re-pin command: the jump-to-bottom affordance or a prompt submit. Re-pins from anywhere. */
   repin(reason: "jump" | "submit"): void;
   /** Ask whether a programmatic scroll write may run, and record it for self-write recognition. */
-  requestWrite(writeClass: WriteClass, options?: RequestWriteOptions): WriteDecision;
+  requestWrite(writeClass: WriteClass, options: RequestWriteOptions): WriteDecision;
 }
 
 /** Sub-pixel slack: scroll positions within this many px count as "the same place" (rounding, clamping). */
 const EPSILON_PX = 1.5;
 
-/** How many recent approved-write offsets to remember for self-write recognition (one follow can issue
+/** How many recent approved writes to remember for self-write recognition (one follow can issue
  *  several writes in a frame; a scroll event matches the newest that lands). */
-const SELF_OFFSET_HISTORY = 8;
+const SELF_WRITE_HISTORY = 8;
 
-/** Whether to emit the dev-only structured log for a denied write. Bundlers strip this in production. */
-function isDev(): boolean {
+/**
+ * Dev-mode flag, computed ONCE at module load (this module sits on 60Hz+ scroll paths). Vitest and
+ * `vite dev` set `import.meta.env.DEV`; production builds get false, so the denied-write debug state
+ * and log are skipped entirely there.
+ */
+const DEV = (() => {
   try {
     return import.meta.env?.DEV === true;
   } catch {
     return false;
   }
+})();
+
+/** One approved-but-not-yet-observed write. */
+interface SelfWrite {
+  readonly offset: number;
+  /** The write targeted the live edge at request time. Its landing may clamp a few px off `offset` as
+   *  the column re-measures in flight, so it is also recognized by LANDING at the (current) edge. */
+  readonly targetsEdge: boolean;
 }
 
 export function createScrollFollowController(
@@ -112,19 +148,13 @@ export function createScrollFollowController(
   // until the first event: direction is undefined without a prior sample, so the first scroll only
   // establishes the baseline (the directional `gesture` path is the primary unpin trigger anyway).
   let lastScrollTop: number | null = null;
-  // The resulting offsets of recently approved writes, matched against the next scroll event so our own
-  // writes are not reinterpreted as user movement. A ring (not a single slot) because one follow can
-  // issue several writes in a frame (virtualizer scrollToEnd + a direct scrollTo + a re-measure
-  // correction) whose landing offset drifts, and the coalesced scroll event matches only one of them.
-  const selfOffsets: number[] = [];
-  // Whether the user is currently scrolling DOWNWARD by their own hand - set by a downward gesture,
-  // cleared by an upward one or a re-pin. The scroll-event re-pin requires this: a bare downward scroll
-  // to the bottom with no gesture behind it is a residual follow self-scroll (its event can land just
-  // after an upward gesture unpins), not a deliberate return, and must not re-pin.
-  let sawDownGesture = false;
+  // The ledger of approved writes whose scroll events have not landed yet, so our own movement is not
+  // reinterpreted as the user's. A short ring (not a single slot) because one follow can issue several
+  // writes in a frame whose landing offset drifts, and the coalesced scroll event matches only one.
+  const selfWrites: SelfWrite[] = [];
   // Writers already named in the dev log for the current unpinned span, so each is warned about at most
   // once (a denied follow write is EXPECTED while reading; we just want the writer named, not a flood).
-  const warnedWriters = new Set<string>();
+  const warnedWriters = new Set<ScrollWriter>();
 
   const listeners = new Set<() => void>();
   const notify = (): void => {
@@ -134,39 +164,59 @@ export function createScrollFollowController(
   };
 
   const setPinned = (next: boolean, reason: PinReason): void => {
-    lastReason = reason;
     if (pinned === next) {
       return;
     }
     pinned = next;
+    lastReason = reason;
     if (pinned) {
-      // A fresh unpinned span starts on the next unpin; clear the per-span dev-log dedup now.
+      // Fresh pinned state: the per-span dev-log dedup, the stale last denial, and any leftover ledger
+      // entries all belonged to the unpinned span that just ended.
       warnedWriters.clear();
+      lastDeniedWrite = null;
+      selfWrites.length = 0;
     }
     notify();
   };
 
   const gesture = (direction: "up" | "down"): void => {
     // Upward is the whole point: unpin synchronously, with no position precondition and no intent
-    // window. Downward is not, by itself, a re-pin - it ARMS the scroll-event re-pin, which fires once
-    // the viewport actually arrives within the tolerance band (a downward gesture ending at the bottom).
-    if (direction === "up") {
-      sawDownGesture = false;
-      setPinned(false, "user-gesture-up");
-    } else {
-      sawDownGesture = true;
+    // window. Downward needs no handling here - a deliberate return is recognized by the scroll event
+    // actually ARRIVING at the bottom (`scrolled`), which works for wheel, touch, keyboard, and
+    // scrollbar alike; residual self-writes landing there are filtered by the ledger instead.
+    if (direction !== "up" || !pinned) {
+      return;
     }
+    // The upward input supersedes any in-flight mid-column write. Edge-targeting writes are kept: they
+    // were approved while pinned, their scroll event is already queued and will land AT the bottom, and
+    // without ledger recognition that landing would be misread as a deliberate user return (re-pinning
+    // right through the flick - the regression spec 3 guards).
+    for (let i = selfWrites.length - 1; i >= 0; i -= 1) {
+      if (!selfWrites[i]?.targetsEdge) {
+        selfWrites.splice(i, 1);
+      }
+    }
+    setPinned(false, "user-gesture-up");
   };
 
   const scrolled = (geo: ScrollGeometry): void => {
-    // Self-write recognition FIRST: a scroll event that lands where a write we approved said it would is
-    // our own movement - consume it (and any older, now-stale offsets), advance the baseline, and change
-    // nothing else.
-    const matched = selfOffsets.findIndex(
-      (offset) => Math.abs(geo.scrollTop - offset) <= EPSILON_PX,
-    );
+    // Self-write recognition FIRST: a scroll event that lands where a write we approved said it would
+    // (or at the live edge, for an edge-targeting write whose exact offset clamped in flight) is our
+    // own movement - consume it and any older, superseded entries, advance the baseline, change nothing.
+    // Indexed loop, no closure: this runs per scroll event (60Hz+).
+    let matched = -1;
+    for (let i = 0; i < selfWrites.length; i += 1) {
+      const entry = selfWrites[i] as SelfWrite;
+      if (
+        Math.abs(geo.scrollTop - entry.offset) <= EPSILON_PX ||
+        (entry.targetsEdge && atBottomOf(geo))
+      ) {
+        matched = i;
+        break;
+      }
+    }
     if (matched !== -1) {
-      selfOffsets.splice(0, matched + 1);
+      selfWrites.splice(0, matched + 1);
       lastScrollTop = geo.scrollTop;
       return;
     }
@@ -177,6 +227,11 @@ export function createScrollFollowController(
       return;
     }
 
+    // Unmatched = the user moved the viewport. Scroll events arrive in order, so every write recorded
+    // before this event is superseded - flush the ledger, or a stale offset could later swallow a
+    // genuine scrollbar/keyboard scroll and suppress the unpin/re-pin logic.
+    selfWrites.length = 0;
+
     const previous = lastScrollTop;
     lastScrollTop = geo.scrollTop;
 
@@ -184,60 +239,76 @@ export function createScrollFollowController(
     const movedDown = geo.scrollTop > previous + EPSILON_PX;
 
     if (pinned) {
-      // The catch-all unpin: an unattributed UPWARD scroll that leaves the bottom band (keyboard PageUp,
-      // touch drag, a scrollbar where one is shown) - the user read away from the live edge. Both
-      // conditions matter: a follow write moving DOWN toward the edge must never trip this even while it
-      // momentarily trails a fast stream (bottomDelta > tolerance mid-catch-up), and a sub-band nudge
-      // that stays at the live edge is still "at bottom", not a read.
+      // The catch-all unpin: an unattributed UPWARD scroll that leaves the bottom band (keyboard
+      // PageUp, touch drag, a scrollbar where one is shown). Both conditions matter: a follow write
+      // momentarily trailing a fast stream moves DOWN (never trips this), and a sub-band nudge that
+      // stays at the live edge is still "at bottom", not a read.
       if (movedUp && !atBottomOf(geo)) {
         setPinned(false, "unattributed-scroll-up");
       }
       return;
     }
 
-    // Unpinned: re-pin only on a DELIBERATE return to the bottom - a downward gesture (armed above) that
-    // arrives within the tolerance band. Upward transit through the band never satisfies this, and a
-    // gesture-less downward scroll (a residual follow write settling) is not a return.
-    if (sawDownGesture && movedDown && atBottomOf(geo)) {
-      sawDownGesture = false;
+    // Unpinned: re-pin on a genuine user arrival at the bottom - moving DOWN and ending within the
+    // tolerance band. Input-agnostic (wheel, touch, keyboard End/PageDown, scrollbar drag). A residual
+    // follow self-scroll cannot reach here (consumed by the ledger above), and upward transit through
+    // the band never satisfies `movedDown`.
+    if (movedDown && atBottomOf(geo)) {
       setPinned(true, "user-return-to-bottom");
     }
   };
 
   const repin = (reason: "jump" | "submit"): void => {
-    sawDownGesture = false;
     setPinned(true, reason);
   };
 
   const requestWrite = (
     writeClass: WriteClass,
-    writeOptions: RequestWriteOptions = {},
+    writeOptions: RequestWriteOptions,
   ): WriteDecision => {
-    // Anchor-compensation is always allowed - it cancels a content shift to keep the viewport where the
-    // user left it, which is the ONE programmatic write that is safe while unpinned.
-    const allowed = writeClass === "anchor-compensation" || pinned;
+    const { writer, resultingOffset, scrollHeight, clientHeight } = writeOptions;
+    // Whether this write would land at the live edge - computable only when the caller supplied its
+    // geometry, and meaningful only when the column overflows (jsdom reports 0/0 lengths; no overflow
+    // means there is no edge to land at).
+    const landsAtEdge =
+      resultingOffset !== undefined &&
+      scrollHeight !== undefined &&
+      clientHeight !== undefined &&
+      scrollHeight > clientHeight &&
+      atBottomOf({ scrollHeight, clientHeight, scrollTop: resultingOffset });
 
-    if (!allowed) {
-      const writer = writeOptions.writer ?? "unknown";
-      lastDeniedWrite = { writeClass, writer };
-      if (isDev() && !warnedWriters.has(writer)) {
-        warnedWriters.add(writer);
-        // Structured, dev-only: names the writer that tried to follow while the user was reading, so a
-        // future regression is attributable instead of a silent tug.
-        console.warn("[scroll-follow] denied a follow write while unpinned", {
-          writer,
-          writeClass,
-        });
+    if (writeClass === "follow" && !pinned) {
+      if (DEV) {
+        lastDeniedWrite = { writeClass, writer };
+        if (!warnedWriters.has(writer)) {
+          warnedWriters.add(writer);
+          // Structured, dev-only: names the writer that tried to follow while the user was reading, so
+          // a future regression is attributable instead of a silent tug.
+          console.warn("[scroll-follow] denied a follow write while unpinned", {
+            writer,
+            writeClass,
+          });
+        }
       }
       return { allowed: false, reason: "unpinned-denies-follow" };
     }
 
-    // Approved: record where the element will end up so the resulting scroll event is a recognized
-    // self-write. Keep only the last few offsets - a scroll event coalesces to the most recent write.
-    if (writeOptions.resultingOffset !== undefined) {
-      selfOffsets.push(writeOptions.resultingOffset);
-      if (selfOffsets.length > SELF_OFFSET_HISTORY) {
-        selfOffsets.shift();
+    // An unpinned anchor-compensation that would land at the live edge is a follow in disguise (the
+    // virtualizer's `anchorTo` lags a render behind a synchronous unpin and can request one): deny it.
+    // Letting it run would yank the reader to the bottom and then read as a deliberate return. No dev
+    // warn - this denial is EXPECTED during the one-render lag window; the reason string names it.
+    if (writeClass === "anchor-compensation" && !pinned && landsAtEdge) {
+      if (DEV) {
+        lastDeniedWrite = { writeClass, writer };
+      }
+      return { allowed: false, reason: "anchor-denied-lands-at-edge" };
+    }
+
+    // Approved: record the landing so the resulting scroll event reads as a self-write.
+    if (resultingOffset !== undefined) {
+      selfWrites.push({ offset: resultingOffset, targetsEdge: landsAtEdge });
+      if (selfWrites.length > SELF_WRITE_HISTORY) {
+        selfWrites.shift();
       }
     }
     return {

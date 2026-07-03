@@ -4,8 +4,8 @@ import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import { isCompactEligible } from "@/components/chat/compact-display";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
-import { atBottomOf } from "@/scroll";
-import type { ScrollFollowController } from "@/scroll-follow";
+import { atBottomOf, liveEdgeOffset } from "@/scroll";
+import type { ScrollFollowController, ScrollWriter } from "@/scroll-follow";
 import type { Message } from "../../transcript";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
 
@@ -140,43 +140,26 @@ export function VirtualTranscript({
     // useAnimationFrameWithResizeObserver: batch row re-measurement to an animation frame so a row
     // resizing mid-stream coalesces its corrections instead of thrashing scrollTop per layout tick.
     useAnimationFrameWithResizeObserver: true,
-    // Every tanstack-initiated scroll asks the controller. While pinned it is a follow write (allowed).
-    // While unpinned it is normally a measure/anchor correction that keeps the viewport visually
-    // stationary (anchor-compensation, allowed) - EXCEPT a correction that would land at the live edge,
-    // which is a lagging-`anchorTo` follow in disguise (the `pinned` prop trails the synchronous
-    // controller by a render). That one is swallowed: allowing it would yank a reading user and, once
-    // clamped, be misread as a deliberate return to the bottom and re-pin. The resulting offset is
-    // recorded so the real scroll event is recognized as a self-write, not user movement.
+    // Every tanstack-initiated scroll is a dumb "ask the controller" pass-through: pinned means it is
+    // a follow write, unpinned means it can only be a measure/anchor correction (followOnAppend is off
+    // and app follows are gated upstream). ALL policy - denying follows while unpinned, rejecting an
+    // unpinned "correction" that would land at the live edge (a lagging-`anchorTo` follow in disguise),
+    // and self-write bookkeeping - lives in the controller. Geometry rides along as flat scalars so the
+    // controller can make those calls without this hot path allocating a geometry literal per re-measure.
     scrollToFn: (offset, opts, instance) => {
       const element = instance.scrollElement;
-      if (controller.isPinned()) {
-        if (
-          controller.requestWrite("follow", { writer: "virtualizer", resultingOffset: offset })
-            .allowed
-        ) {
-          elementScroll(offset, opts, instance);
-        }
-        return;
-      }
-      const landsAtEdge =
-        element !== null &&
-        // Only meaningful when the column actually overflows - with no overflow there is no live edge to
-        // land at (and jsdom, which reports scrollHeight 0, must not read every write as edge-landing).
-        element.scrollHeight > element.clientHeight &&
-        atBottomOf({
-          scrollHeight: element.scrollHeight,
-          clientHeight: element.clientHeight,
-          scrollTop: offset,
-        });
-      if (landsAtEdge) {
-        return;
-      }
-      if (
-        controller.requestWrite("anchor-compensation", {
-          writer: "virtualizer",
-          resultingOffset: offset,
-        }).allowed
-      ) {
+      const decision = controller.requestWrite(
+        controller.isPinned() ? "follow" : "anchor-compensation",
+        element
+          ? {
+              writer: "virtualizer",
+              resultingOffset: offset,
+              scrollHeight: element.scrollHeight,
+              clientHeight: element.clientHeight,
+            }
+          : { writer: "virtualizer", resultingOffset: offset },
+      );
+      if (decision.allowed) {
         elementScroll(offset, opts, instance);
       }
     },
@@ -202,12 +185,17 @@ export function VirtualTranscript({
   // `writer` label names which effect asked, for the controller's dev-only denied-write log. Explicit
   // jump-to-bottom (`scrollToBottomRequest`) stays on `scrollToLiveEdge` - it re-pins first.
   const followLiveEdge = useCallback(
-    (writer: string, behavior: ScrollBehavior = "auto") => {
+    (writer: ScrollWriter, behavior: ScrollBehavior = "auto") => {
       const scrollElement = scrollRef.current;
-      const resultingOffset = scrollElement
-        ? scrollElement.scrollHeight - scrollElement.clientHeight
-        : undefined;
-      if (controller.requestWrite("follow", { writer, resultingOffset }).allowed) {
+      const decision = scrollElement
+        ? controller.requestWrite("follow", {
+            writer,
+            resultingOffset: liveEdgeOffset(scrollElement),
+            scrollHeight: scrollElement.scrollHeight,
+            clientHeight: scrollElement.clientHeight,
+          })
+        : controller.requestWrite("follow", { writer });
+      if (decision.allowed) {
         scrollToLiveEdge(behavior);
       }
     },
@@ -260,11 +248,15 @@ export function VirtualTranscript({
           return;
         }
         const scrollElement = scrollRef.current;
-        const bottomDelta = scrollElement
-          ? scrollElement.scrollHeight - scrollElement.clientHeight - scrollElement.scrollTop
-          : Number.POSITIVE_INFINITY;
+        const settledAtEdge = scrollElement
+          ? atBottomOf({
+              scrollHeight: scrollElement.scrollHeight,
+              clientHeight: scrollElement.clientHeight,
+              scrollTop: scrollElement.scrollTop,
+            })
+          : false;
         const currentLastIndex = virtualizer.getVirtualItems().at(-1)?.index;
-        if (currentLastIndex === rows.length - 1 && bottomDelta < 40) {
+        if (currentLastIndex === rows.length - 1 && settledAtEdge) {
           setReadyToReveal(true);
           return;
         }

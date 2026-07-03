@@ -64,9 +64,8 @@ test("marks appended content unseen while unpinned and clears it on a return to 
   assert.equal(result.current.atBottom, false);
   assert.equal(result.current.hasUnseen, true);
 
-  // A deliberate scroll back down to the live edge (a downward gesture ending at the bottom) re-pins
-  // and clears the unseen flag.
-  act(() => result.current.onUserGesture("down"));
+  // A genuine scroll back down arriving at the live edge re-pins and clears the unseen flag - no
+  // wheel gesture required (the controller recognizes the arrival from the scroll event itself).
   setScrollElement(result.current.transcriptRef, {
     scrollHeight: 1000,
     clientHeight: 400,
@@ -76,6 +75,37 @@ test("marks appended content unseen while unpinned and clears it on a return to 
 
   assert.equal(result.current.atBottom, true);
   assert.equal(result.current.hasUnseen, false);
+});
+
+test("keyboard/scrollbar-style scrolling (no wheel gesture) unpins and re-pins at the bottom", () => {
+  // A user on keyboard (PageUp/End) or a scrollbar drag produces ONLY scroll events - no wheel
+  // gesture ever fires. Both directions must still work through the controller's scroll-event path.
+  const { result } = renderHook(() => useScrollFollow(2));
+  setScrollElement(result.current.transcriptRef, {
+    scrollHeight: 1000,
+    clientHeight: 400,
+    scrollTop: 600,
+  });
+  act(() => result.current.onScroll()); // baseline at the bottom
+  assert.equal(result.current.atBottom, true);
+
+  // PageUp: an unattributed upward scroll -> unpins.
+  setScrollElement(result.current.transcriptRef, {
+    scrollHeight: 1000,
+    clientHeight: 400,
+    scrollTop: 200,
+  });
+  act(() => result.current.onScroll());
+  assert.equal(result.current.atBottom, false);
+
+  // End: a genuine downward arrival at the bottom -> re-pins.
+  setScrollElement(result.current.transcriptRef, {
+    scrollHeight: 1000,
+    clientHeight: 400,
+    scrollTop: 600,
+  });
+  act(() => result.current.onScroll());
+  assert.equal(result.current.atBottom, true);
 });
 
 test("scrollToBottom re-pins and increments the request id", () => {

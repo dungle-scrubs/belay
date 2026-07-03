@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "vitest";
-import { AT_BOTTOM_TOLERANCE, type ScrollGeometry } from "./scroll";
+import { AT_BOTTOM_TOLERANCE, liveEdgeOffset, type ScrollGeometry } from "./scroll";
 import { createScrollFollowController } from "./scroll-follow";
 
 /**
  * The follow controller (plan 12.2 M2): the pure pin state machine + write arbitration. No DOM, no
  * React - geometry is passed in as plain numbers, exactly like `scroll.ts`. These tests pin the
  * behaviors the three Lane B regressions need: a direction-based SYNCHRONOUS unpin, a re-pin that only
- * a deliberate return to the bottom (or jump/submit) triggers, and a write arbiter that denies every
- * follow-class write while unpinned.
+ * a genuine user arrival at the bottom (any input kind), the jump button, or submit triggers, and a
+ * write arbiter that denies every follow-class write while unpinned.
  */
 
 // A geometry helper: a tall column whose distance-from-bottom is `fromBottom` px.
@@ -38,12 +38,12 @@ describe("scroll-follow: unpin is direction-based and synchronous", () => {
     }
   });
 
-  test("an unattributed scrollTop decrease unpins (scrollbar drag / keyboard, no wheel gesture)", () => {
+  test("an unattributed upward scroll unpins (scrollbar drag / keyboard, no wheel gesture)", () => {
     const c = createScrollFollowController();
     c.scrolled(geo(0)); // at the bottom, pinned
     assert.equal(c.isPinned(), true);
 
-    // A scroll event that moved the viewport UP with no approved write behind it: unpin.
+    // A scroll event that moved the viewport UP out of the band with no approved write behind it: unpin.
     c.scrolled(geo(300));
 
     assert.equal(c.isPinned(), false);
@@ -61,15 +61,14 @@ describe("scroll-follow: unpin is direction-based and synchronous", () => {
   });
 });
 
-describe("scroll-follow: re-pin only on a deliberate return to the bottom, jump, or submit", () => {
-  test("a downward user gesture that ends within the bottom tolerance re-pins", () => {
+describe("scroll-follow: re-pin only on a genuine bottom arrival, jump, or submit", () => {
+  test("a wheel user scrolling back down re-pins on arrival within the tolerance band", () => {
     const c = createScrollFollowController();
     c.gesture("up");
     c.scrolled(geo(500));
     assert.equal(c.isPinned(), false);
 
-    // The user scrolls back DOWN (a downward gesture) and arrives within the tolerance band -> re-pin.
-    c.gesture("down");
+    // The user scrolls back down and arrives within the tolerance band -> re-pin.
     c.scrolled(geo(300));
     assert.equal(c.isPinned(), false, "still above the band");
     c.scrolled(geo(AT_BOTTOM_TOLERANCE - 5));
@@ -77,16 +76,46 @@ describe("scroll-follow: re-pin only on a deliberate return to the bottom, jump,
     assert.equal(c.snapshot().lastReason, "user-return-to-bottom");
   });
 
-  test("a gesture-less downward scroll to the bottom does not re-pin (residual follow write)", () => {
+  test("a gesture-less downward arrival at the bottom re-pins (keyboard End, scrollbar drag)", () => {
     const c = createScrollFollowController();
-    c.gesture("up");
-    c.scrolled(geo(500));
+    c.scrolled(geo(0)); // baseline at the bottom
+    c.scrolled(geo(500)); // keyboard PageUp: unattributed upward scroll -> unpin
     assert.equal(c.isPinned(), false);
 
-    // A downward scroll event that arrives at the bottom with NO downward gesture behind it - the
-    // settling of a follow write issued just before the unpin - must not be read as a return.
+    // Keyboard End: a genuine downward scroll event landing in the band, with NO wheel gesture at all.
     c.scrolled(geo(0));
+
+    assert.equal(c.isPinned(), true);
+    assert.equal(c.snapshot().lastReason, "user-return-to-bottom");
+  });
+
+  test("a residual follow self-write landing at the bottom does NOT re-pin", () => {
+    const c = createScrollFollowController();
+    c.scrolled(geo(0)); // pinned at the bottom
+    const edge = geo(0);
+    // A follow write approved while pinned, targeting the live edge. It requests an offset slightly
+    // past the current edge (the column re-measured in flight), so its landing will CLAMP - the exact
+    // offset match would miss, but the edge-targeting recognition must not.
+    const decision = c.requestWrite("follow", {
+      writer: "append",
+      resultingOffset: liveEdgeOffset(edge) + 40,
+      scrollHeight: edge.scrollHeight,
+      clientHeight: edge.clientHeight,
+    });
+    assert.equal(decision.allowed, true);
+
+    // The user flicks up before the write's scroll event lands: unpin, write still in flight.
+    c.gesture("up");
     assert.equal(c.isPinned(), false);
+
+    // The write's event lands clamped at the real edge - a self-write, NOT a deliberate user return.
+    c.scrolled(geo(0));
+    assert.equal(c.isPinned(), false, "a residual follow landing must not re-pin");
+
+    // But the bookkeeping is consumed: a later GENUINE arrival at the bottom still re-pins.
+    c.scrolled(geo(400));
+    c.scrolled(geo(10));
+    assert.equal(c.isPinned(), true);
   });
 
   test("upward transit through the bottom band never re-pins", () => {
@@ -101,11 +130,10 @@ describe("scroll-follow: re-pin only on a deliberate return to the bottom, jump,
     assert.equal(c.isPinned(), false);
   });
 
-  test("a downward gesture that stops short of the band does not re-pin", () => {
+  test("a downward scroll that stops short of the band does not re-pin", () => {
     const c = createScrollFollowController();
     c.gesture("up");
     c.scrolled(geo(500));
-    c.gesture("down");
     c.scrolled(geo(AT_BOTTOM_TOLERANCE + 10)); // moved down, but stopped above the band
     assert.equal(c.isPinned(), false);
   });
@@ -137,20 +165,48 @@ describe("scroll-follow: write arbitration + self-write bookkeeping", () => {
     c.gesture("up");
     assert.equal(c.isPinned(), false);
 
-    for (const writer of ["append", "settle-loop", "total-size-growth", "pinned-raf"]) {
+    for (const writer of ["append", "settle-loop", "total-size", "pinned-change"] as const) {
       const decision = c.requestWrite("follow", { writer });
       assert.equal(
         decision.allowed,
         false,
         `follow write from ${writer} must be denied while unpinned`,
       );
+      assert.equal(decision.reason, "unpinned-denies-follow");
     }
-    assert.equal(c.requestWrite("anchor-compensation", { writer: "measure" }).allowed, true);
+    assert.equal(c.requestWrite("anchor-compensation", { writer: "virtualizer" }).allowed, true);
 
     // The last denial is inspectable in the debug snapshot (names the writer that tried to tug).
     const denied = c.snapshot().lastDeniedWrite;
     assert.equal(denied?.writeClass, "follow");
-    assert.equal(denied?.writer, "pinned-raf");
+    assert.equal(denied?.writer, "pinned-change");
+  });
+
+  test("while unpinned, an anchor-compensation that would land at the live edge is denied", () => {
+    const c = createScrollFollowController();
+    c.gesture("up");
+    const edge = geo(0);
+
+    // The lagging `anchorTo` can request an edge-landing "correction" for one render after a
+    // synchronous unpin - a follow in disguise; the controller (not the component) rejects it.
+    const denied = c.requestWrite("anchor-compensation", {
+      writer: "virtualizer",
+      resultingOffset: liveEdgeOffset(edge),
+      scrollHeight: edge.scrollHeight,
+      clientHeight: edge.clientHeight,
+    });
+    assert.equal(denied.allowed, false);
+    assert.equal(denied.reason, "anchor-denied-lands-at-edge");
+
+    // A mid-column compensation with the same geometry is still allowed (the real anchor case).
+    const allowed = c.requestWrite("anchor-compensation", {
+      writer: "virtualizer",
+      resultingOffset: 1000,
+      scrollHeight: edge.scrollHeight,
+      clientHeight: edge.clientHeight,
+    });
+    assert.equal(allowed.allowed, true);
+    assert.equal(allowed.reason, "anchor-allowed");
   });
 
   test("an approved write is recognized on the next scroll event, not misread as user movement", () => {
@@ -163,7 +219,7 @@ describe("scroll-follow: write arbitration + self-write bookkeeping", () => {
     // keep the same rows visible. That approved write resolves to a known offset...
     const compensated = geo(360); // scrollTop increased by 40 (moved "down") to compensate
     const decision = c.requestWrite("anchor-compensation", {
-      writer: "anchor",
+      writer: "virtualizer",
       resultingOffset: compensated.scrollTop,
     });
     assert.equal(decision.allowed, true);
@@ -187,6 +243,24 @@ describe("scroll-follow: write arbitration + self-write bookkeeping", () => {
     // A subsequent genuine upward gesture still unpins (bookkeeping did not wedge the state).
     c.gesture("up");
     assert.equal(c.isPinned(), false);
+  });
+
+  test("an unmatched user scroll flushes stale ledger entries (they cannot swallow later scrolls)", () => {
+    const c = createScrollFollowController();
+    c.scrolled(geo(0)); // baseline at the bottom
+    // An approved write whose event never lands at its recorded offset (superseded in flight).
+    c.requestWrite("follow", { writer: "append", resultingOffset: geo(100).scrollTop });
+
+    // The user scrolls up: unmatched -> the ledger is flushed and the viewport unpins.
+    c.scrolled(geo(300));
+    assert.equal(c.isPinned(), false);
+
+    // A later user scroll landing EXACTLY on the stale offset is genuine movement, not a self-write:
+    // it is mid-column (no re-pin), and the subsequent arrival at the bottom re-pins normally.
+    c.scrolled(geo(100));
+    assert.equal(c.isPinned(), false, "a flushed offset must not swallow a genuine scroll");
+    c.scrolled(geo(10));
+    assert.equal(c.isPinned(), true);
   });
 });
 
