@@ -87,6 +87,9 @@ edge, replay dispatch, the command lane, and turn dispatch together.
   streamed-text delta buffer, error->message normalization, and the structured boundary logger.
 - `effect/` - small Effect runtime adapters shared across host subsystems, such as fiber exit
   interpretation and interruption.
+- `io/` - shared filesystem write primitives: the one atomic temp-write + rename helper (sync and
+  injected-fs async forms) the file-backed stores (admission, docs corpora, JSON configs, CLAUDE.md
+  migration) route their writes through so a crash or concurrent reader never sees a torn file.
 - `json-rpc/` - protocol-neutral JSON-RPC mechanics shared by child-backed integrations:
   Content-Length framed request/notification correlation, pending timeout handling, and fatal
   connection termination.
