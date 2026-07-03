@@ -58,6 +58,8 @@ export interface PromptInputProps {
   readonly composer: ComposerInput;
   readonly onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   readonly onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  /** Report the caret position to App (plan 30), so it can detect the active `@` file-mention token. */
+  readonly onCaretChange?: (caret: number) => void;
   readonly disabled: boolean;
   readonly placeholder: string;
   /** Open the current draft in the full-surface prompt editor (02.12) for a larger writing area. */
@@ -74,6 +76,7 @@ export function PromptInput({
   composer,
   onSubmit,
   onKeyDown,
+  onCaretChange,
   disabled,
   placeholder,
   onExpand,
@@ -109,6 +112,7 @@ export function PromptInput({
   const updateCaretFromInput = () => {
     const nextCaret = inputRef.current?.selectionStart ?? draft.length;
     setCaret((prev) => (prev === nextCaret ? prev : nextCaret));
+    onCaretChange?.(nextCaret);
   };
 
   // Auto-grow the textarea to fit multi-line prompts and quoted blocks, capped by its max-height
@@ -204,8 +208,10 @@ export function PromptInput({
               ref={inputRef}
               value={draft}
               onChange={(event) => {
+                const nextCaret = event.target.selectionStart ?? event.target.value.length;
                 setDraft(event.target.value);
-                setCaret(event.target.selectionStart ?? event.target.value.length);
+                setCaret(nextCaret);
+                onCaretChange?.(nextCaret);
               }}
               onClick={updateCaretFromInput}
               onFocus={() => {

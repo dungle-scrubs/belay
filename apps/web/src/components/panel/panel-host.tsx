@@ -1,6 +1,7 @@
 import type {
   ArtifactRef,
   CommandSpec,
+  FileMatch,
   GitStatus,
   JobSnapshot,
   LoopControl,
@@ -24,6 +25,7 @@ import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state"
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { CommandMenu } from "@/components/chat/command-menu";
+import { FileMentionMenu } from "@/components/chat/file-mention-menu";
 import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
@@ -112,6 +114,18 @@ export interface ComposeWiring {
   readonly menuIndex: number;
   readonly slashQuery: string | null;
   readonly acceptCommand: (name: string) => void;
+  /** The `@`-file-mention menu (plan 30): the sibling overlay of the slash menu, mutually exclusive
+   *  with it per line. App owns the active-token detection + host search; PanelHost renders the list. */
+  readonly fileMenu: {
+    readonly open: boolean;
+    readonly matches: readonly FileMatch[];
+    readonly index: number;
+    readonly query: string;
+    readonly truncated: boolean;
+    readonly onPick: (path: string) => void;
+  };
+  /** Report the composer caret up to App, so it can detect the active `@` token (mention menu). */
+  readonly onCaretChange: (caret: number) => void;
   readonly disabled: boolean;
   readonly placeholder: string;
   /** Open the current draft in the full-surface prompt editor (02.12). */
@@ -491,15 +505,30 @@ export function PanelHost(props: {
                 />
               ) : null}
 
+              {/* The `@`-file-mention overlay (plan 30): the sibling of the slash menu, in the same
+                bottom-full slot. Mutually exclusive with it per line, so both never show at once. */}
+              {compose.fileMenu.open ? (
+                <FileMentionMenu
+                  className="absolute inset-x-0 bottom-full z-20 mb-2"
+                  matches={compose.fileMenu.matches}
+                  activeIndex={compose.fileMenu.index}
+                  query={compose.fileMenu.query}
+                  truncated={compose.fileMenu.truncated}
+                  onPick={compose.fileMenu.onPick}
+                />
+              ) : null}
+
               <PromptInput
                 composer={composer}
                 onSubmit={compose.onSubmit}
                 onKeyDown={compose.onInputKeyDown}
+                onCaretChange={compose.onCaretChange}
                 disabled={compose.disabled}
                 placeholder={compose.placeholder}
                 onExpand={compose.onExpand}
                 vimEnabled={compose.vimEnabled}
-                menuOpen={compose.menuOpen}
+                // Either composer menu owning the keys suspends the Vim layer (arrows/Enter/Escape).
+                menuOpen={compose.menuOpen || compose.fileMenu.open}
               />
             </>
           )}

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   activeTurnRunId,
   DEFAULT_SESSION_ID,
+  type FileMatch,
   type LoopControl,
   type ModelRef,
 } from "@trevor/session";
@@ -29,6 +30,7 @@ import {
   resizeArtifactPanel,
 } from "@/artifact-panel/artifact-panel-state";
 import { useLoopInventory } from "@/components/chat/loop/use-loop-inventory";
+import { loopPreviewForLine } from "@/components/chat/loop/use-loop-preview";
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import type { PaletteCommand } from "@/components/command-palette/palette-commands";
@@ -78,6 +80,7 @@ import { type EscState, escapeAction } from "./esc-action";
 import { useActiveModel } from "./hooks/use-active-model";
 import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
+import { useFileMentionMenu } from "./hooks/use-file-mention-menu";
 import { useModalState } from "./hooks/use-modal-state";
 import { usePromptEditor } from "./hooks/use-prompt-editor";
 import { usePromptHistory } from "./hooks/use-prompt-history";
@@ -116,6 +119,9 @@ const BUILT_IN_COMMANDS = [
  *  the host always announces; we don't want it cluttering the picker). Stays in `commandNames` so
  *  `parseCommand` routes it as a command, just filtered out of the menu list. */
 const HIDDEN_COMMANDS: ReadonlySet<string> = new Set(["/debug"]);
+
+// A stable empty result set for the `@`-file-mention menu until the live host search is wired (M4).
+const NO_FILE_MATCHES: readonly FileMatch[] = [];
 
 function targetFromLocation(): string {
   return new URLSearchParams(window.location.search).get("session") ?? DEFAULT_SESSION;
@@ -448,6 +454,21 @@ export function App() {
     [commandSpecs],
   );
   const slashMenu = useSlashMenu({ draft, commandSpecs: menuSpecs, inputRef, setDraft });
+  // The composer caret, mirrored up from PromptInput (onCaretChange), so the `@`-file-mention menu can
+  // detect the active token under the cursor. Only this feature needs it; the slash lane is caret-free.
+  const [composerCaret, setComposerCaret] = useState(0);
+  // The `@`-file-mention menu (plan 30), the sibling of the slash menu. It coexists with the loop
+  // helper (D-003): suppressed while the caret sits on a `/loop` line, so at most one composer overlay
+  // owns a given line. Its live results come from the host search (M4); empty until then.
+  const fileMenu = useFileMentionMenu({
+    draft,
+    caret: composerCaret,
+    results: NO_FILE_MATCHES,
+    suppressed: loopPreviewForLine(draft, composerCaret) !== null,
+    inputRef,
+    setDraft,
+    setCaret: setComposerCaret,
+  });
   // Focus the composer on load, once the session resolves and the input is enabled.
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
   useEffect(() => {
@@ -662,6 +683,13 @@ export function App() {
 
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (slashMenu.onMenuKeyDown(event)) {
+      return;
+    }
+    // The `@`-file-mention menu owns its keys (arrows/Tab/Enter/Escape) next, before Enter-submit and
+    // Up/Down history recall, so navigating/selecting a mention never submits or recalls a prompt.
+    // Composer-owned atomic token deletion (Backspace/Delete) already ran in PromptInput; the mention
+    // menu yields those keys, so image-token deletion is unaffected.
+    if (fileMenu.onMenuKeyDown(event)) {
       return;
     }
 
@@ -1068,8 +1096,17 @@ export function App() {
           menuIndex: slashMenu.menuIndex,
           slashQuery: slashMenu.slashQuery,
           acceptCommand: slashMenu.acceptCommand,
+          fileMenu: {
+            open: fileMenu.menuOpen,
+            matches: fileMenu.matches,
+            index: fileMenu.menuIndex,
+            query: fileMenu.query ?? "",
+            truncated: fileMenu.truncated,
+            onPick: fileMenu.acceptFile,
+          },
+          onCaretChange: setComposerCaret,
           disabled: !sessionId,
-          placeholder: `message ${activeLabel}… (/ for commands, ! for shell)`,
+          placeholder: `message ${activeLabel}… (/ for commands, @ for files, ! for shell)`,
           onExpand: () => editor.open({ text: draft, onConfirm: setDraft }),
           vimEnabled,
         }}

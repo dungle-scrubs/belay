@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M2: Composer Token Detection
+> Current focus: M3: Workspace-Confined Search
 
 - Total checklist items: 37
-- Completed: 9
-- Current cutoff blockers: 28
+- Completed: 16
+- Current cutoff blockers: 21
 
 ## 0. Hard Dependencies
 
@@ -25,13 +25,13 @@
 
 ## M2: Composer Token Detection
 
-- [ ] RED: Unit-test active mention parsing across cursor positions, boundaries, emails, multiline prompts, shell lane, and slash lane
-- [ ] GREEN: Add a pure active-mention parser
-- [ ] RED: Hook-test ArrowUp/Down, Tab, Enter, Escape, Backspace, and normal typing ownership
-- [ ] GREEN: Add `useFileMentionMenu` parallel to `useSlashMenu`
-- [ ] RED: Test coexistence with slash menu, prompt history, image-token deletion, Enter submit, and future Vim mode
-- [ ] GREEN: Wire the hook into App's composer key path with correct ownership order
-- [ ] REFACTOR: Keep parsing pure and React-independent
+- [x] RED: Unit-test active mention parsing across cursor positions, boundaries, emails, multiline prompts, shell lane, and slash lane
+- [x] GREEN: Add a pure active-mention parser
+- [x] RED: Hook-test ArrowUp/Down, Tab, Enter, Escape, Backspace, and normal typing ownership
+- [x] GREEN: Add `useFileMentionMenu` parallel to `useSlashMenu`
+- [x] RED: Test coexistence with slash menu, prompt history, image-token deletion, Enter submit, and future Vim mode
+- [x] GREEN: Wire the hook into App's composer key path with correct ownership order
+- [x] REFACTOR: Keep parsing pure and React-independent
 
 ## M3: Workspace-Confined Search
 
