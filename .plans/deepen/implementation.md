@@ -432,6 +432,21 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
 - **Payoff:** live specs shrink to assertions; the event-name coupling lives in one tested place.
 - **Churn:** small (~30-line helper + 2 spec bodies); low value today (2 gated callsites).
 
+## Considered and rejected (pass 6 - CONVERGED, 0 new)
+
+- Core-type flow traces (SessionEvent, ChatMessage, ToolCall/ToolDef, ArtifactRef, DoctorSnapshot,
+  ModelRef/reasoning): every hop transforms or decides; remaining pass-throughs are recorded
+  (M1/M6/M8/M10/M16/M22/M26/M28) or deliberate. Notable clean verdicts: turn-scheduler noteTurn's
+  re-decode is a deliberate single-entry facade (passing the decoded value in would make the API
+  leakier); the hook parse->reserialize->re-decode in loop.ts is load-bearing (rewritten input must
+  face the tool's own schema); the dual model/reasoning event encoding is the D-065 migration
+  bridge with one decode owner (resolveUserTurnModel).
+- Test-pain scan: only outlier snapshot.test.ts (15.9x) is a colocation artifact - it pins ~800 LOC
+  of genuinely deep areas-* folds through the 61-line grid; true ratio ~1.1. The wide-bag-in /
+  focused-area-out signature IS the deep interface; splitting tests per fold is test hygiene
+  (restructure), not depth. mcp-status ratio evidence reinforces M7; history-projection reinforces
+  M26. No mock-web anti-pattern exists in the repo (tests use real fixtures).
+
 ## Considered and rejected (pass 5)
 
 - agent/tool-guardrails.ts, components/question/view-model.ts, metrics/breakdown.ts,
