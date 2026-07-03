@@ -1,14 +1,10 @@
-import {
-  type Api,
-  getSupportedThinkingLevels,
-  type Model,
-  type ThinkingLevel,
-} from "@earendil-works/pi-ai/compat";
+import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai/compat";
 import { msg } from "@host/transport/messages";
 import { Effect, Stream } from "effect";
 import { ProviderAuthError } from "./errors";
 import { resolveContextWindow } from "./model-metadata-overrides";
 import { streamPiAiModel } from "./pi-ai";
+import { deriveModelShape } from "./pi-model";
 import type { CredentialResolver } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
 import {
@@ -72,21 +68,13 @@ export class PiAiProviderBase extends DescribableProvider {
     this.model = params.model;
     this.credentials = params.credentials;
     this.resolveModel = params.resolveModel;
-    // Derive thinking options + image support from the pi-ai model once; fall back to the
-    // provider's declared shape if the id is not in pi-ai's registry, so the host still starts.
-    let levels: readonly string[];
-    let images: boolean;
-    try {
-      const model = params.resolveModel();
-      levels = getSupportedThinkingLevels(model);
-      images = model.input?.includes("image") ?? params.fallback.images;
-    } catch {
-      levels = params.fallback.levels;
-      images = params.fallback.images;
-    }
-    this.reasoningLevels = levels;
-    this.images = images;
-    this.defaultReasoning = (params.pickDefaultReasoning ?? defaultReasoningLevel)(levels);
+    // Derive thinking options + image support from the pi-ai model once via the shared derivation
+    // (pi-model.ts); a registry miss falls back to the declared shape, so the host still starts.
+    const shape = deriveModelShape(params.resolveModel, params.fallback);
+
+    this.reasoningLevels = shape.levels;
+    this.images = shape.images;
+    this.defaultReasoning = (params.pickDefaultReasoning ?? defaultReasoningLevel)(shape.levels);
   }
 
   /** Image support from the registry (or the fallback); tools always supported; context

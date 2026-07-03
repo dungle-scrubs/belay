@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { buildCatalogSnapshot, buildSourceProvider } from "./catalog";
 
@@ -324,6 +325,30 @@ test("claude-code is a distinct, selectable Claude source: tools:false, not read
   assert.equal(ccOff?.status, "needs-auth");
   assert.equal(ccOff?.modelCount, 0);
   assert.deepEqual(ccOff?.actions, ["configure"]);
+});
+
+test("D-004 drift guard: the catalog's claude-code Tools chip agrees with capabilities().tools", () => {
+  // The text-only limitation is encoded twice - the SourceDef's toolCapable flag (the chooser chip)
+  // and the provider's capabilities().tools (what the host actually offers the model). They must
+  // agree, or the chooser would advertise a capability the turn drops (or vice versa).
+  const snap = buildCatalogSnapshot(
+    {},
+    { "claude-code": ["claude-opus-4-0"] },
+    new Set(),
+    undefined,
+    { CLAUDE_CODE_OAUTH_TOKEN: "max-tok" },
+  );
+  const entry = snap.catalogBySource["claude-code"]?.[0];
+  assert.ok(entry, "the configured source carries a catalog entry");
+
+  const provider = buildSourceProvider("claude-code", "claude-opus-4-0");
+  assert.ok(provider, "the source resolves to a provider");
+  const providerTools = Effect.runSync(provider.capabilities()).tools;
+  assert.equal(
+    entry.capabilities.includes("tools"),
+    providerTools,
+    "the SourceDef toolCapable flag and the provider's capabilities().tools must agree (D-004)",
+  );
 });
 
 test("the claude-code source resolves to a ClaudeCodeProvider, and anthropic is unchanged", () => {

@@ -10,6 +10,7 @@ import {
   streamClaudeCode,
 } from "./claude-code";
 import { ProviderAuthError, ProviderUnavailable } from "./errors";
+import { recordLearnedWindow } from "./model-metadata-overrides";
 import type { ProviderEvent } from "./types";
 
 /**
@@ -159,7 +160,7 @@ test("maps text_delta -> text, thinking_delta -> thinking, and the success resul
   assert.equal(usage.usage.contextWindow, 200_000);
 });
 
-test("a terminal SDK error subtype rides the typed ProviderError channel", async () => {
+test("a terminal SDK error subtype rides the typed ProviderError channel, classified for retry", async () => {
   const { query } = recordingQuery([textDelta("partial"), resultError()]);
   const exit = await Effect.runPromiseExit(
     Stream.runDrain(
@@ -173,10 +174,12 @@ test("a terminal SDK error subtype rides the typed ProviderError channel", async
   );
   assert.equal(exit._tag, "Failure");
   if (exit._tag === "Failure" && exit.cause._tag === "Fail") {
-    assert.ok(
-      exit.cause.error instanceof ProviderUnavailable,
-      "error subtype -> ProviderUnavailable",
-    );
+    const error = exit.cause.error;
+    assert.ok(error instanceof ProviderUnavailable, "error subtype -> ProviderUnavailable");
+    // The shared boundary normalizer classifies the failure: an overloaded Max pool is a
+    // retryable provider_overloaded, so the loop's auto-reconnect applies to this source too.
+    assert.equal(error.classification, "provider_overloaded", "the taxonomy class is carried");
+    assert.equal(error.retryable, true, "an overload is retryable (auto-reconnect eligible)");
   } else {
     assert.fail("expected a ProviderUnavailable failure");
   }
@@ -209,7 +212,11 @@ test("capabilities reports tools:false (vision per model), readiness is warm, de
   });
   const caps = Effect.runSync(provider.capabilities());
   assert.equal(caps.tools, false, "tools are never exposed to the SDK (D-004)");
-  assert.equal(typeof caps.images, "boolean", "vision follows the model, not a hardcode");
+  assert.equal(
+    caps.images,
+    true,
+    "claude-opus-4-0 is vision-capable (registry input, or fallback)",
+  );
 
   const readiness = Effect.runSync(provider.readiness());
   assert.equal(readiness.warm, true, "cloud is always warm");
@@ -219,7 +226,35 @@ test("capabilities reports tools:false (vision per model), readiness is warm, de
   assert.equal(model.label, "Claude (Max plan)");
   assert.equal(model.model, "claude-opus-4-0");
   assert.equal(model.kind, "cloud");
-  assert.ok(Array.isArray(model.reasoningLevels));
+  // Claude thinking is disableable and reaches "high" on both the registry shape
+  // (off/minimal/low/medium/high) and the registry-miss fallback (off/high).
+  assert.ok(model.reasoningLevels.includes("off"), "thinking is disableable");
+  assert.ok(model.reasoningLevels.includes("high"), "a high thinking level is advertised");
+  assert.ok(
+    model.reasoningLevels.includes(model.defaultReasoning),
+    "the default reasoning is one of the advertised levels",
+  );
+});
+
+test("the provider's context window routes through resolveContextWindow (corrections honored)", async () => {
+  // A model id unknown to the registry, with a corrected window recorded through the resolver's
+  // learned lever - the same resolveContextWindow precedence a user's models.json override rides
+  // (override > learned > bundled). The provider must consult the resolver, not the bundled value
+  // alone, so the usage row budgets against the corrected ceiling instead of the 200k default.
+  const modelId = "claude-test/corrected-window-probe";
+  recordLearnedWindow(modelId, 55_000);
+
+  const { query } = recordingQuery([resultSuccess(10, 5)]);
+  const provider = claudeCodeProvider({
+    model: modelId,
+    label: "Claude (Max plan)",
+    query,
+    env: { CLAUDE_CODE_OAUTH_TOKEN: "max-token" },
+  });
+  const events = await collect(provider.stream([{ role: "user", content: "hi" }], []));
+  const usage = events.find((e) => e.type === "usage");
+  assert.ok(usage && usage.type === "usage");
+  assert.equal(usage.usage.contextWindow, 55_000, "the corrected window wins over the default");
 });
 
 test("readiness is not-ready (but warm) when the CLI token is absent", () => {

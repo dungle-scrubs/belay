@@ -1,8 +1,8 @@
 /**
  * Responsible for: the pi-ai stream adapter - projecting host messages/tools into pi-ai context
- * and mapping stream events onto ProviderEvents with normalized, redacted failures.
- * Not for: failure classification rules (failure-taxonomy.ts / error-classifier.ts) or
- * reasoning-effort policy (reasoning-policy.ts).
+ * and mapping stream events onto ProviderEvents.
+ * Not for: failure normalization at the boundary (failure-normalizer.ts), the classification rules
+ * (failure-taxonomy.ts / error-classifier.ts), or reasoning-effort policy (reasoning-policy.ts).
  */
 import {
   type Api,
@@ -14,7 +14,6 @@ import {
 } from "@earendil-works/pi-ai/compat";
 import { activeStyleGuidance } from "@host/prefs/style-store";
 import { debug } from "@host/transport/log";
-import { msg } from "@host/transport/messages";
 import {
   type PastePayload,
   parseImageTokens,
@@ -29,9 +28,9 @@ import {
   parseOverflowWindow,
   promptTooBig,
 } from "./error-classifier";
-import { ProviderAuthError, ProviderUnavailable } from "./errors";
-import { causeChainDetail, extractFailureEvidence } from "./failure-evidence";
-import { classifyProviderFailure, redactSecrets } from "./failure-taxonomy";
+import { ProviderAuthError } from "./errors";
+import { normalizeProviderFailure } from "./failure-normalizer";
+import { generationTimer } from "./generation-timer";
 import { reasoningStreamFields } from "./reasoning-policy";
 import { buildSystemPrompt, promptOverheadChars } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
@@ -251,17 +250,9 @@ async function* piAiEvents<TApi extends Api>(
     };
     return;
   }
-  // Time generation from the first GENERATED token (reasoning or visible) to done,
-  // so tokens/sec covers the same span the output tokens were produced in. Timing
-  // from the first visible token alone undercounts reasoning models (hidden reasoning
-  // runs first), and timing the whole request over-penalizes cloud latency.
-  const requestAt = Date.now();
-  let generationAt = 0;
-  const markGeneration = () => {
-    if (generationAt === 0) {
-      generationAt = Date.now();
-    }
-  };
+  // Time generation from the first GENERATED token (reasoning or visible) to done; the shared
+  // timer owns the measurement rationale (generation-timer.ts).
+  const timer = generationTimer();
   // signal rides into stream() so an interrupt (which aborts it - see streamPiAiModel)
   // closes the underlying request: upstream cancel where the adapter supports it. The reasoning
   // fields (effort, or nothing) come from the policy seam - it owns the omit too (see its doc).
@@ -287,7 +278,7 @@ async function* piAiEvents<TApi extends Api>(
       event.type === "thinking_delta" ||
       event.type === "toolcall_start"
     ) {
-      markGeneration();
+      timer.mark();
     }
     if (event.type === "text_delta") {
       yield { type: "text", text: event.delta };
@@ -319,7 +310,7 @@ async function* piAiEvents<TApi extends Api>(
           input,
           output: usage?.output ?? 0,
           contextWindow: options.contextWindow,
-          genMs: Date.now() - (generationAt || requestAt),
+          genMs: timer.genMs(),
         },
       };
       // Did the finished response overflow the window? The classifier owns the decision
@@ -414,59 +405,10 @@ export function streamPiAiModel<TApi extends Api>(
           systemPrompt:
             systemPrompt ?? buildSystemPrompt(tools, { styleGuidance: activeStyleGuidance() }),
         }),
-        // A classified auth failure (see error-classifier) rides through as-is; anything else is
-        // normalized into the failure taxonomy (D-076 M1/M2) -> ProviderUnavailable carrying its
-        // class + user action, with `retryable` DERIVED from the class so the loop can auto-reconnect
-        // before any token streams (D-077). The detail is redacted of secrets before it lands on the
-        // typed error payload (and, later, the observation store).
-        (cause) => {
-          if (cause instanceof ProviderAuthError) {
-            return cause;
-          }
-          // Enrich the generic top-level message ("Connection error.") with the specific syscall code
-          // recovered from the nested `.cause` chain (02.15), then redact - a nested cause can carry
-          // secrets, so the enriched detail goes through `redactSecrets` exactly like the bare message.
-          const detail = redactSecrets(causeChainDetail(msg(cause), cause));
-          // Normalize the raw cause into sanitized structured evidence once (D-076 M2): HTTP status,
-          // SDK code, retry-after, request id, gateway-vs-upstream origin, and the top-level field
-          // NAMES - never a raw value. The classifier reads the strong signals; the rest is preserved.
-          const evidence = extractFailureEvidence(cause, { gateway });
-          const failure = classifyProviderFailure({
-            provider,
-            detail,
-            status: evidence.status,
-            code: evidence.code,
-            retryAfterMs: evidence.retryAfterMs,
-            local,
-          });
-          // Structured, redacted classification log (D-076 M6): the class, retry decision, source,
-          // and preserved HTTP/code/retry-after/request-id/origin signals - never the secret-bearing
-          // raw payload, only the sanitized detail.
-          debug("provider", "classified-failure", {
-            provider,
-            class: failure.class,
-            retryable: failure.retryable,
-            action: failure.userAction,
-            status: evidence.status,
-            code: evidence.code,
-            retryAfterMs: evidence.retryAfterMs,
-            requestId: evidence.requestId,
-            origin: evidence.origin,
-            upstream: evidence.upstreamProvider,
-            detail,
-          });
-          return new ProviderUnavailable({
-            provider,
-            detail,
-            cause,
-            retryable: failure.retryable,
-            classification: failure.class,
-            userAction: failure.userAction,
-            retryAfterMs: failure.retryAfterMs,
-            // Names + shape only, never values - the raw cause payload is never copied (D-076 M2/M5).
-            evidence,
-          });
-        },
+        // The shared boundary normalizer (failure-normalizer.ts): a classified auth failure rides
+        // through as-is; anything else is normalized into the failure taxonomy -> ProviderUnavailable
+        // with class/userAction/evidence and `retryable` derived from the class (D-076/D-077).
+        (cause) => normalizeProviderFailure({ provider, cause, local, gateway }),
       );
     }),
   );

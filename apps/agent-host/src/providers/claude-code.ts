@@ -15,13 +15,14 @@
  * configured-signal wiring (catalog.ts / provider-auth.ts).
  */
 import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type Api, getSupportedThinkingLevels, type Model } from "@earendil-works/pi-ai/compat";
 import { activeStyleGuidance } from "@host/prefs/style-store";
-import { msg } from "@host/transport/messages";
 import { Effect, Stream } from "effect";
-import { ProviderAuthError, ProviderUnavailable } from "./errors";
-import { redactSecrets } from "./failure-taxonomy";
-import { lookupPiModel } from "./pi-model";
+import { ProviderAuthError } from "./errors";
+import { normalizeProviderFailure } from "./failure-normalizer";
+import { generationTimer } from "./generation-timer";
+import { resolveContextWindow } from "./model-metadata-overrides";
+import { deriveModelShape, lookupPiModel } from "./pi-model";
+import { cliTokenPresent } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
 import { buildSystemPrompt } from "./system-prompt";
 import {
@@ -37,6 +38,10 @@ import {
 /** The pi-ai registry provider id whose Claude model shapes (reasoning surface, vision, context
  *  window) enrich this source - the SAME models as the `anthropic` source, only billed differently. */
 const ANTHROPIC = "anthropic";
+
+/** The stable source/provider id: the catalog's SourceDef row, its dispatch, and this provider's
+ *  typed failures all share it, so a rename is one edit. */
+export const CLAUDE_CODE_SOURCE_ID = "claude-code";
 
 /** The long-lived Max-plan token (from `claude setup-token`) that bills inference to the subscription.
  *  Injected into the child env so the SDK subprocess uses it. */
@@ -82,10 +87,11 @@ const defaultQuery: SdkQuery = (params) =>
     }
   })();
 
-/** The CLI token from an env, or null when absent/empty (empty counts as absent). */
+/** The CLI token from an env, or null when absent/empty. Presence is decided by the shared
+ *  `cliTokenPresent` predicate (provider-auth.ts) - the same signal the catalog's configured
+ *  projection reads - so "what counts as a present token" lives once (D-003). */
 export function resolveClaudeCodeToken(env: NodeJS.ProcessEnv = process.env): string | null {
-  const token = env[CLAUDE_CODE_OAUTH_ENV];
-  return typeof token === "string" && token.length > 0 ? token : null;
+  return cliTokenPresent(env, CLAUDE_CODE_OAUTH_ENV) ? (env[CLAUDE_CODE_OAUTH_ENV] ?? null) : null;
 }
 
 /**
@@ -117,20 +123,6 @@ function toPrompt(messages: readonly ChatMessage[]): string {
     .join("\n\n");
 }
 
-/** Normalizes any thrown/terminal cause into a typed ProviderError, redacting secrets from the text
- *  (a subprocess error can echo the injected token). An already-typed failure passes through. */
-function toProviderError(provider: string, cause: unknown): ProviderError {
-  if (cause instanceof ProviderAuthError || cause instanceof ProviderUnavailable) {
-    return cause;
-  }
-  return new ProviderUnavailable({
-    provider,
-    detail: redactSecrets(msg(cause)),
-    cause,
-    retryable: false,
-  });
-}
-
 /** A terminal SDK `result` message with an error subtype, thrown so it rides the stream's error path. */
 class ClaudeCodeResultError extends Error {
   constructor(subtype: string, errors: readonly string[]) {
@@ -153,22 +145,16 @@ async function* claudeCodeEvents(
     readonly contextWindow: number;
   },
 ): AsyncIterable<ProviderEvent> {
-  const requestAt = Date.now();
-  let generationAt = 0;
-  const markGeneration = () => {
-    if (generationAt === 0) {
-      generationAt = Date.now();
-    }
-  };
+  const timer = generationTimer();
   for await (const message of query({ prompt: params.prompt, options: params.options })) {
     if (message.type === "stream_event") {
       const event = message.event;
       if (event.type === "content_block_delta") {
         if (event.delta.type === "text_delta") {
-          markGeneration();
+          timer.mark();
           yield { type: "text", text: event.delta.text };
         } else if (event.delta.type === "thinking_delta") {
-          markGeneration();
+          timer.mark();
           yield { type: "thinking", text: event.delta.thinking };
         }
       }
@@ -180,7 +166,7 @@ async function* claudeCodeEvents(
             input: message.usage.input_tokens ?? 0,
             output: message.usage.output_tokens ?? 0,
             contextWindow: params.contextWindow,
-            genMs: Date.now() - (generationAt || requestAt),
+            genMs: timer.genMs(),
           },
         };
       } else {
@@ -202,7 +188,7 @@ export interface ClaudeCodeStreamOptions {
   readonly parentEnv?: NodeJS.ProcessEnv;
   /** The context window carried on the usage event; defaults to the Claude default. */
   readonly contextWindow?: number;
-  /** The provider id on typed failures; defaults to "claude-code". */
+  /** The provider id on typed failures; defaults to {@link CLAUDE_CODE_SOURCE_ID}. */
   readonly provider?: string;
 }
 
@@ -216,7 +202,7 @@ export interface ClaudeCodeStreamOptions {
 export function streamClaudeCode(
   opts: ClaudeCodeStreamOptions,
 ): Stream.Stream<ProviderEvent, ProviderError> {
-  const provider = opts.provider ?? "claude-code";
+  const provider = opts.provider ?? CLAUDE_CODE_SOURCE_ID;
   if (opts.token === null) {
     return Stream.fail(
       new ProviderAuthError({
@@ -249,7 +235,10 @@ export function streamClaudeCode(
           options,
           contextWindow: opts.contextWindow ?? DEFAULT_CLAUDE_CONTEXT_WINDOW,
         }),
-        (cause) => toProviderError(provider, cause),
+        // The shared boundary normalizer: classifies the failure (a Max-plan overload / rate limit
+        // becomes retryable with a class + user action) and redacts secrets from the detail (a
+        // subprocess error can echo the injected token) - same path as every other provider.
+        (cause) => normalizeProviderFailure({ provider, cause }),
       );
     }),
   );
@@ -262,7 +251,7 @@ export function streamClaudeCode(
  * starts the host. Tools are NEVER exposed (D-004), so `capabilities().tools` is false.
  */
 export class ClaudeCodeProvider extends DescribableProvider {
-  readonly id = "claude-code";
+  readonly id = CLAUDE_CODE_SOURCE_ID;
   readonly kind = "cloud" as const;
   readonly label: string;
   readonly model: string;
@@ -279,28 +268,21 @@ export class ClaudeCodeProvider extends DescribableProvider {
     this.model = config.model;
     this.query = config.query ?? defaultQuery;
     this.env = config.env ?? process.env;
-    // Derive the reasoning surface, vision, and window from the registry model once; fall back to a
-    // reasoning-capable Claude shape when the id is not (yet) in the installed registry.
-    const model = lookupPiModel(ANTHROPIC, config.model) as Model<Api> | undefined;
-    let levels: readonly string[];
-    let images: boolean;
-    let contextWindow: number;
-    try {
-      if (!model) {
-        throw new Error("model not in registry");
-      }
-      levels = getSupportedThinkingLevels(model);
-      images = model.input?.includes("image") ?? true;
-      contextWindow = model.contextWindow || DEFAULT_CLAUDE_CONTEXT_WINDOW;
-    } catch {
-      levels = ["off", "high"];
-      images = true;
-      contextWindow = DEFAULT_CLAUDE_CONTEXT_WINDOW;
-    }
-    this.reasoningLevels = levels;
-    this.images = images;
-    this.contextWindow = contextWindow;
-    this.defaultReasoning = defaultReasoningLevel(levels);
+    // Derive the reasoning surface + vision from the registry model via the shared derivation
+    // (pi-model.ts); a registry miss falls back to a reasoning-capable Claude shape.
+    const shape = deriveModelShape(() => lookupPiModel(ANTHROPIC, config.model), {
+      levels: ["off", "high"],
+      images: true,
+    });
+
+    this.reasoningLevels = shape.levels;
+    this.images = shape.images;
+    this.defaultReasoning = defaultReasoningLevel(shape.levels);
+    // The EFFECTIVE window, through the single resolver (03.2 D-004): a confirmed models.json
+    // override or a learned window corrects a stale bundled value here, exactly like every other
+    // cloud path (pi-ai-base), so the usage/ctx meter budgets against the real ceiling.
+    this.contextWindow =
+      resolveContextWindow(config.model, shape.contextWindow) ?? DEFAULT_CLAUDE_CONTEXT_WINDOW;
   }
 
   /** Vision follows the registry model; tools are always false (never exposed to the SDK, D-004);

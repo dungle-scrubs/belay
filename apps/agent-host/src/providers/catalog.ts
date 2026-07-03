@@ -8,7 +8,7 @@ import type {
   SourceType,
 } from "@trevor/session";
 import { anthropicProvider } from "./anthropic";
-import { claudeCodeProvider } from "./claude-code";
+import { CLAUDE_CODE_OAUTH_ENV, CLAUDE_CODE_SOURCE_ID, claudeCodeProvider } from "./claude-code";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { lmStudioIsVision, lmStudioSupportsTools } from "./lmstudio-native";
@@ -84,11 +84,11 @@ const SOURCES: readonly SourceDef[] = [
   // configured signal is the CLI token STORE (cliTokenEnv), a DIFFERENT credential store than the
   // anthropic source's ~/.pi/auth.json OAuth entry (D-003). Text-only in this cut, so toolCapable false.
   {
-    sourceId: "claude-code",
+    sourceId: CLAUDE_CODE_SOURCE_ID,
     type: "oauth",
     label: "Claude (Max plan)",
     piProvider: "anthropic",
-    cliTokenEnv: "CLAUDE_CODE_OAUTH_TOKEN",
+    cliTokenEnv: CLAUDE_CODE_OAUTH_ENV,
     toolCapable: false,
   },
   // The static-key cloud sources (DeepSeek, Z.ai, MiniMax) are derived from the shared pi-key
@@ -393,7 +393,7 @@ export function providerForSource(
     // Each OAuth subscription has its own provider (different registry + token shape): claude-code
     // streams Claude through the Agent SDK on the Max subscription (billed to the CLI token, D-003),
     // Anthropic streams the same models through ~/.pi/auth.json OAuth, Codex handles OpenAI.
-    if (source.sourceId === "claude-code") {
+    if (source.sourceId === CLAUDE_CODE_SOURCE_ID) {
       return claudeCodeProvider({ model: modelId, label });
     }
     return source.sourceId === "anthropic"
