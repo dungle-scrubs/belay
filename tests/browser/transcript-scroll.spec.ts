@@ -20,8 +20,10 @@ const STREAM_TOLERANCE_PX = 8; // a growing row may briefly trail the edge by a 
 // to still read as "pinned", so the old code kept following. The 12.2 regression specs deliberately
 // read within this band to prove a small upward gesture no longer traps the viewport at the live edge.
 const OLD_TOLERANCE_PX = 40;
-// Slack for sub-pixel rounding when asserting a scrollTop trajectory is non-increasing (monotonic
-// upward progress). Any real "tug"/"snap" back toward the bottom is tens of px, far past this.
+// Slack for sub-pixel rounding when asserting a bottomDelta trajectory is non-decreasing (monotonic
+// upward progress away from the live edge). Any real "tug"/"snap" back toward the bottom is tens of
+// px, far past this. bottomDelta (not raw scrollTop) is sampled because a legitimate above-fold
+// anchor compensation shifts scrollTop a few px while keeping the viewport visually stationary.
 const MONOTONIC_SLACK_PX = 2;
 
 /** Total rows the virtualized list reports (data-transcript-row-count). */
@@ -56,9 +58,10 @@ function bottomDeltaPx(scroller: Locator): Promise<number> {
 const jumpButton = (page: Page): Locator =>
   page.locator('button[aria-label="Scroll to bottom"], button[aria-label="Scroll to new content"]');
 
-/** The scroller's current top offset. Compared before/after an event to prove the viewport did (not) move. */
-function scrollTopOf(scroller: Locator): Promise<number> {
-  return scroller.evaluate((el) => el.scrollTop);
+/** Assert the controller's pin state via the additive `data-transcript-pinned` hook (plan 12.2 D-003):
+ *  the direct read of the follow authority, crisper than inferring it from the jump affordance. */
+function expectPinned(scroller: Locator, pinned: boolean): Promise<void> {
+  return expect(scroller).toHaveAttribute("data-transcript-pinned", pinned ? "true" : "false");
 }
 
 /** Yield `count` animation frames inside the page, so any deferred (double-rAF) follow write has applied
@@ -75,15 +78,17 @@ test("appending while pinned keeps the last row at the live edge (stick-to-botto
   page,
 }) => {
   const { sessionId, scroller } = await openTallTranscript(page, "pin");
-  // Opens pinned: at the live edge, no jump affordance.
+  // Opens pinned: at the live edge, pinned attribute set, no jump affordance.
   await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+  await expectPinned(scroller, true);
   await expect(jumpButton(page)).toHaveCount(0);
 
   await appendExchange(storeTransport(), sessionId, "while-pinned");
 
-  // The new row lands at the live edge and is visible; still pinned (no jump button).
+  // The new row lands at the live edge and is visible; still pinned (attribute + no jump button).
   await expect(scroller).toContainText("reply while-pinned");
   await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+  await expectPinned(scroller, true);
   await expect(jumpButton(page)).toHaveCount(0);
 });
 
@@ -97,7 +102,8 @@ test("scrolling up unpins, the jump affordance appears, and a later append does 
   await scroller.hover();
   await page.mouse.wheel(0, -1200);
 
-  // Unpinned: the jump-to-bottom button shows and we are no longer at the live edge.
+  // Unpinned: the attribute flips, the jump-to-bottom button shows, and we left the live edge.
+  await expectPinned(scroller, false);
   await expect(jumpButton(page)).toHaveCount(1);
   await expect.poll(() => bottomDeltaPx(scroller)).toBeGreaterThan(20);
 
@@ -127,6 +133,7 @@ test("a mid-stream growing row is auto-followed while pinned (bottomDelta stays 
   await turn.complete(" done");
   await expect(scroller).toContainText("streamed line 7");
   await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(STREAM_TOLERANCE_PX);
+  await expectPinned(scroller, true);
 });
 
 test("clicking jump-to-bottom re-pins and returns to the live edge", async ({ page }) => {
@@ -135,11 +142,13 @@ test("clicking jump-to-bottom re-pins and returns to the live edge", async ({ pa
   // Unpin first.
   await scroller.hover();
   await page.mouse.wheel(0, -1200);
+  await expectPinned(scroller, false);
   await expect(jumpButton(page)).toHaveCount(1);
 
   await jumpButton(page).click();
 
-  // Re-pinned: the button is gone and we are back at the live edge.
+  // Re-pinned: the attribute flips back, the button is gone, and we are back at the live edge.
+  await expectPinned(scroller, true);
   await expect(jumpButton(page)).toHaveCount(0);
   await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
 
@@ -176,12 +185,13 @@ test("an append while the user is reading near the bottom does not yank the view
   await expect.poll(() => rowCount(page)).toBeGreaterThan(beforeRows);
   await settleFrames(page);
 
-  // Outcome: the reader is still up the transcript, NOT snapped to the live edge, and the jump affordance
-  // is showing (unpinned). The old code lands here at the live edge (bottomDelta ~0, no jump button).
+  // Outcome: the reader is still up the transcript, NOT snapped to the live edge, and the transcript is
+  // unpinned (attribute + jump affordance). The old code lands here at the live edge (bottomDelta ~0).
   expect(
     await bottomDeltaPx(scroller),
     "the reading nudge + append must leave the viewport off the live edge",
   ).toBeGreaterThan(PIN_TOLERANCE_PX);
+  await expectPinned(scroller, false);
   await expect(jumpButton(page)).toHaveCount(1);
 });
 
@@ -205,19 +215,24 @@ test("a slow upward wheel during a streaming turn makes monotonic upward progres
     await page.mouse.wheel(0, -30); // a small, deliberate reading step upward
     await turn.delta(`growing line ${step}\n`); // grow the streaming row between steps
     await settleFrames(page); // let any (old) re-measure follow apply before sampling
-    samples.push(await scrollTopOf(scroller));
+    samples.push(await bottomDeltaPx(scroller));
   }
   await turn.complete(" end");
 
-  // Scrolling up only ever decreases scrollTop; the "tug" is any sample that rises above its predecessor.
+  // The distance from the live edge only ever grows (the user reads up, the stream grows below); the
+  // "tug" is any sample that collapses back toward the edge. We sample bottomDelta, not raw scrollTop:
+  // a legitimate above-fold anchor compensation shifts scrollTop a few px while keeping the viewport
+  // visually stationary, and must not read as a tug.
   for (let i = 1; i < samples.length; i += 1) {
     expect(
       samples[i],
-      `sample ${i} (${samples[i]}) rose above sample ${i - 1} (${samples[i - 1]}) - the tug`,
-    ).toBeLessThanOrEqual((samples[i - 1] ?? 0) + MONOTONIC_SLACK_PX);
+      `sample ${i} (bottomDelta ${samples[i]}) fell below sample ${i - 1} (${samples[i - 1]}) - the tug`,
+    ).toBeGreaterThanOrEqual((samples[i - 1] ?? 0) - MONOTONIC_SLACK_PX);
   }
-  // And the gesture actually took us well up the transcript (not repeatedly snapped back to the edge).
+  // And the gesture actually took us well up the transcript (not repeatedly snapped back to the edge),
+  // leaving the transcript unpinned.
   expect(await bottomDeltaPx(scroller)).toBeGreaterThan(OLD_TOLERANCE_PX);
+  await expectPinned(scroller, false);
 });
 
 test("a rapid wheel flick from the bottom unpins, stays unpinned, and never snaps back down", async ({
@@ -240,8 +255,9 @@ test("a rapid wheel flick from the bottom unpins, stays unpinned, and never snap
     samples.push(await bottomDeltaPx(scroller));
   }
 
-  // Stays unpinned: the flick broke free and the jump affordance is present (post-M3 this also reads
-  // data-transcript-pinned). The old code re-pins on every arriving row, so the button never appears.
+  // Stays unpinned: the flick broke free - the pinned attribute reads false and the jump affordance is
+  // present. The old code re-pins on every arriving row, so neither ever shows.
+  await expectPinned(scroller, false);
   await expect(jumpButton(page)).toHaveCount(1);
 
   // The distance from the live edge never collapses back toward it - no arriving row snapped the column
