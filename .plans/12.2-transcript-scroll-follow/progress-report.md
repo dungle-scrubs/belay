@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M1: Lane B reproduction specs
+> Current focus: M2: Pure state machine (scroll-follow.ts)
 
 - Total checklist items: 24
-- Completed: 2
-- Current cutoff blockers: 22
+- Completed: 6
+- Current cutoff blockers: 18
 
 ## 0. Hard Dependencies
 
@@ -17,10 +17,10 @@
 
 ### M1: Lane B reproduction specs
 
-- [ ] RED: spec - append while reading (small scroll-up within the old tolerance band, and an append racing a wheel burst) does not move the viewport to the live edge - failing against current code
-- [ ] RED: spec - slow upward wheel during a streaming turn makes monotonic upward progress (sampled scrollTop never increases) - failing against current code
-- [ ] RED: spec - rapid wheel flick from the bottom unpins, stays unpinned, never snaps downward, lands where the gesture says - failing against current code
-- [ ] GREEN: four pre-existing Lane B scroll specs still pass unmodified; record each new spec's observed failure mode as reproduction evidence
+- [x] RED: spec - append while reading (small scroll-up within the old tolerance band) does not move the viewport to the live edge - failing against current code. Observed failure: after a -24px reading nudge (within the 40px band) + `appendExchange`, `bottomDeltaPx` is 0 (viewport snapped to the live edge) and the jump button is absent - the reading nudge is never honored. (Race sub-case deferred to a component test with fake timers, D-006: a WS-round-tripped append outruns the old async unpin window, so it cannot be raced reliably in Lane B.)
+- [x] RED: spec - slow upward wheel during a streaming turn makes monotonic upward progress (sampled scrollTop never increases) - failing against current code. Observed failure: `sample 1 (3746) rose above sample 0 (3726)` - the streaming re-measure tug pulls scrollTop back down between reading steps.
+- [x] RED: spec - rapid wheel flick from the bottom unpins, stays unpinned, never snaps downward, lands where the gesture says - failing against current code. Observed failure: jump button count 0 - each row arriving mid-flick re-pins the lagging pin state and yanks to the new live edge, so the flick never breaks free (reproduced via appends between bursts, D-006; discrete Playwright wheels have no momentum).
+- [x] GREEN: four pre-existing Lane B scroll specs still pass unmodified (stick-to-bottom, unpin+no-yank, mid-stream follow, jump-to-bottom); app-boot + smoke pass; perf skipped (RUN_PERF unset). Each new spec's failure mode recorded above as reproduction evidence.
 
 ## Phase 2: The follow controller
 
