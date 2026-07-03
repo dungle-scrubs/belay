@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { freshSessionId, projectSessionId, shortHash } from "./identity";
+import {
+  clipProducerId,
+  controlProducerId,
+  freshSessionId,
+  hostIdentity,
+  isAnswerableProducer,
+  isClipProducer,
+  isControlProducer,
+  isSelfProducer,
+  projectSessionId,
+  recallProducerId,
+  shortHash,
+  viewerIdentity,
+} from "./identity";
 
 /**
  * The project launcher (D-085) derives a session id from the project root. These pin the two
@@ -59,4 +72,45 @@ test("freshSessionId sanitizes custom prefixes", () => {
     random: "entropy",
   });
   assert.match(id, /^my-project-20260626-123456z-[0-9a-f]{8}$/);
+});
+
+test("hostIdentity stamps the canonical host runtime kind", () => {
+  assert.deepEqual(hostIdentity({ instanceId: "host-1", participantId: "p1" }), {
+    displayName: "trevor-host",
+    runtimeKind: "trevor",
+    instanceId: "host-1",
+    participantId: "p1",
+    capabilities: undefined,
+  });
+});
+
+test("viewerIdentity stamps the canonical non-host runtime kind", () => {
+  assert.deepEqual(viewerIdentity({ displayName: "launcher", instanceId: "v1" }), {
+    displayName: "launcher",
+    runtimeKind: "web",
+    instanceId: "v1",
+    participantId: "v1",
+    capabilities: undefined,
+  });
+});
+
+test("producer channel helpers derive host-owned sub-producers", () => {
+  assert.equal(controlProducerId("host"), "host:control");
+  assert.equal(clipProducerId("host"), "host:clip");
+  assert.equal(recallProducerId("host"), "host:recall");
+});
+
+test("producer provenance predicates keep control lanes answerable", () => {
+  assert.equal(isSelfProducer("host", "host"), true);
+  assert.equal(isSelfProducer("host:control", "host"), false);
+  assert.equal(isAnswerableProducer("host", "host"), false);
+  assert.equal(isAnswerableProducer("host:control", "host"), true);
+  assert.equal(isAnswerableProducer("web", "host"), true);
+});
+
+test("producer provenance predicates recognize named host lanes", () => {
+  assert.equal(isControlProducer("host:control", "host"), true);
+  assert.equal(isControlProducer("host:clip", "host"), false);
+  assert.equal(isClipProducer("host:clip", "host"), true);
+  assert.equal(isClipProducer("host", "host"), false);
 });

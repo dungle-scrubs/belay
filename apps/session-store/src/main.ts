@@ -1,6 +1,4 @@
-import { startServer } from "@trevor/server-kit";
-import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
-import { abbreviateHome } from "@trevor/session/node-paths";
+import { startStore } from "@trevor/server-kit";
 import { RESERVED_PORTS } from "@trevor/session/ports";
 import { sessionStoreDbPath } from "./config";
 import { createSessionStore } from "./server";
@@ -13,27 +11,16 @@ import { createSessionStore } from "./server";
  * host/web to opt into Richter instead.
  */
 
-const PORT = Number(process.env.SESSION_STORE_PORT ?? RESERVED_PORTS.store);
 const DB_PATH = sessionStoreDbPath();
-const HOST = process.env.SESSION_STORE_HOST;
 
-// Detect-only legacy migration (D-009): never changes the default; just nudges if importable
-// ~/.trevor session data is present, with a sanitized source path.
-const legacyDb = planLegacyMigration(nodeMigrationFs).actions.find(
-  (action) => action.artifact === "sessions-db",
-);
-if (legacyDb?.status === "migrate") {
-  console.log(
-    `[session-store] legacy session data detected at ${abbreviateHome(legacyDb.source)}; import it via migration or set SESSION_STORE_DB`,
-  );
-}
-
-startServer(createSessionStore(DB_PATH), {
-  port: PORT,
-  host: HOST,
-  onListen: (port) => {
-    console.log(
-      `[session-store] listening on http://${HOST ?? "127.0.0.1"}:${port} (db: ${abbreviateHome(DB_PATH)})`,
-    );
-  },
+startStore({
+  name: "session-store",
+  envPrefix: "SESSION_STORE",
+  reservedPort: RESERVED_PORTS.store,
+  dataLabel: "db",
+  dataPath: DB_PATH,
+  legacyArtifact: "sessions-db",
+  legacyLabel: "session",
+  legacyOverrideEnv: "SESSION_STORE_DB",
+  build: () => createSessionStore(DB_PATH),
 });

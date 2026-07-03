@@ -11,7 +11,7 @@
  *
  * It is deliberately NOT: it knows nothing about sessions, blobs, databases, or any other
  * domain. The stores declare their routes, then lean on this kit for the boilerplate they
- * would otherwise each re-implement. Zero runtime dependencies - Node built-ins only.
+ * would otherwise each re-implement.
  */
 
 export { cors, json, readBody, readJson } from "./http";
@@ -25,3 +25,4 @@ export {
   type ServiceOptions,
   type ServiceRequest,
 } from "./service";
+export { type StartStoreOptions, startStore } from "./store";

@@ -52,6 +52,131 @@ export interface SessionConnection {
   readonly close: () => void;
 }
 
+export interface ReadLogOptions {
+  readonly afterSeq?: number;
+  readonly timeoutMs?: number;
+}
+
+export type AwaitEventOptions = ReadLogOptions;
+
+const DEFAULT_READ_TIMEOUT_MS = 2_000;
+
+/**
+ * Opens a read-only replay stream, resolves with the replayed log, then closes the stream. This owns
+ * the transport-level replay/timeout/closed-before-replay choreography so callers do not reimplement
+ * a Promise machine around `connectSession`.
+ */
+export function readSessionLog(
+  transport: Pick<SessionTransport, "connectSession">,
+  sessionId: string,
+  identity: SessionIdentity,
+  options: ReadLogOptions = {},
+): Promise<readonly SessionEvent[]> {
+  return new Promise<readonly SessionEvent[]>((resolve, reject) => {
+    const collected: SessionEvent[] = [];
+    const timeoutMs = options.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+    let connection: SessionConnection | null = null;
+    let closeWhenConnected = false;
+    let settled = false;
+
+    const close = (): void => {
+      if (connection === null) {
+        closeWhenConnected = true;
+        return;
+      }
+      connection.close();
+    };
+
+    const finish = (complete: () => void): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      close();
+      complete();
+    };
+
+    const timer = setTimeout(() => finish(() => reject(new Error("read timed out"))), timeoutMs);
+
+    connection = transport.connectSession({
+      sessionId,
+      identity,
+      afterSeq: options.afterSeq ?? 0,
+      onEvent: (event) => collected.push(event),
+      onReplayComplete: () => finish(() => resolve(collected)),
+      onStatus: (status) => {
+        if (status === "closed") {
+          finish(() => reject(new Error("socket closed before replay completed")));
+        }
+      },
+    });
+
+    if (closeWhenConnected) {
+      connection.close();
+    }
+  });
+}
+
+/**
+ * Opens a replay-then-tail stream until `predicate` accepts an event or the timeout expires. The
+ * stream is always closed before this resolves.
+ */
+export function awaitSessionEvent(
+  transport: Pick<SessionTransport, "connectSession">,
+  sessionId: string,
+  identity: SessionIdentity,
+  predicate: (event: SessionEvent) => boolean,
+  options: AwaitEventOptions = {},
+): Promise<SessionEvent | null> {
+  return new Promise<SessionEvent | null>((resolve) => {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+    let connection: SessionConnection | null = null;
+    let closeWhenConnected = false;
+    let settled = false;
+
+    const close = (): void => {
+      if (connection === null) {
+        closeWhenConnected = true;
+        return;
+      }
+      connection.close();
+    };
+
+    const finish = (event: SessionEvent | null): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      close();
+      resolve(event);
+    };
+
+    const timer = setTimeout(() => finish(null), timeoutMs);
+
+    connection = transport.connectSession({
+      sessionId,
+      identity,
+      afterSeq: options.afterSeq ?? 0,
+      onEvent: (event) => {
+        if (predicate(event)) {
+          finish(event);
+        }
+      },
+      onStatus: (status) => {
+        if (status === "closed") {
+          finish(null);
+        }
+      },
+    });
+
+    if (closeWhenConnected) {
+      connection.close();
+    }
+  });
+}
+
 /**
  * A session backend: ensure a session exists, publish events to its durable log,
  * and open a replay-then-tail stream. One implementation per durable log (a local
@@ -62,6 +187,17 @@ export interface SessionTransport {
   readonly ensureSession: (sessionId: string) => Promise<string>;
   readonly publishEvent: (sessionId: string, input: PublishInput) => Promise<void>;
   readonly connectSession: (options: ConnectSessionOptions) => SessionConnection;
+  readonly readLog: (
+    sessionId: string,
+    identity: SessionIdentity,
+    options?: ReadLogOptions,
+  ) => Promise<readonly SessionEvent[]>;
+  readonly awaitEvent: (
+    sessionId: string,
+    identity: SessionIdentity,
+    predicate: (event: SessionEvent) => boolean,
+    options?: AwaitEventOptions,
+  ) => Promise<SessionEvent | null>;
   /**
    * The session inventory read model (`GET /sessions`): every durable session's summary. Owned by
    * the transport beside its sibling `/sessions` routes so the resume chooser, sidebar, cli, and

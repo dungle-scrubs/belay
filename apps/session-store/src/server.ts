@@ -6,7 +6,6 @@ import {
   decodeStreamParams,
   EVENTS_PATTERN,
   frames,
-  type HostPresence,
   type InventoryRow,
   type PermanentDeleteResult,
   type PublishInput,
@@ -18,8 +17,9 @@ import {
   summarizeSession,
 } from "@trevor/session";
 import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
-import { type WebSocket, WebSocketServer } from "ws";
+import { WebSocketServer } from "ws";
 import { SessionLog } from "./log";
+import { SessionHub } from "./session-hub";
 
 /**
  * Builds the local session-store HTTP + WebSocket server over a SQLite log,
@@ -52,85 +52,13 @@ const CORS_METHODS = "GET, POST, OPTIONS";
 export function createSessionStore(dbPath: string): Server {
   // Telemetry is off (NOOP) unless TREVOR_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
   const log = new SessionLog(dbPath, createTelemetrySink("session-store"));
-
-  // Live subscribers per session, fed by appends; a socket is removed on close.
-  const subscribers = new Map<string, Set<WebSocket>>();
-
-  const subscribe = (sessionId: string, socket: WebSocket): void => {
-    const set = subscribers.get(sessionId) ?? new Set<WebSocket>();
-    set.add(socket);
-    subscribers.set(sessionId, set);
-  };
-
-  const unsubscribe = (sessionId: string, socket: WebSocket): void => {
-    const set = subscribers.get(sessionId);
-    if (!set) {
-      return;
-    }
-    set.delete(socket);
-    if (set.size === 0) {
-      subscribers.delete(sessionId);
-    }
-  };
-
-  const broadcast = (sessionId: string, frame: unknown): void => {
-    const set = subscribers.get(sessionId);
-    if (!set) {
-      return;
-    }
-    const data = JSON.stringify(frame);
-    for (const socket of set) {
-      if (socket.readyState === socket.OPEN) {
-        socket.send(data);
-      }
-    }
-  };
-
-  // Hosts (the agent-host runtime) connected per session, keyed by socket. This is the
-  // LIVE source of presence: a host appears when its stream opens and is gone the instant
-  // the socket closes (crash, kill, lost connection) - which the latched host.online
-  // events in the durable log can never reflect. Browsers are not tracked here.
-  const hosts = new Map<string, Map<WebSocket, HostPresence>>();
-
-  // The distinct hosts live for a session. Deduped by instanceId, since a reconnecting
-  // host can momentarily hold both its old and new socket.
-  const hostsOf = (sessionId: string): HostPresence[] => {
-    const set = hosts.get(sessionId);
-    if (!set) {
-      return [];
-    }
-    const byId = new Map<string, HostPresence>();
-    for (const presence of set.values()) {
-      byId.set(presence.instanceId, presence);
-    }
-    return [...byId.values()];
-  };
-
-  const addHost = (sessionId: string, socket: WebSocket, presence: HostPresence): void => {
-    const set = hosts.get(sessionId) ?? new Map<WebSocket, HostPresence>();
-    set.set(socket, presence);
-    hosts.set(sessionId, set);
-  };
-
-  const removeHost = (sessionId: string, socket: WebSocket): boolean => {
-    const set = hosts.get(sessionId);
-    if (!set?.delete(socket)) {
-      return false;
-    }
-    if (set.size === 0) {
-      hosts.delete(sessionId);
-    }
-    return true;
-  };
-
-  const broadcastPresence = (sessionId: string): void =>
-    broadcast(sessionId, frames.presence(hostsOf(sessionId)));
+  const hub = new SessionHub();
 
   // Projects one inventory row into a SessionSummary, folding in live host presence from the socket map
   // (the durable log can't know a host crashed). Shared by GET /sessions (every row) and the delete gate
   // (one row), so the two never drift on how presence is folded in.
   const summarize = (row: Omit<InventoryRow, "hostPresent">): SessionSummary =>
-    summarizeSession({ ...row, hostPresent: hostsOf(row.sessionId).length > 0 });
+    summarizeSession({ ...row, hostPresent: hub.hasLiveHost(row.sessionId) });
 
   // The store's domain routes; CORS, the OPTIONS preflight, GET /health, and the 404 fallthrough are
   // owned by createService. The stream (GET /sessions/<id>/stream) is a WebSocket, handled below.
@@ -187,7 +115,7 @@ export function createSessionStore(dbPath: string): Server {
             // publisher's own socket (matching the Richter round-trip). The log owns the wire
             // framing (D-023); the server just fans out the frame.
             for (const frame of log.readFrames(sessionId, stored.seq - 1)) {
-              broadcast(sessionId, frame);
+              hub.publish(sessionId, frame);
             }
             json(res, 201, { ok: true, seq: stored.seq });
           })
@@ -247,26 +175,14 @@ export function createSessionStore(dbPath: string): Server {
       socket.send(JSON.stringify(frame));
     }
     socket.send(JSON.stringify(frames.replayComplete()));
-    subscribe(sessionId, socket);
-
-    if (isHost) {
-      // A host joined: record it, then push the new live set to everyone (this socket
-      // included) so viewers flip to "host active" immediately.
-      addHost(sessionId, socket, { instanceId, participantId, displayName });
-      broadcastPresence(sessionId);
-    } else {
-      // A viewer joined: it just needs the current live set once (no host-set change,
-      // so don't disturb the others).
-      socket.send(JSON.stringify(frames.presence(hostsOf(sessionId))));
-    }
+    hub.attach(
+      sessionId,
+      socket,
+      isHost ? { host: { instanceId, participantId, displayName } } : {},
+    );
 
     socket.on("close", () => {
-      unsubscribe(sessionId, socket);
-      // A host's socket closing IS the disconnect signal - drop it and tell everyone,
-      // so a crashed/killed host stops showing as active within one round trip.
-      if (isHost && removeHost(sessionId, socket)) {
-        broadcastPresence(sessionId);
-      }
+      hub.detach(sessionId, socket);
     });
   });
 

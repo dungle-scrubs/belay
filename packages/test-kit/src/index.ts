@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  awaitSessionEvent,
   type ConnectSessionOptions,
   type DoctorArea,
   type DoctorAreaId,
@@ -9,13 +10,22 @@ import {
   type DoctorStatus,
   PRODUCER_IDS,
   type PublishInput,
+  readSessionLog,
   type SessionEvent,
-  type SessionIdentity,
   type SessionSummary,
   type SessionTransport,
   type TrevorEventInput,
 } from "@trevor/session";
 import type { MetricRecord, SpanRecord, TelemetrySink } from "@trevor/session/telemetry";
+import { subscribe, testIdentity, waitFor } from "@trevor/session/testing";
+
+export {
+  joinSession,
+  subscribe,
+  type TestSubscriber,
+  testIdentity,
+  waitFor,
+} from "@trevor/session/testing";
 
 /**
  * The generic test harness shared by every integration and e2e test (see repo-root AGENTS.md
@@ -30,13 +40,6 @@ import type { MetricRecord, SpanRecord, TelemetrySink } from "@trevor/session/te
 /** A throwaway temp directory under the OS temp root. Caller removes it (or use `withTempDir`). */
 export function tempDir(prefix = "trevor-test-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
-}
-
-/** A `SessionIdentity` for a test participant. `runtimeKind` defaults to "test", which does NOT count
- *  as a host - only `RUNTIME_KIND.host` ("trevor") does - so a test participant stays a plain viewer
- *  unless it overrides the kind. */
-export function testIdentity(id: string, runtimeKind = "test"): SessionIdentity {
-  return { displayName: id, runtimeKind, instanceId: id, participantId: id };
 }
 
 /** The fixed timestamp every `storedEvent` stamps unless a test overrides `createdAt`. */
@@ -131,6 +134,10 @@ export function recordingTransport(): RecordingTransport {
       });
       return { close: () => {} };
     },
+    readLog: (sessionId, identity, options) =>
+      readSessionLog(transport, sessionId, identity, options),
+    awaitEvent: (sessionId, identity, predicate, options) =>
+      awaitSessionEvent(transport, sessionId, identity, predicate, options),
     fetchInventory: () =>
       inventoryError ? Promise.reject(inventoryError) : Promise.resolve(inventory),
     permanentlyDeleteSession: (sessionId) => {
@@ -155,6 +162,77 @@ export function recordingTransport(): RecordingTransport {
       inventoryError = error;
     },
     permanentlyDeleted,
+  };
+}
+
+export interface LiveTurnResult {
+  readonly completed: SessionEvent;
+  readonly events: readonly SessionEvent[];
+  readonly text: string;
+}
+
+export interface LiveHostHarness {
+  readonly events: readonly SessionEvent[];
+  waitHostOnline(opts?: { readonly timeoutMs?: number; readonly label?: string }): Promise<void>;
+  ask(
+    text: string,
+    opts?: {
+      readonly provider?: string;
+      readonly timeoutMs?: number;
+      readonly label?: string;
+      readonly producerId?: string;
+    },
+  ): Promise<LiveTurnResult>;
+  close(): void;
+}
+
+export function liveHost(
+  transport: Pick<SessionTransport, "connectSession" | "publishEvent">,
+  sessionId: string,
+  opts: {
+    readonly who?: string;
+    readonly producerId?: string;
+    readonly provider?: string;
+  } = {},
+): LiveHostHarness {
+  const producerId = opts.producerId ?? "verify";
+  const subscriber = subscribe(transport as SessionTransport, sessionId, opts.who ?? "verify", {
+    identity: testIdentity(opts.who ?? "verify", "web"),
+  });
+
+  return {
+    events: subscriber.events,
+    waitHostOnline: (waitOpts) =>
+      waitFor(() => subscriber.events.some((event) => event.type === "host.online"), {
+        timeoutMs: waitOpts?.timeoutMs ?? 60_000,
+        label: waitOpts?.label ?? "host.online",
+      }),
+    ask: async (text, askOpts) => {
+      const mark = subscriber.events.length;
+      await transport.publishEvent(sessionId, {
+        type: "user.message",
+        producerId: askOpts?.producerId ?? producerId,
+        payload: { text, provider: askOpts?.provider ?? opts.provider },
+      });
+      await waitFor(
+        () => subscriber.events.slice(mark).some((event) => event.type === "assistant.completed"),
+        {
+          timeoutMs: askOpts?.timeoutMs ?? 180_000,
+          label: askOpts?.label ?? "assistant.completed",
+        },
+      );
+      const after = subscriber.events.slice(mark);
+      const completed = after.find((event) => event.type === "assistant.completed");
+      if (!completed) {
+        throw new Error("assistant.completed vanished after wait");
+      }
+      return {
+        completed,
+        events: after,
+        text: String(completed.payload.text ?? ""),
+      };
+    },
+    close: () => subscriber.connection.close(),
   };
 }
 
@@ -226,34 +304,4 @@ export function recordingTelemetrySink(): RecordingTelemetrySink {
     named: (name) => spans.filter((span) => span.name === name),
     metric: (name) => metrics.filter((point) => point.name === name),
   };
-}
-
-/** Poll until `predicate` holds or the timeout elapses; event callbacks are async. */
-export async function waitFor(
-  predicate: () => boolean,
-  opts?: { readonly timeoutMs?: number; readonly label?: string },
-): Promise<void> {
-  const timeoutMs = opts?.timeoutMs ?? 2000;
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) {
-      throw new Error(`waitFor: ${opts?.label ?? "condition"} not met within ${timeoutMs}ms`);
-    }
-    await new Promise((r) => setTimeout(r, 10));
-  }
-}
-
-/** A connected subscriber that records replay state and every event it receives. */
-export function subscribe(transport: SessionTransport, sessionId: string, who: string) {
-  const events: SessionEvent[] = [];
-  let replayed = false;
-  const connection = transport.connectSession({
-    sessionId,
-    identity: testIdentity(who),
-    onEvent: (event) => events.push(event),
-    onReplayComplete: () => {
-      replayed = true;
-    },
-  });
-  return { events, connection, isReplayed: () => replayed };
 }

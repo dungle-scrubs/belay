@@ -33,6 +33,50 @@ export type RuntimeKind = (typeof RUNTIME_KIND)[keyof typeof RUNTIME_KIND];
 export const PRODUCER_IDS = { host: "trevor-host", web: "trevor-web", cli: "trevor-cli" } as const;
 export type ProducerId = (typeof PRODUCER_IDS)[keyof typeof PRODUCER_IDS];
 
+export const PRODUCER_CHANNELS = {
+  control: "control",
+  clip: "clip",
+  recall: "recall",
+} as const;
+export type ProducerChannel = (typeof PRODUCER_CHANNELS)[keyof typeof PRODUCER_CHANNELS];
+
+/** Builds the host-owned sub-producer id used for answerable control lanes. */
+export function subProducerId(producerId: string, channel: ProducerChannel): string {
+  return `${producerId}:${channel}`;
+}
+
+export const controlProducerId = (producerId: string): string =>
+  subProducerId(producerId, PRODUCER_CHANNELS.control);
+
+export const clipProducerId = (producerId: string): string =>
+  subProducerId(producerId, PRODUCER_CHANNELS.clip);
+
+export const recallProducerId = (producerId: string): string =>
+  subProducerId(producerId, PRODUCER_CHANNELS.recall);
+
+export function isSelfProducer(producerId: string, selfProducerId: string | undefined): boolean {
+  return selfProducerId !== undefined && producerId === selfProducerId;
+}
+
+/**
+ * A prompt is answerable when it is not the host's bare self echo. Host-owned control
+ * lanes such as `${self}:control` deliberately stay answerable.
+ */
+export function isAnswerableProducer(
+  producerId: string,
+  selfProducerId: string | undefined,
+): boolean {
+  return !isSelfProducer(producerId, selfProducerId);
+}
+
+export function isControlProducer(producerId: string, selfProducerId: string | undefined): boolean {
+  return selfProducerId !== undefined && producerId === controlProducerId(selfProducerId);
+}
+
+export function isClipProducer(producerId: string, selfProducerId: string | undefined): boolean {
+  return selfProducerId !== undefined && producerId === clipProducerId(selfProducerId);
+}
+
 /**
  * The lease roles that ride `host.role` and that the web reads to tell the answering
  * leader from standbys. The lease adds a private "probing" start state on top of these
@@ -40,6 +84,35 @@ export type ProducerId = (typeof PRODUCER_IDS)[keyof typeof PRODUCER_IDS];
  */
 export const HOST_ROLE = { leader: "leader", standby: "standby" } as const;
 export type HostRole = (typeof HOST_ROLE)[keyof typeof HOST_ROLE];
+
+export interface ParticipantIdentityOptions {
+  readonly displayName?: string;
+  readonly instanceId: string;
+  readonly participantId?: string;
+  readonly capabilities?: Record<string, unknown>;
+}
+
+/** Builds the canonical stream identity for a Trevor host process. */
+export function hostIdentity(options: ParticipantIdentityOptions): SessionIdentity {
+  return {
+    displayName: options.displayName ?? "trevor-host",
+    runtimeKind: RUNTIME_KIND.host,
+    instanceId: options.instanceId,
+    participantId: options.participantId ?? options.instanceId,
+    capabilities: options.capabilities,
+  };
+}
+
+/** Builds the canonical non-host viewer identity for browsers, launchers, readers, and CLIs. */
+export function viewerIdentity(options: ParticipantIdentityOptions): SessionIdentity {
+  return {
+    displayName: options.displayName ?? "trevor-web",
+    runtimeKind: RUNTIME_KIND.web,
+    instanceId: options.instanceId,
+    participantId: options.participantId ?? options.instanceId,
+    capabilities: options.capabilities,
+  };
+}
 
 /**
  * A pure, dependency-free 32-bit FNV-1a hash, rendered as 8 lowercase hex chars. Used to make a

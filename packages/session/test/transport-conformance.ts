@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { SessionEvent, SessionIdentity, SessionTransport } from "../src/index";
+import { hostIdentity, type SessionTransport, viewerIdentity } from "../src/index";
+import { subscribe, waitFor } from "../src/testing";
 
 /**
  * The transport conformance suite: the reusable contract every `SessionTransport`
@@ -17,50 +18,19 @@ export interface ConformanceContext {
   transport(): SessionTransport;
 }
 
-const identity = (id: string): SessionIdentity => ({
-  displayName: id,
-  runtimeKind: "test",
-  instanceId: id,
-  participantId: id,
-});
-
-async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) {
-      throw new Error("waitFor: condition not met within timeout");
-    }
-    await new Promise((r) => setTimeout(r, 10));
-  }
-}
-
-/** A connected subscriber that records replay state and every event it receives. */
-function subscriber(transport: SessionTransport, sessionId: string, who: string) {
-  const events: SessionEvent[] = [];
-  let replayed = false;
-  const connection = transport.connectSession({
-    sessionId,
-    identity: identity(who),
-    onEvent: (event) => events.push(event),
-    onReplayComplete: () => {
-      replayed = true;
-    },
-  });
-  return { events, connection, isReplayed: () => replayed };
-}
-
 /** Records the latest live-host presence the backend pushes; `kind` "trevor" counts as a host. */
 function presenceWatcher(transport: SessionTransport, sessionId: string, id: string, kind: string) {
   let presence: readonly { instanceId: string }[] | null = null;
-  const connection = transport.connectSession({
-    sessionId,
-    identity: { displayName: id, runtimeKind: kind, instanceId: id, participantId: id },
-    onEvent: () => {},
+  const subscriber = subscribe(transport, sessionId, id, {
+    identity:
+      kind === "trevor"
+        ? hostIdentity({ displayName: id, instanceId: id, participantId: id })
+        : viewerIdentity({ displayName: id, instanceId: id, participantId: id }),
     onPresence: (hosts) => {
       presence = hosts.map((host) => ({ instanceId: host.instanceId }));
     },
   });
-  return { connection, latest: () => presence };
+  return { connection: subscriber.connection, latest: () => presence };
 }
 
 export function runTransportConformance(ctx: ConformanceContext): void {
@@ -73,7 +43,7 @@ export function runTransportConformance(ctx: ConformanceContext): void {
   test("a live subscriber tails published events in order with monotonic seq", async () => {
     const transport = ctx.transport();
     await transport.ensureSession("live");
-    const a = subscriber(transport, "live", "A");
+    const a = subscribe(transport, "live", "A");
     await waitFor(a.isReplayed); // empty replay completes immediately
 
     await transport.publishEvent("live", {
@@ -117,7 +87,7 @@ export function runTransportConformance(ctx: ConformanceContext): void {
     await transport.publishEvent("replay", { type: "b", producerId: "host", payload: {} });
 
     // Joins after the fact: must see the two prior events as replay, then complete.
-    const b = subscriber(transport, "replay", "B");
+    const b = subscribe(transport, "replay", "B");
     await waitFor(() => b.isReplayed() && b.events.length === 2);
     assert.deepEqual(
       b.events.map((e) => e.type),
@@ -159,8 +129,8 @@ export function runTransportConformance(ctx: ConformanceContext): void {
   test("two subscribers both receive a newly published event", async () => {
     const transport = ctx.transport();
     await transport.ensureSession("fanout");
-    const a = subscriber(transport, "fanout", "A");
-    const b = subscriber(transport, "fanout", "B");
+    const a = subscribe(transport, "fanout", "A");
+    const b = subscribe(transport, "fanout", "B");
     await waitFor(() => a.isReplayed() && b.isReplayed());
 
     await transport.publishEvent("fanout", { type: "ping", producerId: "host", payload: {} });

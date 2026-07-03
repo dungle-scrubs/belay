@@ -14,6 +14,7 @@
     "./telemetry-file-sink": "./src/telemetry-file-sink.ts",
     "./telemetry-provider-trace": "./src/telemetry-provider-trace.ts",
     "./telemetry-sentry": "./src/telemetry-sentry.ts",
+    "./testing": "./src/testing.ts",
     "./conformance": "./test/transport-conformance.ts"
   },
   "types": "./src/index.ts",

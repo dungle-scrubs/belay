@@ -1,16 +1,20 @@
 import { Either } from "effect";
 import { decodeStreamEnvelope } from "./envelope";
+import type { SessionEvent } from "./event";
 import { encodeStreamParams } from "./identity";
 import type { SessionSummary } from "./inventory";
 import type { PermanentDeleteResult } from "./session-delete";
 import { deletePath, eventsPath, SESSIONS_PATH, streamPath } from "./session-routes";
 import type {
+  AwaitEventOptions,
   ConnectSessionOptions,
   PublishInput,
+  ReadLogOptions,
   SessionConnection,
   SessionIdentity,
   SessionTransport,
 } from "./transport";
+import { awaitSessionEvent, readSessionLog } from "./transport";
 
 /**
  * The stream-param codec (the URL identity + cursor wire contract) is owned beside the
@@ -159,11 +163,23 @@ async function permanentlyDeleteStreamSession(
  * client that carries it over the wire.
  */
 export function streamTransport(serviceUrl: string): SessionTransport {
-  return {
+  const transport: SessionTransport = {
     ensureSession: (sessionId) => ensureStreamSession(serviceUrl, sessionId),
     publishEvent: (sessionId, input) => publishStream(serviceUrl, sessionId, input),
     connectSession: (options) => connectStream(serviceUrl, options),
+    readLog: (
+      sessionId: string,
+      identity: SessionIdentity,
+      options?: ReadLogOptions,
+    ): Promise<readonly SessionEvent[]> => readSessionLog(transport, sessionId, identity, options),
+    awaitEvent: (
+      sessionId: string,
+      identity: SessionIdentity,
+      predicate: (event: SessionEvent) => boolean,
+      options?: AwaitEventOptions,
+    ) => awaitSessionEvent(transport, sessionId, identity, predicate, options),
     fetchInventory: (signal) => fetchStreamInventory(serviceUrl, signal),
     permanentlyDeleteSession: (sessionId) => permanentlyDeleteStreamSession(serviceUrl, sessionId),
   };
+  return transport;
 }

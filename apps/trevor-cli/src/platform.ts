@@ -4,7 +4,12 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HEALTH_PATH, isHealthBody } from "@trevor/server-kit";
-import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
+import {
+  decodeTrevorEvent,
+  type SessionEvent,
+  streamTransport,
+  viewerIdentity,
+} from "@trevor/session";
 import { raceTimeout, sleep } from "@trevor/session/async";
 import { nodeFs } from "./fs";
 import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
@@ -145,38 +150,16 @@ function watchSession(
   timeoutMs: number,
   satisfied: (event: SessionEvent) => boolean,
 ): Promise<boolean> {
-  return new Promise((resolveOnce) => {
-    const transport = streamTransport(STORE_URL);
-    let done = false;
-    const connection = transport.connectSession({
+  const transport = streamTransport(STORE_URL);
+  const id = `launcher-${process.pid}`;
+  return transport
+    .awaitEvent(
       sessionId,
-      identity: {
-        displayName: "trevor-launcher",
-        runtimeKind: "web",
-        instanceId: `launcher-${process.pid}`,
-        participantId: `launcher-${process.pid}`,
-      },
-      onEvent: (event) => {
-        if (!done && satisfied(event)) {
-          finish(true);
-        }
-      },
-    });
-    const timer = setTimeout(() => finish(false), timeoutMs);
-    function finish(value: boolean): void {
-      if (done) {
-        return;
-      }
-      done = true;
-      clearTimeout(timer);
-      try {
-        connection.close();
-      } catch {
-        // already closed
-      }
-      resolveOnce(value);
-    }
-  });
+      viewerIdentity({ displayName: "trevor-launcher", instanceId: id, participantId: id }),
+      satisfied,
+      { timeoutMs },
+    )
+    .then((event) => event !== null);
 }
 
 const isHostOnline = (event: SessionEvent): boolean =>

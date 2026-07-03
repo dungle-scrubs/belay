@@ -23,15 +23,9 @@ import type { PublishInput } from "./transport";
  * here, where the copy is faithful by design.
  */
 
-/** A message/event's stable coordinate in its home session. */
-export interface MessageOrigin {
-  readonly sessionId: string;
-  readonly seq: number;
-}
-
 /** The reserved payload key a forked (copied) event carries to record its source. It is namespaced with a
  *  leading underscore so it cannot collide with a real event field; the store treats it as opaque payload. */
-export const FORK_ORIGIN_KEY = "_forkOrigin";
+const FORK_ORIGIN_KEY = "_forkOrigin";
 
 /**
  * The durable conversation-state event types a fork copies: exactly what replay consumes to rebuild history
@@ -48,7 +42,7 @@ export const FORK_ORIGIN_KEY = "_forkOrigin";
  *    child seqs over only the forkable subset, so a copied fold would fold the WRONG span (silently
  *    dropping recent turns). The child instead copies the full uncompacted prefix and recompacts itself.
  */
-export const FORKABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
+const FORKABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
   "user.message",
   "user.command",
   "assistant.completed",
@@ -59,55 +53,17 @@ export const FORKABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Whether an event type is copied into a fork prefix (see {@link FORKABLE_EVENT_TYPES}). */
-export function isForkableEvent(type: string): boolean {
+function isForkableEvent(type: string): boolean {
   return FORKABLE_EVENT_TYPES.has(type);
-}
-
-/**
- * The stable per-message id of an event in its home session: `${sessionId}:${seq}`. `seq` is dense and
- * never reassigned once appended, so this is reproducible - unlike the store-minted `eventId`, which a fork
- * COPY reassigns. Use this (or {@link MessageOrigin}) to reference a fork point or dedupe an inherited row.
- */
-export function messageId(event: Pick<SessionEvent, "sessionId" | "seq">): string {
-  return `${event.sessionId}:${event.seq}`;
-}
-
-/** Reads the fork-origin tag off an event's payload, or null for a native (non-copied) event. */
-export function forkOriginOf(event: Pick<SessionEvent, "payload">): MessageOrigin | null {
-  const raw = event.payload[FORK_ORIGIN_KEY];
-  if (raw && typeof raw === "object") {
-    const o = raw as Record<string, unknown>;
-    if (typeof o.sessionId === "string" && typeof o.seq === "number") {
-      return { sessionId: o.sessionId, seq: o.seq };
-    }
-  }
-  return null;
 }
 
 /** Selects the forkable conversation prefix up to AND INCLUDING `forkSeq`, sorted by seq. The sort is
  *  defensive: callers pass seq-ordered logs, but the copy + model fold both depend on order, so a
  *  mis-ordered input would silently corrupt the child rather than fail. */
-export function selectForkPrefix(events: readonly SessionEvent[], forkSeq: number): SessionEvent[] {
+function selectForkPrefix(events: readonly SessionEvent[], forkSeq: number): SessionEvent[] {
   return events
     .filter((e) => e.seq <= forkSeq && isForkableEvent(e.type))
     .sort((a, b) => a.seq - b.seq);
-}
-
-/**
- * Builds the seed {@link PublishInput}s for a fresh child session from a parent prefix. Each forkable event
- * at or before `forkSeq` becomes a PublishInput that keeps its type/producer/payload and gains a
- * {@link FORK_ORIGIN_KEY} tag pointing at the IMMEDIATE parent's `(sessionId, seq)` - a re-fork overwrites
- * any inherited tag, so lineage stays a chain of single-parent links. The caller appends these to a new
- * session via the normal append API; the child is then a self-contained linear session.
- */
-export function buildForkPrefix(args: {
-  readonly parentSessionId: string;
-  readonly parentEvents: readonly SessionEvent[];
-  readonly forkSeq: number;
-}): PublishInput[] {
-  return selectForkPrefix(args.parentEvents, args.forkSeq).map((event) =>
-    tagWithOrigin(args.parentSessionId, event),
-  );
 }
 
 /** Copies one event into a fork seed, tagging it with its immediate-parent origin. */
@@ -131,9 +87,8 @@ export interface ForkPlan {
   readonly events: readonly PublishInput[];
   /** Count of copied conversation events (excludes the trailing `session.forkedFrom` record). */
   readonly copied: number;
-  /** The source (parent) forkable events the copy was built from, in seq order - so a caller can
-   *  reconstruct inherited state (the active model) from the SAME single prefix pass. */
-  readonly sourceEvents: readonly SessionEvent[];
+  /** The active model inherited by the child at the fork point, or null when the prefix carries none. */
+  readonly inheritedModel: ActiveModel | null;
 }
 
 /**
@@ -142,8 +97,7 @@ export interface ForkPlan {
  * only after the whole prefix is copied means its presence signals a COMPLETE fork (a crash mid-copy leaves
  * a child with no marker, which a resumer ignores) - so the marker doubles as the fork-ready signal.
  *
- * The forkable prefix is selected ONCE and returned as `sourceEvents`, so a caller (the host operation)
- * reconstructs the inherited model from it without a second filter pass.
+ * The forkable prefix is selected ONCE, copied, and folded for the child's inherited model.
  */
 export function planFork(args: {
   readonly parentSessionId: string;
@@ -168,7 +122,7 @@ export function planFork(args: {
     forkSeq: args.forkSeq,
     events: [...seeds, marker],
     copied: seeds.length,
-    sourceEvents: prefix,
+    inheritedModel: reconstructActiveModel(prefix),
   };
 }
 
@@ -203,7 +157,7 @@ export interface ActiveModel {
  * current active source and moves the model id + reasoning onto it - the host stays on the same provider
  * source across a mid-turn model change.
  */
-export function reconstructActiveModel(events: readonly SessionEvent[]): ActiveModel | null {
+function reconstructActiveModel(events: readonly SessionEvent[]): ActiveModel | null {
   const build = (sourceId: string, modelId: string, reasoning: string | undefined): ActiveModel =>
     reasoning !== undefined ? { sourceId, modelId, reasoning } : { sourceId, modelId };
 
@@ -235,46 +189,4 @@ export function reconstructActiveModel(events: readonly SessionEvent[]): ActiveM
     }
   }
   return active;
-}
-
-/**
- * A stateful participant that INHERITS state across a fork (plan 15, M4). Most participants are stateless
- * and do NOT implement this - the model PROVIDER, for one, holds no per-session state, so a fork needs no
- * provider inheritance. Only a participant whose state must carry into the child (the model + reasoning
- * SELECTION) opts in by implementing `inherit`, which reconstructs that state from the fork prefix.
- */
-export interface ForkInheritance<S> {
-  readonly participant: string;
-  /** Reconstruct the participant's inherited state from the fork prefix, or null when there is none. */
-  inherit(prefixEvents: readonly SessionEvent[]): S | null;
-}
-
-/**
- * The one built-in inheritance contract: the model + reasoning selection. The provider stays stateless;
- * the SELECTION is inherited state, seeded from the fork point's active (post-switch) value (D-002), so a
- * mid-turn fork resumes on the switched model rather than resetting to a host default.
- */
-export const MODEL_SELECTION_INHERITANCE: ForkInheritance<ActiveModel> = {
-  participant: "model-selection",
-  inherit: reconstructActiveModel,
-};
-
-/**
- * Dedupes a list of copied/inherited events by their stable identity - the fork origin when present
- * (a copied event), else the event's own `(sessionId, seq)` - keeping the FIRST occurrence. So a
- * participant that inherits items across a re-fork never double-counts the same message.
- */
-export function dedupeByOrigin<T extends Pick<SessionEvent, "sessionId" | "seq" | "payload">>(
-  events: readonly T[],
-): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const event of events) {
-    const key = messageId(forkOriginOf(event) ?? event);
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push(event);
-    }
-  }
-  return out;
 }

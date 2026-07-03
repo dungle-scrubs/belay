@@ -345,6 +345,10 @@ importers:
         version: 6.0.3
 
   packages/server-kit:
+    dependencies:
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../session
     devDependencies:
       '@types/node':
         specifier: ^26.0.0
