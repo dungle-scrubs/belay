@@ -104,7 +104,8 @@ const RUNNING_ROWS: readonly TranscriptRow[] = [
 
 function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const controllerRef = useRef(createScrollFollowController());
+  // Unpinned from the start: the catalog shows the transcript top-anchored, not snapped to the edge.
+  const controllerRef = useRef(createScrollFollowController({ initialPinned: false }));
   return (
     <div
       ref={scrollRef}
@@ -115,7 +116,6 @@ function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boo
         rows={rows}
         scrollRef={scrollRef}
         controller={controllerRef.current}
-        pinned={false}
         scrollToBottomRequest={0}
         showThinking
         compact={compact}

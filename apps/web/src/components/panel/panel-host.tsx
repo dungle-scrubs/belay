@@ -389,7 +389,6 @@ export function PanelHost(props: {
                 rows={rows}
                 scrollRef={scroll.transcriptRef}
                 controller={scroll.controller}
-                pinned={scroll.atBottom}
                 scrollToBottomRequest={scroll.bottomRequestId}
                 showThinking={showThinking}
                 compact={compact}

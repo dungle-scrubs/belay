@@ -1,6 +1,14 @@
 import { elementScroll, type Rect, useVirtualizer } from "@tanstack/react-virtual";
 import type { ArtifactRef } from "@trevor/session";
-import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { isCompactEligible } from "@/components/chat/compact-display";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
@@ -13,9 +21,9 @@ export interface VirtualTranscriptProps {
   readonly rows: readonly TranscriptRow[];
   readonly scrollRef: RefObject<HTMLDivElement | null>;
   /** The single follow authority (plan 12.2). Every programmatic scroll write asks it, and it decides
-   *  synchronously - so a follow can never win a race against a user gesture the way lagging state did. */
+   *  synchronously - so a follow can never win a race against a user gesture the way lagging state did.
+   *  Pin state is derived from it here too (no separately drilled prop that could disagree). */
   readonly controller: ScrollFollowController;
-  readonly pinned: boolean;
   readonly scrollToBottomRequest: number;
   readonly showThinking: boolean;
   readonly onOpenPath: (path: string) => void;
@@ -74,7 +82,6 @@ export function VirtualTranscript({
   rows,
   scrollRef,
   controller,
-  pinned,
   scrollToBottomRequest,
   showThinking,
   onOpenPath,
@@ -88,6 +95,14 @@ export function VirtualTranscript({
   const lastRowIdRef = useRef<string | null>(null);
   const [readyToReveal, setReadyToReveal] = useState(false);
   const [settleTick, setSettleTick] = useState(0);
+  // The controller's pin state, mirrored into render: the same value the adapter's jump button reads,
+  // derived here (not drilled as a prop) so a remount or a lagging parent render can never disagree
+  // with the authority. Effects re-run when it flips; write-time decisions still ask the controller.
+  const pinned = useSyncExternalStore(
+    controller.subscribe,
+    controller.isPinned,
+    controller.isPinned,
+  );
   // Which compacted rows have their detail expanded. Owned here (not per-row) so the state survives a
   // row scrolling out of and back into the virtual window, keyed by message id.
   const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
@@ -170,13 +185,12 @@ export function VirtualTranscript({
       if (rows.length === 0) {
         return;
       }
+      // One write: scrollToEnd routes through scrollToFn (the controller-arbitrated seam). The old
+      // second direct `scrollElement.scrollTo(scrollHeight)` chaser is gone - estimate-vs-DOM drift is
+      // already corrected by the settle loop and the double-rAF re-follow, both of which re-ask here.
       virtualizer.scrollToEnd({ behavior });
-      const scrollElement = scrollRef.current;
-      if (scrollElement) {
-        scrollElement.scrollTo({ top: scrollElement.scrollHeight, behavior });
-      }
     },
-    [rows.length, scrollRef, virtualizer],
+    [rows.length, virtualizer],
   );
 
   // Every AUTO-follow asks the controller at FIRE time (synchronously), so a follow scheduled a frame

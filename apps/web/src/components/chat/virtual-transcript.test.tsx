@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { act, render, waitFor } from "@testing-library/react";
-import { type RefObject, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { createScrollFollowController, type ScrollFollowController } from "@/scroll-follow";
@@ -96,17 +96,25 @@ function Harness({
   readonly controller?: ScrollFollowController;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  // A real controller, kept in sync with the `pinned` prop (in the app the prop IS derived from the
-  // controller). The sync is idempotent, so mirroring it during render is safe for the harness.
-  const controllerRef = useRef(createScrollFollowController());
-  const controller = providedController ?? controllerRef.current;
-  if (!providedController) {
+  // A real controller mirroring the `pinned` prop. The initial value is baked in at creation so the
+  // very first render (which the virtualizer's initialOffset reads) is correct; subsequent prop flips
+  // are mirrored in an EFFECT - the controller is a subscribable store, and mutating it during render
+  // is a footgun the moment anything subscribes.
+  const internalControllerRef = useRef<ScrollFollowController | null>(null);
+  if (internalControllerRef.current === null) {
+    internalControllerRef.current = createScrollFollowController({ initialPinned: pinned });
+  }
+  const controller = providedController ?? internalControllerRef.current;
+  useEffect(() => {
+    if (providedController) {
+      return; // the test owns the provided controller's state
+    }
     if (pinned && !controller.isPinned()) {
       controller.repin("jump");
     } else if (!pinned && controller.isPinned()) {
       controller.gesture("up");
     }
-  }
+  }, [pinned, providedController, controller]);
   return (
     <div
       ref={scrollRef}
@@ -117,7 +125,6 @@ function Harness({
         rows={rows}
         scrollRef={scrollRef as RefObject<HTMLDivElement | null>}
         controller={controller}
-        pinned={pinned}
         scrollToBottomRequest={scrollToBottomRequest}
         showThinking
         compact={compact}
@@ -275,9 +282,7 @@ describe("VirtualTranscript", () => {
     controller.gesture("up"); // the user has scrolled up
     const follows = trackApprovedWrites(controller);
     const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
-    const { container, rerender } = render(
-      <Harness rows={rows} controller={controller} pinned={false} />,
-    );
+    const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
 
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
@@ -285,7 +290,7 @@ describe("VirtualTranscript", () => {
     follows.follow = 0; // ignore any writes during the initial reveal; count only post-append
 
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} pinned={false} />);
+      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} />);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     });
@@ -304,9 +309,7 @@ describe("VirtualTranscript", () => {
     const controller = createScrollFollowController(); // starts pinned
     const follows = trackApprovedWrites(controller);
     const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
-    const { container, rerender } = render(
-      <Harness rows={rows} controller={controller} pinned={true} />,
-    );
+    const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
 
     // Let the initial reveal fully settle (it follows the live edge across several frames while pinned).
     await waitFor(() => {
@@ -328,16 +331,10 @@ describe("VirtualTranscript", () => {
     controller.gesture("up");
     follows.follow = 0;
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} pinned={false} />);
+      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} />);
       await raf();
       await raf();
-      rerender(
-        <Harness
-          rows={[...rows, userRow(100), userRow(101)]}
-          controller={controller}
-          pinned={false}
-        />,
-      );
+      rerender(<Harness rows={[...rows, userRow(100), userRow(101)]} controller={controller} />);
       await raf();
       await raf();
     });
@@ -349,16 +346,14 @@ describe("VirtualTranscript", () => {
     const controller = createScrollFollowController(); // pinned
     const follows = trackApprovedWrites(controller);
     const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
-    const { container, rerender } = render(
-      <Harness rows={rows} controller={controller} pinned={true} />,
-    );
+    const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
     });
     follows.follow = 0;
 
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} pinned={true} />);
+      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} />);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     });
@@ -367,14 +362,14 @@ describe("VirtualTranscript", () => {
   });
 
   test("the settle loop terminates on user intent instead of force-scrolling to the edge", async () => {
-    // The user scrolled up (controller unpinned) while the initial reveal was still settling - modeled by
-    // an unpinned controller behind a still-pinned prop. The settle loop must reveal where the user is,
-    // approving no follow write, rather than yanking them to the live edge.
+    // The user scrolled up before the initial reveal finished settling (an unpinned controller from
+    // the very first frame). The settle loop must reveal where the user is, approving no follow write,
+    // rather than force-scrolling them to the live edge - the pre-12.2 not-ready trap.
     const controller = createScrollFollowController();
     controller.gesture("up");
     const follows = trackApprovedWrites(controller);
     const rows = Array.from({ length: 1000 }, (_, index) => userRow(index));
-    const { container } = render(<Harness rows={rows} controller={controller} pinned={true} />);
+    const { container } = render(<Harness rows={rows} controller={controller} />);
 
     await waitFor(() => {
       assert.equal(
@@ -402,8 +397,10 @@ describe("VirtualTranscript", () => {
     controller.gesture("up");
     const writes = trackApprovedWrites(controller);
     const rows = Array.from({ length: 200 }, (_, index) => userRow(index));
-    const { rerender } = render(<Harness rows={rows} controller={controller} pinned={false} />);
-    await waitFor(() => {});
+    const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
     writes.anchor = 0;
     writes.follow = 0;
 
@@ -415,7 +412,7 @@ describe("VirtualTranscript", () => {
       },
     });
     await act(async () => {
-      rerender(<Harness rows={[...rows]} controller={controller} pinned={false} />);
+      rerender(<Harness rows={[...rows]} controller={controller} />);
       for (let i = 0; i < 4; i += 1) {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       }
