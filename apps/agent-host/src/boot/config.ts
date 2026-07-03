@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
+import { writeFileAtomic } from "@host/io/atomic-write";
 import { warn } from "@host/transport/log";
 
 /**
@@ -39,13 +39,14 @@ export function loadJsonConfig<T>(
   }
 }
 
-/** Writes a value as pretty JSON (trailing newline), creating the parent directory as needed. */
+/** Writes a value as pretty JSON (trailing newline), creating the parent directory as needed. The
+ *  default write is the shared atomic temp-write + rename, so a crash mid-save never truncates a
+ *  config file a later load would silently fall back from. */
 export function writeJsonConfig(
   path: string,
   value: unknown,
   write: (p: string, content: string) => void = (p, c) => {
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, c);
+    writeFileAtomic(p, c);
   },
 ): void {
   write(path, `${JSON.stringify(value, null, 2)}\n`);

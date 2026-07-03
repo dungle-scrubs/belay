@@ -14,6 +14,7 @@
 
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { writeFileAtomicVia } from "@host/io/atomic-write";
 import {
   type Corpus,
   type CorpusSummary,
@@ -123,12 +124,9 @@ function pagePath(dir: string, pageId: string): string {
   return join(pagesDir(dir), `${pageId}.json`);
 }
 
-/** Writes JSON via a temp file + rename, so a reader never observes a half-written file. */
+/** Writes JSON via the shared temp-write + rename helper, so a reader never observes a torn file. */
 async function writeJsonAtomic(fs: DocsFs, path: string, value: unknown): Promise<void> {
-  const tmp = `${path}.tmp`;
-
-  await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`);
-  await fs.rename(tmp, path);
+  await writeFileAtomicVia(fs, path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 async function saveCorpusTo(

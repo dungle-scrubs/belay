@@ -7,9 +7,9 @@ import {
   renameSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { writeFileAtomic } from "@host/io/atomic-write";
 import { processAlive } from "@host/processes/process-liveness";
 import { idSlug } from "@trevor/session";
 import { storagePathByName } from "@trevor/session/node-paths";
@@ -160,14 +160,11 @@ export const nodeAdmissionFs: AdmissionFs = {
     }
   },
   writeFile(path, content) {
-    // Write-then-rename so a reader (the unlocked /doctor snapshot) or a mid-write crash never sees a
-    // TRUNCATED resource file - a torn read would parse-fail to the empty resource and silently drop
-    // every active holder + queued waiter (an over-admit). rename is atomic on one filesystem; the
-    // mutex serializes writers per resource, so one tmp name per process never collides.
-    mkdirSync(dirname(path), { recursive: true });
-    const tmp = `${path}.${process.pid}.tmp`;
-    writeFileSync(tmp, content);
-    renameSync(tmp, path);
+    // Atomic (shared temp-write + rename helper) so a reader (the unlocked /doctor snapshot) or a
+    // mid-write crash never sees a TRUNCATED resource file - a torn read would parse-fail to the empty
+    // resource and silently drop every active holder + queued waiter (an over-admit). The mutex
+    // serializes writers per resource, so the helper's per-process tmp name never collides.
+    writeFileAtomic(path, content);
   },
   remove(path) {
     try {
