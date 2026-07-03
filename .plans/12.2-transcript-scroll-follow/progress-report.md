@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M2: Pure state machine (scroll-follow.ts)
+> Current focus: M3: Wire the web app through the controller
 
 - Total checklist items: 24
-- Completed: 6
-- Current cutoff blockers: 18
+- Completed: 13
+- Current cutoff blockers: 11
 
 ## 0. Hard Dependencies
 
@@ -26,13 +26,13 @@
 
 ### M2: Pure state machine (scroll-follow.ts)
 
-- [ ] RED: unit tests - an upward user gesture unpins immediately, no position precondition or intent window
-- [ ] GREEN: state machine skeleton (pinned/unpinned; direction-carrying gesture inputs; re-pin commands)
-- [ ] RED: unit tests - re-pin only via a downward gesture ending within AT_BOTTOM_TOLERANCE, jump, or submit; upward transit through the band never re-pins
-- [ ] GREEN: re-pin arbitration
-- [ ] RED: unit tests - while unpinned every follow write is denied and anchor-compensation writes are allowed; while pinned follow writes pass; approved writes are recognized on the next scroll event
-- [ ] GREEN: write classification, arbitration, and self-write bookkeeping
-- [ ] REFACTOR: bottom-distance math imported from scroll.ts (no duplication); module comment; debug snapshot getter
+- [x] RED: unit tests - an upward user gesture unpins immediately, no position precondition or intent window (scroll-follow.test.ts, initially failed on the missing module)
+- [x] GREEN: state machine skeleton (pinned/unpinned; direction-carrying gesture inputs; re-pin commands) - `createScrollFollowController` in scroll-follow.ts
+- [x] RED: unit tests - re-pin only via a downward gesture ending within AT_BOTTOM_TOLERANCE, jump, or submit; upward transit through the band never re-pins
+- [x] GREEN: re-pin arbitration (down-arrival-in-band re-pin; a null baseline defers direction until two samples exist so a first scroll never false-re-pins)
+- [x] RED: unit tests - while unpinned every follow write is denied and anchor-compensation writes are allowed; while pinned follow writes pass; approved writes are recognized on the next scroll event
+- [x] GREEN: write classification, arbitration, and self-write bookkeeping (pendingSelfOffset matched with a 1.5px epsilon; dev-only structured warn per denied writer, deduped per unpinned span)
+- [x] REFACTOR: bottom-distance math imported from scroll.ts (no duplication, D-003); module comment (Responsible for / Not for); `snapshot()` debug getter. 13 unit tests green; web typecheck + biome clean.
 
 ### M3: Wire the web app through the controller
 
