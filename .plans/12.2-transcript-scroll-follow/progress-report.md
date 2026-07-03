@@ -2,11 +2,12 @@
 
 ## Summary
 
-> Current focus: M4 complete except the owner's deferred manual feel-check EZE
+> Current focus: complete - all milestones done; one owner-gated feel-check moved to Deferred follow-up (D-008)
 
 - Total checklist items: 24
 - Completed: 23
-- Current cutoff blockers: 1 (the deferred manual feel-check EZE - owner-gated, Lane B is the automated backstop)
+- Current cutoff blockers: 0
+- Accepted/deferred follow-up: 1 (the owner's manual feel-check EZE, D-008)
 
 ## 0. Hard Dependencies
 
@@ -49,6 +50,9 @@
 
 ### M4: Full verification + manual EZE
 
-- [x] GREEN: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser` all green. Results: lint clean (1142 files); typecheck 11/11 projects Done; `pnpm test` 3716 passed + 3 skipped; `pnpm test:e2e:browser` 9 passed + 1 skipped (perf, RUN_PERF unset), 0 flakes across 12 consecutive runs.
-- [ ] RED: manual EZE feel-check against a live streaming session - **DEFERRED to the owner (gated)**. This is a human perception task (residual jitter/tug feel) against a live host + model streaming a real turn; it cannot be authentically assessed headlessly, and booting a live host needs a configured provider. tool-proxy `browser-tools` is available but driving a headless browser cannot judge "feel", and the hermetic fake-provider path is not a "live streaming session". The automated backstop is the Lane B real-Chromium spec set, which asserts all three feel-check scenarios: read-while-streaming = no yank (append-while-reading spec), slow-scroll-up = no tug (monotonic spec), rapid-flick = no reset (flick spec), plus the four pre-existing pinned-follow/jump specs. Owner should do the final in-browser feel-check before merge.
-- [x] REFACTOR: verification commands + results recorded above. Plan 33/34/35 D-005 notes re-read and confirmed to describe the LANDED contract exactly (single controller `apps/web/src/scroll-follow.ts`; direction-based synchronous unpin; one programmatic-write authority; re-pin only via deliberate bottom-return/jump/submit; scroll element identity + `data-transcript-*` hooks unchanged with one additive `data-transcript-pinned`; follow-class writes denied while scrolled up; re-measures land as anchor-compensation; three Lane B regression specs must stay green). No plan-note edits needed. Feel-check row is the only deferred item.
+- [x] GREEN: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser` all green. Results: lint clean (1142 files); typecheck 11/11 projects Done; `pnpm test` 3716 passed + 3 skipped; `pnpm test:e2e:browser` 9 passed + 1 skipped (perf, RUN_PERF unset), 0 flakes across 12 consecutive runs. Re-verified after the simplify-review fixes (re-pin via any genuine bottom arrival, controller-owned edge policy, derived pin state, data-transcript-pinned assertions): unit/web/Lane B green again, Lane B 0 flakes across 5+6+3 consecutive runs.
+- [x] REFACTOR: verification commands + results recorded above. Plan 33/34/35 D-005 notes re-read and confirmed to describe the LANDED contract exactly (single controller `apps/web/src/scroll-follow.ts`; direction-based synchronous unpin; one programmatic-write authority; re-pin only via a genuine bottom return / jump / submit; scroll element identity + `data-transcript-*` hooks unchanged with one additive `data-transcript-pinned`; follow-class writes denied while scrolled up; re-measures land as anchor-compensation). No plan-note edits needed. The manual feel-check moved to Deferred follow-up below (D-008).
+
+## Deferred follow-up
+
+- [ ] Manual EZE feel-check (D-008, owner-gated): in a real browser against a LIVE streaming session, verify read-while-streaming (no yank), slow-scroll up (no tug), and a rapid upward flick (no reset); any residual jitter is a finding. Deferred because feel is a human perception judgment requiring a live host + model; the Lane B real-Chromium spec set is the automated backstop for all three scenarios.
