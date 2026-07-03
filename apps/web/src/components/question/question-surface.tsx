@@ -176,9 +176,12 @@ export function QuestionSurface({
       return;
     }
     // Enter confirms-and-advances (submits on the final/only tab). Inside a textarea plain Enter stays a
-    // newline and only Cmd/Ctrl+Enter advances; everywhere else plain Enter advances. Shift+Enter never.
+    // newline and only Cmd/Ctrl+Enter advances - EXCEPT the custom-answer row, where the short single
+    // answer makes plain Enter confirm and Shift+Enter the newline (the free-text/reason/notes fields
+    // keep newline-on-Enter). Everywhere else plain Enter advances. Shift+Enter never advances.
     const inTextarea = el.tagName === "TEXTAREA";
-    if (e.metaKey || e.ctrlKey || (!inTextarea && !e.shiftKey)) {
+    const inCustomAnswer = inTextarea && el.hasAttribute("data-custom-answer");
+    if (e.metaKey || e.ctrlKey || ((!inTextarea || inCustomAnswer) && !e.shiftKey)) {
       e.preventDefault();
       confirmOrAdvance();
     }
@@ -773,6 +776,7 @@ function CustomRow({
       <textarea
         rows={1}
         data-qrow={index}
+        data-custom-answer
         tabIndex={tabIndex}
         aria-label={`Custom answer for: ${q.question}`}
         disabled={disabled}

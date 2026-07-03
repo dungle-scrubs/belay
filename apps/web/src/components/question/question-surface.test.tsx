@@ -264,6 +264,20 @@ test("plain Enter submits when ready and focus is on a choice", () => {
   assert.equal(lastAccept(onAnswer).action, "accept");
 });
 
+test("custom-answer row: plain Enter submits when ready; Shift+Enter stays a newline", () => {
+  const { onAnswer } = renderSurface(fx.singleChoice);
+  const custom = screen.getByLabelText(/custom answer for:/i);
+  // Typing moves the answer to the custom option and makes the draft ready.
+  fireEvent.change(custom, { target: { value: "my own answer" } });
+
+  fireEvent.keyDown(custom, { key: "Enter", shiftKey: true });
+  assert.equal(onAnswer.mock.calls.length, 0, "Shift+Enter is a newline, not a submit");
+
+  fireEvent.keyDown(custom, { key: "Enter" });
+  assert.equal(onAnswer.mock.calls.length, 1, "plain Enter submits from the custom row");
+  assert.equal(lastAccept(onAnswer).action, "accept");
+});
+
 test("plain Enter inside a textarea is a newline, not a submit (Cmd+Enter still submits)", () => {
   const { onAnswer } = renderSurface(fx.singleChoice); // ready
   fireEvent.keyDown(screen.getByRole("radio", { name: /PostgreSQL/ }), { key: "n" });
