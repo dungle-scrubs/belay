@@ -119,9 +119,13 @@ test("visual mode extends the selection with motions, then d deletes it", () => 
 });
 
 test("visual selection can extend backward past the anchor (the anchor stays fixed)", () => {
-  // caret at 3, v anchors the left edge at 3 ([3,4]); h then h walks the moving end left to 2 -> [2,3].
+  // caret at 3, v anchors char 3 ([3,4]); h keeps that original char selected while adding char 2.
+  const first = drive("hello", 3, ["v", "h"]);
+  assert.deepEqual([first.selStart, first.selEnd], [2, 4]);
+
+  // h again walks the moving end left to 1 while still including the anchored char 3 -> [1,4).
   const sel = drive("hello", 3, ["v", "h", "h"]);
-  assert.deepEqual([sel.selStart, sel.selEnd], [2, 3]);
+  assert.deepEqual([sel.selStart, sel.selEnd], [1, 4]);
   assert.equal(sel.state.anchor, 3, "the anchor stays where visual began");
 });
 

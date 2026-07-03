@@ -276,10 +276,18 @@ function visualKey(state: VimState, snap: TextSnapshot, key: VimKey): VimResult 
   }
   // Motions move the cursor (the end that is NOT the anchor) and re-form the selection.
   const anchor = state.anchor ?? snap.selStart;
+  const initialEnd = Math.min(snap.value.length, anchor + 1);
+  const initialSelection = snap.selStart === anchor && snap.selEnd === initialEnd;
   const cursor = anchor === snap.selStart ? snap.selEnd : snap.selStart;
-  const target = motionTarget(snap.value, cursor, key, undefined);
+  const firstTarget = motionTarget(snap.value, cursor, key, undefined);
+  const target =
+    initialSelection && firstTarget !== null && firstTarget <= anchor
+      ? motionTarget(snap.value, anchor, key, undefined)
+      : firstTarget;
   if (target === null) {
     return handled({ mode: "visual", anchor }, snap.selStart, snap.selEnd); // swallow
   }
-  return handled({ mode: "visual", anchor }, Math.min(anchor, target), Math.max(anchor, target));
+  return target < anchor
+    ? handled({ mode: "visual", anchor }, target, initialEnd)
+    : handled({ mode: "visual", anchor }, anchor, target);
 }
