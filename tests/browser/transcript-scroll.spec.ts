@@ -107,15 +107,22 @@ test("scrolling up unpins, the jump affordance appears, and a later append does 
   await expect(jumpButton(page)).toHaveCount(1);
   await expect.poll(() => bottomDeltaPx(scroller)).toBeGreaterThan(20);
 
-  const before = await scroller.evaluate((el) => el.scrollTop);
+  const before = await bottomDeltaPx(scroller);
   const beforeRows = await rowCount(page);
   await appendExchange(storeTransport(), sessionId, "while-unpinned");
   // Wait until the append is actually observed (the row is off-screen/virtualized, so we can't assert on
   // its text) BEFORE measuring - otherwise "no yank" passes trivially because the row-add hasn't landed.
   await expect.poll(() => rowCount(page)).toBeGreaterThan(beforeRows);
+  await expectPinned(scroller, false);
   await expect(jumpButton(page)).toHaveCount(1);
-  const after = await scroller.evaluate((el) => el.scrollTop);
-  expect(Math.abs(after - before)).toBeLessThan(PIN_TOLERANCE_PX);
+  // No yank: the distance from the live edge never shrinks (the append below only grows it). Sampled as
+  // bottomDelta, not raw scrollTop - an above-viewport estimate correction legitimately shifts scrollTop
+  // a few px (anchor compensation, visually stationary) and must not read as movement.
+  const after = await bottomDeltaPx(scroller);
+  expect(
+    after,
+    "an append while unpinned must not pull the viewport toward the live edge",
+  ).toBeGreaterThanOrEqual(before - MONOTONIC_SLACK_PX);
 });
 
 test("a mid-stream growing row is auto-followed while pinned (bottomDelta stays small, no yank)", async ({
