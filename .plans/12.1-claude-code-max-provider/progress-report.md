@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M3: Catalog source + configured branch + dispatch
+> Current focus: M4: Full verification + manual EZE
 
 - Total checklist items: 23
-- Completed: 13
-- Current cutoff blockers: 10
+- Completed: 20
+- Current cutoff blockers: 3
 
 ## 0. Hard Dependencies
 
@@ -36,13 +36,13 @@
 
 ### M3: Catalog source + configured branch + dispatch
 
-- [ ] RED: resolveSourceAuth for claude-code = token presence, INDEPENDENT of the ~/.pi/auth.json anthropic entry (both cross cases)
-- [ ] GREEN: add the SourceDef row (type oauth, cliTokenEnv) + cliTokenPresent helper + the resolveSourceAuth branch
-- [ ] RED: providerForSource returns claudeCodeProvider for sourceId claude-code; anthropic unchanged
-- [ ] GREEN: add the providerForSource dispatch branch
-- [ ] RED: the source appears in the host.online catalog snapshot as a distinct selectable Claude source, not ready without the token
-- [ ] GREEN: wire the source into the catalog snapshot builder
-- [ ] REFACTOR: the new auth branch reads cleanly beside local/oauth/api-key; no duplicate token read
+- [x] RED: resolveSourceAuth for claude-code = token presence, INDEPENDENT of the ~/.pi/auth.json anthropic entry (both cross cases)
+- [x] GREEN: add the SourceDef row (type oauth, cliTokenEnv) + cliTokenPresent helper + the resolveSourceAuth branch
+- [x] RED: providerForSource returns claudeCodeProvider for sourceId claude-code; anthropic unchanged
+- [x] GREEN: add the providerForSource dispatch branch
+- [x] RED: the source appears in the host.online catalog snapshot as a distinct selectable Claude source, not ready without the token
+- [x] GREEN: wire the source into the catalog snapshot builder
+- [x] REFACTOR: the new auth branch reads cleanly beside local/oauth/api-key; no duplicate token read
 
 ## Phase 3: Verification
 

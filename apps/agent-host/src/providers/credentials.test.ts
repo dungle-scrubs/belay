@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
 import { ProviderAuthError } from "./errors";
-import { oauthCredentialResolver, staticKeyCredentialResolver } from "./provider-auth";
+import {
+  cliTokenPresent,
+  oauthCredentialResolver,
+  staticKeyCredentialResolver,
+} from "./provider-auth";
 
 /**
  * Characterization tests for the credential strategies (M2 / D-005).
@@ -100,4 +104,14 @@ test("oauth: no openai-codex entry fails as ProviderAuthError before any refresh
   );
   assert.ok(error instanceof ProviderAuthError);
   assert.match(error.detail, /no openai-codex entry in/);
+});
+
+test("cliTokenPresent reads a CLI-token env var (the claude-code configured signal), empty = absent", () => {
+  // The CLI-token store is env, NOT ~/.pi/auth.json (D-003) - present + non-empty means configured.
+  assert.equal(
+    cliTokenPresent({ CLAUDE_CODE_OAUTH_TOKEN: "tok" }, "CLAUDE_CODE_OAUTH_TOKEN"),
+    true,
+  );
+  assert.equal(cliTokenPresent({ CLAUDE_CODE_OAUTH_TOKEN: "" }, "CLAUDE_CODE_OAUTH_TOKEN"), false);
+  assert.equal(cliTokenPresent({}, "CLAUDE_CODE_OAUTH_TOKEN"), false);
 });

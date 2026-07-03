@@ -8,6 +8,7 @@ import type {
   SourceType,
 } from "@trevor/session";
 import { anthropicProvider } from "./anthropic";
+import { claudeCodeProvider } from "./claude-code";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { lmStudioIsVision, lmStudioSupportsTools } from "./lmstudio-native";
@@ -15,7 +16,7 @@ import { reloadModelOverrides, resolveContextWindow } from "./model-metadata-ove
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
 import { lookupPiModel } from "./pi-model";
-import { AUTH_PATH, oauthPresent, staticKeyEntry } from "./provider-auth";
+import { AUTH_PATH, cliTokenPresent, oauthPresent, staticKeyEntry } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
 import { asLiveModel, fetchSourceModels, type LiveModel } from "./source-models";
 import type { Provider } from "./types";
@@ -52,6 +53,13 @@ interface SourceDef {
   /** A fixed OpenAI-compatible base URL for a source NOT in pi-ai's registry (e.g. Ollama Cloud);
    *  overrides the registry-derived URL and is what `/models` is queried against. */
   readonly baseUrl?: string;
+  /** The CLI-token env var whose PRESENCE is this source's configured signal, read from the CLI token
+   *  STORE (env) instead of `~/.pi/auth.json` (D-003). Set for the claude-code source; its subprocess
+   *  reads the same token, so marking configured from anything else would show ready and fail at stream. */
+  readonly cliTokenEnv?: string;
+  /** Whether this source can expose tools to the model. Defaults to true; the claude-code source sets
+   *  it false (text-only in this cut - D-004), so its catalog entries carry no Tools chip. */
+  readonly toolCapable?: boolean;
 }
 
 /** The sources the host knows about (a new provider is one row here). */
@@ -70,6 +78,18 @@ const SOURCES: readonly SourceDef[] = [
     label: "Anthropic (Claude)",
     piProvider: "anthropic",
     oauthName: "anthropic",
+  },
+  // A SECOND Claude source, billed to the Max subscription via the Agent SDK (plan 12.1). Same Claude
+  // models as `anthropic` (piProvider "anthropic" enriches shape + supplies the model list), but its
+  // configured signal is the CLI token STORE (cliTokenEnv), a DIFFERENT credential store than the
+  // anthropic source's ~/.pi/auth.json OAuth entry (D-003). Text-only in this cut, so toolCapable false.
+  {
+    sourceId: "claude-code",
+    type: "oauth",
+    label: "Claude (Max plan)",
+    piProvider: "anthropic",
+    cliTokenEnv: "CLAUDE_CODE_OAUTH_TOKEN",
+    toolCapable: false,
   },
   // The static-key cloud sources (DeepSeek, Z.ai, MiniMax) are derived from the shared pi-key
   // registry: for these, the source id == the pi-ai provider id == the auth.json entry, so one
@@ -129,11 +149,20 @@ function staticKeyOf(source: SourceDef, auth: Record<string, unknown>): string |
   return source.authName ? staticKeyEntry(auth, source.authName) : null;
 }
 
-/** Resolves one source's auth state: local runtimes are always configured; an oauth source needs its
- *  OAuth entry; an api-key source needs a present static key (both via the shared predicates). */
-function resolveSourceAuth(source: SourceDef, auth: Record<string, unknown>): SourceAuth {
+/** Resolves one source's auth state: local runtimes are always configured; a CLI-token source
+ *  (claude-code) needs its env token PRESENT - read from the CLI token STORE (env), NOT
+ *  `~/.pi/auth.json` (D-003); an oauth source needs its `~/.pi/auth.json` OAuth entry; an api-key
+ *  source needs a present static key (all via the shared predicates). */
+function resolveSourceAuth(
+  source: SourceDef,
+  auth: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = process.env,
+): SourceAuth {
   if (source.type === "local") {
     return { configured: true, staticKey: null };
+  }
+  if (source.cliTokenEnv) {
+    return { configured: cliTokenPresent(env, source.cliTokenEnv), staticKey: null };
   }
   if (source.oauthName) {
     return { configured: oauthPresent(auth, source.oauthName), staticKey: null };
@@ -144,8 +173,11 @@ function resolveSourceAuth(source: SourceDef, auth: Record<string, unknown>): So
 
 /** The per-source auth state in ONE pass over SOURCES, so the configured signal + static key are
  *  resolved once and shared by the snapshot builder and the live-models fetch. */
-function projectSourceAuth(auth: Record<string, unknown>): Map<string, SourceAuth> {
-  return new Map(SOURCES.map((source) => [source.sourceId, resolveSourceAuth(source, auth)]));
+function projectSourceAuth(
+  auth: Record<string, unknown>,
+  env: NodeJS.ProcessEnv = process.env,
+): Map<string, SourceAuth> {
+  return new Map(SOURCES.map((source) => [source.sourceId, resolveSourceAuth(source, auth, env)]));
 }
 
 /** The pi-ai registry Model for an id (full object), for shape + reasoning enrichment, or undefined. */
@@ -232,7 +264,12 @@ function cloudEntry(
   model: PiModel | undefined,
   reasoningLevels: readonly string[],
 ): CatalogEntry {
-  const capabilities = withReasoning(["tools"], reasoningLevels);
+  // Tools are always-on for cloud EXCEPT a source that declares itself text-only (claude-code,
+  // toolCapable false - D-004), so its chooser row honestly shows no Tools chip.
+  const capabilities = withReasoning(
+    source.toolCapable === false ? [] : ["tools"],
+    reasoningLevels,
+  );
   if (model?.input?.includes("image")) {
     capabilities.push("vision");
   }
@@ -295,12 +332,16 @@ export function buildCatalogSnapshot(
   auth: Record<string, unknown>,
   modelsBySource: Readonly<Record<string, readonly (string | LiveModel)[]>>,
   staleSources: ReadonlySet<string> = new Set(),
-  sourceAuth: ReadonlyMap<string, SourceAuth> = projectSourceAuth(auth),
+  sourceAuth?: ReadonlyMap<string, SourceAuth>,
+  env: NodeJS.ProcessEnv = process.env,
 ): CatalogSnapshot {
+  // A CLI-token source (claude-code) derives configured from `env`, so tests can inject token
+  // presence; the default projection reads process.env for that source and `auth` for the rest.
+  const resolvedAuth = sourceAuth ?? projectSourceAuth(auth, env);
   const catalogBySource: Record<string, CatalogEntry[]> = {};
   const sources: SourceSummary[] = [];
   for (const source of SOURCES) {
-    const configured = sourceAuth.get(source.sourceId)?.configured ?? false;
+    const configured = resolvedAuth.get(source.sourceId)?.configured ?? false;
     // Stale only applies to a configured source whose live /models query failed (an unconfigured
     // source has no catalog to be stale).
     const freshness: CatalogFreshness = {
@@ -319,9 +360,12 @@ export function buildCatalogSnapshot(
       modelCount: entries.length,
       auth: configured ? "authenticated" : "none",
       freshness,
+      // A CLI-token source (claude-code) has NO in-app OAuth flow - its token comes from
+      // `claude setup-token` - so it offers the manual "configure" hint, not the device-code
+      // "authenticate" an oauth source triggers (which has no sign-in target for it).
       actions: configured
         ? ["refresh"]
-        : source.type === "oauth"
+        : source.type === "oauth" && !source.cliTokenEnv
           ? ["authenticate"]
           : ["configure"],
     });
@@ -346,8 +390,12 @@ export function providerForSource(
     return lmStudioProvider({ model: modelId, label });
   }
   if (source.type === "oauth") {
-    // Each OAuth subscription has its own provider (different registry + token shape); Codex for
-    // OpenAI, Anthropic for Claude Pro/Max.
+    // Each OAuth subscription has its own provider (different registry + token shape): claude-code
+    // streams Claude through the Agent SDK on the Max subscription (billed to the CLI token, D-003),
+    // Anthropic streams the same models through ~/.pi/auth.json OAuth, Codex handles OpenAI.
+    if (source.sourceId === "claude-code") {
+      return claudeCodeProvider({ model: modelId, label });
+    }
     return source.sourceId === "anthropic"
       ? anthropicProvider({ model: modelId, label })
       : codexProviderFromConfig({ model: modelId, label });
