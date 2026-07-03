@@ -6,6 +6,7 @@
  * surfacing bytes used/dropped and the required-response state.
  * Not for: reading the filesystem (callers pass the report + inventory) or the proposal flow itself.
  */
+import { commas } from "@host/transport/messages";
 import type { ContextReport } from "./agents-md";
 import type { ClaudeMigrationInventory } from "./claude-migration";
 
@@ -65,11 +66,6 @@ export function collectContextDiagnostics(
   };
 }
 
-/** Thousands-separated integer, matching the doctor's other byte counters. */
-function commas(n: number): string {
-  return n.toLocaleString("en-US");
-}
-
 /**
  * Render the diagnostics into the doctor's `Record<string,string>` debug lines: one `context` line
  * (AGENTS.md + rules + scopes + bytes, with any truncation), and a `claudeMd` line ONLY when CLAUDE.md
@@ -96,7 +92,10 @@ export function formatContextDiagnostics(diag: ContextDiagnostics): Record<strin
   if (diag.claudeDetected > 0) {
     const parts: string[] = [];
     if (diag.claudeToMigrate > 0) {
-      parts.push(`${diag.claudeToMigrate} to migrate (response required)`);
+      // The required-response flag is the collected state, not re-derived here, so the formatter and
+      // any other consumer of ContextDiagnostics can never disagree on it.
+      const pending = diag.requiredResponsePending ? " (response required)" : "";
+      parts.push(`${diag.claudeToMigrate} to migrate${pending}`);
     }
     if (diag.claudePointers > 0) {
       parts.push(`${diag.claudePointers} pointer${diag.claudePointers === 1 ? "" : "s"}`);

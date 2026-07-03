@@ -119,6 +119,9 @@ test("the formatted CLAUDE.md line appears only when files are detected", () => 
 });
 
 test("diagnostics summarize by counts and never dump instruction or rule bodies (D-012)", () => {
+  // The guard is meaningful because the COLLECTOR receives the bodies (the report text and the
+  // migration previews below both carry the secret) - so the collected read model, not just the
+  // formatter's lines, is asserted body-free.
   const secretBody = "SECRET RULE BODY: do the dangerous thing";
   const diag = collectContextDiagnostics(
     report({
@@ -129,9 +132,12 @@ test("diagnostics summarize by counts and never dump instruction or rule bodies 
     inventory([claudeItem({ claudePath: "CLAUDE.md", preview: secretBody })]),
     new Set(),
   );
-  const lines = formatContextDiagnostics(diag);
 
-  for (const value of Object.values(lines)) {
+  assert.ok(
+    !JSON.stringify(diag).includes(secretBody),
+    "the collected diagnostics carry no rule/instruction body in any field",
+  );
+  for (const value of Object.values(formatContextDiagnostics(diag))) {
     assert.ok(
       !value.includes(secretBody),
       "ordinary diagnostics must not include rule/instruction bodies",

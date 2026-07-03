@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "vitest";
 import { addPermanentlyIgnored, loadPermanentlyIgnored } from "./claude-migration-ignores";
 
@@ -36,6 +36,25 @@ test("adding an already-ignored file is idempotent (deduped, no duplicates)", ()
     "CLAUDE.md",
     "pkg/CLAUDE.md",
   ]);
+});
+
+test("an add that changes nothing skips the write entirely", () => {
+  const file = storeFile();
+  assert.equal(addPermanentlyIgnored("/repo", ["CLAUDE.md"], file), true, "first add writes");
+  assert.equal(
+    addPermanentlyIgnored("/repo", ["CLAUDE.md"], file),
+    false,
+    "an identical re-add skips the write",
+  );
+  assert.equal(addPermanentlyIgnored("/repo", [], file), false, "an empty add never writes");
+});
+
+test("a write leaves no staging temp file behind (atomic rename)", () => {
+  const file = storeFile();
+  addPermanentlyIgnored("/repo", ["CLAUDE.md"], file);
+
+  const stray = readdirSync(dirname(file)).filter((name) => name.endsWith(".tmp"));
+  assert.deepEqual(stray, [], "the temp file was renamed over the store");
 });
 
 test("a corrupt store degrades to empty rather than throwing", () => {

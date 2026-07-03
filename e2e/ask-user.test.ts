@@ -7,13 +7,11 @@ import {
 } from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import {
-  decodeTrevorEvent,
   type ProviderQuestionAnswer,
-  type SessionEvent,
   events as sessionEvents,
   streamTransport,
 } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
+import { questionAnswerDrain, subscribe, waitFor } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, afterEach, beforeAll, test } from "vitest";
@@ -57,16 +55,9 @@ test("a fake-provider ask_user turn blocks, then resumes with the browser's answ
 
   // The host-side consumer: on a browser answer, resolve the pending question (main.ts's inbound lane).
   const host = subscribe(transport, SESSION, "host-consumer");
-  let consumed = 0;
-  const drainAnswers = () => {
-    for (let i = consumed; i < host.events.length; i += 1) {
-      const decoded = decodeTrevorEvent(host.events[i] as SessionEvent);
-      if (decoded?.type === "provider.question.answer") {
-        providerQuestionRuntime.submitAnswer(decoded.questionId, decoded.answer);
-      }
-    }
-    consumed = host.events.length;
-  };
+  const drainAnswers = questionAnswerDrain(host.events, (questionId, answer) =>
+    providerQuestionRuntime.submitAnswer(questionId, answer),
+  );
 
   // The fake provider: step 1 calls ask_user; after the tool result, step 2 answers.
   let calls = 0;

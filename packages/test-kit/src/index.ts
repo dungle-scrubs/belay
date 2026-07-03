@@ -8,7 +8,9 @@ import {
   type DoctorAreaId,
   type DoctorSnapshot,
   type DoctorStatus,
+  decodeTrevorEvent,
   PRODUCER_IDS,
+  type ProviderQuestionAnswer,
   type PublishInput,
   readSessionLog,
   type SessionEvent,
@@ -162,6 +164,28 @@ export function recordingTransport(): RecordingTransport {
       inventoryError = error;
     },
     permanentlyDeleted,
+  };
+}
+
+/**
+ * The host-side answer-drain a provider-question e2e plays (the role main.ts's inbound lane plays in
+ * the real host): returns a `drain()` that scans a subscriber's growing `events` array for new
+ * `provider.question.answer` events and feeds each to `submit` (the runtime's `submitAnswer`),
+ * tracking its own consumed cursor. Shared by the ask_user and CLAUDE.md-migration suites so the
+ * inbound-lane stand-in is written once.
+ */
+export function questionAnswerDrain(
+  events: readonly SessionEvent[],
+  submit: (questionId: string, answer: ProviderQuestionAnswer) => unknown,
+): () => void {
+  let consumed = 0;
+  return () => {
+    for (; consumed < events.length; consumed += 1) {
+      const decoded = decodeTrevorEvent(events[consumed] as SessionEvent);
+      if (decoded?.type === "provider.question.answer") {
+        submit(decoded.questionId, decoded.answer);
+      }
+    }
   };
 }
 

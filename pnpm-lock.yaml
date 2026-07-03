@@ -327,6 +327,9 @@ importers:
       '@trevor/test-kit':
         specifier: workspace:*
         version: link:../packages/test-kit
+      '@trevor/web':
+        specifier: workspace:*
+        version: link:../apps/web
       effect:
         specifier: ^3.21.4
         version: 3.21.4

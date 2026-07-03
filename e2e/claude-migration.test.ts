@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  CLAUDE_POINTER_SENTINEL,
   fakeProvider,
   providerQuestionRuntime,
   publishTurnVia,
@@ -10,14 +11,13 @@ import {
 } from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import {
-  decodeTrevorEvent,
-  type ProviderQuestionAnswer,
-  type SessionEvent,
+  decodeProviderQuestionContract,
   events as sessionEvents,
   streamTransport,
 } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
+import { questionAnswerDrain, subscribe, waitFor } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
+import { buildAnswer, initialDraft } from "@trevor/web/question-view-model";
 import { Stream } from "effect";
 import { afterAll, afterEach, beforeAll, test } from "vitest";
 
@@ -98,16 +98,9 @@ function migrateTurn(
 /** Tails the store as the host's inbound lane: resolve any pending question from a browser answer. */
 function hostConsumer(transport: ReturnType<typeof streamTransport>, session: string) {
   const host = subscribe(transport, session, "host-consumer");
-  let consumed = 0;
-  const drain = () => {
-    for (let i = consumed; i < host.events.length; i += 1) {
-      const decoded = decodeTrevorEvent(host.events[i] as SessionEvent);
-      if (decoded?.type === "provider.question.answer") {
-        providerQuestionRuntime.submitAnswer(decoded.questionId, decoded.answer);
-      }
-    }
-    consumed = host.events.length;
-  };
+  const drain = questionAnswerDrain(host.events, (questionId, answer) =>
+    providerQuestionRuntime.submitAnswer(questionId, answer),
+  );
   return { host, drain };
 }
 
@@ -140,23 +133,17 @@ test("migrate_claude_md converts (create + merge) after the user's grouped answe
   const questionId = String(requested?.payload.questionId ?? "");
   assert.ok(questionId);
 
-  // 2) The browser answers: create the root file, merge the nested one.
-  const answer: ProviderQuestionAnswer = {
-    action: "accept",
-    answer: "",
-    questions: [
-      {
-        id: "CLAUDE.md",
-        answer: "create",
-        selected: [{ id: "create", label: "Create AGENTS.md" }],
-      },
-      {
-        id: "apps/CLAUDE.md",
-        answer: "merge",
-        selected: [{ id: "merge", label: "Merge into existing AGENTS.md" }],
-      },
-    ],
-  };
+  // 2) The browser answers through the REAL web view-model over the decoded wire contract - the
+  // recommended defaults are exactly create (no sibling) and merge (sibling exists) - so this locks
+  // the actual answer shape the web emits (summary line included), not a hand-built approximation.
+  const contract = decodeProviderQuestionContract(requested?.payload.contract);
+  const answer = buildAnswer(contract, initialDraft(contract));
+  assert.deepEqual(
+    answer.questions.map((q) => q.selected?.[0]?.id),
+    ["create", "merge"],
+    "the recommended per-file actions are create then merge",
+  );
+  assert.match(answer.answer, /Create AGENTS\.md/, "the combined summary rides the wire answer");
   await transport.publishEvent(SESSION, {
     producerId: "web",
     ...sessionEvents.providerQuestionAnswer({ questionId, answer }),
@@ -194,8 +181,8 @@ test("migrate_claude_md converts (create + merge) after the user's grouped answe
 
 test("a second migrate_claude_md run finds only pointers and never raises a proposal (idempotent)", async () => {
   const root = mkdtempSync(join(tmpdir(), "trevor-migrate-done-"));
-  // Both CLAUDE.md files are already converted pointers.
-  write(join(root, "CLAUDE.md"), "This file has moved; see AGENTS.md as the source of truth.");
+  // The CLAUDE.md is an already-converted pointer (the sentinel is what detection matches).
+  write(join(root, "CLAUDE.md"), `# CLAUDE.md\n\n${CLAUDE_POINTER_SENTINEL}\n\nSee AGENTS.md.`);
   write(join(root, "AGENTS.md"), "# Root guide");
   process.chdir(root);
 

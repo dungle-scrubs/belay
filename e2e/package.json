@@ -12,6 +12,7 @@
     "@trevor/session": "workspace:*",
     "@trevor/session-store": "workspace:*",
     "@trevor/test-kit": "workspace:*",
+    "@trevor/web": "workspace:*",
     "effect": "^3.21.4"
   },
   "devDependencies": {

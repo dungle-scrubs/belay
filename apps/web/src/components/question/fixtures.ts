@@ -202,8 +202,9 @@ export const grouped = contract([
 /**
  * A CLAUDE.md migration proposal (plan 26): the host raises this as a provider-question so it renders
  * through the same surface. One question per detected file, the paths + sibling state + a bounded
- * preview in the question text, and the explicit per-file actions as choices (choice id == action). This
- * mirrors `buildMigrationProposalContract`'s output shape; the host owns the authoritative builder.
+ * preview in the question text, and the explicit per-file actions as choices - the choice `id` IS the
+ * action (no content payload; the host resolves from `selected[0].id`). This mirrors
+ * `buildMigrationProposalContract`'s output shape; the host owns the authoritative builder.
  */
 export const claudeMigration = contract([
   question({
@@ -218,15 +219,10 @@ export const claudeMigration = contract([
         label: "Create AGENTS.md",
         description: "Convert this CLAUDE.md into a sibling AGENTS.md and leave a pointer behind.",
         recommended: true,
-        content: { action: "create", claudePath: "CLAUDE.md" },
       }),
-      choice({ id: "leave", label: "Leave unchanged", content: { action: "leave" } }),
-      choice({ id: "ignore-once", label: "Ignore once", content: { action: "ignore-once" } }),
-      choice({
-        id: "ignore-permanent",
-        label: "Ignore permanently",
-        content: { action: "ignore-permanent" },
-      }),
+      choice({ id: "leave", label: "Leave unchanged" }),
+      choice({ id: "ignore-once", label: "Ignore once" }),
+      choice({ id: "ignore-permanent", label: "Ignore permanently" }),
     ],
   }),
 ]);
@@ -240,19 +236,10 @@ export const claudeMigrationWithSibling = contract([
     header: "CLAUDE.md migration",
     answerShape: "single_choice",
     choices: [
-      choice({
-        id: "merge",
-        label: "Merge into existing AGENTS.md",
-        recommended: true,
-        content: { action: "merge", claudePath: "apps/web/CLAUDE.md" },
-      }),
-      choice({ id: "leave", label: "Leave unchanged", content: { action: "leave" } }),
-      choice({ id: "ignore-once", label: "Ignore once", content: { action: "ignore-once" } }),
-      choice({
-        id: "ignore-permanent",
-        label: "Ignore permanently",
-        content: { action: "ignore-permanent" },
-      }),
+      choice({ id: "merge", label: "Merge into existing AGENTS.md", recommended: true }),
+      choice({ id: "leave", label: "Leave unchanged" }),
+      choice({ id: "ignore-once", label: "Ignore once" }),
+      choice({ id: "ignore-permanent", label: "Ignore permanently" }),
     ],
   }),
 ]);

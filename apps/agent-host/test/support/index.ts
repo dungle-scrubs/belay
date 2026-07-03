@@ -38,9 +38,11 @@ export { createMcpRuntime, type McpRuntime } from "@host/mcp/runtime";
 // command through the supervisor (promote -> tracked pN -> kill) the way the bash tool / shell lane do.
 export { ProcessRegistry } from "@host/processes/process-registry";
 // The project-context system (plan 26 M8): the pure eager render + the session ContextRegistry (eager +
-// lazy AGENTS.md and .trevor/rules) + the /init proposal builder, so cross-service e2e can exercise real
-// context ordering, lazy loading, and /init drafting over a hermetic temp workspace.
+// lazy AGENTS.md and .trevor/rules) + the /init proposal builder + the pointer sentinel, so
+// cross-service e2e can exercise real context ordering, lazy loading, /init drafting, and
+// already-converted-pointer fixtures over a hermetic temp workspace.
 export { collectEagerSources, renderContext } from "@host/project-context/agents-md";
+export { CLAUDE_POINTER_SENTINEL } from "@host/project-context/claude-migration";
 export { buildInitProposal } from "@host/project-context/init-agents";
 export { ContextRegistry } from "@host/project-context/registry";
 export type { ChatMessage, Provider, ProviderEvent } from "@host/providers";
