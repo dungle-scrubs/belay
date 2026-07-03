@@ -1,12 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   activeTurnRunId,
-  catalogEntryFor,
-  constrainReasoning,
   DEFAULT_SESSION_ID,
   type LoopControl,
   type ModelRef,
-  modelRefFromProvider,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { Archive, GitBranch, RotateCcw } from "lucide-react";
@@ -40,8 +37,7 @@ import { ControlsPanel } from "@/components/panel/panel-controls";
 import { PanelHost } from "@/components/panel/panel-host";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
-import { useModelSelection } from "@/hooks/use-model-selection";
-import { activeModelLabel, resolveReasoning, sessionScopedKey } from "@/model-selection";
+import { sessionScopedKey } from "@/model-selection";
 import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
@@ -57,6 +53,7 @@ import {
   commandsFrom,
   defaultProviderFrom,
   detectOrphanedTurn,
+  hostAnnouncement,
   hostStatus,
   isHostlessPendingPrompt,
   isSessionArchived,
@@ -75,8 +72,10 @@ import {
   truncate,
   vimEnabledFrom,
   workspaceBasename,
+  worktreesFrom,
 } from "./derive";
 import { type EscState, escapeAction } from "./esc-action";
+import { useActiveModel } from "./hooks/use-active-model";
 import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
 import { useModalState } from "./hooks/use-modal-state";
@@ -300,7 +299,11 @@ export function App() {
   const awaitingResponse = transcript.at(-1)?.kind === "user";
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
-  const host = useMemo(() => hostStatus(events, presence, now), [events, presence, now]);
+  const announcement = useMemo(() => hostAnnouncement(events), [events]);
+  const host = useMemo(
+    () => hostStatus(events, presence, now, announcement),
+    [events, presence, now, announcement],
+  );
   // Reflect WHERE we are in the tab/window title (not a bare "Trevor"): the project name - the
   // host-announced workspace basename when known, else the session-id slug (the `<name>-<hash>` the
   // launcher mints, hash stripped). The default shared session stays plain "Trevor".
@@ -310,12 +313,12 @@ export function App() {
     const label = workspaceBasename(host.workspace) ?? fromSession;
     document.title = label ? `${label} · Trevor` : "Trevor";
   }, [host.workspace, target]);
-  const hostModels = useMemo(() => providerModelsFrom(events), [events]);
+  const hostModels = useMemo(() => providerModelsFrom(announcement), [announcement]);
   // The host-owned model sources + catalog (D-065): the real provider/runtime/subscription list with
   // auth state and each configured source's live model catalog. Empty until the host's first catalog
   // load re-announces, so the chooser falls back to the roster projection until then.
-  const hostSources = useMemo(() => sourcesFrom(events), [events]);
-  const hostCatalog = useMemo(() => catalogFrom(events), [events]);
+  const hostSources = useMemo(() => sourcesFrom(announcement), [announcement]);
+  const hostCatalog = useMemo(() => catalogFrom(announcement), [announcement]);
   // The in-flight source sign-in (D-065 M5): show the verification URL while the flow is active. A
   // device-code flow (Codex) carries a userCode; a browser+paste flow (Anthropic) carries acceptsCode
   // and the user pastes the returned code back.
@@ -330,7 +333,7 @@ export function App() {
       : null;
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
-  const hostDefault = useMemo(() => defaultProviderFrom(events), [events]);
+  const hostDefault = useMemo(() => defaultProviderFrom(announcement), [announcement]);
   // The model/effort this session last ran a turn on (a handoff stamps it onto the first prompt); a
   // fresh session inherits it instead of falling to the host default - the qwen-on-handoff fix (09.1).
   const lastUserModel = useMemo(() => lastUserModelFrom(events), [events]);
@@ -338,7 +341,8 @@ export function App() {
   const busy = active !== null || awaitingResponse;
   // Modal, drawer, inventory, and project scoping state are one App-owned view boundary shared by
   // /resume, /worktree, the left session sidebar, and the right details panel.
-  const modal = useModalState({ events, host, target, sessionId, busy });
+  const worktrees = useMemo(() => worktreesFrom(announcement), [announcement]);
+  const modal = useModalState({ worktrees, host, target, sessionId, busy });
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
   const archived = useMemo(() => isSessionArchived(events), [events]);
@@ -410,7 +414,7 @@ export function App() {
   // The support panel's background work (plan 09): promoted jobs the host announces live, and the
   // running subagent delegations from the transcript. Both derived from the live session, never cached.
   // One scan over the events feeds both the panel rows and the job-detail lookup below.
-  const jobs = useMemo(() => jobsFrom(events), [events]);
+  const jobs = useMemo(() => jobsFrom(announcement), [announcement]);
   const subagents = useMemo(() => runningSubagents(transcript), [transcript]);
   // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
   const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);
@@ -429,9 +433,9 @@ export function App() {
   );
   // Immediate host commands the host announced, plus the set of names used to tell a
   // command from an ordinary prompt at submit time.
-  const commands = useMemo(() => commandsFrom(events), [events]);
+  const commands = useMemo(() => commandsFrom(announcement), [announcement]);
   // The host-owned Vim prompt preference (plan 06): gates the composer + full-surface editor Vim layer.
-  const vimEnabled = useMemo(() => vimEnabledFrom(events), [events]);
+  const vimEnabled = useMemo(() => vimEnabledFrom(announcement), [announcement]);
   const commandSpecs = useMemo(() => {
     const announced = new Set(commands.map((c) => c.name));
     return [...BUILT_IN_COMMANDS.filter((c) => !announced.has(c.name)), ...commands];
@@ -501,53 +505,31 @@ export function App() {
   });
   const visibleQueue = pending ? [pending, ...queue] : queue;
 
-  const firstAnnouncedProvider = Object.keys(hostModels)[0];
-  // Stored per-session pick wins; else inherit this session's last-used model (handoff carry-over);
-  // else the host default. This is what keeps a handoff target on the source's model, not the default.
-  const activeProvider =
-    provider ?? lastUserModel?.provider ?? hostDefault ?? firstAnnouncedProvider ?? "default";
-  // Inherit the effort from that last turn too, but only when it belongs to the provider we resolved to.
-  const seededReasoning =
-    lastUserModel?.provider === activeProvider ? lastUserModel.reasoning : undefined;
-  // Before any host has announced (empty hostModels), there's no roster to show: fall back
-  // to a neutral descriptor keyed by the active provider, so the picker renders one inert
-  // entry and no reasoning control until host.online arrives and supplies the real roster.
-  const modelMeta = hostModels[activeProvider] ?? {
-    label: activeProvider,
-    model: activeProvider,
-    reasoningLevels: [],
-    defaultReasoning: "off",
-    kind: "local" as const,
-  };
-  // Model options for the picker, grouped local-first then cloud (the picker renders a
-  // labeled section per group). Falls back to the active model before the host announces.
-  // Keep a stale stored level from showing as selected if the model's options changed.
-  const reasoning = resolveReasoning(
-    modelMeta.reasoningLevels,
-    reasoningMap?.[activeProvider] ?? seededReasoning,
-    modelMeta.defaultReasoning,
-  );
   const showThinkingOn = showThinking ?? true;
-  const setReasoning = (level: string) =>
-    setReasoningMap({ ...(reasoningMap ?? {}), [activeProvider]: level });
-  // The active selection as a stable ModelRef (D-065 migration): the source IS the provider key, the
-  // model id comes from the host roster, and reasoning is the chosen level (null = provider default).
-  // Sent ALONGSIDE the legacy provider/reasoning so the host resolves through resolveUserTurnModel
-  // while old clients keep working. Today each source carries one model, so this tracks the provider
-  // selection and the reasoning toggle; the chooser/quick-picker just sync the provider + record recents.
-  const activeModelRef = modelRefFromProvider(activeProvider, modelMeta.model, reasoning || null);
-
-  // The model chooser (D-065 M3/M6): the persisted ModelPreferences + the source/catalog read models
-  // (projected from the announced roster), the quick-picker recents, and the select transition. The
-  // legacy provider/reasoning are the seed + stay in sync on a pick, so the existing sidebar behavior
-  // and the send path keep working unchanged.
-  const selection = useModelSelection({
-    roster: hostModels,
+  const {
+    activeProvider,
+    reasoning,
+    setReasoning,
+    selection,
+    sendModel,
+    activeLabel,
+    activeReasoningLevels,
+    activeReasoning,
+    sendModelRef,
+    onSelectModel: selectActiveModel,
+  } = useActiveModel({
+    hostModels,
     hostSources,
     hostCatalog,
-    legacyProvider: activeProvider,
-    legacyReasoning: reasoning || null,
+    provider,
+    setProvider,
+    reasoningMap,
+    setReasoningMap,
+    hostDefault,
+    lastUserModel,
     sessionId,
+    activeRunId: active,
+    switchModel,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
   // The tool detail takeover (plan 08): the id of the transcript row being inspected, or null when
@@ -577,62 +559,8 @@ export function App() {
     remove: permanentlyDeleteSession,
     refresh: () => modal.inventory.refetch(),
   });
-  // The active model for DISPLAY + SEND: the explicit/persisted selection (a catalog ModelRef, e.g.
-  // {zai, glm-5.2}) wins; before any pick it's the legacy provider-derived ref. Routing the send
-  // through this is what carries the real modelId to the host (not the legacy provider key). The label
-  // keeps the legacy roster's curated name for a registered provider, else the catalog display name.
-  const sendModel = selection.active ?? activeModelRef;
-  // The active model's reasoning surface (D-065): its catalog entry's levels for a catalog pick, else
-  // the legacy roster - so the reasoning control matches the chosen model instead of vanishing, and the
-  // turn carries the reasoning the model actually supports. The toggle is keyed by the active source.
-  const activeEntry = catalogEntryFor(selection.catalogBySource, sendModel);
-  // The button label is the SELECTED model's name (the catalog entry's displayName), not the static
-  // per-provider roster label - so picking a non-default model updates the button (02.16 D-001).
-  const activeLabel = activeModelLabel({
-    entry: activeEntry,
-    registeredProvider: Boolean(hostModels[activeProvider]),
-    rosterLabel: modelMeta.label,
-    selectionLabel: selection.activeLabel,
-  });
-  const activeReasoningLevels =
-    activeEntry && activeEntry.reasoningLevels.length > 0
-      ? activeEntry.reasoningLevels
-      : modelMeta.reasoningLevels;
-  const activeReasoning = resolveReasoning(
-    activeReasoningLevels,
-    reasoningMap?.[activeProvider] ?? seededReasoning,
-    activeEntry?.defaultReasoning ?? modelMeta.defaultReasoning,
-  );
-  // The ModelRef sent with the turn: the active model + the live reasoning (so changing the toggle
-  // takes effect on the next turn even after an explicit chooser pick).
-  const sendModelRef: ModelRef = {
-    sourceId: sendModel.sourceId,
-    modelId: sendModel.modelId,
-    reasoning: activeReasoning || null,
-  };
-
-  // A pick from the quick picker OR the full chooser: record it (recents + persisted active), then
-  // MAINTAIN the chosen reasoning effort across the switch - carry the level we're on now into the new
-  // model, clamped to what it supports (xhigh -> a model that caps at high becomes high, not the model
-  // default). The chooser emits reasoning=null, so without this the effort would reset on every switch.
-  // Sync the legacy provider + reasoning so the rest of the UI and the send path follow, and close.
   const onSelectModel = (ref: ModelRef) => {
-    const carried = constrainReasoning(
-      selection.reasoningSurface(ref),
-      activeReasoning || ref.reasoning,
-    );
-    const target: ModelRef = { ...ref, reasoning: carried };
-    // Sticky always (09.1 D-005): the persisted selection updates so the model does not snap back when
-    // the turn ends. When a turn is in flight, ALSO send a mid-turn switch keyed to it, so the active
-    // turn re-resolves model+reasoning at its next step boundary instead of only the next turn.
-    selection.select(target);
-    setProvider(ref.sourceId);
-    if (carried != null) {
-      setReasoningMap({ ...(reasoningMap ?? {}), [ref.sourceId]: carried });
-    }
-    if (active) {
-      void switchModel(active, target);
-    }
+    selectActiveModel(ref);
     setChooserOpen(false);
   };
 

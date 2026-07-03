@@ -1,6 +1,6 @@
 import { decodeRecallResult, type ToolName } from "@trevor/session";
 import type { ReactElement } from "react";
-import { parseToolArgs, toolSummary } from "@/derive";
+import { parseToolArgs, toolSummary } from "@/tool-args";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { ArchiveResult, parseArchiveResult } from "./archive";
 import { DocsResult, parseDocsResult } from "./docs";
@@ -13,9 +13,9 @@ import { type ToolStatus, toolMessageStatus } from "./tool-status";
 import { parseWebFetchResult, WebFetchResult } from "./web-fetch";
 import { type WebSearchResultItem, WebSearchResults } from "./web-search";
 
-// `parseToolArgs` now lives in `@/derive` (its single owner, beside `toolSummary`); re-exported here so
+// `parseToolArgs` now lives in `@/tool-args` (its single owner, beside `toolSummary`); re-exported here so
 // the existing tool-renderer importers keep their import path.
-export { parseToolArgs } from "@/derive";
+export { parseToolArgs } from "@/tool-args";
 
 const FRESHNESS_WINDOWS = ["day", "week", "month", "year"] as const;
 type FreshnessWindow = (typeof FRESHNESS_WINDOWS)[number];

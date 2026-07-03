@@ -1,5 +1,10 @@
 import type { ArtifactRef } from "@trevor/session";
-import { isErrorResult, type ToolStatus, toolMessageStatus } from "@/components/chat/tool-status";
+import {
+  isErrorResult,
+  shellMessageStatus,
+  type ToolStatus,
+  toolMessageStatus,
+} from "@/components/chat/tool-status";
 import type { Message, ShellMessage, ToolMessage } from "@/transcript";
 
 /**
@@ -93,7 +98,7 @@ function fromTool(t: ToolMessage): ToolDetailModel {
 }
 
 function fromShell(s: ShellMessage): ToolDetailModel {
-  const status: ToolStatus = !s.done ? "running" : s.ok === false ? "error" : "done";
+  const status: ToolStatus = shellMessageStatus(s);
   return {
     id: s.id,
     source: "shell",

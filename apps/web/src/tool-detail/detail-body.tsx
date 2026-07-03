@@ -17,7 +17,7 @@ import {
   toolScriptDetailArgs,
   truncationLabel,
   writeDetailArgs,
-} from "./detail-args";
+} from "../tool-args";
 import type { ToolDetailModel } from "./detail-model";
 
 /** How many output lines render before the "N more lines below the fold" advisory (the detail shows

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { AlertCircleIcon, CheckIcon, LoaderIcon, XCircleIcon } from "lucide-react";
 import { test } from "vitest";
-import { statusIcon, toolStatusColor } from "./tool-status";
+import { shellMessageStatus, statusIcon, toolMessageStatus, toolStatusColor } from "./tool-status";
 
 /**
  * One status→color config (D-014) shared by the transcript tool row and the concurrent-batch rows, so
@@ -24,6 +24,20 @@ test("pulse adds the running animation only for the running state", () => {
 test("without pulse the running color carries no animation (the concurrent-batch row)", () => {
   assert.ok(!toolStatusColor("running").includes("animate-pulse"));
   assert.match(toolStatusColor("running"), /text-smui-yellow/);
+});
+
+test("tool message status derives aborted, running, done, and error results", () => {
+  assert.equal(toolMessageStatus({ aborted: true, done: false }), "error");
+  assert.equal(toolMessageStatus({ done: false }), "running");
+  assert.equal(toolMessageStatus({ done: true, result: "ok" }), "done");
+  assert.equal(toolMessageStatus({ done: true, result: "error: nope" }), "error");
+});
+
+test("shell message status derives running, done, and failed commands", () => {
+  assert.equal(shellMessageStatus({ done: false }), "running");
+  assert.equal(shellMessageStatus({ done: true }), "done");
+  assert.equal(shellMessageStatus({ done: true, ok: true }), "done");
+  assert.equal(shellMessageStatus({ done: true, ok: false }), "error");
 });
 
 /**

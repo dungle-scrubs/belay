@@ -10,6 +10,7 @@ import {
 import { storedEvent } from "@trevor/test-kit";
 import { beforeEach, test, vi } from "vitest";
 import type { HostStatus } from "../derive";
+import { hostAnnouncement, worktreesFrom } from "../derive";
 import { useModalState } from "./use-modal-state";
 
 const mockInventory = vi.hoisted(() => ({
@@ -111,12 +112,13 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
       }),
     ),
   ];
+  const worktrees = worktreesFrom(hostAnnouncement(eventsLog));
 
   const { result, rerender } = renderHook(
     ({ sessions }) => {
       mockInventory.state.sessions = sessions;
       return useModalState({
-        events: eventsLog,
+        worktrees,
         host,
         target: "s-current",
         sessionId: "s-current",
@@ -144,7 +146,7 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
 
 test("opening the archive browser enables the inventory fetch", () => {
   const { result } = renderHook(() =>
-    useModalState({ events: [], host, target: "s", sessionId: "s", busy: false }),
+    useModalState({ worktrees: [], host, target: "s", sessionId: "s", busy: false }),
   );
   assert.equal(result.current.archiveOpen, false);
   assert.equal(mockInventory.enabledCalls.at(-1), false);

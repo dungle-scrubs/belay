@@ -21,6 +21,8 @@ import {
   type WorktreeSummary,
 } from "@trevor/session";
 
+export { parseToolArgs, toolSummary } from "./tool-args";
+
 /** The last value `pick` yields over the decoded log (the newest snapshot), else undefined. */
 function latest<T>(
   events: readonly SessionEvent[],
@@ -142,37 +144,6 @@ export function workspaceBasename(path: string | null | undefined): string | nul
   return base && base !== "~" ? base : null;
 }
 
-/** A concise, tool-aware label for a tool call (path/command/pattern, not the blob). */
-/** Tool-call arguments arrive as a JSON string; parse defensively (a streaming or malformed call yields
- *  `{}`). The single owner of this parse, shared by the tool renderers and the compact display. */
-export function parseToolArgs(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-export function toolSummary(name: string, argsJson: string): string {
-  let args: Record<string, unknown> = {};
-
-  try {
-    args = JSON.parse(argsJson || "{}") as Record<string, unknown>;
-  } catch {
-    return "";
-  }
-
-  const primary =
-    name === "bash" ? args.command : name === "grep" || name === "glob" ? args.pattern : args.path;
-
-  // With no recognized primary arg, fall back to the raw args JSON - but a no-arg tool (e.g. doctor)
-  // has an empty object, and rendering "{}" as the summary is noise, so collapse it to nothing.
-  const text =
-    typeof primary === "string" ? primary : Object.keys(args).length === 0 ? "" : argsJson;
-
-  return truncate(text, 60);
-}
-
 export type HostStatus = {
   branch: string | null;
   /** Structured git status from the latest host.online, or null on a non-git cwd. */
@@ -183,6 +154,13 @@ export type HostStatus = {
   standbyCount: number;
   workspace: string | null;
 };
+
+export type HostAnnouncement = Extract<DecodedEvent, { readonly type: "host.online" }>;
+
+/** The latest host.online announcement. Owns the host-owned roster/config/worktree snapshot fold. */
+export function hostAnnouncement(events: readonly SessionEvent[]): HostAnnouncement | null {
+  return latest(events, (d) => (d.type === "host.online" ? d : undefined)) ?? null;
+}
 
 /** A standby pings continuously, so it counts as present only if seen this recently. */
 const HOST_RECENT_MS = 15000;
@@ -204,12 +182,13 @@ export function hostStatus(
   events: readonly SessionEvent[],
   presence: readonly HostPresence[] | null,
   nowMs: number,
+  announcement: HostAnnouncement | null = hostAnnouncement(events),
 ): HostStatus {
   let everOnline = false;
-  let branch: string | null = null;
-  let git: GitStatus | null = null;
-  let workspace: string | null = null;
-  let cwd: string | null = null;
+  let branch: string | null = announcement?.branch ?? null;
+  let git: GitStatus | null = announcement?.git ?? null;
+  let workspace: string | null = announcement?.workspace ?? null;
+  let cwd: string | null = announcement?.cwd ?? null;
 
   const role = new Map<string, string>();
   const lastSeen = new Map<string, number>();
@@ -319,20 +298,22 @@ export function hostStatus(
  * so a previously-seen host's roster survives a restart, and a never-seen one yields an
  * empty picker rather than a hand-authored guess that could drift from what the host runs.
  */
-export function providerModelsFrom(events: readonly SessionEvent[]): Record<string, ProviderModel> {
-  return latest(events, (d) => (d.type === "host.online" ? d.models : undefined)) ?? {};
+export function providerModelsFrom(
+  announcement: HostAnnouncement | null,
+): Record<string, ProviderModel> {
+  return announcement?.models ?? {};
 }
 
 /** The host-announced model SOURCES (D-065), or [] before the host's catalog load completes. */
-export function sourcesFrom(events: readonly SessionEvent[]): readonly SourceSummary[] {
-  return latest(events, (d) => (d.type === "host.online" ? d.sources : undefined)) ?? [];
+export function sourcesFrom(announcement: HostAnnouncement | null): readonly SourceSummary[] {
+  return announcement?.sources ?? [];
 }
 
 /** The host-announced per-source model catalog (D-065), keyed by sourceId, or {} before load. */
 export function catalogFrom(
-  events: readonly SessionEvent[],
+  announcement: HostAnnouncement | null,
 ): Readonly<Record<string, readonly CatalogEntry[]>> {
-  return latest(events, (d) => (d.type === "host.online" ? d.catalog : undefined)) ?? {};
+  return announcement?.catalog ?? {};
 }
 
 /**
@@ -349,8 +330,8 @@ export function sourceSignInFrom(events: readonly SessionEvent[]): SourceSignInS
  * announced. The host owns the default (DEFAULT_PROVIDER) and ships it on host.online;
  * the UI's initial selection derives from this instead of hardcoding a provider key.
  */
-export function defaultProviderFrom(events: readonly SessionEvent[]): string | undefined {
-  return latest(events, (d) => (d.type === "host.online" && d.default ? d.default : undefined));
+export function defaultProviderFrom(announcement: HostAnnouncement | null): string | undefined {
+  return announcement?.default;
 }
 
 /**
@@ -358,14 +339,14 @@ export function defaultProviderFrom(events: readonly SessionEvent[]): string | u
  * (its vim.json config) and ships it on host.online; the composer gates its opt-in Vim layer on this
  * instead of browser state. Defaults to false until a host announces (no host -> no Vim mode).
  */
-export function vimEnabledFrom(events: readonly SessionEvent[]): boolean {
-  return latest(events, (d) => (d.type === "host.online" ? d.vimEnabled : undefined)) ?? false;
+export function vimEnabledFrom(announcement: HostAnnouncement | null): boolean {
+  return announcement?.vimEnabled ?? false;
 }
 
 /** The host's latest tracked background jobs (plan 09): the freshest `host.online` job snapshots (the
  *  host re-announces on every job change), empty when none / no host. */
-export function jobsFrom(events: readonly SessionEvent[]): readonly JobSnapshot[] {
-  return latest(events, (d) => (d.type === "host.online" ? d.jobs : undefined)) ?? [];
+export function jobsFrom(announcement: HostAnnouncement | null): readonly JobSnapshot[] {
+  return announcement?.jobs ?? [];
 }
 
 /**
@@ -590,13 +571,13 @@ export function summarizeProviderQuestion(input: {
 }
 
 /** The immediate-command inventory the host last announced (empty until one is online). */
-export function commandsFrom(events: readonly SessionEvent[]): CommandSpec[] {
-  return [...(latest(events, (d) => (d.type === "host.online" ? d.commands : undefined)) ?? [])];
+export function commandsFrom(announcement: HostAnnouncement | null): CommandSpec[] {
+  return [...(announcement?.commands ?? [])];
 }
 
 /** The managed worktrees the host last announced (empty until one is online), D-091. */
-export function worktreesFrom(events: readonly SessionEvent[]): WorktreeSummary[] {
-  return [...(latest(events, (d) => (d.type === "host.online" ? d.worktrees : undefined)) ?? [])];
+export function worktreesFrom(announcement: HostAnnouncement | null): WorktreeSummary[] {
+  return [...(announcement?.worktrees ?? [])];
 }
 
 interface LatestSessionSwitchOptions {

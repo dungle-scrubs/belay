@@ -13,6 +13,7 @@ import {
   detectOrphanedTurn,
   fmtCtx,
   fmtTokens,
+  hostAnnouncement,
   hostStatus,
   isHostlessPendingPrompt,
   isSessionArchived,
@@ -124,28 +125,35 @@ test("the shell and command lanes never overlap: a ! draft is shell, a / draft i
 });
 
 test("providerModelsFrom / defaultProviderFrom / commandsFrom take the latest host.online", () => {
-  assert.deepEqual(providerModelsFrom([]), {});
+  assert.deepEqual(providerModelsFrom(null), {});
   const events = [online("h1"), online("h1", { default: "gpt", models: {} })];
-  assert.deepEqual(providerModelsFrom(events), {}); // latest wins (second announced empty)
-  assert.equal(defaultProviderFrom(events), "gpt");
-  const commands = commandsFrom([online("h1")]);
+  const announcement = hostAnnouncement(events);
+  assert.deepEqual(providerModelsFrom(announcement), {}); // latest wins (second announced empty)
+  assert.equal(defaultProviderFrom(announcement), "gpt");
+  const commands = commandsFrom(hostAnnouncement([online("h1")]));
   assert.equal(commands.length, 1);
   assert.equal(commands[0]?.name, "/clear");
 });
 
 test("vimEnabledFrom reflects the latest host.online preference (plan 06), false with no host", () => {
-  assert.equal(vimEnabledFrom([]), false, "no host announced -> Vim mode off");
-  assert.equal(vimEnabledFrom([online("h1")]), false, "host announced no preference -> off");
-  assert.equal(vimEnabledFrom([online("h1", { vimEnabled: true })]), true);
+  assert.equal(vimEnabledFrom(null), false, "no host announced -> Vim mode off");
+  assert.equal(
+    vimEnabledFrom(hostAnnouncement([online("h1")])),
+    false,
+    "host announced no preference -> off",
+  );
+  assert.equal(vimEnabledFrom(hostAnnouncement([online("h1", { vimEnabled: true })])), true);
   // Latest host.online wins (the host re-announces when the preference changes).
   assert.equal(
-    vimEnabledFrom([online("h1", { vimEnabled: true }), online("h1", { vimEnabled: false })]),
+    vimEnabledFrom(
+      hostAnnouncement([online("h1", { vimEnabled: true }), online("h1", { vimEnabled: false })]),
+    ),
     false,
   );
 });
 
 test("jobsFrom returns the latest host.online job snapshots, empty with no host (plan 09)", () => {
-  assert.deepEqual(jobsFrom([]), [], "no host -> no jobs");
+  assert.deepEqual(jobsFrom(null), [], "no host -> no jobs");
   const running = {
     id: "p1",
     command: "sleep 9",
@@ -157,12 +165,14 @@ test("jobsFrom returns the latest host.online job snapshots, empty with no host 
     stdoutTotal: 0,
     stderrTotal: 0,
   };
-  assert.equal(jobsFrom([online("h1", { jobs: [running] })])[0]?.id, "p1");
+  assert.equal(jobsFrom(hostAnnouncement([online("h1", { jobs: [running] })]))[0]?.id, "p1");
   // A newer host.online with the job exited supersedes the older running snapshot - no stale row.
-  const live = jobsFrom([
-    online("h1", { jobs: [running] }),
-    online("h1", { jobs: [{ ...running, status: "exited", exitCode: 0 }] }),
-  ]);
+  const live = jobsFrom(
+    hostAnnouncement([
+      online("h1", { jobs: [running] }),
+      online("h1", { jobs: [{ ...running, status: "exited", exitCode: 0 }] }),
+    ]),
+  );
   assert.equal(live[0]?.status, "exited");
 });
 

@@ -1,4 +1,4 @@
-import type { ArtifactRef, ModelRef, PastePayload } from "@trevor/session";
+import type { ArtifactRef, PastePayload } from "@trevor/session";
 import { usePrevious } from "ahooks";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
@@ -7,6 +7,7 @@ import {
   type QueuedPrompt,
   type SteerMeta,
   sendQueueReducer,
+  type UserTurnInput,
 } from "@/send-queue";
 
 /**
@@ -55,14 +56,7 @@ export function useSendQueue({
 }: {
   /** True while a turn is in flight (active run, or awaiting the echo). */
   readonly busy: boolean;
-  readonly publish: (
-    text: string,
-    provider: string,
-    reasoning?: string,
-    artifacts?: readonly ArtifactRef[],
-    model?: ModelRef,
-    pastes?: readonly PastePayload[],
-  ) => Promise<void>;
+  readonly publish: (prompt: UserTurnInput) => Promise<void>;
   /** Changes when the browser switches durable sessions; queued prompts must not cross sessions. */
   readonly resetKey?: string | null;
 }): UseSendQueue {
@@ -114,14 +108,7 @@ export function useSendQueue({
     inFlightRef.current = true;
     setPending(next);
     dispatchQueue({ type: "drainHead" });
-    void publish(
-      next.text,
-      next.provider,
-      next.reasoning,
-      next.artifacts,
-      next.model,
-      next.pastes,
-    ).catch(() => {
+    void publish(next).catch(() => {
       inFlightRef.current = false;
       setPending((current) => (current?.id === next.id ? null : current));
     });
@@ -158,14 +145,7 @@ export function useSendQueue({
         return;
       }
       dispatchQueue({ type: "clear" });
-      void publish(
-        folded.text,
-        folded.provider,
-        folded.reasoning,
-        folded.artifacts,
-        folded.model,
-        folded.pastes,
-      ).catch(() => {
+      void publish(folded).catch(() => {
         // The publish failed (transient transport error): put the folded prompt back so it is not
         // lost - it drains when the turn ends, and the queue is non-empty again for a retry.
         dispatchQueue({ type: "enqueue", prompt: folded });

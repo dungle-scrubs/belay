@@ -60,17 +60,17 @@ test("createSessionActions maps user intents to Trevor events", async () => {
     built.push({ producerId: "web", ...event });
   });
 
-  await actions.publish(
-    "hello",
-    "qwen",
-    "high",
-    [{ kind: "image", hash: "h", mimeType: "image/png", size: 1 }],
-    {
+  await actions.publish({
+    text: "hello",
+    provider: "qwen",
+    reasoning: "high",
+    artifacts: [{ kind: "image", hash: "h", mimeType: "image/png", size: 1 }],
+    model: {
       sourceId: "qwen",
       modelId: "coder",
       reasoning: "high",
     },
-  );
+  });
   await actions.cancel("r1");
   await actions.switchModel("r1", {
     sourceId: "deepseek",

@@ -1,26 +1,25 @@
 import {
-  ArrowLeftRight,
   ChevronRight,
   CircleX,
   CornerDownRight,
   LoaderIcon,
   MessageCircleQuestion,
-  ShieldAlert,
   Sparkles,
   Terminal,
   TriangleAlert,
-  Webhook,
   Wrench,
 } from "lucide-react";
 import type { ElementType } from "react";
-import { parseToolArgs, toolSummary, truncate } from "../../derive";
+import { truncate } from "../../derive";
+import { parseToolArgs, toolSummary } from "../../tool-args";
+import type { AssistantMessage, Message } from "../../transcript";
+import { messageKindDescriptor } from "./message-kind-descriptor";
 import {
-  type AssistantMessage,
-  formatSwitchEndpoint,
-  hookDecisionActionLabel,
-  type Message,
-} from "../../transcript";
-import { type ToolStatus, toolMessageStatus, toolStatusColor } from "./tool-status";
+  shellMessageStatus,
+  type ToolStatus,
+  toolMessageStatus,
+  toolStatusColor,
+} from "./tool-status";
 
 /**
  * The compact transcript display contract (plan 05): a pure, presentation-only projection that maps a
@@ -108,7 +107,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         hasDetail: message.text.trim().length > 0,
       };
     case "shell": {
-      const status = !message.done ? "running" : message.ok === false ? "error" : "done";
+      const status = shellMessageStatus(message);
       return {
         kind: "shell",
         status,
@@ -121,7 +120,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
     case "recovered":
       return marker("recovered", CornerDownRight, message.action, message.detail);
     case "continued":
-      return marker("continued", CornerDownRight, "Continued", message.detail);
+      return compactFromDescriptor(messageKindDescriptor(message));
     case "reconnecting":
       return {
         kind: "reconnecting",
@@ -132,18 +131,9 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         hasDetail: false,
       };
     case "guardrail":
-      return marker("guardrail", ShieldAlert, `Guardrail: ${message.tool}`, message.reason);
-    case "hookDecision": {
-      // A hook decision (plan 25 M9) compacts to the same quiet marker shape as a guardrail:
-      // the hook's key as the label, its action + reason as the summary.
-      const action = hookDecisionActionLabel(message.decision, message.toolName);
-      return marker(
-        "hookDecision",
-        Webhook,
-        `Hook: ${message.hookId}`,
-        `${action}${message.reason ? ` - ${message.reason}` : ""}`,
-      );
-    }
+      return compactFromDescriptor(messageKindDescriptor(message));
+    case "hookDecision":
+      return compactFromDescriptor(messageKindDescriptor(message));
     case "compacting":
       return {
         kind: "compacting",
@@ -174,13 +164,8 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         secondary: firstLine(message.summary),
         hasDetail: message.items.length > 0,
       };
-    case "modelSwitch": {
-      const secondary =
-        message.outcome === "blocked"
-          ? `blocked${message.reason ? `: ${message.reason}` : ""}`
-          : `${formatSwitchEndpoint(message.from)} -> ${formatSwitchEndpoint(message.to)}`;
-      return marker("modelSwitch", ArrowLeftRight, "Model", secondary);
-    }
+    case "modelSwitch":
+      return compactFromDescriptor(messageKindDescriptor(message));
   }
 }
 
@@ -234,6 +219,19 @@ function marker(
   detail: string,
 ): CompactDisplay {
   return { kind, status: "info", icon, primary, secondary: firstLine(detail), hasDetail: false };
+}
+
+function compactFromDescriptor(
+  descriptor: ReturnType<typeof messageKindDescriptor>,
+): CompactDisplay {
+  return {
+    kind: descriptor.kind,
+    status: descriptor.status,
+    icon: descriptor.icon,
+    primary: descriptor.primary,
+    secondary: descriptor.secondary ? firstLine(descriptor.secondary) : null,
+    hasDetail: false,
+  };
 }
 
 /**

@@ -1,13 +1,13 @@
-import type { SessionActivity, SessionEvent } from "@trevor/session";
+import type { SessionActivity, WorktreeSummary } from "@trevor/session";
 import { useLocalStorageState } from "ahooks";
 import { useMemo, useRef, useState } from "react";
 import type { HostStatus } from "../derive";
-import { workspaceBasename, worktreesFrom } from "../derive";
+import { workspaceBasename } from "../derive";
 import { useInventory } from "../resume";
 import type { WorktreeActivity } from "../worktrees";
 
 export function useModalState(opts: {
-  readonly events: readonly SessionEvent[];
+  readonly worktrees: readonly WorktreeSummary[];
   readonly host: HostStatus;
   readonly target: string;
   readonly sessionId: string | null;
@@ -46,7 +46,6 @@ export function useModalState(opts: {
     lastKnownProjectRef.current = resolvedProject;
   }
   const currentProject = resolvedProject ?? lastKnownProjectRef.current;
-  const worktrees = useMemo(() => worktreesFrom(opts.events), [opts.events]);
   const worktreeActivity = useMemo(() => {
     const map = new Map<string, WorktreeActivity>();
     for (const s of inventory.sessions) {
@@ -75,7 +74,7 @@ export function useModalState(opts: {
     setPanelOpen,
     inventory,
     currentProject,
-    worktrees,
+    worktrees: opts.worktrees,
     worktreeActivity,
     sidebarLiveActivity,
   };

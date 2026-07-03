@@ -15,13 +15,8 @@ import type { ArtifactRef, ModelRef, PastePayload } from "@trevor/session";
  *     cancelled turn is followed by a single combined interruption (not a replay).
  */
 
-/**
- * A prompt waiting in the local send queue, carrying the provider/reasoning chosen when
- * it was submitted so a model switch while it waits does not rewrite it. `id` is a stable
- * React key (queue order can change when ESC-steer collapses the queue).
- */
-export type QueuedPrompt = {
-  readonly id: string;
+/** The publishable user turn payload shared by session actions and the local send queue. */
+export interface UserTurnInput {
   readonly text: string;
   readonly provider: string;
   readonly reasoning?: string;
@@ -32,7 +27,16 @@ export type QueuedPrompt = {
   /** Exact pasted-text payloads paired to the prompt's `[Pasted text #N +M lines]` tokens, in reading
    *  order. Carried so a queued prompt's hidden payloads survive the wait and ride to the host. */
   readonly pastes?: readonly PastePayload[];
-};
+}
+
+/**
+ * A prompt waiting in the local send queue, carrying the provider/reasoning chosen when
+ * it was submitted so a model switch while it waits does not rewrite it. `id` is a stable
+ * React key (queue order can change when ESC-steer collapses the queue).
+ */
+export interface QueuedPrompt extends UserTurnInput {
+  readonly id: string;
+}
 
 /**
  * Folds queued prompts (in order) and the current draft into one steering prompt text.

@@ -1,14 +1,5 @@
 import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@trevor/session";
-import {
-  ArrowLeftRight,
-  CircleX,
-  CornerDownRight,
-  PanelRight,
-  RotateCw,
-  ShieldAlert,
-  TriangleAlert,
-  Webhook,
-} from "lucide-react";
+import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { compactDisplayFor } from "@/components/chat/compact-display";
 import { CompactRow } from "@/components/chat/compact-row";
@@ -24,6 +15,7 @@ import {
   UserMessage,
   WorkingIndicator,
 } from "@/components/chat/message";
+import { messageKindDescriptor, quietMarkerText } from "@/components/chat/message-kind-descriptor";
 import { QuestionTranscriptItem } from "@/components/chat/question-item";
 import { ToneAlert } from "@/components/chat/tone-alert";
 import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
@@ -31,10 +23,9 @@ import { toolMessageStatus } from "@/components/chat/tool-status";
 import { CommandMenu } from "@/components/command-menu/command-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { WithInspect } from "@/tool-detail/inspect-affordance";
-import { fmtCtx, fmtTokens, toolSummary } from "../../derive";
+import { fmtCtx, fmtTokens } from "../../derive";
+import { toolSummary } from "../../tool-args";
 import {
-  formatSwitchEndpoint,
-  hookDecisionActionLabel,
   LEGACY_RECONNECT_ATTEMPTS,
   type Message,
   type ToolMessage as ToolMessageData,
@@ -263,11 +254,12 @@ export function TranscriptRowView({
     // A QUIET breadcrumb (02.17): the loop auto-continued past the adaptive step budget because there
     // was context headroom and progress. Deliberately understated muted text - NOT the alarming
     // step_backstop pause card (which renders only on a genuine terminating stop).
+    const descriptor = messageKindDescriptor(message);
+    const Icon = descriptor.icon;
     return (
       <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
-        <CornerDownRight className="size-3 shrink-0" />
-        continued at step {message.steps} · {(message.pressure * 100).toFixed(1)}% context, room
-        left
+        <Icon className="size-3 shrink-0" />
+        {quietMarkerText(descriptor)}
       </div>
     );
   }
@@ -277,12 +269,12 @@ export function TranscriptRowView({
     // side shows `model (reasoning)`, so a reasoning-only change reads `X (high) -> X (medium)`; a blocked
     // larger->smaller switch shows the guard's reason instead of a delta. Understated like the checkpoint
     // breadcrumb, not an alarming card.
+    const descriptor = messageKindDescriptor(message);
+    const Icon = descriptor.icon;
     return (
       <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
-        <ArrowLeftRight className="size-3 shrink-0" />
-        {message.outcome === "blocked"
-          ? `switch to ${formatSwitchEndpoint(message.to)} blocked${message.reason ? ` · ${message.reason}` : ""}`
-          : `model ${formatSwitchEndpoint(message.from)} -> ${formatSwitchEndpoint(message.to)}`}
+        <Icon className="size-3 shrink-0" />
+        {quietMarkerText(descriptor)}
       </div>
     );
   }
@@ -291,13 +283,12 @@ export function TranscriptRowView({
     // A quiet, REDACTED advisory (plan 07): the loop flagged a repeating tool path. It shows only the
     // tool, the reason, and the repeat count - never the arguments, output, or fingerprints (D-005).
     // Deliberately understated muted text, like the checkpoint breadcrumb, not an alarming card.
-    const reason = message.reason === "repeated_failure" ? "repeated failure" : "no progress";
-    const blocked = message.action === "block" || message.action === "halt";
+    const descriptor = messageKindDescriptor(message);
+    const Icon = descriptor.icon;
     return (
       <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
-        <ShieldAlert className="size-3 shrink-0" />
-        guardrail · {message.tool} · {reason} ×{message.count}
-        {blocked ? " · blocked" : ""}
+        <Icon className="size-3 shrink-0" />
+        {quietMarkerText(descriptor)}
       </div>
     );
   }
@@ -306,12 +297,12 @@ export function TranscriptRowView({
     // A visible hook decision (plan 25 M9): a quiet, attributed advisory line - the hook's
     // approval key, what it did (denied a tool / halted the turn / added context), and its
     // already-redacted reason. Understated like the guardrail marker, never an alarming card.
-    const action = hookDecisionActionLabel(message.decision, message.toolName);
+    const descriptor = messageKindDescriptor(message);
+    const Icon = descriptor.icon;
     return (
       <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
-        <Webhook className="size-3 shrink-0" />
-        hook · {message.hookId} · {action}
-        {message.reason ? ` · ${message.reason}` : ""}
+        <Icon className="size-3 shrink-0" />
+        {quietMarkerText(descriptor)}
       </div>
     );
   }

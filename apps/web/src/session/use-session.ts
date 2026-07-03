@@ -1,14 +1,11 @@
 import {
-  type ArtifactRef,
   type ConnectionStatus,
   type HostPresence,
   type ModelRef,
-  type PastePayload,
   type PermanentDeleteResult,
   PRODUCER_IDS,
   type ProviderQuestionAnswer,
   type PublishInput,
-  RUNTIME_KIND,
   type SessionConnection,
   type SessionEvent,
   type SessionIdentity,
@@ -16,8 +13,10 @@ import {
   events as sessionEvents,
   streamTransport,
   type TrevorEventInput,
+  viewerIdentity,
 } from "@trevor/session";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { UserTurnInput } from "@/send-queue";
 
 export type { ConnectionStatus, HostPresence };
 
@@ -58,12 +57,11 @@ function webIdentity(): SessionIdentity {
     // storage unavailable: fall through to a fresh, non-persisted identity
   }
 
-  const identity: SessionIdentity = {
+  const identity = viewerIdentity({
     displayName: "trevor-web",
-    runtimeKind: RUNTIME_KIND.web,
     instanceId: crypto.randomUUID(),
     participantId: `web-${crypto.randomUUID()}`,
-  };
+  });
 
   try {
     sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
@@ -286,14 +284,7 @@ export function useSessionWithTransport(
 // --- write side: publishing user intents ---
 
 export interface SessionActions {
-  readonly publish: (
-    text: string,
-    provider: string,
-    reasoning?: string,
-    artifacts?: readonly ArtifactRef[],
-    model?: ModelRef,
-    pastes?: readonly PastePayload[],
-  ) => Promise<void>;
+  readonly publish: (prompt: UserTurnInput) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
   /** Switch the in-flight turn's model/reasoning mid-flight (plan 09.1): publish a
    *  `model.switch.requested` keyed to the active runId, which the host routes to that turn's switch
@@ -335,17 +326,7 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
     publishVia(sessionEvents.userCommand({ command, args }));
 
   return {
-    publish: (
-      text: string,
-      provider: string,
-      reasoning?: string,
-      artifacts?: readonly ArtifactRef[],
-      model?: ModelRef,
-      pastes?: readonly PastePayload[],
-    ) =>
-      publishVia(
-        sessionEvents.userMessage({ text, provider, reasoning, model, artifacts, pastes }),
-      ),
+    publish: (prompt) => publishVia(sessionEvents.userMessage(prompt)),
     cancel: (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
     switchModel: (runId: string, model: ModelRef) =>
       publishVia(sessionEvents.modelSwitchRequested({ runId, model, initiator: "manual" })),

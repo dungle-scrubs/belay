@@ -39,6 +39,17 @@ export function toolMessageStatus(tool: {
   return isErrorResult(tool.result) ? "error" : "done";
 }
 
+/** The shell lane's lifecycle rule, shared by compact rows and the detail takeover. */
+export function shellMessageStatus(shell: {
+  readonly done: boolean;
+  readonly ok?: boolean;
+}): ToolStatus {
+  if (!shell.done) {
+    return "running";
+  }
+  return shell.ok === false ? "error" : "done";
+}
+
 /** Status shows in the wrench icon color (no separate dot). */
 const TOOL_STATUS_COLOR: Record<ToolStatus, string> = {
   running: "text-smui-yellow",

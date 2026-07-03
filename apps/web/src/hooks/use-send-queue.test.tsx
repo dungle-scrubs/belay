@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { act, renderHook } from "@testing-library/react";
 import { test } from "vitest";
-import type { QueuedPrompt } from "@/send-queue";
+import type { QueuedPrompt, UserTurnInput } from "@/send-queue";
 import { useSendQueue } from "./use-send-queue";
 
 /**
@@ -15,8 +15,8 @@ const prompt = (id: string, text: string): QueuedPrompt => ({ id, text, provider
 
 test("drains one prompt at a time and never double-sends", async () => {
   const published: string[] = [];
-  const publish = async (text: string) => {
-    published.push(text);
+  const publish = async (prompt: UserTurnInput) => {
+    published.push(prompt.text);
   };
 
   let busy = false;
@@ -47,14 +47,8 @@ test("drains one prompt at a time and never double-sends", async () => {
 
 test("a submitted prompt's ModelRef is forwarded to publish (D-065)", () => {
   const calls: Array<{ text: string; model: unknown }> = [];
-  const publish = async (
-    text: string,
-    _provider: string,
-    _reasoning?: string,
-    _artifacts?: unknown,
-    model?: unknown,
-  ) => {
-    calls.push({ text, model });
+  const publish = async (prompt: UserTurnInput) => {
+    calls.push({ text: prompt.text, model: prompt.model });
   };
   const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
   const { result } = renderHook(() => useSendQueue({ busy: false, publish }));
@@ -81,8 +75,8 @@ test("hard steer folds the queued prompts + draft into a single prompt", () => {
 
 test("flushQueuedSteer publishes the folded queue once and drains it, without cancel", async () => {
   const published: string[] = [];
-  const publish = async (text: string) => {
-    published.push(text);
+  const publish = async (prompt: UserTurnInput) => {
+    published.push(prompt.text);
   };
   // Busy throughout (a turn is active), so submits accumulate instead of draining.
   const { result, rerender } = renderHook(() => useSendQueue({ busy: true, publish }));
@@ -104,8 +98,8 @@ test("flushQueuedSteer publishes the folded queue once and drains it, without ca
 
 test("flushQueuedSteer is a no-op with an empty queue", () => {
   const published: string[] = [];
-  const publish = async (text: string) => {
-    published.push(text);
+  const publish = async (prompt: UserTurnInput) => {
+    published.push(prompt.text);
   };
   const { result } = renderHook(() => useSendQueue({ busy: true, publish }));
   act(() => result.current.flushQueuedSteer({ id: "s", provider: "qwen" }));
@@ -114,8 +108,8 @@ test("flushQueuedSteer is a no-op with an empty queue", () => {
 
 test("session changes clear queued prompts and the in-flight latch", () => {
   const published: string[] = [];
-  const publish = async (text: string) => {
-    published.push(text);
+  const publish = async (prompt: UserTurnInput) => {
+    published.push(prompt.text);
   };
   const { result, rerender } = renderHook(
     ({ sessionId }: { sessionId: string }) =>
