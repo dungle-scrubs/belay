@@ -13,14 +13,14 @@
 import type { FetchAttemptStatus } from "./envelope";
 import type { BoundedContent } from "./extract";
 import { boundContent } from "./extract";
-import { assertSafeUrl, type ResolveHost, UnsafeUrlError } from "./url-guard";
+import { type AsyncResolveHost, assertSafeUrlAsync, UnsafeUrlError } from "./url-guard";
 
 /** The Jina backend's injected dependencies, mirroring the static backend's injectable-IO shape.
- *  `resolveHost` is the SYNC guard resolver (the caller pre-resolves the host); `apiKey` is the
+ *  `resolveHost` is the async DNS resolver the shared guard owns; `apiKey` is the
  *  optional `JINA_API_KEY` - undefined means keyless mode. */
 export interface JinaFetchDeps {
   readonly fetch: typeof globalThis.fetch;
-  readonly resolveHost?: ResolveHost;
+  readonly resolveHost?: AsyncResolveHost;
   readonly apiKey?: string;
   readonly maxBytes: number;
   readonly maxChars: number;
@@ -71,7 +71,7 @@ export async function jinaFetch(target: string, deps: JinaFetchDeps): Promise<Ji
   let safe: URL;
 
   try {
-    safe = assertSafeUrl(target, deps.resolveHost);
+    safe = await assertSafeUrlAsync(target, deps.resolveHost);
   } catch (error) {
     if (error instanceof UnsafeUrlError) {
       return { status: "failed", detail: `jina target rejected: ${error.reason}` };

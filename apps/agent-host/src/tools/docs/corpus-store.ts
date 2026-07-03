@@ -21,6 +21,7 @@ import {
   DOCS_CORPUS_VERSION,
   type Page,
 } from "./corpus";
+import { corruptResult, type DocsAction, type DocsResult, errorResult } from "./envelope";
 
 /** The minimal filesystem surface the store needs, injected so tests use an in-memory fake. */
 export interface DocsFs {
@@ -72,6 +73,31 @@ export type LoadResult =
       readonly partial: boolean;
       readonly diagnostics: readonly string[];
     };
+
+export type LoadedCorpus = Extract<LoadResult, { state: "loaded" }>;
+
+export function requireLoadedCorpus(
+  action: DocsAction,
+  loaded: LoadResult,
+  ref: string,
+): LoadedCorpus | DocsResult {
+  if (loaded.state === "loaded") {
+    return loaded;
+  }
+
+  if (loaded.state === "missing") {
+    const detail =
+      action === "read" || action === "refresh"
+        ? `docs ${action}: corpus ${ref} not found`
+        : `docs ${action}: no cached corpus for ${ref}${action === "search" ? "; resolve it first" : ""}`;
+    return errorResult(action, detail);
+  }
+
+  return corruptResult(
+    action,
+    `docs ${action}: corpus ${loaded.corpusId} is corrupt: ${loaded.detail}`,
+  );
+}
 
 /** Reads/writes corpora under one docs-corpus root through an injected filesystem. */
 export interface CorpusStore {

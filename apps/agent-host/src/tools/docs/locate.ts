@@ -11,7 +11,12 @@
  */
 
 import { corpusIdFor, hostOf } from "./corpus";
-import { type CorpusStore, createCorpusStore, type LoadResult } from "./corpus-store";
+import {
+  type CorpusStore,
+  createCorpusStore,
+  type LoadedCorpus,
+  type LoadResult,
+} from "./corpus-store";
 import type { ReadyDocsDeps } from "./deps";
 import {
   clamp,
@@ -37,9 +42,6 @@ export function specFrom(args: DocsArgs): BuildSpec {
     maxPages: clamp(args.maxPages, MAX_PAGES_FLOOR, MAX_PAGES_CEILING, DEFAULT_MAX_PAGES),
   };
 }
-
-/** A corpus that loaded cleanly off disk: the manifest, its pages, and any load diagnostics. */
-export type LoadedCorpus = Extract<LoadResult, { state: "loaded" }>;
 
 /**
  * Predicts the corpus id a build of `spec` would target WITHOUT any network, so a fresh corpus can be

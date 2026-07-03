@@ -10,9 +10,9 @@
 
 import { type Corpus, canonicalUrl, type Page } from "./corpus";
 import { excerptWindow } from "./corpus-results";
-import { createCorpusStore, summarizeCorpus } from "./corpus-store";
+import { createCorpusStore, requireLoadedCorpus, summarizeCorpus } from "./corpus-store";
 import type { ReadyDocsDeps } from "./deps";
-import { corruptResult, type DocsResult, errorResult } from "./envelope";
+import { type DocsResult, errorResult } from "./envelope";
 import { isCorpusStale, isStaleAt } from "./freshness";
 import { locateCorpus, targetRef } from "./locate";
 import {
@@ -42,37 +42,28 @@ export async function searchAction(args: DocsArgs, deps: ReadyDocsDeps): Promise
   }
 
   const loaded = await locateCorpus(args, deps);
+  const required = requireLoadedCorpus("search", loaded, targetRef(args));
 
-  if (loaded.state === "missing") {
-    return errorResult(
-      "search",
-      `docs search: no cached corpus for ${targetRef(args)}; resolve it first`,
-    );
-  }
-
-  if (loaded.state === "corrupt") {
-    return corruptResult(
-      "search",
-      `docs search: corpus ${loaded.corpusId} is corrupt: ${loaded.detail}`,
-    );
+  if (!("state" in required)) {
+    return required;
   }
 
   const limit = clamp(args.maxResults, MAX_RESULTS_FLOOR, MAX_RESULTS_CEILING, DEFAULT_MAX_RESULTS);
   const offset = clampOffset(args.offset);
-  const ranked = searchCorpus(loaded.pages, query, { offset, limit });
-  const stale = isCorpusStale(loaded.corpus, deps.now());
+  const ranked = searchCorpus(required.pages, query, { offset, limit });
+  const stale = isCorpusStale(required.corpus, deps.now());
 
   return {
     action: "search",
     outcome: "ok",
-    detail: `docs search: ${ranked.excerpts.length} excerpt(s) for "${query}" in ${loaded.corpus.corpusId}${
+    detail: `docs search: ${ranked.excerpts.length} excerpt(s) for "${query}" in ${required.corpus.corpusId}${
       stale ? " (stale)" : ""
     }`,
-    corpus: summarizeCorpus(loaded.corpus),
-    query: { corpusId: loaded.corpus.corpusId, query, excerpts: ranked.excerpts },
+    corpus: summarizeCorpus(required.corpus),
+    query: { corpusId: required.corpus.corpusId, query, excerpts: ranked.excerpts },
     window: excerptWindow(ranked),
     stale,
-    ...(loaded.diagnostics.length > 0 ? { diagnostics: loaded.diagnostics } : {}),
+    ...(required.diagnostics.length > 0 ? { diagnostics: required.diagnostics } : {}),
   };
 }
 
@@ -106,16 +97,13 @@ export async function readAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<D
 
   const store = createCorpusStore(deps.fs, deps.corpusRoot);
   const loaded = await store.loadCorpus(args.corpusId);
+  const required = requireLoadedCorpus("read", loaded, args.corpusId);
 
-  if (loaded.state === "missing") {
-    return errorResult("read", `docs read: corpus ${args.corpusId} not found`);
+  if (!("state" in required)) {
+    return required;
   }
 
-  if (loaded.state === "corrupt") {
-    return corruptResult("read", `docs read: corpus ${args.corpusId} is corrupt: ${loaded.detail}`);
-  }
-
-  const page = findPage(loaded.pages, args);
+  const page = findPage(required.pages, args);
 
   if (!page) {
     return errorResult(
@@ -126,7 +114,7 @@ export async function readAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<D
 
   const offset = clampOffset(args.offset);
   const result = readPage(page, { offset });
-  const stale = isCorpusStale(loaded.corpus, deps.now());
+  const stale = isCorpusStale(required.corpus, deps.now());
 
   return {
     action: "read",
@@ -134,7 +122,7 @@ export async function readAction(args: DocsArgs, deps: ReadyDocsDeps): Promise<D
     detail: `docs read: ${page.pageId} (${result.view.content.length} of ${result.total} chars)${
       stale ? " (stale)" : ""
     }`,
-    corpus: summarizeCorpus(loaded.corpus),
+    corpus: summarizeCorpus(required.corpus),
     page: result.view,
     window: {
       unit: "chars",
@@ -210,21 +198,15 @@ export async function statusAction(args: DocsArgs, deps: ReadyDocsDeps): Promise
   }
 
   const loaded = await locateCorpus(args, deps);
+  const required = requireLoadedCorpus("status", loaded, targetRef(args));
 
-  if (loaded.state === "missing") {
-    return errorResult("status", `docs status: no cached corpus for ${targetRef(args)}`);
+  if (!("state" in required)) {
+    return required;
   }
 
-  if (loaded.state === "corrupt") {
-    return corruptResult(
-      "status",
-      `docs status: corpus ${loaded.corpusId} is corrupt: ${loaded.detail}`,
-    );
-  }
-
-  const corpus = loaded.corpus;
+  const corpus = required.corpus;
   const stale = isCorpusStale(corpus, deps.now());
-  const diagnostics = statusDiagnostics(corpus, loaded.diagnostics);
+  const diagnostics = statusDiagnostics(corpus, required.diagnostics);
 
   return {
     action: "status",

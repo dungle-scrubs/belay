@@ -1,16 +1,9 @@
 import { capText, MAX_LSP_HOVER_CHARS } from "@host/lsp/caps";
 import { type LspRange, rangeFromLsp } from "@host/lsp/contract";
-import { describeDegraded, formatRange } from "@host/lsp/format";
+import { formatRange } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 import { Schema } from "effect";
-import {
-  fileNotFound,
-  loadWorkspaceFile,
-  lspWorkspaceRoot,
-  openWorkspaceFile,
-  toLspPosition,
-  unsupportedCapability,
-} from "./lsp-shared";
+import { runFileLspRequest, toLspPosition } from "./lsp-shared";
 import { simpleTool } from "./shared";
 import type { Tool } from "./types";
 
@@ -80,36 +73,25 @@ export function buildLspHoverTool(manager: LspManager): Tool<LspHoverArgs> {
     params: Params,
     readOnly: true,
     capped: true,
-    execute: async (args) => {
-      const root = lspWorkspaceRoot(manager);
-      const loaded = await loadWorkspaceFile(root, args.file);
-      if (!loaded) {
-        return fileNotFound(args.file, root);
-      }
-      const acquired = await manager.acquire();
-      if (acquired.kind === "degraded") {
-        return describeDegraded(acquired);
-      }
-      const unsupported = unsupportedCapability(acquired, "hoverProvider");
-      if (unsupported) {
-        return describeDegraded(unsupported);
-      }
-      openWorkspaceFile(acquired.client, loaded);
-      const outcome = await manager.request("textDocument/hover", {
-        textDocument: { uri: loaded.uri },
-        position: toLspPosition(args.line, args.column),
-      });
-      if (outcome.kind === "degraded") {
-        return describeDegraded(outcome);
-      }
-      const at = `${loaded.display}:${args.line}:${args.column}`;
-      const hover = hoverContent(outcome.value);
-      if (!hover) {
-        return `no hover information at ${at}`;
-      }
-      const capped = capText(hover.text, MAX_LSP_HOVER_CHARS);
-      const range = hover.range ? ` (${formatRange(hover.range)})` : "";
-      return `hover at ${at}${range}:\n${capped.text}`;
-    },
+    execute: async (args) =>
+      runFileLspRequest(manager, {
+        file: args.file,
+        capability: "hoverProvider",
+        method: "textDocument/hover",
+        params: ({ loaded }) => ({
+          textDocument: { uri: loaded.uri },
+          position: toLspPosition(args.line, args.column),
+        }),
+        render: (value, { loaded }) => {
+          const at = `${loaded.display}:${args.line}:${args.column}`;
+          const hover = hoverContent(value);
+          if (!hover) {
+            return `no hover information at ${at}`;
+          }
+          const capped = capText(hover.text, MAX_LSP_HOVER_CHARS);
+          const range = hover.range ? ` (${formatRange(hover.range)})` : "";
+          return `hover at ${at}${range}:\n${capped.text}`;
+        },
+      }),
   });
 }

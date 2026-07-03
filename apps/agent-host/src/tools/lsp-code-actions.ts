@@ -6,18 +6,10 @@ import {
   MAX_LSP_PROPOSAL_TEXT_CHARS,
 } from "@host/lsp/caps";
 import { rangeFromLsp } from "@host/lsp/contract";
-import { describeDegraded, displayPath, formatRange } from "@host/lsp/format";
+import { displayPath, formatRange } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 import { Schema } from "effect";
-import {
-  fileNotFound,
-  loadWorkspaceFile,
-  lspWorkspaceRoot,
-  openWorkspaceFile,
-  toLspDiagnostic,
-  toLspPosition,
-  unsupportedCapability,
-} from "./lsp-shared";
+import { runFileLspRequest, toLspDiagnostic, toLspPosition } from "./lsp-shared";
 import { clipLine, simpleTool } from "./shared";
 import type { Tool } from "./types";
 
@@ -164,60 +156,51 @@ export function buildLspCodeActionsTool(manager: LspManager): Tool<LspCodeAction
     params: Params,
     readOnly: true,
     capped: true,
-    execute: async (args) => {
-      const root = lspWorkspaceRoot(manager);
-      const loaded = await loadWorkspaceFile(root, args.file);
-      if (!loaded) {
-        return fileNotFound(args.file, root);
-      }
-      const acquired = await manager.acquire();
-      if (acquired.kind === "degraded") {
-        return describeDegraded(acquired);
-      }
-      const unsupported = unsupportedCapability(acquired, "codeActionProvider");
-      if (unsupported) {
-        return describeDegraded(unsupported);
-      }
-      openWorkspaceFile(acquired.client, loaded);
-      // CodeActionContext carries the file's published diagnostics overlapping the requested
-      // lines (plan 24 M9): real servers (tsserver) derive their quickfixes from exactly these
-      // and return NOTHING for an empty context, so the tool waits for the post-open publish
-      // (the lsp_diagnostics seam) and forwards the overlap re-encoded to the wire shape.
-      const published = (await acquired.client.waitForDiagnostics(loaded.uri)) ?? [];
-      const overlapping = published.filter(
-        (diagnostic) =>
-          diagnostic.range.start.line <= args.endLine &&
-          diagnostic.range.end.line >= args.startLine,
-      );
-      // A bare line range covers WHOLE lines: tsserver only returns fixes whose error span
-      // intersects the request range, so the endColumn default is the end of endLine, never a
-      // zero-width span at column 1.
-      const endLineLength = loaded.text.split("\n")[args.endLine - 1]?.length ?? 0;
-      const outcome = await manager.request("textDocument/codeAction", {
-        textDocument: { uri: loaded.uri },
-        range: {
-          start: toLspPosition(args.startLine, args.startColumn ?? 1),
-          end: toLspPosition(args.endLine, args.endColumn ?? endLineLength + 1),
+    execute: async (args) =>
+      runFileLspRequest(manager, {
+        file: args.file,
+        capability: "codeActionProvider",
+        method: "textDocument/codeAction",
+        // CodeActionContext carries the file's published diagnostics overlapping the requested
+        // lines (plan 24 M9): real servers (tsserver) derive their quickfixes from exactly these
+        // and return NOTHING for an empty context, so the tool waits for the post-open publish
+        // (the lsp_diagnostics seam) and forwards the overlap re-encoded to the wire shape.
+        prepare: async ({ loaded, acquired }) =>
+          ((await acquired.client.waitForDiagnostics(loaded.uri)) ?? []).filter(
+            (diagnostic) =>
+              diagnostic.range.start.line <= args.endLine &&
+              diagnostic.range.end.line >= args.startLine,
+          ),
+        params: ({ loaded }, overlapping) => {
+          // A bare line range covers WHOLE lines: tsserver only returns fixes whose error span
+          // intersects the request range, so the endColumn default is the end of endLine, never a
+          // zero-width span at column 1.
+          const endLineLength = loaded.text.split("\n")[args.endLine - 1]?.length ?? 0;
+          return {
+            textDocument: { uri: loaded.uri },
+            range: {
+              start: toLspPosition(args.startLine, args.startColumn ?? 1),
+              end: toLspPosition(args.endLine, args.endColumn ?? endLineLength + 1),
+            },
+            context: { diagnostics: overlapping.map(toLspDiagnostic) },
+          };
         },
-        context: { diagnostics: overlapping.map(toLspDiagnostic) },
-      });
-      if (outcome.kind === "degraded") {
-        return describeDegraded(outcome);
-      }
-      const actions = Array.isArray(outcome.value)
-        ? outcome.value.filter((entry) => asRecord(entry) !== undefined)
-        : [];
-      const where = `${loaded.display}:${args.startLine}-${args.endLine}`;
-      if (actions.length === 0) {
-        return `no code actions available at ${where}`;
-      }
-      const capped = capItems(actions, MAX_LSP_CODE_ACTIONS);
-      const cut = capped.truncated ? `, showing the first ${MAX_LSP_CODE_ACTIONS}` : "";
-      const header = `${actions.length} code action proposal(s) at ${where}${cut} (proposals only - nothing is applied):`;
-      const blocks = capped.items.flatMap((action, index) =>
-        proposalBlock(action, index + 1, root),
-      );
-      return [header, ...blocks].join("\n");
-    },
+        render: (value, { loaded, root }) => {
+          const actions = Array.isArray(value)
+            ? value.filter((entry) => asRecord(entry) !== undefined)
+            : [];
+          const where = `${loaded.display}:${args.startLine}-${args.endLine}`;
+          if (actions.length === 0) {
+            return `no code actions available at ${where}`;
+          }
+          const capped = capItems(actions, MAX_LSP_CODE_ACTIONS);
+          const cut = capped.truncated ? `, showing the first ${MAX_LSP_CODE_ACTIONS}` : "";
+          const header = `${actions.length} code action proposal(s) at ${where}${cut} (proposals only - nothing is applied):`;
+          const blocks = capped.items.flatMap((action, index) =>
+            proposalBlock(action, index + 1, root),
+          );
+          return [header, ...blocks].join("\n");
+        },
+      }),
   });
 }

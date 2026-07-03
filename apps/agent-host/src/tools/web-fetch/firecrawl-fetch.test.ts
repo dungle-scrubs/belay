@@ -10,7 +10,7 @@ import { type FirecrawlFetchDeps, firecrawlFetch } from "./firecrawl-fetch";
  * into a detail, the char cap applies, and an unsafe target is rejected before any request.
  */
 
-const SAFE_RESOLVER = (host: string) => (host === "example.com" ? ["93.184.216.34"] : []);
+const SAFE_RESOLVER = async (host: string) => (host === "example.com" ? ["93.184.216.34"] : []);
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return {

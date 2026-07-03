@@ -17,16 +17,10 @@ import {
   staleAfterFrom,
 } from "./corpus";
 import { okCorpusResult, reuseResult, staleFallback } from "./corpus-results";
-import { createCorpusStore } from "./corpus-store";
+import { createCorpusStore, requireLoadedCorpus } from "./corpus-store";
 import type { ReadyDocsDeps } from "./deps";
 import { type DiscoveryResult, resolveCandidates } from "./discovery";
-import {
-  corruptResult,
-  type DocsAction,
-  type DocsResult,
-  errorResult,
-  unavailableResult,
-} from "./envelope";
+import { type DocsAction, type DocsResult, errorResult, unavailableResult } from "./envelope";
 import { fetchPages } from "./fetch-pages";
 import { DEFAULT_FRESHNESS_HOURS, decideRefresh, isCorpusStale } from "./freshness";
 import { type BuildSpec, loadExisting, specFrom } from "./locate";
@@ -211,19 +205,13 @@ export async function refreshAction(args: DocsArgs, deps: ReadyDocsDeps): Promis
   if (args.corpusId) {
     const store = createCorpusStore(deps.fs, deps.corpusRoot);
     const loaded = await store.loadCorpus(args.corpusId);
+    const required = requireLoadedCorpus("refresh", loaded, args.corpusId);
 
-    if (loaded.state === "missing") {
-      return errorResult("refresh", `docs refresh: corpus ${args.corpusId} not found`);
+    if (!("state" in required)) {
+      return required;
     }
 
-    if (loaded.state === "corrupt") {
-      return corruptResult(
-        "refresh",
-        `docs refresh: corpus ${args.corpusId} is corrupt: ${loaded.detail}`,
-      );
-    }
-
-    const corpus = loaded.corpus;
+    const corpus = required.corpus;
     const built = await buildAndStore(
       "refresh",
       {
@@ -235,7 +223,7 @@ export async function refreshAction(args: DocsArgs, deps: ReadyDocsDeps): Promis
       deps,
     );
 
-    return built.outcome === "ok" ? built : staleFallback("refresh", loaded, built);
+    return built.outcome === "ok" ? built : staleFallback("refresh", required, built);
   }
 
   if (!args.subject?.trim() && !args.url?.trim()) {

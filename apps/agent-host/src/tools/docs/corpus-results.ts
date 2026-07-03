@@ -9,9 +9,8 @@
  */
 
 import type { Corpus, Page } from "./corpus";
-import { summarizeCorpus } from "./corpus-store";
+import { type LoadedCorpus, summarizeCorpus } from "./corpus-store";
 import type { DocsAction, DocsResult, ResultWindow } from "./envelope";
-import type { LoadedCorpus } from "./locate";
 import { previewExcerpts, type Ranked } from "./query";
 
 /** How many lead excerpts a resolve/refresh preview returns (capped, continuable). */

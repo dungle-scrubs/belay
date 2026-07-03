@@ -6,9 +6,8 @@
 import { lookup } from "node:dns/promises";
 import { readFile, stat } from "node:fs/promises";
 import {
-  assertSafeRedirect,
-  assertSafeUrl,
-  type ResolveHost,
+  assertSafeRedirectAsync,
+  assertSafeUrlAsync,
   UnsafeUrlError,
 } from "../web-fetch/url-guard";
 import { ArchiveToolError } from "./errors";
@@ -214,9 +213,8 @@ async function guardUrl(
   base: URL | undefined,
   resolveHost: ArchiveResolveHost,
 ): Promise<URL> {
-  const sync = await syncResolverFor(raw, base, resolveHost);
   try {
-    return assertSafeUrl(base ? new URL(raw, base).toString() : raw, sync);
+    return await assertSafeUrlAsync(raw, resolveHost, base);
   } catch (error) {
     if (error instanceof UnsafeUrlError) {
       throw new ArchiveToolError({ code: "ARCHIVE_URL_REJECTED", detail: error.reason });
@@ -231,35 +229,12 @@ async function guardRedirect(
   seen: ReadonlySet<string>,
   resolveHost: ArchiveResolveHost,
 ): Promise<URL> {
-  const sync = await syncResolverFor(to, from, resolveHost);
   try {
-    return assertSafeRedirect({ from, to }, seen, sync);
+    return await assertSafeRedirectAsync({ from, to }, seen, resolveHost);
   } catch (error) {
     if (error instanceof UnsafeUrlError) {
       throw new ArchiveToolError({ code: "ARCHIVE_URL_REJECTED", detail: error.reason });
     }
     throw error;
   }
-}
-
-async function syncResolverFor(
-  raw: string,
-  base: URL | undefined,
-  resolveHost: ArchiveResolveHost,
-): Promise<ResolveHost> {
-  let host: string;
-  try {
-    host = new URL(raw, base).hostname;
-  } catch {
-    return () => [];
-  }
-
-  let literals: readonly string[];
-  try {
-    literals = await resolveHost(host);
-  } catch {
-    literals = [];
-  }
-
-  return (queried) => (queried === host ? literals : []);
 }

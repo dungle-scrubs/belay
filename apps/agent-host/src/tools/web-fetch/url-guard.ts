@@ -14,6 +14,7 @@
 /** Resolves a hostname to its IP literals. Injected so tests are deterministic and so a backend can
  *  supply the real DNS lookup. Returning an empty array means "no addresses found". */
 export type ResolveHost = (host: string) => readonly string[];
+export type AsyncResolveHost = (host: string) => Promise<readonly string[]>;
 
 /** A URL the guard refused, carrying a sanitized reason (host/scheme only, never credentials). */
 export class UnsafeUrlError extends Error {
@@ -58,6 +59,15 @@ export function assertSafeUrl(raw: string, resolveHost?: ResolveHost): URL {
   assertSafeHost(host, resolveHost);
 
   return url;
+}
+
+export async function assertSafeUrlAsync(
+  raw: string,
+  resolveHost?: AsyncResolveHost,
+  base?: URL,
+): Promise<URL> {
+  const sync = await syncResolverFor(raw, base, resolveHost);
+  return assertSafeUrl(base ? new URL(raw, base).toString() : raw, sync);
 }
 
 /** Strips the `[...]` IPv6 brackets `URL.hostname` keeps, leaving a bare address or name. */
@@ -250,4 +260,55 @@ export function assertSafeRedirect(
   }
 
   return safe;
+}
+
+export async function assertSafeRedirectAsync(
+  hop: RedirectHop,
+  seen: ReadonlySet<string>,
+  resolveHost?: AsyncResolveHost,
+): Promise<URL> {
+  let target: URL;
+
+  try {
+    target = new URL(hop.to, hop.from);
+  } catch {
+    throw new UnsafeUrlError("malformed redirect target");
+  }
+
+  if (hop.from.protocol === "https:" && target.protocol === "http:") {
+    throw new UnsafeUrlError("redirect downgrades https to http");
+  }
+
+  const safe = await assertSafeUrlAsync(target.toString(), resolveHost);
+
+  if (seen.has(safe.toString())) {
+    throw new UnsafeUrlError("redirect loop detected");
+  }
+
+  return safe;
+}
+
+async function syncResolverFor(
+  raw: string,
+  base: URL | undefined,
+  resolveHost: AsyncResolveHost | undefined,
+): Promise<ResolveHost | undefined> {
+  if (!resolveHost) {
+    return undefined;
+  }
+
+  let host: string;
+
+  try {
+    host = new URL(raw, base).hostname;
+  } catch {
+    return () => [];
+  }
+
+  try {
+    const literals = await resolveHost(host);
+    return (queried) => (queried === host ? literals : []);
+  } catch {
+    return () => [];
+  }
 }

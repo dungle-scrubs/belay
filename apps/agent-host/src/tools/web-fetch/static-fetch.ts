@@ -9,11 +9,14 @@
  * time caps, no cookies or auth.
  */
 
-import { assertSafeRedirect, assertSafeUrl, type ResolveHost, UnsafeUrlError } from "./url-guard";
+import {
+  type AsyncResolveHost,
+  assertSafeRedirectAsync,
+  assertSafeUrlAsync,
+  UnsafeUrlError,
+} from "./url-guard";
 
-/** Resolves a hostname to its IP literals; async because live DNS is async. Each hop's host is
- *  resolved with this before the SYNC guard runs, so the guard stays pure. */
-export type AsyncResolveHost = (host: string) => Promise<readonly string[]>;
+export type { AsyncResolveHost };
 
 /** The subset of the `fetch` API this backend depends on; injected for deterministic tests. */
 export type FetchLike = (url: string, init: StaticFetchInit) => Promise<FetchLikeResponse>;
@@ -105,10 +108,8 @@ async function guardUrl(
   base: URL | undefined,
   resolveHost: AsyncResolveHost | undefined,
 ): Promise<URL> {
-  const sync = await syncResolverFor(raw, base, resolveHost);
-
   try {
-    return assertSafeUrl(base ? new URL(raw, base).toString() : raw, sync);
+    return await assertSafeUrlAsync(raw, resolveHost, base);
   } catch (error) {
     if (error instanceof UnsafeUrlError) {
       throw new StaticFetchError(error.reason);
@@ -124,10 +125,8 @@ async function guardRedirect(
   seen: ReadonlySet<string>,
   resolveHost: AsyncResolveHost | undefined,
 ): Promise<URL> {
-  const sync = await syncResolverFor(to, from, resolveHost);
-
   try {
-    return assertSafeRedirect({ from, to }, seen, sync);
+    return await assertSafeRedirectAsync({ from, to }, seen, resolveHost);
   } catch (error) {
     if (error instanceof UnsafeUrlError) {
       throw new StaticFetchError(error.reason);
@@ -135,31 +134,6 @@ async function guardRedirect(
 
     throw error;
   }
-}
-
-/** Resolves the target's host once (async), returning a sync `ResolveHost` the guard can call. When
- *  no async resolver is injected, returns undefined so the guard runs literal-only. */
-async function syncResolverFor(
-  raw: string,
-  base: URL | undefined,
-  resolveHost: AsyncResolveHost | undefined,
-): Promise<ResolveHost | undefined> {
-  if (!resolveHost) {
-    return undefined;
-  }
-
-  let host: string;
-
-  try {
-    host = new URL(raw, base).hostname;
-  } catch {
-    // The guard will reject the malformed URL; hand it a resolver that finds nothing.
-    return () => [];
-  }
-
-  const literals = await resolveHost(host);
-
-  return (queried) => (queried === host ? literals : []);
 }
 
 async function requestOnce(url: URL, options: StaticFetchOptions): Promise<FetchLikeResponse> {

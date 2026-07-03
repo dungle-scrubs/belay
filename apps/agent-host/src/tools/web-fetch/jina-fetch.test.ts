@@ -9,7 +9,7 @@ import { type JinaFetchDeps, jinaFetch } from "./jina-fetch";
  * is rejected by the SSRF guard before any request. All deterministic; nothing touches the network.
  */
 
-const SAFE_RESOLVER = (host: string) => (host === "example.com" ? ["93.184.216.34"] : []);
+const SAFE_RESOLVER = async (host: string) => (host === "example.com" ? ["93.184.216.34"] : []);
 
 function textResponse(body: string, status = 200): Response {
   const bytes = new TextEncoder().encode(body);
@@ -164,7 +164,7 @@ test("an unsafe target is rejected by the guard before any request", async () =>
 
 test("a host resolving to a private address is rejected before any request", async () => {
   const { fetch, calls } = capturingFetch(textResponse("never read"));
-  const privateResolver = (host: string) => (host === "evil.example" ? ["10.0.0.5"] : []);
+  const privateResolver = async (host: string) => (host === "evil.example" ? ["10.0.0.5"] : []);
 
   const outcome = await jinaFetch(
     "https://evil.example/p",

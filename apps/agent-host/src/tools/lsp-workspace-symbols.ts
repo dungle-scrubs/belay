@@ -1,10 +1,10 @@
 import { asRecord } from "@host/boot/decode";
 import { capItems, MAX_LSP_WORKSPACE_SYMBOLS } from "@host/lsp/caps";
 import { type LspWorkspaceSymbol, lspSymbolKindName, rangeFromLsp } from "@host/lsp/contract";
-import { describeDegraded, displayPath, formatPosition } from "@host/lsp/format";
+import { displayPath, formatPosition } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 import { Schema } from "effect";
-import { lspWorkspaceRoot, unsupportedCapability } from "./lsp-shared";
+import { runWorkspaceLspRequest } from "./lsp-shared";
 import { clamp, simpleTool, toolInput } from "./shared";
 import type { Tool } from "./types";
 
@@ -84,29 +84,23 @@ export function buildLspWorkspaceSymbolsTool(manager: LspManager): Tool<LspWorks
         );
       }
       const limit = clamp(args.limit, 1, MAX_LSP_WORKSPACE_SYMBOLS, DEFAULT_LIMIT);
-      const acquired = await manager.acquire();
-      if (acquired.kind === "degraded") {
-        return describeDegraded(acquired);
-      }
-      const unsupported = unsupportedCapability(acquired, "workspaceSymbolProvider");
-      if (unsupported) {
-        return describeDegraded(unsupported);
-      }
-      const outcome = await manager.request("workspace/symbol", { query });
-      if (outcome.kind === "degraded") {
-        return describeDegraded(outcome);
-      }
-      const symbols = Array.isArray(outcome.value)
-        ? outcome.value.flatMap((entry) => decodeSymbol(entry) ?? [])
-        : [];
-      if (symbols.length === 0) {
-        return `no workspace symbols match "${query}"`;
-      }
-      const root = lspWorkspaceRoot(manager);
-      const capped = capItems(symbols, limit);
-      const cut = capped.truncated ? `, showing the first ${limit}` : "";
-      const header = `${symbols.length} workspace symbol(s) matching "${query}"${cut}:`;
-      return [header, ...capped.items.map((symbol) => symbolLine(symbol, root))].join("\n");
+      return runWorkspaceLspRequest(manager, {
+        capability: "workspaceSymbolProvider",
+        method: "workspace/symbol",
+        params: { query },
+        render: (value, { root }) => {
+          const symbols = Array.isArray(value)
+            ? value.flatMap((entry) => decodeSymbol(entry) ?? [])
+            : [];
+          if (symbols.length === 0) {
+            return `no workspace symbols match "${query}"`;
+          }
+          const capped = capItems(symbols, limit);
+          const cut = capped.truncated ? `, showing the first ${limit}` : "";
+          const header = `${symbols.length} workspace symbol(s) matching "${query}"${cut}:`;
+          return [header, ...capped.items.map((symbol) => symbolLine(symbol, root))].join("\n");
+        },
+      });
     },
   });
 }

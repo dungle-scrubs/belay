@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { assertSafeRedirect, assertSafeUrl, UnsafeUrlError } from "./url-guard";
+import {
+  assertSafeRedirect,
+  assertSafeRedirectAsync,
+  assertSafeUrl,
+  assertSafeUrlAsync,
+  UnsafeUrlError,
+} from "./url-guard";
 
 /**
  * SSRF guard coverage. Every rejection class the plan names is pinned both as an IP literal and
@@ -94,6 +100,15 @@ test("a hostname resolving only to public addresses passes", () => {
   assert.equal(url.hostname, "good.example.com");
 });
 
+test("async URL guard owns DNS resolution", async () => {
+  const url = await assertSafeUrlAsync("https://good.example.com/", async () => ["93.184.216.34"]);
+  assert.equal(url.hostname, "good.example.com");
+  await assert.rejects(
+    () => assertSafeUrlAsync("https://evil.example.com/", async () => ["10.0.0.5"]),
+    UnsafeUrlError,
+  );
+});
+
 test("resolution failure or no addresses is treated as unknown and rejected", () => {
   rejects("https://mystery.example.com/", () => {
     throw new Error("ENOTFOUND");
@@ -110,6 +125,16 @@ test("a safe redirect hop resolves and passes the guard", () => {
   const from = new URL("https://example.com/a");
   const target = assertSafeRedirect({ from, to: "/b" }, new Set());
   assert.equal(target.toString(), "https://example.com/b");
+});
+
+test("async redirect guard resolves the target host before accepting a hop", async () => {
+  const from = new URL("https://example.com/a");
+  const target = await assertSafeRedirectAsync(
+    { from, to: "https://good.example.com/b" },
+    new Set(),
+    async () => ["93.184.216.34"],
+  );
+  assert.equal(target.toString(), "https://good.example.com/b");
 });
 
 test("a redirect to a private target is blocked", () => {

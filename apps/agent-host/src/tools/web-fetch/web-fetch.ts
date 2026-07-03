@@ -20,7 +20,7 @@ import { boundContent, classifyStatic, extractHtml } from "./extract";
 import { firecrawlFetch } from "./firecrawl-fetch";
 import { jinaFetch } from "./jina-fetch";
 import { type FetchLike, StaticFetchError, staticFetch } from "./static-fetch";
-import { assertSafeUrl, type ResolveHost, UnsafeUrlError } from "./url-guard";
+import { assertSafeUrlAsync, UnsafeUrlError } from "./url-guard";
 import { errorCategoryFor, hostOf, logWebFetchAttempt } from "./web-fetch-log";
 
 const MODES = ["auto", "static", "rendered"] as const;
@@ -138,7 +138,6 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
 
   const attempts: FetchAttempt[] = [];
   const fetchedAt = deps.now();
-  const resolveHost = await syncResolverFor(args.url, deps.resolveHost);
   // The request host + caps are the same for every backend; only the host (never the path/query) and
   // the sizes are ever logged, so the secret-bearing parts of the URL never reach a log field.
   const host = hostOf(args.url);
@@ -174,7 +173,7 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
   let winner = staticOutcome;
 
   if (mode === "auto" && staticOutcome.status !== "usable") {
-    const jinaOutcome = await runBackend(() => runJina(args.url, maxChars, deps, resolveHost));
+    const jinaOutcome = await runBackend(() => runJina(args.url, maxChars, deps));
 
     if (jinaOutcome.status === "usable") {
       winner = jinaOutcome;
@@ -182,9 +181,7 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
   }
 
   if (shouldRunFirecrawl(mode, winner)) {
-    const firecrawlOutcome = await runBackend(() =>
-      runFirecrawlBackend(args.url, maxChars, deps, resolveHost),
-    );
+    const firecrawlOutcome = await runBackend(() => runFirecrawlBackend(args.url, maxChars, deps));
 
     if (firecrawlOutcome.status === "usable" || mode === "rendered") {
       winner = firecrawlOutcome;
@@ -267,16 +264,11 @@ async function runStatic(
 }
 
 /** Runs the Jina backend and maps its outcome onto a `BackendOutcome`. */
-async function runJina(
-  url: string,
-  maxChars: number,
-  deps: WebFetchDeps,
-  resolveHost: ResolveHost | undefined,
-): Promise<BackendOutcome> {
+async function runJina(url: string, maxChars: number, deps: WebFetchDeps): Promise<BackendOutcome> {
   const maxBytes = clamp(undefined, MAX_BYTES_FLOOR, MAX_BYTES_CEILING, DEFAULT_MAX_BYTES);
   const outcome = await jinaFetch(url, {
     fetch: deps.fetch,
-    resolveHost,
+    resolveHost: deps.resolveHost,
     apiKey: deps.jinaApiKey,
     maxBytes,
     maxChars,
@@ -302,11 +294,10 @@ async function runFirecrawlBackend(
   url: string,
   maxChars: number,
   deps: WebFetchDeps,
-  resolveHost: ResolveHost | undefined,
 ): Promise<BackendOutcome> {
   const outcome = await firecrawlFetch(url, {
     fetch: deps.fetch,
-    resolveHost,
+    resolveHost: deps.resolveHost,
     apiKey: deps.firecrawlApiKey,
     maxChars,
     timeoutMs: FIRECRAWL_TIMEOUT_MS,
@@ -353,13 +344,10 @@ const liveDeps: WebFetchDeps = {
 
 /** Runs the full web_fetch path against injected deps; the exported tool binds the live deps. */
 export async function runWebFetch(args: WebFetchArgs, deps: WebFetchDeps): Promise<string> {
-  // Entry guard: a malformed/unsafe URL must never reach a backend. Pre-resolve the host (async DNS)
-  // into the literals the SYNC guard checks; the static backend re-guards each redirect hop the same
-  // way. A bad input is a typed input error (the model reads it), not a crashed turn.
+  // Entry guard: a malformed/unsafe URL must never reach a backend. A bad input is a typed input
+  // error (the model reads it), not a crashed turn.
   try {
-    const sync = await syncResolverFor(args.url, deps.resolveHost);
-
-    assertSafeUrl(args.url, sync);
+    await assertSafeUrlAsync(args.url, deps.resolveHost);
   } catch (error) {
     if (error instanceof UnsafeUrlError) {
       return toolInput(error.reason);
@@ -371,26 +359,6 @@ export async function runWebFetch(args: WebFetchArgs, deps: WebFetchDeps): Promi
   const result = await fetchVia(args, deps);
 
   return serializeResult(result);
-}
-
-/** Pre-resolves the URL's host (async) into the sync resolver the guard and the fallback backends
- *  consume, so each backend re-guards the same target against the literals resolved once here. */
-async function syncResolverFor(
-  raw: string,
-  resolveHost: WebFetchDeps["resolveHost"],
-): Promise<ResolveHost | undefined> {
-  let host: string;
-
-  try {
-    host = new URL(raw).hostname;
-  } catch {
-    // The guard rejects the malformed URL; give it a resolver that finds nothing.
-    return () => [];
-  }
-
-  const literals = await resolveHost(host);
-
-  return (queried) => (queried === host ? literals : []);
 }
 
 /** Fetches one explicit public URL into bounded, attributable markdown/text. */

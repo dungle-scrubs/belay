@@ -8,7 +8,7 @@ import {
   type LspDiagnostic,
   type LspSeverity,
 } from "@host/lsp/contract";
-import { displayPath } from "@host/lsp/format";
+import { describeDegraded, displayPath } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 
 /**
@@ -110,6 +110,93 @@ export function unsupportedCapability(
     "unsupported",
     `${acquired.server} does not advertise ${provider} in its initialize capabilities`,
   );
+}
+
+export interface FileLspRequestContext {
+  readonly root: string;
+  readonly loaded: WorkspaceFile;
+  readonly acquired: { readonly client: LspClient; readonly server: string };
+}
+
+export interface FileLspRequestOptions<TPrepared = void> {
+  readonly file: string;
+  readonly capability: LspProviderCapability;
+  readonly method: string;
+  readonly prepare?: (context: FileLspRequestContext) => Promise<TPrepared> | TPrepared;
+  readonly params: (context: FileLspRequestContext, prepared: TPrepared) => unknown;
+  readonly render: (
+    value: unknown,
+    context: FileLspRequestContext,
+    prepared: TPrepared,
+  ) => string | Promise<string>;
+}
+
+/**
+ * Runs the shared file-taking LSP tool pipeline: load file, acquire server, gate capability, sync
+ * current file content, optionally prepare request context, issue request, render degradation or value.
+ */
+export async function runFileLspRequest<TPrepared = void>(
+  manager: LspManager,
+  options: FileLspRequestOptions<TPrepared>,
+): Promise<string> {
+  const root = lspWorkspaceRoot(manager);
+  const loaded = await loadWorkspaceFile(root, options.file);
+  if (!loaded) {
+    return fileNotFound(options.file, root);
+  }
+  const acquired = await manager.acquire();
+  if (acquired.kind === "degraded") {
+    return describeDegraded(acquired);
+  }
+  const unsupported = unsupportedCapability(acquired, options.capability);
+  if (unsupported) {
+    return describeDegraded(unsupported);
+  }
+
+  openWorkspaceFile(acquired.client, loaded);
+  const context = { root, loaded, acquired };
+  const prepared =
+    options.prepare === undefined ? (undefined as TPrepared) : await options.prepare(context);
+  const outcome = await manager.request(options.method, options.params(context, prepared));
+  if (outcome.kind === "degraded") {
+    return describeDegraded(outcome);
+  }
+  return options.render(outcome.value, context, prepared);
+}
+
+export interface WorkspaceLspRequestContext {
+  readonly root: string;
+  readonly acquired: { readonly client: LspClient; readonly server: string };
+}
+
+export interface WorkspaceLspRequestOptions {
+  readonly capability: LspProviderCapability;
+  readonly method: string;
+  readonly params: unknown;
+  readonly render: (
+    value: unknown,
+    context: WorkspaceLspRequestContext,
+  ) => string | Promise<string>;
+}
+
+/** Runs the shared workspace-scoped LSP request pipeline for tools that do not open a file first. */
+export async function runWorkspaceLspRequest(
+  manager: LspManager,
+  options: WorkspaceLspRequestOptions,
+): Promise<string> {
+  const acquired = await manager.acquire();
+  if (acquired.kind === "degraded") {
+    return describeDegraded(acquired);
+  }
+  const unsupported = unsupportedCapability(acquired, options.capability);
+  if (unsupported) {
+    return describeDegraded(unsupported);
+  }
+  const outcome = await manager.request(options.method, options.params);
+  if (outcome.kind === "degraded") {
+    return describeDegraded(outcome);
+  }
+  return options.render(outcome.value, { root: lspWorkspaceRoot(manager), acquired });
 }
 
 /** A tool's 1-based line/column encoded as the 0-based LSP wire position. */

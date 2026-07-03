@@ -14,13 +14,13 @@
 import type { FetchAttemptStatus } from "./envelope";
 import type { BoundedContent } from "./extract";
 import { boundContent } from "./extract";
-import { assertSafeUrl, type ResolveHost, UnsafeUrlError } from "./url-guard";
+import { type AsyncResolveHost, assertSafeUrlAsync, UnsafeUrlError } from "./url-guard";
 
 /** The Firecrawl backend's injected dependencies. `apiKey` is `FIRECRAWL_API_KEY`; undefined means
  *  the backend is unavailable and returns a typed `failed` outcome without any request. */
 export interface FirecrawlFetchDeps {
   readonly fetch: typeof globalThis.fetch;
-  readonly resolveHost?: ResolveHost;
+  readonly resolveHost?: AsyncResolveHost;
   readonly apiKey?: string;
   readonly maxChars: number;
   readonly timeoutMs: number;
@@ -68,7 +68,7 @@ export async function firecrawlFetch(
   let safe: URL;
 
   try {
-    safe = assertSafeUrl(target, deps.resolveHost);
+    safe = await assertSafeUrlAsync(target, deps.resolveHost);
   } catch (error) {
     if (error instanceof UnsafeUrlError) {
       return { status: "failed", detail: `firecrawl target rejected: ${error.reason}` };

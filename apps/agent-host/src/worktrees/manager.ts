@@ -10,6 +10,7 @@ import {
   mergeBranch,
   pruneWorktrees,
   removeWorktree,
+  type WorktreeGitState,
   worktreeGitState,
 } from "./git";
 import type { GitRunner } from "./git-status";
@@ -68,6 +69,44 @@ export type SwitchTarget =
 
 const BASELINE_ID = "baseline";
 
+interface SummaryIdentity {
+  readonly id: string;
+  readonly baseRepo: string;
+  readonly baseRepoName: string;
+  readonly branch: string;
+  readonly path: string;
+  readonly sessionId: string;
+}
+
+interface SummaryRole {
+  readonly baseline: boolean;
+  readonly current: boolean;
+  readonly missing: boolean;
+}
+
+function summaryRow(
+  identity: SummaryIdentity,
+  role: SummaryRole,
+  state: WorktreeGitState | null,
+): WorktreeSummary {
+  return {
+    id: identity.id,
+    baseRepo: identity.baseRepo,
+    baseRepoName: identity.baseRepoName,
+    branch: state?.git?.branch ?? state?.git?.detached ?? identity.branch,
+    path: identity.path,
+    sessionId: identity.sessionId,
+    dirty: state?.git?.dirty ?? false,
+    ahead: state?.git?.ahead ?? 0,
+    behind: state?.git?.behind ?? 0,
+    conflict: state?.conflict ?? false,
+    detached: state?.git?.branch == null && state?.git?.detached != null,
+    current: role.current,
+    baseline: role.baseline,
+    missing: role.missing,
+  };
+}
+
 export class WorktreeManager {
   constructor(private readonly deps: WorktreeManagerDeps) {}
 
@@ -102,59 +141,47 @@ export class WorktreeManager {
       return [];
     }
     const baseState = worktreeGitState(this.deps.gitRunnerFor(ctx.basePath));
-    const baseline: WorktreeSummary = {
-      id: BASELINE_ID,
-      baseRepo: ctx.baseRepo,
-      baseRepoName: ctx.baseRepoName,
-      branch: baseState.git?.branch ?? baseState.git?.detached ?? "(detached)",
-      path: this.deps.abbrev(ctx.basePath),
-      sessionId: ctx.baselineSessionId,
-      dirty: baseState.git?.dirty ?? false,
-      ahead: baseState.git?.ahead ?? 0,
-      behind: baseState.git?.behind ?? 0,
-      conflict: baseState.conflict,
-      detached: baseState.git?.branch == null && baseState.git?.detached != null,
-      current: ctx.currentPath === ctx.basePath,
-      baseline: true,
-      missing: false,
-    };
+    const baseline = summaryRow(
+      {
+        id: BASELINE_ID,
+        baseRepo: ctx.baseRepo,
+        baseRepoName: ctx.baseRepoName,
+        branch: "(detached)",
+        path: this.deps.abbrev(ctx.basePath),
+        sessionId: ctx.baselineSessionId,
+      },
+      { baseline: true, current: ctx.currentPath === ctx.basePath, missing: false },
+      baseState,
+    );
 
     const managed = worktreesForRepo(this.deps.fs, this.deps.home, ctx.baseRepo).map((view) => {
       if (view.missing) {
-        return {
+        return summaryRow(
+          {
+            id: view.id,
+            baseRepo: view.baseRepo,
+            baseRepoName: view.baseRepoName,
+            branch: view.branch,
+            path: this.deps.abbrev(view.worktreePath),
+            sessionId: view.sessionId,
+          },
+          { baseline: false, current: false, missing: true },
+          null,
+        );
+      }
+      const state = worktreeGitState(this.deps.gitRunnerFor(view.worktreePath));
+      return summaryRow(
+        {
           id: view.id,
           baseRepo: view.baseRepo,
           baseRepoName: view.baseRepoName,
           branch: view.branch,
           path: this.deps.abbrev(view.worktreePath),
           sessionId: view.sessionId,
-          dirty: false,
-          ahead: 0,
-          behind: 0,
-          conflict: false,
-          detached: false,
-          current: false,
-          baseline: false,
-          missing: true,
-        } satisfies WorktreeSummary;
-      }
-      const state = worktreeGitState(this.deps.gitRunnerFor(view.worktreePath));
-      return {
-        id: view.id,
-        baseRepo: view.baseRepo,
-        baseRepoName: view.baseRepoName,
-        branch: state.git?.branch ?? view.branch,
-        path: this.deps.abbrev(view.worktreePath),
-        sessionId: view.sessionId,
-        dirty: state.git?.dirty ?? false,
-        ahead: state.git?.ahead ?? 0,
-        behind: state.git?.behind ?? 0,
-        conflict: state.conflict,
-        detached: state.git?.branch == null && state.git?.detached != null,
-        current: ctx.currentPath === view.worktreePath,
-        baseline: false,
-        missing: false,
-      } satisfies WorktreeSummary;
+        },
+        { baseline: false, current: ctx.currentPath === view.worktreePath, missing: false },
+        state,
+      );
     });
 
     return [baseline, ...managed];

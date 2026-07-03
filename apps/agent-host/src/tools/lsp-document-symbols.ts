@@ -1,16 +1,10 @@
 import { asRecord } from "@host/boot/decode";
 import { MAX_LSP_DOCUMENT_SYMBOLS } from "@host/lsp/caps";
 import { type LspDocumentSymbol, lspSymbolKindName, rangeFromLsp } from "@host/lsp/contract";
-import { describeDegraded, formatRange } from "@host/lsp/format";
+import { formatRange } from "@host/lsp/format";
 import type { LspManager } from "@host/lsp/manager";
 import { Schema } from "effect";
-import {
-  fileNotFound,
-  loadWorkspaceFile,
-  lspWorkspaceRoot,
-  openWorkspaceFile,
-  unsupportedCapability,
-} from "./lsp-shared";
+import { runFileLspRequest } from "./lsp-shared";
 import { clipLine, simpleTool } from "./shared";
 import type { Tool } from "./types";
 
@@ -100,36 +94,24 @@ export function buildLspDocumentSymbolsTool(manager: LspManager): Tool<LspDocume
     params: Params,
     readOnly: true,
     capped: true,
-    execute: async (args) => {
-      const root = lspWorkspaceRoot(manager);
-      const loaded = await loadWorkspaceFile(root, args.file);
-      if (!loaded) {
-        return fileNotFound(args.file, root);
-      }
-      const acquired = await manager.acquire();
-      if (acquired.kind === "degraded") {
-        return describeDegraded(acquired);
-      }
-      const unsupported = unsupportedCapability(acquired, "documentSymbolProvider");
-      if (unsupported) {
-        return describeDegraded(unsupported);
-      }
-      openWorkspaceFile(acquired.client, loaded);
-      const outcome = await manager.request("textDocument/documentSymbol", {
-        textDocument: { uri: loaded.uri },
-      });
-      if (outcome.kind === "degraded") {
-        return describeDegraded(outcome);
-      }
-      const symbols = decodeSymbols(outcome.value);
-      if (symbols.length === 0) {
-        return `no symbols reported in ${loaded.display}`;
-      }
-      const total = countSymbols(symbols);
-      const cut = total > MAX_LSP_DOCUMENT_SYMBOLS ? `, capped at ${MAX_LSP_DOCUMENT_SYMBOLS}` : "";
-      const header = `outline of ${loaded.display} (${total} symbol(s)${cut}):`;
-      const budget = { remaining: MAX_LSP_DOCUMENT_SYMBOLS };
-      return [header, ...renderOutline(symbols, 0, budget)].join("\n");
-    },
+    execute: async (args) =>
+      runFileLspRequest(manager, {
+        file: args.file,
+        capability: "documentSymbolProvider",
+        method: "textDocument/documentSymbol",
+        params: ({ loaded }) => ({ textDocument: { uri: loaded.uri } }),
+        render: (value, { loaded }) => {
+          const symbols = decodeSymbols(value);
+          if (symbols.length === 0) {
+            return `no symbols reported in ${loaded.display}`;
+          }
+          const total = countSymbols(symbols);
+          const cut =
+            total > MAX_LSP_DOCUMENT_SYMBOLS ? `, capped at ${MAX_LSP_DOCUMENT_SYMBOLS}` : "";
+          const header = `outline of ${loaded.display} (${total} symbol(s)${cut}):`;
+          const budget = { remaining: MAX_LSP_DOCUMENT_SYMBOLS };
+          return [header, ...renderOutline(symbols, 0, budget)].join("\n");
+        },
+      }),
   });
 }
