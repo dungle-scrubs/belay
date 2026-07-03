@@ -13,6 +13,7 @@ export * from "./doctor";
 export * from "./envelope";
 export * from "./error-message";
 export * from "./event";
+export * from "./file-mention";
 export * from "./fork";
 export * from "./identity";
 export * from "./image-tokens";

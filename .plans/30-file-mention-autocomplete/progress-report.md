@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M1: Reusable Autocomplete Chrome
+> Current focus: M2: Composer Token Detection
 
 - Total checklist items: 37
-- Completed: 4
-- Current cutoff blockers: 33
+- Completed: 9
+- Current cutoff blockers: 28
 
 ## 0. Hard Dependencies
 
@@ -17,11 +17,11 @@
 
 ## M1: Reusable Autocomplete Chrome
 
-- [ ] RED: Storybook fixtures for slash menu, file menu, long paths, empty results, and narrow composer widths
-- [ ] GREEN: Extract or widen the shared menu row/list primitive
-- [ ] RED: Component tests for active row, focus-preserving mouse pick, long path truncation, and summary metadata
-- [ ] GREEN: Render file rows with basename emphasis, muted directory path, and stable row height
-- [ ] REFACTOR: Preserve existing slash command behavior at its public boundary
+- [x] RED: Storybook fixtures for slash menu, file menu, long paths, empty results, and narrow composer widths
+- [x] GREEN: Extract or widen the shared menu row/list primitive
+- [x] RED: Component tests for active row, focus-preserving mouse pick, long path truncation, and summary metadata
+- [x] GREEN: Render file rows with basename emphasis, muted directory path, and stable row height
+- [x] REFACTOR: Preserve existing slash command behavior at its public boundary
 
 ## M2: Composer Token Detection
 

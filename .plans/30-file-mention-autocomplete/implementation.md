@@ -6,7 +6,7 @@
 - [x] Existing slash-command autocomplete pattern: `useSlashMenu` plus `CommandMenu`, with the caller owning filtering, active index, and key handling.
 - [x] Existing workspace root confinement and file-search primitives in the host (`WORKSPACE_ROOT`, `glob`, `grep`, shared skip policy).
 - [x] Existing prompt token/ref behavior for inline image tokens, so file mentions can follow the same "visible text plus structured metadata" direction without becoming attachment chips.
-- [ ] `17.1-loop-helper-composer-wiring` (lands first) - the composer (`prompt-input.tsx`) already renders a `LoopHelper` builder/preview overlay + command-token highlighting on `/loop` lines; the `@`-mention picker must coexist with it (see Key Decisions). <!-- D-003 -->
+- [x] `17.1-loop-helper-composer-wiring` (merged) - the composer (`prompt-input.tsx`) already renders a `LoopHelper` builder/preview overlay + command-token highlighting on `/loop` lines; the `@`-mention picker must coexist with it (see Key Decisions). <!-- D-003 -->
 
 ## 1. Architecture
 
