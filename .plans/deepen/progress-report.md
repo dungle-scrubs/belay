@@ -7,9 +7,9 @@
 
 > Current focus: M1: SessionTransport read/await/identity helpers
 
-- Total checklist items: 27
+- Total checklist items: 29
 - Completed: 0
-- Current cutoff blockers: 27
+- Current cutoff blockers: 29
 
 ## High
 
@@ -36,6 +36,7 @@
 - [ ] M23: session fan-out hub (session-store; pass 2)
 - [ ] M26: event-provenance predicates (host + session; pass 3)
 - [ ] M27: cancellable-fiber Exit interpretation (agent-host; pass 3)
+- [ ] M28: fork.ts public-surface narrowing (packages/session; pass 4)
 
 ## Low
 
@@ -48,3 +49,4 @@
 - [ ] M20: transcript message-kind descriptor registry (web renderers)
 - [ ] M24: requireLoadedCorpus (tools/docs; pass 2)
 - [ ] M25: worktree summaryRow builder (worktrees/manager; pass 2)
+- [ ] M29: e2e/live live-turn harness (test-kit; pass 4)

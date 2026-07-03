@@ -274,6 +274,25 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
 - **Churn:** small-medium (~25-line helper + ~5 call-site rewrites; scoped away from the recorded
   ActiveRun/forwarder candidates).
 
+#### M28: `packages/session/src/fork.ts` public-surface narrowing (pass 4)
+
+- **Symptom:** interface ~4x heavier than usage + speculative generality + leaky abstraction.
+- **Evidence:** 16 barrel-exported symbols; the SOLE production consumer (session/fork-flow.ts:1-8)
+  imports 4; the other 12 are consumed only by fork.test.ts (verified per symbol);
+  `ForkInheritance<S>` is a generic with exactly one instance (MODEL_SELECTION_INHERITANCE) and no
+  generic consumer; `planFork` returns raw `sourceEvents` specifically so the caller can re-derive
+  the model the module could compute itself (fork-flow.ts:83); the origin/dedupe read surface is
+  written but never read in production.
+- **Proposed boundary:** `ForkPlan` carries `inheritedModel: ActiveModel | null` computed inside;
+  drop `sourceEvents`; make the copy/fold/tag mechanics module-private; delete the
+  ForkInheritance framework + unused origin-read surface. Public surface becomes
+  { planFork, ForkPlan, ActiveModel, isForkReady }.
+- **Payoff:** the barrel sheds ~13 symbols; fork reads as plan/ready/inherited-model; removes a
+  generic-with-one-impl and the sourceEvents leak.
+- **Churn:** moderate, low-risk (one module + one consumer line; ~12 unit tests rewritten to
+  exercise via planFork).
+
+
 ### Low
 
 #### M14: `apps/agent-host/src/agent` ActiveRun cell
@@ -358,6 +377,7 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
   icon/status/quiet-flag.
 
 
+
 #### M24: `apps/agent-host/src/tools/docs/corpus-store.ts` requireLoadedCorpus (pass 2)
 
 - **Symptom:** callsite boilerplate - the 3-state LoadResult union hand-unwrapped per action.
@@ -378,6 +398,37 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
 - **Payoff:** ~35 lines collapse; the "missing rows read zeroed, not stale" invariant lives once;
   a unit-test seam for row construction without a live repo.
 - **Churn:** low (single file; summaries() already tested).
+
+#### M29: `e2e/live` live-turn harness (pass 4)
+
+- **Symptom:** callsite boilerplate + reaching past the existing test-kit API.
+- **Evidence:** both gated live specs hand-roll transport.connectSession + local events[] +
+  hostOnline flag (context.test.ts:24-32, agent.test.ts:25-33) re-implementing test-kit's
+  subscribe(); the publish -> waitFor(assistant.completed) -> slice/extract "ask a turn" sequence
+  is a local helper in one spec and open-coded in the other (context.test.ts:34-47,
+  agent.test.ts:37-54).
+- **Proposed boundary:** `liveHost(transport, sessionId)` in test-kit composing subscribe +
+  waitOnline() + `askTurn(text, {provider}): Promise<string>` owning the event-name coupling.
+- **Payoff:** live specs shrink to assertions; the event-name coupling lives in one tested place.
+- **Churn:** small (~30-line helper + 2 spec bodies); low value today (2 gated callsites).
+
+## Considered and rejected (pass 4)
+
+- `packages/session/src/approval.ts` is FULLY DEAD in production (only its own test references it;
+  tied to the never-wired continuation-handoff surface) - a dead-code REMOVAL for a simplify pass,
+  not a depth candidate. Surfaced for the owner.
+- catalog-query.ts (correctly-private helper of model-source); createMcpRuntime/createHooksRuntime
+  options (documented test-injection DI, one production call site each); LoopStore/Lease/
+  TurnScheduler constructors (single-site DI; consumers already use narrow Picks); the only wide
+  Pick is a duplicated 4-field DoctorArea projection in manifest/ (drift nit); tools/docs
+  build-vs-query (functional verticals, not temporal); project-context (documented functional
+  split); @trevor/agent-host/testing barrel (deliberate per-seam e2e surface; two dead type
+  re-exports); mcp/lsp/hooks helper modules (deep single-consumer helpers - pass-2 verdict
+  extended); tests/browser run_in_container wrapper (~8-line shell function; below the bar);
+  lane-b-fixtures completedExchange (3-callsite same-file DRY nit); vim controller/use-vim/caret,
+  trevor-cli main/lifecycle/project, model-selection projection, repo-policy engine,
+  tests/browser shared.ts, storybook config, assistant-ui primitives, command-menu/slash-menu/
+  prompt-editor/modal-state hooks, tool-detail model/view (all verified deep).
 
 ## Considered and rejected (pass 3)
 
