@@ -6,6 +6,11 @@
 - Existing `MessageAttachments` / `MessageImages` inline transcript rendering.
 - Existing same-message `ImageCarousel` dialog behavior.
 - Existing blob-store image URL resolution through `artifactSrc`.
+- `12.2-transcript-scroll-follow` (lands first) - an image loading in re-measures its virtualized
+  transcript row; under 12.2's follow controller a re-measure while the user is scrolled up must land
+  as anchor compensation (the viewport stays visually stationary), never as a downward tug. Tiles
+  that reserve size without layout jump (M1) keep that cheap; 12.2's Lane B monotonic-scroll spec is
+  the backstop. <!-- D-003 -->
 
 ## 1. Architecture
 
@@ -44,6 +49,9 @@ No host/runtime observability is required. Browser-side image load/error state s
 **Goal:** Inline transcript images have assistant-ui-inspired loading, error, metadata, and responsive states while preserving D-092 behavior.
 
 #### M1: Storybook Image States
+
+<!-- D-003 --> Note (12.2): "without layout jump" also protects the 12.2 scroll contract - an image
+load that re-measures a row above the viewport must not move the user's view while unpinned.
 
 - **Dependencies:** hard dependencies
 - **Effort:** S

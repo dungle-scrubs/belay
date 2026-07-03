@@ -7,6 +7,7 @@
 - Existing `VirtualTranscript` TanStack virtualizer wiring against the same scroll ref.
 - Existing transcript scroll Storybook fixture and web tests.
 - `09.2-web-browser-test-suite` (lands first) - this plan restyles the exact transcript scroll element 09.2 Lane B asserts (pin / stick-to-bottom / mid-stream-no-yank / jump-to-bottom). Keep the scroll element and ref identity stable so Lane B stays green, and regenerate Lane A baselines for the scrollbar story states. <!-- D-003 -->
+- `12.2-transcript-scroll-follow` (lands first) - replaces the `useScrollFollow` intent-window model with a single follow controller (`apps/web/src/scroll-follow.ts`): direction-based synchronous unpin, one programmatic-write authority, re-pin only via a deliberate bottom return / jump / submit. The scroll element identity and `data-transcript-*` hooks are unchanged (one ADDITIVE `data-transcript-pinned` attribute), so this plan's constraints still hold - but "pinned/live-edge behavior" is owned by the controller, not `useScrollFollow` internals, and Lane B's scroll spec set now includes 12.2's three regression specs, which must also stay green through the restyle. <!-- D-004 -->
 
 ## 1. Architecture
 
@@ -69,6 +70,10 @@ No new runtime observability is required. This plan should rely on DOM tests and
 **Goal:** The custom scrollbar is usable across browsers and does not regress transcript interaction.
 
 #### M3: Scroll Behavior Regression
+
+<!-- D-004 --> Note (12.2): the behaviors this milestone re-verifies (pinned follow, manual scroll-up
+unpinning, jump re-pin) are owned by the 12.2 follow controller after it lands; assert them through
+the Lane B specs and the `data-transcript-pinned` hook rather than `useScrollFollow` internals.
 
 - **Dependencies:** M2
 - **Effort:** M

@@ -10,6 +10,7 @@
 - Existing `.plans/05-compact-transcript-layout` as the future compact-mode integration boundary.
 - Coordinate with `.plans/09.1-mid-turn-model-switch` (lands first): it adds a `model.switched` inline marker row that renders a reasoning-level delta (`X (high) -> X (medium)`) and shares `apps/web/src/components/chat/transcript-row-view.tsx`. That marker is owned by 09.1 and is distinct from this plan's ghosted reasoning trace.
 - `09.2-web-browser-test-suite` (lands first) - "streaming behavior must not yank transcript scroll" is exactly 09.2 Lane B's mid-stream-no-yank assertion; keep it green, and regenerate Lane A baselines for the reasoning story states (hidden/collapsed/expanded/streaming/narrow). <!-- D-005 -->
+- `12.2-transcript-scroll-follow` (lands first) - the no-yank invariant this plan relies on is OWNED by 12.2's follow controller (`apps/web/src/scroll-follow.ts`): while the user is scrolled up, every follow-class programmatic scroll is denied, so reasoning auto-open/auto-collapse must never write scroll directly - route any programmatic scroll through the controller, and expand/collapse row re-measures land under its arbitration. Lane B's scroll spec set includes 12.2's three regression specs; keep them green too. <!-- D-006 -->
 
 ## 1. Architecture
 
@@ -61,6 +62,10 @@ No host/runtime observability is required. DOM tests and Storybook states should
   6. REFACTOR: Rename local component only if it improves clarity without touching protocol names.
 
 #### M2: Streaming Behavior
+
+<!-- D-006 --> Note (12.2): "must not yank" is enforced by the 12.2 follow controller - auto-open and
+auto-collapse must not write scroll themselves; while the user is unpinned their re-measures must land
+as anchor compensation (net-zero viewport movement), which the 12.2 Lane B specs assert.
 
 - **Dependencies:** M1
 - **Effort:** M
