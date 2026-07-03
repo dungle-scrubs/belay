@@ -32,12 +32,20 @@ function read(path: string): string {
 }
 
 /**
- * Whether a CLAUDE.md body is an already-converted pointer to its sibling AGENTS.md (D-011). A pointer
- * mentions AGENTS.md and one of the migration verbs, so re-discovery recognizes it and does not
- * re-propose the file. Exported so the writer can short-circuit a redundant conversion idempotently.
+ * The sentinel line every Trevor-written pointer CLAUDE.md carries. Detection matches EXACTLY this
+ * marker - a fuzzy phrase match ("see AGENTS.md", "reuse the AGENTS.md patterns") false-positives on
+ * real instruction bodies and would silently exclude them from migration.
+ */
+export const CLAUDE_POINTER_SENTINEL = "<!-- trevor:claude-md-pointer -->";
+
+/**
+ * Whether a CLAUDE.md body is an already-converted pointer to its sibling AGENTS.md (D-011): it
+ * carries the {@link CLAUDE_POINTER_SENTINEL} the pointer rewrite stamps, so re-discovery recognizes
+ * it and does not re-propose the file. Exported so the writer can short-circuit a redundant
+ * conversion idempotently.
  */
 export function isClaudePointer(body: string): boolean {
-  return /AGENTS\.md/u.test(body) && /moved|see|use|source of truth|pointer/i.test(body);
+  return body.includes(CLAUDE_POINTER_SENTINEL);
 }
 
 function preview(body: string): string {

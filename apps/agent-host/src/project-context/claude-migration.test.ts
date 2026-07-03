@@ -3,7 +3,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "vitest";
-import { discoverClaudeMigrations, siblingAgentsPath } from "./claude-migration";
+import {
+  CLAUDE_POINTER_SENTINEL,
+  discoverClaudeMigrations,
+  siblingAgentsPath,
+} from "./claude-migration";
 
 function tree(): string {
   return mkdtempSync(join(tmpdir(), "claude-migration-"));
@@ -45,7 +49,7 @@ test("maps each CLAUDE.md file to sibling AGENTS.md state and bounded preview", 
 
 test("recognizes converted CLAUDE.md pointers and excludes them from proposal items", () => {
   const root = tree();
-  write(join(root, "CLAUDE.md"), "Moved: use AGENTS.md as the source of truth.");
+  write(join(root, "CLAUDE.md"), `# CLAUDE.md\n\n${CLAUDE_POINTER_SENTINEL}\n\nSee AGENTS.md.`);
   write(join(root, "pkg", "CLAUDE.md"), "real legacy instructions");
 
   const inventory = discoverClaudeMigrations(root);
@@ -54,5 +58,24 @@ test("recognizes converted CLAUDE.md pointers and excludes them from proposal it
   assert.deepEqual(
     inventory.proposalItems.map((item) => item.claudePath),
     ["pkg/CLAUDE.md"],
+  );
+});
+
+test("a real body that merely MENTIONS AGENTS.md is still proposed (no fuzzy pointer match)", () => {
+  const root = tree();
+  // Prose like this used to false-positive the old regex matcher and silently skip migration.
+  write(
+    join(root, "CLAUDE.md"),
+    "House rules: reuse the AGENTS.md patterns; see AGENTS.md for the source of truth on tests.",
+  );
+
+  const inventory = discoverClaudeMigrations(root);
+  const item = inventory.items.find((entry) => entry.claudePath === "CLAUDE.md");
+
+  assert.equal(item?.pointer, false, "prose mentioning AGENTS.md is not a pointer");
+  assert.deepEqual(
+    inventory.proposalItems.map((entry) => entry.claudePath),
+    ["CLAUDE.md"],
+    "the file still gets a migration proposal",
   );
 });

@@ -127,8 +127,43 @@ test("an atomic write leaves no temp files behind", () => {
     action: "create",
   });
 
-  const stray = readdirSync(root).filter((name) => name.includes("trevor-tmp"));
+  const stray = readdirSync(root).filter((name) => name.endsWith(".tmp"));
   assert.deepEqual(stray, [], "no staging temp files remain in the tree");
+});
+
+test("a rerun after AGENTS.md landed but the pointer write failed completes, never duplicates (D-011)", () => {
+  const root = tree();
+  const original = "# rules\n\nRun tests.";
+  write(join(root, "CLAUDE.md"), original);
+  applyMigrationDecision(root, {
+    claudePath: "CLAUDE.md",
+    agentsPath: "AGENTS.md",
+    action: "create",
+  });
+  const agentsAfterCreate = read(join(root, "AGENTS.md"));
+  // Simulate the interrupted create: AGENTS.md landed but the pointer write never did, so the
+  // CLAUDE.md is still the original body and discovery proposes it again.
+  write(join(root, "CLAUDE.md"), original);
+  assert.equal(
+    discoverClaudeMigrations(root).proposalItems.length,
+    1,
+    "re-proposed after the crash",
+  );
+
+  // The rerun (create falls through to merge on the existing sibling) must recognize the
+  // create-stamped markers: no second copy of the body, and the pointer rewrite is COMPLETED.
+  const second = applyMigrationDecision(root, {
+    claudePath: "CLAUDE.md",
+    agentsPath: "AGENTS.md",
+    action: "create",
+  });
+
+  assert.equal(second.kind, "skipped", "already-migrated content is never appended twice");
+  assert.equal(second.pointerWritten, true, "the interrupted pointer rewrite is completed");
+  assert.equal(read(join(root, "AGENTS.md")), agentsAfterCreate, "AGENTS.md is unchanged");
+  const markers = read(join(root, "AGENTS.md")).match(/BEGIN migrated from CLAUDE\.md/g) ?? [];
+  assert.equal(markers.length, 1, "exactly one migrated section after the rerun");
+  assert.deepEqual(discoverClaudeMigrations(root).proposalItems, [], "no further re-proposals");
 });
 
 test("leave and ignore actions never write files", () => {

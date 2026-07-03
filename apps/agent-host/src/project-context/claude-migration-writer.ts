@@ -1,22 +1,26 @@
 /**
  * Responsible for: the CLAUDE.md -> AGENTS.md file mutations - create, merge, and the pointer rewrite
- * (M6 / D-011). Every operation is explicit, atomic (temp-write + rename), and idempotent, and NONE of
- * them runs unless the caller passes a decision that already carries the user's recorded response.
+ * (M6 / D-011). Every operation is explicit, atomic (the shared temp-write + rename), and idempotent,
+ * and NONE of them runs unless the caller passes a decision that already carries the user's recorded
+ * response.
  * Not for: deciding WHAT to do (claude-migration-proposal.ts) or WHEN (claude-migration-flow.ts).
  */
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { isClaudePointer } from "./claude-migration";
+import { writeFileAtomic } from "@host/io/atomic-write";
+import { CLAUDE_POINTER_SENTINEL, isClaudePointer } from "./claude-migration";
 import type { MigrationActionKind, MigrationDecision } from "./claude-migration-proposal";
 
-/** How an applied decision resolved on disk. */
+/** How an applied decision resolved on disk. `failed` is produced by the flow's per-file containment
+ *  (claude-migration-flow.ts) when applying one decision threw; the writer itself only throws. */
 export type MigrationOutcomeKind =
   | "created"
   | "merged"
   | "left"
   | "ignored-once"
   | "ignored-permanent"
-  | "skipped";
+  | "skipped"
+  | "failed";
 
 /** The result of applying one decision: what happened, whether a pointer was written, and byte cost. */
 export interface MigrationOutcome {
@@ -37,26 +41,23 @@ function provenanceHeader(claudePath: string): string {
   return `<!-- Migrated from ${claudePath} by Trevor. Original content preserved in git history. -->`;
 }
 
-/** The pointer body left in place of a converted CLAUDE.md. Recognized by `isPointer` (idempotent). */
+/** The pointer body left in place of a converted CLAUDE.md. Carries the sentinel `isClaudePointer`
+ *  matches exactly, so detection never relies on fuzzy prose matching (idempotent re-discovery). */
 function pointerBody(agentsPath: string): string {
   return (
-    `# CLAUDE.md\n\n` +
+    `# CLAUDE.md\n\n${CLAUDE_POINTER_SENTINEL}\n\n` +
     `This file has moved. Trevor uses \`${agentsPath}\` as the source of truth for agent ` +
     `instructions; see that file. This pointer is safe to leave in place.\n`
   );
 }
 
-/** The migrated section appended into an existing AGENTS.md, framed by stable markers (D-011). */
+/**
+ * The migrated content, framed by stable markers (D-011). BOTH create and merge stamp these same
+ * markers, so a rerun after a partially-applied conversion (AGENTS.md written, pointer write failed)
+ * uniformly recognizes already-migrated content and skips instead of appending the body twice.
+ */
 function migratedSection(claudePath: string, body: string): string {
   return `${MERGE_BEGIN}\n## Migrated from ${claudePath}\n\n${body.trim()}\n${MERGE_END}`;
-}
-
-/** Atomic write: stage to a sibling temp file, then rename over the target. Returns bytes written. */
-function atomicWrite(absPath: string, content: string): number {
-  const tmp = `${absPath}.trevor-tmp-${process.pid}`;
-  writeFileSync(tmp, content, "utf8");
-  renameSync(tmp, absPath);
-  return Buffer.byteLength(content);
 }
 
 function readText(absPath: string): string {
@@ -65,9 +66,11 @@ function readText(absPath: string): string {
 
 /**
  * Apply one recorded decision. `create`/`merge` write the sibling AGENTS.md and then rewrite the
- * CLAUDE.md into a pointer; the AGENTS.md write happens first, so a failure there leaves the CLAUDE.md
- * untouched (rollback-safe ordering). `leave`/`ignore-*` never touch the filesystem. Re-running a
- * conversion whose AGENTS.md already carries the migrated section is a no-op (`skipped`).
+ * CLAUDE.md into a pointer; the AGENTS.md write happens first and is ROLLED BACK if the pointer write
+ * throws (create removes the new file, merge restores the previous content), so a failure never leaves
+ * a half-converted pair behind. `leave`/`ignore-*` never touch the filesystem. Re-running a conversion
+ * whose CLAUDE.md is already a pointer, or whose AGENTS.md already carries the migrated-section
+ * markers, is a no-op (`skipped`).
  */
 export function applyMigrationDecision(
   root: string,
@@ -99,12 +102,20 @@ export function applyMigrationDecision(
         return { ...inert("skipped"), note: "CLAUDE.md is already a pointer to AGENTS.md." };
       }
       if (existsSync(agentsAbs)) {
-        // A sibling appeared since discovery; do not clobber it. Fall through to a merge instead.
+        // A sibling appeared since discovery (or a prior run wrote it before its pointer write
+        // failed); do not clobber it. Fall through to a merge, whose marker check keeps this
+        // idempotent.
         return applyMigrationDecision(root, { ...decision, action: "merge" });
       }
-      const content = `${provenanceHeader(decision.claudePath)}\n\n${body.trim()}\n`;
-      const bytes = atomicWrite(agentsAbs, content);
-      atomicWrite(claudeAbs, pointerBody(decision.agentsPath));
+      const content = `${provenanceHeader(decision.claudePath)}\n\n${migratedSection(decision.claudePath, body)}\n`;
+      const bytes = writeFileAtomic(agentsAbs, content);
+      try {
+        writeFileAtomic(claudeAbs, pointerBody(decision.agentsPath));
+      } catch (error) {
+        // Roll the create back so a rerun starts from the original state (no half-converted pair).
+        rmSync(agentsAbs, { force: true });
+        throw error;
+      }
       return {
         ...inert("created"),
         kind: "created",
@@ -123,14 +134,26 @@ export function applyMigrationDecision(
       }
       const existing = readText(agentsAbs);
       if (existing.includes(MERGE_BEGIN)) {
+        // The content already landed (an earlier conversion whose pointer write failed, or a plain
+        // re-run). Never append the body twice; instead COMPLETE the interrupted conversion by
+        // finishing the pointer rewrite - the user explicitly chose this file's migration, and
+        // without the pointer the file would be re-proposed forever.
+        writeFileAtomic(claudeAbs, pointerBody(decision.agentsPath));
         return {
           ...inert("skipped"),
-          note: "AGENTS.md already contains a migrated section for this file.",
+          pointerWritten: true,
+          note: "AGENTS.md already contains a migrated section; completed the pointer rewrite.",
         };
       }
       const content = `${existing.trimEnd()}\n\n${migratedSection(decision.claudePath, body)}\n`;
-      const bytes = atomicWrite(agentsAbs, content);
-      atomicWrite(claudeAbs, pointerBody(decision.agentsPath));
+      const bytes = writeFileAtomic(agentsAbs, content);
+      try {
+        writeFileAtomic(claudeAbs, pointerBody(decision.agentsPath));
+      } catch (error) {
+        // Restore the pre-merge AGENTS.md so a rerun starts from the original state.
+        writeFileAtomic(agentsAbs, existing);
+        throw error;
+      }
       return {
         ...inert("merged"),
         kind: "merged",
