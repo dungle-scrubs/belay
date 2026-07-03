@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useRef } from "react";
+import { createScrollFollowController } from "@/scroll-follow";
 import type { Message } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
 import { VirtualTranscript } from "./virtual-transcript";
@@ -103,6 +104,7 @@ const RUNNING_ROWS: readonly TranscriptRow[] = [
 
 function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const controllerRef = useRef(createScrollFollowController());
   return (
     <div
       ref={scrollRef}
@@ -112,6 +114,7 @@ function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boo
       <VirtualTranscript
         rows={rows}
         scrollRef={scrollRef}
+        controller={controllerRef.current}
         pinned={false}
         scrollToBottomRequest={0}
         showThinking

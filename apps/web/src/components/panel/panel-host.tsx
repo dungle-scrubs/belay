@@ -15,7 +15,6 @@ import { ChevronDown } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
-  type UIEvent as ReactUIEvent,
   type RefObject,
   type SubmitEvent,
   useMemo,
@@ -38,6 +37,7 @@ import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/pan
 import { QuestionSurface } from "@/components/question";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
+import type { ScrollFollowController } from "@/scroll-follow";
 import type { SessionStream } from "@/session/use-session";
 import type { HostStatus, PendingHandoff, PendingQuestion } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
@@ -85,12 +85,16 @@ export interface TranscriptView {
  */
 export interface TranscriptScroll {
   readonly transcriptRef: RefObject<HTMLDivElement | null>;
+  /** The follow authority (plan 12.2), threaded to VirtualTranscript so its writes ask the same
+   *  controller the jump affordance reads. */
+  readonly controller: ScrollFollowController;
   readonly atBottom: boolean;
   /** True when content appended below the fold while scrolled up (D-093): glows the chevron. */
   readonly hasUnseen: boolean;
   readonly bottomRequestId: number;
   readonly onScroll: () => void;
-  readonly onUserScrollIntent: () => void;
+  /** A directional user gesture (wheel `deltaY` sign): upward unpins synchronously. */
+  readonly onUserGesture: (direction: "up" | "down") => void;
   readonly scrollToBottom: () => void;
 }
 
@@ -288,11 +292,10 @@ export function PanelHost(props: {
       }),
     [active, awaitingResponse, toolBatches, transcript, turnStartedAt],
   );
-  const onTranscriptScroll = (event: ReactUIEvent<HTMLDivElement>) => {
-    const virtualList = event.currentTarget.querySelector("[data-transcript-virtual-list]");
-    if (virtualList?.getAttribute("data-transcript-ready") === "false") {
-      return;
-    }
+  // Every scroll event reaches the controller, even before the list reveals (`data-transcript-ready`
+  // false). The controller recognizes its own settle-loop writes as self-writes, so they no longer need
+  // to be dropped here to avoid a false unpin (plan 12.2); dropping them was one of the flick-reset causes.
+  const onTranscriptScroll = () => {
     scroll.onScroll();
   };
 
@@ -354,17 +357,15 @@ export function PanelHost(props: {
             ref={scroll.transcriptRef}
             onScroll={onTranscriptScroll}
             onWheel={(event) => {
+              // Extract the gesture DIRECTION from the wheel: an upward wheel unpins synchronously at
+              // this event, before the DOM has even moved. A touch drag / scrollbar / keyboard scroll
+              // has no wheel event and is caught by the controller's scroll-event catch-all instead.
               if (event.deltaY !== 0) {
-                scroll.onUserScrollIntent();
-              }
-            }}
-            onTouchStart={scroll.onUserScrollIntent}
-            onPointerDown={(event) => {
-              if (event.target === event.currentTarget) {
-                scroll.onUserScrollIntent();
+                scroll.onUserGesture(event.deltaY < 0 ? "up" : "down");
               }
             }}
             data-transcript-scroll
+            data-transcript-pinned={scroll.atBottom ? "true" : "false"}
             className="flex flex-1 flex-col overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {/* Three states, so the page never looks broken while things come up:
@@ -387,6 +388,7 @@ export function PanelHost(props: {
               <VirtualTranscript
                 rows={rows}
                 scrollRef={scroll.transcriptRef}
+                controller={scroll.controller}
                 pinned={scroll.atBottom}
                 scrollToBottomRequest={scroll.bottomRequestId}
                 showThinking={showThinking}

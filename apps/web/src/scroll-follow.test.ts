@@ -62,18 +62,31 @@ describe("scroll-follow: unpin is direction-based and synchronous", () => {
 });
 
 describe("scroll-follow: re-pin only on a deliberate return to the bottom, jump, or submit", () => {
-  test("a downward user scroll that ends within the bottom tolerance re-pins", () => {
+  test("a downward user gesture that ends within the bottom tolerance re-pins", () => {
     const c = createScrollFollowController();
     c.gesture("up");
     c.scrolled(geo(500));
     assert.equal(c.isPinned(), false);
 
-    // The user scrolls back down and arrives within the tolerance band -> re-pin.
+    // The user scrolls back DOWN (a downward gesture) and arrives within the tolerance band -> re-pin.
+    c.gesture("down");
     c.scrolled(geo(300));
     assert.equal(c.isPinned(), false, "still above the band");
     c.scrolled(geo(AT_BOTTOM_TOLERANCE - 5));
     assert.equal(c.isPinned(), true);
     assert.equal(c.snapshot().lastReason, "user-return-to-bottom");
+  });
+
+  test("a gesture-less downward scroll to the bottom does not re-pin (residual follow write)", () => {
+    const c = createScrollFollowController();
+    c.gesture("up");
+    c.scrolled(geo(500));
+    assert.equal(c.isPinned(), false);
+
+    // A downward scroll event that arrives at the bottom with NO downward gesture behind it - the
+    // settling of a follow write issued just before the unpin - must not be read as a return.
+    c.scrolled(geo(0));
+    assert.equal(c.isPinned(), false);
   });
 
   test("upward transit through the bottom band never re-pins", () => {
@@ -88,10 +101,11 @@ describe("scroll-follow: re-pin only on a deliberate return to the bottom, jump,
     assert.equal(c.isPinned(), false);
   });
 
-  test("a downward scroll that stops short of the band does not re-pin", () => {
+  test("a downward gesture that stops short of the band does not re-pin", () => {
     const c = createScrollFollowController();
     c.gesture("up");
     c.scrolled(geo(500));
+    c.gesture("down");
     c.scrolled(geo(AT_BOTTOM_TOLERANCE + 10)); // moved down, but stopped above the band
     assert.equal(c.isPinned(), false);
   });

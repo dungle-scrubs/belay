@@ -28,14 +28,3 @@ export function distanceFromBottom(geo: ScrollGeometry): number {
 export function atBottomOf(geo: ScrollGeometry, tolerance = AT_BOTTOM_TOLERANCE): boolean {
   return distanceFromBottom(geo) < tolerance;
 }
-
-/**
- * Whether an app-owned AUTO-follow scroll may run: only while pinned at the live edge (D-001). This is
- * the single named gate for "the transcript follows new content" - every automatic bottom-follow
- * (initial reveal, pinned streaming, append, measured-size growth) checks it, and a deferred follow
- * frame re-checks it at fire time, so manual upward scrolling is never fought. Explicit jump-to-bottom
- * is a SEPARATE path (it re-pins first), not gated here.
- */
-export function mayAutoFollow(pinned: boolean): boolean {
-  return pinned;
-}

@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M3: Wire the web app through the controller
+> Current focus: M4: Full verification + manual EZE
 
 - Total checklist items: 24
-- Completed: 13
-- Current cutoff blockers: 11
+- Completed: 21
+- Current cutoff blockers: 3
 
 ## 0. Hard Dependencies
 
@@ -36,14 +36,14 @@
 
 ### M3: Wire the web app through the controller
 
-- [ ] RED: adapter tests - wheel-up while pinned unpins synchronously within the same event; pinned exposed to render for the jump button
-- [ ] GREEN: rewrite use-scroll-follow.ts as the adapter over the controller; hoist pin state above VirtualTranscript remounts
-- [ ] RED: component tests - while unpinned: appends, totalSize growth, and the settle loop write nothing to scrollTop; while pinned they follow; settle loop terminates on user intent; panel-host no longer drops scroll events while not ready
-- [ ] GREEN: collapse the follow effects into controller requests; route scrollToFn, the settle loop, and the panel-host listeners (direction extraction) through the controller
-- [ ] RED: component test - above-viewport re-measure keeps viewport content visually stationary while unpinned (anchor compensation, net-zero movement)
-- [ ] GREEN: anchor-compensation acceptance path
-- [ ] GREEN: the three M1 specs pass; four pre-existing Lane B scroll specs + app-boot + smoke stay green (`pnpm test:e2e:browser`)
-- [ ] REFACTOR: delete intent-window plumbing and dead gates; add data-transcript-pinned; module comments; DOM contract unchanged except the additive attribute
+- [x] RED: adapter tests - wheel-up while pinned unpins synchronously within the same event; pinned exposed to render for the jump button (use-scroll-follow.test.tsx rewrite; `atBottom` via useSyncExternalStore)
+- [x] GREEN: rewrite use-scroll-follow.ts as the adapter over the controller (stable controllerRef, sync refs, useSyncExternalStore); pin state is hoisted (the controller lives in the adapter, threaded down, so VirtualTranscript remounts reuse it)
+- [x] RED: component tests - while unpinned no follow write is approved (append, totalSize, settle); while pinned appends DO follow; the settle loop reveals-on-unpin instead of force-scrolling; panel-host drops the not-ready scroll guard (verified by Lane B exercising the not-ready path)
+- [x] GREEN: collapse the follow effects into controller requests (followLiveEdge -> requestWrite); route scrollToFn, the settle loop, and the panel-host wheel/scroll listeners (direction from deltaY) through the controller
+- [x] RED: component test - a re-measure while unpinned is accepted as anchor-compensation (not swallowed), keeping the viewport stationary; jsdom cannot measure net-zero px so the acceptance path is asserted
+- [x] GREEN: anchor-compensation acceptance path (scrollToFn classifies unpinned writes as compensation and allows them, EXCEPT a correction that would land at the live edge - a lagging-anchorTo follow in disguise - which is swallowed, D-007)
+- [x] GREEN: the three M1 specs pass; four pre-existing Lane B scroll specs + app-boot + smoke stay green - 12 consecutive `pnpm test:e2e:browser` runs, 0 flakes
+- [x] REFACTOR: deleted the 700ms intent window + `onUserScrollIntent` + the dead `mayAutoFollow` gate; added `data-transcript-pinned`; module comments; DOM contract unchanged (scroll element identity, data-transcript-scroll/-virtual-list/-ready/-row-count, jump aria labels) except the additive attribute
 
 ## Phase 3: Verification
 

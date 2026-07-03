@@ -4,13 +4,17 @@ import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import { isCompactEligible } from "@/components/chat/compact-display";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
-import { mayAutoFollow } from "@/scroll";
+import { atBottomOf } from "@/scroll";
+import type { ScrollFollowController } from "@/scroll-follow";
 import type { Message } from "../../transcript";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
 
 export interface VirtualTranscriptProps {
   readonly rows: readonly TranscriptRow[];
   readonly scrollRef: RefObject<HTMLDivElement | null>;
+  /** The single follow authority (plan 12.2). Every programmatic scroll write asks it, and it decides
+   *  synchronously - so a follow can never win a race against a user gesture the way lagging state did. */
+  readonly controller: ScrollFollowController;
   readonly pinned: boolean;
   readonly scrollToBottomRequest: number;
   readonly showThinking: boolean;
@@ -69,6 +73,7 @@ function estimateRowSize(
 export function VirtualTranscript({
   rows,
   scrollRef,
+  controller,
   pinned,
   scrollToBottomRequest,
   showThinking,
@@ -114,11 +119,13 @@ export function VirtualTranscript({
     overscan: 10,
     // anchorTo: while pinned, anchor measurement corrections to the END (the live edge we follow);
     // while unpinned, anchor to the START of the visible range so a measured-size change keeps the
-    // user's topmost visible row put instead of shifting it.
+    // user's topmost visible row put instead of shifting it (this IS the anchor-compensation the
+    // controller allows while unpinned - see scrollToFn).
     anchorTo: pinned ? "end" : "start",
-    // followOnAppend: let tanstack auto-stick to a newly appended row ONLY while pinned; never while
-    // unpinned (an append below the fold must not pull the viewport down).
-    followOnAppend: pinned ? "auto" : false,
+    // followOnAppend is OFF: append-follow policy lives in the controller-gated last-row layout effect
+    // below, not in tanstack (D-007). Leaving it "auto" would let tanstack scroll to an appended row
+    // through scrollToFn indistinguishably from an anchor correction, defeating the arbitration.
+    followOnAppend: false,
     // The virtualizer reads initialOffset only at mount, so compute the estimated total lazily HERE
     // rather than as a live memo that the streaming `rows` would otherwise recompute every token.
     initialOffset: () => {
@@ -133,14 +140,43 @@ export function VirtualTranscript({
     // useAnimationFrameWithResizeObserver: batch row re-measurement to an animation frame so a row
     // resizing mid-stream coalesces its corrections instead of thrashing scrollTop per layout tick.
     useAnimationFrameWithResizeObserver: true,
-    // The component owns scrolling: it only follows the live edge when pinned (mayAutoFollow). So when
-    // the user has scrolled up (unpinned), swallow EVERY programmatic scroll - including tanstack's
-    // resize-adjustment, which otherwise yanks the viewport down as a streaming row grows at its
-    // bottom (the row is one big virtualized item whose start sits above the viewport, so bottom
-    // growth is misread as top-growth). This keeps the intentional scroll position; manual user
-    // scrolling is unaffected (that is the browser, not this fn).
+    // Every tanstack-initiated scroll asks the controller. While pinned it is a follow write (allowed).
+    // While unpinned it is normally a measure/anchor correction that keeps the viewport visually
+    // stationary (anchor-compensation, allowed) - EXCEPT a correction that would land at the live edge,
+    // which is a lagging-`anchorTo` follow in disguise (the `pinned` prop trails the synchronous
+    // controller by a render). That one is swallowed: allowing it would yank a reading user and, once
+    // clamped, be misread as a deliberate return to the bottom and re-pin. The resulting offset is
+    // recorded so the real scroll event is recognized as a self-write, not user movement.
     scrollToFn: (offset, opts, instance) => {
-      if (mayAutoFollow(pinned)) {
+      const element = instance.scrollElement;
+      if (controller.isPinned()) {
+        if (
+          controller.requestWrite("follow", { writer: "virtualizer", resultingOffset: offset })
+            .allowed
+        ) {
+          elementScroll(offset, opts, instance);
+        }
+        return;
+      }
+      const landsAtEdge =
+        element !== null &&
+        // Only meaningful when the column actually overflows - with no overflow there is no live edge to
+        // land at (and jsdom, which reports scrollHeight 0, must not read every write as edge-landing).
+        element.scrollHeight > element.clientHeight &&
+        atBottomOf({
+          scrollHeight: element.scrollHeight,
+          clientHeight: element.clientHeight,
+          scrollTop: offset,
+        });
+      if (landsAtEdge) {
+        return;
+      }
+      if (
+        controller.requestWrite("anchor-compensation", {
+          writer: "virtualizer",
+          resultingOffset: offset,
+        }).allowed
+      ) {
         elementScroll(offset, opts, instance);
       }
     },
@@ -160,27 +196,29 @@ export function VirtualTranscript({
     [rows.length, scrollRef, virtualizer],
   );
 
-  // The latest pinned state, read at fire time by every AUTO-follow so a follow that was scheduled a
-  // frame ago becomes a no-op if the user has since scrolled away (unpinned mid-rAF). This is the one
-  // gate that keeps manual upward scrolling from being fought (D-001); the scattered effects below all
-  // route through `followLiveEdge` instead of calling `scrollToLiveEdge` directly. Explicit
+  // Every AUTO-follow asks the controller at FIRE time (synchronously), so a follow scheduled a frame
+  // ago becomes a no-op if the user has since scrolled away - the one gate that keeps manual upward
+  // scrolling from being fought (D-001), now owned by the controller instead of a lagging ref. The
+  // `writer` label names which effect asked, for the controller's dev-only denied-write log. Explicit
   // jump-to-bottom (`scrollToBottomRequest`) stays on `scrollToLiveEdge` - it re-pins first.
-  const pinnedRef = useRef(pinned);
-  pinnedRef.current = pinned;
   const followLiveEdge = useCallback(
-    (behavior: ScrollBehavior = "auto") => {
-      if (mayAutoFollow(pinnedRef.current)) {
+    (writer: string, behavior: ScrollBehavior = "auto") => {
+      const scrollElement = scrollRef.current;
+      const resultingOffset = scrollElement
+        ? scrollElement.scrollHeight - scrollElement.clientHeight
+        : undefined;
+      if (controller.requestWrite("follow", { writer, resultingOffset }).allowed) {
         scrollToLiveEdge(behavior);
       }
     },
-    [scrollToLiveEdge],
+    [controller, scrollRef, scrollToLiveEdge],
   );
   const totalSize = virtualizer.getTotalSize();
 
   useLayoutEffect(() => {
     const last = rows.at(-1)?.id ?? null;
     if (last !== lastRowIdRef.current) {
-      followLiveEdge();
+      followLiveEdge("append");
     }
     lastRowIdRef.current = last;
   });
@@ -189,7 +227,7 @@ export function VirtualTranscript({
     if (!pinned) {
       return;
     }
-    const frame = requestAnimationFrame(() => followLiveEdge());
+    const frame = requestAnimationFrame(() => followLiveEdge("pinned-change"));
     return () => cancelAnimationFrame(frame);
   }, [pinned, followLiveEdge]);
 
@@ -215,6 +253,12 @@ export function VirtualTranscript({
     let secondFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
+        // Terminate the settle loop on user intent: if the user scrolled up (unpinned) mid-settle,
+        // reveal where they are instead of force-scrolling them back to the edge.
+        if (!controller.isPinned()) {
+          setReadyToReveal(true);
+          return;
+        }
         const scrollElement = scrollRef.current;
         const bottomDelta = scrollElement
           ? scrollElement.scrollHeight - scrollElement.clientHeight - scrollElement.scrollTop
@@ -224,7 +268,7 @@ export function VirtualTranscript({
           setReadyToReveal(true);
           return;
         }
-        scrollToLiveEdge();
+        followLiveEdge("settle-loop");
         setSettleTick((tick) => tick + 1);
       });
     });
@@ -234,7 +278,16 @@ export function VirtualTranscript({
         cancelAnimationFrame(secondFrame);
       }
     };
-  }, [pinned, readyToReveal, rows.length, scrollRef, scrollToLiveEdge, settleTick, virtualizer]);
+  }, [
+    pinned,
+    readyToReveal,
+    rows.length,
+    scrollRef,
+    followLiveEdge,
+    controller,
+    settleTick,
+    virtualizer,
+  ]);
 
   useEffect(() => {
     if (!readyToReveal) {
@@ -243,14 +296,14 @@ export function VirtualTranscript({
     if (!pinned) {
       return;
     }
-    const frame = requestAnimationFrame(() => followLiveEdge());
+    const frame = requestAnimationFrame(() => followLiveEdge("post-ready"));
     return () => cancelAnimationFrame(frame);
   }, [pinned, readyToReveal, followLiveEdge]);
 
   // A measured-size growth (totalSize change) while pinned + streaming follows the live edge. The
   // double rAF lets the virtualizer settle the new measurement before the second snap. Both frames
-  // route through `followLiveEdge`, so if the user scrolls away between this layout effect and the
-  // frames firing, the follow is abandoned rather than yanking them back down.
+  // ask the controller, so if the user scrolled away between this layout effect and the frames firing,
+  // the follow is denied rather than yanking them back down (this was the constant streaming "tug").
   useLayoutEffect(() => {
     void totalSize;
     if (!readyToReveal || !pinned) {
@@ -258,8 +311,8 @@ export function VirtualTranscript({
     }
     let secondFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
-      followLiveEdge();
-      secondFrame = requestAnimationFrame(() => followLiveEdge());
+      followLiveEdge("total-size");
+      secondFrame = requestAnimationFrame(() => followLiveEdge("total-size"));
     });
     return () => {
       cancelAnimationFrame(frame);

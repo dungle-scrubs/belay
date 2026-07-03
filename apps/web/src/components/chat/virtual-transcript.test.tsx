@@ -3,6 +3,7 @@ import { act, render, waitFor } from "@testing-library/react";
 import { type RefObject, useRef } from "react";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
+import { createScrollFollowController, type ScrollFollowController } from "@/scroll-follow";
 import type { TranscriptRow } from "../../transcript-rows";
 
 const noop = () => {};
@@ -56,18 +57,56 @@ function assistantRow(id: string, text: string): TranscriptRow {
   };
 }
 
+/** Wrap a controller so a test can count the writes it APPROVES, by class (the "did it auto-follow /
+ *  did it compensate?" signal that survives jsdom having no real geometry - where a yank and a no-op
+ *  top-anchored compensation both target scrollTop 0). */
+function trackApprovedWrites(controller: ScrollFollowController): {
+  follow: number;
+  anchor: number;
+} {
+  const tracker = { follow: 0, anchor: 0 };
+  const original = controller.requestWrite.bind(controller);
+  controller.requestWrite = (writeClass, options) => {
+    const decision = original(writeClass, options);
+    if (decision.allowed) {
+      if (writeClass === "follow") {
+        tracker.follow += 1;
+      } else {
+        tracker.anchor += 1;
+      }
+    }
+    return decision;
+  };
+  return tracker;
+}
+
 function Harness({
   rows,
   pinned = true,
   scrollToBottomRequest = 0,
   compact = false,
+  controller: providedController,
 }: {
   readonly rows: readonly TranscriptRow[];
   readonly pinned?: boolean;
   readonly scrollToBottomRequest?: number;
   readonly compact?: boolean;
+  /** A test may supply its own controller (to pre-set pin state or spy on it); otherwise the harness
+   *  keeps one in sync with the `pinned` prop. */
+  readonly controller?: ScrollFollowController;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // A real controller, kept in sync with the `pinned` prop (in the app the prop IS derived from the
+  // controller). The sync is idempotent, so mirroring it during render is safe for the harness.
+  const controllerRef = useRef(createScrollFollowController());
+  const controller = providedController ?? controllerRef.current;
+  if (!providedController) {
+    if (pinned && !controller.isPinned()) {
+      controller.repin("jump");
+    } else if (!pinned && controller.isPinned()) {
+      controller.gesture("up");
+    }
+  }
   return (
     <div
       ref={scrollRef}
@@ -77,6 +116,7 @@ function Harness({
       <VirtualTranscript
         rows={rows}
         scrollRef={scrollRef as RefObject<HTMLDivElement | null>}
+        controller={controller}
         pinned={pinned}
         scrollToBottomRequest={scrollToBottomRequest}
         showThinking
@@ -227,36 +267,48 @@ describe("VirtualTranscript", () => {
     });
   });
 
-  test("does not scroll to bottom on appended rows while unpinned", async () => {
+  test("does not follow the live edge on appended rows while unpinned", async () => {
+    // jsdom has no real geometry (scrollHeight 0), so a yank and a benign top-anchored compensation both
+    // target scrollTop 0 - the meaningful signal is that NO follow write is APPROVED while unpinned. The
+    // real-position "no yank" assertion lives in the Lane B e2e specs.
+    const controller = createScrollFollowController();
+    controller.gesture("up"); // the user has scrolled up
+    const follows = trackApprovedWrites(controller);
     const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
-    const { container, rerender } = render(<Harness rows={rows} pinned={false} />);
+    const { container, rerender } = render(
+      <Harness rows={rows} controller={controller} pinned={false} />,
+    );
 
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
     });
-    const callsBefore = vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
+    follows.follow = 0; // ignore any writes during the initial reveal; count only post-append
 
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} pinned={false} />);
+      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} pinned={false} />);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     });
 
     assert.equal(
-      vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length,
-      callsBefore,
-      "append while unpinned must not force the viewport back to the bottom",
+      follows.follow,
+      0,
+      "append while unpinned must not approve a follow write to the live edge",
     );
+    // The append effect DID ask the controller (and was denied): the writer is named for the dev log.
+    assert.equal(controller.snapshot().lastDeniedWrite?.writeClass, "follow");
   });
 
   test("abandons auto-follow once the user unpins, even as rows keep appending", async () => {
     const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const scrollCalls = () => vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
+    const controller = createScrollFollowController(); // starts pinned
+    const follows = trackApprovedWrites(controller);
     const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
-    const { container, rerender } = render(<Harness rows={rows} pinned={true} />);
+    const { container, rerender } = render(
+      <Harness rows={rows} controller={controller} pinned={true} />,
+    );
 
-    // Let the initial reveal fully settle (it scrolls to the live edge across several frames) so the
-    // baseline below counts only scrolls that happen AFTER the user unpins.
+    // Let the initial reveal fully settle (it follows the live edge across several frames while pinned).
     await waitFor(() => {
       assert.equal(
         container
@@ -271,22 +323,108 @@ describe("VirtualTranscript", () => {
       }
     });
 
-    // The user scrolls up (pinned -> false). From here, appended/streamed rows must never pull the
-    // viewport back down - the follow gate (mayAutoFollow) re-checks pinned at fire time.
-    const callsAtUnpin = scrollCalls();
+    // The user scrolls up (unpin the controller AND drop the prop). From here, appended rows must never
+    // pull the viewport back down - every follow request is denied at fire time by the controller.
+    controller.gesture("up");
+    follows.follow = 0;
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} pinned={false} />);
+      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} pinned={false} />);
       await raf();
       await raf();
-      rerender(<Harness rows={[...rows, userRow(100), userRow(101)]} pinned={false} />);
+      rerender(
+        <Harness
+          rows={[...rows, userRow(100), userRow(101)]}
+          controller={controller}
+          pinned={false}
+        />,
+      );
       await raf();
       await raf();
     });
 
+    assert.equal(follows.follow, 0, "no auto-follow write may be approved after the user unpins");
+  });
+
+  test("while pinned, an appended row DOES approve a follow write (stick-to-bottom)", async () => {
+    const controller = createScrollFollowController(); // pinned
+    const follows = trackApprovedWrites(controller);
+    const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
+    const { container, rerender } = render(
+      <Harness rows={rows} controller={controller} pinned={true} />,
+    );
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+    follows.follow = 0;
+
+    await act(async () => {
+      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} pinned={true} />);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+
+    assert.ok(follows.follow > 0, "a pinned append must follow the live edge");
+  });
+
+  test("the settle loop terminates on user intent instead of force-scrolling to the edge", async () => {
+    // The user scrolled up (controller unpinned) while the initial reveal was still settling - modeled by
+    // an unpinned controller behind a still-pinned prop. The settle loop must reveal where the user is,
+    // approving no follow write, rather than yanking them to the live edge.
+    const controller = createScrollFollowController();
+    controller.gesture("up");
+    const follows = trackApprovedWrites(controller);
+    const rows = Array.from({ length: 1000 }, (_, index) => userRow(index));
+    const { container } = render(<Harness rows={rows} controller={controller} pinned={true} />);
+
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector("[data-transcript-virtual-list]")
+          ?.getAttribute("data-transcript-ready"),
+        "true",
+        "the settle loop still reveals the transcript",
+      );
+    });
     assert.equal(
-      scrollCalls(),
-      callsAtUnpin,
-      "no auto-follow scroll may run after the user unpins",
+      follows.follow,
+      0,
+      "a settle loop that saw the user unpin must not follow the edge",
+    );
+  });
+
+  test("while unpinned, a re-measure's anchor-compensation write is accepted (not swallowed)", async () => {
+    // Old code swallowed EVERY programmatic scroll while unpinned, so an above-viewport re-measure shifted
+    // the reader's view. Now tanstack's start-anchored correction flows through scrollToFn as an
+    // anchor-compensation write and is ACCEPTED, keeping the viewport visually stationary. In jsdom we
+    // cannot measure the net-zero pixel movement (no layout), so we assert the compensation path is wired:
+    // the controller approves anchor-compensation while denying follow.
+    const controller = createScrollFollowController();
+    controller.gesture("up");
+    const writes = trackApprovedWrites(controller);
+    const rows = Array.from({ length: 200 }, (_, index) => userRow(index));
+    const { rerender } = render(<Harness rows={rows} controller={controller} pinned={false} />);
+    await waitFor(() => {});
+    writes.anchor = 0;
+    writes.follow = 0;
+
+    // Grow a row's measured height, forcing the virtualizer to re-anchor via scrollToFn.
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get() {
+        return 220;
+      },
+    });
+    await act(async () => {
+      rerender(<Harness rows={[...rows]} controller={controller} pinned={false} />);
+      for (let i = 0; i < 4; i += 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+    });
+
+    assert.equal(writes.follow, 0, "a re-measure while unpinned must not be a follow write");
+    assert.ok(
+      writes.anchor > 0,
+      "the anchor-compensation write must be accepted (the viewport stays put), not swallowed",
     );
   });
 

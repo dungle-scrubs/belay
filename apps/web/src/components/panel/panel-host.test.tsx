@@ -3,6 +3,7 @@ import type { LoopControl, LoopInventoryRow } from "@trevor/session";
 import { useRef } from "react";
 import { expect, test, vi } from "vitest";
 import { useComposer } from "@/hooks/use-composer";
+import { createScrollFollowController } from "@/scroll-follow";
 import type { HostStatus } from "../../derive";
 import type { InventoryState } from "../../resume";
 import type { SessionStream } from "../../session/use-session";
@@ -113,9 +114,10 @@ function PanelHostHarness(props: {
       scroll={{
         atBottom: true,
         bottomRequestId: 0,
+        controller: createScrollFollowController(),
         hasUnseen: false,
         onScroll: vi.fn(),
-        onUserScrollIntent: vi.fn(),
+        onUserGesture: vi.fn(),
         scrollToBottom: vi.fn(),
         transcriptRef,
       }}

@@ -229,28 +229,30 @@ test("a rapid wheel flick from the bottom unpins, stays unpinned, and never snap
   // Rapid consecutive upward bursts from the pinned bottom while new rows keep arriving at the live edge -
   // the "flick away while it's still generating" case. Under the old code every arriving row, seen while
   // the lagging pin state was still true, re-ran `followOnAppend` + the last-row follow and snapped the
-  // column back to the (now taller) live edge, so the flick never broke free and the position kept
-  // resetting downward. Each burst starts inside the 40px band the old code re-pinned.
+  // column back to the (now taller) live edge, so the flick never broke free and the distance-from-bottom
+  // kept resetting to ~0. Each burst starts inside the 40px band the old code re-pinned.
   await scroller.hover();
   const samples: number[] = [];
   for (let burst = 0; burst < 6; burst += 1) {
     await page.mouse.wheel(0, -30);
     await appendExchange(storeTransport(), sessionId, `flick-${burst}`);
     await settleFrames(page);
-    samples.push(await scrollTopOf(scroller));
+    samples.push(await bottomDeltaPx(scroller));
   }
 
   // Stays unpinned: the flick broke free and the jump affordance is present (post-M3 this also reads
   // data-transcript-pinned). The old code re-pins on every arriving row, so the button never appears.
   await expect(jumpButton(page)).toHaveCount(1);
 
-  // The trajectory is monotonic upward (scrollTop non-increasing) - no arriving row snapped the column
-  // back down to the live edge. The old code yanks scrollTop down to each new, taller bottom instead.
+  // The distance from the live edge never collapses back toward it - no arriving row snapped the column
+  // to the bottom. (We sample bottomDelta, not raw scrollTop: an above-fold re-measure legitimately
+  // shifts scrollTop a few px to keep the viewport visually stationary, which is not a downward snap.)
+  // The old code resets bottomDelta to ~0 on every append.
   for (let i = 1; i < samples.length; i += 1) {
     expect(
       samples[i],
-      `flick sample ${i} (${samples[i]}) snapped below sample ${i - 1} (${samples[i - 1]})`,
-    ).toBeLessThanOrEqual((samples[i - 1] ?? 0) + MONOTONIC_SLACK_PX);
+      `flick sample ${i} (bottomDelta ${samples[i]}) snapped toward the edge from ${samples[i - 1]}`,
+    ).toBeGreaterThanOrEqual((samples[i - 1] ?? 0) - MONOTONIC_SLACK_PX);
   }
   // Final position reflects the gesture (scrolled well up), not a reset back to the live edge.
   expect(await bottomDeltaPx(scroller)).toBeGreaterThan(OLD_TOLERANCE_PX);

@@ -88,6 +88,10 @@ export interface ScrollFollowController {
 /** Sub-pixel slack: scroll positions within this many px count as "the same place" (rounding, clamping). */
 const EPSILON_PX = 1.5;
 
+/** How many recent approved-write offsets to remember for self-write recognition (one follow can issue
+ *  several writes in a frame; a scroll event matches the newest that lands). */
+const SELF_OFFSET_HISTORY = 8;
+
 /** Whether to emit the dev-only structured log for a denied write. Bundlers strip this in production. */
 function isDev(): boolean {
   try {
@@ -108,9 +112,16 @@ export function createScrollFollowController(
   // until the first event: direction is undefined without a prior sample, so the first scroll only
   // establishes the baseline (the directional `gesture` path is the primary unpin trigger anyway).
   let lastScrollTop: number | null = null;
-  // The resulting offset of the most recently approved write, matched against the next scroll event so
-  // our own write is not reinterpreted as user movement. Single-slot: the newest approved write wins.
-  let pendingSelfOffset: number | null = null;
+  // The resulting offsets of recently approved writes, matched against the next scroll event so our own
+  // writes are not reinterpreted as user movement. A ring (not a single slot) because one follow can
+  // issue several writes in a frame (virtualizer scrollToEnd + a direct scrollTo + a re-measure
+  // correction) whose landing offset drifts, and the coalesced scroll event matches only one of them.
+  const selfOffsets: number[] = [];
+  // Whether the user is currently scrolling DOWNWARD by their own hand - set by a downward gesture,
+  // cleared by an upward one or a re-pin. The scroll-event re-pin requires this: a bare downward scroll
+  // to the bottom with no gesture behind it is a residual follow self-scroll (its event can land just
+  // after an upward gesture unpins), not a deliberate return, and must not re-pin.
+  let sawDownGesture = false;
   // Writers already named in the dev log for the current unpinned span, so each is warned about at most
   // once (a denied follow write is EXPECTED while reading; we just want the writer named, not a flood).
   const warnedWriters = new Set<string>();
@@ -137,18 +148,25 @@ export function createScrollFollowController(
 
   const gesture = (direction: "up" | "down"): void => {
     // Upward is the whole point: unpin synchronously, with no position precondition and no intent
-    // window. Downward is not, by itself, a re-pin - a return to the bottom is recognized from the
-    // scroll event (`scrolled`) once the viewport actually arrives within the tolerance band.
+    // window. Downward is not, by itself, a re-pin - it ARMS the scroll-event re-pin, which fires once
+    // the viewport actually arrives within the tolerance band (a downward gesture ending at the bottom).
     if (direction === "up") {
+      sawDownGesture = false;
       setPinned(false, "user-gesture-up");
+    } else {
+      sawDownGesture = true;
     }
   };
 
   const scrolled = (geo: ScrollGeometry): void => {
     // Self-write recognition FIRST: a scroll event that lands where a write we approved said it would is
-    // our own movement - consume it, advance the baseline, and change nothing else.
-    if (pendingSelfOffset !== null && Math.abs(geo.scrollTop - pendingSelfOffset) <= EPSILON_PX) {
-      pendingSelfOffset = null;
+    // our own movement - consume it (and any older, now-stale offsets), advance the baseline, and change
+    // nothing else.
+    const matched = selfOffsets.findIndex(
+      (offset) => Math.abs(geo.scrollTop - offset) <= EPSILON_PX,
+    );
+    if (matched !== -1) {
+      selfOffsets.splice(0, matched + 1);
       lastScrollTop = geo.scrollTop;
       return;
     }
@@ -166,22 +184,28 @@ export function createScrollFollowController(
     const movedDown = geo.scrollTop > previous + EPSILON_PX;
 
     if (pinned) {
-      // The catch-all unpin: an upward move with no approved write behind it (scrollbar drag, keyboard
-      // PageUp) that the directional `gesture` path did not already handle.
-      if (movedUp) {
+      // The catch-all unpin: an unattributed UPWARD scroll that leaves the bottom band (keyboard PageUp,
+      // touch drag, a scrollbar where one is shown) - the user read away from the live edge. Both
+      // conditions matter: a follow write moving DOWN toward the edge must never trip this even while it
+      // momentarily trails a fast stream (bottomDelta > tolerance mid-catch-up), and a sub-band nudge
+      // that stays at the live edge is still "at bottom", not a read.
+      if (movedUp && !atBottomOf(geo)) {
         setPinned(false, "unattributed-scroll-up");
       }
       return;
     }
 
-    // Unpinned: re-pin only on a deliberate return to the bottom - moving DOWN and arriving within the
-    // tolerance band. Upward transit through the band (movedUp) can never satisfy this.
-    if (movedDown && atBottomOf(geo)) {
+    // Unpinned: re-pin only on a DELIBERATE return to the bottom - a downward gesture (armed above) that
+    // arrives within the tolerance band. Upward transit through the band never satisfies this, and a
+    // gesture-less downward scroll (a residual follow write settling) is not a return.
+    if (sawDownGesture && movedDown && atBottomOf(geo)) {
+      sawDownGesture = false;
       setPinned(true, "user-return-to-bottom");
     }
   };
 
   const repin = (reason: "jump" | "submit"): void => {
+    sawDownGesture = false;
     setPinned(true, reason);
   };
 
@@ -209,10 +233,12 @@ export function createScrollFollowController(
     }
 
     // Approved: record where the element will end up so the resulting scroll event is a recognized
-    // self-write. `follow` writes without a known offset fall through (while pinned a follow write only
-    // ever moves toward the bottom, which never triggers an unpin).
+    // self-write. Keep only the last few offsets - a scroll event coalesces to the most recent write.
     if (writeOptions.resultingOffset !== undefined) {
-      pendingSelfOffset = writeOptions.resultingOffset;
+      selfOffsets.push(writeOptions.resultingOffset);
+      if (selfOffsets.length > SELF_OFFSET_HISTORY) {
+        selfOffsets.shift();
+      }
     }
     return {
       allowed: true,
