@@ -5,7 +5,8 @@ import { activeMention } from "@/composer/active-mention";
 import { useComposer } from "@/hooks/use-composer";
 import { useFileMentionMenu } from "@/hooks/use-file-mention-menu";
 import { useWorkspaceFileSearch, type WorkspaceFileIndex } from "@/hooks/use-workspace-file-search";
-import { FileMentionMenu } from "./file-mention-menu";
+import { activeOptionId } from "./autocomplete-menu";
+import { FILE_MENTION_LISTBOX_ID, FileMentionMenu } from "./file-mention-menu";
 import { PromptInput } from "./prompt-input";
 
 /**
@@ -57,6 +58,12 @@ function LiveHarness({ index }: { readonly index: WorkspaceFileIndex }) {
         disabled={false}
         placeholder="message"
         menuOpen={fileMenu.menuOpen}
+        menuListboxId={fileMenu.menuOpen ? FILE_MENTION_LISTBOX_ID : undefined}
+        activeDescendantId={
+          fileMenu.menuOpen
+            ? activeOptionId(FILE_MENTION_LISTBOX_ID, fileMenu.menuIndex)
+            : undefined
+        }
       />
     </div>
   );
@@ -113,6 +120,25 @@ describe("live @-file-mention integration", () => {
     expect(screen.getByRole("listbox", { name: "Workspace files" })).toBeTruthy();
     fireEvent.keyDown(input, { key: "Enter" });
     expect(input.value).toBe("see @apps/web/src/app.tsx here");
+  });
+
+  test("exposes menu semantics + active descendant + labels for screen readers", () => {
+    render(<LiveHarness index={INDEX} />);
+    const input = typeInto("@app");
+    settle();
+    const listbox = screen.getByRole("listbox", { name: "Workspace files" });
+    expect(listbox.id).toBe("file-mention-menu");
+    // The composer points aria-activedescendant/aria-controls at the highlighted option.
+    expect(input.getAttribute("aria-controls")).toBe("file-mention-menu");
+    const activeId = input.getAttribute("aria-activedescendant");
+    expect(activeId).toBe("file-mention-menu-opt-0");
+    const active = activeId ? document.getElementById(activeId) : null;
+    expect(active?.getAttribute("role")).toBe("option");
+    expect(active?.getAttribute("aria-selected")).toBe("true");
+
+    // Arrowing down moves the active descendant to the next option.
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-activedescendant")).toBe("file-mention-menu-opt-1");
   });
 
   test("mouse pick inserts the mention without losing composer focus", () => {

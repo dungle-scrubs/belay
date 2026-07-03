@@ -69,7 +69,7 @@ import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { buildLiveDoctorSnapshot, collectDoctorProbeResults } from "./doctor/build";
 import { makeHostFacts } from "./doctor/host-facts";
 import { currentDoctorSnapshot, registerDoctorSnapshotSource } from "./doctor/source";
-import { buildFileIndex } from "./file-search";
+import { buildFileIndex } from "./file-mention/file-index";
 import { makeHandoffOrchestrator } from "./handoff/orchestrator";
 import { createLoopPersistence } from "./loop/persistence";
 import { createLoopIterationRunner, defaultProcessSeam } from "./loop/runner";

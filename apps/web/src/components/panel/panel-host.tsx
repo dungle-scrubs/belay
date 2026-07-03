@@ -24,8 +24,9 @@ import { ArtifactPanel } from "@/artifact-panel/artifact-panel";
 import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state";
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
-import { CommandMenu } from "@/components/chat/command-menu";
-import { FileMentionMenu } from "@/components/chat/file-mention-menu";
+import { activeOptionId } from "@/components/chat/autocomplete-menu";
+import { CommandMenu, SLASH_MENU_LISTBOX_ID } from "@/components/chat/command-menu";
+import { FILE_MENTION_LISTBOX_ID, FileMentionMenu } from "@/components/chat/file-mention-menu";
 import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
@@ -531,6 +532,21 @@ export function PanelHost(props: {
                 vimEnabled={compose.vimEnabled}
                 // Either composer menu owning the keys suspends the Vim layer (arrows/Enter/Escape).
                 menuOpen={compose.menuOpen || compose.fileMenu.open}
+                // Point aria-activedescendant/aria-controls at whichever overlay is open (M5).
+                menuListboxId={
+                  compose.menuOpen
+                    ? SLASH_MENU_LISTBOX_ID
+                    : compose.fileMenu.open
+                      ? FILE_MENTION_LISTBOX_ID
+                      : undefined
+                }
+                activeDescendantId={
+                  compose.menuOpen
+                    ? activeOptionId(SLASH_MENU_LISTBOX_ID, compose.menuIndex)
+                    : compose.fileMenu.open
+                      ? activeOptionId(FILE_MENTION_LISTBOX_ID, compose.fileMenu.index)
+                      : undefined
+                }
               />
             </>
           )}

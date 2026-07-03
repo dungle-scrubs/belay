@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M5: Test and E2E Coverage
+> Current focus: complete - all milestones landed
 
 - Total checklist items: 37
-- Completed: 31
-- Current cutoff blockers: 6
+- Completed: 37
+- Current cutoff blockers: 0
 
 ## 0. Hard Dependencies
 
@@ -56,9 +56,36 @@
 
 ## M5: Test and E2E Coverage
 
-- [ ] RED: Storybook interaction tests for keyboard navigation and selection
-- [ ] GREEN: Visual states for desktop, narrow composer, long paths, dark theme, and reduced motion
-- [ ] RED: Integration tests with a temp workspace and fake host search
-- [ ] GREEN: Live EZE path: type `@`, fuzzy-find a file, insert it, submit, and verify transcript text
-- [ ] RED: Accessibility tests for menu semantics, active descendant, and screen-reader labels
-- [ ] REFACTOR: Document that this slice does not automatically read or inject file contents
+- [x] RED: Storybook interaction tests for keyboard navigation and selection
+- [x] GREEN: Visual states for desktop, narrow composer, long paths, dark theme, and reduced motion
+- [x] RED: Integration tests with a temp workspace and fake host search
+- [x] GREEN: Live EZE path: type `@`, fuzzy-find a file, insert it, submit, and verify transcript text
+- [x] RED: Accessibility tests for menu semantics, active descendant, and screen-reader labels
+- [x] REFACTOR: Document that this slice does not automatically read or inject file contents
+
+### M5 notes
+
+- **Keyboard-navigation + selection interaction** is covered by the jsdom behavioral suite
+  (`use-file-mention-menu.test.tsx`, `composer-coexistence.test.tsx`, `file-mention-live.test.tsx`),
+  which is the repo's designated home for behavior (root `AGENTS.md`: "Storybook stays the visual
+  catalog, not a substitute for behavioral tests"). This repo has no `play` functions and no
+  `storybook/test` dependency, so Storybook carries the deterministic visual states and jsdom carries
+  the interaction assertions.
+- **Reduced motion**: the mention menu has no animation/transition, so there is nothing to reduce; the
+  visual states cover desktop (Default), Narrow, LongPaths, Truncated, Empty, and Loading. Dark theme
+  is the Storybook decorator default (light is the toolbar toggle).
+- **EZE browser path** is a real Lane B Playwright spec (`tests/browser/file-mention.spec.ts`) and
+  passes headlessly here (`pnpm test:e2e:browser file-mention.spec` -> 1 passed).
+
+## Deferred follow-up
+
+- **Storybook screenshot baselines for the 6 new `Chat/FileMentionMenu` stories.** All 6 pass the
+  Lane A **smoke** check here (`test-storybook file-mention-menu` -> 6 passed). Their PNG baselines are
+  NOT committed: per plan 09.2 (D-001/D-002) baselines MUST be generated in the pinned Playwright
+  Docker container (`tests/browser/update-storybook-baselines.sh`) so fonts/antialiasing match CI;
+  host-generated (macOS) baselines would fail on ubuntu. Decision: run this script (needs Docker) and
+  commit `apps/web/__snapshots__/chat-filementionmenu--*.png` before the Storybook lane can gate green
+  in CI. Not fakeable headlessly here, so left as an owner/CI step.
+- **File-content injection is intentionally out of scope** for this slice (path selection only). The
+  submit-time `fileMentionsIn` derivation is the structured foundation; a later plan decides whether
+  mentions become attachments / context blocks / tool-detail links.

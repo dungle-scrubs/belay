@@ -30,6 +30,26 @@ async function publish(
   await transport.publishEvent(sessionId, { ...input, producerId });
 }
 
+/** Seed a workspace file index (plan 30) straight into the store, as a host would answer a
+ *  `file.index.requested`, so the browser's `@`-mention picker can filter it with no live host. */
+export async function seedFileIndex(
+  transport: SessionTransport,
+  sessionId: string,
+  paths: readonly string[],
+): Promise<void> {
+  await transport.ensureSession(sessionId);
+  await publish(
+    transport,
+    sessionId,
+    events.fileIndexResult({
+      requestId: "seed-index",
+      files: paths.map((path) => ({ path })),
+      truncated: false,
+    }),
+    HOST,
+  );
+}
+
 /** One complete user->assistant exchange = a user row + an assistant row. `n` of them make a transcript
  *  tall enough to scroll. Each assistant turn is fully completed, so nothing renders as stuck "Working". */
 export async function seedExchanges(

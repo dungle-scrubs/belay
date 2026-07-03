@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "vitest";
-import { buildFileIndex } from "./file-search";
+import { buildFileIndex } from "./file-index";
 
 const root = "/ws";
 const abs = (...segments: string[]): string => join(root, ...segments);

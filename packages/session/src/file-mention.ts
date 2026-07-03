@@ -5,6 +5,12 @@
  * this one wire type + the pure path helpers so a basename/directory rendering can never drift from
  * the path the host sent. Only the format + pure helpers live here; the composer's menu state, key
  * handling, and insertion stay web-side (like image-tokens keeps its editing model web-side).
+ *
+ * Non-goal (this slice, plan 30): selecting a file inserts a visible PATH REFERENCE only. It never
+ * automatically reads or injects the file's contents, and adds no prompt attachment. `fileMentionsIn`
+ * derives the structured mentions from the submitted text so a later content-injection plan can decide
+ * whether mentions become attachments, context blocks, or tool-detail links - but this cut ships the
+ * visible text as an ordinary prompt.
  */
 
 /** A workspace file match for the `@`-mention picker: a workspace-relative POSIX path only. */

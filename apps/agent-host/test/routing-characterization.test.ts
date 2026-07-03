@@ -36,6 +36,7 @@ const ROUTED: readonly string[] = [
   "command.result",
   "context.compacted",
   "editor.open",
+  "file.index.requested",
   "handoff.accepted",
   "handoff.approved",
   "handoff.failed",
@@ -63,6 +64,9 @@ const UNROUTED: readonly string[] = [
   "assistant.thinking",
   "context.compacting",
   "delegated.to",
+  // The `@`-file-mention index (plan 30): the leader emits it as a read model; handleEvent never
+  // consumes it (the browser derives the index from the stream).
+  "file.index.result",
   "handoff.generating",
   "handoff.requested",
   // A visible hook decision (plan 25 M9): host-emitted from the turn pipeline, web-rendered;

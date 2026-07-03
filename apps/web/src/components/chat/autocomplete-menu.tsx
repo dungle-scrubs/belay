@@ -27,6 +27,9 @@ export interface AutocompleteMenuProps {
   readonly onPick: (key: string) => void;
   /** Screen-reader label for the listbox (e.g. "Slash commands", "Workspace files"). */
   readonly ariaLabel: string;
+  /** DOM id for the listbox; each option is `${listboxId}-opt-${i}`, so the composer textarea can
+   *  point `aria-activedescendant`/`aria-controls` at the active row (see {@link activeOptionId}). */
+  readonly listboxId: string;
   /** Optional muted footer, e.g. a result count / a "more exist" truncation notice. */
   readonly summary?: ReactNode;
   /** Shown in place of the rows when there are none (e.g. "No matching files"). */
@@ -35,11 +38,17 @@ export interface AutocompleteMenuProps {
   readonly className?: string;
 }
 
+/** The DOM id of the active option in a menu with the given `listboxId`, for `aria-activedescendant`. */
+export function activeOptionId(listboxId: string, activeIndex: number): string {
+  return `${listboxId}-opt-${activeIndex}`;
+}
+
 export function AutocompleteMenu({
   rows,
   activeIndex,
   onPick,
   ariaLabel,
+  listboxId,
   summary,
   empty,
   className,
@@ -49,10 +58,11 @@ export function AutocompleteMenu({
       {rows.length === 0 && empty ? (
         <div className="px-3 py-1.5 text-sm text-muted-foreground">{empty}</div>
       ) : (
-        <div role="listbox" aria-label={ariaLabel} className="flex flex-col">
+        <div id={listboxId} role="listbox" aria-label={ariaLabel} className="flex flex-col">
           {rows.map((row, i) => (
             <button
               key={row.key}
+              id={activeOptionId(listboxId, i)}
               type="button"
               role="option"
               aria-selected={i === activeIndex}

@@ -105,3 +105,18 @@ export const Narrow: Story = {
     },
   ],
 };
+
+/** Loading: the host has not yet answered the index request, so the empty state reads "loading". */
+export const Loading: Story = {
+  args: { matches: [], query: "app", loading: true },
+  decorators: [
+    (Story) => {
+      const Frame = storyFrame("w-[34rem]");
+      return (
+        <Frame>
+          <Story />
+        </Frame>
+      );
+    },
+  ],
+};

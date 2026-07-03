@@ -2,6 +2,9 @@ import { type FileMatch, splitWorkspacePath } from "@trevor/session";
 import type { ReactNode } from "react";
 import { AutocompleteMenu, type AutocompleteRow } from "./autocomplete-menu";
 
+/** The listbox id for the file-mention menu, so the composer can point aria-activedescendant at it. */
+export const FILE_MENTION_LISTBOX_ID = "file-mention-menu";
+
 /**
  * Responsible for: the `@`-file-mention list - one row per workspace match with the BASENAME
  * emphasized, the directory shown muted + end-truncated (so a deep path never wraps the row), the
@@ -81,6 +84,7 @@ export function FileMentionMenu({
       activeIndex={activeIndex}
       onPick={onPick}
       ariaLabel="Workspace files"
+      listboxId={FILE_MENTION_LISTBOX_ID}
       summary={summary}
       empty={loading ? "Loading workspace files…" : "No matching files"}
     />

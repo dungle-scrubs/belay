@@ -52,6 +52,10 @@ export function CommandMenu({
       activeIndex={activeIndex}
       onPick={onPick}
       ariaLabel="Slash commands"
+      listboxId={SLASH_MENU_LISTBOX_ID}
     />
   );
 }
+
+/** The listbox id for the slash menu, so the composer can point aria-activedescendant at it. */
+export const SLASH_MENU_LISTBOX_ID = "slash-command-menu";

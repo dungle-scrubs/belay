@@ -80,6 +80,10 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 - `subagents/` - subagent discovery (`discovery.ts`) for delegated agents.
 - `serial-run/` - the serialized multi-plan run lane.
 - `loop/` - the `/loop` recurring-prompt domain and command.
+- `file-mention/` - the workspace file INDEX the browser's `@`-file-mention picker searches (plan 30):
+  an ignore-aware, confined, capped list of workspace-relative paths built over an injected walk seam.
+  The leader answers a `file.index.requested` with one `file.index.result`; the browser fuzzy-filters
+  the cached index locally.
 
 ### Transport and observability edges
 

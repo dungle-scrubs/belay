@@ -70,6 +70,10 @@ export interface PromptInputProps {
   /** Whether the slash command menu is open (plan 06 conflict precedence): while it is, the menu owns
    *  the keys (arrows/Enter/Escape), so the Vim layer is suspended. */
   readonly menuOpen?: boolean;
+  /** The DOM id of the active menu row + its listbox, for the composer's `aria-activedescendant` /
+   *  `aria-controls` (plan 30 M5) - so a screen reader announces the highlighted command / file. */
+  readonly activeDescendantId?: string;
+  readonly menuListboxId?: string;
 }
 
 export function PromptInput({
@@ -82,6 +86,8 @@ export function PromptInput({
   onExpand,
   vimEnabled = false,
   menuOpen = false,
+  activeDescendantId,
+  menuListboxId,
 }: PromptInputProps) {
   const {
     draft,
@@ -238,6 +244,10 @@ export function PromptInput({
               placeholder={placeholder}
               disabled={disabled}
               rows={1}
+              // Combobox-style active-descendant wiring for the slash / `@`-file overlays (M5): the
+              // textarea keeps its implicit textbox role; these point a screen reader at the active row.
+              aria-controls={menuOpen ? menuListboxId : undefined}
+              aria-activedescendant={menuOpen ? activeDescendantId : undefined}
               className={cn(
                 "relative max-h-48 w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 pb-1.5 text-sm outline-none placeholder:text-muted-foreground/50 disabled:cursor-not-allowed",
                 shellMode ? "font-mono text-smui-orange" : "text-foreground",
