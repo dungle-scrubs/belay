@@ -109,10 +109,12 @@ describe("source-level guards - the excluded surfaces are absent from src/hooks 
         `${name} must not use exec/execSync/execFile`,
       ).toBe(false);
     }
-    // The runner's one execution primitive is the no-shell spawn of the explicit argv array;
-    // the behavioral proof (args arrive verbatim, no word splitting) is runner.test.ts "argv".
+    // The runner's one execution primitive is the hardened no-shell spawn boundary; the
+    // behavioral proof (args arrive verbatim, no word splitting) is runner.test.ts "argv".
     const runner = hooksSources().get("runner.ts") ?? "";
-    expect(runner).toContain("spawn(hook.command, [...hook.args]");
+    expect(runner).toContain("spawnHardenedChild({");
+    expect(runner).toContain("command: hook.command");
+    expect(runner).toContain("args: hook.args");
   });
 
   test("no plugin/extension registration or model-routing seam exists in the hooks sources", () => {

@@ -85,6 +85,11 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 
 - `transport/` - the emit/IPC edge helpers: the `Emit` service publishing session events, the
   streamed-text delta buffer, error->message normalization, and the structured boundary logger.
+- `effect/` - small Effect runtime adapters shared across host subsystems, such as fiber exit
+  interpretation and interruption.
+- `json-rpc/` - protocol-neutral JSON-RPC mechanics shared by child-backed integrations:
+  Content-Length framed request/notification correlation, pending timeout handling, and fatal
+  connection termination.
 - `doctor/` - the `/doctor` health snapshot of workspace, providers, and tools.
 - `metrics/` - usage breakdown reporting.
 

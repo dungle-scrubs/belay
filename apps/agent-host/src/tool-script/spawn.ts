@@ -1,5 +1,6 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { reapAfterGrace, spawnHardenedChild } from "@host/processes/child-spawn";
 import type { ManagedChild } from "./host-manager";
 import { createLineReader, decodeRunnerToHost, encodeMessage, type RunnerToHost } from "./protocol";
 
@@ -18,6 +19,7 @@ import { createLineReader, decodeRunnerToHost, encodeMessage, type RunnerToHost 
 
 const MAX_LINE_BYTES = 1_000_000;
 const MAX_STDERR_BYTES = 64 * 1024;
+const RUNNER_KILL_GRACE_MS = 2_000;
 
 export interface RunnerSpawnConfig {
   /** The full command+args that run the entry (e.g. `["node","--import","tsx", entry]`), so M4 can wrap it
@@ -44,11 +46,13 @@ export function spawnRunner(config: RunnerSpawnConfig): ManagedChild {
   if (!cmd) {
     throw new Error("spawnRunner: empty command");
   }
-  const child: ChildProcess = spawn(cmd, args, {
+  const child: ChildProcess = spawnHardenedChild({
+    command: cmd,
+    args,
     cwd: config.cwd,
     // Deny-first env: only what is explicitly provided (plus a PATH so the runtime resolves).
     env: config.env ?? { PATH: process.env.PATH ?? "" },
-    stdio: ["pipe", "pipe", "pipe"],
+    onStdinError: () => onExitCb?.(),
   });
 
   const reader = createLineReader({ maxLineBytes: MAX_LINE_BYTES });
@@ -74,13 +78,6 @@ export function spawnRunner(config: RunnerSpawnConfig): ManagedChild {
   });
   child.on("exit", () => onExitCb?.());
   child.on("error", () => onExitCb?.());
-  // A dead child makes its pipes emit `error` (EPIPE on stdin, ECONNRESET on the read side). Without a
-  // listener Node re-throws those as an unhandled stream error and CRASHES THE HOST, so absorb them: a
-  // stdin break means the child is gone (treat as exit); read-side errors just end that stream.
-  child.stdin?.on("error", () => onExitCb?.());
-  child.stdout?.on("error", () => {});
-  child.stderr?.on("error", () => {});
-
   return {
     send(message) {
       // Guard the write: after the child dies `writable` is false and a stray write would throw EPIPE
@@ -102,7 +99,8 @@ export function spawnRunner(config: RunnerSpawnConfig): ManagedChild {
       onExitCb = cb;
     },
     kill() {
-      child.kill("SIGKILL");
+      child.kill("SIGTERM");
+      reapAfterGrace(child, RUNNER_KILL_GRACE_MS);
     },
   };
 }

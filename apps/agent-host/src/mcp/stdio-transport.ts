@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
 import { MINIMAL_CHILD_ENV_ALLOWLIST, minimalChildEnv } from "@host/processes/child-env";
-import { msg } from "@host/transport/messages";
+import { reap, reapAfterGrace, spawnHardenedChild } from "@host/processes/child-spawn";
+import { createFramedJsonRpcConnection } from "../json-rpc/framed-connection";
 import type { McpStdioServerConfig } from "./config";
 import {
   isMcpTransportError,
@@ -12,18 +12,12 @@ import {
   type McpTransportError,
   type McpTransportErrorTag,
 } from "./errors";
-import { createFrameParser, encodeFrame } from "./framing";
 import {
-  armRequestTimeout,
-  decodeRpcError,
   type McpInitializeResult,
   type McpServerRequestHandler,
   type McpTransport,
   type McpTransportState,
-  notificationEnvelope,
   performHandshake,
-  requestEnvelope,
-  responseEnvelope,
   serverRequestOutcome,
 } from "./transport";
 
@@ -70,13 +64,6 @@ export interface StdioTransportOptions {
   readonly onServerRequest?: McpServerRequestHandler;
 }
 
-interface PendingRequest {
-  readonly method: string;
-  readonly resolve: (value: unknown) => void;
-  readonly reject: (error: McpTransportError) => void;
-  readonly cancelTimeout: () => void;
-}
-
 /** Spawns the server's child process and returns the transport over it. */
 export function spawnStdioTransport(
   server: McpStdioServerConfig,
@@ -85,9 +72,10 @@ export function spawnStdioTransport(
   const clientInfo = options.clientInfo ?? { name: "trevor", version: "dev" };
   const closeGraceMs = options.closeGraceMs ?? DEFAULT_CLOSE_GRACE_MS;
 
-  const child = spawn(server.command, [...server.args], {
+  const child = spawnHardenedChild({
+    command: server.command,
+    args: server.args,
     env: stdioChildEnv(options.hostEnv ?? process.env, server.env),
-    stdio: ["pipe", "pipe", "pipe"],
   });
 
   let status: McpTransportState["status"] = "configured";
@@ -99,11 +87,8 @@ export function spawnStdioTransport(
   let fate: McpTransportError | null = null;
   let exited = false;
   let stderrTail = "";
-  let nextId = 1;
   let initPromise: Promise<McpInitializeResult> | null = null;
   let closePromise: Promise<void> | null = null;
-  const pending = new Map<number, PendingRequest>();
-  const parser = createFrameParser();
   const exitWaiters: (() => void)[] = [];
 
   /** Records the failure as the transport's last error (message + machine-readable tag). */
@@ -125,15 +110,6 @@ export function spawnStdioTransport(
     return tail;
   };
 
-  const settle = (id: number): PendingRequest | undefined => {
-    const entry = pending.get(id);
-    if (entry) {
-      entry.cancelTimeout();
-      pending.delete(id);
-    }
-    return entry;
-  };
-
   /** Every death path lands here exactly once: record the fate and drain pending requests.
    *  Failure paths reap the child immediately; the graceful close path shuts it down itself. */
   const terminate = (error: McpTransportError, terminalStatus: "failed" | "closed"): void => {
@@ -143,96 +119,23 @@ export function spawnStdioTransport(
     fate = error;
     status = terminalStatus;
     fail(error);
-    for (const id of [...pending.keys()]) {
-      settle(id)?.reject(error);
-    }
     if (terminalStatus === "failed" && !exited) {
-      child.kill();
+      child.kill("SIGTERM");
+      reapAfterGrace(child, closeGraceMs);
     }
   };
 
-  const send = (message: Record<string, unknown>): void => {
-    try {
-      child.stdin.write(encodeFrame(JSON.stringify(message)));
-    } catch {
-      // A dead child's stdin can throw synchronously; the exit/error handlers classify it.
-    }
-  };
-
-  const handleBody = (body: string): void => {
-    let message: Record<string, unknown>;
-    try {
-      const parsed: unknown = JSON.parse(body);
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        throw new Error("not an object");
-      }
-      message = parsed as Record<string, unknown>;
-    } catch {
-      terminate(
-        new McpMalformedResponseError({
-          server: server.name,
-          detail: `response body is not a JSON object: ${body.slice(0, 120)}`,
-        }),
-        "failed",
-      );
-      return;
-    }
-
-    if (typeof message.id === "number" && ("result" in message || "error" in message)) {
-      const entry = settle(message.id);
-      if (!entry) {
-        return; // a late response after timeout/close - nothing to correlate
-      }
-      if ("error" in message) {
-        entry.reject(fail(decodeRpcError(server.name, entry.method, message.error, McpRpcError)));
-        return;
-      }
-      entry.resolve(message.result);
-      return;
-    }
-
-    if (typeof message.method === "string") {
-      // A server-initiated request or notification. Requests (they carry an id) run through
-      // the shared outcome ladder over the injected mediation handler (M6).
-      if (message.id !== undefined && !fate) {
-        const id = message.id as number | string;
-        void serverRequestOutcome(options.onServerRequest, message.method, message.params).then(
-          (outcome) => {
-            if (!fate) {
-              send(responseEnvelope(id, outcome));
-            }
-          },
-        );
-      }
-      return;
-    }
-
-    const entryId = typeof message.id === "number" ? message.id : undefined;
-    const malformed = fail(
-      new McpMalformedResponseError({
-        server: server.name,
-        detail: "response carries neither result nor error",
-      }),
-    );
-    if (entryId !== undefined) {
-      settle(entryId)?.reject(malformed);
-    }
-  };
-
-  child.stdout.on("data", (chunk: Buffer) => {
-    let frames: string[];
-    try {
-      frames = parser.push(chunk);
-    } catch (error) {
-      terminate(
-        new McpMalformedResponseError({ server: server.name, detail: msg(error) }),
-        "failed",
-      );
-      return;
-    }
-    for (const body of frames) {
-      handleBody(body);
-    }
+  const connection = createFramedJsonRpcConnection<McpTransportError>({
+    child,
+    server: server.name,
+    defaultTimeoutMs: server.requestTimeoutMs,
+    timeoutError: McpTimeoutError,
+    rpcError: McpRpcError,
+    malformedError: (detail) => new McpMalformedResponseError({ server: server.name, detail }),
+    recordError: fail,
+    onFatal: (error) => terminate(error, "failed"),
+    onServerRequest: (method, params) =>
+      serverRequestOutcome(options.onServerRequest, method, params),
   });
 
   child.stderr.on("data", (chunk: Buffer) => {
@@ -240,9 +143,8 @@ export function spawnStdioTransport(
   });
 
   child.on("error", (error) => {
-    terminate(
+    connection.terminate(
       new McpServerCrashError({ server: server.name, detail: error.message, cause: error }),
-      "failed",
     );
   });
 
@@ -252,53 +154,20 @@ export function spawnStdioTransport(
       wake();
     }
     const tail = scrubbedStderrTail();
-    terminate(
+    connection.terminate(
       new McpServerCrashError({
         server: server.name,
         detail:
           `child exited (code ${code ?? "null"}, signal ${signal ?? "null"})` +
           (tail ? `; stderr tail: ${tail}` : ""),
       }),
-      "failed",
     );
   });
 
-  // A dead child's pipes emit errors (EPIPE on stdin, resets on the read side); without
-  // listeners Node rethrows them and crashes the host. The exit handler owns classification.
-  child.stdin.on("error", () => {});
-  child.stdout.on("error", () => {});
-  child.stderr.on("error", () => {});
-
   const request = (method: string, params?: unknown): Promise<unknown> =>
-    new Promise((resolve, reject) => {
-      if (fate) {
-        reject(fate);
-        return;
-      }
-      const id = nextId;
-      nextId += 1;
-      const cancelTimeout = armRequestTimeout(
-        server.name,
-        method,
-        server.requestTimeoutMs,
-        McpTimeoutError,
-        (timeout) => {
-          const entry = settle(id);
-          if (entry) {
-            entry.reject(fail(timeout));
-          }
-        },
-      );
-      pending.set(id, { method, resolve, reject, cancelTimeout });
-      send(requestEnvelope(id, method, params));
-    });
+    connection.request(method, params);
 
-  const notify = (method: string, params?: unknown): void => {
-    if (fate) {
-      return;
-    }
-    send(notificationEnvelope(method, params));
-  };
+  const notify = (method: string, params?: unknown): void => connection.notify(method, params);
 
   const doInitialize = async (): Promise<McpInitializeResult> => {
     try {
@@ -311,7 +180,7 @@ export function spawnStdioTransport(
       // ANY handshake failure is terminal: without a completed handshake the child is a
       // zombie, so it is reaped and the transport parks in "failed" (never "configured").
       if (isMcpTransportError(error)) {
-        terminate(error, "failed");
+        connection.terminate(error);
       }
       throw error;
     }
@@ -332,14 +201,18 @@ export function spawnStdioTransport(
   const doClose = async (): Promise<void> => {
     // When a crash already sealed the fate this is pure cleanup: the transport keeps
     // reporting "failed" (the truthier state for /doctor) and the crash error as its fate.
-    terminate(new McpClosedError({ server: server.name }), "closed");
+    if (!fate) {
+      fate = new McpClosedError({ server: server.name });
+      status = "closed";
+      fail(fate);
+      connection.terminate(fate);
+    }
     if (exited) {
       return;
     }
     child.stdin.end();
     if (!(await awaitExit(closeGraceMs))) {
-      child.kill("SIGKILL");
-      await awaitExit(closeGraceMs);
+      await reap(child, { graceMs: closeGraceMs });
     }
   };
 

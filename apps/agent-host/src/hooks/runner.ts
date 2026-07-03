@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import { minimalChildEnv } from "@host/processes/child-env";
+import { reapAfterGrace, spawnHardenedChild } from "@host/processes/child-spawn";
 import { TRUNCATION_NOTICE } from "@host/tools/shared";
 import { msg } from "@host/transport/messages";
 import { type HookDefinition, MAX_HOOK_TIMEOUT_MS } from "./config";
@@ -80,10 +80,11 @@ export function runHook(
   const startedAt = Date.now();
 
   return new Promise((resolve) => {
-    const child = spawn(hook.command, [...hook.args], {
+    const child = spawnHardenedChild({
+      command: hook.command,
+      args: hook.args,
       cwd: options.cwd,
       env: minimalChildEnv(options.hostEnv ?? process.env),
-      stdio: ["pipe", "pipe", "pipe"],
     });
 
     const stdout = createStreamCapture(maxOutputChars);
@@ -91,13 +92,11 @@ export function runHook(
     let timedOut = false;
     let spawnError: string | undefined;
     let settled = false;
-    let hardKill: NodeJS.Timeout | undefined;
 
     const deadline = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
-      hardKill = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
-      hardKill.unref?.();
+      reapAfterGrace(child, killGraceMs);
     }, timeoutMs);
     deadline.unref?.();
 
@@ -107,9 +106,6 @@ export function runHook(
       }
       settled = true;
       clearTimeout(deadline);
-      if (hardKill) {
-        clearTimeout(hardKill);
-      }
       resolve({
         stdout: stdout.result(),
         stderr: stderr.result(),
@@ -123,12 +119,6 @@ export function runHook(
 
     child.stdout.on("data", stdout.push);
     child.stderr.on("data", stderr.push);
-    // A dead child's pipes emit errors (EPIPE on stdin, resets on the read side); without
-    // listeners Node rethrows them and crashes the host (the stdio-transport precedent).
-    child.stdin.on("error", () => {});
-    child.stdout.on("error", () => {});
-    child.stderr.on("error", () => {});
-
     child.on("error", (error) => {
       // A failed spawn (ENOENT and friends) may never reach "close"; settle here.
       spawnError = redactHookText(msg(error));

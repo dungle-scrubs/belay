@@ -1,17 +1,9 @@
-import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { asRecord } from "@host/boot/decode";
-import { createFrameParser, encodeFrame } from "@host/mcp/framing";
-import {
-  armRequestTimeout,
-  decodeRpcError,
-  notificationEnvelope,
-  requestEnvelope,
-  responseEnvelope,
-} from "@host/mcp/transport";
+import { createFramedJsonRpcConnection } from "@host/json-rpc/framed-connection";
 import { minimalChildEnv } from "@host/processes/child-env";
+import { reap, reapAfterGrace, spawnHardenedChild } from "@host/processes/child-spawn";
 import { clipLine } from "@host/tools/shared";
-import { msg } from "@host/transport/messages";
 import type { LspSpawnSpec } from "./adapter";
 import {
   capItems,
@@ -142,13 +134,6 @@ export interface LspClient {
   readonly state: () => LspClientState;
 }
 
-interface PendingRequest {
-  readonly method: string;
-  readonly resolve: (value: unknown) => void;
-  readonly reject: (error: LspClientError) => void;
-  readonly cancelTimeout: () => void;
-}
-
 /** Spawns the language server's child process and returns the client over it. */
 export function spawnLspClient(options: LspClientOptions): LspClient {
   const serverName = options.serverName;
@@ -160,9 +145,10 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
   );
   const closeGraceMs = options.closeGraceMs ?? DEFAULT_CLOSE_GRACE_MS;
 
-  const child = spawn(options.spawn.command, [...options.spawn.args], {
+  const child = spawnHardenedChild({
+    command: options.spawn.command,
+    args: options.spawn.args,
     env: minimalChildEnv(options.hostEnv ?? process.env),
-    stdio: ["pipe", "pipe", "pipe"],
   });
 
   let initialized = false;
@@ -174,11 +160,8 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
   let exited = false;
   let closing = false;
   let stderrTail = "";
-  let nextId = 1;
   let initPromise: Promise<LspInitializeResult> | null = null;
   let closePromise: Promise<void> | null = null;
-  const pending = new Map<number, PendingRequest>();
-  const parser = createFrameParser();
   const exitWaiters: (() => void)[] = [];
 
   /** Open documents' sync versions, keyed by uri. */
@@ -198,15 +181,6 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
   };
 
   const boundedStderrTail = (): string => stderrTail.trim();
-
-  const settle = (id: number): PendingRequest | undefined => {
-    const entry = pending.get(id);
-    if (entry) {
-      entry.cancelTimeout();
-      pending.delete(id);
-    }
-    return entry;
-  };
 
   const wakeDiagnosticWaiters = (uri: string, diagnostics?: readonly LspDiagnostic[]): void => {
     for (const wake of diagnosticWaiters.get(uri)?.splice(0) ?? []) {
@@ -236,27 +210,12 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     }
     fate = error;
     fail(error);
-    for (const id of [...pending.keys()]) {
-      settle(id)?.reject(error);
-    }
     for (const uri of [...diagnosticWaiters.keys()]) {
       wakeDiagnosticWaiters(uri, published.get(uri));
     }
     if (terminalKind === "failed" && !exited) {
-      child.kill();
-      void awaitExit(closeGraceMs).then((exitedInGrace) => {
-        if (!exitedInGrace) {
-          child.kill("SIGKILL");
-        }
-      });
-    }
-  };
-
-  const send = (message: Record<string, unknown>): void => {
-    try {
-      child.stdin.write(encodeFrame(JSON.stringify(message)));
-    } catch {
-      // A dead child's stdin can throw synchronously; the exit/error handlers classify it.
+      child.kill("SIGTERM");
+      reapAfterGrace(child, closeGraceMs);
     }
   };
 
@@ -264,29 +223,7 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     method: string,
     params: unknown,
     timeoutMs: number,
-  ): Promise<unknown> =>
-    new Promise((resolve, reject) => {
-      if (fate) {
-        reject(fate);
-        return;
-      }
-      const id = nextId;
-      nextId += 1;
-      const cancelTimeout = armRequestTimeout(
-        serverName,
-        method,
-        timeoutMs,
-        LspTimeoutError,
-        (timeout) => {
-          const entry = settle(id);
-          if (entry) {
-            entry.reject(fail(timeout));
-          }
-        },
-      );
-      pending.set(id, { method, resolve, reject, cancelTimeout });
-      send(requestEnvelope(id, method, params));
-    });
+  ): Promise<unknown> => connection.request(method, params, timeoutMs);
 
   /** Decodes one publishDiagnostics params object into bounded contract diagnostics. A publish
    *  tagged with a version OLDER than the document's current sync is a stale wave for previous
@@ -337,85 +274,16 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     // Other server notifications (logMessage, progress) are deliberately ignored: pull-only.
   };
 
-  const handleBody = (body: string): void => {
-    let message: Record<string, unknown>;
-    try {
-      const parsed: unknown = JSON.parse(body);
-      const record = asRecord(parsed);
-      if (!record) {
-        throw new Error("not an object");
-      }
-      message = record;
-    } catch {
-      terminate(
-        fail(
-          new LspMalformedResponseError({
-            server: serverName,
-            detail: `response body is not a JSON object: ${body.slice(0, 120)}`,
-          }),
-        ),
-        "failed",
-      );
-      return;
-    }
-
-    if (typeof message.id === "number" && ("result" in message || "error" in message)) {
-      const entry = settle(message.id);
-      if (!entry) {
-        return; // a late response after timeout/shutdown - nothing to correlate
-      }
-      if ("error" in message) {
-        entry.reject(fail(decodeRpcError(serverName, entry.method, message.error, LspRpcError)));
-        return;
-      }
-      entry.resolve(message.result);
-      return;
-    }
-
-    if (typeof message.method === "string") {
-      if (message.id === undefined) {
-        handleNotification(message.method, message.params);
-        return;
-      }
-      // A server-originated request (workspace/configuration, client/registerCapability, ...).
-      // The read-only first cut answers method-not-found; servers treat that as "no answer"
-      // and fall back to their defaults (the MCP no-handler ladder, plan 23 precedent).
-      if (!fate) {
-        send(
-          responseEnvelope(message.id as number | string, {
-            error: { code: -32601, message: `method not supported: ${message.method}` },
-          }),
-        );
-      }
-      return;
-    }
-
-    const entryId = typeof message.id === "number" ? message.id : undefined;
-    const malformed = fail(
-      new LspMalformedResponseError({
-        server: serverName,
-        detail: "response carries neither result nor error",
-      }),
-    );
-    if (entryId !== undefined) {
-      settle(entryId)?.reject(malformed);
-    }
-  };
-
-  child.stdout.on("data", (chunk: Buffer) => {
-    let frames: string[];
-    try {
-      frames = parser.push(chunk);
-    } catch (error) {
-      terminate(
-        fail(new LspMalformedResponseError({ server: serverName, detail: msg(error) })),
-        "failed",
-      );
-      return;
-    }
-    for (const body of frames) {
-      handleBody(body);
-    }
+  const connection = createFramedJsonRpcConnection<LspClientError>({
+    child,
+    server: serverName,
+    defaultTimeoutMs: requestTimeoutMs,
+    timeoutError: LspTimeoutError,
+    rpcError: LspRpcError,
+    malformedError: (detail) => new LspMalformedResponseError({ server: serverName, detail }),
+    recordError: fail,
+    onFatal: (error) => terminate(error, closing ? "closed" : "failed"),
+    onNotification: handleNotification,
   });
 
   child.stderr.on("data", (chunk: Buffer) => {
@@ -423,9 +291,8 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
   });
 
   child.on("error", (error) => {
-    terminate(
+    connection.terminate(
       fail(new LspServerCrashError({ server: serverName, detail: error.message, cause: error })),
-      "failed",
     );
   });
 
@@ -439,7 +306,7 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       `child exited (code ${code ?? "null"}, signal ${signal ?? "null"})` +
       (tail ? `; stderr tail: ${tail}` : "");
     if (!closing) {
-      terminate(fail(new LspServerCrashError({ server: serverName, detail })), "failed");
+      connection.terminate(fail(new LspServerCrashError({ server: serverName, detail })));
     } else {
       // Shutdown-path exits still release any diagnostics waiters.
       for (const uri of [...diagnosticWaiters.keys()]) {
@@ -448,12 +315,6 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     }
     options.onExit?.({ expected: closing, detail });
   });
-
-  // A dead child's pipes emit errors (EPIPE on stdin, resets on the read side); without
-  // listeners Node rethrows them and crashes the host. The exit handler owns classification.
-  child.stdin.on("error", () => {});
-  child.stdout.on("error", () => {});
-  child.stderr.on("error", () => {});
 
   const doInitialize = async (): Promise<LspInitializeResult> => {
     try {
@@ -495,7 +356,7 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       }
       capabilities = asRecord(record.capabilities) ?? {};
       initialized = true;
-      send(notificationEnvelope("initialized", {}));
+      connection.notify("initialized", {});
       return {
         capabilities,
         ...(record.serverInfo !== undefined ? { serverInfo: record.serverInfo } : {}),
@@ -504,7 +365,7 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       // ANY handshake failure is terminal: without a completed handshake the child is a
       // zombie, so it is reaped and every later request gets the sealed fate.
       if (isLspClientError(error)) {
-        terminate(error, "failed");
+        connection.terminate(error);
       }
       throw error;
     }
@@ -519,14 +380,13 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
         // A server that cannot answer shutdown still gets the exit notification below.
       }
     }
-    terminate(new LspClosedError({ server: serverName }), "closed");
+    connection.terminate(new LspClosedError({ server: serverName }));
     if (exited) {
       return;
     }
-    send(notificationEnvelope("exit"));
+    connection.notify("exit");
     if (!(await awaitExit(closeGraceMs))) {
-      child.kill("SIGKILL");
-      await awaitExit(closeGraceMs);
+      await reap(child, { graceMs: closeGraceMs });
     }
   };
 
@@ -538,7 +398,7 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
     request: (method, params) => requestWithTimeout(method, params, requestTimeoutMs),
     notify: (method, params) => {
       if (!fate) {
-        send(notificationEnvelope(method, params));
+        connection.notify(method, params);
       }
     },
     openDocument: (uri, languageId, text) => {
@@ -553,20 +413,16 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       documentTexts.set(uri, text);
       if (version === undefined) {
         documentVersions.set(uri, 1);
-        send(
-          notificationEnvelope("textDocument/didOpen", {
-            textDocument: { uri, languageId, version: 1, text },
-          }),
-        );
+        connection.notify("textDocument/didOpen", {
+          textDocument: { uri, languageId, version: 1, text },
+        });
       } else {
         const next = version + 1;
         documentVersions.set(uri, next);
-        send(
-          notificationEnvelope("textDocument/didChange", {
-            textDocument: { uri, version: next },
-            contentChanges: [{ text }], // full sync - the simplest correct first cut
-          }),
-        );
+        connection.notify("textDocument/didChange", {
+          textDocument: { uri, version: next },
+          contentChanges: [{ text }], // full sync - the simplest correct first cut
+        });
       }
     },
     closeDocument: (uri) => {
@@ -576,7 +432,7 @@ export function spawnLspClient(options: LspClientOptions): LspClient {
       documentVersions.delete(uri);
       documentTexts.delete(uri);
       published.delete(uri);
-      send(notificationEnvelope("textDocument/didClose", { textDocument: { uri } }));
+      connection.notify("textDocument/didClose", { textDocument: { uri } });
     },
     diagnosticsFor: (uri) => published.get(uri),
     diagnosticsSnapshot: () =>
