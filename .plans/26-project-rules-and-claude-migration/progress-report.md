@@ -2,8 +2,8 @@
 
 ## Summary
 
-> Current focus: M7: Doctor, UI, And CLI Surfacing
-- Current cutoff blockers: 18 unchecked
+> Current focus: M8: E2E And Regression Coverage
+- Current cutoff blockers: 12 unchecked
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
@@ -90,12 +90,12 @@
 
 ### M7: Doctor, UI, And CLI Surfacing
 
-- [ ] RED: Add `/doctor` tests for `AGENTS.md`, `.trevor/rules`, detected `CLAUDE.md`, converted pointers, ignored files, bytes used, and bytes dropped.
-- [ ] GREEN: Extend context diagnostics and `/doctor` output.
-- [ ] RED: Add web or protocol tests for rendering required-response migration proposals.
-- [ ] GREEN: Render migration proposals with paths, sibling state, bounded preview, and explicit action controls.
-- [ ] RED: Add tests proving debug output does not dump full instruction/rule bodies by default.
-- [ ] GREEN: Redact or summarize bodies in ordinary diagnostics while leaving explicit inspection possible.
+- [x] RED: Add `/doctor` tests for `AGENTS.md`, `.trevor/rules`, detected `CLAUDE.md`, converted pointers, ignored files, bytes used, and bytes dropped.
+- [x] GREEN: Extend context diagnostics and `/doctor` output.
+- [x] RED: Add web or protocol tests for rendering required-response migration proposals.
+- [x] GREEN: Render migration proposals with paths, sibling state, bounded preview, and explicit action controls.
+- [x] RED: Add tests proving debug output does not dump full instruction/rule bodies by default.
+- [x] GREEN: Redact or summarize bodies in ordinary diagnostics while leaving explicit inspection possible.
 
 ### M8: E2E And Regression Coverage
 

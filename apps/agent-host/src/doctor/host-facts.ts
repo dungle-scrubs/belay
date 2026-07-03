@@ -16,6 +16,12 @@ import type { LspServerStatus } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
 import type { McpRuntime, McpServerStatusEntry } from "@host/mcp/runtime";
 import { activeStylePref } from "@host/prefs/style-store";
+import { discoverClaudeMigrations } from "@host/project-context/claude-migration";
+import { loadPermanentlyIgnored } from "@host/project-context/claude-migration-ignores";
+import {
+  collectContextDiagnostics,
+  formatContextDiagnostics,
+} from "@host/project-context/context-diagnostics";
 import { contextRegistry } from "@host/project-context/registry";
 import type { CatalogSnapshot } from "@host/providers/catalog";
 import type { HostResidency } from "@host/residency/host";
@@ -213,16 +219,22 @@ export function makeHostFacts(deps: HostFactsDeps) {
     };
   }
 
-  /** The AGENTS.md context summary for /doctor: files, scopes, bytes used (+ dropped/truncated). */
+  /**
+   * The project-context summary for /doctor (D-012): AGENTS.md vs `.trevor/rules` (with inclusion
+   * reasons), bytes used/dropped, plus a `claudeMd` line distinguishing detected CLAUDE.md files,
+   * converted pointers, still-to-migrate (required-response), and ignored ones. Count-only - no rule or
+   * instruction body is ever dumped. The migration inventory is a bounded workspace walk done on demand
+   * (a /doctor build), not per turn.
+   */
   function contextState(): Record<string, string> {
-    const ctx = contextRegistry.report();
-    if (ctx.files.length === 0) {
-      return {};
-    }
-    const dropped = ctx.truncated ? ` (-${commas(ctx.bytesDropped)}B truncated)` : "";
-    return {
-      context: `${ctx.files.length} AGENTS.md [${ctx.scopes.join(", ")}] ${commas(ctx.bytesUsed)}B${dropped}`,
-    };
+    const cwd = process.cwd();
+    return formatContextDiagnostics(
+      collectContextDiagnostics(
+        contextRegistry.report(),
+        discoverClaudeMigrations(cwd),
+        loadPermanentlyIgnored(cwd),
+      ),
+    );
   }
 
   /**

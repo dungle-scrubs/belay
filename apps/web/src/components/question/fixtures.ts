@@ -199,6 +199,64 @@ export const grouped = contract([
   }),
 ]);
 
+/**
+ * A CLAUDE.md migration proposal (plan 26): the host raises this as a provider-question so it renders
+ * through the same surface. One question per detected file, the paths + sibling state + a bounded
+ * preview in the question text, and the explicit per-file actions as choices (choice id == action). This
+ * mirrors `buildMigrationProposalContract`'s output shape; the host owns the authoritative builder.
+ */
+export const claudeMigration = contract([
+  question({
+    id: "CLAUDE.md",
+    question:
+      "Migrate CLAUDE.md to AGENTS.md? No sibling AGENTS.md exists yet. Preview: # House rules - always run the linter before committing.",
+    header: "CLAUDE.md migration",
+    answerShape: "single_choice",
+    choices: [
+      choice({
+        id: "create",
+        label: "Create AGENTS.md",
+        description: "Convert this CLAUDE.md into a sibling AGENTS.md and leave a pointer behind.",
+        recommended: true,
+        content: { action: "create", claudePath: "CLAUDE.md" },
+      }),
+      choice({ id: "leave", label: "Leave unchanged", content: { action: "leave" } }),
+      choice({ id: "ignore-once", label: "Ignore once", content: { action: "ignore-once" } }),
+      choice({
+        id: "ignore-permanent",
+        label: "Ignore permanently",
+        content: { action: "ignore-permanent" },
+      }),
+    ],
+  }),
+]);
+
+/** A migration proposal for a file whose sibling AGENTS.md already exists: merge is offered, not create. */
+export const claudeMigrationWithSibling = contract([
+  question({
+    id: "apps/web/CLAUDE.md",
+    question:
+      "Migrate apps/web/CLAUDE.md to apps/web/AGENTS.md? A sibling apps/web/AGENTS.md already exists. Preview: nested web rules.",
+    header: "CLAUDE.md migration",
+    answerShape: "single_choice",
+    choices: [
+      choice({
+        id: "merge",
+        label: "Merge into existing AGENTS.md",
+        recommended: true,
+        content: { action: "merge", claudePath: "apps/web/CLAUDE.md" },
+      }),
+      choice({ id: "leave", label: "Leave unchanged", content: { action: "leave" } }),
+      choice({ id: "ignore-once", label: "Ignore once", content: { action: "ignore-once" } }),
+      choice({
+        id: "ignore-permanent",
+        label: "Ignore permanently",
+        content: { action: "ignore-permanent" },
+      }),
+    ],
+  }),
+]);
+
 /** A legacy single-question raw input, to exercise the coercion path end to end. */
 export const legacyRaw: RawAskUserInput = {
   question: "Proceed with the destructive reset?",
