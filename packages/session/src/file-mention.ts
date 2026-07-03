@@ -33,3 +33,118 @@ export function splitWorkspacePath(path: string): PathParts {
 export function fileMentionText(path: string): string {
   return `@${path}`;
 }
+
+/**
+ * The index of the first character of `needle` in `haystack` when `needle` is a subsequence of it (its
+ * characters appear in order, not necessarily adjacent), or -1. An empty needle matches at 0.
+ */
+function subsequenceStart(needle: string, haystack: string): number {
+  if (needle === "") {
+    return 0;
+  }
+  let n = 0;
+  let first = -1;
+  for (let h = 0; h < haystack.length && n < needle.length; h += 1) {
+    if (haystack[h] === needle[n]) {
+      if (first === -1) {
+        first = h;
+      }
+      n += 1;
+    }
+  }
+  return n === needle.length ? first : -1;
+}
+
+/**
+ * A file's rank for a query: a discrete `tier` (higher is a better kind of match), the match `at`
+ * position (earlier is better), and the matched string `length` (shorter, more specific is better).
+ * The tiers, best first: exact basename, basename prefix, exact path segment, basename substring, path
+ * substring, basename fuzzy subsequence, path fuzzy subsequence. An empty query ranks everything at a
+ * neutral tier so the whole (capped) index shows shallow-first. Content is never read.
+ */
+interface FileRank {
+  readonly tier: number;
+  readonly at: number;
+  readonly length: number;
+}
+
+function rankFile(path: string, query: string): FileRank | null {
+  const q = query.toLowerCase();
+  const { basename } = splitWorkspacePath(path);
+  const base = basename.toLowerCase();
+  const full = path.toLowerCase();
+  if (q === "") {
+    return { tier: 0, at: 0, length: path.length };
+  }
+  if (base === q) {
+    return { tier: 7, at: 0, length: basename.length };
+  }
+  if (base.startsWith(q)) {
+    return { tier: 6, at: 0, length: basename.length };
+  }
+  if (full.split("/").includes(q)) {
+    return { tier: 5, at: full.indexOf(q), length: path.length };
+  }
+  const baseIndex = base.indexOf(q);
+  if (baseIndex !== -1) {
+    return { tier: 4, at: baseIndex, length: basename.length };
+  }
+  const pathIndex = full.indexOf(q);
+  if (pathIndex !== -1) {
+    return { tier: 3, at: pathIndex, length: path.length };
+  }
+  const baseFuzzy = subsequenceStart(q, base);
+  if (baseFuzzy !== -1) {
+    return { tier: 2, at: baseFuzzy, length: basename.length };
+  }
+  const pathFuzzy = subsequenceStart(q, full);
+  if (pathFuzzy !== -1) {
+    return { tier: 1, at: pathFuzzy, length: path.length };
+  }
+  return null;
+}
+
+/** Best-first order for two ranked matches: tier, then match position, then length, then path (stable). */
+function compareRanked(
+  a: { rank: FileRank; path: string },
+  b: { rank: FileRank; path: string },
+): number {
+  return (
+    b.rank.tier - a.rank.tier ||
+    a.rank.at - b.rank.at ||
+    a.rank.length - b.rank.length ||
+    (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+  );
+}
+
+/** The result of searching a workspace file index for a query: the ranked, capped matches + a flag. */
+export interface FileSearchResult {
+  readonly matches: readonly FileMatch[];
+  /** True when more files matched than `cap`, so the returned slice is the best-ranked prefix only. */
+  readonly truncated: boolean;
+}
+
+/**
+ * Ranks `index` against `query` and returns the best `cap` matches (see {@link rankFile}). Pure over
+ * paths only - no filesystem, no content reads - so it runs in the browser over a host-supplied index.
+ * An empty query returns the shallow-first index (capped). Reports truncation when matches exceed the
+ * cap so the menu can say "more exist, narrow your query".
+ */
+export function searchWorkspaceFiles(
+  index: readonly FileMatch[],
+  query: string,
+  cap: number,
+): FileSearchResult {
+  const ranked: { rank: FileRank; path: string; match: FileMatch }[] = [];
+  for (const match of index) {
+    const rank = rankFile(match.path, query);
+    if (rank !== null) {
+      ranked.push({ rank, path: match.path, match });
+    }
+  }
+  ranked.sort(compareRanked);
+  return {
+    matches: ranked.slice(0, cap).map((entry) => entry.match),
+    truncated: ranked.length > cap,
+  };
+}

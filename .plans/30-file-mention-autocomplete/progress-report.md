@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M3: Workspace-Confined Search
+> Current focus: M4: Live Composer Integration
 
 - Total checklist items: 37
-- Completed: 16
-- Current cutoff blockers: 21
+- Completed: 24
+- Current cutoff blockers: 13
 
 ## 0. Hard Dependencies
 
@@ -35,14 +35,14 @@
 
 ## M3: Workspace-Confined Search
 
-- [ ] RED: Host unit tests for confinement, ignore policy, caps, empty query, and path escaping
-- [ ] GREEN: Add a host-side file-search service using existing workspace primitives
-- [ ] RED: Ranking tests for basename, path segment, exact prefix, fuzzy subsequence, and tie-break order
-- [ ] GREEN: Implement lightweight fuzzy scoring without file-content reads
-- [ ] RED: Protocol/decoder tests for request, response, stale response, and host unavailable cases
-- [ ] GREEN: Add browser-host file-search request/read-model path
-- [ ] RED: Debounce and cancellation tests so stale results cannot overwrite newer queries
-- [ ] REFACTOR: Keep result payloads small and relative-path-only
+- [x] RED: Host unit tests for confinement, ignore policy, caps, empty query, and path escaping
+- [x] GREEN: Add a host-side file-search service using existing workspace primitives
+- [x] RED: Ranking tests for basename, path segment, exact prefix, fuzzy subsequence, and tie-break order
+- [x] GREEN: Implement lightweight fuzzy scoring without file-content reads
+- [x] RED: Protocol/decoder tests for request, response, stale response, and host unavailable cases
+- [x] GREEN: Add browser-host file-search request/read-model path
+- [x] RED: Debounce and cancellation tests so stale results cannot overwrite newer queries
+- [x] REFACTOR: Keep result payloads small and relative-path-only
 
 ## M4: Live Composer Integration
 

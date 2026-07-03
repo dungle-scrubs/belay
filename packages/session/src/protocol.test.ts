@@ -1353,3 +1353,63 @@ test("taskSnapshotReplaces: higher revision wins, equal replaces (latest), lower
   // Legacy events all share rev 0, so the latest still wins among them.
   assert.equal(taskSnapshotReplaces(LEGACY_TASK_REVISION, LEGACY_TASK_REVISION), true);
 });
+
+test("events.fileIndexRequested round-trips with its correlation id (plan 30)", () => {
+  const decoded = decodeTrevorEvent(stored(events.fileIndexRequested({ requestId: "req-7" })));
+  assert.deepEqual(decoded, { type: "file.index.requested", requestId: "req-7" });
+});
+
+test("a fileIndexRequested missing its requestId falls back to the event id", () => {
+  const decoded = decodeTrevorEvent(
+    stored({ type: "file.index.requested", payload: {} }, { eventId: "ev-9" }),
+  );
+  assert.deepEqual(decoded, { type: "file.index.requested", requestId: "ev-9" });
+});
+
+test("events.fileIndexResult round-trips the paths + truncation, paired by requestId", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.fileIndexResult({
+        requestId: "req-7",
+        files: [{ path: "apps/web/src/app.tsx" }, { path: "README.md" }],
+        truncated: true,
+      }),
+    ),
+  );
+  assert.deepEqual(decoded, {
+    type: "file.index.result",
+    requestId: "req-7",
+    files: [{ path: "apps/web/src/app.tsx" }, { path: "README.md" }],
+    truncated: true,
+  });
+});
+
+test("a stale/newer fileIndexResult keeps its requestId so the browser can supersede by id", () => {
+  const older = decodeTrevorEvent(
+    stored(events.fileIndexResult({ requestId: "req-1", files: [], truncated: false })),
+  );
+  const newer = decodeTrevorEvent(
+    stored(events.fileIndexResult({ requestId: "req-2", files: [], truncated: false })),
+  );
+  assert.equal(older?.type === "file.index.result" ? older.requestId : null, "req-1");
+  assert.equal(newer?.type === "file.index.result" ? newer.requestId : null, "req-2");
+});
+
+test("fileIndexResult decode drops absolute / escaping paths (confinement never leaks)", () => {
+  const decoded = decodeTrevorEvent(
+    stored({
+      type: "file.index.result",
+      payload: {
+        requestId: "r",
+        files: ["ok.ts", "/etc/passwd", "../up.ts", ""],
+        truncated: false,
+      },
+    }),
+  );
+  assert.deepEqual(decoded, {
+    type: "file.index.result",
+    requestId: "r",
+    files: [{ path: "ok.ts" }],
+    truncated: false,
+  });
+});

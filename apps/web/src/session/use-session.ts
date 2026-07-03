@@ -294,6 +294,9 @@ export interface SessionActions {
   /** The prompt shell lane (D-082): publish a `user.shell` so the leader runs the command now,
    *  bypassing the send queue, the model, and the provider flow. */
   readonly shell: (requestId: string, command: string) => Promise<void>;
+  /** The `@`-file-mention picker (plan 30): ask the live leader for the workspace file index once,
+   *  paired by `requestId`; the browser then fuzzy-filters the cached index locally per keystroke. */
+  readonly requestFileIndex: (requestId: string) => Promise<void>;
   readonly openInEditor: (path: string, line?: number, column?: number) => Promise<void>;
   /** Explicit internet refresh (D-060 M2): ask the host to probe public reachability now. */
   readonly refreshInternet: () => Promise<void>;
@@ -333,6 +336,8 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
     command,
     shell: (requestId: string, command: string) =>
       publishVia(sessionEvents.userShell({ requestId, command })),
+    requestFileIndex: (requestId: string) =>
+      publishVia(sessionEvents.fileIndexRequested({ requestId })),
     openInEditor: (path: string, line?: number, column?: number) =>
       publishVia(sessionEvents.editorOpen({ path, line, column })),
     refreshInternet: () => command("/internet-refresh", ""),

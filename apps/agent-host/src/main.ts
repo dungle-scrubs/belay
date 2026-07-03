@@ -69,6 +69,7 @@ import { InternetMonitor, probeInternet } from "./connectivity/probe";
 import { buildLiveDoctorSnapshot, collectDoctorProbeResults } from "./doctor/build";
 import { makeHostFacts } from "./doctor/host-facts";
 import { currentDoctorSnapshot, registerDoctorSnapshotSource } from "./doctor/source";
+import { buildFileIndex } from "./file-search";
 import { makeHandoffOrchestrator } from "./handoff/orchestrator";
 import { createLoopPersistence } from "./loop/persistence";
 import { createLoopIterationRunner, defaultProcessSeam } from "./loop/runner";
@@ -998,6 +999,19 @@ function handleEvent(message: SessionEvent): void {
       runShellCommand(decoded.requestId, decoded.command).catch((error) =>
         warn("host", "shell failed", { error: msg(error) }),
       );
+    }
+  } else if (
+    decoded.type === "file.index.requested" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
+    // The `@`-file-mention picker (plan 30) asked for the workspace file index. A side-channel action
+    // (like editor.open): only the live leader answers, never on replay/standby - it is a one-shot
+    // read model, not state to rebuild. The result (relative paths only) is published paired by
+    // requestId and never enters the model context; the browser fuzzy-filters it locally.
+    if (live && lease.isLeader()) {
+      const { files, truncated } = buildFileIndex();
+      log("host", "file.index", { files: files.length, truncated });
+      void emit(events.fileIndexResult({ requestId: decoded.requestId, files, truncated }));
     }
   } else if (
     decoded.type === "provider.question.answer" &&

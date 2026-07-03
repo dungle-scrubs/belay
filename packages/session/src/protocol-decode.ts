@@ -4,6 +4,7 @@ import { asAnyNumber, asMaybeString, asString, asStringArray, oneOf } from "./co
 import { type CommandMenuPayload, decodeCommandMenu } from "./command-menu";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
+import type { FileMatch } from "./file-mention";
 import type { LoopSnapshot } from "./loop-command";
 import {
   LOOP_DURABILITIES,
@@ -572,6 +573,13 @@ export type DecodedEvent =
       readonly line?: number;
       readonly column?: number;
     }
+  | { readonly type: "file.index.requested"; readonly requestId: string }
+  | {
+      readonly type: "file.index.result";
+      readonly requestId: string;
+      readonly files: readonly FileMatch[];
+      readonly truncated: boolean;
+    }
   | {
       readonly type: "tasks.current";
       readonly tasks: readonly TaskSnapshot[];
@@ -915,6 +923,22 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         path: str(p.path),
         line: typeof p.line === "number" ? p.line : undefined,
         column: typeof p.column === "number" ? p.column : undefined,
+      };
+    case "file.index.requested":
+      return { type: "file.index.requested", requestId: str(p.requestId, event.eventId) };
+    case "file.index.result":
+      return {
+        type: "file.index.result",
+        requestId: str(p.requestId, event.eventId),
+        // Relative-path-only payloads: rebuild `{ path }` matches from the string list, and drop any
+        // stray absolute / `..`-escaping path so a malformed event can never surface one to the picker.
+        files: strList(p.files)
+          .filter(
+            (path) =>
+              path !== "" && path !== ".." && !path.startsWith("../") && !path.startsWith("/"),
+          )
+          .map((path) => ({ path })),
+        truncated: p.truncated === true,
       };
     case "tasks.current":
       return { type: "tasks.current", tasks: coerceTasks(p.tasks), rev: num(p.rev) };

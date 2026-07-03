@@ -1,6 +1,7 @@
 import type { UsageBreakdown } from "./breakdown";
 import type { CommandMenuPayload } from "./command-menu";
 import type { InternetSnapshot } from "./connectivity";
+import type { FileMatch } from "./file-mention";
 import type { LoopSnapshot } from "./loop-command";
 import type { CatalogEntry, ModelRef, SourceSignInState, SourceSummary } from "./model-source";
 import type { PastePayload } from "./paste-tokens";
@@ -732,6 +733,36 @@ export const events = {
       path: p.path,
       ...(p.line != null ? { line: p.line } : {}),
       ...(p.column != null ? { column: p.column } : {}),
+    },
+  }),
+  /**
+   * The `@`-file-mention picker (plan 30) asks the live leader for the workspace file INDEX. A
+   * side-channel request (like editor.open / user.shell), published ONCE per session the first time
+   * `@` is used; `requestId` pairs it with its `file.index.result`. The browser then fuzzy-filters the
+   * cached index locally per keystroke, so no per-keystroke traffic hits the log. It never reaches the
+   * model or the transcript.
+   */
+  fileIndexRequested: (p: { requestId: string }): TrevorEventInput => ({
+    type: "file.index.requested",
+    payload: { requestId: p.requestId },
+  }),
+  /**
+   * The live leader's workspace file index for a {@link fileIndexRequested} (paired by `requestId`):
+   * the capped list of workspace-relative POSIX paths the `@`-mention picker searches. Advisory /
+   * presence-style - kept OUT of conversation memory / prompt-history projection (like host.internet),
+   * carrying relative paths only (never contents, never an absolute or escaping path). `truncated` is
+   * true when the workspace has more files than the cap, so the search slice is incomplete.
+   */
+  fileIndexResult: (p: {
+    requestId: string;
+    files: readonly FileMatch[];
+    truncated: boolean;
+  }): TrevorEventInput => ({
+    type: "file.index.result",
+    payload: {
+      requestId: p.requestId,
+      files: p.files.map((f) => f.path),
+      truncated: p.truncated,
     },
   }),
   /**
