@@ -221,7 +221,6 @@ export class SystemPromptBuilder {
   build(tools: readonly ToolDef[] = [], context: SystemPromptContext = {}): string {
     const workspaceRoot = context.workspaceRoot ?? WORKSPACE_ROOT;
     const cwd = context.cwd ?? process.cwd();
-    const snapshot = this.registrySnapshot(cwd, workspaceRoot);
 
     const style = styleBlock(context.styleGuidance);
 
@@ -235,6 +234,10 @@ export class SystemPromptBuilder {
         { render: () => "No tools are available on this route; answer directly in ordinary text." },
       ]);
     }
+
+    // The registry snapshot (the synchronous AGENTS.md context walk + checklist render) is paid only
+    // on the tooled path - the answer-only branch above never reads it.
+    const snapshot = this.registrySnapshot(cwd, workspaceRoot);
 
     const guidance = [
       ...CODING_GUIDANCE,
