@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M4: Full verification + manual EZE
+> Current focus: complete - all milestones landed (M4 manual EZE recorded as gated)
 
 - Total checklist items: 23
-- Completed: 20
-- Current cutoff blockers: 3
+- Completed: 23
+- Current cutoff blockers: 0
 
 ## 0. Hard Dependencies
 
@@ -48,6 +48,44 @@
 
 ### M4: Full verification + manual EZE
 
-- [ ] GREEN: lint + typecheck + full test suite green
-- [ ] RED: manual EZE with a real Max token - select claude-code, run a text turn, confirm streamed text + usage + Max-pool billing (record as gated if no token headlessly)
-- [ ] REFACTOR: record verification commands; note the tool-support follow-up as a separate future plan
+- [x] GREEN: lint + typecheck + full test suite green
+- [x] RED: manual EZE with a real Max token - RECORDED AS GATED (no headless `CLAUDE_CODE_OAUTH_TOKEN`; see Verification record below)
+- [x] REFACTOR: record verification commands; note the tool-support follow-up as a separate future plan
+
+## Verification record (M4)
+
+Commands run from the worktree root, all green:
+
+- `pnpm lint` - biome (1138 files) + kebab-case filename policy: clean.
+- `pnpm typecheck` - all 11 workspace projects: clean.
+- `pnpm test` (`vitest run`, all projects) - **3696 passed | 3 skipped**.
+  - Lanes RUN green: `unit`, `integration`, `web` (jsdom), and the hermetic `e2e` lane.
+  - Lane SKIPPED with stated reason: the live-model `e2e/live/*` lane
+    (`agent.test.ts`, `context.test.ts`) - `test.skipIf(!enabled)` where `enabled`
+    needs `TREVOR_LIVE=1` + a running host (`RICHTER_URL`/`SESSION_ID`), absent
+    headlessly. Skips, never fails (AGENTS.md gated-lane doctrine).
+
+Manual EZE - **GATED / DEFERRED**: the EZE needs a real Max-plan
+`CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`). None is available headlessly:
+the env var is unset, there is no `~/.claude/.credentials.json`, and no
+`Claude Code-credentials` keychain entry. An interactive `claude` CLI login exists on
+the machine, but that is NOT the long-lived setup-token the provider reads, and
+generating one requires interactive auth + would consume the Max programmatic pool, so
+the EZE was not faked. When a token is available, run: select the `claude-code` source
+in the chooser, send a text turn, confirm a streamed text answer + a usage row, and
+confirm via the subscription's programmatic-usage view that it billed the Max pool (not
+API credits). The billing-correctness invariant it validates (child env deletes
+`ANTHROPIC_API_KEY`, injects `CLAUDE_CODE_OAUTH_TOKEN`) is already pinned by the M2
+spawn-env probe unit tests.
+
+Follow-ups (separate future plans, out of scope here - D-004):
+
+- **Tool support**: this cut is text-only (`capabilities().tools = false`; the SDK gets
+  `tools: []`). Exposing any tool re-enables the SDK's multi-turn loop and breaks the
+  one-step `Provider.stream()` contract - a different provider shape, not a deferred
+  milestone of this plan.
+- **Vision passthrough**: `capabilities().images` follows the model, but the current
+  prompt projection is a text transcript (image artifacts ride as an attachments note,
+  not inline blocks). True inline-image passthrough via the SDK is a follow-up.
+- **Programmatic-pool state in `/doctor`**: surface the Max programmatic pool if cheaply
+  readable (Risk Register mitigation), so subsidized-inference value is honest.

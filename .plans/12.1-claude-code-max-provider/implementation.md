@@ -177,12 +177,12 @@ New module gets a `Responsible for:` / `Not for:` header (host convention).
 
 ### Done Gate
 
-- [ ] `claude-code` is a selectable second Claude source, distinct from `anthropic`, that streams
+- [x] `claude-code` is a selectable second Claude source, distinct from `anthropic`, that streams
   text via the Agent SDK on the Max subscription.
-- [ ] Subprocess env sets `CLAUDE_CODE_OAUTH_TOKEN` and never carries `ANTHROPIC_API_KEY`.
-- [ ] Configured signal is the CLI token, independent of `~/.pi/auth.json`.
-- [ ] `capabilities()` reports `tools:false`; no tool is ever exposed to the SDK.
-- [ ] Full suites green; manual EZE done or recorded as gated.
+- [x] Subprocess env sets `CLAUDE_CODE_OAUTH_TOKEN` and never carries `ANTHROPIC_API_KEY`.
+- [x] Configured signal is the CLI token, independent of `~/.pi/auth.json`.
+- [x] `capabilities()` reports `tools:false`; no tool is ever exposed to the SDK.
+- [x] Full suites green; manual EZE recorded as gated (no headless Max-plan token).
 
 ## 4. Risk Register
 
