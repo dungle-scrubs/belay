@@ -17,7 +17,6 @@ import type {
 } from "@trevor/session";
 import { MAX_QUESTIONS } from "@trevor/session";
 import type { ClaudeMigrationItem } from "./claude-migration";
-import { siblingAgentsPath } from "./claude-migration";
 
 /** The explicit per-file actions a user may pick for a detected CLAUDE.md (D-010). */
 export type MigrationActionKind = "create" | "merge" | "leave" | "ignore-once" | "ignore-permanent";
@@ -62,12 +61,13 @@ function choicesFor(item: ClaudeMigrationItem): readonly ProviderQuestionChoice[
     "ignore-permanent",
   ];
   const recommended = primaryAction(item);
+  // No `content` payload: the choice `id` IS the action (one source of truth); the host resolves the
+  // decision from `selected[0].id`, so a parallel content blob could only drift from it.
   return actions.map((action) => ({
     id: action,
     label: MIGRATION_ACTION_LABELS[action],
     description: MIGRATION_ACTION_DESCRIPTIONS[action],
     ...(action === recommended ? { recommended: true } : {}),
-    content: { action, claudePath: item.claudePath },
   }));
 }
 
@@ -103,21 +103,18 @@ export function buildMigrationProposalContract(
   return { schemaVersion: 1, questions };
 }
 
+/** Every action id, derived from the label map's keys so a new MigrationActionKind cannot be added
+ *  without a label - and is then accepted here automatically instead of falling through to "leave". */
+const MIGRATION_ACTION_IDS = Object.keys(MIGRATION_ACTION_LABELS) as readonly MigrationActionKind[];
+
 /** The action a single accepted answer selected, read from its `selected[]` id (else `leave`). */
 function actionFromAnswer(
   selected: readonly { readonly id?: string }[] | undefined,
 ): MigrationActionKind {
   const id = selected?.[0]?.id;
-  switch (id) {
-    case "create":
-    case "merge":
-    case "leave":
-    case "ignore-once":
-    case "ignore-permanent":
-      return id;
-    default:
-      return "leave";
-  }
+  return id !== undefined && (MIGRATION_ACTION_IDS as readonly string[]).includes(id)
+    ? (id as MigrationActionKind)
+    : "leave";
 }
 
 /**
@@ -135,7 +132,7 @@ export function resolveMigrationDecisions(
       : new Map<string, never>();
   return items.map((item) => ({
     claudePath: item.claudePath,
-    agentsPath: siblingAgentsPath(item.claudePath),
+    agentsPath: item.agentsPath,
     action:
       answer.action === "accept" ? actionFromAnswer(byId.get(item.claudePath)?.selected) : "leave",
   }));

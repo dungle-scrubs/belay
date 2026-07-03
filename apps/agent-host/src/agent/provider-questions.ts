@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   events,
+  PROVIDER_QUESTION_ADAPTERS,
+  type ProviderQuestionAdapter,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
   type TrevorEventInput,
@@ -44,6 +46,13 @@ type ResolvedOutcome = "answered" | "declined" | "cancelled";
 
 /** Publishes a session event; injected so this module never imports the transport. */
 export type QuestionEmitter = (event: TrevorEventInput) => void;
+
+/** Which surface raised a question: the tool name shown on the transcript row and the typed adapter
+ *  tag the web dispatches its renderer on. One object so the two can never be transposed. */
+export interface ProviderQuestionSource {
+  readonly toolName: string;
+  readonly adapter: ProviderQuestionAdapter;
+}
 
 interface Pending {
   readonly questionId: string;
@@ -90,24 +99,29 @@ export class ProviderQuestionRuntime {
     runId: string,
     toolCallId: string,
   ): Effect.Effect<string, ToolInputError> {
-    return this.block(contract, runId, toolCallId, "ask_user", "ask_user", formatToolResult);
+    return this.block(
+      contract,
+      runId,
+      toolCallId,
+      { toolName: "ask_user", adapter: PROVIDER_QUESTION_ADAPTERS.askUser },
+      formatToolResult,
+    );
   }
 
   /**
    * The structured sibling of {@link ask} for HOST-owned required-response proposals (e.g. the CLAUDE.md
    * migration, plan 26): it rides the exact same `provider.question.*` events and blocking lifecycle,
    * but resumes with the full {@link ProviderQuestionAnswer} so the caller can act on the chosen options
-   * (the tool-result string discards the structured selection). `toolName`/`adapter` tag the surface so
-   * the request is distinguishable from an ask_user question while reusing its renderer.
+   * (the tool-result string discards the structured selection). `source` tags the surface so the
+   * request is distinguishable from an ask_user question while reusing its renderer.
    */
   askForAnswer(
     contract: ProviderQuestionContract,
     runId: string,
     toolCallId: string,
-    toolName: string,
-    adapter: string,
+    source: ProviderQuestionSource,
   ): Effect.Effect<ProviderQuestionAnswer, ToolInputError> {
-    return this.block(contract, runId, toolCallId, toolName, adapter, (answer) => answer);
+    return this.block(contract, runId, toolCallId, source, (answer) => answer);
   }
 
   /**
@@ -120,14 +134,16 @@ export class ProviderQuestionRuntime {
     contract: ProviderQuestionContract,
     runId: string,
     toolCallId: string,
-    toolName: string,
-    adapter: string,
+    source: ProviderQuestionSource,
     toResult: (answer: ProviderQuestionAnswer) => A,
   ): Effect.Effect<A, ToolInputError> {
     const issues = validateContract(contract);
     if (issues.length > 0) {
       return Effect.fail(
-        new ToolInputError({ tool: toolName, detail: issues.map((i) => i.message).join("; ") }),
+        new ToolInputError({
+          tool: source.toolName,
+          detail: issues.map((i) => i.message).join("; "),
+        }),
       );
     }
     return Effect.async<A, ToolInputError>((resume) => {
@@ -147,8 +163,8 @@ export class ProviderQuestionRuntime {
           questionId,
           runId,
           toolCallId,
-          toolName,
-          adapter,
+          toolName: source.toolName,
+          adapter: source.adapter,
           contract,
         }),
       );

@@ -46,6 +46,7 @@ import type {
 import {
   decodeProviderQuestionAnswer,
   decodeProviderQuestionContract,
+  PROVIDER_QUESTION_ADAPTERS,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
 } from "./provider-question";
@@ -989,7 +990,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         runId,
         toolCallId: str(p.toolCallId, event.eventId),
         toolName: str(p.toolName, "ask_user"),
-        adapter: str(p.adapter, "ask_user"),
+        adapter: str(p.adapter, PROVIDER_QUESTION_ADAPTERS.askUser),
         contract: decodeProviderQuestionContract(p.contract),
       };
     case "provider.question.answer":

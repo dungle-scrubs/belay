@@ -1,22 +1,19 @@
-import {
-  applyMigrationAnswer,
-  collectPendingMigrations,
-} from "@host/project-context/claude-migration-flow";
-import { buildMigrationProposalContract } from "@host/project-context/claude-migration-proposal";
+import { runClaudeMigrationFlow } from "@host/project-context/claude-migration-flow";
+import { PROVIDER_QUESTION_ADAPTERS } from "@trevor/session";
 import { Effect, Schema } from "effect";
 import { providerQuestionRuntime } from "../agent/provider-questions";
 import type { Tool, ToolContext } from "./types";
 
 /**
  * `migrate_claude_md`: the required-response CLAUDE.md -> AGENTS.md migration (plan 26, D-005/D-010).
- * It discovers root + nested CLAUDE.md files that still need a decision, raises ONE grouped proposal
- * through the shared provider-question runtime (the same block/answer path `ask_user` uses, so the
- * turn suspends until the user answers and interruption cleans the pending question up), and only THEN
- * applies each file's explicit action - create, merge, leave, or ignore. Nothing is written before the
- * answer; proposal shaping and file mutation stay in project-context, this tool is only the wiring.
+ * A thin wiring layer: it hands `runClaudeMigrationFlow` (the ONE orchestration, shared with its
+ * tests) the real cwd and the provider-question runtime as the blocking asker - the same block/answer
+ * path `ask_user` uses, so the turn suspends until the user answers and interruption cleans the
+ * pending question up. Everything is built lazily (Effect.suspend + the flow's own Effect.sync
+ * frames), so constructing the tool call never walks the workspace or blocks dispatch.
  *
  * Responsible for: exposing the migration flow as a model-callable tool over the real runtime + cwd.
- * Not for: the proposal/decision/mutation logic - project-context/claude-migration-*.ts own those.
+ * Not for: orchestration or the proposal/decision/mutation logic - project-context owns those.
  */
 
 // A no-arg tool: an EMPTY object params schema. The explicit `jsonSchema` annotation is load-bearing -
@@ -39,19 +36,13 @@ export const migrateClaudeTool: Tool<MigrateParams> = {
   description: DESCRIPTION,
   // Not readOnly: it blocks the turn for a user decision and then mutates files (a serial barrier).
   params: Params,
-  execute: (_args: MigrateParams, ctx?: ToolContext) => {
-    const { root, pending } = collectPendingMigrations(process.cwd());
-    if (pending.length === 0) {
-      return Effect.succeed("No CLAUDE.md files need migration.");
-    }
-    return providerQuestionRuntime
-      .askForAnswer(
-        buildMigrationProposalContract(pending),
-        ctx?.runId ?? "",
-        ctx?.callId ?? "",
-        "migrate_claude_md",
-        "claude_migration",
-      )
-      .pipe(Effect.map((answer) => applyMigrationAnswer(root, pending, answer).summary));
-  },
+  execute: (_args: MigrateParams, ctx?: ToolContext) =>
+    Effect.suspend(() =>
+      runClaudeMigrationFlow(process.cwd(), (contract) =>
+        providerQuestionRuntime.askForAnswer(contract, ctx?.runId ?? "", ctx?.callId ?? "", {
+          toolName: "migrate_claude_md",
+          adapter: PROVIDER_QUESTION_ADAPTERS.claudeMigration,
+        }),
+      ),
+    ).pipe(Effect.map((result) => result.summary)),
 };

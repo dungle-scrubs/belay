@@ -24,6 +24,21 @@ export const MIN_QUESTIONS = 1;
 export const MAX_QUESTIONS = 5;
 
 /**
+ * The registered surfaces that raise provider questions over the `provider.question.*` events:
+ * `ask_user` is the model-invoked question tool (plan 01); `claude_migration` is the host-owned
+ * CLAUDE.md migration proposal (plan 26). The union keeps the host runtime's adapter tag typed - a
+ * new question surface registers here instead of passing an ad hoc string - and the wire decoder's
+ * default rides the same constant.
+ */
+export const PROVIDER_QUESTION_ADAPTERS = {
+  askUser: "ask_user",
+  claudeMigration: "claude_migration",
+} as const;
+
+export type ProviderQuestionAdapter =
+  (typeof PROVIDER_QUESTION_ADAPTERS)[keyof typeof PROVIDER_QUESTION_ADAPTERS];
+
+/**
  * A structured preview attached to a choice (e.g. an ASCII layout mock). Model-provided content,
  * so it is rendered as INERT TEXT, never interpreted as HTML. `viewport` is an optional visual hint
  * (e.g. "narrow"); `before`/`after` frame the change in context.
