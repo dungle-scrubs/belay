@@ -293,6 +293,26 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
   exercise via planFork).
 
 
+#### M30: session-switch teardown invariant (session-switch + handoff + main.ts) (pass 5)
+
+- **Symptom:** information leakage + caller reaching past the API - the "announce switch, drop
+  session-local state, retire" teardown has no owner.
+- **Evidence:** `scheduler.clearPending() + contextRegistry.reset()` written verbatim at exactly
+  four sites (session-switch.ts:224-225 + 261-262, handoff/orchestrator.ts:122-123, main.ts:923+926
+  /clear admit arm); the full announce+drop+retire sequence copied three times; the orchestrator
+  imports contextRegistry + events.sessionSwitch directly and carries three separate
+  SessionSwitchApi deps to re-assemble switchToWorkspace's body (it cannot call it: the reason
+  union excludes "handoff", and it must interleave cross-session prompt injection); /clear
+  deliberately splits the drop onto the replay-safe admit path with no name tying the two halves.
+- **Proposed boundary:** SessionSwitchApi gains pure `dropSessionLocalState()` + live-only
+  `announceSwitchAndRetire(targetSessionId, reason)`; cd/worktree/handoff collapse to one call;
+  the /clear admit arm calls the pure drop; the orchestrator drops its reach-through imports.
+- **Payoff:** the four paths cannot silently disagree on which teardown steps run; a future
+  teardown step (e.g. residency release) is one edit, not four.
+- **Churn:** low (~15-line addition + 4 call-site collapses + orchestrator dep trim; behavior
+  covered by existing session-switch/handoff/lifecycle tests). Note: /restart is deliberately
+  distinct (no announce, no drop) and stays out.
+
 ### Low
 
 #### M14: `apps/agent-host/src/agent` ActiveRun cell
@@ -411,6 +431,13 @@ Ranking: (callers benefiting x boundary clarity) / churn. <!-- D-002 -->
   waitOnline() + `askTurn(text, {provider}): Promise<string>` owning the event-name coupling.
 - **Payoff:** live specs shrink to assertions; the event-name coupling lives in one tested place.
 - **Churn:** small (~30-line helper + 2 spec bodies); low value today (2 gated callsites).
+
+## Considered and rejected (pass 5)
+
+- agent/tool-guardrails.ts, components/question/view-model.ts, metrics/breakdown.ts,
+  connectivity/probe.ts: adversarially re-read - all reference-quality deep modules.
+- commands/lifecycle.ts /restart: deliberately performs spawn+retire WITHOUT announce/drop (same
+  session, fresh code) - correctly excluded from the M30 boundary.
 
 ## Considered and rejected (pass 4)
 

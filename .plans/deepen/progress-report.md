@@ -7,9 +7,9 @@
 
 > Current focus: M1: SessionTransport read/await/identity helpers
 
-- Total checklist items: 29
+- Total checklist items: 30
 - Completed: 0
-- Current cutoff blockers: 29
+- Current cutoff blockers: 30
 
 ## High
 
@@ -37,6 +37,7 @@
 - [ ] M26: event-provenance predicates (host + session; pass 3)
 - [ ] M27: cancellable-fiber Exit interpretation (agent-host; pass 3)
 - [ ] M28: fork.ts public-surface narrowing (packages/session; pass 4)
+- [ ] M30: session-switch teardown invariant (session/handoff/main; pass 5)
 
 ## Low
 
