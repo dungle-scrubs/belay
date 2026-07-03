@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M1: Naked SDK provider and event mapping
+> Current focus: M3: Catalog source + configured branch + dispatch
 
 - Total checklist items: 23
-- Completed: 2
-- Current cutoff blockers: 21
+- Completed: 13
+- Current cutoff blockers: 10
 
 ## 0. Hard Dependencies
 
@@ -17,20 +17,20 @@
 
 ### M1: Naked SDK provider and event mapping
 
-- [ ] RED: `stream()` runs ONE `query()` with systemPrompt=passed prompt, tools:[], settingSources:[], permissionMode bypass, includePartialMessages true, and ignores the host-passed tools arg
-- [ ] GREEN: add `@anthropic-ai/claude-agent-sdk` dep; implement `providers/claude-code.ts` mirroring anthropic.ts
-- [ ] RED: mapping tests - text_delta -> text (streamed), thinking delta -> thinking, ResultMessage -> usage, terminal SDK error -> typed ProviderError
-- [ ] GREEN: implement the SDK-event -> ProviderEvent stream mapper
-- [ ] RED: capabilities() = tools:false + vision-per-model; readiness warm; describe carries label/model/reasoning
-- [ ] GREEN: implement capabilities/readiness/warm/describe
-- [ ] REFACTOR: pure spawn/mapping over an injected `query` seam (unit-tested without a live subprocess)
+- [x] RED: `stream()` runs ONE `query()` with systemPrompt=passed prompt, tools:[], settingSources:[], permissionMode bypass, includePartialMessages true, and ignores the host-passed tools arg
+- [x] GREEN: add `@anthropic-ai/claude-agent-sdk` dep; implement `providers/claude-code.ts` mirroring anthropic.ts
+- [x] RED: mapping tests - text_delta -> text (streamed), thinking delta -> thinking, ResultMessage -> usage, terminal SDK error -> typed ProviderError
+- [x] GREEN: implement the SDK-event -> ProviderEvent stream mapper
+- [x] RED: capabilities() = tools:false + vision-per-model; readiness warm; describe carries label/model/reasoning
+- [x] GREEN: implement capabilities/readiness/warm/describe
+- [x] REFACTOR: pure spawn/mapping over an injected `query` seam (unit-tested without a live subprocess)
 
 ### M2: Subprocess env hygiene
 
-- [ ] RED: spawn-env probe - child env has CLAUDE_CODE_OAUTH_TOKEN and NO ANTHROPIC_API_KEY key, even with a stale parent ANTHROPIC_API_KEY
-- [ ] GREEN: build child env by deleting ANTHROPIC_API_KEY (not empty) + injecting the token
-- [ ] RED: missing CLAUDE_CODE_OAUTH_TOKEN -> bounded typed provider error (no silent API-credit fallthrough)
-- [ ] GREEN: fail closed when the token is absent
+- [x] RED: spawn-env probe - child env has CLAUDE_CODE_OAUTH_TOKEN and NO ANTHROPIC_API_KEY key, even with a stale parent ANTHROPIC_API_KEY
+- [x] GREEN: build child env by deleting ANTHROPIC_API_KEY (not empty) + injecting the token
+- [x] RED: missing CLAUDE_CODE_OAUTH_TOKEN -> bounded typed provider error (no silent API-credit fallthrough)
+- [x] GREEN: fail closed when the token is absent
 
 ## Phase 2: Source wiring + configured signal
 
