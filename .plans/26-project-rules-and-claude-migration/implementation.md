@@ -2,8 +2,8 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `01-ask-user-tool` - `CLAUDE.md` conversion, merge, and pointer rewrites require an explicit required-response user decision.
-- [ ] **Reorg (plan 22.1):** Plan 22.1 renames src/context/ to src/project-context/ (including agents-md.ts, registry.ts, rules.ts, init-agents.ts, claude-migration.ts that this plan edits) and homes slash commands under commands/. Target the post-22.1 paths and register /init under commands/. <!-- D-016 -->
+- [x] `01-ask-user-tool` - `CLAUDE.md` conversion, merge, and pointer rewrites require an explicit required-response user decision. (Satisfied: plan 01 merged to main and its plan dir deleted; `ask_user` tool + `providerQuestionRuntime` required-response path shipped and reused by M5's migration proposal.)
+- [x] **Reorg (plan 22.1):** Plan 22.1 renames src/context/ to src/project-context/ (including agents-md.ts, registry.ts, rules.ts, init-agents.ts, claude-migration.ts that this plan edits) and homes slash commands under commands/. Target the post-22.1 paths and register /init under commands/. <!-- D-016 --> (Satisfied: plan 22.1 merged and deleted; code lives under `apps/agent-host/src/project-context/` and `/init` is registered under `apps/agent-host/src/commands/commands.ts`.)
 
 ## Architecture
 
