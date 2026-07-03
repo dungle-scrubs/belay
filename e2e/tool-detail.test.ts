@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import { type SessionEvent, streamTransport } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
+import { joinSession } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -28,10 +28,7 @@ afterAll(async () => {
 
 test("a running tool's started/completed events carry the fields the detail takeover projects", async () => {
   const transport = streamTransport(store.url);
-  await transport.ensureSession("detail");
-
-  const viewer = subscribe(transport, "detail", "viewer");
-  await waitFor(viewer.isReplayed);
+  const viewer = await joinSession(transport, "detail", "viewer");
 
   await publishTurnVia(
     transportEmit(transport, "detail", "host"),
@@ -40,9 +37,7 @@ test("a running tool's started/completed events carry the fields the detail take
     { runId: "r1" },
   );
 
-  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
-    label: "assistant.completed",
-  });
+  await viewer.waitForType("assistant.completed");
 
   const started = viewer.events.find((e: SessionEvent) => e.type === "tool.started");
   const completed = viewer.events.find((e: SessionEvent) => e.type === "tool.completed");

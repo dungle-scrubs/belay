@@ -41,7 +41,7 @@ afterAll(async () => {
 });
 
 /** Reads a session's full durable log via a replay-then-read subscriber. */
-async function readLog(url: string, sessionId: string): Promise<SessionEvent[]> {
+async function readLog(url: string, sessionId: string): Promise<readonly SessionEvent[]> {
   const transport = streamTransport(url);
   const viewer = subscribe(transport, sessionId, `reader-${sessionId}`);
   await waitFor(viewer.isReplayed, { label: `${sessionId} replay` });

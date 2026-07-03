@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import { type SessionEvent, streamTransport } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
+import { joinSession } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
@@ -61,9 +61,7 @@ test("archive_read runs through the hermetic model/tool/session loop", async () 
     );
 
     const transport = streamTransport(store.url);
-    await transport.ensureSession("archive-read");
-    const viewer = subscribe(transport, "archive-read", "viewer");
-    await waitFor(viewer.isReplayed);
+    const viewer = await joinSession(transport, "archive-read", "viewer");
 
     await publishTurnVia(
       transportEmit(transport, "archive-read", "host"),
@@ -86,9 +84,7 @@ test("archive_read runs through the hermetic model/tool/session loop", async () 
       { runId: "archive-read-run" },
     );
 
-    await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
-      label: "archive_read completed",
-    });
+    await viewer.waitForType("assistant.completed", { label: "archive_read completed" });
     const completed = viewer.events.find((e: SessionEvent) => e.type === "tool.completed");
     assert.equal(completed?.payload.name, "archive_read");
     assert.ok(String(completed?.payload.result ?? "").includes("archive evidence"));
@@ -112,9 +108,7 @@ test("archive_unpack extracts selected entries through the hermetic model/tool/s
     );
 
     const transport = streamTransport(store.url);
-    await transport.ensureSession("archive-unpack");
-    const viewer = subscribe(transport, "archive-unpack", "viewer");
-    await waitFor(viewer.isReplayed);
+    const viewer = await joinSession(transport, "archive-unpack", "viewer");
 
     await publishTurnVia(
       transportEmit(transport, "archive-unpack", "host"),
@@ -143,9 +137,7 @@ test("archive_unpack extracts selected entries through the hermetic model/tool/s
       { runId: "archive-unpack-run" },
     );
 
-    await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
-      label: "archive_unpack completed",
-    });
+    await viewer.waitForType("assistant.completed", { label: "archive_unpack completed" });
     const completed = viewer.events.find((e: SessionEvent) => e.type === "tool.completed");
     assert.equal(completed?.payload.name, "archive_unpack");
     assert.equal(await readFile(join(destination, "logs/app.txt"), "utf8"), "selected evidence");

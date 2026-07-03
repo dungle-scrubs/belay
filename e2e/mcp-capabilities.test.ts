@@ -170,9 +170,7 @@ async function runMcpTurn(
   calls: readonly McpArgs[],
 ): Promise<ReturnType<TestKit["subscribe"]>> {
   const transport = session.streamTransport(store.url);
-  await transport.ensureSession(sessionId);
-  const viewer = kit.subscribe(transport, sessionId, "viewer");
-  await kit.waitFor(viewer.isReplayed);
+  const viewer = await kit.joinSession(transport, sessionId, "viewer");
 
   await host.publishTurnVia(
     host.transportEmit(transport, sessionId, "host"),
@@ -186,7 +184,7 @@ async function runMcpTurn(
     { runId: `r-${sessionId}` },
   );
 
-  await kit.waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+  await viewer.waitForType("assistant.completed", {
     label: `assistant.completed ${sessionId}`,
     timeoutMs: 55_000,
   });

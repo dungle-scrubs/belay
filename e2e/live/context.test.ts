@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { type SessionEvent, streamTransport } from "@trevor/session";
-import { testIdentity, waitFor } from "@trevor/test-kit";
+import { streamTransport } from "@trevor/session";
+import { liveHost } from "@trevor/test-kit";
 import { test } from "vitest";
 
 /**
@@ -19,38 +19,22 @@ test.skipIf(!enabled)(
   "live: context is retained across turns",
   async () => {
     const transport = streamTransport(base as string);
-    const events: SessionEvent[] = [];
-    let hostOnline = false;
-    const conn = transport.connectSession({
-      sessionId: sid as string,
-      identity: testIdentity("verify", "web"),
-      onEvent: (e) => {
-        if (e.type === "host.online") hostOnline = true;
-        events.push(e);
+    const host = liveHost(transport, sid as string, { provider });
+    await host.waitHostOnline();
+
+    await host.ask("Remember the number 42. Reply with just: OK", { label: "turn 1 completion" });
+    const turn2 = await host.ask(
+      "What number did I ask you to remember? Reply with just the number.",
+      {
+        label: "turn 2 completion",
       },
-    });
-    await waitFor(() => hostOnline, { timeoutMs: 60_000, label: "host.online" });
+    );
+    host.close();
 
-    async function ask(text: string): Promise<string> {
-      const mark = events.length;
-      await transport.publishEvent(sid as string, {
-        type: "user.message",
-        producerId: "verify",
-        payload: { text, provider },
-      });
-      await waitFor(() => events.slice(mark).some((e) => e.type === "assistant.completed"), {
-        timeoutMs: 180_000,
-        label: "turn completion",
-      });
-      const completed = events.slice(mark).find((e) => e.type === "assistant.completed");
-      return String(completed?.payload.text ?? "");
-    }
-
-    await ask("Remember the number 42. Reply with just: OK");
-    const turn2 = await ask("What number did I ask you to remember? Reply with just the number.");
-    conn.close();
-
-    assert.ok(turn2.includes("42"), `turn 2 did not recall 42: "${turn2.trim().slice(0, 60)}"`);
+    assert.ok(
+      turn2.text.includes("42"),
+      `turn 2 did not recall 42: "${turn2.text.trim().slice(0, 60)}"`,
+    );
   },
   260_000,
 );
