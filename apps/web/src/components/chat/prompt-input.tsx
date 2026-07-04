@@ -4,7 +4,6 @@ import {
   type SubmitEvent,
   useEffect,
   useMemo,
-  useState,
 } from "react";
 import { ArtifactThumb } from "@/artifact-thumb";
 import { commandTokenSegments } from "@/components/chat/loop/command-token-segments";
@@ -58,8 +57,15 @@ export interface PromptInputProps {
   readonly composer: ComposerInput;
   readonly onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   readonly onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
-  /** Report the caret position to App (plan 30), so it can detect the active `@` file-mention token. */
-  readonly onCaretChange?: (caret: number) => void;
+  /**
+   * The composer caret, OWNED by the caller (App) - a single source of truth this component reads
+   * (for its own `LoopHelper` preview) and reports changes to via `onCaretChange`, rather than keeping
+   * a second independent `useState` that must be kept in sync with the caller's by convention. Without
+   * this, this component's LoopHelper-overlay decision and App's `/loop`-line suppression decision for
+   * the `@`-mention menu could silently desync if a future edit forgot to mirror one into the other.
+   */
+  readonly caret: number;
+  readonly onCaretChange: (caret: number) => void;
   readonly disabled: boolean;
   readonly placeholder: string;
   /** Open the current draft in the full-surface prompt editor (02.12) for a larger writing area. */
@@ -80,6 +86,7 @@ export function PromptInput({
   composer,
   onSubmit,
   onKeyDown,
+  caret,
   onCaretChange,
   disabled,
   placeholder,
@@ -109,16 +116,13 @@ export function PromptInput({
   // The prompt shell lane is triggered by the RAW first character being `!` (a space before it stays
   // an ordinary prompt) - mirrors `parseBangShell`, so the visual state and the submit routing agree.
   const shellMode = draft[0] === "!";
-  const [caret, setCaret] = useState(() => draft.length);
   const loopPreview = useLoopPreview(draft, caret);
   const loopSegments = useMemo(
     () => (loopPreview ? commandTokenSegments(loopPreview.line, loopPreview.tokens) : []),
     [loopPreview],
   );
   const updateCaretFromInput = () => {
-    const nextCaret = inputRef.current?.selectionStart ?? draft.length;
-    setCaret((prev) => (prev === nextCaret ? prev : nextCaret));
-    onCaretChange?.(nextCaret);
+    onCaretChange(inputRef.current?.selectionStart ?? draft.length);
   };
 
   // Auto-grow the textarea to fit multi-line prompts and quoted blocks, capped by its max-height
@@ -216,8 +220,7 @@ export function PromptInput({
               onChange={(event) => {
                 const nextCaret = event.target.selectionStart ?? event.target.value.length;
                 setDraft(event.target.value);
-                setCaret(nextCaret);
-                onCaretChange?.(nextCaret);
+                onCaretChange(nextCaret);
               }}
               onClick={updateCaretFromInput}
               onFocus={() => {

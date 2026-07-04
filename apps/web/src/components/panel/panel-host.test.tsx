@@ -32,8 +32,13 @@ function emptyInventory(): InventoryState {
 
 function PanelHostHarness(props: {
   readonly onLoopControl: (loopId: string, control: LoopControl) => void;
+  readonly fileMenu?: {
+    readonly open: boolean;
+    readonly matches: readonly { path: string }[];
+    readonly index: number;
+  };
 }) {
-  const { onLoopControl } = props;
+  const { onLoopControl, fileMenu } = props;
   const composer = useComposer();
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -76,11 +81,12 @@ function PanelHostHarness(props: {
       }}
       compose={{
         acceptCommand: vi.fn(),
+        caret: 0,
         disabled: false,
         fileMenu: {
-          open: false,
-          matches: [],
-          index: 0,
+          open: fileMenu?.open ?? false,
+          matches: fileMenu?.matches ?? [],
+          index: fileMenu?.index ?? 0,
           query: "",
           truncated: false,
           loading: false,
@@ -179,4 +185,29 @@ test("PanelHost mounts live loop inventory above the composer and routes control
 
   fireEvent.click(screen.getByRole("button", { name: "Pause loop_1" }));
   expect(controls).toEqual([{ control: "pause", loopId: "loop_1" }]);
+});
+
+test("an open file-mention menu with zero matches never points the composer at a dangling id", () => {
+  render(
+    <PanelHostHarness onLoopControl={vi.fn()} fileMenu={{ open: true, matches: [], index: 0 }} />,
+  );
+
+  // AutocompleteMenu renders no listbox/option DOM when there are zero matches (loading or
+  // no-results); the composer must not claim aria-controls/aria-activedescendant point somewhere.
+  const input = screen.getByRole("textbox");
+  expect(input.getAttribute("aria-controls")).toBeNull();
+  expect(input.getAttribute("aria-activedescendant")).toBeNull();
+});
+
+test("an open file-mention menu WITH matches points the composer at the active option", () => {
+  render(
+    <PanelHostHarness
+      onLoopControl={vi.fn()}
+      fileMenu={{ open: true, matches: [{ path: "apps/web/src/app.tsx" }], index: 0 }}
+    />,
+  );
+
+  const input = screen.getByRole("textbox");
+  expect(input.getAttribute("aria-controls")).toBe("file-mention-menu");
+  expect(input.getAttribute("aria-activedescendant")).toBe("file-mention-menu-opt-0");
 });

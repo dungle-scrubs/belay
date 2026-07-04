@@ -126,6 +126,12 @@ export interface ComposeWiring {
     readonly loading: boolean;
     readonly onPick: (path: string) => void;
   };
+  /**
+   * The composer caret: a single source of truth OWNED by App (not duplicated as a second local state
+   * inside PromptInput), since both PromptInput's own LoopHelper preview and App's `/loop`-line
+   * suppression decision for the `@`-mention menu must always agree on the same value.
+   */
+  readonly caret: number;
   /** Report the composer caret up to App, so it can detect the active `@` token (mention menu). */
   readonly onCaretChange: (caret: number) => void;
   readonly disabled: boolean;
@@ -525,6 +531,7 @@ export function PanelHost(props: {
                 composer={composer}
                 onSubmit={compose.onSubmit}
                 onKeyDown={compose.onInputKeyDown}
+                caret={compose.caret}
                 onCaretChange={compose.onCaretChange}
                 disabled={compose.disabled}
                 placeholder={compose.placeholder}
@@ -532,18 +539,23 @@ export function PanelHost(props: {
                 vimEnabled={compose.vimEnabled}
                 // Either composer menu owning the keys suspends the Vim layer (arrows/Enter/Escape).
                 menuOpen={compose.menuOpen || compose.fileMenu.open}
-                // Point aria-activedescendant/aria-controls at whichever overlay is open (M5).
+                // Point aria-activedescendant/aria-controls at whichever overlay is open (M5). The
+                // slash menu's `menuOpen` already implies matches.length > 0 (useSlashMenu never opens
+                // empty); the file-mention menu can be "open" with ZERO matches (loading / no-results -
+                // useFileMentionMenu deliberately keeps Escape working then), so it needs an explicit
+                // matches.length guard or these would point at a listbox/option id AutocompleteMenu
+                // never renders in that state.
                 menuListboxId={
                   compose.menuOpen
                     ? SLASH_MENU_LISTBOX_ID
-                    : compose.fileMenu.open
+                    : compose.fileMenu.open && compose.fileMenu.matches.length > 0
                       ? FILE_MENTION_LISTBOX_ID
                       : undefined
                 }
                 activeDescendantId={
                   compose.menuOpen
                     ? activeOptionId(SLASH_MENU_LISTBOX_ID, compose.menuIndex)
-                    : compose.fileMenu.open
+                    : compose.fileMenu.open && compose.fileMenu.matches.length > 0
                       ? activeOptionId(FILE_MENTION_LISTBOX_ID, compose.fileMenu.index)
                       : undefined
                 }

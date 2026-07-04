@@ -26,6 +26,7 @@ function ComposerHarness({
   vimEnabled?: boolean;
 }) {
   const [draft, setDraft] = useState(initialDraft);
+  const [caret, setCaret] = useState(initialDraft.length);
   const [chips, setChips] = useState<readonly ArtifactRef[]>(attachments);
   const [error, setError] = useState<string | null>(uploadError);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -71,6 +72,8 @@ function ComposerHarness({
           composer={composer}
           onSubmit={(event) => event.preventDefault()}
           onKeyDown={() => {}}
+          caret={caret}
+          onCaretChange={setCaret}
           disabled={false}
           placeholder="message qwen… (/ for commands, ! for shell)"
           vimEnabled={vimEnabled}

@@ -23,6 +23,7 @@ type ComposerInput = Pick<
 function PromptHarness(props: { readonly initialDraft: string; readonly vimEnabled?: boolean }) {
   const { initialDraft, vimEnabled = false } = props;
   const [draft, setDraft] = useState(initialDraft);
+  const [caret, setCaret] = useState(initialDraft.length);
   const composer: ComposerInput = {
     attachments: [],
     draft,
@@ -41,6 +42,8 @@ function PromptHarness(props: { readonly initialDraft: string; readonly vimEnabl
   return (
     <PromptInput
       composer={composer}
+      caret={caret}
+      onCaretChange={setCaret}
       disabled={false}
       onKeyDown={vi.fn()}
       onSubmit={(event) => event.preventDefault()}
@@ -89,6 +92,53 @@ describe("PromptInput Vim mode indicator alignment (06.1)", () => {
 
     expect(prev?.getAttribute("aria-label")).toBe("Attach files (or paste / drag-drop)");
     expect(prev?.className ?? "").not.toContain("flex-1");
+  });
+});
+
+/** A harness where `caret` is an EXTERNALLY-controlled prop (not derived from the DOM), so a test can
+ *  move it without any click/keydown - proving PromptInput's LoopHelper reads the caller's single
+ *  source of truth rather than an independent internal state that must be kept in sync by convention. */
+function ControlledCaretHarness(props: { readonly draft: string; readonly caret: number }) {
+  const { draft, caret } = props;
+  const composer: ComposerInput = {
+    attachments: [],
+    draft,
+    fileInputRef: createRef<HTMLInputElement>(),
+    handleKeyDown: vi.fn(),
+    inputRef: createRef<HTMLTextAreaElement>(),
+    onPaste: vi.fn(),
+    onPickFiles: vi.fn(),
+    removeAttachment: vi.fn(),
+    setDraft: vi.fn(),
+    setUploadError: vi.fn(),
+    uploadError: null,
+    uploading: 0,
+  };
+  return (
+    <PromptInput
+      composer={composer}
+      caret={caret}
+      onCaretChange={vi.fn()}
+      disabled={false}
+      onKeyDown={vi.fn()}
+      onSubmit={(event) => event.preventDefault()}
+      placeholder="message"
+    />
+  );
+}
+
+describe("PromptInput caret single source of truth (simplify fix #6)", () => {
+  test("the loop-helper preview follows the caret PROP, not an independent internal state", () => {
+    const draft = 'not a loop line\n/loop max 5 do "run tests"';
+    const { rerender } = render(<ControlledCaretHarness draft={draft} caret={draft.length} />);
+    // The caret sits on the /loop line (line 2) - the helper shows.
+    expect(screen.getByText("ready")).toBeTruthy();
+
+    // Move the caret via the PROP alone (no DOM interaction) to the first, non-/loop line. If this
+    // component tracked its own independent caret state instead of reading the prop, it would still
+    // show the helper here (its internal state would never have heard about the move).
+    rerender(<ControlledCaretHarness draft={draft} caret={5} />);
+    expect(screen.queryByText("ready")).toBeNull();
   });
 });
 

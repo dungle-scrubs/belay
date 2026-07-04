@@ -54,13 +54,18 @@ function LiveHarness({ index }: { readonly index: WorkspaceFileIndex }) {
         composer={composer}
         onSubmit={(event) => event.preventDefault()}
         onKeyDown={onInputKeyDown}
+        caret={caret}
         onCaretChange={setCaret}
         disabled={false}
         placeholder="message"
         menuOpen={fileMenu.menuOpen}
-        menuListboxId={fileMenu.menuOpen ? FILE_MENTION_LISTBOX_ID : undefined}
+        // Guard on matches.length: the menu can be "open" with zero matches (loading / no-results),
+        // in which case there is no listbox/option DOM for these ids to point at.
+        menuListboxId={
+          fileMenu.menuOpen && fileMenu.matches.length > 0 ? FILE_MENTION_LISTBOX_ID : undefined
+        }
         activeDescendantId={
-          fileMenu.menuOpen
+          fileMenu.menuOpen && fileMenu.matches.length > 0
             ? activeOptionId(FILE_MENTION_LISTBOX_ID, fileMenu.menuIndex)
             : undefined
         }
@@ -87,6 +92,17 @@ describe("live @-file-mention integration", () => {
     settle();
     expect(screen.getByText(/loading workspace files/i)).toBeTruthy();
     expect(screen.queryAllByRole("option")).toHaveLength(0);
+  });
+
+  test("zero matches means no dangling aria-activedescendant/aria-controls (loading or no-results)", () => {
+    render(<LiveHarness index={{ files: [], truncated: false, ready: false }} />);
+    const input = typeInto("@app");
+    settle();
+    // The menu IS open (mention !== null), but with no matches AutocompleteMenu renders no listbox/
+    // option DOM - the composer must not point at an id that doesn't exist.
+    expect(screen.getByText(/loading workspace files/i)).toBeTruthy();
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    expect(input.getAttribute("aria-controls")).toBeNull();
   });
 
   test("shows a no-results state when the ready index has no match", () => {

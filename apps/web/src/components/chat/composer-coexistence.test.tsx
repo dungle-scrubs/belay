@@ -77,6 +77,7 @@ function ComposerHarness({ vimEnabled = false }: { readonly vimEnabled?: boolean
         composer={composer}
         onSubmit={(event) => event.preventDefault()}
         onKeyDown={onInputKeyDown}
+        caret={caret}
         onCaretChange={setCaret}
         disabled={false}
         placeholder="message"

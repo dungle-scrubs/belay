@@ -48,6 +48,7 @@ import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
 import { activeMention } from "./composer/active-mention";
+import { type FileIndexAsked, shouldRequestFileIndex } from "./composer/file-index-request";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
   activeTurnStartedAt,
@@ -87,7 +88,7 @@ import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useScrollFollow } from "./hooks/use-scroll-follow";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { useSlashMenu } from "./hooks/use-slash-menu";
-import { fileIndexFrom, useWorkspaceFileSearch } from "./hooks/use-workspace-file-search";
+import { useFileIndex, useWorkspaceFileSearch } from "./hooks/use-workspace-file-search";
 import {
   archiveSession,
   deleteSession,
@@ -463,7 +464,11 @@ export function App() {
   const activeMentionQuery = onLoopLine
     ? null
     : (activeMention(draft, composerCaret)?.query ?? null);
-  const fileIndex = useMemo(() => fileIndexFrom(events), [events]);
+  // useFileIndex (not fileIndexFrom + useMemo keyed on `events`): `events`' array identity changes on
+  // EVERY incoming session event, not just a file.index.result, which would otherwise re-derive a
+  // fresh index object on each one and bust useWorkspaceFileSearch's memo below independently of its
+  // own debounce (see the useFileIndex doc comment).
+  const fileIndex = useFileIndex(events);
   const fileSearch = useWorkspaceFileSearch(activeMentionQuery, fileIndex);
   const fileMenu = useFileMentionMenu({
     draft,
@@ -477,20 +482,29 @@ export function App() {
   });
   // Ask the leader for the workspace index the first time `@` is used in this session (and once a
   // leader is present); the browser caches the reply and filters it locally. `crypto.randomUUID` ids
-  // the request so a later refresh's result supersedes it (see fileIndexFrom).
-  // Keyed by session so switching sessions in this tab re-requests the new workspace's index.
-  const fileIndexRequestedForRef = useRef<string | null>(null);
+  // the request so a later refresh's result supersedes it (see fileIndexFrom). The decision (fresh
+  // session, or a leader failover while still not ready - a lost request must not wedge the picker in
+  // "loading" forever) is the pure, unit-tested `shouldRequestFileIndex`; this effect only acts on it.
+  const fileIndexAskedRef = useRef<FileIndexAsked | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: requestFileIndex is a stable action.
   useEffect(() => {
-    if (
-      activeMentionQuery !== null &&
-      !fileIndex.ready &&
-      fileIndexRequestedForRef.current !== sessionId &&
-      host.leaderId
-    ) {
-      fileIndexRequestedForRef.current = sessionId;
-      void requestFileIndex(crypto.randomUUID());
+    if (host.leaderId === null || sessionId === null) {
+      return;
     }
+    const leaderId = host.leaderId;
+    if (
+      !shouldRequestFileIndex({
+        activeMentionQuery,
+        ready: fileIndex.ready,
+        leaderId,
+        sessionId,
+        askedFor: fileIndexAskedRef.current,
+      })
+    ) {
+      return;
+    }
+    fileIndexAskedRef.current = { sessionId, leaderId };
+    void requestFileIndex(crypto.randomUUID());
   }, [activeMentionQuery, fileIndex.ready, host.leaderId, sessionId]);
   // Focus the composer on load, once the session resolves and the input is enabled.
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputRef is a stable ref (from useComposer).
@@ -1128,6 +1142,7 @@ export function App() {
             loading: fileMenu.menuOpen && !fileIndex.ready,
             onPick: fileMenu.acceptFile,
           },
+          caret: composerCaret,
           onCaretChange: setComposerCaret,
           disabled: !sessionId,
           placeholder: `message ${activeLabel}… (/ for commands, @ for files, ! for shell)`,
