@@ -2,10 +2,14 @@
 
 ## 0. Hard Dependencies
 
-- [ ] `.plans/12-bounded-child-takeover` - the workflow `agent()` leaf **is** a bounded child run.
-  The runtime reuses `runDelegatedChild()` (`apps/agent-host/src/agent/delegate.ts:91`) for
-  isolation, tool clamping, structured fold-back, and lifecycle/failure events. 12 must land its
-  bounded-child runtime first.
+- [x] The workflow `agent()` leaf **is** the existing `runDelegatedChild()`
+  (`apps/agent-host/src/agent/delegate.ts:91`) subagent leaf: its isolation (explicit-only context,
+  no parent-transcript leak), tool clamping, and `delegated.to` fold-back already exist. This plan
+  **hardens that leaf in place** - schema-forced structured output + typed fail-soft +
+  fiber-interrupt cancellation (M2), and a hard budget ceiling (M5). Formerly a separate plan 12
+  ("bounded-child + takeover"), now **dissolved into this plan**: with no model router in V2 there is
+  no host-owned execution packet that picks its own model, the leaf isolation + fold-back already
+  exist, the leaf hardening is exactly M2/M5 here, and 12's takeover UI had no consumer. <!-- D-009 -->
 - [ ] `.plans/01-managed-worktree-hardening` - the cwd-path advisory lock. Required before
   worktree-isolated, **write-capable** leaves can run in parallel without clobbering each other.
 - [ ] `.plans/15-forkable-sessions-lineage` (supporting) - durable session spawning/lineage that the
@@ -68,7 +72,7 @@ and `delegated.to` fold-back. Two extensions over today's delegation:
   "until managed worktrees, cwd-level locks, and a merge/reconciliation protocol exist."
 - **Depth/cap are runtime-owned**, distinct from the interactive `delegate_*` tools'
   `MAX_DELEGATION_DEPTH = 1` and `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4`. v1 is **flat**: leaves are
-  bounded children that do not themselves orchestrate.
+  isolated delegated children that do not themselves orchestrate.
 
 ### Journaling + resume <!-- D-005 -->
 
@@ -113,7 +117,7 @@ This durability is what the fleet's resumable run shell (`46`) builds on.
 | Deterministic control flow | No clocks/RNG in specs; literal header; resume is sound and cheap. |
 | Stochastic leaves only | The model re-enters only at `agent()`; orchestration is code. |
 | Effect-native | Concurrency/cancellation/errors/DI reuse the host's Effect machinery. |
-| Leaf = bounded child | Every `agent()` is a `runDelegatedChild` run; no new spawn machinery. |
+| Leaf = isolated delegated child | Every `agent()` is a `runDelegatedChild` run, hardened here (schema/budget/typed-failure); no new spawn machinery. |
 | Write only in own worktree | Write-capable leaves require `isolation:'worktree'` + the cwd-lock (`01`). |
 | No sandbox in v1 | Built-in + DSL authoring need no code execution; JS is gated on `16`. |
 | Hard budget | Spend ceiling throws; cost is bounded by construction. |
@@ -155,7 +159,8 @@ budget counters, and fold-back results; deeper inspection reuses `08-tool-detail
 
 **Goal:** a workflow spec runs phased sequential/parallel/pipeline leaves over `runDelegatedChild`.
 
-**Gate from previous:** 12's bounded-child runtime is available.
+**Gate from previous:** the delegated-child leaf (`runDelegatedChild`) exists; this plan hardens it
+in M2/M5 (no separate bounded-child plan).
 
 #### M1: Workflow contract & registry
 
@@ -172,11 +177,13 @@ budget counters, and fold-back results; deeper inspection reuses `08-tool-detail
 
 #### M2: `agent()` leaf over `runDelegatedChild`
 
-- **Dependencies:** M1, `.plans/12-bounded-child-takeover`
+- **Dependencies:** M1
 - **Effort:** L
 - **Tasks:**
   1. RED: tests that `agent(prompt, opts)` spawns one isolated child and returns text; with
-     `opts.schema` returns a validated object (auto-retry on mismatch at the tool-call layer).
+     `opts.schema` returns a validated object (auto-retry on mismatch at the tool-call layer); plus a
+     characterization test that the child sees ONLY the seeded task, never the parent transcript
+     (preserving the `runDelegatedChild` isolation invariant formerly emphasized by plan 12). <!-- D-009 -->
   2. GREEN: implement the leaf wrapping `runDelegatedChild`; schema-forced structured result.
   3. RED: tests for leaf failure -> fail-soft `null`; cancellation -> fiber interrupt.
   4. GREEN: fail-soft + interrupt-based cancellation.

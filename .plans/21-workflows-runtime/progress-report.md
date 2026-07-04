@@ -14,7 +14,7 @@
 - [x] Journal substrate exists: append-only session log (`apps/session-store/src/log.ts`) + protocol
   (`packages/session/src/protocol.ts`).
 - [x] Budget inputs exist: `turn-budget.ts` tiers + `Usage` on `assistant.completed`.
-- [x] HARD DEP identified: `.plans/12-bounded-child-takeover` (bounded-child runtime behind every leaf).
+- [x] Leaf hardening owned here (former plan 12, now dissolved in): schema-forced output + typed fail-soft + hard budget over the existing `runDelegatedChild` leaf; no separate bounded-child plan.
 - [x] HARD DEP identified: `.plans/01-managed-worktree-hardening` (cwd-lock for write-capable isolated leaves).
 - [x] SUPPORTING identified: `.plans/15-forkable-sessions-lineage` (durable run/leaf sessions).
 
@@ -32,7 +32,8 @@
 
 **M2 - `agent()` leaf over `runDelegatedChild`**
 - [ ] RED: `agent(prompt, opts)` spawns one isolated child, returns text; `opts.schema` returns a
-  validated object (retry on mismatch).
+  validated object (retry on mismatch); characterization: child sees ONLY the seeded task, never the
+  parent transcript (preserve the `runDelegatedChild` isolation invariant, former plan 12).
 - [ ] GREEN: leaf wrapping `runDelegatedChild` + schema-forced result.
 - [ ] RED: leaf failure -> fail-soft `null`; cancellation -> fiber interrupt.
 - [ ] GREEN: fail-soft + interrupt cancellation.
