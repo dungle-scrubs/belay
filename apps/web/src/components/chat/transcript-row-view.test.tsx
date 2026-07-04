@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { test, vi } from "vitest";
+import { RECOVERY_ACTION_LABEL, reconnectActionLabel } from "@/action-label";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import type { AssistantMessage, Message } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
@@ -580,4 +581,51 @@ test("plan 31 M4 a11y: the status label is readable text and the shimmer is hidd
 test("plan 31 M4: settled assistant rows never shimmer", () => {
   const { container } = renderRow(assistant({ text: "done reasoning", done: true }));
   assert.equal(shimmerOverlay(container), null);
+});
+
+// --- coordinator fix: reconnecting/recovered rows must call the SHARED action-label helpers, not
+// hand-roll a parallel copy of their format. Asserting against the live imported value (rather than
+// a hardcoded duplicate string) means this test breaks if the row ever stops actually calling the
+// shared function - proving there's exactly one source of truth for the format. ---
+
+test("fix: the reconnecting row renders via the shared reconnectActionLabel, not a parallel string", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "reconnecting",
+      id: "rc1",
+      attempt: 2,
+      maxAttempts: 5,
+      detail: "stream dropped",
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.ok(
+    text.includes(reconnectActionLabel(2, 5)),
+    "the row's reconnect text must equal whatever the shared helper currently produces",
+  );
+});
+
+test("fix: the reconnecting row falls back to the legacy attempt budget via the shared helper", () => {
+  const { container } = renderRow(
+    messageRow({ kind: "reconnecting", id: "rc2", attempt: 1, detail: "stream dropped" }),
+  );
+  const text = container.textContent ?? "";
+  assert.ok(text.includes(reconnectActionLabel(1, 3)), "falls back to LEGACY_RECONNECT_ATTEMPTS=3");
+});
+
+test("fix: the recovered row renders via the shared RECOVERY_ACTION_LABEL constant", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "recovered",
+      id: "rec1",
+      action: "trim_tool_result",
+      detail: "context pressure eased",
+      reclaimed: 0,
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.ok(
+    text.includes(RECOVERY_ACTION_LABEL),
+    "the row's recovery text must equal whatever the shared constant currently says",
+  );
 });

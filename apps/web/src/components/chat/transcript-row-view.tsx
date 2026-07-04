@@ -1,7 +1,7 @@
 import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@trevor/session";
 import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
-import { turnActionLabel } from "@/action-label";
+import { RECOVERY_ACTION_LABEL, reconnectActionLabel, turnActionLabel } from "@/action-label";
 import { ActionShimmer } from "@/components/chat/action-shimmer";
 import { compactDisplayFor } from "@/components/chat/compact-display";
 import { CompactRow } from "@/components/chat/compact-row";
@@ -245,7 +245,7 @@ export function TranscriptRowView({
       <div className="pl-3.5">
         <ToneAlert tone="yellow" icon={RotateCw} title="context full">
           {message.detail}
-          {reclaimed} · retrying
+          {reclaimed} · {RECOVERY_ACTION_LABEL}
         </ToneAlert>
       </div>
     );
@@ -312,8 +312,8 @@ export function TranscriptRowView({
     return (
       <div className="pl-3.5">
         <ToneAlert tone="blue" icon={RotateCw} title="connection dropped">
-          {message.detail} · reconnecting (attempt {message.attempt}/
-          {message.maxAttempts ?? LEGACY_RECONNECT_ATTEMPTS})
+          {message.detail} ·{" "}
+          {reconnectActionLabel(message.attempt, message.maxAttempts ?? LEGACY_RECONNECT_ATTEMPTS)}
         </ToneAlert>
       </div>
     );

@@ -1,5 +1,6 @@
 import { Layers } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { compactionActionLabel } from "@/action-label";
 import { fmtTokens } from "../../derive";
 
 /**
@@ -60,7 +61,7 @@ export function CompactingBar({ tokens, budget }: { tokens: number; budget: numb
         <div className="flex items-center justify-between text-label tracking-wider text-smui-frost-3">
           <span className="inline-flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 animate-pulse" />
-            compacting context…
+            {compactionActionLabel()}…
           </span>
           <span>{preparing ? "preparing…" : `${Math.round(realPct)}%`}</span>
         </div>
