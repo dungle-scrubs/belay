@@ -677,6 +677,72 @@ test("plan 34: token #k maps to image artifact k - the k-th tile names the k-th 
   );
 });
 
+// --- plan 35 M3: assistant rows render the ghosted reasoning trace, gated by showThinking ---
+
+/** The reasoning trace's trigger (its accessible name carries the stable `thinking` label). A native
+ *  button - distinct from the silent-turn shimmer, which renders "thinking" as a plain span. */
+function reasoningTrigger(): HTMLElement {
+  return screen.getByRole("button", { name: /thinking/i });
+}
+
+test("plan 35 M3: showThinking renders the reasoning trace as a disclosure button", () => {
+  renderRow(assistant({ thinking: "weighing the options", text: "the answer", done: true }));
+  const btn = reasoningTrigger();
+  assert.equal(btn.tagName, "BUTTON");
+  assert.ok(screen.getByText("the answer"), "the answer still renders beside the reasoning");
+});
+
+test("plan 35 M3: showThinking=false hides the reasoning trace entirely", () => {
+  render(
+    <TranscriptRowView
+      row={assistant({ thinking: "hidden reasoning", text: "the answer", done: true })}
+      showThinking={false}
+      onOpenPath={noop}
+      onDoctorRefresh={noop}
+    />,
+  );
+  assert.equal(screen.queryByRole("button", { name: /thinking/i }), null);
+  assert.equal(screen.queryByText("hidden reasoning"), null);
+  assert.ok(screen.getByText("the answer"));
+});
+
+test("plan 35 M3: a streaming thinking-only turn auto-opens the reasoning trace", () => {
+  renderRow(assistant({ thinking: "weighing the options", text: "", done: false }));
+  const btn = reasoningTrigger();
+  assert.equal(btn.getAttribute("aria-expanded"), "true", "live reasoning auto-opens");
+  assert.ok(screen.getByText("weighing the options"), "the streaming reasoning is visible");
+});
+
+test("plan 35 M3: a settled answer collapses the reasoning trace but keeps the answer", () => {
+  renderRow(assistant({ thinking: "weighing the options", text: "the answer", done: true }));
+  assert.equal(
+    reasoningTrigger().getAttribute("aria-expanded"),
+    "false",
+    "settled reasoning collapses so it never competes with the answer",
+  );
+  assert.ok(screen.getByText("the answer"));
+});
+
+test("plan 35 M3: an interrupted assistant row still shows reasoning and the interrupted note", () => {
+  renderRow(assistant({ thinking: "partial reasoning", text: "partial", interrupted: true }));
+  assert.ok(reasoningTrigger());
+  assert.match(screen.getByText(/interrupted/).textContent ?? "", /host restarted/);
+});
+
+test("plan 35 M3: an errored assistant row shows reasoning alongside the error alert", () => {
+  renderRow(assistant({ thinking: "reasoning before the failure", text: "", error: "boom" }));
+  assert.ok(reasoningTrigger());
+  assert.ok(screen.getByText("boom"));
+});
+
+test("plan 35 M3: with no thinking text a silent turn falls back to the working shimmer", () => {
+  const { container } = renderRow(assistant({ thinking: "", text: "", done: false, warm: true }));
+  // No reasoning disclosure is rendered when there is no thinking text...
+  assert.equal(screen.queryByRole("button", { name: /thinking/i }), null);
+  // ...and the ActionShimmer fallback carries the status instead.
+  assert.ok(container.querySelector("[aria-hidden].shimmer"), "silent turn shows the shimmer");
+});
+
 test("plan 34: an image-only prompt renders the image set with no prose block", () => {
   const { container } = renderRow(userMsg({ id: "iu3", artifacts: [imageArt("a", "only.png")] }));
   assert.equal(container.querySelectorAll("img").length, 1, "the image renders");

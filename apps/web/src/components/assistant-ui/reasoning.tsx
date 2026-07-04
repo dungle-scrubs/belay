@@ -78,10 +78,13 @@ function ReasoningRoot({
   const initialOpenRef = useRef(defaultOpen);
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
 
+  // `streaming` only ever FORCES OPEN (a live trace auto-opens); it never forces closed, so once it
+  // ends the disclosure falls back to `defaultOpen` (auto-collapse) rather than pinning shut - and an
+  // explicit `streaming={false}` no longer clobbers a caller's `defaultOpen`. <!-- plan 35 M2 -->
   const isOpen =
     controlledOpen !== undefined
       ? controlledOpen
-      : (userOpen ?? streaming ?? initialOpenRef.current);
+      : (userOpen ?? (streaming ? true : undefined) ?? initialOpenRef.current);
   const isAutoMode = isControlled || userOpen === null;
   const isPreview = streaming === true && isOpen && isAutoMode;
 
@@ -174,11 +177,14 @@ function ReasoningFade({
 function ReasoningTrigger({
   active,
   duration,
+  label = "Reasoning",
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   active?: boolean;
   duration?: number;
+  /** The trigger copy (default "Reasoning"); the transcript passes "thinking" (plan 35). */
+  label?: string;
 }) {
   const durationText = duration ? ` (${duration}s)` : "";
 
@@ -199,14 +205,18 @@ function ReasoningTrigger({
         data-slot="reasoning-trigger-label"
         className="aui-reasoning-trigger-label-wrapper relative inline-block leading-none"
       >
-        <span>Reasoning{durationText}</span>
+        <span>
+          {label}
+          {durationText}
+        </span>
         {active ? (
           <span
             aria-hidden
             data-slot="reasoning-trigger-shimmer"
             className="aui-reasoning-trigger-shimmer shimmer pointer-events-none absolute inset-0 motion-reduce:animate-none"
           >
-            Reasoning{durationText}
+            {label}
+            {durationText}
           </span>
         ) : null}
       </span>
@@ -308,6 +318,8 @@ export type ReasoningGroupProps = Omit<ReasoningRootProps, "children"> & {
   children: React.ReactNode;
   active?: boolean;
   duration?: number;
+  /** The trigger copy (default "Reasoning"); the transcript passes "thinking" (plan 35). */
+  label?: string;
   contentProps?: Omit<
     React.ComponentProps<typeof CollapsibleContent>,
     "children"
@@ -319,6 +331,7 @@ const ReasoningGroup = memo(function ReasoningGroup({
   children,
   active,
   duration,
+  label,
   contentProps,
   textProps,
   streaming,
@@ -327,7 +340,7 @@ const ReasoningGroup = memo(function ReasoningGroup({
   const triggerActive = active ?? streaming;
   return (
     <ReasoningRoot streaming={streaming} {...rootProps}>
-      <ReasoningTrigger active={triggerActive} duration={duration} />
+      <ReasoningTrigger active={triggerActive} duration={duration} label={label} />
       <ReasoningContent {...contentProps} aria-busy={streaming}>
         <ReasoningText {...textProps}>{children}</ReasoningText>
       </ReasoningContent>

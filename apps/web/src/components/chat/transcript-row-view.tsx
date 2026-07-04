@@ -9,15 +9,10 @@ import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import { DoctorResult } from "@/components/chat/doctor/doctor-result";
 import { MarkdownBody } from "@/components/chat/markdown-body";
-import {
-  CommandResult,
-  MessageMeta,
-  ShellBlock,
-  ThinkingMessage,
-  UserMessage,
-} from "@/components/chat/message";
+import { CommandResult, MessageMeta, ShellBlock, UserMessage } from "@/components/chat/message";
 import { messageKindDescriptor, quietMarkerText } from "@/components/chat/message-kind-descriptor";
 import { QuestionTranscriptItem } from "@/components/chat/question-item";
+import { ReasoningTrace } from "@/components/chat/reasoning-trace";
 import { ToneAlert } from "@/components/chat/tone-alert";
 import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
 import { toolMessageStatus } from "@/components/chat/tool-status";
@@ -357,6 +352,11 @@ export function TranscriptRowView({
   const thinking =
     message.kind === "assistant" && showThinking && message.thinking ? message.thinking : null;
 
+  // Reasoning streams while the assistant turn has produced no answer text and has not finished; once
+  // the answer starts or the turn settles, the trace auto-collapses. Derived here (not in the protocol)
+  // so the reasoning surface stays a pure presentation of the `thinking` string (plan 35 M2).
+  const reasoningStreaming = message.kind === "assistant" && !message.done && !message.text;
+
   const overflowNote =
     message.kind === "assistant" && message.overflow ? (
       <ToneAlert tone="yellow" icon={TriangleAlert} title="context overflow">
@@ -439,7 +439,7 @@ export function TranscriptRowView({
     return (
       <div className="flex flex-col gap-3 pl-3.5">
         {thinking ? (
-          <ThinkingMessage content={thinking} />
+          <ReasoningTrace content={thinking} streaming={reasoningStreaming} />
         ) : (
           <ActionShimmer
             label={turnActionLabel({
@@ -478,7 +478,7 @@ export function TranscriptRowView({
 
   return (
     <div data-message-id={message.id} className="flex flex-col gap-3 pl-3.5">
-      {thinking ? <ThinkingMessage content={thinking} /> : null}
+      {thinking ? <ReasoningTrace content={thinking} streaming={reasoningStreaming} /> : null}
       {anomalyNote ?? (message.text ? <MarkdownBody text={message.text} mermaid /> : null)}
       {overflowNote}
       {errorNote}

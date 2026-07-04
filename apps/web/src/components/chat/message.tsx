@@ -344,39 +344,6 @@ export function AssistantMessage({ content, meta }: { content: string; meta?: Re
   );
 }
 
-/** The reasoning trace: collapsible, dim + italic markdown. */
-export function ThinkingMessage({
-  content,
-  defaultOpen = true,
-}: {
-  content: string;
-  defaultOpen?: boolean;
-}) {
-  const [open, { toggle }] = useBoolean(defaultOpen);
-
-  return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        onClick={toggle}
-        className="flex w-fit cursor-pointer items-center gap-1.5 text-label tracking-wider uppercase text-muted-foreground hover:text-foreground"
-      >
-        <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
-        thinking
-      </button>
-      {open ? (
-        <div className="border-l border-border pl-3">
-          {/* Thinking reads one shade quieter than muted prose - it's scaffolding,
-              not the answer. Opacity keeps the left border at full strength. */}
-          <div className="opacity-75">
-            <MarkdownBody text={content} muted />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 /**
  * A prompt-shell-lane run (D-082): a leading `!` that ran through the host's protected shell path.
  * Rendered as a terminal block - an orange `$ command` prompt line (matching the composer's shell

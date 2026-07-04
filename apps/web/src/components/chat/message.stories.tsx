@@ -6,10 +6,10 @@ import {
   CommandResult,
   MessageHeading,
   MessageMeta,
-  ThinkingMessage,
   ToolCall,
   UserMessage,
 } from "./message";
+import { ReasoningTrace } from "./reasoning-trace";
 
 const meta: Meta = {
   title: "Chat/Messages",
@@ -245,13 +245,9 @@ export const AssistantMermaidStreaming: Story = {
   ),
 };
 
-export const Thinking: Story = {
-  render: () => (
-    <Frame>
-      <ThinkingMessage content={THINKING} />
-    </Frame>
-  ),
-};
+// The reasoning trace's own catalog (collapsed/expanded/streaming/long/compact/reduced-motion) lives
+// in reasoning-trace.stories.tsx; this file keeps only the Conversation composition below that shows
+// it stitched into a realistic message sequence (plan 35 M4).
 
 export const Result: Story = {
   render: () => (
@@ -268,7 +264,7 @@ export const Conversation: Story = {
       <div className="flex flex-col gap-5">
         <CommandResult command="/doctor" text={DOCTOR} />
         <UserMessage text="create a sample plan using lucid" />
-        <ThinkingMessage content={THINKING} defaultOpen={false} />
+        <ReasoningTrace content={THINKING} />
         <AssistantMessage
           content={RESPONSE}
           meta={<MessageMeta items={["qwen3.6-27b-mlx", "3.3k/8k ctx", "15 tok/s"]} />}
