@@ -61,13 +61,14 @@ export interface DelegationResult {
 }
 
 /** The child's isolated conversation: the agent's instructions framing ONLY the parent task. The
- *  child shares no parent transcript - this single seeded message is its entire input. */
-function childHistory(agent: AgentDefinition, task: string): ChatMessage[] {
+ *  child shares no parent transcript - this single seeded message is its entire input. Shared by the
+ *  delegation entry and the workflow `agent()` leaf (plan 21 M2). */
+export function childHistory(agent: AgentDefinition, task: string): ChatMessage[] {
   return [{ role: "user", content: `${agent.body}\n\n---\n\nYour task:\n${task}` }];
 }
 
 /** Publishes one event to a session through the transport, attaching the producer id. */
-function publishTo(
+export function publishTo(
   ctx: DelegationContext,
   sessionId: string,
   event: TrevorEventInput,
@@ -79,11 +80,66 @@ function publishTo(
   });
 }
 
+/**
+ * The shared child-session SEED (plan 21 M2): mint-agnostic. Ensures the child session, seeds it with
+ * ONLY the parent task as its first user message (the entire slice it sees - no parent transcript), and
+ * links parent -> child (running) on the PARENT session. Both `runDelegatedChild` and the workflow leaf
+ * reuse this so the isolation invariant lives in one place.
+ */
+export async function seedChildSession(
+  ctx: DelegationContext,
+  req: DelegationRequest,
+  childSessionId: string,
+): Promise<void> {
+  await ctx.transport.ensureSession(childSessionId);
+  await publishTo(
+    ctx,
+    childSessionId,
+    events.userMessage({ text: req.task, provider: req.provider.id }),
+  );
+  await publishTo(
+    ctx,
+    ctx.parentSessionId,
+    events.delegatedTo({
+      runId: req.parentRunId,
+      childSessionId,
+      agent: req.agent.id,
+      task: req.task,
+      mode: req.mode,
+      status: "running",
+    }),
+  );
+}
+
+/** The shared FOLD-BACK link (plan 21 M2): the terminal `delegated.to` (done/failed) carrying the
+ *  frozen result, on the PARENT session, so no child is ever left "running". Best-effort. */
+export async function foldBackLink(
+  ctx: DelegationContext,
+  req: DelegationRequest,
+  childSessionId: string,
+  result: string,
+  failed: boolean,
+): Promise<void> {
+  await publishTo(
+    ctx,
+    ctx.parentSessionId,
+    events.delegatedTo({
+      runId: req.parentRunId,
+      childSessionId,
+      agent: req.agent.id,
+      task: req.task,
+      mode: req.mode,
+      status: failed ? "failed" : "done",
+      result,
+    }),
+  ).catch(() => {});
+}
+
 /** The child's tool allow-list. A BACKGROUND child is clamped to READ-ONLY tools (D-048): it may
  *  observe but never mutate, so a detached child can't race the parent or another child's writes -
  *  discovered + ephemeral alike (an ephemeral `tools:['*']` collapses to the read-only set). Inline
  *  keeps the full resolved allow-list. */
-function resolveChildTools(req: DelegationRequest): Set<string> {
+export function resolveChildTools(req: DelegationRequest): Set<string> {
   const allow = resolveAgentTools(req.agent);
   return req.mode === "background"
     ? new Set(allow.filter((name) => READ_ONLY_TOOLS.has(name)))
@@ -108,28 +164,8 @@ export async function runDelegatedChild(
   let result = "";
   let failed = false;
   try {
-    await ctx.transport.ensureSession(childSessionId);
-
-    // Seed the child log with the parent task as its first user message (the entire slice it sees).
-    await publishTo(
-      ctx,
-      childSessionId,
-      events.userMessage({ text: req.task, provider: req.provider.id }),
-    );
-
-    // Link parent -> child (running) on the PARENT session.
-    await publishTo(
-      ctx,
-      ctx.parentSessionId,
-      events.delegatedTo({
-        runId: req.parentRunId,
-        childSessionId,
-        agent: req.agent.id,
-        task: req.task,
-        mode: req.mode,
-        status: "running",
-      }),
-    );
+    // Ensure + seed the child (parent task only) + link running - the shared isolation/seed (M2).
+    await seedChildSession(ctx, req, childSessionId);
 
     const childEmit = Layer.succeed(Emit, {
       publish: (event: TrevorEventInput) =>
@@ -173,19 +209,7 @@ export async function runDelegatedChild(
   }
 
   // Fold-back link (done/failed) carrying the frozen result the parent reuses.
-  await publishTo(
-    ctx,
-    ctx.parentSessionId,
-    events.delegatedTo({
-      runId: req.parentRunId,
-      childSessionId,
-      agent: req.agent.id,
-      task: req.task,
-      mode: req.mode,
-      status: failed ? "failed" : "done",
-      result,
-    }),
-  ).catch(() => {});
+  await foldBackLink(ctx, req, childSessionId, result, failed);
 
   return { childSessionId, result, failed };
 }

@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 50
-- **Completed current work:** 5
+- **Current cutoff blockers:** 41
+- **Completed current work:** 14
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M2 - `agent()` leaf (forked, interruptible, multi-turn)
+- **Current focus:** M3 - Structured-concurrency primitives
 
 ## Completed Current State / Hard Dependencies
 
@@ -32,17 +32,17 @@
 - [x] REFACTOR: spec schema separate from execution. (spec.ts holds only the schema + determinism scan; registry.ts holds only lookup/resolve; no interpreter here)
 
 **M2 - `agent()` leaf (forked, interruptible; over `runDelegatedChild`)**
-- [ ] RED: `agent(prompt, opts)` spawns one isolated child, returns text; `opts.schema` returns a
+- [x] RED: `agent(prompt, opts)` spawns one isolated child, returns text; `opts.schema` returns a
   validated object (retry on mismatch); characterization: child sees ONLY the seeded task, never the
-  parent transcript (preserve the `runDelegatedChild` isolation invariant, former plan 12).
-- [ ] GREEN: extract shared seed/isolation/fold-back; **forked interruptible leaf entry** running the child Effect in the orchestration fiber (not a detached `Effect.runPromise`) + schema-forced result.
-- [ ] RED: child-turn failure (`{failed:true}` flag, not a throw), schema-invalid-after-retry, and budget/cancel all surface through ONE **typed** channel with a **structured** cause (+ optional opaque caller `detail`, D-022); fiber interrupt actually halts an in-flight leaf.
-- [ ] GREEN: typed structured failure channel (cause + optional caller `detail`, D-022) + interrupt-based cancellation that reaches the child turn.
-- [ ] RED: a leaf drives its durable child session (15) across **multiple turns** to a semantic done-signal (per-turn step/context budgets + inter-turn compaction), still **one call ordinal**; single-turn leaf unchanged. (D-017)
-- [ ] GREEN: multi-turn leaf loop over the durable child session + **per-leaf token cap / per-turn step budget as `opts`** (`opts.tokenBudget`/`opts.stepBudget`). (D-017, D-020)
-- [ ] RED: `opts.model` as a `ModelRef` resolves via `providerForSource`/`buildSourceProvider` (`model-unresolvable` when absent); local-pinned leaf gates on `readiness().warm`, serialises behind the admission gate, surfaces `local-not-ready`.
-- [ ] GREEN: `ModelRef` resolution + local-readiness gate.
-- [ ] REFACTOR: leaf policy separate from `delegate_*` tool policy.
+  parent transcript. (`workflow/leaf.test.ts`, `test/workflow-leaf.test.ts` isolation assertion)
+- [x] GREEN: extract shared seed/isolation/fold-back (`delegate.ts` `seedChildSession`/`foldBackLink`, reused by `runDelegatedChild`); **forked interruptible leaf entry** running the child Effect in the orchestration fiber via `publishTurn` (not a detached `Effect.runPromise`) + schema-forced result. (`workflow/leaf-host.ts` `runAgentLeaf`)
+- [x] RED: child-turn failure, schema-invalid-after-retry, and budget/cancel all surface through ONE **typed** channel with a **structured** cause (+ optional opaque caller `detail`, D-022); fiber interrupt actually halts an in-flight leaf. (`workflow/leaf.test.ts` typed-failure + `it.effect` interrupt test)
+- [x] GREEN: typed structured failure channel (`LeafFailure`: cause + optional caller `detail`, D-022) + interrupt-based cancellation that reaches the child turn (in-fiber composition). (`workflow/leaf.ts`)
+- [x] RED: a leaf drives its durable child session (15) across **multiple turns** to a semantic done-signal (per-turn step budget via `emergencyMaxSteps`; per-turn context via publishTurn's 0.8-window gate; inter-turn context carried by `buildHistory` reprojection folds), still **one call ordinal**; single-turn leaf unchanged. (D-017) (`workflow/leaf.test.ts` multi-turn suite)
+- [x] GREEN: multi-turn leaf loop over the durable child session (`runLeaf` + `continueWith` reprojection) + **per-leaf token cap / per-turn step budget as `opts`** (`opts.tokenBudget`/`opts.stepBudget`). (D-017, D-020)
+- [x] RED: `opts.model` as a `ModelRef` resolves via `buildSourceProvider` (`model-unresolvable` when absent); local-pinned leaf gates on `readiness().warm` (surfaces `local-not-ready`) and serialises behind the provider's existing background admission lease (priority `background`). (`workflow/leaf-host.test.ts` `resolveLeafProvider`)
+- [x] GREEN: `ModelRef` resolution + local-readiness gate. (`workflow/leaf-host.ts` `resolveLeafProvider`)
+- [x] REFACTOR: leaf policy separate from `delegate_*` tool policy (the leaf lives in `workflow/`, offers the child no delegation capability).
 
 **M3 - Structured-concurrency primitives**
 - [ ] RED: `parallel()` barrier (failures -> `null`), `pipeline()` no-barrier, `phase()`, `log()`.
