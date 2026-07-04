@@ -22,6 +22,7 @@ import {
 } from "react";
 import { ArtifactPanel } from "@/artifact-panel/artifact-panel";
 import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state";
+import type { LucidPanelWiring } from "@/artifact-panel/lucid/lucid-viewer";
 import {
   QuoteSelectionToolbar,
   type TangentSelection,
@@ -166,6 +167,8 @@ export interface PanelBinding {
 
 export interface ArtifactPanelBinding {
   readonly artifact: ArtifactRef | null;
+  /** The Lucid review wiring (plan 27), present only when the open artifact is a Lucid surface. */
+  readonly lucid?: LucidPanelWiring;
   readonly layout: ArtifactPanelLayout;
   readonly width: number;
   readonly onClose: () => void;
@@ -575,6 +578,7 @@ export function PanelHost(props: {
       {artifactPanel ? (
         <ArtifactPanel
           artifact={artifactPanel.artifact}
+          lucid={artifactPanel.lucid}
           layout={artifactPanel.layout}
           width={artifactPanel.width}
           onClose={artifactPanel.onClose}

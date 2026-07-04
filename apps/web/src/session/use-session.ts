@@ -2,6 +2,7 @@ import {
   type ConnectionStatus,
   freshSessionId,
   type HostPresence,
+  type LucidFeedbackBatch,
   type ModelRef,
   type PermanentDeleteResult,
   PRODUCER_IDS,
@@ -384,6 +385,11 @@ export interface SessionActions {
   readonly approveHandoff: (handoffId: string, prompt?: string) => Promise<void>;
   /** Reject a generated handoff draft: publish `handoff.rejected`; the source session stays active. */
   readonly rejectHandoff: (handoffId: string) => Promise<void>;
+  /** Deliver located Lucid review feedback (plan 27, M5): publish `lucid.feedback` so the located
+   *  annotations reach the agent as STRUCTURED DATA (the host frames them safely, never as raw prompt). */
+  readonly deliverLucidFeedback: (batch: LucidFeedbackBatch) => Promise<void>;
+  /** Change a Lucid artifact's review status (plan 27, M6): publish `lucid.review` (resolved/reopened). */
+  readonly setLucidReview: (lucidId: string, resolved: boolean, cursor: number) => Promise<void>;
 }
 
 type PublishVia = (built: TrevorEventInput) => Promise<void>;
@@ -421,6 +427,18 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
         sessionEvents.handoffApproved({ handoffId, ...(prompt != null ? { prompt } : {}) }),
       ),
     rejectHandoff: (handoffId: string) => publishVia(sessionEvents.handoffRejected({ handoffId })),
+    deliverLucidFeedback: (batch: LucidFeedbackBatch) =>
+      publishVia(
+        sessionEvents.lucidFeedback({
+          lucidId: batch.lucidId,
+          version: batch.version,
+          cursor: batch.cursor,
+          annotations: batch.annotations,
+          ...(batch.message ? { message: batch.message } : {}),
+        }),
+      ),
+    setLucidReview: (lucidId: string, resolved: boolean, cursor: number) =>
+      publishVia(sessionEvents.lucidReview({ lucidId, resolved, cursor })),
     // Mirrors the host's `reapExcept` reconcile: an interrupted (not user-cancelled) completion, so the
     // transcript renders it as a host-style reap rather than an ESC, and the in-flight latch releases.
     reconcileTurn: (runId: string) =>

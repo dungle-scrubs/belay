@@ -3,6 +3,7 @@ import type { CommandMenuPayload } from "./command-menu";
 import type { InternetSnapshot } from "./connectivity";
 import type { FileMatch } from "./file-mention";
 import type { LoopSnapshot } from "./loop-command";
+import type { LucidArtifactMeta, LucidDeliveredAnnotation, LucidProvenance } from "./lucid";
 import type { CatalogEntry, ModelRef, SourceSignInState, SourceSummary } from "./model-source";
 import type { PastePayload } from "./paste-tokens";
 import type { DecodedEvent } from "./protocol-decode";
@@ -250,6 +251,13 @@ export interface ArtifactRef {
   readonly size: number;
   readonly hash: string;
   readonly name?: string;
+  /**
+   * The LUCID addressability sidecar (plan 27), kept SEPARATE from the content-addressed blob fields
+   * above (M1 REFACTOR): its presence marks this HTML artifact as an addressable Lucid surface the
+   * panel renders with element/text-range annotation; its absence degrades the artifact to the plain
+   * (non-addressable) HTML/document viewer, so generic HTML rendering is never broken. See `lucid.ts`.
+   */
+  readonly lucid?: LucidArtifactMeta;
 }
 
 /** A task's lifecycle state (the V1 set). "deleted" is an update verb, not a state. */
@@ -828,6 +836,63 @@ export const events = {
       mode: p.mode,
       preview: p.preview,
     },
+  }),
+  /**
+   * A LUCID artifact was published into the session (plan 27, M2/M6): the agent (or an external/import
+   * path) produced or re-produced an addressable HTML artifact. `lucidId` is the STABLE per-artifact
+   * identity across versions; `version` increments per revision; `htmlHash` is the HTML blob's sha256;
+   * `provenance`/`title` describe it. The web surfaces it as a transcript artifact card that opens the
+   * Lucid viewer in the artifact panel - NOT a separate `lucid open` browser tab. A later publish with
+   * the same `lucidId` and a higher `version` is the live-reload/version-swap (M6).
+   */
+  lucidPublished: (p: {
+    lucidId: string;
+    version: number;
+    htmlHash: string;
+    provenance: LucidProvenance;
+    title?: string;
+  }): TrevorEventInput => ({
+    type: "lucid.published",
+    payload: {
+      lucidId: p.lucidId,
+      version: p.version,
+      htmlHash: p.htmlHash,
+      provenance: p.provenance,
+      ...(p.title ? { title: p.title } : {}),
+    },
+  }),
+  /**
+   * Located LUCID review feedback delivered to the agent (plan 27, M5): the STRUCTURED batch of
+   * element/text-range annotations (id, anchor, snippet, note) the human composed against `version`,
+   * plus an optional non-located `message` and a monotonic `cursor` that orders deliveries. This is
+   * DATA the agent consumes, NOT prompt text: the host projects it through a safe, clearly-fenced
+   * frame (`formatLucidFeedbackForPrompt`) so a note can never act as a top-level instruction.
+   */
+  lucidFeedback: (p: {
+    lucidId: string;
+    version: number;
+    cursor: number;
+    annotations: readonly LucidDeliveredAnnotation[];
+    message?: string;
+  }): TrevorEventInput => ({
+    type: "lucid.feedback",
+    payload: {
+      lucidId: p.lucidId,
+      version: p.version,
+      cursor: p.cursor,
+      annotations: p.annotations,
+      ...(p.message ? { message: p.message } : {}),
+    },
+  }),
+  /**
+   * A LUCID review lifecycle change (plan 27, M6): the human `resolved` the review (approved / done)
+   * or reopened it (`resolved: false`). Distinct from a feedback delivery - it carries no annotations,
+   * only the status transition - so the agent knows it can stop iterating (resolved) or that
+   * post-approval feedback is coming (reopened). `cursor` orders it in the delivery stream.
+   */
+  lucidReview: (p: { lucidId: string; resolved: boolean; cursor: number }): TrevorEventInput => ({
+    type: "lucid.review",
+    payload: { lucidId: p.lucidId, resolved: p.resolved, cursor: p.cursor },
   }),
   /**
    * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately

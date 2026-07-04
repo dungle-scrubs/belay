@@ -1482,3 +1482,59 @@ test("plan 07: an ask_user guardrail marker is suppressed (no transcript row for
     "ask_user has no transcript row, so its guardrail marker is suppressed",
   );
 });
+
+const HASH_A = "a".repeat(64);
+const HASH_B = "b".repeat(64);
+
+test("plan 27: a lucid.published event yields one openable Lucid card, coalesced per version", () => {
+  const log = [
+    ev(0, events.userMessage({ text: "make a plan", provider: "openai" })),
+    ev(
+      1,
+      events.lucidPublished({
+        lucidId: "roadmap",
+        version: 1,
+        htmlHash: HASH_A,
+        provenance: "agent",
+        title: "Roadmap",
+      }),
+    ),
+    // A second version of the SAME artifact updates the card in place (not a new card).
+    ev(
+      2,
+      events.lucidPublished({
+        lucidId: "roadmap",
+        version: 2,
+        htmlHash: HASH_B,
+        provenance: "agent",
+        title: "Roadmap v2",
+      }),
+    ),
+  ];
+  const cards = toTranscript(log).filter((m) => m.kind === "lucid");
+  assert.equal(cards.length, 1, "versions of one artifact coalesce to one card");
+  const card = cards[0];
+  assert.equal(card?.kind === "lucid" && card.version, 2);
+  assert.equal(card?.kind === "lucid" && card.title, "Roadmap v2");
+  // The card carries a panel-openable ref that routes to the addressable viewer.
+  if (card?.kind !== "lucid") {
+    throw new Error("unreachable");
+  }
+  assert.equal(card.artifact.hash, HASH_B, "the ref points at the latest version's HTML blob");
+  assert.equal(card.artifact.lucid?.lucidId, "roadmap");
+  assert.equal(card.artifact.mimeType, "text/html");
+});
+
+test("plan 27: two distinct lucid artifacts render as two cards", () => {
+  const log = [
+    ev(
+      0,
+      events.lucidPublished({ lucidId: "a", version: 1, htmlHash: HASH_A, provenance: "agent" }),
+    ),
+    ev(
+      1,
+      events.lucidPublished({ lucidId: "b", version: 1, htmlHash: HASH_B, provenance: "agent" }),
+    ),
+  ];
+  assert.equal(toTranscript(log).filter((m) => m.kind === "lucid").length, 2);
+});

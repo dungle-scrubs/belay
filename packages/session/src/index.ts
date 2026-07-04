@@ -20,6 +20,8 @@ export * from "./image-tokens";
 export * from "./inventory";
 export * from "./loop-command";
 export * from "./loop-parser";
+export * from "./lucid";
+export * from "./lucid-compat";
 export * from "./metrics";
 export * from "./model-preferences";
 export * from "./model-source";

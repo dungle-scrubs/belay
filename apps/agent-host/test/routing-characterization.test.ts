@@ -76,6 +76,12 @@ const UNROUTED: readonly string[] = [
   "host.online",
   "host.role",
   "loop.status",
+  // Located Lucid review events (plan 27): the human's feedback + review lifecycle. handleEvent never
+  // consumes them; the turn's history projection (history-projection.ts) folds `lucid.feedback` into a
+  // safely-framed prompt turn, and the web derives the panel/review state from the stream.
+  "lucid.feedback",
+  "lucid.published",
+  "lucid.review",
   "model.switched",
   "provider.question.requested",
   "provider.question.resolved",

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   activeTurnRunId,
   DEFAULT_SESSION_ID,
+  foldLucidReview,
   type LoopControl,
   type ModelRef,
   tangentsOf,
@@ -29,6 +30,7 @@ import {
   resetArtifactPanelPreference,
   resizeArtifactPanel,
 } from "@/artifact-panel/artifact-panel-state";
+import type { LucidPanelWiring } from "@/artifact-panel/lucid/lucid-viewer";
 import type { TangentSelection } from "@/components/assistant-ui/quote-selection-toolbar";
 import { useLoopInventory } from "@/components/chat/loop/use-loop-inventory";
 import { loopPreviewForLine } from "@/components/chat/loop/use-loop-preview";
@@ -274,6 +276,8 @@ export function App() {
     reconcileSubagent,
     approveHandoff,
     rejectHandoff,
+    deliverLucidFeedback,
+    setLucidReview,
   } = useSessionActions(sessionId);
 
   // Tab-local composer recovery + history (D-083/D-084), keyed by this tab's id + the session id and
@@ -286,10 +290,22 @@ export function App() {
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
   const transcript = useMemo(() => toTranscript(events), [events]);
+  // Openable artifacts come from BOTH submitted user-message attachments and published Lucid artifacts
+  // (plan 27): a Lucid card opens the addressable viewer, an attachment its plain viewer.
   const transcriptArtifacts = useMemo(
-    () => transcript.flatMap((message) => (message.kind === "user" ? message.artifacts : [])),
+    () =>
+      transcript.flatMap((message) =>
+        message.kind === "user"
+          ? message.artifacts
+          : message.kind === "lucid"
+            ? [message.artifact]
+            : [],
+      ),
     [transcript],
   );
+  // The folded, per-artifact Lucid review state (delivered feedback + review status), so the panel can
+  // show already-delivered feedback and keep review status in sync across replay/resume.
+  const lucidReview = useMemo(() => foldLucidReview(events), [events]);
   const artifactPanelOpen = artifactPanel?.open ?? false;
   const selectedArtifactId = artifactPanel?.selectedArtifactId ?? null;
   const selectedPanelArtifact = useMemo(
@@ -300,6 +316,22 @@ export function App() {
         : null,
     [artifactPanelOpen, selectedArtifactId, transcriptArtifacts],
   );
+  const selectedLucidWiring = useMemo<LucidPanelWiring | undefined>(() => {
+    const meta = selectedPanelArtifact?.lucid;
+    if (!meta) {
+      return undefined;
+    }
+    return {
+      delivered: lucidReview.get(meta.lucidId) ?? null,
+      onDeliver: (batch) => void deliverLucidFeedback(batch),
+      onReviewChange: (resolved) =>
+        void setLucidReview(
+          meta.lucidId,
+          resolved,
+          (lucidReview.get(meta.lucidId)?.lastCursor ?? 0) + 1,
+        ),
+    };
+  }, [selectedPanelArtifact, lucidReview, deliverLucidFeedback, setLucidReview]);
   const switchTarget = useMemo(
     () =>
       replayThroughSeq === null
@@ -1351,6 +1383,7 @@ export function App() {
           artifactPanel?.open
             ? {
                 artifact: selectedPanelArtifact,
+                lucid: selectedLucidWiring,
                 layout: artifactPanel.preference.layout,
                 width: artifactPanel.preference.width,
                 onClose: () =>

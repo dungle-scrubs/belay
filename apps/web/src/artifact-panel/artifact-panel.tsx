@@ -16,6 +16,7 @@ import {
   clampArtifactPanelWidth,
 } from "./artifact-panel-state";
 import { artifactViewerFor } from "./artifact-registry";
+import type { LucidPanelWiring } from "./lucid/lucid-viewer";
 
 export interface ArtifactPanelProps {
   readonly artifact: ArtifactRef | null;
@@ -26,6 +27,9 @@ export interface ArtifactPanelProps {
   readonly onResetWidth?: () => void;
   readonly onWidthChange?: (width: number) => void;
   readonly srcOf?: (hash: string) => string;
+  /** The Lucid review wiring (plan 27), forwarded to the `lucid-html` viewer when the open artifact is
+   *  a Lucid surface; ignored by every other viewer. */
+  readonly lucid?: LucidPanelWiring;
 }
 
 function titleOf(artifact: ArtifactRef | null): string {
@@ -45,6 +49,7 @@ export function ArtifactPanel({
   onResetWidth,
   onWidthChange,
   srcOf = artifactSrc,
+  lucid,
 }: ArtifactPanelProps) {
   const panelRef = useRef<HTMLElement | null>(null);
   const resizeStart = useRef<{ readonly startX: number; readonly startWidth: number } | null>(null);
@@ -233,7 +238,7 @@ export function ArtifactPanel({
             The artifact could not be loaded. Use open or download from the toolbar.
           </div>
         ) : artifact && Viewer ? (
-          <Viewer artifact={artifact} srcOf={srcOf} />
+          <Viewer artifact={artifact} srcOf={srcOf} lucid={lucid} />
         ) : (
           <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
             Select an artifact from the transcript to open it here.

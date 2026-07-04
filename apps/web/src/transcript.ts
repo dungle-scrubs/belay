@@ -4,6 +4,7 @@ import {
   type CommandMenuPayload,
   decodeTrevorEvent,
   inputEstimateTokens,
+  lucidArtifactRef,
   type ModelSwitchEndpoint,
   type ModelSwitchInitiator,
   type ModelSwitchOutcome,
@@ -223,6 +224,20 @@ export type ModelSwitchMessage = {
   reason?: string;
 };
 
+// A published LUCID artifact (plan 27, M2/M7): an addressable HTML artifact the agent produced, shown
+// as a transcript card that OPENS it in the artifact panel (never a separate `lucid open` tab).
+// Coalesced per stable `lucidId` to the latest version, so a re-publish updates one card in place
+// rather than stacking a new card per revision.
+export type LucidArtifactMessage = {
+  kind: "lucid";
+  id: string;
+  lucidId: string;
+  title: string;
+  version: number;
+  /** The panel-openable artifact ref (carries the `lucid` marker), built from the publish event. */
+  artifact: ArtifactRef;
+};
+
 /** One side of a switch as `model (reasoning)`, or just `model` when no level applies - shared by the
  *  transcript breadcrumb and its compact row so the two surfaces can't drift. */
 export function formatSwitchEndpoint(endpoint: ModelSwitchEndpoint): string {
@@ -250,7 +265,8 @@ export type Message =
   | ShellMessage
   | QuestionMessage
   | HookDecisionMessage
-  | ModelSwitchMessage;
+  | ModelSwitchMessage
+  | LucidArtifactMessage;
 
 /**
  * Finds the concurrent read-only batches in a transcript: each run of 2+ consecutive read-only tool
@@ -385,6 +401,9 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
   const questionContractById = new Map<string, ProviderQuestionContract>();
   const questionAnswerById = new Map<string, ProviderQuestionAnswer>();
   const questionMsgById = new Map<string, QuestionMessage>();
+  // One card per stable lucidId (plan 27): a re-publish (a new version) updates the same card in place
+  // rather than stacking a new card per revision, so the transcript shows one artifact, latest version.
+  const lucidCardById = new Map<string, LucidArtifactMessage>();
   // Reaps every open fold bar from the transcript. A fold runs on the host's one-turn gate, so a
   // bar is only ever live at the tail; once a turn or command follows it without a matching
   // `context.compacted`, that fold was interrupted (host reset mid-fold) and its bar is an orphan -
@@ -465,6 +484,7 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           questionContractById.clear();
           questionAnswerById.clear();
           questionMsgById.clear();
+          lucidCardById.clear();
         }
         // The command itself is NOT listed in the transcript - the user just typed it, so echoing it
         // back is noise. Only its result (command.result, below) is shown: the output they invoked.
@@ -492,6 +512,39 @@ export function toTranscript(events: readonly SessionEvent[]): Message[] {
           ...(decoded.menu ? { menu: decoded.menu } : {}),
         });
         break;
+      case "lucid.published": {
+        const title = decoded.title ?? decoded.lucidId;
+        const artifact = lucidArtifactRef({
+          htmlHash: decoded.htmlHash,
+          size: 0,
+          meta: {
+            lucidId: decoded.lucidId,
+            version: decoded.version,
+            provenance: decoded.provenance,
+            reviewStatus: "open",
+            ...(decoded.title ? { title: decoded.title } : {}),
+          },
+        });
+        const existing = lucidCardById.get(decoded.lucidId);
+        if (existing) {
+          // A new version: update the same card in place (latest version + fresh artifact ref).
+          existing.version = decoded.version;
+          existing.title = title;
+          existing.artifact = artifact;
+        } else {
+          const card: LucidArtifactMessage = {
+            kind: "lucid",
+            id: event.eventId,
+            lucidId: decoded.lucidId,
+            title,
+            version: decoded.version,
+            artifact,
+          };
+          lucidCardById.set(decoded.lucidId, card);
+          messages.push(card);
+        }
+        break;
+      }
       case "user.shell": {
         // The shell-lane request: a pending terminal block (no output yet), keyed by requestId so its
         // result fills it in place. Already present means a duplicate request id - leave the block.

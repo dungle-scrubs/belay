@@ -1,16 +1,28 @@
 import type { ArtifactRef } from "@trevor/session";
-import { AlertTriangle, FileText, Image, Monitor, ScrollText } from "lucide-react";
+import { isLucidArtifact } from "@trevor/session";
+import { AlertTriangle, FileText, Image, Monitor, PenLine, ScrollText } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { artifactSrc } from "@/blob";
 import { fmtBytes } from "@/derive";
 import { cn } from "@/lib/utils";
+import { LucidArtifactViewer, type LucidPanelWiring } from "./lucid/lucid-viewer";
 
-export type ArtifactViewerKind = "diagnostic" | "document" | "file" | "html" | "image" | "unknown";
+export type ArtifactViewerKind =
+  | "diagnostic"
+  | "document"
+  | "file"
+  | "html"
+  | "image"
+  | "lucid-html"
+  | "unknown";
 export type ArtifactCapability = "copyMetadata" | "download" | "openExternal";
 
 export interface ArtifactViewerProps {
   readonly artifact: ArtifactRef;
   readonly srcOf?: (hash: string) => string;
+  /** The Lucid session wiring (plan 27), forwarded only to the `lucid-html` viewer; other viewers
+   *  ignore it. Absent in the Storybook/degraded path (the viewer then runs review-local only). */
+  readonly lucid?: LucidPanelWiring;
 }
 
 export interface ArtifactViewerEntry {
@@ -108,6 +120,11 @@ export function UnknownArtifactViewer({ artifact }: ArtifactViewerProps) {
 function artifactViewerKind(artifact: ArtifactRef): ArtifactViewerKind {
   const mime = artifact.mimeType.toLowerCase();
   const name = artifact.name?.toLowerCase() ?? "";
+  // A Lucid artifact (the `lucid` marker) routes to the ADDRESSABLE viewer; a plain HTML artifact
+  // WITHOUT the marker falls through to the non-addressable `html` viewer below (M1 degradation).
+  if (isLucidArtifact(artifact)) {
+    return "lucid-html";
+  }
   if (artifact.kind === "image" || mime.startsWith("image/")) {
     return "image";
   }
@@ -166,6 +183,15 @@ const VIEWERS = {
     kind: "image",
     label: "image",
     Viewer: ImageArtifactViewer,
+  },
+  "lucid-html": {
+    // A Lucid artifact stays openable externally / downloadable as raw HTML (the safe fallback), but
+    // its metadata is not a plain copy target - the review UI owns interaction.
+    capabilities: ["download", "openExternal"],
+    icon: PenLine,
+    kind: "lucid-html",
+    label: "Lucid",
+    Viewer: LucidArtifactViewer,
   },
   unknown: {
     capabilities: ["download", "openExternal"],

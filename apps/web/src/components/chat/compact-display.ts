@@ -84,6 +84,9 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
   switch (message.kind) {
     case "user":
       return null;
+    // A Lucid artifact card (plan 27) is already a compact one-liner; it stays fully rendered.
+    case "lucid":
+      return null;
     case "assistant":
       return message.text.trim().length > 0 ? null : assistantCompact(message);
     case "tool": {

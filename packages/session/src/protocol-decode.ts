@@ -13,6 +13,13 @@ import {
   LOOP_STOP_REASONS,
 } from "./loop-command";
 import {
+  decodeLucidAnnotations,
+  decodeLucidMeta,
+  LUCID_PROVENANCES,
+  type LucidDeliveredAnnotation,
+  type LucidProvenance,
+} from "./lucid";
+import {
   type CatalogEntry,
   decodeCatalogEntry,
   decodeModelRef,
@@ -328,12 +335,16 @@ function coerceArtifacts(value: unknown): ArtifactRef[] {
       ? (a.kind as ArtifactRef["kind"])
       : "file";
     const name = optStr(a.name);
+    // The Lucid addressability sidecar (plan 27) is decoded tolerantly and kept SEPARATE from the
+    // blob fields: a garbled/absent marker reads as undefined, degrading to the plain HTML viewer.
+    const lucid = decodeLucidMeta(a.lucid);
     return {
       kind,
       mimeType: str(a.mimeType, "application/octet-stream"),
       size: num(a.size),
       hash,
       ...(name ? { name } : {}),
+      ...(lucid ? { lucid } : {}),
     };
   });
 }
@@ -595,6 +606,28 @@ export type DecodedEvent =
       /** "quote" | "message" | "summary"; kept open for forward-compat fold-back modes. */
       readonly mode: string;
       readonly preview: string;
+    }
+  | {
+      readonly type: "lucid.published";
+      readonly lucidId: string;
+      readonly version: number;
+      readonly htmlHash: string;
+      readonly provenance: LucidProvenance;
+      readonly title?: string;
+    }
+  | {
+      readonly type: "lucid.feedback";
+      readonly lucidId: string;
+      readonly version: number;
+      readonly cursor: number;
+      readonly annotations: readonly LucidDeliveredAnnotation[];
+      readonly message?: string;
+    }
+  | {
+      readonly type: "lucid.review";
+      readonly lucidId: string;
+      readonly resolved: boolean;
+      readonly cursor: number;
     }
   | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
   | {
@@ -962,6 +995,35 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         parentSessionId: str(p.parentSessionId),
         mode: str(p.mode, "quote"),
         preview: str(p.preview),
+      };
+    case "lucid.published": {
+      const title = optStr(p.title);
+      return {
+        type: "lucid.published",
+        lucidId: str(p.lucidId),
+        version: Math.max(1, Math.trunc(num(p.version, 1))),
+        htmlHash: str(p.htmlHash),
+        provenance: oneOf(LUCID_PROVENANCES, p.provenance, "agent"),
+        ...(title ? { title } : {}),
+      };
+    }
+    case "lucid.feedback": {
+      const message = optStr(p.message);
+      return {
+        type: "lucid.feedback",
+        lucidId: str(p.lucidId),
+        version: Math.max(1, Math.trunc(num(p.version, 1))),
+        cursor: num(p.cursor),
+        annotations: decodeLucidAnnotations(p.annotations),
+        ...(message ? { message } : {}),
+      };
+    }
+    case "lucid.review":
+      return {
+        type: "lucid.review",
+        lucidId: str(p.lucidId),
+        resolved: p.resolved === true,
+        cursor: num(p.cursor),
       };
     case "user.shell":
       // A missing requestId falls back to the event's own id, so a forward-compat event still

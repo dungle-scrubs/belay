@@ -8,6 +8,7 @@ import { CompactRow } from "@/components/chat/compact-row";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import { DoctorResult } from "@/components/chat/doctor/doctor-result";
+import { LucidArtifactCard } from "@/components/chat/lucid-artifact-card";
 import { MarkdownBody } from "@/components/chat/markdown-body";
 import { CommandResult, MessageMeta, ShellBlock, UserMessage } from "@/components/chat/message";
 import { messageKindDescriptor, quietMarkerText } from "@/components/chat/message-kind-descriptor";
@@ -183,6 +184,19 @@ export function TranscriptRowView({
           <ToolRenderer message={message} className="pl-3.5" onOpenPath={onOpenPath} />
         </div>
       </WithInspect>
+    );
+  }
+
+  if (message.kind === "lucid") {
+    return (
+      <div data-message-id={message.id} className="pl-3.5">
+        <LucidArtifactCard
+          title={message.title}
+          version={message.version}
+          artifact={message.artifact}
+          onOpenArtifact={onOpenArtifact}
+        />
+      </div>
     );
   }
 

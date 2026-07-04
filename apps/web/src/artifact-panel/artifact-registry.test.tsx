@@ -11,6 +11,7 @@ function ref(input: Partial<ArtifactRef>): ArtifactRef {
     mimeType: input.mimeType ?? "application/octet-stream",
     name: input.name,
     size: input.size ?? 20,
+    ...(input.lucid ? { lucid: input.lucid } : {}),
   };
 }
 
@@ -27,6 +28,22 @@ test("maps artifact kind, MIME, and source metadata to viewer components", () =>
     "diagnostic",
   );
   assert.equal(artifactViewerFor(ref({ kind: "file" })).kind, "file");
+});
+
+test("a Lucid-marked HTML artifact routes to the addressable lucid-html viewer (M1)", () => {
+  const lucid = ref({
+    kind: "document",
+    mimeType: "text/html",
+    name: "roadmap.html",
+    lucid: { lucidId: "roadmap", version: 1, provenance: "agent", reviewStatus: "open" },
+  });
+  assert.equal(artifactViewerFor(lucid).kind, "lucid-html");
+  assert.equal(artifactViewerFor(lucid).label, "Lucid");
+});
+
+test("a plain HTML artifact WITHOUT the marker degrades to the non-addressable html viewer (M1)", () => {
+  const plain = ref({ kind: "document", mimeType: "text/html", name: "notes.html" });
+  assert.equal(artifactViewerFor(plain).kind, "html", "no lucid marker => plain HTML rendering");
 });
 
 test("exposes safe viewer capabilities through registry entries", () => {

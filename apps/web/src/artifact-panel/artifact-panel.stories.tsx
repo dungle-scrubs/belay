@@ -64,6 +64,27 @@ const diagnostic: ArtifactRef = {
   size: 4_200,
 };
 
+// A Lucid artifact (plan 27): the `lucid` marker routes the panel to the ADDRESSABLE viewer.
+const lucid: ArtifactRef = {
+  kind: "document",
+  hash: "d".repeat(64),
+  mimeType: "text/html",
+  name: "Launch roadmap",
+  size: 9_000,
+  lucid: {
+    lucidId: "roadmap",
+    version: 1,
+    provenance: "agent",
+    reviewStatus: "open",
+    title: "Launch roadmap",
+  },
+};
+
+const LUCID_HTML = `<!doctype html><html><body style="font:16px system-ui;padding:28px">
+  <h1 data-lucid-id="title">Launch roadmap</h1>
+  <ol><li data-lucid-id="s1">Freeze scope.</li><li data-lucid-id="s2">Ship the beta Friday.</li></ol>
+</body></html>`;
+
 function srcOf(hash: string): string {
   if (hash === image.hash) {
     const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='900' height='520'><rect width='100%' height='100%' fill='#d8dee9'/><rect x='64' y='64' width='772' height='392' fill='#2e3440'/><text x='96' y='124' fill='#eceff4' font-family='sans-serif' font-size='32'>artifact preview</text></svg>`;
@@ -72,6 +93,9 @@ function srcOf(hash: string): string {
   if (hash === html.hash) {
     const page = `<main style="font:16px system-ui;padding:32px"><h1>Lucid review</h1><p>Addressable HTML artifact in a sandboxed viewer.</p></main>`;
     return `data:text/html,${encodeURIComponent(page)}`;
+  }
+  if (hash === lucid.hash) {
+    return `data:text/html,${encodeURIComponent(LUCID_HTML)}`;
   }
   return `data:application/json,${encodeURIComponent(JSON.stringify({ status: "ok" }, null, 2))}`;
 }
@@ -101,5 +125,16 @@ export const PushNarrowTranscript: Story = { args: args(image, "push") };
 export const ReplaceCurrentPanel: Story = { args: args(html, "replace") };
 export const PartialOverlap: Story = { args: args(diagnostic, "overlap", 560) };
 export const ResizableState: Story = { args: args(image, "push", 680) };
+export const LucidAddressable: Story = {
+  args: {
+    ...args(lucid, "push", 620),
+    lucid: {
+      delivered: null,
+      onDeliver: () => {},
+      onReviewChange: () => {},
+      loadHtml: async () => LUCID_HTML,
+    },
+  },
+};
 export const Loading: Story = { args: { ...args(image, "push"), loadStatus: "loading" } };
 export const FailedLoad: Story = { args: { ...args(image, "push"), loadStatus: "error" } };

@@ -5,6 +5,7 @@
  */
 import {
   type ArtifactRef,
+  formatLucidFeedbackForPrompt,
   isSelfProducer,
   type PastePayload,
   type SessionEvent,
@@ -105,15 +106,24 @@ export function buildHistory(
     }
     out.push({ role: "assistant", content: renderFold(analysis.fold.summary, analysis.tasks) });
   }
+  // True when the trailing user turn is (or ends with) located Lucid feedback (M5): a following prompt
+  // then CONCATENATES rather than replacing, so real located feedback is never treated as an abandoned
+  // turn and dropped. Set by the lucid.feedback arm, cleared whenever a plain user turn is pushed.
+  let feedbackTail = false;
   const pushUser = (turn: ChatMessage): void => {
     // Collapse consecutive user turns to the latest: with one-turn-at-a-time dispatch this only
     // fires for a genuinely abandoned turn (e.g. the host crashed mid-answer) - feed the model
-    // the latest prompt, not two unanswered.
-    if (out[out.length - 1]?.role === "user") {
-      out[out.length - 1] = turn;
+    // the latest prompt, not two unanswered. But a Lucid-feedback tail is real content, so a prompt
+    // arriving after it merges instead of clobbering it.
+    const last = out[out.length - 1];
+    if (last?.role === "user") {
+      out[out.length - 1] = feedbackTail
+        ? { ...last, content: `${last.content}\n\n${turn.content}` }
+        : turn;
     } else {
       out.push(turn);
     }
+    feedbackTail = false;
   };
   // Tool-call reconstruction (the shared rule - see toolCallGrouper). out.length > 0 gates a leading
   // tool-call message so the prompt always opens on a user turn.
@@ -133,6 +143,27 @@ export function buildHistory(
       }
       tools.reset();
       pushUser(toUserTurn(decoded));
+    } else if (decoded.type === "lucid.feedback") {
+      // Located Lucid review feedback (plan 27, M5) enters the prompt as STRUCTURED DATA, never as a
+      // blindly-injected instruction: the shared framer fences every human note so it reads as a
+      // located comment, not a command. It rides as a user turn (the human addressed the agent). To
+      // preserve strict user/assistant alternation without EVER discarding feedback, a run adjacent to
+      // another user turn is CONCATENATED (not replaced, as pushUser does for abandoned prompts).
+      tools.reset();
+      const framed = formatLucidFeedbackForPrompt({
+        lucidId: decoded.lucidId,
+        version: decoded.version,
+        cursor: decoded.cursor,
+        annotations: decoded.annotations,
+        ...(decoded.message ? { message: decoded.message } : {}),
+      });
+      const last = out[out.length - 1];
+      if (last?.role === "user") {
+        out[out.length - 1] = { ...last, content: `${last.content}\n\n${framed}` };
+      } else {
+        out.push({ role: "user", content: framed });
+      }
+      feedbackTail = true;
     } else if (decoded.type === "tool.started") {
       tools.started(decoded.callId, decoded.name, decoded.arguments);
     } else if (decoded.type === "tool.completed") {

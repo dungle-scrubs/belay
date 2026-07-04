@@ -1,0 +1,5 @@
+{"t":"session_opened","seq":1,"at":"2026-07-01T10:00:00.000Z","segment":1,"artifact":"plan.html","version":1,"hash":"3f9a1c2b","path":"/Users/dev/notes/plan.html"}
+{"t":"version","seq":2,"at":"2026-07-01T10:01:00.000Z","version":2,"hash":"77bde4a1","path":"/Users/dev/notes/plan.html"}
+{"t":"annotation","seq":3,"at":"2026-07-01T10:02:00.000Z","id":"c0ffee01-0000-4000-8000-000000000001","version":2,"target":{"kind":"element","lucidId":"step-2","fingerprint":"li#a3f9·\"Ship the beta…\"","domPath":"article>ol>li:nth-child(2)","snippet":"<li>Ship the beta on Friday</li>"},"note":"Friday is too aggressive; move to next week."}
+{"t":"annotation","seq":4,"at":"2026-07-01T10:03:00.000Z","id":"c0ffee01-0000-4000-8000-000000000002","version":2,"target":{"kind":"range","quote":{"exact":"ring-0 cohort","prefix":"ship the beta to the ","suffix":" first"},"position":{"start":142,"end":155},"snippet":"ring-0 cohort"},"note":"Define what ring-0 means here."}
+{"t":"review_resolved","seq":5,"at":"2026-07-01T10:05:00.000Z"}
