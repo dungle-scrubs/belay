@@ -371,9 +371,9 @@ export function PanelHost(props: {
             {chooser}
           </div>
         ) : null}
-        {/* Transcript fills the view; the composer + footer pin to the bottom.
-          Scrollbar is hidden but the region still scrolls. The relative wrapper anchors
-          the jump-to-bottom chevron over the transcript's lower edge. */}
+        {/* Transcript fills the view; the composer + footer pin to the bottom. The scroll well carries a
+          themed native scrollbar (index.css `[data-transcript-scroll]`, plan 33). The relative wrapper
+          anchors the jump-to-bottom chevron over the transcript's lower edge. */}
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={scroll.transcriptRef}
@@ -388,7 +388,7 @@ export function PanelHost(props: {
             }}
             data-transcript-scroll
             data-transcript-pinned={scroll.atBottom ? "true" : "false"}
-            className="flex flex-1 flex-col overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex flex-1 flex-col overflow-y-auto py-4"
           >
             {/* Three states, so the page never looks broken while things come up:
               1. still replaying the session stream -> a brief "connecting to session" state;

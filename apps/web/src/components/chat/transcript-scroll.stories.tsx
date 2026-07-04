@@ -21,8 +21,9 @@ function TranscriptWellFixture({ rows, heightClass = "h-[40rem]" }: WellProps) {
       className={`flex w-full max-w-2xl flex-col border border-border bg-smui-surface-sunken px-4 ${heightClass}`}
     >
       {/* The transcript well: normal top-down column (matches app.tsx) - content starts at the top
-        padding and appends downward; once it overflows the frame it scrolls. */}
-      <div className="flex flex-1 flex-col gap-8 overflow-y-auto py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        padding and appends downward; once it overflows the frame it scrolls. `data-transcript-scroll`
+        applies the themed native scrollbar (index.css, plan 33), so the overflow stories show the real bar. */}
+      <div data-transcript-scroll className="flex flex-1 flex-col gap-8 overflow-y-auto py-4">
         {Array.from({ length: rows }, (_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: static fixture rows.
           <div key={i} className="flex flex-col gap-3">

@@ -211,3 +211,17 @@ test("an open file-mention menu WITH matches points the composer at the active o
   expect(input.getAttribute("aria-controls")).toBe("file-mention-menu");
   expect(input.getAttribute("aria-activedescendant")).toBe("file-mention-menu-opt-0");
 });
+
+test("the transcript well keeps its scroll identity and shows the themed (not hidden) scrollbar", () => {
+  const { container } = render(<PanelHostHarness onLoopControl={vi.fn()} />);
+
+  // The one scroll owner is still marked `data-transcript-scroll` (scroll-follow + the virtualizer bind
+  // to it) and keeps its scroll model; the force-hidden scrollbar utilities are gone, so the themed
+  // native bar in index.css `[data-transcript-scroll]` paints instead (plan 33 M2).
+  const well = container.querySelector("[data-transcript-scroll]");
+  expect(well).toBeTruthy();
+  const cls = well?.getAttribute("class") ?? "";
+  expect(cls).toContain("overflow-y-auto");
+  expect(cls).not.toContain("scrollbar-width:none");
+  expect(cls).not.toContain("scrollbar]:hidden");
+});
