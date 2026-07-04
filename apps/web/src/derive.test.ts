@@ -91,6 +91,22 @@ test("toolSummary picks the salient arg per tool and truncates", () => {
   assert.ok(toolSummary("bash", JSON.stringify({ command: "x".repeat(80) })).endsWith("…"));
 });
 
+test("toolSummary: a non-string salient field collapses to empty, never the raw args JSON", () => {
+  // write is keyed on `path` (the default salientToolArg branch); a malformed/mid-stream call
+  // missing `path` but carrying other populated fields (e.g. `content`) must NOT fall back to
+  // dumping the whole args blob - that would leak file content into anything that renders this
+  // summary (a tool row header, a compact-row line, an action-shimmer running label).
+  const leaky = toolSummary("write", JSON.stringify({ content: "SECRET_TOKEN=hunter2" }));
+  assert.equal(leaky, "");
+  assert.doesNotMatch(leaky, /SECRET_TOKEN|hunter2/);
+
+  const editLeaky = toolSummary(
+    "edit",
+    JSON.stringify({ old: "const a = 1;", new: "const a = 2;" }),
+  );
+  assert.equal(editLeaky, "");
+});
+
 test("parseCommand routes only an exact known /command, else an ordinary prompt", () => {
   const known = new Set(["/clear", "/note"]);
   assert.deepEqual(parseCommand("/clear", known), { command: "/clear", args: "" });

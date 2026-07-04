@@ -20,7 +20,9 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
-function truncateText(text: string, max = 60): string {
+/** The single "cap + ellipsis" implementation, shared with `action-label.ts`'s label redaction so
+ *  the two modules never chain two independent truncation algorithms on the same string. */
+export function truncateText(text: string, max = 60): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
 }
 
@@ -48,9 +50,11 @@ export function salientToolArg(name: string, args: Record<string, unknown>): unk
 export function toolSummary(name: string, argsJson: string): string {
   const args = parseToolArgs(argsJson || "{}");
   const primary = salientToolArg(name, args);
-  const text =
-    typeof primary === "string" ? primary : Object.keys(args).length === 0 ? "" : argsJson;
-  return truncateText(text, 60);
+  // A non-string (missing/malformed) salient field collapses to "" - NEVER the raw argsJson. A
+  // write/edit/multi_edit call missing `path` mid-stream still carries `old`/`new`/`content`; falling
+  // back to the whole args blob would leak up to a truncation-width fragment of that raw content into
+  // whatever renders this summary (a tool row header, a compact-row line, an action-shimmer label).
+  return truncateText(typeof primary === "string" ? primary : "", 60);
 }
 
 export interface BashDetailArgs {
