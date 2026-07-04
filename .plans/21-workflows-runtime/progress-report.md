@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 41
-- **Completed current work:** 14
+- **Current cutoff blockers:** 29
+- **Completed current work:** 26
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M3 - Structured-concurrency primitives
+- **Current focus:** M4 - Run journal + resume (Phase 2)
 
 ## Completed Current State / Hard Dependencies
 
@@ -44,21 +44,21 @@
 - [x] GREEN: `ModelRef` resolution + local-readiness gate. (`workflow/leaf-host.ts` `resolveLeafProvider`)
 - [x] REFACTOR: leaf policy separate from `delegate_*` tool policy (the leaf lives in `workflow/`, offers the child no delegation capability).
 
-**M3 - Structured-concurrency primitives**
-- [ ] RED: `parallel()` barrier (failures -> `null`), `pipeline()` no-barrier, `phase()`, `log()`.
-- [ ] GREEN: implement over `Effect.all` with a runtime concurrency cap.
-- [ ] RED: cap enforcement (excess queues) + lifetime-cap backstop.
-- [ ] GREEN: bounded scheduler + shared progress emission.
-- [ ] RED: every degrade-to-null emits a typed `leaf-failed` event (with **structured** cause, the M2 channel) before returning null - never a bare unrecorded null.
-- [ ] GREEN: emit `leaf-failed` on the fail-soft path (owned in M3, not deferred to M8).
-- [ ] RED: opt-in strict mode (`onError:'fail'`) rejects the batch on the first leaf failure; default stays fail-soft.
-- [ ] GREEN: implement strict mode.
-- [ ] REFACTOR: generic, reusable emission.
+**M3 - Structured-concurrency primitives** (`workflow/concurrency.ts`, `concurrency.test.ts`)
+- [x] RED: `parallel()` barrier (failures -> `null`), `pipeline()` no-barrier, `phase()`, `log()`.
+- [x] GREEN: implement over `Effect.all` with a runtime concurrency cap (`DEFAULT_CONCURRENCY`).
+- [x] RED: cap enforcement (excess queues, max-concurrent test) + lifetime-cap backstop + per-call item cap.
+- [x] GREEN: bounded scheduler (`makeScheduler` + `Ref` lifetime counter) + shared progress emission (`WorkflowEmit`).
+- [x] RED: every degrade-to-null emits a typed `leaf-failed` event (with **structured** cause, the M2 channel) before returning null - never a bare unrecorded null.
+- [x] GREEN: emit `leaf-failed` on the fail-soft path (owned in M3 `runLeafThunk`, not deferred to M8).
+- [x] RED: opt-in strict mode (`onError:'fail'`) rejects the batch (`WorkflowRunError`) on the first leaf failure; default stays fail-soft.
+- [x] GREEN: implement strict mode.
+- [x] REFACTOR: generic, reusable emission (the `WorkflowEmit` seam, wired to `workflow.*` in M4).
 
 **Gate 1->2**
-- [ ] DSL spec validates, statically rejects non-deterministic constructs, takes `model` as a `ModelRef`.
-- [ ] `agent()` isolated, schema-capable, `ModelRef`-resolved (local-readiness-gated), typed-fail-soft, genuinely interrupt-cancellable (halts in-flight), and (heavyweight) runs **multi-turn** to a semantic completion under a per-`agent()` token/step cap.
-- [ ] `parallel`/`pipeline`/`phase`/`log` correct under the cap.
+- [x] DSL spec validates, statically rejects non-deterministic constructs, takes `model` as a `ModelRef`. (M1)
+- [x] `agent()` isolated, schema-capable, `ModelRef`-resolved (local-readiness-gated), typed-fail-soft, genuinely interrupt-cancellable (halts in-flight), and (heavyweight) runs **multi-turn** to a semantic completion under a per-`agent()` token/step cap. (M2)
+- [x] `parallel`/`pipeline`/`phase`/`log` correct under the cap. (M3)
 
 ### Phase 2: Journaling, resume, budget
 

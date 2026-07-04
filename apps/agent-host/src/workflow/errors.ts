@@ -37,5 +37,20 @@ export class WorkflowArgsInvalid extends Data.TaggedError("WorkflowArgsInvalid")
   }
 }
 
+/**
+ * A run-level failure the structured-concurrency primitives raise in the `E` channel (M3): a
+ * strict-mode batch reject (`onError:'fail'` on a leaf failure), the lifetime-cap backstop (a runaway
+ * loop exceeded the total-leaf cap), or a too-large call (more items than one call may take). Distinct
+ * from a per-leaf typed failure, which is a fail-soft VALUE, never thrown.
+ */
+export class WorkflowRunError extends Data.TaggedError("WorkflowRunError")<{
+  readonly reason: "strict-failure" | "lifetime-cap" | "call-too-large";
+  readonly detail: string;
+}> {
+  override get message(): string {
+    return this.detail;
+  }
+}
+
 /** The engine's authoring/invocation error vocabulary. */
 export type WorkflowError = WorkflowSpecInvalid | WorkflowNotFound | WorkflowArgsInvalid;
