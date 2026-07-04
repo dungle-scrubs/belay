@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M3: SidePanel Wiring
+> Current focus: M4: Context Event Awareness
 
 - Total checklist items: 29
-- Completed: 14
-- Current cutoff blockers: 15
+- Completed: 19
+- Current cutoff blockers: 10
 
 ## 0. Hard Dependencies
 
@@ -33,11 +33,11 @@
 
 ## M3: SidePanel Wiring
 
-- [ ] RED: Extend `SidePanel.test.tsx` for normal, warning, danger, and critical state output
-- [ ] GREEN: Wire `SidePanelBreakdown` to the pure policy result
-- [ ] RED: Regression tests for replay/initial-load transition behavior
-- [ ] GREEN: Preserve existing width transition behavior
-- [ ] REFACTOR: Keep token formatting consistent with `fmtTok`/`fmtCtx`
+- [x] RED: Extend `SidePanel.test.tsx` for normal, warning, danger, and critical state output
+- [x] GREEN: Wire `SidePanelBreakdown` to the pure policy result
+- [x] RED: Regression tests for replay/initial-load transition behavior
+- [x] GREEN: Preserve existing width transition behavior
+- [x] REFACTOR: Keep token formatting consistent with `fmtTok`/`fmtCtx`
 
 ## M4: Context Event Awareness
 

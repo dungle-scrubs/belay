@@ -76,3 +76,41 @@ test("meter preserves a compact 1M window label", () => {
   assert.ok(getByText("420.0k (42%)"));
   assert.ok(getByText(/of 1M/));
 });
+
+// The usage number picks up the band tone too, so the state is legible even for a viewer who
+// only glances at the number rather than the bar.
+
+test("danger band tones the usage number orange", () => {
+  const { getByText } = render(<SidePanelBreakdown ctxUsed={182_000} ctxMax={200_000} />);
+  const label = getByText(/\(91%\)/);
+  assert.ok(label.className.includes("text-smui-orange"));
+});
+
+test("critical band bolds the usage number in the destructive tone", () => {
+  const { getByText } = render(<SidePanelBreakdown ctxUsed={194_000} ctxMax={200_000} />);
+  const label = getByText(/\(97%\)/);
+  assert.ok(label.className.includes("font-semibold"));
+  assert.ok(label.className.includes("text-destructive"));
+});
+
+// Regression: the width transition is armed only for live post-load changes, never on first
+// paint or during replay - so a refresh settles without the bar sweeping across (the churn the
+// `ready`/`useArmedAfterMount` gate exists to prevent).
+
+test("meter snaps into place on first appearance without a width transition", () => {
+  const { container } = render(<SidePanelBreakdown ctxUsed={144_000} ctxMax={200_000} />);
+  const fill = container.querySelector(".bg-smui-yellow");
+  assert.ok(fill);
+  assert.equal(fill?.className.includes("transition-"), false);
+});
+
+test("meter stays un-armed through replay (ready=false)", async () => {
+  const { container } = render(
+    <SidePanelBreakdown ctxUsed={144_000} ctxMax={200_000} ready={false} />,
+  );
+  // Give any queued animation frame a chance to fire; the replay gate must keep it un-armed.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const fill = container.querySelector(".bg-smui-yellow");
+  assert.ok(fill);
+  assert.equal(fill?.className.includes("transition-"), false);
+});
