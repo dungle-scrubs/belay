@@ -4,7 +4,6 @@ import { ChevronRight, Copy, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { ActionShimmer } from "./action-shimmer";
 import { MarkdownBody } from "./markdown-body";
 import { MessageAttachments } from "./message-attachments";
 import { ToolSection } from "./tool-section";
@@ -34,24 +33,6 @@ export function MessageMeta({ items, className }: { items: string[]; className?:
       {items.join(" · ")}
     </span>
   );
-}
-
-/**
- * Backwards-compatible alias for {@link ActionShimmer}. The active-status placeholder that once
- * rendered pulsing dots now shimmers its label (plan 31); this wrapper keeps existing call sites
- * working while the transcript migrates to `ActionShimmer` + structured action-label projection.
- * New code should import `ActionShimmer` (and derive its label via `action-label.ts`) directly.
- */
-export function WorkingIndicator({
-  label = "Working",
-  startedAt,
-  interruptible = false,
-}: {
-  label?: string;
-  startedAt?: number;
-  interruptible?: boolean;
-}) {
-  return <ActionShimmer label={label} startedAt={startedAt} interruptible={interruptible} />;
 }
 
 /**

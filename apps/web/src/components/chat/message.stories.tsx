@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { storyFrame } from "@/components/chat/story-frame";
+import { ActionShimmer } from "./action-shimmer";
 import {
   AssistantMessage,
   CommandResult,
@@ -8,7 +9,6 @@ import {
   ThinkingMessage,
   ToolCall,
   UserMessage,
-  WorkingIndicator,
 } from "./message";
 
 const meta: Meta = {
@@ -120,15 +120,9 @@ export const MetaLine: Story = {
   render: () => <MessageMeta items={["qwen3.6-27b-mlx", "3.3k/8k ctx", "15 tok/s"]} />,
 };
 
-export const Working: Story = {
-  render: () => (
-    <div className="flex flex-col gap-3">
-      <WorkingIndicator />
-      <WorkingIndicator label="thinking" />
-      <WorkingIndicator label="loading qwen" />
-    </div>
-  ),
-};
+// The active-status shimmer's own label vocabulary/fallback/reduced-motion states live in
+// action-shimmer.stories.tsx (plan 31); this catalog keeps only the compositions below that show
+// it stitched into a realistic message sequence.
 
 export const Tool: Story = {
   render: () => (
@@ -245,7 +239,7 @@ export const AssistantMermaidStreaming: Story = {
     <Frame>
       <div className="flex flex-col gap-3">
         <AssistantMessage content={MERMAID_FLOW} />
-        <WorkingIndicator label="streaming" />
+        <ActionShimmer label="streaming" />
       </div>
     </Frame>
   ),
@@ -280,7 +274,7 @@ export const Conversation: Story = {
           meta={<MessageMeta items={["qwen3.6-27b-mlx", "3.3k/8k ctx", "15 tok/s"]} />}
         />
         <ToolCall name="read" args="apps/web/src/app.tsx" status="done" />
-        <WorkingIndicator />
+        <ActionShimmer />
       </div>
     </Frame>
   ),
