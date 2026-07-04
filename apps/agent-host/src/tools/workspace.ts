@@ -40,11 +40,16 @@ export function resolveWorkspaceRoot(ctx?: ToolContext): string {
   return ctx?.workspaceRoot ?? WORKSPACE_ROOT;
 }
 
-/** Run `effect` with the leaf workspace set for its fiber (and any child fibers it forks), so the
- *  leaf's tool calls resolve against `workspace` while sibling leaves keep their own. */
+/**
+ * Run `effect` with the leaf workspace SCOPED to it (and any child fibers it forks), restoring the
+ * caller's workspace after. `Effect.locally`, not a bare `FiberRef.set`: a set would leak the
+ * workspace past the leaf - a fan-out's "child value wins" join would clobber the parent, and a
+ * sequential set would outlive the leaf - so a later non-worktree leaf would wrongly route to this
+ * tree instead of the ambient host cwd (breaking the M6/D-024 "default = ambient globals" invariant).
+ */
 export function withLeafWorkspace<A, E, R>(
   workspace: LeafWorkspace,
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> {
-  return FiberRef.set(LeafWorkspaceRef, workspace).pipe(Effect.flatMap(() => effect));
+  return Effect.locally(effect, LeafWorkspaceRef, workspace);
 }

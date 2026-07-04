@@ -17,6 +17,7 @@
 import { Effect } from "effect";
 import type { LeafRunner } from "./engine";
 import { type EngineDeps, runWorkflow, type WorkflowBody } from "./engine";
+import { ordinalKey } from "./ordinal";
 
 export interface DeterminismReport {
   readonly deterministic: boolean;
@@ -46,7 +47,7 @@ async function runPass(
     emit: (event) =>
       Effect.sync(() => {
         if (event.type === "workflow.agent") {
-          const ordinal = (event.payload.ordinal as number[]).join(".");
+          const ordinal = ordinalKey(event.payload.ordinal as number[]);
           keys.push(`${ordinal}#${event.payload.fingerprint as string}`);
         }
       }),
@@ -55,14 +56,24 @@ async function runPass(
 
   const originalNow = Date.now;
   const originalRandom = Math.random;
+  const originalPerfNow = globalThis.performance?.now;
+  // Vary the common wall-clock + RNG sources across the two passes. (A built-in that instead reads
+  // `new Date()` or `crypto.getRandomValues` is not pinned here - a documented harness limitation;
+  // the DSL path forbids those tokens statically in spec.ts.)
   Date.now = () => varied.time;
   Math.random = () => varied.random;
+  if (globalThis.performance) {
+    globalThis.performance.now = () => varied.time;
+  }
   try {
     await Effect.runPromise(runWorkflow(name, body, args, deps));
     return keys;
   } finally {
     Date.now = originalNow;
     Math.random = originalRandom;
+    if (globalThis.performance && originalPerfNow) {
+      globalThis.performance.now = originalPerfNow;
+    }
   }
 }
 

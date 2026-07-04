@@ -71,18 +71,3 @@ export function makeBudget(total: number | null): Effect.Effect<WorkflowBudget> 
 export function budgetLayer(total: number | null): Layer.Layer<BudgetGovernor> {
   return Layer.effect(BudgetGovernor, makeBudget(total));
 }
-
-/**
- * Gate one live spawn through the governor, then run it: `admit` (fail-fast if the ceiling is spent),
- * then the leaf, then `record` its usage into the pool. A cached/replayed leaf does NOT go through this
- * (it is not a new spawn); it only `record`s its restored usage.
- */
-export function spawnGuarded<T extends { readonly usage: TurnUsage }>(
-  budget: WorkflowBudget,
-  live: Effect.Effect<T>,
-): Effect.Effect<T, WorkflowRunError> {
-  return budget.admit.pipe(
-    Effect.flatMap(() => live),
-    Effect.tap((result) => budget.record(result.usage)),
-  );
-}

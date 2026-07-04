@@ -1,6 +1,6 @@
 import { Effect, Exit } from "effect";
 import { describe, expect, test } from "vitest";
-import { BudgetGovernor, budgetLayer, makeBudget, spawnGuarded } from "./budget";
+import { BudgetGovernor, budgetLayer, makeBudget } from "./budget";
 import type { TurnUsage } from "./leaf";
 
 const usage = (output: number): TurnUsage => ({ input: 0, output });
@@ -56,34 +56,6 @@ describe("WorkflowBudget - shared pool", () => {
     // A still-running leaf drains its overshoot - recording is never blocked.
     await Effect.runPromise(budget.record(usage(40)));
     expect(await Effect.runPromise(budget.spent)).toBe(140);
-  });
-});
-
-describe("spawnGuarded", () => {
-  test("admits, runs the live leaf, and records its usage", async () => {
-    const budget = await Effect.runPromise(makeBudget(100));
-    let ran = 0;
-    const live = Effect.sync(() => {
-      ran++;
-      return { usage: usage(40) };
-    });
-    const out = await Effect.runPromise(spawnGuarded(budget, live));
-    expect(ran).toBe(1);
-    expect(out.usage.output).toBe(40);
-    expect(await Effect.runPromise(budget.spent)).toBe(40);
-  });
-
-  test("fails budget-exhausted over the ceiling and does NOT run the live leaf", async () => {
-    const budget = await Effect.runPromise(makeBudget(50));
-    await Effect.runPromise(budget.record(usage(50)));
-    let ran = 0;
-    const live = Effect.sync(() => {
-      ran++;
-      return { usage: usage(10) };
-    });
-    const exit = await Effect.runPromiseExit(spawnGuarded(budget, live));
-    expect(Exit.isFailure(exit)).toBe(true);
-    expect(ran).toBe(0);
   });
 });
 

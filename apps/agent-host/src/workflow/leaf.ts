@@ -124,6 +124,27 @@ function validateAgainst(
     : Either.right(decoded.right);
 }
 
+/** Map a turn that ended in `error`/`cancelled` to a typed leaf failure; null when the turn is usable
+ *  (answered or cut off). `label` names the turn (`"child turn"` / `"schema-repair turn"`). */
+function terminalFailure(
+  outcome: TurnOutcome,
+  childSessionId: string,
+  label: string,
+): LeafFailure | null {
+  if (outcome.endReason === "error") {
+    return fail(
+      childSessionId,
+      "child-turn-failed",
+      outcome.cause ?? `the ${label} failed`,
+      outcome.text || undefined,
+    );
+  }
+  if (outcome.endReason === "cancelled") {
+    return fail(childSessionId, "cancelled", `the ${label} was cancelled`);
+  }
+  return null;
+}
+
 /**
  * Run the leaf to a typed result. The loop runs up to `maxTurns` child turns, continuing only a
  * cut-off turn while budget remains, and stops on the first `answered` turn (semantic completion),
@@ -149,16 +170,9 @@ export function runLeaf<A = unknown>(
       inputTokens = outcome.usage.input;
       lastText = outcome.text;
 
-      if (outcome.endReason === "error") {
-        return fail(
-          childSessionId,
-          "child-turn-failed",
-          outcome.cause ?? "the child turn failed",
-          outcome.text || undefined,
-        );
-      }
-      if (outcome.endReason === "cancelled") {
-        return fail(childSessionId, "cancelled", "the child turn was cancelled");
+      const turnFailure = terminalFailure(outcome, childSessionId, "child turn");
+      if (turnFailure !== null) {
+        return turnFailure;
       }
       if (outcome.endReason === "answered") {
         break;
@@ -183,15 +197,9 @@ export function runLeaf<A = unknown>(
       let validated = validateAgainst(request.schema, lastText);
       if (Either.isLeft(validated) && deps.repair !== undefined) {
         const repairOutcome = yield* deps.repair(validated.left);
-        if (repairOutcome.endReason === "error") {
-          return fail(
-            childSessionId,
-            "child-turn-failed",
-            repairOutcome.cause ?? "the schema-repair turn failed",
-          );
-        }
-        if (repairOutcome.endReason === "cancelled") {
-          return fail(childSessionId, "cancelled", "the schema-repair turn was cancelled");
+        const repairFailure = terminalFailure(repairOutcome, childSessionId, "schema-repair turn");
+        if (repairFailure !== null) {
+          return repairFailure;
         }
         spentOutput += repairOutcome.usage.output;
         inputTokens = repairOutcome.usage.input;

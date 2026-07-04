@@ -11,49 +11,20 @@
  * Not for: the ordinal machinery (ordinal.ts), running a leaf (leaf-host.ts), or the budget governor
  * (M5 - it wires `onUsage`).
  */
+import { canonicalJson } from "@host/boot/canonical-json";
 import { events, type TrevorEventInput } from "@trevor/session";
 import { Effect } from "effect";
 import type { LeafResult, TurnUsage } from "./leaf";
 import { consumeOrdinal, type Ordinal, ordinalKey } from "./ordinal";
 
 /**
- * A stable, function-free stringify for fingerprinting: objects key-sorted, arrays in order,
- * functions/undefined dropped. Same effective inputs -> same string; a changed prompt/model/budget
- * changes it. Equality of the raw string IS the per-ordinal invalidation check (D-009).
+ * The per-ordinal invalidation key: a stable fingerprint of `(prompt, opts)` via the shared
+ * key-sorted `canonicalJson` (function-valued opts fields are dropped by `JSON.stringify`). Same
+ * effective inputs -> same string; a changed prompt/model/budget changes it. Equality of the raw
+ * string IS the per-ordinal invalidation check (D-009).
  */
-export function stableStringify(value: unknown): string {
-  if (value === null) {
-    return "null";
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (typeof value === "string") {
-    return JSON.stringify(value);
-  }
-  if (typeof value === "function" || value === undefined) {
-    return "";
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
-  }
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const parts = Object.keys(record)
-      .sort()
-      .map((key) => {
-        const rendered = stableStringify(record[key]);
-        return rendered === "" ? "" : `${JSON.stringify(key)}:${rendered}`;
-      })
-      .filter((part) => part !== "");
-    return `{${parts.join(",")}}`;
-  }
-  return "";
-}
-
-/** The per-ordinal invalidation key: a stable fingerprint of `(prompt, opts)`. */
 export function fingerprint(prompt: string, opts: unknown): string {
-  return `${stableStringify(prompt)}|${stableStringify(opts)}`;
+  return `${canonicalJson(prompt)}|${canonicalJson(opts)}`;
 }
 
 /** A journaled leaf the cache can replay: its fingerprint, its typed result, and its Usage. */

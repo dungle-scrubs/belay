@@ -565,7 +565,6 @@ export const events = {
   }),
   workflowLeafFailed: (p: {
     runId: string;
-    ordinal: readonly number[];
     kind: string;
     cause: string;
     childSessionId: string;
@@ -574,7 +573,6 @@ export const events = {
     type: "workflow.leaf-failed",
     payload: {
       runId: p.runId,
-      ordinal: [...p.ordinal],
       kind: p.kind,
       cause: p.cause,
       childSessionId: p.childSessionId,

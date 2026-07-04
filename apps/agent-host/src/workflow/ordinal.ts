@@ -42,17 +42,19 @@ export const consumeOrdinal: Effect.Effect<Ordinal> = Effect.gen(function* () {
 
 /**
  * Run `effect` under a fresh child slot rooted at `basePath` - its `agent()` calls key under it (and a
- * retry within it gets the next intra-slot index). Set (not `locally`) because each parallel/pipeline
- * element runs in its OWN fiber, so the set is fiber-local to that element.
+ * retry within it gets the next intra-slot index). `Effect.locally` SCOPES the slot to `effect` and
+ * restores the caller's slot after: a bare `FiberRef.set` would leak (a fan-out's "child value wins"
+ * join clobbers the parent slot, and a sequential set outlives the block), so a later `agent()` in the
+ * body would derive a corrupt ordinal.
  */
 export function withChildSlot<A, E, R>(
   basePath: Ordinal,
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> {
-  return FiberRef.set(SlotCtxRef, makeSlot(basePath)).pipe(Effect.flatMap(() => effect));
+  return Effect.locally(effect, SlotCtxRef, makeSlot(basePath));
 }
 
 /** Run a whole run's orchestration under a fresh root slot, so ordinals start at `[0]` every run. */
 export function withRootSlot<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  return FiberRef.set(SlotCtxRef, makeSlot([])).pipe(Effect.flatMap(() => effect));
+  return Effect.locally(effect, SlotCtxRef, makeSlot([]));
 }

@@ -190,6 +190,28 @@ describe("pipeline - per-item staged flow", () => {
     expect(stage2Runs).toBe(1); // the bad item never reached stage 2
     expect(c.failures).toEqual(["stage1 bad"]);
   });
+
+  test("a legitimate null-valued success does NOT truncate the chain (only a drop does)", async () => {
+    const c = collector();
+    const s = await scheduler(c.emit);
+    let stage2Runs = 0;
+    const out = await Effect.runPromise(
+      pipeline(
+        s,
+        ["x"],
+        [
+          () => Effect.succeed(okValue(null)), // succeeds with value null
+          (prev) =>
+            Effect.sync(() => {
+              stage2Runs++;
+              return okText(`after-${prev}`);
+            }),
+        ],
+      ),
+    );
+    expect(out).toEqual(["after-null"]); // stage 2 ran despite the null stage-1 value
+    expect(stage2Runs).toBe(1);
+  });
 });
 
 describe("phase / log", () => {

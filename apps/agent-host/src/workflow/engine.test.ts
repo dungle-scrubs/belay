@@ -75,7 +75,10 @@ describe("runWorkflow", () => {
       });
     const result = await Effect.runPromise(runWorkflow("loop", body, {}, deps));
     // total 8, 5 output/leaf: after 2 leaves spend is 10 -> remaining 0 -> stop.
-    expect(result.value).toBe(2);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBe(2);
+    }
   });
 
   test("resume: a cache replays leaves without re-running the leaf runner, and reconstructs order", async () => {

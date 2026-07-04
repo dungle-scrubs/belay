@@ -13,7 +13,7 @@
  */
 import { events, type TrevorEventInput } from "@trevor/session";
 import { Effect, Either, Ref } from "effect";
-import { makeBudget, type WorkflowBudget } from "./budget";
+import { makeBudget } from "./budget";
 import {
   type BatchOptions,
   log as logPrim,
@@ -44,6 +44,13 @@ export interface AgentOpts {
  *  `runAgentLeaf` (leaf-host.ts); tests inject a fake. */
 export type LeafRunner = (prompt: string, opts: AgentOpts) => Effect.Effect<LeafResult>;
 
+/** The read-only budget view a workflow body sees: its loop guards, but not `admit`/`record`/`total`
+ *  (the engine owns spend accounting, so a body cannot corrupt the shared pool). */
+export interface BudgetView {
+  readonly remaining: Effect.Effect<number>;
+  readonly spent: Effect.Effect<number>;
+}
+
 /** The runtime "stdlib" a built-in workflow's orchestration is written against. */
 export interface WorkflowApi {
   readonly agent: (prompt: string, opts?: AgentOpts) => Effect.Effect<LeafResult, WorkflowRunError>;
@@ -58,7 +65,7 @@ export interface WorkflowApi {
   ) => Effect.Effect<ReadonlyArray<unknown>, WorkflowRunError>;
   readonly phase: (title: string) => Effect.Effect<void>;
   readonly log: (message: string) => Effect.Effect<void>;
-  readonly budget: WorkflowBudget;
+  readonly budget: BudgetView;
 }
 
 /** A developer-authored built-in workflow: an orchestration over the `WorkflowApi` (the fleet, 46,
@@ -68,12 +75,9 @@ export type WorkflowBody = (
   args: unknown,
 ) => Effect.Effect<unknown, WorkflowRunError>;
 
-export interface RunResult {
-  readonly ok: boolean;
-  readonly leaves: number;
-  readonly value?: unknown;
-  readonly error?: WorkflowRunError;
-}
+export type RunResult =
+  | { readonly ok: true; readonly leaves: number; readonly value: unknown }
+  | { readonly ok: false; readonly leaves: number; readonly error: WorkflowRunError };
 
 export interface EngineDeps {
   readonly runId: string;
@@ -107,7 +111,6 @@ export function runWorkflow(
         deps.emit(
           events.workflowLeafFailed({
             runId: deps.runId,
-            ordinal: [],
             kind: failure.kind,
             cause: failure.cause,
             childSessionId: failure.childSessionId,
@@ -148,16 +151,17 @@ export function runWorkflow(
       pipeline: (items, stages, options) => pipelinePrim(scheduler, items, stages, options),
       phase: (title) => phasePrim(scheduler, title),
       log: (message) => logPrim(scheduler, message),
-      budget,
+      budget: { remaining: budget.remaining, spent: budget.spent },
     };
 
     yield* deps.emit(events.workflowStarted({ runId: deps.runId, workflow: name, args }));
     const outcome = yield* withRootSlot(body(api, args)).pipe(Effect.either);
     const leaves = yield* Ref.get(leafCount);
-    const ok = Either.isRight(outcome);
-    yield* deps.emit(events.workflowCompleted({ runId: deps.runId, ok, leaves }));
+    yield* deps.emit(
+      events.workflowCompleted({ runId: deps.runId, ok: Either.isRight(outcome), leaves }),
+    );
 
-    return ok
+    return Either.isRight(outcome)
       ? { ok: true, leaves, value: outcome.right }
       : { ok: false, leaves, error: outcome.left };
   });

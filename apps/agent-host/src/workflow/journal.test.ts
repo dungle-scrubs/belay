@@ -8,10 +8,9 @@ import {
   fingerprint,
   journaledAgent,
   type RunCache,
-  stableStringify,
 } from "./journal";
 import type { LeafResult, TurnUsage } from "./leaf";
-import { withRootSlot } from "./ordinal";
+import { ordinalKey, withRootSlot } from "./ordinal";
 
 const ok = (text: string, output = 5): LeafResult => ({
   ok: true,
@@ -52,11 +51,11 @@ function recorder(cache: RunCache = emptyCache()) {
 const agentOrdinals = (emitted: readonly JournalEvent[]): string[] =>
   emitted
     .filter((event) => event.type === "workflow.agent")
-    .map((event) => (event.payload.ordinal as number[]).join("."));
+    .map((event) => ordinalKey(event.payload.ordinal as number[]));
 
-describe("fingerprint / stableStringify", () => {
-  test("is stable across key order and drops functions", () => {
-    expect(stableStringify({ b: 1, a: 2 })).toBe(stableStringify({ a: 2, b: 1 }));
+describe("fingerprint", () => {
+  test("is stable across opts key order and drops function-valued fields", () => {
+    expect(fingerprint("p", { b: 1, a: 2 })).toBe(fingerprint("p", { a: 2, b: 1 }));
     expect(fingerprint("p", { model: "m", fn: () => 1 })).toBe(fingerprint("p", { model: "m" }));
   });
 

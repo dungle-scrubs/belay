@@ -62,6 +62,14 @@ function unwrap(result: LeafSuccess): unknown {
   return result.value !== undefined ? result.value : result.text;
 }
 
+/** A fail-soft drop marker - distinct from a leaf that legitimately RESOLVES to `null` (e.g. a
+ *  `Schema.NullOr` output), so a null success does not read as a drop and truncate a pipeline. Mapped
+ *  to `null` only at the result boundary. */
+const DROPPED: unique symbol = Symbol("workflow.dropped-leaf");
+
+const nullifyDrops = (values: ReadonlyArray<unknown>): ReadonlyArray<unknown> =>
+  values.map((value) => (value === DROPPED ? null : value));
+
 export interface BatchOptions {
   /** `'null'` (default) degrades a failed leaf to null after emitting; `'fail'` rejects the batch. */
   readonly onError?: "null" | "fail";
@@ -94,7 +102,7 @@ function runLeafThunk(
         new WorkflowRunError({ reason: "strict-failure", detail: result.cause }),
       );
     }
-    return null;
+    return DROPPED;
   });
 }
 
@@ -130,6 +138,7 @@ export function parallel(
         { concurrency: scheduler.concurrency },
       ),
     ),
+    Effect.map(nullifyDrops),
   );
 }
 
@@ -165,8 +174,9 @@ export function pipeline<T>(
           [...base, index, stageIndex],
           runLeafThunk(scheduler, () => stage(previous, item, index), onError),
         );
-        if (value === null) {
-          return null;
+        // A DROPPED stage (a fail-soft failure) ends this item's chain; a legitimate null value does not.
+        if (value === DROPPED) {
+          return DROPPED;
         }
         previous = value;
       }
@@ -180,6 +190,7 @@ export function pipeline<T>(
         { concurrency: scheduler.concurrency },
       ),
     ),
+    Effect.map(nullifyDrops),
   );
 }
 

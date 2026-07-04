@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { RunResult } from "./engine";
 import { type DetachedRunDeps, startDetachedRun } from "./lifecycle";
 
-const summary: RunResult = { ok: true, leaves: 3 };
+const summary: RunResult = { ok: true, leaves: 3, value: undefined };
 
 describe("startDetachedRun (D-018)", () => {
   test("ensures the run session, returns immediately (launcher survives), then notifies on completion", async () => {

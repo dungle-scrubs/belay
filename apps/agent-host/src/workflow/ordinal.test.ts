@@ -40,4 +40,24 @@ describe("ordinal", () => {
     expect(await once()).toBe("0");
     expect(await once()).toBe("0");
   });
+
+  test("a child slot does NOT leak into the parent slot after it (Effect.locally restore)", async () => {
+    const out = await Effect.runPromise(
+      withRootSlot(
+        Effect.gen(function* () {
+          const a = yield* consumeOrdinal; // [0]
+          yield* withChildSlot(
+            [...a, 5],
+            Effect.gen(function* () {
+              yield* consumeOrdinal; // [0,5,0]
+              yield* consumeOrdinal; // [0,5,1]
+            }),
+          );
+          const b = yield* consumeOrdinal; // must be [1], not a leaked child slot
+          return [ordinalKey(a), ordinalKey(b)];
+        }),
+      ),
+    );
+    expect(out).toEqual(["0", "1"]);
+  });
 });
