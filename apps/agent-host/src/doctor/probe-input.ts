@@ -138,11 +138,13 @@ export interface DoctorProviderIncident {
   readonly at: string;
 }
 
-/** The compact, redaction-safe provider-observation summary the Providers area surfaces (D-076 M6). */
+/** The compact, redaction-safe observation-corpus summary the Providers area surfaces (D-076 M6 / plan 29 M4). */
 export interface DoctorObservations {
   readonly distinct: number;
   readonly unknown: number;
   readonly total: number;
+  /** The busiest shape fingerprints by count - stable shape ids only, never a message or secret. */
+  readonly top?: readonly { readonly fingerprint: string; readonly count: number }[];
 }
 
 /** Recent terminal provider-failure counts, kept in two distinct buckets (D-076 M6). */

@@ -99,6 +99,7 @@ export interface DoctorProbeResults {
     readonly distinct: number;
     readonly unknown: number;
     readonly total: number;
+    readonly top: readonly { readonly fingerprint: string; readonly count: number }[];
   };
   readonly providerFailures: {
     readonly retryExhausted: number;
@@ -301,7 +302,7 @@ export async function collectDoctorProbeResults(
     providers: providerProbes,
     roots,
     tools,
-    observations: { distinct: obs.distinct, unknown: obs.unknown, total: obs.total },
+    observations: { distinct: obs.distinct, unknown: obs.unknown, total: obs.total, top: obs.top },
     providerFailures: {
       retryExhausted: summary.retryExhausted,
       nonRetryableTerminal: summary.nonRetryableTerminal,

@@ -308,6 +308,31 @@ test("the Providers area surfaces unclassified-failure observation counts as a r
   assert.ok(!/«|sk-|bearer|token/i.test(JSON.stringify(withObs)), "no secret material in the area");
 });
 
+test("the observations fact surfaces the busiest shape fingerprint but never a message (plan 29 M4)", () => {
+  const withTop = buildDoctorSnapshot(
+    input({
+      observations: {
+        distinct: 2,
+        unknown: 9,
+        total: 9,
+        top: [
+          { fingerprint: "a1b2c3d4e5f6a7b8", count: 6 },
+          { fingerprint: "0f0f0f0f0f0f0f0f", count: 3 },
+        ],
+      },
+    }),
+  ).areas.find((a) => a.id === "providers");
+  const fact = withTop?.facts?.find((f) => f.label === "observations");
+  assert.ok(fact, "an observations fact is present");
+  // The busiest fingerprint (a stable hex shape id) is shown for log correlation...
+  assert.match(fact?.value ?? "", /a1b2c3d4e5f6a7b8×6/);
+  // ...but no raw message, auth value, prompt, or payload body ever appears.
+  assert.ok(
+    !/authorization|bearer|sk-|api_key|prompt|«/i.test(JSON.stringify(withTop)),
+    "no raw message or auth value in the observations fact",
+  );
+});
+
 test("the Providers area shows retry exhaustion separately from non-retryable terminal failures (D-076 M6)", () => {
   // Nothing recorded: neither finding appears.
   const clean = buildDoctorSnapshot(input()).areas.find((a) => a.id === "providers");

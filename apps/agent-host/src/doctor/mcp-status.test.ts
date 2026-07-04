@@ -261,7 +261,7 @@ const PROBES: DoctorProbeResults = {
   providers: [],
   roots: [],
   tools: ["read"],
-  observations: { distinct: 0, unknown: 0, total: 0 },
+  observations: { distinct: 0, unknown: 0, total: 0, top: [] },
   providerFailures: { retryExhausted: 0, nonRetryableTerminal: 0 },
   providerIncidents: [],
 };

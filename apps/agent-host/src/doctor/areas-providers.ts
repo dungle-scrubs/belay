@@ -157,9 +157,13 @@ export function providersArea(input: DoctorProbeInput): DoctorArea {
   // it's a breadcrumb for improving the classifier. Omitted entirely when nothing has been observed.
   const obs = input.observations;
   if (obs && obs.distinct > 0) {
+    // The busiest shape id is a stable fingerprint (hex), useful for correlating with the structured
+    // failure log; it carries no message, auth, or payload value, so it stays inside the redacted fact.
+    const busiest = obs.top?.[0];
+    const topSuffix = busiest ? ` · top ${busiest.fingerprint}×${busiest.count}` : "";
     facts.push({
       label: "observations",
-      value: `${obs.distinct} unclassified shape${obs.distinct === 1 ? "" : "s"} · ${obs.unknown} sighting${obs.unknown === 1 ? "" : "s"}`,
+      value: `${obs.distinct} unclassified shape${obs.distinct === 1 ? "" : "s"} · ${obs.unknown} sighting${obs.unknown === 1 ? "" : "s"}${topSuffix}`,
     });
   }
   return area(
