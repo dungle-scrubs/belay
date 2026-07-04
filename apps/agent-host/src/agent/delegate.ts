@@ -2,7 +2,15 @@ import { discoverSkills } from "@host/skills/skills";
 import type { AgentDefinition } from "@host/subagents/discovery";
 import { resolveAgentTools } from "@host/subagents/discovery";
 import { Emit } from "@host/transport/services";
-import { events, type SessionTransport, type TrevorEventInput } from "@trevor/session";
+import {
+  type DecodedEvent,
+  decodeTrevorEvent,
+  events,
+  isTerminalDelegationStatus,
+  type SessionEvent,
+  type SessionTransport,
+  type TrevorEventInput,
+} from "@trevor/session";
 import { Effect, Layer } from "effect";
 import type { ChatMessage, Provider, ToolDef } from "../providers";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";
@@ -133,6 +141,54 @@ export async function foldBackLink(
       result,
     }),
   ).catch(() => {});
+}
+
+/**
+ * Derives the ORPHANED background subagents from the replayed PARENT log (plan 52 / D-001): every
+ * `delegated.to{status:"running"}` child with no terminal link for the same `childSessionId` that is NOT
+ * in `activeChildSessionIds` (a child THIS host is itself running - the subagent analogue of
+ * `reapExcept(activeRunId)` excluding the live turn). Returns the terminal `delegated.to{interrupted}`
+ * links to emit so a new/reconnecting leader closes children a dead leader left dangling. Any terminal
+ * status (`done|failed|interrupted`) closes the link, so a second takeover after the interrupted link is
+ * already in the log yields nothing (idempotent by `childSessionId`). Pure over the log; the caller
+ * emits + logs.
+ */
+export function orphanedSubagentReaps(
+  parentEvents: readonly SessionEvent[],
+  activeChildSessionIds: ReadonlySet<string>,
+): TrevorEventInput[] {
+  const running = new Map<string, Extract<DecodedEvent, { type: "delegated.to" }>>();
+  const terminated = new Set<string>();
+  for (const event of parentEvents) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type !== "delegated.to") {
+      continue;
+    }
+    if (isTerminalDelegationStatus(decoded.status)) {
+      terminated.add(decoded.childSessionId);
+    } else {
+      running.set(decoded.childSessionId, decoded);
+    }
+  }
+  const out: TrevorEventInput[] = [];
+  for (const [childSessionId, link] of running) {
+    if (terminated.has(childSessionId) || activeChildSessionIds.has(childSessionId)) {
+      continue;
+    }
+    out.push(
+      events.delegatedTo({
+        runId: link.runId,
+        childSessionId,
+        agent: link.agent,
+        task: link.task,
+        mode: link.mode === "background" ? "background" : "inline",
+        status: "interrupted",
+        result:
+          "The host that started this subagent went away before it finished; a new leader recovered it.",
+      }),
+    );
+  }
+  return out;
 }
 
 /** The child's tool allow-list. A BACKGROUND child is clamped to READ-ONLY tools (D-048): it may

@@ -62,6 +62,7 @@ import {
   catalogFrom,
   commandsFrom,
   defaultProviderFrom,
+  detectOrphanedSubagents,
   detectOrphanedTurn,
   hostAnnouncement,
   hostStatus,
@@ -81,6 +82,7 @@ import {
   tasksFrom,
   tasksStale,
   truncate,
+  unreconciledSubagents,
   vimEnabledFrom,
   workspaceBasename,
   worktreesFrom,
@@ -269,6 +271,7 @@ export function App() {
     unarchive,
     answerQuestion,
     reconcileTurn,
+    reconcileSubagent,
     approveHandoff,
     rejectHandoff,
   } = useSessionActions(sessionId);
@@ -423,6 +426,33 @@ export function App() {
       });
     }
   }, [orphanedTurn, reconcileTurn]);
+  // Web stall guard for background SUBAGENTS (plan 52): a background child OUTLIVES its spawning turn, so
+  // its terminal `delegated.to` can be lost independently of the turn reconcile if its owning host dies
+  // before folding back - leaving the child stuck "running" forever. Same conservative gate as the turn
+  // path (no leader + live replayed view + silent past grace); the browser closes each orphaned child to
+  // `interrupted`, mirroring the host's `reapOrphanSubagents`. The Set ref fires the reconcile at most
+  // once per childSessionId, and the host reap is idempotent by the same key, so a race converges on one card.
+  const orphanedSubagents = useMemo(
+    () =>
+      detectOrphanedSubagents(events, {
+        leaderPresent: host.leaderId !== null,
+        connected: status === "open" && replayed,
+        now,
+        graceMs: ORPHAN_GRACE_MS,
+      }),
+    [events, host.leaderId, status, replayed, now],
+  );
+  const reconciledSubagentRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const orphan of unreconciledSubagents(orphanedSubagents, reconciledSubagentRef.current)) {
+      const { childSessionId } = orphan;
+      reconciledSubagentRef.current.add(childSessionId);
+      reconcileSubagent(orphan).catch(() => {
+        // Transient publish failure: drop the latch so the next clock tick retries this child.
+        reconciledSubagentRef.current.delete(childSessionId);
+      });
+    }
+  }, [orphanedSubagents, reconcileSubagent]);
   // True while a manual /compact fold is streaming (a transient bar in the transcript). ESC cancels
   // it (manual folds are interruptible; automatic ones run to completion).
   const compacting = useMemo(() => transcript.some((m) => m.kind === "compacting"), [transcript]);
@@ -435,7 +465,9 @@ export function App() {
   // The support panel's background work (plan 09): promoted jobs the host announces live, and the
   // running subagent delegations from the transcript. Both derived from the live session, never cached.
   // One scan over the events feeds both the panel rows and the job-detail lookup below.
-  const jobs = useMemo(() => jobsFrom(announcement), [announcement]);
+  // Pass the host-liveness verdict (the live leader id) so a dead host's `running` jobs render as
+  // interrupted rather than a stuck "running" (plan 52 / D-003) - the derive-layer job reconcile.
+  const jobs = useMemo(() => jobsFrom(announcement, host.leaderId), [announcement, host.leaderId]);
   const subagents = useMemo(() => runningSubagents(transcript), [transcript]);
   // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
   const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);

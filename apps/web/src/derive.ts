@@ -8,7 +8,7 @@ import {
   type GitStatus,
   HOST_ROLE,
   type HostPresence,
-  type JobSnapshot,
+  isTerminalDelegationStatus,
   type ModelRef,
   type ProviderModel,
   type ProviderQuestionAnswer,
@@ -20,6 +20,7 @@ import {
   taskSnapshotReplaces,
   type WorktreeSummary,
 } from "@trevor/session";
+import type { PanelJob } from "@/support-panel/support-panel";
 
 export { parseToolArgs, toolSummary } from "./tool-args";
 
@@ -360,10 +361,29 @@ export function modelPrefsFrom(announcement: HostAnnouncement | null): ModelPref
   return announcement?.modelPrefs ?? { default: null, pinned: [] };
 }
 
-/** The host's latest tracked background jobs (plan 09): the freshest `host.online` job snapshots (the
- *  host re-announces on every job change), empty when none / no host. */
-export function jobsFrom(announcement: HostAnnouncement | null): readonly JobSnapshot[] {
-  return announcement?.jobs ?? [];
+/**
+ * The host's latest tracked background jobs (plan 09): the freshest `host.online` job snapshots (the host
+ * re-announces on every job change), empty when none / no host.
+ *
+ * Orphan reconcile (plan 52 / D-003): a promoted job carries NO durable per-job event - it exists only on
+ * the `host.online` snapshot - so it cannot mirror the subagent reconcile with a terminal event. Instead
+ * this pure derivation downgrades a `running` job to `interrupted` when the snapshot's AUTHOR is no longer
+ * the live leader (`announcement.instanceId !== leaderId`, the same host-liveness verdict `hostStatus`
+ * already computes): a dead host's `running` jobs are really orphaned, so the panel renders them terminal
+ * with the kill control inert rather than a stuck "running". When the announcing host IS the live leader,
+ * or its identity is unknown, jobs pass through untouched. `leaderId` defaults to the announcer, so a
+ * caller that omits the liveness verdict (tests / stories) sees no downgrade.
+ */
+export function jobsFrom(
+  announcement: HostAnnouncement | null,
+  leaderId: string | null = announcement?.instanceId ?? null,
+): readonly PanelJob[] {
+  const jobs = announcement?.jobs ?? [];
+  const authorStale = announcement?.instanceId != null && announcement.instanceId !== leaderId;
+  if (!authorStale) {
+    return jobs;
+  }
+  return jobs.map((job) => (job.status === "running" ? { ...job, interrupted: true } : job));
 }
 
 /**
@@ -758,14 +778,51 @@ export interface OrphanCheck {
 }
 
 /**
+ * Orphaned-background reconcile (plan 52). Three kinds of work can latch "running" forever when the host
+ * that owns their completion signal dies before emitting it, each recovered in its own way but under ONE
+ * liveness verdict so a live-but-slow host is never cut short:
+ *   - TURN: `detectOrphanedTurn` -> `reconcileTurn` publishes a terminal `assistant.completed{interrupted}`
+ *     (mirrors the host's `reapExcept`).
+ *   - SUBAGENT: `detectOrphanedSubagents` -> `reconcileSubagent` publishes a terminal
+ *     `delegated.to{interrupted}` keyed by `childSessionId` (mirrors the host's `reapOrphanSubagents`);
+ *     a background child outlives its turn, so it is recovered independently.
+ *   - JOB: `jobsFrom` downgrades a `running` job to `interrupted` in the DERIVE layer only - a promoted
+ *     shell job carries no durable per-job event, so it cannot publish a terminal link the way a turn or
+ *     subagent does; the only available truth is that its `host.online` author is no longer the live
+ *     leader (D-003), a pure presentation fix that emits nothing.
+ * The turn + subagent detectors share {@link orphanRecoveryWindow}; the job downgrade reuses `hostStatus`'s
+ * leader verdict. `interrupted` (recovered) stays distinct from `failed` (a genuine error) throughout.
+ */
+
+/**
+ * The shared orphan-recovery GATE (plan 52 REFACTOR): the browser may step in to close orphaned
+ * background work ONLY when no leader host is connected to ever write the terminal event, the view is
+ * live + replayed (not a partial/stale log), and the log has been silent past `graceMs` (so a host that
+ * is merely mid-reconnect gets first crack at its OWN reconcile before the browser does). Returns how
+ * long the log has been silent when the gate is open, else null. Both {@link detectOrphanedTurn} and
+ * {@link detectOrphanedSubagents} read this one predicate, so a live-but-slow host is never cut short by
+ * either path. <!-- D-001 -->
+ */
+function orphanRecoveryWindow(events: readonly SessionEvent[], check: OrphanCheck): number | null {
+  if (check.leaderPresent || !check.connected) {
+    return null;
+  }
+  const lastAt = lastEventAt(events);
+  if (lastAt === null) {
+    return null;
+  }
+  const silentMs = check.now - lastAt;
+  return silentMs >= check.graceMs ? silentMs : null;
+}
+
+/**
  * Detects an in-flight turn that is ORPHANED - one with no terminal event, while no leader host is
  * connected to ever write one. This is the client-side mirror of the host's reap-on-reconnect
  * (turn-machine `reapExcept`): when a host restarts/crashes mid-turn, or the host<->store socket
  * flapped exactly at turn-end, and nothing rejoins to win the lease, no host will EVER emit the
  * `assistant.completed` - so the "Working" spinner latches forever. The browser may then close the
- * turn itself, but only when it is certain no host can: an in-flight run, no leader present, a live
- * replayed view of the log, and no new event for `graceMs` (so a host that is merely mid-reconnect
- * gets first crack at its own reconcile before the browser does). Returns the orphaned run, or null.
+ * turn itself, but only when it is certain no host can (the shared {@link orphanRecoveryWindow} gate).
+ * Returns the orphaned run, or null.
  *
  * Deliberately conservative: it never fires while a leader is connected (a live but slow/stalled turn
  * is the host's to finish), nor while the browser is disconnected or replaying (it would be acting on
@@ -776,15 +833,77 @@ export function detectOrphanedTurn(
   check: OrphanCheck,
 ): OrphanedTurn | null {
   const runId = activeTurnRunId(events);
-  if (!runId || check.leaderPresent || !check.connected) {
+  if (!runId) {
     return null;
   }
-  const lastAt = lastEventAt(events);
-  if (lastAt === null) {
-    return null;
+  const silentMs = orphanRecoveryWindow(events, check);
+  return silentMs === null ? null : { runId, silentMs };
+}
+
+/** An orphaned background subagent the browser can recover: the original running `delegated.to` link's
+ *  fields, so the reconcile can advance the EXISTING transcript block (keyed by `childSessionId`) to
+ *  interrupted rather than spawn a second card. <!-- D-001 --> */
+export interface OrphanedSubagent {
+  readonly childSessionId: string;
+  readonly runId: string;
+  readonly agent: string;
+  readonly task: string;
+  readonly mode: "inline" | "background";
+}
+
+/**
+ * Detects background subagents that are ORPHANED - a `delegated.to{status:"running"}` link on the parent
+ * log with no terminal link for the same `childSessionId`, while no leader host is connected to ever fold
+ * one back. The subagent analogue of {@link detectOrphanedTurn}: a background child OUTLIVES its spawning
+ * turn, so its terminal link can be lost independently of any turn (its owning host crashed before the
+ * fold-back), leaving the child stuck "running" forever. Gated by the SAME conservative window as the turn
+ * detector (no leader + live replayed view + silent past grace), so a live-but-slow host finishes its own
+ * children first. Returns every orphaned child's link (there may be several fanned out at once), or []. <!-- D-001 -->
+ */
+export function detectOrphanedSubagents(
+  events: readonly SessionEvent[],
+  check: OrphanCheck,
+): readonly OrphanedSubagent[] {
+  if (orphanRecoveryWindow(events, check) === null) {
+    return [];
   }
-  const silentMs = check.now - lastAt;
-  return silentMs >= check.graceMs ? { runId, silentMs } : null;
+  const running = new Map<string, OrphanedSubagent>();
+  const terminated = new Set<string>();
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type !== "delegated.to") {
+      continue;
+    }
+    if (isTerminalDelegationStatus(decoded.status)) {
+      terminated.add(decoded.childSessionId);
+    } else {
+      running.set(decoded.childSessionId, {
+        childSessionId: decoded.childSessionId,
+        runId: decoded.runId,
+        agent: decoded.agent,
+        task: decoded.task,
+        mode: decoded.mode === "background" ? "background" : "inline",
+      });
+    }
+  }
+  const out: OrphanedSubagent[] = [];
+  for (const [childSessionId, link] of running) {
+    if (!terminated.has(childSessionId)) {
+      out.push(link);
+    }
+  }
+  return out;
+}
+
+/** The orphaned subagents still needing a reconcile: the detected orphans not yet in `reconciled` (the
+ *  app's `reconciledSubagentRef` Set). Mirrors the turn path's `reconciledRunRef` one-shot guard so each
+ *  child publishes at most one interrupted link even as the detector keeps returning it every clock
+ *  tick. Pure, so the once-per-child wiring policy is testable without rendering the app. <!-- D-001 --> */
+export function unreconciledSubagents(
+  detected: readonly OrphanedSubagent[],
+  reconciled: ReadonlySet<string>,
+): readonly OrphanedSubagent[] {
+  return detected.filter((orphan) => !reconciled.has(orphan.childSessionId));
 }
 
 /** True when the newest turn-boundary event is a `user.message` - i.e. a prompt is awaiting a reply with

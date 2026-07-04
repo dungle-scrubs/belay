@@ -10,6 +10,7 @@ import { test } from "vitest";
 import {
   commandsFrom,
   defaultProviderFrom,
+  detectOrphanedSubagents,
   detectOrphanedTurn,
   fmtCtx,
   fmtTokens,
@@ -30,6 +31,7 @@ import {
   tasksFrom,
   tasksStale,
   toolSummary,
+  unreconciledSubagents,
   vimEnabledFrom,
 } from "./derive";
 
@@ -222,6 +224,41 @@ test("jobsFrom returns the latest host.online job snapshots, empty with no host 
     ]),
   );
   assert.equal(live[0]?.status, "exited");
+});
+
+test("jobsFrom downgrades a dead host's running job to interrupted, keeps a live leader's running (D-003)", () => {
+  const running = {
+    id: "p1",
+    command: "pnpm dev",
+    source: "bash",
+    cwd: "/w",
+    startedAt: 1,
+    status: "running",
+    exitCode: null,
+    stdoutTotal: 0,
+    stderrTotal: 0,
+  };
+  const exited = { ...running, id: "p2", status: "exited", exitCode: 0 };
+  const announcement = hostAnnouncement([online("h1", { jobs: [running, exited] })]);
+
+  // The announcing host h1 is still the live leader -> its jobs render exactly as announced.
+  const underLeader = jobsFrom(announcement, "h1");
+  assert.equal(underLeader[0]?.status, "running");
+  assert.equal(underLeader[0]?.interrupted, undefined, "a live leader's job is untouched");
+
+  // h1 is no longer the live leader (a different host leads, or none) -> its running job is orphaned.
+  for (const leaderId of ["h2", null]) {
+    const stale = jobsFrom(announcement, leaderId);
+    assert.equal(stale[0]?.interrupted, true, "the dead host's running job is interrupted");
+    assert.equal(
+      stale[1]?.interrupted,
+      undefined,
+      "an already-terminal (exited) job is left alone",
+    );
+  }
+
+  // The default (single-arg) path assumes the announcer is live, so no downgrade (preserves callers).
+  assert.equal(jobsFrom(announcement)[0]?.interrupted, undefined);
 });
 
 test("isSessionArchived reflects the latest session.archived event (D-094)", () => {
@@ -674,6 +711,121 @@ test("detectOrphanedTurn does not fire on an idle session with no in-flight turn
     }),
     null,
   );
+});
+
+/**
+ * detectOrphanedSubagents (plan 52 / D-001): the subagent mirror of detectOrphanedTurn. A background
+ * child OUTLIVES its spawning turn, so its terminal `delegated.to` can be lost independently of any turn
+ * reconcile; the browser closes such an orphan only under the SAME conservative gate as the turn path.
+ */
+const delegated = (childSessionId: string, status: string, extra: Record<string, unknown> = {}) =>
+  evt(
+    "delegated.to",
+    {
+      runId: "r1",
+      childSessionId,
+      agent: "explorer",
+      task: "scan",
+      mode: "background",
+      status,
+      ...extra,
+    },
+    AT,
+  );
+const withRunningChild = () => [
+  evt("user.message", { text: "audit the repo" }, AT),
+  evt("assistant.completed", { runId: "r1", text: "started it in the background" }, AT),
+  delegated("s::sub::bg", "running"),
+];
+
+test("detectOrphanedSubagents returns an orphaned running child when no leader can fold it back", () => {
+  const now = Date.parse(AT) + 20_000;
+  const orphans = detectOrphanedSubagents(withRunningChild(), {
+    leaderPresent: false,
+    connected: true,
+    now,
+    graceMs: 12_000,
+  });
+  assert.deepEqual(orphans, [
+    {
+      childSessionId: "s::sub::bg",
+      runId: "r1",
+      agent: "explorer",
+      task: "scan",
+      mode: "background",
+    },
+  ]);
+});
+
+test("detectOrphanedSubagents stays out while a leader is present (its child to finish)", () => {
+  const now = Date.parse(AT) + 60_000;
+  assert.deepEqual(
+    detectOrphanedSubagents(withRunningChild(), {
+      leaderPresent: true,
+      connected: true,
+      now,
+      graceMs: 12_000,
+    }),
+    [],
+  );
+});
+
+test("detectOrphanedSubagents stays out while disconnected or within the grace window", () => {
+  assert.deepEqual(
+    detectOrphanedSubagents(withRunningChild(), {
+      leaderPresent: false,
+      connected: false,
+      now: Date.parse(AT) + 60_000,
+      graceMs: 12_000,
+    }),
+    [],
+    "disconnected -> the view may be partial, so never reconcile",
+  );
+  assert.deepEqual(
+    detectOrphanedSubagents(withRunningChild(), {
+      leaderPresent: false,
+      connected: true,
+      now: Date.parse(AT) + 5_000,
+      graceMs: 12_000,
+    }),
+    [],
+    "under grace -> a reconnecting host reconciles its own child first",
+  );
+});
+
+test("detectOrphanedSubagents ignores a child already closed by any terminal link (done/interrupted)", () => {
+  const now = Date.parse(AT) + 20_000;
+  const check = { leaderPresent: false, connected: true, now, graceMs: 12_000 } as const;
+  // A done fold-back closes the link.
+  assert.deepEqual(
+    detectOrphanedSubagents(
+      [...withRunningChild(), delegated("s::sub::bg", "done", { result: "found 3 TODOs" })],
+      check,
+    ),
+    [],
+  );
+  // An already-interrupted link is terminal too (idempotent with the host reap - no re-detect).
+  assert.deepEqual(
+    detectOrphanedSubagents([...withRunningChild(), delegated("s::sub::bg", "interrupted")], check),
+    [],
+  );
+});
+
+test("unreconciledSubagents drops children already in the reconciled set (once-per-child guard)", () => {
+  const now = Date.parse(AT) + 20_000;
+  const detected = detectOrphanedSubagents(
+    [...withRunningChild(), delegated("s::sub::two", "running")],
+    { leaderPresent: false, connected: true, now, graceMs: 12_000 },
+  );
+  assert.equal(detected.length, 2, "two orphaned children fanned out");
+  // The app's reconciledSubagentRef already published one; only the untouched child remains.
+  const pending = unreconciledSubagents(detected, new Set(["s::sub::bg"]));
+  assert.deepEqual(
+    pending.map((o) => o.childSessionId),
+    ["s::sub::two"],
+  );
+  // Once both are reconciled, nothing is left to publish (fires at most once per childSessionId).
+  assert.deepEqual(unreconciledSubagents(detected, new Set(["s::sub::bg", "s::sub::two"])), []);
 });
 
 /**

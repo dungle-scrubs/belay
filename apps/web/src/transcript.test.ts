@@ -504,6 +504,89 @@ test("D-048: a background delegation's late result lands by id AFTER the parent 
   assert.equal(blocks[0]?.result, "found 3 TODOs", "the late distilled result lands by id");
 });
 
+test("D-002: a later delegated.to{interrupted} advances the existing block in place, no second card", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "audit the repo", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::orphan",
+        agent: "explorer",
+        task: "scan for TODOs",
+        mode: "background",
+        status: "running",
+      }),
+    ),
+    ev(4, events.assistantCompleted({ runId: "r1", text: "Started it in the background." })),
+    // The leader died before fold-back; orphan recovery closes the child as interrupted (not failed).
+    ev(
+      5,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::orphan",
+        agent: "explorer",
+        task: "scan for TODOs",
+        mode: "background",
+        status: "interrupted",
+        result: "No host was connected to finish this subagent; recovered.",
+      }),
+    ),
+  ];
+  const blocks = toTranscript(log).filter(
+    (m): m is Extract<Message, { kind: "delegation" }> => m.kind === "delegation",
+  );
+  assert.equal(
+    blocks.length,
+    1,
+    "the interrupted link advances the existing block, not a second card",
+  );
+  assert.equal(
+    blocks[0]?.status,
+    "interrupted",
+    "the block advances to the interrupted terminal status",
+  );
+  assert.equal(blocks[0]?.result, "No host was connected to finish this subagent; recovered.");
+});
+
+test("M5: a host reap AND a browser reconcile for the same child converge on ONE interrupted card", () => {
+  // The leader died mid-delegation (running link, no fold-back). BOTH recovery paths then fire: the new
+  // leader's `reapOrphanSubagents` and a browser's `reconcileSubagent`, each publishing a terminal
+  // interrupted link keyed by the same childSessionId. The reducer advances the one block in place, so
+  // the two idempotent-by-key links collapse onto a single card - never a duplicate.
+  const runningLink = events.delegatedTo({
+    runId: "r1",
+    childSessionId: "sess::sub::bg",
+    agent: "explorer",
+    task: "scan for TODOs",
+    mode: "background",
+    status: "running",
+  });
+  const interruptedLink = (result: string) =>
+    events.delegatedTo({
+      runId: "r1",
+      childSessionId: "sess::sub::bg",
+      agent: "explorer",
+      task: "scan for TODOs",
+      mode: "background",
+      status: "interrupted",
+      result,
+    });
+  const log = [
+    ev(1, events.userMessage({ text: "audit the repo", provider: "qwen" })),
+    ev(2, events.assistantCompleted({ runId: "r1", text: "started it in the background" })),
+    ev(3, runningLink),
+    ev(4, interruptedLink("a new leader recovered it")), // host reap
+    ev(5, interruptedLink("the browser recovered it")), // browser reconcile (also observed the gap)
+  ];
+  const blocks = toTranscript(log).filter(
+    (m): m is Extract<Message, { kind: "delegation" }> => m.kind === "delegation",
+  );
+  assert.equal(blocks.length, 1, "both interrupted links converge on one card, not two");
+  assert.equal(blocks[0]?.status, "interrupted");
+});
+
 test("D-079: an assistant.reconnecting event renders an inline reconnecting marker", () => {
   const log = [
     ev(1, events.userMessage({ text: "go", provider: "qwen" })),

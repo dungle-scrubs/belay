@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { AgentDefinition } from "@host/subagents/discovery";
-import type { SessionTransport } from "@trevor/session";
-import { recordingTransport } from "@trevor/test-kit";
+import { events, type SessionEvent, type SessionTransport } from "@trevor/session";
+import { recordingTransport, storedEvent } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderEvent } from "../providers";
@@ -12,6 +12,7 @@ import {
   buildDelegationDefs,
   type DelegationContext,
   type DelegationRequest,
+  orphanedSubagentReaps,
   runDelegatedChild,
 } from "./delegate";
 import { type AgentEvent, type DelegateCapability, runAgent } from "./loop";
@@ -543,4 +544,98 @@ test("an ephemeral agent cannot allow-list delegate_background either (depth-1 c
     ),
     /may not use delegation tools/,
   );
+});
+
+/**
+ * Host-side subagent reap on leadership takeover (plan 52 / D-001): the subagent analogue of the turn
+ * `reapExcept`. A new/reconnecting leader derives orphaned `delegated.to{running}` links from the replayed
+ * PARENT log and closes them to `interrupted`, excluding children THIS host is itself running. Pure over
+ * the log, so the reap policy is tested without a store or a leader election.
+ */
+const parentLink = (childSessionId: string, status: string): SessionEvent =>
+  storedEvent(
+    events.delegatedTo({
+      runId: "r1",
+      childSessionId,
+      agent: "explorer",
+      task: "scan the repo",
+      mode: "background",
+      status: status as "running" | "done" | "failed" | "interrupted",
+    }),
+  );
+
+test("reap closes an orphaned running subagent to interrupted (no terminal link, not active)", () => {
+  const reaps = orphanedSubagentReaps([parentLink("s::sub::bg", "running")], new Set());
+  assert.equal(reaps.length, 1);
+  assert.equal(reaps[0]?.type, "delegated.to");
+  assert.equal(reaps[0]?.payload.childSessionId, "s::sub::bg");
+  assert.equal(reaps[0]?.payload.status, "interrupted", "recovered, not a genuine failed");
+  assert.equal(
+    reaps[0]?.payload.agent,
+    "explorer",
+    "carries the original link fields for the reducer",
+  );
+  assert.equal(reaps[0]?.payload.mode, "background");
+});
+
+test("reap does NOT close a subagent this host is itself running (backgroundChildren exclusion)", () => {
+  // The subagent analogue of reapExcept excluding the active run: an in-flight child is not an orphan.
+  const reaps = orphanedSubagentReaps(
+    [parentLink("s::sub::mine", "running")],
+    new Set(["s::sub::mine"]),
+  );
+  assert.deepEqual(reaps, []);
+});
+
+test("reap is idempotent: a second takeover after the interrupted link is in the log emits nothing", () => {
+  const afterFirstReap = [
+    parentLink("s::sub::bg", "running"),
+    parentLink("s::sub::bg", "interrupted"),
+  ];
+  assert.deepEqual(
+    orphanedSubagentReaps(afterFirstReap, new Set()),
+    [],
+    "any terminal status (incl. interrupted) closes the link",
+  );
+});
+
+test("reap treats a done or failed fold-back as closing the link (no double-close)", () => {
+  assert.deepEqual(
+    orphanedSubagentReaps([parentLink("s::a", "running"), parentLink("s::a", "done")], new Set()),
+    [],
+  );
+  assert.deepEqual(
+    orphanedSubagentReaps([parentLink("s::b", "running"), parentLink("s::b", "failed")], new Set()),
+    [],
+  );
+});
+
+test("reap closes only the genuinely-orphaned child when several are in flight", () => {
+  const log = [
+    parentLink("s::orphan", "running"),
+    parentLink("s::mine", "running"),
+    parentLink("s::done", "running"),
+    parentLink("s::done", "done"),
+  ];
+  const reaps = orphanedSubagentReaps(log, new Set(["s::mine"]));
+  assert.deepEqual(
+    reaps.map((r) => r.payload.childSessionId),
+    ["s::orphan"],
+    "s::mine is active, s::done already folded back; only s::orphan is reaped",
+  );
+});
+
+test("hermetic failover: two leadership takeovers reap an orphaned subagent exactly once (M5)", () => {
+  // A leader started a background child (running link) then died before fold-back.
+  let log: SessionEvent[] = [parentLink("s::sub::bg", "running")];
+  // Takeover #1 on a second host: exactly one terminal interrupted link is emitted; the store durably
+  // appends it (as `emit` would).
+  const first = orphanedSubagentReaps(log, new Set());
+  assert.equal(first.length, 1, "the new leader closes the orphan once");
+  const firstLink = first[0];
+  assert.ok(firstLink);
+  log = [...log, storedEvent(firstLink)];
+  // Takeover #2 (a later reconnect / re-election): the interrupted link is already terminal in the log,
+  // so nothing further is emitted - no duplicate close.
+  assert.deepEqual(orphanedSubagentReaps(log, new Set()), [], "a second takeover emits nothing");
 });

@@ -79,6 +79,9 @@ export interface LeadershipDeps {
   announceOnline(): void;
   /** Close runs a previous leader left dangling (agent/run-lifecycle, wired through main.ts). */
   reapOrphans(): void;
+  /** Close background subagents a previous leader left dangling (plan 52, agent/run-lifecycle). Shares
+   *  the same two takeover triggers as reapOrphans - the turn and subagent reaps fire together. */
+  reapOrphanSubagents(): void;
   /** Auto-resume an un-continued trailing interrupt (agent/control-prompts, wired through main.ts). */
   maybeAutoResume(): void;
 }
@@ -103,6 +106,7 @@ export function makeLeadership(deps: LeadershipDeps) {
     cwdLockCaps,
     announceOnline,
     reapOrphans,
+    reapOrphanSubagents,
     maybeAutoResume,
   } = deps;
 
@@ -118,6 +122,10 @@ export function makeLeadership(deps: LeadershipDeps) {
       .refresh()
       .then(announceOnline)
       .catch(() => {});
+    // Close background subagents a previous leader left dangling (plan 52). Unlike a turn, a background
+    // child OUTLIVES its spawning turn, so its orphan can exist with NO in-flight run - hence this fires
+    // outside the hasInFlight branch below, keyed by the child's log link rather than the turn set.
+    reapOrphanSubagents();
     if (turnMachine.hasInFlight) {
       // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
       // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
@@ -203,6 +211,9 @@ export function makeLeadership(deps: LeadershipDeps) {
     // onBecomeLeader; this adds the reconnect-as-existing-leader path that case misses.)
     if (lease.isLeader()) {
       reapOrphans();
+      // Same reconnect reconcile for background subagents a dead leader left dangling (plan 52): the two
+      // reaps share this one takeover trigger, so a failover closes both stuck turns and stuck children.
+      reapOrphanSubagents();
       // After reaping, auto-resume an un-continued trailing interrupt that is already settled in the log
       // (the browser recovered the orphan while no host was up - tonight's nimoy/lucid case). A run this
       // reap just closed is still mid-echo, so it is picked up by the completion handler, not here.

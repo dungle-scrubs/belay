@@ -5,6 +5,7 @@ import { MAX_FILE_INDEX } from "./file-mention";
 import {
   decodeTrevorEvent,
   events,
+  isTerminalDelegationStatus,
   type KnownTurnStopCause,
   LEGACY_TASK_REVISION,
   LIFECYCLE_TYPES,
@@ -1463,4 +1464,36 @@ test("fileIndexResult decode re-caps at MAX_FILE_INDEX regardless of the wire's 
   const files = decoded?.type === "file.index.result" ? decoded.files : [];
   assert.equal(files.length, MAX_FILE_INDEX);
   assert.equal(decoded?.type === "file.index.result" ? decoded.truncated : null, true);
+});
+
+test("events.delegatedTo round-trips a status:interrupted link (plan 52 / D-002)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "s::sub::abc",
+        agent: "explorer",
+        task: "scan the repo",
+        mode: "background",
+        status: "interrupted",
+        result: "recovered by orphan reconcile",
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "delegated.to");
+  assert.equal(decoded?.type === "delegated.to" ? decoded.status : null, "interrupted");
+  assert.equal(decoded?.type === "delegated.to" ? decoded.childSessionId : null, "s::sub::abc");
+  assert.equal(
+    decoded?.type === "delegated.to" ? decoded.result : null,
+    "recovered by orphan reconcile",
+  );
+});
+
+test("isTerminalDelegationStatus: done/failed/interrupted are terminal, running is not (D-002)", () => {
+  assert.equal(isTerminalDelegationStatus("running"), false);
+  assert.equal(isTerminalDelegationStatus("done"), true);
+  assert.equal(isTerminalDelegationStatus("failed"), true);
+  assert.equal(isTerminalDelegationStatus("interrupted"), true);
+  // An unknown/forward-compat status is treated as non-terminal, so a link is never wrongly closed.
+  assert.equal(isTerminalDelegationStatus("weird"), false);
 });

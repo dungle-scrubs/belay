@@ -113,6 +113,20 @@ test("jobOutcome resolves the terminal disposition the row + detail both key off
   // A clean exit with no numeric code is done, not an error - the row tone + the detail status must agree
   // here (they previously disagreed: the row read null as error, the detail read it as done).
   assert.equal(jobOutcome(job({ id: "e", status: "exited", exitCode: null })), "done");
+  // D-003: an interrupted (orphan-reconciled) job is terminal (error tone) even though its raw lifecycle
+  // is still "running" - its owning host is gone.
+  assert.equal(jobOutcome({ ...job({ id: "f", status: "running" }), interrupted: true }), "error");
+});
+
+test("D-003: jobToDetailModel reflects an interrupted job as terminal with a recovered error note", () => {
+  const model = jobToDetailModel({
+    ...job({ id: "p1", command: "pnpm dev", status: "running", tail: "compiling..." }),
+    interrupted: true,
+  });
+  assert.equal(model.status, "error", "the detail takeover shows a terminal status, not running");
+  assert.equal(model.aborted, false, "not a user kill - it was recovered");
+  assert.match(model.error ?? "", /host/, "the note explains the owning host went away");
+  assert.equal(model.output, "compiling...", "the bounded tail is still shown");
 });
 
 test("runningSubagents keeps only non-terminal delegation rows from the transcript (M7)", () => {
@@ -177,4 +191,69 @@ test("a subagent row is NOT detail-eligible and tones by status", () => {
   }).background;
   assert.equal(running?.detailEligible, false);
   assert.deepEqual([running?.tone, done?.tone, failed?.tone], ["running", "done", "error"]);
+});
+
+test("D-002: runningSubagents excludes an interrupted child (terminal like done/failed)", () => {
+  const messages: Message[] = [
+    {
+      kind: "delegation",
+      id: "d1",
+      childSessionId: "c1",
+      agent: "explorer",
+      task: "scan",
+      mode: "background",
+      status: "interrupted",
+    },
+    {
+      kind: "delegation",
+      id: "d2",
+      childSessionId: "c2",
+      agent: "reviewer",
+      task: "review",
+      mode: "background",
+      status: "running",
+    },
+  ];
+  assert.deepEqual(
+    runningSubagents(messages).map((s) => s.agent),
+    ["reviewer"],
+    "an interrupted child drops out of background work; only the running one remains",
+  );
+});
+
+test("D-002: an interrupted subagent row tones error/terminal but keeps its own 'interrupted' label", () => {
+  const [row] = buildSupportPanel({
+    tasks: [],
+    subagents: [{ id: "a", agent: "explorer", task: "t", status: "interrupted" }],
+    jobs: [],
+  }).background;
+  assert.equal(row?.tone, "error", "shares the terminal tone the turn's interrupted note uses");
+  assert.equal(
+    row?.statusLabel,
+    "interrupted",
+    "labeled interrupted, not failed - it was recovered",
+  );
+});
+
+test("M5: after reconcile, an orphaned subagent + a dead-host job settle to no RUNNING background work", () => {
+  // The whole orphaned-background picture after both reconciles: the subagent was reaped to interrupted
+  // (runningSubagents already dropped it, so the app would not even pass it here), and the dead host's
+  // running job carries the derive-layer interrupted flag (D-003). No background row is left "running".
+  const panel = buildSupportPanel({
+    tasks: [],
+    subagents: [], // the orphaned child dropped out of runningSubagents once interrupted
+    jobs: [{ ...job({ id: "p1", status: "running" }), interrupted: true }],
+  });
+  assert.equal(
+    panel.hasBackground,
+    true,
+    "the reconciled rows still show (terminal), just not running",
+  );
+  assert.ok(
+    panel.background.every((row) => row.tone !== "running"),
+    "nothing renders as running once the owning host is gone",
+  );
+  const jobRow = panel.background.find((r) => r.kind === "job");
+  assert.equal(jobRow?.tone, "error");
+  assert.equal(jobRow?.statusLabel, "interrupted");
 });

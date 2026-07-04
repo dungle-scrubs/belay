@@ -1,10 +1,11 @@
-import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
+import type { TaskSnapshot } from "@trevor/session";
 import { Maximize2, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { TasksPanel } from "@/tasks-panel";
 import {
   buildSupportPanel,
+  type PanelJob,
   type SupportBackgroundRow,
   type SupportSubagent,
   type SupportTone,
@@ -40,7 +41,7 @@ export function SupportPanel({
 }: {
   readonly tasks: readonly TaskSnapshot[];
   readonly subagents: readonly SupportSubagent[];
-  readonly jobs: readonly JobSnapshot[];
+  readonly jobs: readonly PanelJob[];
   readonly stale?: boolean;
   readonly onClearTasks?: () => void;
   readonly onOpenJobDetail?: (jobId: string) => void;

@@ -1,7 +1,9 @@
 import { log } from "@host/transport/log";
 import type { EmitEvent } from "@host/transport/services";
+import type { SessionEvent } from "@trevor/session";
 import { interruptFiber } from "../effect/fiber-exit";
 import type { CompactionCommandsApi } from "./compaction-commands";
+import { orphanedSubagentReaps } from "./delegate";
 import type { TurnMachine } from "./turn-machine";
 import type { TurnScheduler } from "./turn-scheduler";
 
@@ -29,11 +31,24 @@ export interface RunLifecycleDeps {
   runningRunId(): string | null;
   /** The in-flight MANUAL /compact fold, or null (abortRuns interrupts it). */
   manualCompactFiber: CompactionCommandsApi["manualCompactFiber"];
+  /** The replayed PARENT session log, for the subagent orphan scan (main.ts's conversationLog.events). */
+  parentLog(): readonly SessionEvent[];
+  /** The child sessions THIS host is actively running in the background, excluded from the reap the
+   *  way `runningRunId` excludes the live turn (main.ts's backgroundChildren registry). */
+  activeChildSessionIds(): ReadonlySet<string>;
 }
 
 /** Builds the run-lifecycle teardown over the host's live turn state; main.ts wires it once. */
 export function makeRunLifecycle(deps: RunLifecycleDeps) {
-  const { turnMachine, scheduler, emit, runningRunId, manualCompactFiber } = deps;
+  const {
+    turnMachine,
+    scheduler,
+    emit,
+    runningRunId,
+    manualCompactFiber,
+    parentLog,
+    activeChildSessionIds,
+  } = deps;
 
   /**
    * Publishes the terminal completion for a run being closed WITHOUT a completion of its own - a user
@@ -85,5 +100,24 @@ export function makeRunLifecycle(deps: RunLifecycleDeps) {
     }
   }
 
-  return { abortRuns, reapOrphans };
+  /**
+   * Closes background SUBAGENTS a previous leader left dangling (plan 52 / D-001): a
+   * `delegated.to{running}` link on the parent log with no terminal link, whose owning host vanished
+   * before it could fold back. The subagent analogue of {@link reapOrphans}: a background child OUTLIVES
+   * its spawning turn, so it is keyed by `childSessionId` (not `runId`) and derived from the replayed
+   * PARENT log, excluding children THIS host is itself running (`activeChildSessionIds`) exactly as the
+   * turn reap excludes the live run. Emits a terminal `interrupted` link per orphan (distinct from a real
+   * `failed`); idempotent by key, so a second takeover after the link is already terminal emits nothing.
+   * Best-effort - it never throws, so it cannot crash the leadership transition.
+   */
+  function reapOrphanSubagents(): void {
+    for (const event of orphanedSubagentReaps(parentLog(), activeChildSessionIds())) {
+      const child =
+        typeof event.payload.childSessionId === "string" ? event.payload.childSessionId : "";
+      log("host", "reaping orphaned subagent", { child: child.slice(-8) });
+      emit(event).catch(() => {});
+    }
+  }
+
+  return { abortRuns, reapOrphans, reapOrphanSubagents };
 }

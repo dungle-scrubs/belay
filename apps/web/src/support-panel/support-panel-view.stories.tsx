@@ -137,3 +137,29 @@ export const RowTones: Story = {
     </Frame>
   ),
 };
+
+/**
+ * Plan 52: orphan-reconciled background work. A subagent reaped by orphan recovery renders `interrupted`
+ * (terminal tone, its OWN label - distinct from a genuine `failed`), and a `running` job whose owning
+ * host is gone (D-003) renders `interrupted` with the kill control inert. Both read as recovered, not
+ * crashed - the muted-terminal counterpart to a live "running" row.
+ */
+export const Interrupted: Story = {
+  render: (args) => (
+    <Frame width={560}>
+      <SupportPanel
+        {...args}
+        tasks={[]}
+        subagents={[
+          sub("s1", "explorer", "running"),
+          sub("s2", "reviewer", "interrupted"),
+          sub("s3", "auditor", "failed"),
+        ]}
+        jobs={[
+          job({ id: "p1", command: "pnpm dev", status: "running" }),
+          { ...job({ id: "p2", command: "vitest --watch", status: "running" }), interrupted: true },
+        ]}
+      />
+    </Frame>
+  ),
+};

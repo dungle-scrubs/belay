@@ -454,12 +454,21 @@ const scheduler = new TurnScheduler({
 // The run close/abort/reap lifecycle (plan 22.3, agent/run-lifecycle): wired over the live turn
 // machine + scheduler and the active-run/manual-compact markers, so handleEvent's user.cancel arm,
 // the lifecycle commands, and the leadership reconciles share one teardown.
-const { abortRuns, reapOrphans } = makeRunLifecycle({
+const { abortRuns, reapOrphans, reapOrphanSubagents } = makeRunLifecycle({
   turnMachine,
   scheduler,
   emit,
   runningRunId: () => activeRun.runId(),
   manualCompactFiber,
+  // The replayed parent log + the child sessions this host is itself running - the subagent reap derives
+  // orphaned running links from the former, excluding the latter (the analogue of the live-run exclusion).
+  parentLog: () => conversationLog.events(),
+  activeChildSessionIds: () =>
+    new Set(
+      [...backgroundChildren.values()]
+        .map((child) => child.childSessionId)
+        .filter((id) => id.length > 0),
+    ),
 });
 
 // The turn fork (plan 22.3, agent/start-turn): resolves the prompt's provider/model, assembles the
@@ -531,6 +540,7 @@ const { goLive, onBecomeLeader } = makeLeadership({
   cwdLockCaps,
   announceOnline,
   reapOrphans,
+  reapOrphanSubagents,
   maybeAutoResume,
 });
 

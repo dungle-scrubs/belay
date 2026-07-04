@@ -92,6 +92,13 @@ test("createSessionActions maps user intents to Trevor events", async () => {
     questions: [{ id: "db", answer: "Postgres", selected: [{ id: "pg", label: "Postgres" }] }],
   });
   await actions.reconcileTurn("r9");
+  await actions.reconcileSubagent({
+    runId: "r1",
+    childSessionId: "s::sub::bg",
+    agent: "explorer",
+    task: "scan the repo",
+    mode: "background",
+  });
 
   assert.deepEqual(
     built.map((event) => event.type),
@@ -110,8 +117,16 @@ test("createSessionActions maps user intents to Trevor events", async () => {
       "session.archived",
       "provider.question.answer",
       "assistant.completed",
+      "delegated.to",
     ],
   );
+  // The subagent recovery (plan 52): a terminal interrupted link keyed by childSessionId, NOT failed - the
+  // child was reaped by orphan recovery, not a genuine task error. Carries the original link fields so the
+  // reducer advances the existing block, plus a recovery summary in result.
+  assert.equal(built[14]?.payload.childSessionId, "s::sub::bg");
+  assert.equal(built[14]?.payload.status, "interrupted");
+  assert.equal(built[14]?.payload.agent, "explorer");
+  assert.match(String(built[14]?.payload.result), /browser recovered/);
   // The mid-turn switch control event (09.1): keyed to the active run, carrying the target ref + initiator.
   assert.deepEqual(built[2]?.payload, {
     runId: "r1",

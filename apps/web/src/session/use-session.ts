@@ -369,6 +369,16 @@ export interface SessionActions {
   /** Recover an orphaned turn (no host connected to ever finish it): publish the same interrupted
    *  terminal event the host's reaper would, so the in-flight latch clears and the session resumes. */
   readonly reconcileTurn: (runId: string) => Promise<void>;
+  /** Recover an orphaned background subagent (plan 52): publish a terminal `delegated.to{interrupted}`
+   *  keyed by `childSessionId` - the browser mirror of the host's `reapOrphanSubagents`. Carries the
+   *  original link fields so the transcript reducer advances the EXISTING delegation block in place. */
+  readonly reconcileSubagent: (link: {
+    readonly runId: string;
+    readonly childSessionId: string;
+    readonly agent: string;
+    readonly task: string;
+    readonly mode: "inline" | "background";
+  }) => Promise<void>;
   /** Approve a generated handoff draft (02.10): publish `handoff.approved` so the host runs the
    *  finalized handoff. `prompt` overrides the generated text when the user edited it. */
   readonly approveHandoff: (handoffId: string, prompt?: string) => Promise<void>;
@@ -424,6 +434,17 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
             action: "failed",
             summary: "No host was connected to finish this turn; the browser recovered it.",
           },
+        }),
+      ),
+    // Mirrors the host's `reapOrphanSubagents`: a terminal `interrupted` link (not `failed` - the child
+    // was recovered, not a genuine task error) keyed by `childSessionId`, carrying the original link
+    // fields so the reducer advances the existing block. Idempotent by key with the host reap.
+    reconcileSubagent: (link) =>
+      publishVia(
+        sessionEvents.delegatedTo({
+          ...link,
+          status: "interrupted",
+          result: "No host was connected to finish this subagent; the browser recovered it.",
         }),
       ),
   };

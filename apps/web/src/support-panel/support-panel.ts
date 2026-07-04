@@ -1,4 +1,9 @@
-import type { JobSnapshot, TaskSnapshot, TaskStatus } from "@trevor/session";
+import {
+  isTerminalDelegationStatus,
+  type JobSnapshot,
+  type TaskSnapshot,
+  type TaskStatus,
+} from "@trevor/session";
 import type { ToolDetailModel } from "@/tool-detail/detail-model";
 import type { Message } from "@/transcript";
 
@@ -15,9 +20,18 @@ export interface SupportSubagent {
   readonly id: string;
   readonly agent: string;
   readonly task: string;
-  /** The delegation status string: running / done / failed (and friends). */
+  /** The delegation status string: running / done / failed / interrupted (D-002). */
   readonly status: string;
 }
+
+/**
+ * A promoted job as the panel sees it: the host's wire {@link JobSnapshot} plus a derive-layer
+ * `interrupted` flag (plan 52 / D-003). The flag is set by `jobsFrom` when the job's `host.online`
+ * author is no longer the live leader - a `running` job whose owning host vanished is really orphaned,
+ * so the panel renders it interrupted (terminal, kill control inert) instead of a stuck "running".
+ * Presentation-only: jobs carry no durable event, so there is no `interrupted` lifecycle on the wire.
+ */
+export type PanelJob = JobSnapshot & { readonly interrupted?: boolean };
 
 export type SupportTone = "running" | "done" | "error";
 
@@ -53,7 +67,7 @@ export interface ThreadSupportPanel {
 export function buildSupportPanel(input: {
   readonly tasks: readonly TaskSnapshot[];
   readonly subagents: readonly SupportSubagent[];
-  readonly jobs: readonly JobSnapshot[];
+  readonly jobs: readonly PanelJob[];
 }): ThreadSupportPanel {
   const tasks: SupportTaskRow[] = input.tasks.map((t) => ({
     id: t.id,
@@ -77,10 +91,16 @@ export function buildSupportPanel(input: {
 }
 
 /** A job's terminal disposition, the single source of truth for both its panel-row tone and its
- *  detail-model status (they previously disagreed on an exited job with a null exit code). A `running`
- *  job is in flight; a killed job or one that exited non-zero is an error; anything else is done (an
- *  exit code of 0 or an absent code from a clean exit). */
-export function jobOutcome(job: Pick<JobSnapshot, "status" | "exitCode">): SupportTone {
+ *  detail-model status (they previously disagreed on an exited job with a null exit code). An
+ *  `interrupted` job (its host vanished, D-003) is terminal, rendered with the error/terminal tone the
+ *  turn's interrupted note uses. Otherwise: a `running` job is in flight; a killed job or one that exited
+ *  non-zero is an error; anything else is done (an exit code of 0 or an absent code from a clean exit). */
+export function jobOutcome(
+  job: Pick<JobSnapshot, "status" | "exitCode"> & { readonly interrupted?: boolean },
+): SupportTone {
+  if (job.interrupted) {
+    return "error";
+  }
   if (job.status === "running") {
     return "running";
   }
@@ -92,7 +112,7 @@ export function jobOutcome(job: Pick<JobSnapshot, "status" | "exitCode">): Suppo
  * detail takeover as a transcript tool row. The command + cwd ride the args (the bash detail body reads
  * them); the bounded tail is the output; the outcome maps to running/done/error (a killed job is aborted).
  */
-export function jobToDetailModel(job: JobSnapshot): ToolDetailModel {
+export function jobToDetailModel(job: PanelJob): ToolDetailModel {
   const status = jobOutcome(job);
   return {
     id: job.id,
@@ -104,17 +124,24 @@ export function jobToDetailModel(job: JobSnapshot): ToolDetailModel {
     args: JSON.stringify({ command: job.command, cwd: job.cwd }),
     ...(job.tail ? { output: job.tail } : {}),
     ...(status === "error"
-      ? { error: job.status === "killed" ? "stopped" : `exited with code ${job.exitCode}` }
+      ? {
+          error: job.interrupted
+            ? "interrupted - the host that owned this job went away"
+            : job.status === "killed"
+              ? "stopped"
+              : `exited with code ${job.exitCode}`,
+        }
       : {}),
   };
 }
 
 /** The live background subagents (plan 09 M7): the non-terminal `delegation` rows from the transcript -
- *  a finished/failed child is no longer "background work" and stays in the transcript instead. */
+ *  a finished/failed/interrupted child is no longer "background work" and stays in the transcript instead.
+ *  `interrupted` (a child reaped by orphan recovery, D-002) is terminal like done/failed. */
 export function runningSubagents(messages: readonly Message[]): SupportSubagent[] {
   const out: SupportSubagent[] = [];
   for (const m of messages) {
-    if (m.kind === "delegation" && m.status !== "done" && m.status !== "failed") {
+    if (m.kind === "delegation" && !isTerminalDelegationStatus(m.status)) {
       out.push({ id: m.childSessionId, agent: m.agent, task: m.task, status: m.status });
     }
   }
@@ -122,8 +149,14 @@ export function runningSubagents(messages: readonly Message[]): SupportSubagent[
 }
 
 function subagentRow(s: SupportSubagent): SupportBackgroundRow {
+  // `interrupted` (orphan-reaped, D-002) shares the error/terminal tone but keeps its own status label,
+  // so it reads as recovered-not-crashed rather than a genuine `failed`.
   const tone: SupportTone =
-    s.status === "failed" ? "error" : s.status === "done" ? "done" : "running";
+    s.status === "failed" || s.status === "interrupted"
+      ? "error"
+      : s.status === "done"
+        ? "done"
+        : "running";
   return {
     id: s.id,
     kind: "subagent",
@@ -134,10 +167,11 @@ function subagentRow(s: SupportSubagent): SupportBackgroundRow {
   };
 }
 
-function jobRow(job: JobSnapshot): SupportBackgroundRow {
+function jobRow(job: PanelJob): SupportBackgroundRow {
   const tone = jobOutcome(job);
-  const statusLabel =
-    job.status === "killed"
+  const statusLabel = job.interrupted
+    ? "interrupted"
+    : job.status === "killed"
       ? "killed"
       : tone === "running"
         ? "running"

@@ -310,6 +310,18 @@ export function taskSnapshotReplaces(incomingRev: number, currentRev: number): b
 }
 
 /**
+ * Whether a `delegated.to` status is TERMINAL - the child has folded back (`done`), hit a genuine error
+ * (`failed`), or was closed by orphan recovery (`interrupted`, a leader died/reaped it - plan 52/D-002).
+ * `running` is the only non-terminal status. The single classifier the transcript reducer, the
+ * support-panel rows, the browser orphan detector, and the host reap all share, so they cannot disagree
+ * on which statuses close a delegation link (a link with no terminal for its `childSessionId` is an
+ * orphan the recovery paths reap). The decoded `status` is a permissive string, so this narrows it.
+ */
+export function isTerminalDelegationStatus(status: string): boolean {
+  return status === "done" || status === "failed" || status === "interrupted";
+}
+
+/**
  * The per-fold DELTA manifest carried on a `context.compacted` event: what THIS fold
  * folded away, not a cumulative picture. `turnRange` is the seq span it covers; `files`,
  * `tools`, and `topics` name the recallable references it collapsed (session recall, D-044,
@@ -518,7 +530,10 @@ export const events = {
     agent: string;
     task: string;
     mode: "inline" | "background";
-    status: "running" | "done" | "failed";
+    // `interrupted` (plan 52 / D-002): a child closed by orphan recovery - a leader died or reaped it
+    // mid-delegation - kept distinct from `failed` (a genuine task error) so the UI renders a muted
+    // "interrupted" note, not an error. Terminal like done/failed (see isTerminalDelegationStatus).
+    status: "running" | "done" | "failed" | "interrupted";
     result?: string;
   }): TrevorEventInput => ({
     type: "delegated.to",
