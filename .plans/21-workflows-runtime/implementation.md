@@ -374,22 +374,23 @@ in M2/M5 (no separate bounded-child plan).
 
 - **Dependencies:** M2; `.plans/01-managed-worktree-hardening` (**merged** - cwd-lock available); **and
   per-leaf cwd routing through the tool boundary** (net-new; task 1 below). <!-- D-010 -->
-- **Effort:** L (larger if in-process cwd-threading is chosen over out-of-process leaves - owner
-  decision, D-010/D-023)
-- **Owner decision (confirm before `46`/M3):** in-process cwd-threading (recommended default) vs
-  out-of-process leaves on `16`'s runner; it sets M6's effort and may pull M9's sandbox-runner forward. <!-- D-023 -->
+- **Effort:** L+ (in-process cwd-threading chosen, D-024 - a de-globalize-the-singletons refactor)
+- **Process model: DECIDED in-process cwd-threading** (`D-024`, resolving the `D-023` gate); out-of-process
+  leaves on `16`'s runner are the **rejected** fallback. In-process keeps ONE cancellation model (D-011),
+  budget (D-013/D-020), and journaling (D-019) in one address space and does not pull M9 forward. `46`/M3
+  is unblocked (no inherited process-model choice). <!-- D-023 --> <!-- D-024 -->
 - **Tasks:**
   1. RED: a failing test that two **parallel** worktree leaves write to **distinct** trees - which
      fails today because the tools resolve a global `process.cwd()` (`bash.ts`, `read.ts`,
      `run-shell.ts`, `tools/index.ts`, `WORKSPACE_ROOT`). This pins the per-leaf cwd requirement. <!-- D-010 -->
-  2. GREEN: thread a **per-leaf cwd** through the tool execution boundary (recommended default) so each
+  2. GREEN: thread a **per-leaf cwd** through the tool execution boundary (in-process, `D-024`) so each
      leaf resolves paths/`spawn` against its own worktree. This **de-globalizes** the module-level
      `WORKSPACE_ROOT` (`boot/paths.ts`) **and the `confine()` path-guard that keys off it** (a
      write-safety concern - a leaf could confine against the wrong root), and converts the
      `tools/index.ts` module-**load** `process.cwd()` snapshot to a **per-call thunk** (the tool-script
      bridge already models one) - not merely a cwd arg on bash/read/run-shell. `01`'s cwd-lock prevents
-     path collision. Fallback if in-process threading proves infeasible: run worktree leaves
-     **out-of-process** on `16`'s shipped runner. <!-- D-010 --> <!-- D-023 -->
+     path collision. Add a **guard**: a lint/test that no tool module reads a global `process.cwd()`/
+     `WORKSPACE_ROOT` directly, so a stray global read cannot silently escape isolation. <!-- D-010 --> <!-- D-023 --> <!-- D-024 -->
   3. RED: tests that `opts.isolation:'worktree'` provisions a managed worktree per leaf, lifts the
      read-only clamp for that leaf, and parallel write-capable leaves **do not race**; merge/reconcile
      is the caller's job.
@@ -490,7 +491,7 @@ prerequisite is `21`'s own M9 extraction of a shared `sandbox-runner` from it. <
 
 ## 5. Decisions
 
-Canonical decisions are in `.plans/21-workflows-runtime/plan.db` (D-001..D-023). Key decisions use
+Canonical decisions are in `.plans/21-workflows-runtime/plan.db` (D-001..D-024). Key decisions use
 `<!-- D-NNN -->` markers above; a bare `D-NNN` marker denotes **this** plan's ledger. References to
 another plan's ledger are namespaced (e.g. `delegation/D-047`, `45/§4 D-033`, `46/D-016`) so they are
 never mistaken for this plan's decisions.
@@ -498,4 +499,5 @@ never mistaken for this plan's decisions.
 D-017..D-023 close the `46`-consumer design audit: the multi-turn worker leaf (D-017), the
 21-owned detached durable-run lifecycle (D-018), the per-invocation call ordinal (D-019), per-`agent()`
 budget caps (D-020), the built-in determinism harness (D-021), the optional caller `detail` on
-`leaf-failed` (D-022), and the widened M6 cwd scope + gated process-model choice (D-023).
+`leaf-failed` (D-022), and the widened M6 cwd scope + gated process-model choice (D-023), resolved
+**in-process** (D-024).

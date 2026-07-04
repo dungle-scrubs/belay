@@ -10,8 +10,8 @@
 - [x] `.plans/01-managed-worktree-hardening` - **merged** (completed, removed from `.plans/`): the
   `WorktreeManager` + cwd-path advisory lock. `01` prevents worktree-path **collision** but does
   **not** route a working directory; the load-bearing prerequisite for N concurrent mutating trees is
-  `21`/M6's **per-leaf cwd routing through the tool boundary** (net-new), which 46 inherits
-  transitively via `21`. <!-- D-010 -->
+  `21`/M6's **per-leaf cwd routing through the tool boundary** (net-new, **decided in-process**,
+  `21/D-024`), which 46 inherits transitively via `21`. <!-- D-010 -->
 - [x] (was `.plans/12-bounded-child-takeover`) - the bounded-child runtime is **folded into `21`**'s hardened `agent()` leaf (plan 12 dropped); covered by the `21` dependency above, no separate plan. <!-- D-009 -->
 - [x] `.plans/15-forkable-sessions-lineage` (supporting) - **merged**: the durable fleet run is a session.
 - [ ] `.plans/45-subagent-variants` (supporting; **not yet implemented**) - `45`/M2 retains the

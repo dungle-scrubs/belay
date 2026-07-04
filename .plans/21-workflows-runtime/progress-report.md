@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 56
+- **Current cutoff blockers:** 55
 - **Completed current work:** 0
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
@@ -83,9 +83,9 @@
 ### Phase 3: Worktree-isolated write-capable leaves
 
 **M6 - Worktree isolation for leaves** (needs net-new per-leaf cwd routing, D-010/D-023)
-- [ ] **Owner decision (confirm before `46`/M3):** in-process cwd-threading (default) vs out-of-process leaves on `16`'s runner - sets M6 effort. (D-023)
+- **Process model DECIDED: in-process cwd-threading (D-024)**; out-of-process on `16`'s runner rejected. `46`/M3 unblocked.
 - [ ] RED: failing test that two **parallel** worktree leaves write to **distinct** trees - fails today because tools resolve a global `process.cwd()` (`bash.ts`, `read.ts`, `run-shell.ts`, `tools/index.ts`, `WORKSPACE_ROOT`).
-- [ ] GREEN: thread a **per-leaf cwd** through the tool boundary (recommended default); **de-globalize `WORKSPACE_ROOT` + the `confine()` guard keyed off it, and convert the `tools/index.ts` module-load `process.cwd()` snapshot to a per-call thunk** - not merely a cwd arg on bash/read/run-shell; cwd-lock prevents path collision. (Fallback: out-of-process leaves on `16`'s runner.) (D-023)
+- [ ] GREEN: thread a **per-leaf cwd** through the tool boundary (in-process, D-024); **de-globalize `WORKSPACE_ROOT` + the `confine()` guard keyed off it, and convert the `tools/index.ts` module-load `process.cwd()` snapshot to a per-call thunk** - not merely a cwd arg on bash/read/run-shell; + a **guard** lint/test that no tool reads a global cwd; cwd-lock prevents path collision. (D-023, D-024)
 - [ ] RED: `opts.isolation:'worktree'` provisions a managed worktree per leaf, lifts read-only for that leaf, and parallel write-capable leaves do not race.
 - [ ] GREEN: wire leaf -> `WorktreeManager` + cwd-lock + per-leaf cwd; write-capable in own tree; auto-cleanup; per-leaf worktree result (branch, diffstat, conflict-with-base).
 - [ ] REFACTOR: worktree policy in the leaf, not the scheduler.
