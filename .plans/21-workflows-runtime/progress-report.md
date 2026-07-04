@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 11
-- **Completed current work:** 44
+- **Current cutoff blockers:** 6
+- **Completed current work:** 49
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M7 - Invocation surfaces + durable-run lifecycle (Phase 4)
+- **Current focus:** M8 - Observability + determinism harness (Phase 4)
 
 ## Completed Current State / Hard Dependencies
 
@@ -96,12 +96,13 @@
 
 ### Phase 4: Authoring surfaces + observability
 
-**M7 - Invocation surfaces (built-in + DSL tool)**
-- [ ] RED: invoke a built-in/saved workflow by name+args; a `Workflow` tool accepting a DSL spec.
-- [ ] GREEN: register the `Workflow` tool + named-workflow path; run as a **detached durable run** (session via 15, launcher not switched/retired) + **run-completion notify distinct from `delegated.to`**. (D-018)
-- [ ] RED: loop tests success/failure/cancel/notify; launcher survives and is notified without a switch. (D-018)
-- [ ] GREEN: detached durable-run spawn (via 15) + run-completion notify (distinct from `delegated.to`). (D-018)
-- [ ] REFACTOR: thin tool surface over the engine.
+**M7 - Invocation surfaces (built-in + DSL tool)** (`workflow/engine.ts`, `interpreter.ts`, `lifecycle.ts`, `invoke.ts`)
+- [x] RED: run a built-in workflow (a body over the `WorkflowApi`) end-to-end + a DSL spec via the interpreter; the `Workflow` tool validates + dispatches a spec. (`engine.test.ts`, `interpreter.test.ts`, `invoke.test.ts`)
+- [x] GREEN: `runWorkflow` (the engine harness tying M1-M5: scheduler + journal + budget into the `agent`/`parallel`/`pipeline`/`phase`/`log`/`budget` stdlib, emitting `workflow.started`/`completed`); `interpretSpec` (DSL walk); `buildWorkflowTool` (the `Workflow` tool). (D-018)
+- [x] RED: loop tests - a run's success, a fail-soft leaf (`workflow.leaf-failed`), a budget-terminated loop, resume-from-cache; and `startDetachedRun` returns immediately (launcher survives) then notifies on completion. (`engine.test.ts`, `lifecycle.test.ts`)
+- [x] GREEN: `startDetachedRun` (D-018) - ensure the run session, fork the run as a background **daemon** fiber (launcher NOT switched/retired), notify the launcher on completion via an injected **run-completion notify distinct from `delegated.to`**. (`lifecycle.ts`)
+- [x] REFACTOR: thin tool surface (`invoke.ts` only validates + dispatches over the injected `startRun`).
+- **Host composition (main.ts / 46 fleet):** the live `TOOLS`-array registration of the `Workflow` tool with a real `startRun`, and the real `leafRunner` (`runAgentLeaf`) / `ensureRunSession` (15) / `notifyLauncher` (transport) seams, are wired at the composition root from turn context - the engine + lifecycle + tool contracts M7 delivers are the tested seams they instantiate.
 
 **M8 - Observability + minimal run view**
 - [ ] RED: run/phase/leaf spans + typed failures; a **reusable determinism-characterization harness** for built-ins (run-twice under frozen clock + forbidden RNG -> identical ordinal sequence). (D-021)

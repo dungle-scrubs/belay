@@ -126,12 +126,12 @@ const usageOf = (result: LeafResult): TurnUsage =>
  * runs the leaf live. Either way it emits a `workflow.agent` event and returns the SAME typed result,
  * so this is one call ordinal whether replayed or live (D-019). Never throws.
  */
-export function journaledAgent(
+export function journaledAgent<E = never>(
   journal: AgentJournal,
   prompt: string,
   opts: unknown,
-  live: () => Effect.Effect<LeafResult>,
-): Effect.Effect<LeafResult> {
+  live: () => Effect.Effect<LeafResult, E>,
+): Effect.Effect<LeafResult, E> {
   return Effect.gen(function* () {
     const ordinal = yield* consumeOrdinal;
     const fp = fingerprint(prompt, opts);

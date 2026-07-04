@@ -71,7 +71,7 @@ export interface BatchOptions {
  *  strict reject - emitting `leaf-failed` before any fail-soft null (D-008). */
 function runLeafThunk(
   scheduler: WorkflowScheduler,
-  thunk: () => Effect.Effect<LeafResult>,
+  thunk: () => Effect.Effect<LeafResult, WorkflowRunError>,
   onError: "null" | "fail",
 ): Effect.Effect<unknown, WorkflowRunError> {
   return Effect.gen(function* () {
@@ -116,7 +116,7 @@ function assertCallSize(count: number): Effect.Effect<void, WorkflowRunError> {
  */
 export function parallel(
   scheduler: WorkflowScheduler,
-  thunks: ReadonlyArray<() => Effect.Effect<LeafResult>>,
+  thunks: ReadonlyArray<() => Effect.Effect<LeafResult, WorkflowRunError>>,
   options: BatchOptions = {},
 ): Effect.Effect<ReadonlyArray<unknown>, WorkflowRunError> {
   const onError = options.onError ?? "null";
@@ -138,7 +138,7 @@ export type PipelineStage<T> = (
   previous: unknown,
   item: T,
   index: number,
-) => Effect.Effect<LeafResult>;
+) => Effect.Effect<LeafResult, WorkflowRunError>;
 
 /**
  * A per-item staged flow with NO barrier between stages: each item runs its own stage chain, so item A

@@ -77,10 +77,10 @@ export function budgetLayer(total: number | null): Layer.Layer<BudgetGovernor> {
  * then the leaf, then `record` its usage into the pool. A cached/replayed leaf does NOT go through this
  * (it is not a new spawn); it only `record`s its restored usage.
  */
-export function spawnGuarded(
+export function spawnGuarded<T extends { readonly usage: TurnUsage }>(
   budget: WorkflowBudget,
-  live: Effect.Effect<{ readonly usage: TurnUsage }>,
-): Effect.Effect<{ readonly usage: TurnUsage }, WorkflowRunError> {
+  live: Effect.Effect<T>,
+): Effect.Effect<T, WorkflowRunError> {
   return budget.admit.pipe(
     Effect.flatMap(() => live),
     Effect.tap((result) => budget.record(result.usage)),
