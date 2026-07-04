@@ -528,3 +528,56 @@ test("plan 25 M9: a hook context note renders attributed to its tool", () => {
   assert.match(text, /context for read/i);
   assert.match(text, /prefer the v2 config/);
 });
+
+// --- plan 31 M4: shimmer action status wired into the live transcript rows ---
+
+const workingRow = (
+  over: Partial<Extract<TranscriptRow, { kind: "working" }>> = {},
+): TranscriptRow => ({
+  kind: "working",
+  id: "working:r1",
+  interruptible: true,
+  startedAt: Date.now(),
+  ...over,
+});
+
+/** The shimmer overlay is the aria-hidden `.shimmer` duplicate the ActionShimmer primitive renders. */
+function shimmerOverlay(container: HTMLElement): Element | null {
+  return container.querySelector("[aria-hidden].shimmer");
+}
+
+test("plan 31 M4: the working row shows the interruptible shimmer status", () => {
+  const { container } = renderRow(workingRow());
+  const text = container.textContent ?? "";
+  assert.match(text, /Working/);
+  assert.match(text, /esc to interrupt/);
+  const overlay = shimmerOverlay(container);
+  assert.ok(overlay, "working row must render a shimmer overlay");
+  assert.ok(overlay?.classList.contains("motion-reduce:animate-none"));
+});
+
+test("plan 31 M4: a silent warm turn shimmers 'thinking' via the projection", () => {
+  const { container } = renderRow(assistant({ text: "", done: false, warm: true }));
+  assert.match(container.textContent ?? "", /thinking/);
+  assert.ok(shimmerOverlay(container), "silent turn must shimmer");
+});
+
+test("plan 31 M4: a silent cold turn shimmers the loading-model label", () => {
+  const { container } = renderRow(assistant({ text: "", done: false, warm: false, model: "qwen" }));
+  assert.match(container.textContent ?? "", /loading qwen/);
+});
+
+test("plan 31 M4 a11y: the status label is readable text and the shimmer is hidden from AT", () => {
+  const { container } = renderRow(workingRow({ startedAt: undefined }));
+  // Exactly one announced (non-aria-hidden) copy of the label; the shimmer duplicate is hidden.
+  const announced = [...container.querySelectorAll("span")].filter(
+    (el) => el.textContent === "Working" && el.getAttribute("aria-hidden") === null,
+  );
+  assert.equal(announced.length, 1);
+  assert.equal(shimmerOverlay(container)?.getAttribute("aria-hidden"), "true");
+});
+
+test("plan 31 M4: settled assistant rows never shimmer", () => {
+  const { container } = renderRow(assistant({ text: "done reasoning", done: true }));
+  assert.equal(shimmerOverlay(container), null);
+});

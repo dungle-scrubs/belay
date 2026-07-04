@@ -23,12 +23,12 @@ import {
 import { ArtifactPanel } from "@/artifact-panel/artifact-panel";
 import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state";
 import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
+import { ActionShimmer } from "@/components/chat/action-shimmer";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { activeOptionId } from "@/components/chat/autocomplete-menu";
 import { CommandMenu, SLASH_MENU_LISTBOX_ID } from "@/components/chat/command-menu";
 import { FILE_MENTION_LISTBOX_ID, FileMentionMenu } from "@/components/chat/file-mention-menu";
 import { LoopInventory } from "@/components/chat/loop/loop-inventory";
-import { WorkingIndicator } from "@/components/chat/message";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
@@ -397,11 +397,11 @@ export function PanelHost(props: {
               3. otherwise -> the full history (existing session pinned to bottom, empty at top), 150ms fade. */}
             {!replayed ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2">
-                <WorkingIndicator label="connecting to session" />
+                <ActionShimmer label="connecting to session" />
               </div>
             ) : !host.leaderId && transcript.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                <WorkingIndicator label={host.present ? "connecting to host" : "starting host"} />
+                <ActionShimmer label={host.present ? "connecting to host" : "starting host"} />
                 <span className="text-label tracking-wider text-muted-foreground/70">
                   waiting for the agent host to start and join this session…
                 </span>

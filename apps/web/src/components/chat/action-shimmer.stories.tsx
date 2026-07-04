@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { storyFrame } from "@/components/chat/story-frame";
 import { ActionShimmer } from "./action-shimmer";
+import { AssistantMessage, ToolCall } from "./message";
 
 const meta: Meta<typeof ActionShimmer> = {
   title: "Chat/ActionShimmer",
@@ -53,6 +54,42 @@ export const InterruptibleTurn: Story = {
 /** Elapsed timer without the esc hint (a non-interruptible in-flight action). */
 export const ElapsedOnly: Story = {
   args: { label: "summarizing archive", startedAt: FROZEN_STARTED_AT },
+};
+
+/**
+ * A running tool row: the tool header stays solid while the body shimmers its present-progress
+ * status. Mirrors how status-aware tool renderers show an in-flight call (plan 31 M4).
+ */
+export const RunningToolRow: Story = {
+  render: () => (
+    <Frame>
+      <div className="flex flex-col gap-3">
+        <ToolCall name="bash" args="pnpm test" status="running">
+          <ActionShimmer label="running pnpm test" />
+        </ToolCall>
+        <ToolCall name="web_search" args="tw-shimmer technique" status="running">
+          <ActionShimmer label="searching the web" />
+        </ToolCall>
+      </div>
+    </Frame>
+  ),
+};
+
+/** Shimmer in the live transcript: a settled response, then the persistent working row below it. */
+export const InTranscript: Story = {
+  render: () => (
+    <Frame>
+      <div className="flex flex-col gap-5">
+        <AssistantMessage content="On it - reading the composer first." />
+        <div className="pl-3.5">
+          <ActionShimmer label="reading apps/web/src/app.tsx" />
+        </div>
+        <div className="pl-3.5">
+          <ActionShimmer label="Working" startedAt={FROZEN_STARTED_AT} interruptible />
+        </div>
+      </div>
+    </Frame>
+  ),
 };
 
 /**

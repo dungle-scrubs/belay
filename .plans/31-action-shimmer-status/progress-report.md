@@ -5,8 +5,8 @@
 > Current focus: M1: Shimmer Component
 
 - Total checklist items: 33
-- Completed: 22
-- Current cutoff blockers: 11
+- Completed: 28
+- Current cutoff blockers: 5
 
 > M3 note (decision D-005): no new host protocol events were added. Every action label is a
 > deterministic web-side projection of already-decoded structured state (tool name/args,
@@ -50,12 +50,12 @@
 
 ## M4: Live UI Wiring
 
-- [ ] RED: Web transcript tests for silent turn, running tool body, shell running, concurrent tool batch, compaction, reconnect, and cancellation
-- [ ] GREEN: Replace `WorkingIndicator` rendering in transcript rows and status-aware tool renderers
-- [ ] RED: Storybook/visual tests for shimmer in message rows, running tool rows, and compact row candidates
-- [ ] GREEN: Apply shimmer consistently across active transcript status rows without animating settled rows
-- [ ] RED: Accessibility tests for readable label text and no screen-reader duplication
-- [ ] REFACTOR: Keep active state available to future tool-detail takeover and compact transcript layout
+- [x] RED: Web transcript tests for silent turn, running tool body, shell running, concurrent tool batch, compaction, reconnect, and cancellation
+- [x] GREEN: Replace `WorkingIndicator` rendering in transcript rows and status-aware tool renderers
+- [x] RED: Storybook/visual tests for shimmer in message rows, running tool rows, and compact row candidates
+- [x] GREEN: Apply shimmer consistently across active transcript status rows without animating settled rows
+- [x] RED: Accessibility tests for readable label text and no screen-reader duplication
+- [x] REFACTOR: Keep active state available to future tool-detail takeover and compact transcript layout
 
 ## M5: Validation and E2E
 

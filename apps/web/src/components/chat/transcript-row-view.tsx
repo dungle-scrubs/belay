@@ -1,6 +1,8 @@
 import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@trevor/session";
 import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
+import { turnActionLabel } from "@/action-label";
+import { ActionShimmer } from "@/components/chat/action-shimmer";
 import { compactDisplayFor } from "@/components/chat/compact-display";
 import { CompactRow } from "@/components/chat/compact-row";
 import { CompactingBar } from "@/components/chat/compacting-bar";
@@ -13,7 +15,6 @@ import {
   ShellBlock,
   ThinkingMessage,
   UserMessage,
-  WorkingIndicator,
 } from "@/components/chat/message";
 import { messageKindDescriptor, quietMarkerText } from "@/components/chat/message-kind-descriptor";
 import { QuestionTranscriptItem } from "@/components/chat/question-item";
@@ -167,7 +168,7 @@ export function TranscriptRowView({
   if (row.kind === "working") {
     return (
       <div className="pl-3.5">
-        <WorkingIndicator
+        <ActionShimmer
           label="Working"
           startedAt={row.startedAt}
           interruptible={row.interruptible}
@@ -440,7 +441,13 @@ export function TranscriptRowView({
         {thinking ? (
           <ThinkingMessage content={thinking} />
         ) : (
-          <WorkingIndicator label={message.warm ? "thinking" : `loading ${message.model}`} />
+          <ActionShimmer
+            label={turnActionLabel({
+              warm: message.warm,
+              model: message.model,
+              streaming: false,
+            })}
+          />
         )}
         {overflowNote}
         {errorNote}
