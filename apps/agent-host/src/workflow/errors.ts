@@ -44,7 +44,7 @@ export class WorkflowArgsInvalid extends Data.TaggedError("WorkflowArgsInvalid")
  * from a per-leaf typed failure, which is a fail-soft VALUE, never thrown.
  */
 export class WorkflowRunError extends Data.TaggedError("WorkflowRunError")<{
-  readonly reason: "strict-failure" | "lifetime-cap" | "call-too-large";
+  readonly reason: "strict-failure" | "lifetime-cap" | "call-too-large" | "budget-exhausted";
   readonly detail: string;
 }> {
   override get message(): string {

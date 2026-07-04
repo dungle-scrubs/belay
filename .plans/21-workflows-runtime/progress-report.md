@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 24
-- **Completed current work:** 31
+- **Current cutoff blockers:** 17
+- **Completed current work:** 38
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M5 - WorkflowBudgetGovernor (Phase 2)
+- **Current focus:** M6 - Worktree isolation / in-process cwd routing (Phase 3)
 
 ## Completed Current State / Hard Dependencies
 
@@ -69,16 +69,16 @@
 - [x] GREEN: resume engine (`RunCache` keyed by ordinal, fingerprint as the invalidation check; `cacheFromEvents` + `Usage` restore).
 - [x] REFACTOR: generic journal projection (`cacheFromEvents` rebuilds the cache from prior `workflow.agent` events).
 
-**M5 - WorkflowBudgetGovernor**
-- [ ] RED: cumulative `Usage` across leaves; ceiling -> new `agent()` typed error; `remaining()` loop support; **per-leaf token cap AND step budget settable per `agent()` call** (`opts.tokenBudget`/`opts.stepBudget`, distinct from `turn-budget.ts`'s global step cap); budget trip lets in-flight leaves **drain** with overshoot bounded by `(concurrency-cap x per-leaf token cap)`. (D-020)
-- [ ] GREEN: governor service (`Context.Tag` + `Layer`) + per-`agent()` token cap (`opts`), reusing `turn-budget.ts` tiers for the per-leaf STEP budget. (D-020)
-- [ ] RED: shared-pool accounting.
-- [ ] GREEN: shared pool.
-- [ ] REFACTOR: budget separate from scheduler.
+**M5 - WorkflowBudgetGovernor** (`workflow/budget.ts`, `budget.test.ts`)
+- [x] RED: cumulative `Usage` across leaves; ceiling -> new `agent()` typed error (`admit` fails `budget-exhausted`); `remaining()` loop support; **per-leaf token cap AND step budget settable per `agent()` call** (`opts.tokenBudget`/`opts.stepBudget` on the leaf, M2; distinct from `turn-budget.ts`'s global step cap); budget trip gates NEW spawns but lets in-flight leaves **drain** (`record` never blocked), overshoot bounded by `(concurrency-cap x per-leaf token cap)`. (D-020)
+- [x] GREEN: governor service (`BudgetGovernor` `Context.Tag` + `budgetLayer`) + `spawnGuarded` (admit -> run -> record); per-`agent()` token cap (`opts.tokenBudget`) + per-turn step budget (`opts.stepBudget` -> `emergencyMaxSteps`) live on the leaf (M2). (D-020)
+- [x] RED: shared-pool accounting.
+- [x] GREEN: shared pool (`makeBudget` + `Ref`).
+- [x] REFACTOR: budget separate from scheduler (`budget.ts` distinct from `concurrency.ts`).
 
 **Gate 2->3**
-- [ ] A run survives restart and resumes with a correct **per-invocation ordinal-keyed** cache-hit prefix (identical parallel leaves, a second `agent()` call within one slot, + out-of-order completion included); cached leaves restore `Usage`.
-- [ ] Budget is a typed spawn-gate ceiling with bounded overshoot (per-`agent()` token/step caps; in-flight drain).
+- [x] A run survives restart and resumes with a correct **per-invocation ordinal-keyed** cache-hit prefix (identical parallel leaves, a second `agent()` call within one slot, + out-of-order completion included); cached leaves restore `Usage`. (M4)
+- [x] Budget is a typed spawn-gate ceiling with bounded overshoot (per-`agent()` token/step caps; in-flight drain). (M5)
 
 ### Phase 3: Worktree-isolated write-capable leaves
 
