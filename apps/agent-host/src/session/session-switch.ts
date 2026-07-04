@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CompactionCommandsApi } from "@host/agent/compaction-commands";
 import type { BackgroundChildInfo } from "@host/agent/delegate";
 import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
-import { WORKSPACE_ROOT } from "@host/boot/paths";
+import { TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { supervisor } from "@host/processes/processes";
 import { contextRegistry } from "@host/project-context/registry";
 import { log, warn } from "@host/transport/log";
@@ -68,17 +70,46 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
   } = deps;
 
   function spawnReplacementHost(opts: WorkspaceTarget): { readonly pid: number } {
+    // Fail loud, not silent: if this host's own launch paths were removed out from under it (a managed
+    // worktree pruned after its plan merged, a moved/deleted checkout), the re-exec below cannot boot -
+    // it dies instantly with MODULE_NOT_FOUND. Detect that and throw a clear, surfaced error instead of
+    // spawning a doomed child that leaves the target session hostless ("starting host…") forever. The
+    // launch paths are the entry script (process.argv[1]) plus the tsx loader modules tsx installs via
+    // execArgv (--require preflight / --import loader), which live in THIS host's (possibly-gone) checkout.
+    const launchPaths = [
+      ...(process.argv[1] ? [process.argv[1]] : []),
+      ...process.execArgv.flatMap((arg) => {
+        const value = arg.includes("=") ? arg.slice(arg.indexOf("=") + 1) : arg;
+        if (value.startsWith("file://")) return [fileURLToPath(value)];
+        return value.startsWith("/") ? [value] : [];
+      }),
+    ];
+    const missing = launchPaths.find((path) => !existsSync(path));
+    if (missing) {
+      throw new Error(
+        `this host's checkout is no longer on disk (${missing} missing) - restart it (e.g. \`trevor open ${SESSION_ID}\`) before switching`,
+      );
+    }
+    // Capture the replacement's boot output to the target session's host log rather than discarding it
+    // (mirrors the launcher's per-session log). A broken re-exec used to die under stdio:"ignore" with no
+    // trace, which is exactly how a failed switch became an invisible "starting host…" hang; logging it
+    // makes the failure diagnosable. Best-effort: fall back to discarding output if the log can't open.
+    let out: number | "ignore" = "ignore";
+    try {
+      mkdirSync(join(TREVOR_STATE_HOME, "logs"), { recursive: true });
+      out = openSync(join(TREVOR_STATE_HOME, "logs", `host-${opts.sessionId}.log`), "a");
+    } catch {
+      // keep "ignore"
+    }
     // Re-exec with the SAME node invocation that started THIS process. Under the dev/start lanes the
     // host runs via tsx, which installs its TypeScript loader through process.execArgv (--require
     // preflight, --import loader) - NOT argv. Dropping execArgv respawns a bare `node src/main.ts`, which
-    // dies instantly on the first extensionless `.ts` import (ERR_MODULE_NOT_FOUND); with stdio:"ignore"
-    // that death is silent, so /cd, /clear, and /restart would leave the new session hostless ("starting
-    // host…" forever). Carrying execArgv through reproduces the full launch; it's empty under a compiled
-    // binary, so this is a no-op there.
+    // dies instantly on the first extensionless `.ts` import (ERR_MODULE_NOT_FOUND). Carrying execArgv
+    // through reproduces the full launch; it's empty under a compiled binary, so this is a no-op there.
     const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
       cwd: opts.cwd,
       detached: true,
-      stdio: "ignore",
+      stdio: ["ignore", out, out],
       env: {
         ...process.env,
         SESSION_ID: opts.sessionId,
@@ -86,8 +117,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
         TREVOR_MANAGED_HOST: "1",
         // tsx resolves tsconfig `paths` from the child's cwd, and the replacement's cwd is the TARGET
         // project - which has no @host/* mapping - so without this pointer the re-exec dies on its
-        // first @host import (silently: stdio is "ignore"). Self-anchored so it also covers hosts
-        // whose launcher didn't set it.
+        // first @host import. Self-anchored so it also covers hosts whose launcher didn't set it.
         TSX_TSCONFIG_PATH:
           process.env.TSX_TSCONFIG_PATH ?? join(import.meta.dirname, "..", "..", "tsconfig.json"),
         // Carry the CURRENT debug flag (which may have been toggled at runtime via /debug, so it
