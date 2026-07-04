@@ -108,7 +108,7 @@ test("the provider ignores the host-passed tools arg (the SDK always gets tools:
   const { query, calls } = recordingQuery([resultSuccess(1, 1)]);
   const provider = claudeCodeProvider({
     model: "claude-opus-4-0",
-    label: "Claude (Max plan)",
+    label: "Claude Code subscription",
     query,
     env: { CLAUDE_CODE_OAUTH_TOKEN: "max-token" },
   });
@@ -207,7 +207,7 @@ test("a thrown iterator failure rides the typed ProviderError channel", async ()
 test("capabilities reports tools:false (vision per model), readiness is warm, describe carries the roster", () => {
   const provider = claudeCodeProvider({
     model: "claude-opus-4-0",
-    label: "Claude (Max plan)",
+    label: "Claude Code subscription",
     env: { CLAUDE_CODE_OAUTH_TOKEN: "max-token" },
   });
   const caps = Effect.runSync(provider.capabilities());
@@ -223,7 +223,7 @@ test("capabilities reports tools:false (vision per model), readiness is warm, de
   assert.equal(readiness.ready, true, "ready when the CLI token is present");
 
   const model = provider.describe();
-  assert.equal(model.label, "Claude (Max plan)");
+  assert.equal(model.label, "Claude Code subscription");
   assert.equal(model.model, "claude-opus-4-0");
   assert.equal(model.kind, "cloud");
   // Claude thinking is disableable and reaches "high" on both the registry shape
@@ -247,7 +247,7 @@ test("the provider's context window routes through resolveContextWindow (correct
   const { query } = recordingQuery([resultSuccess(10, 5)]);
   const provider = claudeCodeProvider({
     model: modelId,
-    label: "Claude (Max plan)",
+    label: "Claude Code subscription",
     query,
     env: { CLAUDE_CODE_OAUTH_TOKEN: "max-token" },
   });
@@ -260,7 +260,7 @@ test("the provider's context window routes through resolveContextWindow (correct
 test("readiness is not-ready (but warm) when the CLI token is absent", () => {
   const provider = claudeCodeProvider({
     model: "claude-opus-4-0",
-    label: "Claude (Max plan)",
+    label: "Claude Code subscription",
     env: {},
   });
   const readiness = Effect.runSync(provider.readiness());

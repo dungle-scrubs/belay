@@ -7,14 +7,13 @@ import type {
   SourceSummary,
   SourceType,
 } from "@trevor/session";
-import { anthropicProvider } from "./anthropic";
 import { CLAUDE_CODE_OAUTH_ENV, CLAUDE_CODE_SOURCE_ID, claudeCodeProvider } from "./claude-code";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { lmStudioIsVision, lmStudioSupportsTools } from "./lmstudio-native";
 import { reloadModelOverrides, resolveContextWindow } from "./model-metadata-overrides";
 import { openAICompatProvider } from "./openai-compat";
-import { PI_KEY_PROVIDERS, piKeyProviderFromConfig } from "./pi-key";
+import { PI_KEY_PROVIDERS, piKeyAuthName, piKeyProviderFromConfig } from "./pi-key";
 import { lookupPiModel } from "./pi-model";
 import { AUTH_PATH, cliTokenPresent, oauthPresent, staticKeyEntry } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
@@ -72,35 +71,30 @@ const SOURCES: readonly SourceDef[] = [
     piProvider: "openai",
     oauthName: "openai-codex",
   },
-  {
-    sourceId: "anthropic",
-    type: "oauth",
-    label: "Anthropic (Claude)",
-    piProvider: "anthropic",
-    oauthName: "anthropic",
-  },
-  // A SECOND Claude source, billed to the Max subscription via the Agent SDK (plan 12.1). Same Claude
-  // models as `anthropic` (piProvider "anthropic" enriches shape + supplies the model list), but its
-  // configured signal is the CLI token STORE (cliTokenEnv), a DIFFERENT credential store than the
-  // anthropic source's ~/.pi/auth.json OAuth entry (D-003). Text-only in this cut, so toolCapable false.
+  // The ONE Claude subscription source (53 D-001): a single Anthropic OAuth, billed to the Claude
+  // subscription via the Agent SDK (setup-token). Its configured signal is the CLI token STORE
+  // (cliTokenEnv), NOT `~/.pi/auth.json`; its subprocess reads the same token, so a different store
+  // would show ready and fail at stream (D-003). Text-only in this cut, so toolCapable false. The
+  // separate Anthropic *Direct API* (a plain generated key) is an api-key peer below, not this row.
   {
     sourceId: CLAUDE_CODE_SOURCE_ID,
     type: "oauth",
-    label: "Claude (Max plan)",
+    label: "Claude Code subscription",
     piProvider: "anthropic",
     cliTokenEnv: CLAUDE_CODE_OAUTH_ENV,
     toolCapable: false,
   },
-  // The static-key cloud sources (DeepSeek, Z.ai, MiniMax) are derived from the shared pi-key
-  // registry: for these, the source id == the pi-ai provider id == the auth.json entry, so one
-  // registry row owns all three. Adding a pi-key provider updates the registry, not this list.
+  // The static-key cloud sources (DeepSeek, Z.ai, MiniMax, Anthropic Direct) are derived from the
+  // shared pi-key registry: the source id is the pi-ai provider id and the key comes from the row's
+  // auth.json entry (piKeyAuthName - distinct for Anthropic Direct), so one registry row owns both the
+  // roster provider and this source. Adding a pi-key provider updates the registry, not this list.
   ...PI_KEY_PROVIDERS.map(
     (def): SourceDef => ({
       sourceId: def.piProvider,
       type: "api-key",
       label: def.sourceLabel,
       piProvider: def.piProvider,
-      authName: def.piProvider,
+      authName: piKeyAuthName(def),
     }),
   ),
   // A cloud gateway/proxy: one key fronts hundreds of upstream models (256+ in pi-ai's registry, more
@@ -375,8 +369,9 @@ export function buildCatalogSnapshot(
 
 /**
  * Builds the concrete {@link Provider} for a source + model id, dispatching on the source's type +
- * auth shape: local -> LM Studio, oauth -> Codex/Anthropic, api-key/gateway -> a static-key pi
- * provider or (when there's a fixed base URL and no pi registry entry) an OpenAI-compatible one.
+ * auth shape: local -> LM Studio, oauth -> Codex / the Claude Code subscription (Agent SDK),
+ * api-key/gateway -> a static-key pi provider (Anthropic Direct, DeepSeek, Z.ai, MiniMax, OpenRouter)
+ * or (when there's a fixed base URL and no pi registry entry) an OpenAI-compatible one.
  * The ONE owner of the adapter-per-source mapping, so catalog turn-resolution can't dispatch a source
  * a different way than anything else that resolves a source. `label` defaults to the model id.
  * Returns null when no adapter matches.
@@ -390,14 +385,11 @@ export function providerForSource(
     return lmStudioProvider({ model: modelId, label });
   }
   if (source.type === "oauth") {
-    // Each OAuth subscription has its own provider (different registry + token shape): claude-code
-    // streams Claude through the Agent SDK on the Max subscription (billed to the CLI token, D-003),
-    // Anthropic streams the same models through ~/.pi/auth.json OAuth, Codex handles OpenAI.
-    if (source.sourceId === CLAUDE_CODE_SOURCE_ID) {
-      return claudeCodeProvider({ model: modelId, label });
-    }
-    return source.sourceId === "anthropic"
-      ? anthropicProvider({ model: modelId, label })
+    // Each OAuth subscription has its own provider (different registry + token shape): the Claude Code
+    // subscription streams Claude through the Agent SDK, billed to the setup-token (D-001/D-003); Codex
+    // handles OpenAI. (The Anthropic Direct API is a static-key peer below, not an oauth subscription.)
+    return source.sourceId === CLAUDE_CODE_SOURCE_ID
+      ? claudeCodeProvider({ model: modelId, label })
       : codexProviderFromConfig({ model: modelId, label });
   }
   // A gateway/api-key source NOT in pi-ai's registry (Ollama Cloud) streams through its fixed

@@ -236,7 +236,9 @@ test("Ollama Cloud (no pi-ai registry) resolves any live model id to a runnable 
   assert.equal(ollama?.model, "gpt-oss:120b");
 });
 
-test("the Anthropic OAuth source resolves to a Claude provider", () => {
+test("the Anthropic Direct API source resolves to a static-key Claude provider (not OAuth)", () => {
+  // 53 D-002: the direct source is a plain static-key pi provider (id "anthropic"), reached with a key
+  // from ~/.pi/auth.json - NOT the removed OAuth-mints-a-key path (no getOAuthApiKey, no sign-in target).
   const a = buildSourceProvider("anthropic", "claude-opus-4-0");
   assert.equal(a?.kind, "cloud");
   assert.equal(a?.id, "anthropic");
@@ -247,13 +249,42 @@ test("an unknown source returns null (caller falls back to the registered provid
   assert.equal(buildSourceProvider("nope", "whatever"), null);
 });
 
-test("Anthropic is announced as an OAuth source needing sign-in until configured", () => {
-  // `auth` configures openai-codex but not anthropic, so anthropic reads needs-auth with a sign-in action.
+test("exactly ONE Claude subscription oauth source exists, and no separate anthropic oauth source", () => {
+  // 53 D-001: the two Claude OAuth rows collapsed into one. The surviving subscription is claude-code,
+  // relabelled "Claude Code subscription"; the old `anthropic` OAuth source is gone.
   const snap = buildCatalogSnapshot(auth, {});
-  const a = snap.sources.find((s) => s.sourceId === "anthropic");
-  assert.equal(a?.type, "oauth");
-  assert.equal(a?.status, "needs-auth");
-  assert.deepEqual(a?.actions, ["authenticate"]);
+  const claudeOauth = snap.sources.filter((s) => s.type === "oauth" && s.label.includes("Claude"));
+  assert.equal(claudeOauth.length, 1, "one Claude subscription oauth source");
+  assert.equal(claudeOauth[0]?.sourceId, "claude-code");
+  assert.equal(claudeOauth[0]?.label, "Claude Code subscription");
+  assert.equal(
+    snap.sources.some((s) => s.sourceId === "anthropic" && s.type === "oauth"),
+    false,
+    "no separate anthropic OAuth source remains",
+  );
+});
+
+test("the Anthropic Direct API is an api-key source under the Direct API family (53 D-002)", () => {
+  // Peer to DeepSeek / Z.ai / MiniMax: its configured signal is a `{ key }` in ~/.pi/auth.json under the
+  // DISTINCT `anthropic-api` entry (not a legacy OAuth `anthropic`), and it offers no device-code sign-in.
+  const cold = buildCatalogSnapshot(auth, {}).sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(cold?.type, "api-key");
+  assert.equal(cold?.label, "Anthropic Direct API");
+  assert.equal(cold?.status, "needs-auth");
+  assert.deepEqual(cold?.actions, ["configure"], "a manual configure action, never authenticate");
+
+  const ANTHROPIC_KEY = "sk-ant-direct-DO-NOT-LEAK-0987654321";
+  const withKey = buildCatalogSnapshot(
+    { ...auth, "anthropic-api": { key: ANTHROPIC_KEY } },
+    { anthropic: ["claude-opus-4-8", "claude-sonnet-4-6"] },
+  );
+  const hot = withKey.sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(hot?.status, "ready");
+  assert.equal(hot?.auth, "authenticated");
+  assert.equal(hot?.modelCount, 2);
+  assert.deepEqual(hot?.actions, ["refresh"]);
+  // REDACTION: the direct key value never reaches the announced snapshot.
+  assert.ok(!JSON.stringify(withKey).includes(ANTHROPIC_KEY));
 });
 
 test("OpenRouter is announced as a gateway source", () => {
@@ -267,8 +298,8 @@ test("OpenRouter is announced as a gateway source", () => {
 });
 
 test("claude-code configured signal is the CLI token, INDEPENDENT of ~/.pi/auth.json (both cross cases)", () => {
-  // present-pi + absent-token = NOT configured: the anthropic OAuth entry is a DIFFERENT store than
-  // the CLI token store the subprocess reads (D-003), so it must not mark claude-code ready.
+  // present-pi + absent-token = NOT configured: a legacy `anthropic` OAuth entry is a DIFFERENT store
+  // than the CLI token store the subprocess reads (D-003), so it must not mark claude-code ready.
   const piPresentNoToken = buildCatalogSnapshot(
     { anthropic: { type: "oauth", access: "tok" } },
     {},
@@ -282,6 +313,10 @@ test("claude-code configured signal is the CLI token, INDEPENDENT of ~/.pi/auth.
     "needs-auth",
     "pi anthropic entry present but no CLI token -> not configured",
   );
+  // That legacy OAuth `anthropic` entry ALSO must not configure the Anthropic Direct API source, which
+  // reads a `{ key }` from the DISTINCT `anthropic-api` entry (53 D-002 collision avoidance).
+  const direct1 = piPresentNoToken.sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(direct1?.status, "needs-auth", "a legacy OAuth entry is not a Direct API key");
 
   // absent-pi + present-token = configured, purely off the CLI token.
   const tokenNoPi = buildCatalogSnapshot(
@@ -293,12 +328,13 @@ test("claude-code configured signal is the CLI token, INDEPENDENT of ~/.pi/auth.
   );
   const a2 = tokenNoPi.sources.find((s) => s.sourceId === "claude-code");
   assert.equal(a2?.status, "ready", "CLI token present (pi anthropic absent) -> configured");
-  // The anthropic source itself stays needs-auth (its own ~/.pi store is empty) - the two are independent.
-  const anthropic = tokenNoPi.sources.find((s) => s.sourceId === "anthropic");
-  assert.equal(anthropic?.status, "needs-auth");
+  // The Anthropic Direct API source stays needs-auth (its ~/.pi `anthropic-api` key is absent) - the
+  // subscription and the direct key are independent credentials.
+  const direct2 = tokenNoPi.sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(direct2?.status, "needs-auth");
 });
 
-test("claude-code is a distinct, selectable Claude source: tools:false, not ready without the token", () => {
+test("claude-code is the Claude subscription source: tools:false, not ready without the token", () => {
   const withToken = buildCatalogSnapshot(
     {},
     { "claude-code": ["claude-opus-4-0"] },
@@ -308,11 +344,7 @@ test("claude-code is a distinct, selectable Claude source: tools:false, not read
   );
   const cc = withToken.sources.find((s) => s.sourceId === "claude-code");
   assert.equal(cc?.type, "oauth");
-  assert.notEqual(
-    cc?.label,
-    "Anthropic (Claude)",
-    "the label is distinct from the anthropic source",
-  );
+  assert.equal(cc?.label, "Claude Code subscription");
   assert.equal(cc?.status, "ready");
   assert.ok((cc?.modelCount ?? 0) > 0, "selectable: at least one model");
   const entry = withToken.catalogBySource["claude-code"]?.[0];
@@ -351,16 +383,11 @@ test("D-004 drift guard: the catalog's claude-code Tools chip agrees with capabi
   );
 });
 
-test("the claude-code source resolves to a ClaudeCodeProvider, and anthropic is unchanged", () => {
+test("the claude-code source resolves to a ClaudeCodeProvider", () => {
   const cc = buildSourceProvider("claude-code", "claude-opus-4-0");
   assert.equal(cc?.id, "claude-code");
   assert.equal(cc?.kind, "cloud");
   assert.equal(cc?.model, "claude-opus-4-0");
-
-  // No regression: the anthropic OAuth source still resolves to the anthropic provider.
-  const a = buildSourceProvider("anthropic", "claude-opus-4-0");
-  assert.equal(a?.id, "anthropic");
-  assert.equal(a?.model, "claude-opus-4-0");
 });
 
 test("Ollama Cloud is a gateway source: needs-auth without a key, ready with its live models", () => {

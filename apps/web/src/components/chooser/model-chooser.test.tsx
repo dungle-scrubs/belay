@@ -244,6 +244,32 @@ test("the source-detail auth/setup action invokes the host-owned flow", () => {
   assert.deepEqual(actions, [["codex", "reauthenticate"]]);
 });
 
+test("the Configure button on a source needing setup forwards onSourceAction(id, 'configure') (53 D-003)", () => {
+  // The Anthropic Direct API source needs a key -> its detail shows the SourceAuthPanel with a
+  // Configure action. The chooser forwards it; the App wires it to a defined effect (no dead button).
+  const actions: [string, string][] = [];
+  const anthropicDirect = source({
+    sourceId: "anthropic",
+    label: "Anthropic Direct API",
+    type: "api-key",
+    status: "needs-auth",
+    auth: "none",
+    modelCount: 0,
+    actions: ["configure"],
+  });
+  const { getByLabelText, getByRole } = render(
+    <ModelChooser
+      sources={[anthropicDirect]}
+      catalogBySource={{}}
+      onSelectModel={noop}
+      onSourceAction={(id, action) => actions.push([id, action])}
+    />,
+  );
+  fireEvent.click(getByLabelText("Open Anthropic Direct API"));
+  fireEvent.click(getByRole("button", { name: "Configure" }));
+  assert.deepEqual(actions, [["anthropic", "configure"]]);
+});
+
 test("the Configured only toggle hides needs-setup sources", () => {
   // SOURCES has the needs-auth Codex source, so the toggle appears; toggling it hides Codex.
   const { getByText, getByLabelText, queryByLabelText } = render(

@@ -86,20 +86,25 @@ export function piKeyProviderFromConfig(config: PiKeyConfig): PiAiProviderBase {
 
 /**
  * One row per static-key cloud provider reached through pi-ai. Each owns the browser-facing key,
- * its pi-ai provider id (which doubles as the `~/.pi/auth.json` entry name), its model-env override,
- * its default model, and the labels both consumers need. This is the single source of provider
- * config: `buildProviders` (index.ts) spreads it into the roster, and the catalog (catalog.ts)
- * derives its api-key SOURCE rows from it - so adding a pi-key provider is one row here, not three
- * near-identical factory bodies plus duplicate source/anomaly entries.
+ * its pi-ai provider id, its `~/.pi/auth.json` entry name, its model-env override, its default model,
+ * and the labels both consumers need. This is the single source of provider config: `buildProviders`
+ * (index.ts) spreads it into the roster, and the catalog (catalog.ts) derives its api-key SOURCE rows
+ * from it - so adding a pi-key provider is one row here, not three near-identical factory bodies plus
+ * duplicate source/anomaly entries.
  *
- * For these providers the pi-ai provider id, the auth.json key name, and the catalog source id all
- * coincide (deepseek/zai/minimax); the browser KEY differs only for Z.ai (key "glm", pi/auth "zai").
+ * For deepseek/zai/minimax the pi-ai provider id and the auth.json entry coincide (so `authName` is
+ * omitted and defaults to `piProvider`); the browser KEY differs only for Z.ai (key "glm", pi/auth
+ * "zai"). Anthropic Direct sets an explicit `authName` ("anthropic-api"): its pi-ai registry id is
+ * "anthropic", but its auth.json entry is kept distinct so it never reads a legacy OAuth entry named
+ * "anthropic" (the removed subscription-mints-a-key path) as if it were a `{ key }` (D-002).
  */
 export interface PiKeyProviderDef {
   /** Browser-facing registry key + provider id (user.message.provider). */
   readonly key: string;
-  /** pi-ai provider id whose registry the model lives in; also the auth.json entry + catalog source id. */
+  /** pi-ai provider id whose registry the model lives in; also the catalog source id. */
   readonly piProvider: string;
+  /** `~/.pi/auth.json` entry holding this provider's `{ key }`; defaults to `piProvider` when omitted. */
+  readonly authName?: string;
   /** Env var that overrides the default model. */
   readonly modelEnvVar: string;
   /** Model id used when the env var is unset. */
@@ -108,6 +113,11 @@ export interface PiKeyProviderDef {
   readonly rosterLabel: string;
   /** Display label for the D-065 catalog source. */
   readonly sourceLabel: string;
+}
+
+/** The `~/.pi/auth.json` entry a row reads its `{ key }` from: an explicit `authName`, else `piProvider`. */
+export function piKeyAuthName(def: PiKeyProviderDef): string {
+  return def.authName ?? def.piProvider;
 }
 
 export const PI_KEY_PROVIDERS: readonly PiKeyProviderDef[] = [
@@ -135,6 +145,18 @@ export const PI_KEY_PROVIDERS: readonly PiKeyProviderDef[] = [
     rosterLabel: "MiniMax M2.7",
     sourceLabel: "MiniMax",
   },
+  // Anthropic Direct API: a plain generated key (usage-billed), NOT the Claude subscription OAuth. Its
+  // pi-ai registry is "anthropic" (which carries the direct `anthropic-messages` API + base URL); its
+  // auth.json entry is the distinct "anthropic-api" so it never collides with a legacy OAuth entry.
+  {
+    key: "anthropic",
+    piProvider: "anthropic",
+    authName: "anthropic-api",
+    modelEnvVar: "ANTHROPIC_MODEL",
+    defaultModel: "claude-sonnet-4-6",
+    rosterLabel: "Claude Sonnet 4.6 (Anthropic API)",
+    sourceLabel: "Anthropic Direct API",
+  },
 ];
 
 /**
@@ -146,7 +168,7 @@ export function piKeyProvider(def: PiKeyProviderDef): PiAiProviderBase {
   return piKeyProviderFromConfig({
     id: def.key,
     piProvider: def.piProvider,
-    authName: def.piProvider,
+    authName: piKeyAuthName(def),
     model: process.env[def.modelEnvVar] ?? def.defaultModel,
     label: def.rosterLabel,
   });

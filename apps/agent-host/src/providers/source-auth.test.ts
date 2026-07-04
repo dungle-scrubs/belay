@@ -37,25 +37,30 @@ const fakeLoginOk: OAuthLogin = async ({ onDeviceCode }) => {
   return { access: SECRET, refresh: "refresh-tok", expires: 123, accountId: "acct-1" };
 };
 
-test("signInTargetFor maps the OAuth sources to their auth entries, and nothing else", () => {
+test("signInTargetFor maps OpenAI to its auth entry; the Claude subscription and api-key sources have none", () => {
   assert.equal(signInTargetFor("openai")?.oauthName, "openai-codex");
-  assert.equal(signInTargetFor("anthropic")?.oauthName, "anthropic");
+  // 53 D-001/D-002: the Claude subscription authorizes via `claude setup-token` (a CLI token store),
+  // not an in-app OAuth, and the Anthropic Direct API is a static key - neither has a sign-in target.
+  assert.equal(signInTargetFor("claude-code"), null, "the Claude subscription has no in-app OAuth");
+  assert.equal(signInTargetFor("anthropic"), null, "the Anthropic Direct API is a static key");
   assert.equal(signInTargetFor("deepseek"), null, "api-key sources have no sign-in flow");
   assert.equal(signInTargetFor("nope"), null);
 });
 
-test("a browser+paste sign-in (Anthropic) emits the URL with acceptsCode, then completes on the code", async () => {
+test("a browser+paste sign-in emits the URL with acceptsCode, then completes on the pasted code", async () => {
   const states: SourceSignInState[] = [];
-  // A fake Anthropic-style login: shows a URL, awaits the pasted code, then returns credentials.
-  const fakeAnthropicLogin: OAuthLogin = async ({ onAuthUrl, requestCode }) => {
-    onAuthUrl({ url: "https://claude.ai/oauth/authorize?x=1" });
+  // A browser+paste login (runSourceSignIn's generic onAuthUrl path): shows a URL, awaits the pasted
+  // code, then returns credentials. No registered target is required - the login is injected, so this
+  // pins the generic browser+paste capability the protocol keeps for any future source that needs it.
+  const fakePasteLogin: OAuthLogin = async ({ onAuthUrl, requestCode }) => {
+    onAuthUrl({ url: "https://provider.example/oauth/authorize?x=1" });
     const code = await requestCode();
-    return { access: "anthropic-token", refresh: "r", expires: 1, via: code };
+    return { access: "paste-token", refresh: "r", expires: 1, via: code };
   };
   await runSourceSignIn({
-    sourceId: "anthropic",
-    oauthName: "anthropic",
-    login: fakeAnthropicLogin,
+    sourceId: "paste-source",
+    oauthName: "paste-source",
+    login: fakePasteLogin,
     authPath,
     signal: new AbortController().signal,
     emit: (s) => states.push(s),
@@ -63,15 +68,15 @@ test("a browser+paste sign-in (Anthropic) emits the URL with acceptsCode, then c
   });
   assert.deepEqual(states, [
     {
-      sourceId: "anthropic",
+      sourceId: "paste-source",
       phase: "device-code",
-      verificationUri: "https://claude.ai/oauth/authorize?x=1",
+      verificationUri: "https://provider.example/oauth/authorize?x=1",
       acceptsCode: true,
     },
-    { sourceId: "anthropic", phase: "complete" },
+    { sourceId: "paste-source", phase: "complete" },
   ]);
   const stored = JSON.parse(await readFile(authPath, "utf8")) as Record<string, { type?: string }>;
-  assert.equal(stored.anthropic?.type, "oauth", "the anthropic OAuth credential is persisted");
+  assert.equal(stored["paste-source"]?.type, "oauth", "the browser+paste credential is persisted");
 });
 
 test("a successful sign-in emits device-code then complete, and persists the credential", async () => {

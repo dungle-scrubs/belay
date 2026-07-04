@@ -86,6 +86,32 @@ test("OAuth expired shows a Re-authenticate action and expired copy", () => {
   assert.ok(getByRole("button", { name: "Re-authenticate" }));
 });
 
+test("the Claude subscription (oauth + configure) shows setup-token guidance, not a provider sign-in", () => {
+  // 53 D-003: the merged Claude subscription authorizes via `claude setup-token` (a CLI token), so the
+  // host offers it `configure`, not `authenticate` - the panel must show the token-setup copy instead
+  // of the "sign in through the provider" flow it does not have.
+  const subscription = source({
+    sourceId: "claude-code",
+    type: "oauth",
+    status: "needs-auth",
+    auth: "none",
+    actions: ["configure"],
+    label: "Claude Code subscription",
+  });
+  const copy = authCopy(subscription);
+  assert.match(copy.title, /set up/i);
+  assert.match(copy.body, /claude setup-token/i);
+  assert.doesNotMatch(copy.body, /sign in through the provider/i);
+  const { getByRole, container } = render(
+    <SourceAuthPanel source={subscription} onAction={noop} />,
+  );
+  assert.ok(
+    getByRole("button", { name: "Configure" }),
+    "a Configure action, not a device-code sign-in",
+  );
+  assertNoKeyInput(container);
+});
+
 test("a direct API-key source with no key points to the host auth store and renders NO key field", () => {
   const missing = source({
     sourceId: "anthropic",
@@ -166,6 +192,30 @@ test("a device / provider-code flow shows the link + non-key code and submits a 
   fireEvent.click(getByRole("button", { name: "Continue" }));
   assert.deepEqual(codes, ["user-entered-code"]);
   assertNoKeyInput(container);
+});
+
+test("a long verification URL wraps instead of overflowing the panel (53 D-004)", () => {
+  const longUrl = `https://auth.example.com/oauth/device/authorize?client_id=trevor&scope=all&state=${"x".repeat(240)}`;
+  const { getByText } = render(
+    <SourceAuthPanel
+      source={source({
+        sourceId: "codex",
+        type: "oauth",
+        status: "needs-auth",
+        auth: "none",
+        actions: ["authenticate"],
+      })}
+      deviceCode={{ verificationUrl: longUrl, acceptsCode: true }}
+      onAction={noop}
+    />,
+  );
+  // jsdom does not lay out, so the anti-overflow guarantee is asserted structurally: the URL text
+  // carries `break-all` (breaks between characters) inside a `flex-wrap` row, so a long URL wraps
+  // within the panel rather than forcing horizontal overflow.
+  const urlText = getByText(longUrl);
+  assert.ok(urlText.className.includes("break-all"), "the URL text breaks between characters");
+  const row = urlText.closest("a")?.parentElement;
+  assert.ok(row?.className.includes("flex-wrap"), "the link + code row wraps");
 });
 
 test("an auth failure is scoped to the panel - it renders only this source's state", () => {

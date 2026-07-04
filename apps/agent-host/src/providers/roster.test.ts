@@ -20,6 +20,9 @@ const EXPECTED_LABELS: Record<string, string> = {
   deepseek: "DeepSeek V4 Pro",
   glm: "GLM-5.2 (Z.ai)",
   minimax: "MiniMax M2.7",
+  // The Anthropic Direct API static-key provider (53 D-002), derived from the shared pi-key registry
+  // row - a peer to DeepSeek / Z.ai / MiniMax, keyed by its browser-facing provider id "anthropic".
+  anthropic: "Claude Sonnet 4.6 (Anthropic API)",
 };
 
 test("buildProviders exposes the canonical provider keys and labels", () => {

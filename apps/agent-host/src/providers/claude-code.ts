@@ -1,17 +1,17 @@
 /**
- * A second Claude source that runs Claude through the TypeScript Agent SDK
- * (`@anthropic-ai/claude-agent-sdk`) billed to the user's Max-plan subscription, alongside the
- * `anthropic` source (raw Messages API, billed to API credits). Each `stream()` call spawns ONE SDK
- * `query()` NAKED - a custom system prompt that fully replaces Claude Code's default, zero tools (so
- * the SDK's own agent loop terminates after one text-only turn), no filesystem settings, and a child
- * env that injects `CLAUDE_CODE_OAUTH_TOKEN` while DELETING `ANTHROPIC_API_KEY` so a stale key can't
- * silently bill API credits (D-002). Text-only in this cut: `capabilities().tools` is false and no
- * tool is ever exposed to the SDK (D-004).
+ * The Claude Code subscription source (53 D-001): runs Claude through the TypeScript Agent SDK
+ * (`@anthropic-ai/claude-agent-sdk`) billed to the user's Claude subscription. It is the ONE Claude
+ * subscription source; the separate Anthropic *Direct API* is a plain static-key peer (pi-key.ts),
+ * NOT an OAuth path. Each `stream()` call spawns ONE SDK `query()` NAKED - a custom system prompt that
+ * fully replaces Claude Code's default, zero tools (so the SDK's own agent loop terminates after one
+ * text-only turn), no filesystem settings, and a child env that injects `CLAUDE_CODE_OAUTH_TOKEN`
+ * while DELETING `ANTHROPIC_API_KEY` so a stale key can't silently bill API credits (D-002). Text-only
+ * in this cut: `capabilities().tools` is false and no tool is ever exposed to the SDK (D-004).
  *
  * Responsible for: the Claude-Code Provider impl (describe/readiness/capabilities/warm/stream), the
  * naked `query()` spawn + env hygiene, and the SDK-event -> ProviderEvent mapping over an injected
  * `query` seam.
- * Not for: the `~/.pi/auth.json` anthropic OAuth source (anthropic.ts), or the source registry /
+ * Not for: the Anthropic Direct API static-key source (pi-key.ts), or the source registry /
  * configured-signal wiring (catalog.ts / provider-auth.ts).
  */
 import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -36,15 +36,16 @@ import {
 } from "./types";
 
 /** The pi-ai registry provider id whose Claude model shapes (reasoning surface, vision, context
- *  window) enrich this source - the SAME models as the `anthropic` source, only billed differently. */
+ *  window) enrich this source - the same Claude models the Anthropic Direct API serves, only reached
+ *  through the Agent SDK on the subscription instead of a direct static key. */
 const ANTHROPIC = "anthropic";
 
 /** The stable source/provider id: the catalog's SourceDef row, its dispatch, and this provider's
  *  typed failures all share it, so a rename is one edit. */
 export const CLAUDE_CODE_SOURCE_ID = "claude-code";
 
-/** The long-lived Max-plan token (from `claude setup-token`) that bills inference to the subscription.
- *  Injected into the child env so the SDK subprocess uses it. */
+/** The long-lived subscription token (from `claude setup-token`) that bills inference to the Claude
+ *  subscription. Injected into the child env so the SDK subprocess uses it. */
 export const CLAUDE_CODE_OAUTH_ENV = "CLAUDE_CODE_OAUTH_TOKEN";
 
 /** The API-credit key. Precedence is `ANTHROPIC_API_KEY > CLAUDE_CODE_OAUTH_TOKEN`, so a stale key
@@ -67,7 +68,7 @@ export type SdkQuery = (params: {
 export interface ClaudeCodeConfig {
   /** A Claude model id from pi-ai's anthropic registry, e.g. claude-opus-4-0. */
   readonly model: string;
-  /** Human-friendly name for the UI selector (distinct from the `anthropic` source's label). */
+  /** Human-friendly name for the UI selector (distinct from the Anthropic Direct API source's label). */
   readonly label: string;
   /** The Agent SDK query seam; defaults to the lazily-imported real SDK `query`. Injected in tests. */
   readonly query?: SdkQuery;
@@ -245,7 +246,7 @@ export function streamClaudeCode(
 }
 
 /**
- * Claude via the Agent SDK on the Max subscription. Cloud (always warm); the reasoning surface + image
+ * Claude via the Agent SDK on the Claude subscription. Cloud (always warm); the reasoning surface + image
  * support + context window are derived from the pi-ai anthropic registry model (metadata only - this
  * source streams through the SDK, not pi-ai), with a safe fallback so a just-released model id still
  * starts the host. Tools are NEVER exposed (D-004), so `capabilities().tools` is false.
@@ -291,8 +292,8 @@ export class ClaudeCodeProvider extends DescribableProvider {
     return Effect.succeed({ images: this.images, tools: false, contextLength: 0 });
   }
 
-  /** Cloud, so always warm; ready when the CLI token is present (a DIFFERENT store than the anthropic
-   *  source's ~/.pi/auth.json OAuth entry - D-003). */
+  /** Cloud, so always warm; ready when the CLI token is present (the subscription setup-token in the
+   *  host env - a DIFFERENT store than the Anthropic Direct API's ~/.pi/auth.json static key, D-003). */
   readiness(): Effect.Effect<Readiness> {
     return Effect.sync(() => ({ ready: resolveClaudeCodeToken(this.env) !== null, warm: true }));
   }

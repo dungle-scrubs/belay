@@ -90,6 +90,16 @@ export function authCopy(source: SourceSummary): { title: string; body: string }
     };
   }
   if (source.type === "oauth") {
+    // A subscription with NO in-app OAuth flow authorizes via a long-lived CLI setup token in the host
+    // env (e.g. `claude setup-token` for the Claude subscription), so the host offers it `configure`,
+    // not the device-code `authenticate`. Show the token-setup guidance rather than a "sign in through
+    // the provider" flow it does not have (53 D-003). Real OAuth sources (Codex) keep the sign-in copy.
+    if (source.actions.includes("configure")) {
+      return {
+        title: `Set up ${source.label}`,
+        body: "Authorize this subscription with its CLI setup token (for Claude Code, run `claude setup-token`) and set it in the host environment. Trevor reads it from the host; no password or key is entered in this chooser.",
+      };
+    }
     return source.auth === "expired"
       ? {
           title: "Your sign-in expired",
@@ -152,18 +162,22 @@ export function SourceAuthPanel({
                 ? "Open the authorization page, then paste the code it gives you below:"
                 : "Open the authorization page to continue:"}
           </p>
-          <div className="flex items-center gap-2">
+          {/* A device/OAuth verification URL can be very long (query params + tokens), so it must WRAP
+              inside the panel instead of pushing past its edge (53 D-004). The row wraps, the anchor
+              can shrink (min-w-0) and its URL text breaks between characters (break-all), while the
+              external-link icon and the short code chip stay whole (shrink-0). */}
+          <div className="flex flex-wrap items-center gap-2">
             <a
               href={deviceCode.verificationUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex cursor-pointer items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+              className="inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
             >
-              {deviceCode.verificationUrl}
-              <ExternalLink className="size-3.5" />
+              <span className="break-all">{deviceCode.verificationUrl}</span>
+              <ExternalLink className="size-3.5 shrink-0" />
             </a>
             {deviceCode.userCode ? (
-              <code className="rounded bg-muted px-2 py-0.5 font-mono text-sm tracking-widest">
+              <code className="shrink-0 rounded bg-muted px-2 py-0.5 font-mono text-sm tracking-widest">
                 {deviceCode.userCode}
               </code>
             ) : null}

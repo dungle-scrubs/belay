@@ -31,6 +31,7 @@ import {
 import { useLoopInventory } from "@/components/chat/loop/use-loop-inventory";
 import { loopPreviewForLine } from "@/components/chat/loop/use-loop-preview";
 import { ModelChooser } from "@/components/chooser/model-chooser";
+import { sourceActionCommand } from "@/components/chooser/source-action";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import type { PaletteCommand } from "@/components/command-palette/palette-commands";
 import { BackToChat } from "@/components/panel/back-to-chat";
@@ -983,13 +984,31 @@ export function App() {
         onSubmitCode={(code) => void submitSignInCode(code)}
         onSelectModel={onSelectModel}
         onSourceAction={(id, action) => {
-          // refresh re-queries each source's live /models; authenticate/re-authenticate runs the
-          // host-owned OAuth device-code sign-in (D-065 M5). configure (add an API key) stays manual
-          // - the host store, never a paste form.
-          if (action === "refresh") {
-            void refreshCatalog();
-          } else if (action === "authenticate" || action === "reauthenticate") {
-            void signInSource(id);
+          // The single source-action dispatch (53 D-003): every action maps to a defined effect, so
+          // none silently no-ops the way `configure` used to (there was no branch, so the button was
+          // dead on every machine).
+          const command = sourceActionCommand(action);
+          switch (command.kind) {
+            case "refresh-catalog":
+              // Re-query each configured source's live /models.
+              void refreshCatalog();
+              return;
+            case "sign-in":
+              // The host-owned OAuth device-code / browser+paste sign-in (D-065 M5).
+              void signInSource(id);
+              return;
+            case "show-setup-guidance":
+              // configure has no host round-trip: the key/token lives in the host store and the
+              // source's SourceAuthPanel already renders the setup guidance (the Claude subscription
+              // shows `claude setup-token`, the Direct API shows the ~/.pi/auth.json key copy). Keep
+              // that guidance surface open - never a paste form.
+              setChooserOpen(true);
+              return;
+            case "disable":
+              // No source offers `disable` yet; the exhaustive command mapping keeps it from silently
+              // dropping if one ever does.
+              setChooserOpen(true);
+              return;
           }
         }}
       />

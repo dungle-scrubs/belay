@@ -138,18 +138,12 @@ async function codexDeviceCodeLogin(cb: LoginCallbacks): Promise<Record<string, 
   return credentials as unknown as Record<string, unknown>;
 }
 
-async function anthropicLogin(cb: LoginCallbacks): Promise<Record<string, unknown>> {
-  const { loginAnthropic } = await import("@earendil-works/pi-ai/oauth");
-  const credentials = await loginAnthropic({
-    onAuth: (info) => cb.onAuthUrl({ url: info.url, instructions: info.instructions }),
-    onPrompt: () => cb.requestCode(),
-  });
-  return credentials as unknown as Record<string, unknown>;
-}
-
+// The Claude subscription has NO in-app OAuth sign-in target: its credential is the long-lived
+// `claude setup-token` token in the host env (a CLI token store), so the catalog offers it a manual
+// `configure` action, not a device-code `authenticate` (53 D-001/D-003). `runSourceSignIn` keeps its
+// generic browser+paste (onAuthUrl/requestCode) support for any future target that needs it.
 const SIGN_IN_TARGETS: Readonly<Record<string, { oauthName: string; login: OAuthLogin }>> = {
   openai: { oauthName: "openai-codex", login: codexDeviceCodeLogin },
-  anthropic: { oauthName: "anthropic", login: anthropicLogin },
 };
 
 export function signInTargetFor(sourceId: string): { oauthName: string; login: OAuthLogin } | null {
