@@ -76,16 +76,13 @@
   is the Storybook decorator default (light is the toolbar toggle).
 - **EZE browser path** is a real Lane B Playwright spec (`tests/browser/file-mention.spec.ts`) and
   passes headlessly here (`pnpm test:e2e:browser file-mention.spec` -> 1 passed).
+- **Storybook baselines** for the 6 new `Chat/FileMentionMenu` stories were generated in the pinned
+  Playwright Docker container per plan 09.2 (D-001/D-002) and committed
+  (`apps/web/__snapshots__/chat-filementionmenu--*.png`); the Lane A visual-regression check gates
+  green.
 
 ## Deferred follow-up
 
-- **Storybook screenshot baselines for the 6 new `Chat/FileMentionMenu` stories.** All 6 pass the
-  Lane A **smoke** check here (`test-storybook file-mention-menu` -> 6 passed). Their PNG baselines are
-  NOT committed: per plan 09.2 (D-001/D-002) baselines MUST be generated in the pinned Playwright
-  Docker container (`tests/browser/update-storybook-baselines.sh`) so fonts/antialiasing match CI;
-  host-generated (macOS) baselines would fail on ubuntu. Decision: run this script (needs Docker) and
-  commit `apps/web/__snapshots__/chat-filementionmenu--*.png` before the Storybook lane can gate green
-  in CI. Not fakeable headlessly here, so left as an owner/CI step.
 - **File-content injection is intentionally out of scope** for this slice (path selection only). The
   submit-time `fileMentionsIn` derivation is the structured foundation; a later plan decides whether
   mentions become attachments / context blocks / tool-detail links.
