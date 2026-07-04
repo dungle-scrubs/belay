@@ -20,6 +20,7 @@ export * from "./image-tokens";
 export * from "./inventory";
 export * from "./loop-command";
 export * from "./loop-parser";
+export * from "./metrics";
 export * from "./model-preferences";
 export * from "./model-source";
 export * from "./paste-tokens";

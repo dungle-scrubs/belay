@@ -16,23 +16,23 @@ Extracted from H-031/H-034. This plan owns a user-facing usage/metrics surface s
 
 ### M1 - Metrics Contract
 
-- [ ] RED: Define tested read models for run, session, provider/source, and time-window metrics.
-- [ ] GREEN: Map available usage fields and explicitly mark unknown/untrusted fields.
-- [ ] REFACTOR: Keep metrics separate from settings and routing.
+- [x] RED: Define tested read models for run, session, provider/source, and time-window metrics.
+- [x] GREEN: Map available usage fields and explicitly mark unknown/untrusted fields.
+- [x] REFACTOR: Keep metrics separate from settings and routing.
 
 ### M2 - Collection and Aggregation
 
-- [ ] RED: Cover aggregation, redaction, missing data, and provider differences.
-- [ ] GREEN: Implement bounded aggregation over recorded run/provider events.
-- [ ] RED: Cover per-model-segment attribution within a turn - usage, latency, and token/cost split at each `model.switched` boundary so a turn spanning multiple models/reasoning levels is not attributed to a single model.
-- [ ] GREEN: Partition each turn's recorded run/provider events at `model.switched` events from `.plans/09.1-mid-turn-model-switch` and aggregate usage per model/reasoning segment.
-- [ ] REFACTOR: Reuse telemetry artifacts without making debug metrics user-blocking.
+- [x] RED: Cover aggregation, redaction, missing data, and provider differences.
+- [x] GREEN: Implement bounded aggregation over recorded run/provider events.
+- [x] RED: Cover per-model-segment attribution within a turn - usage, latency, and token/cost split at each `model.switched` boundary so a turn spanning multiple models/reasoning levels is not attributed to a single model.
+- [x] GREEN: Partition each turn's recorded run/provider events at `model.switched` events from `.plans/09.1-mid-turn-model-switch` and aggregate usage per model/reasoning segment.
+- [x] REFACTOR: Reuse telemetry artifacts without making debug metrics user-blocking.
 
 ### M3 - UI and Export
 
-- [ ] RED: Storybook/test summary, provider breakdown, failure/retry rows, empty states, and export/copy.
-- [ ] GREEN: Add the UI surface and optional export.
-- [ ] REFACTOR: Keep cost/token labels conservative and source-attributed.
+- [x] RED: Storybook/test summary, provider breakdown, failure/retry rows, empty states, and export/copy.
+- [x] GREEN: Add the UI surface and optional export.
+- [x] REFACTOR: Keep cost/token labels conservative and source-attributed.
 
 ## Decisions
 
