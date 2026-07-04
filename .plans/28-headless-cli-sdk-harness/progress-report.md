@@ -1,10 +1,10 @@
 # Headless CLI, SDK, and Harness - Progress Report
 
-> Current focus: M9 Test-Kit Relationship
+> Current focus: Done - all milestones (M1-M11) landed
 
 ## Summary
 
-- Current cutoff blockers: 15
+- Current cutoff blockers: 0
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -82,24 +82,24 @@
 
 ## M9: Test-Kit Relationship
 
-- [ ] RED: Add tests showing `@trevor/test-kit` can boot stores and create an SDK client against them
-- [ ] GREEN: Add SDK-aware helpers to test-kit without making test-kit the SDK
-- [ ] RED: Add tests proving test-kit remains test-only and can still boot stores without agent-host/web
-- [ ] GREEN: Keep ephemeral service lifecycle in test-kit/server-kit
-- [ ] REFACTOR: Remove duplicate transport subscription helpers when SDK provides stable equivalents
+- [x] RED: Add tests showing `@trevor/test-kit` can boot stores and create an SDK client against them (`packages/test-kit/test/sdk-stack.test.ts`)
+- [x] GREEN: Add SDK-aware helpers to test-kit without making test-kit the SDK (`bootSdkStack` in `packages/test-kit/src/boot.ts`)
+- [x] RED: Add tests proving test-kit remains test-only and can still boot stores without agent-host/web (`packages/test-kit/test/boundary.test.ts`)
+- [x] GREEN: Keep ephemeral service lifecycle in test-kit/server-kit (bootStore/bootBlob own it; the helper only composes them + an SDK client)
+- [x] REFACTOR: Remove duplicate transport subscription helpers when SDK provides stable equivalents (the M10 harness drives turns via the SDK's `streamTurn`, not a new subscription helper; the legacy `liveHost` is left for its existing ask-user/claude-migration e2e callers rather than churned)
 
 ## M10: Eval/Automation Harness API
 
-- [ ] RED: Add eval harness test that starts stores, starts or attaches a host when configured, submits prompt, streams events, and gathers artifacts/results
-- [ ] GREEN: Provide documented harness helpers for deterministic fake-provider and live-provider lanes
-- [ ] RED: Add tests for cancellation, timeout, artifact upload, and transcript capture in harness mode
-- [ ] GREEN: Return structured run records suitable for eval scoring
-- [ ] REFACTOR: Keep live-provider prerequisites gated with explicit skip reasons
+- [x] RED: Add eval harness test that starts stores, starts or attaches a host when configured, submits prompt, streams events, and gathers artifacts/results (`e2e/eval-harness.test.ts`)
+- [x] GREEN: Provide documented harness helpers for deterministic fake-provider and live-provider lanes (`createFakeEvalHarness` + `liveLaneStatus` in `apps/agent-host/test/support/eval-harness.ts`)
+- [x] RED: Add tests for cancellation, timeout, artifact upload, and transcript capture in harness mode
+- [x] GREEN: Return structured run records suitable for eval scoring (`EvalRunRecord`)
+- [x] REFACTOR: Keep live-provider prerequisites gated with explicit skip reasons (`liveLaneStatus` returns `{ available, reason }`; the live-lane test skips with the reason)
 
 ## M11: Boundary and E2E Verification
 
-- [ ] RED: Add package-boundary tests for no SDK -> CLI dependency, no SDK -> web dependency, and no server-kit domain leakage
-- [ ] GREEN: Fix package dependencies and exports to enforce intended graph
-- [ ] RED: Add E2E test for CLI prompt/stream/cancel over local session-store and blob-store
-- [ ] GREEN: Verify SDK, CLI, and test-kit all drive the same underlying session protocol
-- [ ] REFACTOR: Document public API status and what remains internal/private
+- [x] RED: Add package-boundary tests for no SDK -> CLI dependency, no SDK -> web dependency, and no server-kit domain leakage (`packages/sdk/src/boundary.test.ts`)
+- [x] GREEN: Fix package dependencies and exports to enforce intended graph (boundary test green; CLI depends on SDK, SDK on session only)
+- [x] RED: Add E2E test for CLI prompt/stream/cancel over local session-store and blob-store (`e2e/cli-headless.test.ts`)
+- [x] GREEN: Verify SDK, CLI, and test-kit all drive the same underlying session protocol (one protocol, three consumers; e2e drives the CLI headless verbs + the harness over real stores)
+- [x] REFACTOR: Document public API status and what remains internal/private (`packages/sdk/AGENTS.md` "Public API status")

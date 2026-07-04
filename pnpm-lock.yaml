@@ -77,6 +77,9 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@trevor/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@trevor/test-kit':
         specifier: workspace:*
         version: link:../../packages/test-kit
@@ -318,6 +321,12 @@ importers:
       '@trevor/blob-store':
         specifier: workspace:*
         version: link:../apps/blob-store
+      '@trevor/cli':
+        specifier: workspace:*
+        version: link:../apps/trevor-cli
+      '@trevor/sdk':
+        specifier: workspace:*
+        version: link:../packages/sdk
       '@trevor/server-kit':
         specifier: workspace:*
         version: link:../packages/server-kit
@@ -403,6 +412,9 @@ importers:
       '@trevor/blob-store':
         specifier: workspace:*
         version: link:../../apps/blob-store
+      '@trevor/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@trevor/server-kit':
         specifier: workspace:*
         version: link:../server-kit

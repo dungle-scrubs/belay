@@ -5,6 +5,9 @@
   "bin": {
     "trevor": "./bin/trevor.mjs"
   },
+  "exports": {
+    "./headless": "./src/headless.ts"
+  },
   "scripts": {
     "start": "tsx src/main.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"

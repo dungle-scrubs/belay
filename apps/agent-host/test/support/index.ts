@@ -54,6 +54,19 @@ export { ProviderUnavailable } from "@host/providers/errors";
 export { ToolExecutionError, ToolInputError } from "@host/tools/errors";
 export { buildMcpTool, type McpArgs } from "@host/tools/mcp";
 export { runPromotable } from "@host/tools/promote-runner";
+// The eval/automation harness (plan 28 M10): boots stores + SDK client + a scriptable fake-provider host
+// into a `run() -> structured record` loop, so an eval or automation drives Trevor through the same
+// headless SDK layer a script would, with the live lane gated by an explicit skip reason.
+export {
+  attachFakeHost,
+  createFakeEvalHarness,
+  type EvalHarness,
+  type EvalRunInput,
+  type EvalRunRecord,
+  type FakeHostHandle,
+  type LiveLaneStatus,
+  liveLaneStatus,
+} from "./eval-harness";
 export * from "./fake-provider";
 // The hermetic fake-LM-Studio residency fixture (plan 11.1 M7), so cross-service e2e can drive two host
 // instances reference-counting residency claims over one real cross-process admission store.

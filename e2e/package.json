@@ -8,6 +8,8 @@
   "dependencies": {
     "@trevor/agent-host": "workspace:*",
     "@trevor/blob-store": "workspace:*",
+    "@trevor/cli": "workspace:*",
+    "@trevor/sdk": "workspace:*",
     "@trevor/server-kit": "workspace:*",
     "@trevor/session": "workspace:*",
     "@trevor/session-store": "workspace:*",

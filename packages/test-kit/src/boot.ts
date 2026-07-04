@@ -1,5 +1,6 @@
 import { rmSync } from "node:fs";
 import { createBlobServer } from "@trevor/blob-store/server";
+import { createTrevorClient, type TrevorClient } from "@trevor/sdk";
 import { type RunningServer, startServer } from "@trevor/server-kit";
 import { createSessionStore } from "@trevor/session-store/server";
 import { tempDir } from "./index";
@@ -42,6 +43,37 @@ export async function bootBlob(): Promise<BootedBlob> {
     close: async () => {
       await server.close();
       rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+/** A booted session-store + blob-store with a `@trevor/sdk` client bound to both, and one teardown. */
+export interface BootedSdkStack {
+  readonly store: RunningServer;
+  readonly blob: BootedBlob;
+  /** An SDK client bound to the booted store (`sessionUrl`) and blob (`blobUrl`). */
+  readonly client: TrevorClient;
+  /** Stops both stores (and removes the blob temp root). */
+  close(): Promise<void>;
+}
+
+/**
+ * Boots the real local stores and binds a `@trevor/sdk` client to them, so a test or eval harness drives
+ * Trevor through the SAME headless workflow layer a script would, over the same wire the host and web use.
+ * test-kit owns only the ephemeral service lifecycle here; the workflows themselves stay in the SDK (M9
+ * keeps test-kit test infrastructure, not a second SDK).
+ */
+export async function bootSdkStack(): Promise<BootedSdkStack> {
+  const store = await bootStore();
+  const blob = await bootBlob();
+  const client = createTrevorClient({ sessionUrl: store.url, blobUrl: blob.url });
+  return {
+    store,
+    blob,
+    client,
+    close: async () => {
+      await blob.close();
+      await store.close();
     },
   };
 }
