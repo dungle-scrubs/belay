@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M5: Accessibility and E2E
+> Current focus: Done - all milestones landed
 
 - Total checklist items: 29
-- Completed: 24
-- Current cutoff blockers: 5
+- Completed: 29
+- Current cutoff blockers: 0
 
 ## 0. Hard Dependencies
 
@@ -49,8 +49,8 @@
 
 ## M5: Accessibility and E2E
 
-- [ ] RED: Accessibility tests for tokens, percent, window, and band labels
-- [ ] GREEN: Expose pressure band without relying on color alone
-- [ ] RED: Reduced-motion and high-contrast checks
-- [ ] GREEN: Verify Storybook desktop and narrow panel screenshots
-- [ ] REFACTOR: Document thresholds in helper test names
+- [x] RED: Accessibility tests for tokens, percent, window, and band labels
+- [x] GREEN: Expose pressure band without relying on color alone
+- [x] RED: Reduced-motion and high-contrast checks
+- [x] GREEN: Verify Storybook desktop and narrow panel screenshots
+- [x] REFACTOR: Document thresholds in helper test names

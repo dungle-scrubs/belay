@@ -175,7 +175,15 @@ export function SidePanelBreakdown({
   return (
     <>
       {pressure ? (
-        <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
+        <div
+          className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pressure.clampedPercent}
+          aria-label={pressure.ariaLabel}
+          title={pressure.ariaLabel}
+        >
           <span className="shrink-0 text-muted-foreground">ctx</span>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
             <div

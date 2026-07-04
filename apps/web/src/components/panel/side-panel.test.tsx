@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { test } from "vitest";
 import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "./side-panel";
 
@@ -149,4 +149,37 @@ test("critical is a stronger color+weight treatment, not a textual alert", () =>
   assert.ok(getByText(/\(97%\)/).className.includes("font-semibold"));
   // ...but the only text is still "ctx", the usage number, and the window.
   assert.equal((container.textContent ?? "").toLowerCase().includes("overflow"), false);
+});
+
+// Accessibility (D-002): the band and values reach assistive tech through a labelled
+// progressbar, so the state never relies on color alone.
+
+test("meter is a labelled progressbar carrying tokens, window, percent, and band", () => {
+  const { getByRole } = render(<SidePanelBreakdown ctxUsed={182_000} ctxMax={200_000} />);
+  const meter = getByRole("progressbar");
+  assert.equal(meter.getAttribute("aria-valuemin"), "0");
+  assert.equal(meter.getAttribute("aria-valuemax"), "100");
+  assert.equal(meter.getAttribute("aria-valuenow"), "91");
+  const label = meter.getAttribute("aria-label") ?? "";
+  assert.match(label, /182\.0k/); // tokens
+  assert.match(label, /200k/); // window
+  assert.match(label, /91%/); // percent
+  assert.match(label, /danger/); // band
+  // The hover title mirrors the accessible label so mouse users get the same detail.
+  assert.equal(meter.getAttribute("title"), label);
+});
+
+test("over-window meter caps aria-valuenow at 100 while the label stays honest at 108%", () => {
+  const { getByRole } = render(<SidePanelBreakdown ctxUsed={216_000} ctxMax={200_000} />);
+  const meter = getByRole("progressbar");
+  assert.equal(meter.getAttribute("aria-valuenow"), "100");
+  assert.match(meter.getAttribute("aria-label") ?? "", /108%/);
+});
+
+test("the armed width transition is disabled under reduced motion", async () => {
+  const { container } = render(<SidePanelBreakdown ctxUsed={144_000} ctxMax={200_000} />);
+  const fill = () => container.querySelector<HTMLElement>(".bg-smui-yellow");
+  // The transition arms a frame after mount; once it does, it must carry the reduced-motion opt-out.
+  await waitFor(() => assert.ok(fill()?.className.includes("transition-[width]")));
+  assert.ok(fill()?.className.includes("motion-reduce:transition-none"));
 });
