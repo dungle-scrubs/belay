@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DOCTOR_AREA_ORDER,
+  DOCTOR_STATUS_HEADLINE,
+  DOCTOR_STATUS_RANK,
   type DoctorArea,
+  type DoctorAreaId,
   type DoctorSnapshot,
   type DoctorStatus,
   decodeDoctorSnapshot,
@@ -15,6 +18,53 @@ import {
 function area(id: DoctorArea["id"], status: DoctorStatus): DoctorArea {
   return { id, label: id, status, verdict: "" };
 }
+
+/**
+ * Plan 41 M2 - freeze the shared snapshot contract. These pin the stable vocabulary both the host
+ * (which builds the snapshot) and the web dashboard (which renders it) bind to, so a rename, reorder,
+ * or dropped area is a failing test rather than a silent host/web drift. The canonical grid is the
+ * fourteen areas below in this exact order.
+ */
+describe("contract freeze", () => {
+  const CANONICAL_AREAS: readonly DoctorAreaId[] = [
+    "core",
+    "session",
+    "providers",
+    "internet",
+    "tools",
+    "web",
+    "mcp",
+    "lsp",
+    "hooks",
+    "storage",
+    "workspace",
+    "admission",
+    "telemetry",
+    "updates",
+  ];
+
+  it("DOCTOR_AREA_ORDER is the frozen fourteen-area canonical set, in order", () => {
+    expect(DOCTOR_AREA_ORDER).toEqual(CANONICAL_AREAS);
+    expect(DOCTOR_AREA_ORDER).toHaveLength(14);
+  });
+
+  it("every area id is unique - no id is listed twice", () => {
+    expect(new Set(DOCTOR_AREA_ORDER).size).toBe(DOCTOR_AREA_ORDER.length);
+  });
+
+  it("the severity rank is strictly error > warn > ok > not_checked", () => {
+    expect(DOCTOR_STATUS_RANK.error).toBeGreaterThan(DOCTOR_STATUS_RANK.warn);
+    expect(DOCTOR_STATUS_RANK.warn).toBeGreaterThan(DOCTOR_STATUS_RANK.ok);
+    expect(DOCTOR_STATUS_RANK.ok).toBeGreaterThan(DOCTOR_STATUS_RANK.not_checked);
+  });
+
+  it("every status has a headline for the summary strip and the copy report", () => {
+    for (const status of ["ok", "warn", "error", "not_checked"] as const) {
+      expect(typeof DOCTOR_STATUS_HEADLINE[status]).toBe("string");
+      expect(DOCTOR_STATUS_HEADLINE[status].length).toBeGreaterThan(0);
+    }
+  });
+});
 
 function snapshot(statuses: readonly DoctorStatus[]): DoctorSnapshot {
   return {
@@ -127,6 +177,41 @@ describe("formatDoctorReport", () => {
     // A snapshot with no host context omits the workspace line entirely.
     const bare = formatDoctorReport({ state: "ready", areas: [] });
     expect(bare).not.toContain("workspace:");
+  });
+
+  it("is a formatted text projection, never the raw JSON struct (redaction: copy surface)", () => {
+    // The copy report / model-facing tool render THIS, not JSON.stringify(snapshot). The already
+    // -sanitized evidence a host published is shown faithfully, but the raw object's key names
+    // (`"state":`, `"areas":`, `"evidence":`) never appear - so the surface can leak nothing the
+    // structured object carried beyond the strings the dashboard already shows.
+    const withEvidence: DoctorSnapshot = {
+      state: "ready",
+      areas: [
+        {
+          id: "providers",
+          label: "Providers",
+          status: "warn",
+          verdict: "one incident",
+          findings: [
+            {
+              id: "providers.incident.deepseek",
+              status: "warn",
+              title: "Provider transport failure",
+              message: "the last turn was interrupted",
+              evidence: "401 from upstream: «redacted»",
+            },
+          ],
+        },
+      ],
+    };
+    const report = formatDoctorReport(withEvidence);
+    expect(report).toContain("evidence: 401 from upstream: «redacted»");
+    // No raw-struct key names leak: it is the report, not a serialized object.
+    expect(report).not.toContain('"state"');
+    expect(report).not.toContain('"areas"');
+    expect(report).not.toContain('"evidence"');
+    // And nothing the snapshot never carried (a bearer/key shape) can appear.
+    expect(report).not.toMatch(/Bearer|sk-|x-api-key/i);
   });
 });
 

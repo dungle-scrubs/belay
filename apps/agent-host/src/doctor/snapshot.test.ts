@@ -11,7 +11,7 @@ import { buildDoctorSnapshot } from "./snapshot";
 
 /**
  * D-073 M1-M3: the structured doctor.current snapshot construction. Pure over probed facts, so these
- * pin the 12-area grid, per-area findings, severity aggregation, and the area-specific status
+ * pin the fourteen-area grid, per-area findings, severity aggregation, and the area-specific status
  * mappings (provider unreachable, offline internet, unwritable storage) without any live probing.
  */
 
@@ -90,7 +90,7 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
   };
 }
 
-test("builds all twelve areas in canonical order, with findings (internet/storage are facts-driven)", () => {
+test("builds all fourteen areas in canonical order, with findings (internet/storage are facts-driven)", () => {
   const snap = buildDoctorSnapshot(input());
   assert.deepEqual(
     snap.areas.map((a) => a.id),

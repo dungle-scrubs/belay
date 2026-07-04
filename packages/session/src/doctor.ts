@@ -1,12 +1,19 @@
 /**
- * `/doctor` health-snapshot read model and aggregation helpers.
+ * `/doctor` health-snapshot read model and aggregation helpers - the FROZEN contract (plan 41 M2).
  *
  * The single source of the shape Trevor web renders for `doctor.current`: the
- * overall snapshot, its twelve diagnostic areas, the findings inside each area,
+ * overall snapshot, its fourteen diagnostic areas, the findings inside each area,
  * and the pure helpers that roll finding/area severity up into the summary
- * strip. Nothing here renders or probes - the host builds the snapshot, the web
- * dashboard (`components/chat/doctor`) renders it, and this module is the shared
- * vocabulary in between (mirrors `commands/loop.ts`).
+ * strip. Nothing here renders or probes - the host (`apps/agent-host/src/doctor`)
+ * builds the snapshot, the web dashboard (`components/chat/doctor`) renders it,
+ * and this module is the shared vocabulary in between (mirrors `commands/loop.ts`).
+ *
+ * This is the single contract both sides bind to: the area id set + canonical order
+ * ({@link DOCTOR_AREA_ORDER}), the severity model ({@link DoctorStatus} +
+ * {@link DOCTOR_STATUS_RANK}), the copyable report ({@link formatDoctorReport}),
+ * and the defensive decode ({@link decodeDoctorSnapshot}) are pinned by
+ * `doctor.test.ts` so host and web can never silently drift. Adding a field ripples
+ * to the web typecheck by design - keep both sides in sync.
  */
 
 /**
@@ -17,7 +24,7 @@
  */
 export type DoctorStatus = "ok" | "warn" | "error" | "not_checked";
 
-/** The twelve diagnostic areas, in their canonical dashboard order. */
+/** The fourteen diagnostic areas, in their canonical dashboard order. */
 export type DoctorAreaId =
   | "core"
   | "session"

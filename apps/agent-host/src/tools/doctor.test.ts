@@ -54,6 +54,40 @@ test("doctor takes no arguments (empty payload decodes and runs)", async () => {
   assert.equal(result, formatDoctorReport(SNAPSHOT));
 });
 
+test("the model reads the formatted text report, never the raw JSON struct (plan 41 M6 redaction)", async () => {
+  // A finding whose evidence carries an already-sanitized upstream detail. The model-facing
+  // projection is a pure text render of the SAME sanitized snapshot the user sees - so it shows the
+  // sanitized evidence faithfully but never serializes the raw object (no `{`, no `"areas":` keys),
+  // which is what keeps a struct dump - and anything it might carry - off the model surface.
+  const withEvidence: DoctorSnapshot = doctorSnapshot({
+    areas: [
+      doctorArea("providers", "warn", {
+        label: "Providers",
+        verdict: "one incident",
+        findings: [
+          {
+            id: "providers.incident.deepseek",
+            status: "warn",
+            title: "Provider auth / quota",
+            message: "the last turn failed on a credential error",
+            evidence: "401 from upstream: «redacted»",
+          },
+        ],
+      }),
+    ],
+  });
+  registerDoctorSnapshotSource(async () => withEvidence);
+  const result = await Effect.runPromise(executeTool("doctor", "{}"));
+  assert.equal(result, formatDoctorReport(withEvidence), "the tool renders the shared text report");
+  assert.ok(!result.trimStart().startsWith("{"), "it is text, not a serialized JSON object");
+  assert.ok(!result.includes('"areas"'), "no raw-struct key names leak to the model");
+  assert.ok(
+    result.includes("401 from upstream: «redacted»"),
+    "sanitized evidence shows faithfully",
+  );
+  assert.ok(!/Bearer|sk-|x-api-key/i.test(result), "no credential shape appears");
+});
+
 test("a snapshot-source failure degrades to one clean error line, not a thrown turn", async () => {
   registerDoctorSnapshotSource(async () => {
     throw new Error("host is not the live leader");

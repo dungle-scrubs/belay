@@ -697,7 +697,55 @@ export const storageLegacyImportable: DoctorArea = {
   ],
 };
 
-// --- Workspace -------------------------------------------------------------
+// --- Local admission (plans 11 + 11.1) -------------------------------------
+
+/** No local model in use - the clean idle default the host reports when nothing is resident. */
+export const admissionIdle: DoctorArea = {
+  id: "admission",
+  label: "Local admission",
+  status: "ok",
+  verdict: "no local model in use",
+  findings: [
+    {
+      id: "admission.idle",
+      status: "ok",
+      title: "Local admission",
+      message: "no local model in use",
+    },
+  ],
+};
+
+/** Resident Trevor-loaded local models with their context caps + live claim counts (plan 11.1). */
+export const admissionResident: DoctorArea = {
+  id: "admission",
+  label: "Local admission",
+  status: "ok",
+  verdict: "1 active, 0 queued; 2 models resident",
+  facts: [
+    { label: "resources", value: "1" },
+    { label: "active owners", value: "1" },
+    { label: "queued", value: "0" },
+    { label: "resident models", value: "2" },
+    { label: "qwen3.6-27b", value: "65536 ctx, 2 claims" },
+    { label: "gemma3-27b", value: "32768 ctx, 1 claim" },
+  ],
+  findings: [
+    {
+      id: "admission.summary",
+      status: "ok",
+      title: "Local admission",
+      message: "1 active, 0 queued",
+    },
+    {
+      id: "residency.summary",
+      status: "ok",
+      title: "Resident local models",
+      message: "2 models resident",
+    },
+  ],
+};
+
+// --- Telemetry (plan 13) ---------------------------------------------------
 
 export const telemetryDisabled: DoctorArea = {
   id: "telemetry",
@@ -830,7 +878,7 @@ function snapshot(
   return { state, checkedAt, host: HOST, areas: ordered(areas) };
 }
 
-/** The full healthy baseline - one ok area per id, canonical order. */
+/** The full healthy baseline - one ok area per id, the real fourteen-area grid, canonical order. */
 export const HEALTHY_AREAS: readonly DoctorArea[] = [
   coreOk,
   sessionOk,
@@ -843,6 +891,8 @@ export const HEALTHY_AREAS: readonly DoctorArea[] = [
   hooksOk,
   storageOk,
   workspaceGit,
+  admissionIdle,
+  telemetryDisabled,
   updatesOk,
 ];
 
@@ -861,6 +911,8 @@ export const mixedSnapshot: DoctorSnapshot = snapshot("ready", "checked 18s ago"
   hooksOk,
   storageOk,
   workspaceGit,
+  admissionResident,
+  telemetryDisabled,
   updatesAvailable,
 ]);
 
@@ -877,6 +929,8 @@ export const manyFindingsSnapshot: DoctorSnapshot = snapshot("ready", "checked 4
   hooksSlow,
   storageRootInvalid,
   workspaceNotGit,
+  admissionResident,
+  telemetryFileWithDrops,
   updatesAvailable,
 ]);
 
@@ -907,6 +961,15 @@ export const refreshingSnapshot: DoctorSnapshot = {
 /** First probe, nothing rendered yet - the dashboard shows its skeleton. */
 export const loadingSnapshot: DoctorSnapshot = {
   state: "refreshing",
+  host: HOST,
+  areas: [],
+};
+
+/** A settled snapshot that carries no areas - the degenerate empty grid (distinct from loading:
+ *  ready, not refreshing). The panel should render its chrome without crashing on zero rows. */
+export const emptySnapshot: DoctorSnapshot = {
+  state: "ready",
+  checkedAt: "checked just now",
   host: HOST,
   areas: [],
 };
@@ -993,5 +1056,7 @@ export const longPathsSnapshot: DoctorSnapshot = snapshot("ready", "checked 11s 
   hooksOk,
   storageLongPath,
   workspaceGit,
+  admissionResident,
+  telemetryDisabled,
   updatesOk,
 ]);

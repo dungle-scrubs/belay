@@ -14,7 +14,7 @@ import {
 } from "@trevor/session";
 import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
 import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
 import type { ProviderRegistry } from "../providers";
 import { readObservations, summarizeObservations } from "../providers/observation-store";
@@ -159,18 +159,31 @@ function parseDoctorCommand(args: string): DoctorCommand {
 }
 
 /**
- * One probe of a provider's reachability: run `readiness()` once and map it - and any throw - to the
- * warm/cold/unreachable vocabulary both /doctor surfaces render. The single owner of the
- * readiness -> status ladder + the unreachable-on-throw policy, so the structured probe and the
- * plaintext line can't drift on what "warm" means.
+ * The bounded per-provider readiness timeout (plan 41 M4). A health probe must never hang the whole
+ * /doctor command on one slow or wedged provider readiness call, so each readiness is raced against
+ * this budget and an unanswered probe degrades to `unreachable` (the same bucket as a throw) rather
+ * than blocking. Read-only either way: readiness never loads or warms a model.
+ */
+const PROVIDER_PROBE_TIMEOUT_MS = 2000;
+
+/**
+ * One probe of a provider's reachability: run `readiness()` once, BOUNDED by a timeout, and map it -
+ * and any throw or timeout - to the warm/cold/unreachable vocabulary both /doctor surfaces render.
+ * The single owner of the readiness -> status ladder + the unreachable-on-throw/timeout policy, so
+ * the structured probe and the plaintext line can't drift on what "warm" means, and neither can hang.
  */
 async function probeProviderStatus(
   provider: ProviderRegistry[string],
+  timeoutMs: number = PROVIDER_PROBE_TIMEOUT_MS,
 ): Promise<DoctorProviderProbe["status"]> {
   try {
-    const { ready, warm } = await Effect.runPromise(provider.readiness());
+    const { ready, warm } = await Effect.runPromise(
+      provider.readiness().pipe(Effect.timeout(Duration.millis(timeoutMs))),
+    );
     return ready ? (warm ? "warm" : "cold") : "unreachable";
   } catch {
+    // A throw OR a timeout both land here: a bounded, non-mutating probe reads an unanswered
+    // readiness as unreachable rather than letting /doctor block on a wedged provider (plan 41 M4).
     return "unreachable";
   }
 }
@@ -179,8 +192,9 @@ async function probeProviderStatus(
 async function doctorProviderProbe(
   key: string,
   provider: ProviderRegistry[string],
+  timeoutMs?: number,
 ): Promise<DoctorProviderProbe> {
-  const status = await probeProviderStatus(provider);
+  const status = await probeProviderStatus(provider, timeoutMs);
   return { key, label: provider.label, model: provider.model, kind: provider.kind, status };
 }
 
@@ -270,13 +284,22 @@ function hostStr(host: Record<string, unknown> | undefined, key: string): string
   return typeof value === "string" ? value : undefined;
 }
 
+/** Options for {@link collectDoctorProbeResults}: the per-provider readiness timeout (plan 41 M4),
+ *  injectable so the bounded-probe behavior is deterministic in tests. */
+export interface DoctorProbeOptions {
+  readonly probeTimeoutMs?: number;
+}
+
 /** Probes bounded live dependencies for /doctor without exposing raw provider/storage internals. */
 export async function collectDoctorProbeResults(
   providers: ProviderRegistry,
+  opts: DoctorProbeOptions = {},
 ): Promise<DoctorProbeResults> {
   const [providerProbes, roots, observationStore, tools] = await Promise.all([
     Promise.all(
-      Object.entries(providers).map(([key, provider]) => doctorProviderProbe(key, provider)),
+      Object.entries(providers).map(([key, provider]) =>
+        doctorProviderProbe(key, provider, opts.probeTimeoutMs),
+      ),
     ),
     Promise.all(resolveRootPolicy().map(probeRoot)),
     readObservations(),

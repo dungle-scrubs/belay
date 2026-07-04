@@ -3,6 +3,7 @@ import type { DoctorSnapshot } from "@trevor/session";
 import { useState } from "react";
 import { storyFrame } from "@/components/chat/story-frame";
 import {
+  emptySnapshot,
   healthySnapshot,
   loadingSnapshot,
   longPathsSnapshot,
@@ -37,7 +38,7 @@ const onRefresh = () => window.alert("/doctor refresh");
 /** The panel reads as a command result: a single column at a comfortable width. */
 const Frame = storyFrame("mx-auto w-full max-w-3xl");
 
-/** All twelve areas healthy - twelve quiet lines, no boxes. */
+/** All fourteen areas healthy - fourteen quiet lines, no boxes. */
 export const AllHealthy: Story = {
   render: () => (
     <Frame>
@@ -79,6 +80,16 @@ export const Loading: Story = {
   render: () => (
     <Frame>
       <DoctorPanel snapshot={loadingSnapshot} onRefresh={onRefresh} />
+    </Frame>
+  ),
+};
+
+/** A settled snapshot with zero areas - the degenerate empty grid. The panel renders its summary
+ *  chrome (all counts zero) over an empty list without collapsing. */
+export const Empty: Story = {
+  render: () => (
+    <Frame>
+      <DoctorPanel snapshot={emptySnapshot} onRefresh={onRefresh} />
     </Frame>
   ),
 };
