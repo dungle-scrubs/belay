@@ -40,6 +40,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
     archived: false,
     deleted: false,
     forkedFrom: null,
+    tangentOf: null,
     ...over,
   };
 }

@@ -35,12 +35,33 @@ export interface SessionSummary {
   readonly deleted: boolean;
   /** Lineage: the parent this session was forked from (plan 15), or null for a root session. */
   readonly forkedFrom: SessionLineage | null;
+  /**
+   * Tangent lineage (plan 37): when this session is a tangent, the parent + anchor it branched from;
+   * null for a normal, root, or forked session. Distinct from `forkedFrom` - a tangent is a scoped side
+   * thread seeded only with the selected snapshot, kept out of ordinary top-level navigation.
+   */
+  readonly tangentOf: TangentAnchor | null;
 }
 
 /** A session's fork lineage: the parent it branched from and the parent seq it branched at. */
 export interface SessionLineage {
   readonly parentSessionId: string;
   readonly forkSeq: number;
+}
+
+/**
+ * A tangent's anchor (plan 37): the parent session + the exact source message and selected quote a
+ * tangent was branched from, plus its creation time. Drives parent-owned tangent discovery (M7) and the
+ * takeover's source-context header. It is metadata only - never a licence to replay parent history into
+ * the tangent prompt (D-001).
+ */
+export interface TangentAnchor {
+  readonly parentSessionId: string;
+  readonly sourceMessageId: string;
+  readonly quote: string;
+  readonly label: string | null;
+  /** The tangent's creation time (the `session.tangentOf` marker's `createdAt`). */
+  readonly createdAt: string;
 }
 
 export type HostPresenceState = "live" | "stale" | "none";
@@ -77,6 +98,8 @@ export interface InventoryRow {
   readonly deleted: SessionEvent | null;
   /** The session.forkedFrom lineage marker (plan 15), if this session is a fork; else null. */
   readonly forkedFrom: SessionEvent | null;
+  /** The session.tangentOf lineage marker (plan 37), if this session is a tangent; else null. */
+  readonly tangentOf: SessionEvent | null;
   /** Whether a host socket is connected to this session right now. */
   readonly hostPresent: boolean;
 }
@@ -194,6 +217,18 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     forkedEvent?.type === "session.forkedFrom"
       ? { parentSessionId: forkedEvent.parentSessionId, forkSeq: forkedEvent.forkSeq }
       : null;
+  const tangentEvent = row.tangentOf ? decodeTrevorEvent(row.tangentOf) : null;
+  const tangentOf: TangentAnchor | null =
+    tangentEvent?.type === "session.tangentOf"
+      ? {
+          parentSessionId: tangentEvent.parentSessionId,
+          sourceMessageId: tangentEvent.sourceMessageId,
+          quote: tangentEvent.quote,
+          label: tangentEvent.label ?? null,
+          // The marker's own createdAt is the tangent's creation time (never duplicated in the payload).
+          createdAt: row.tangentOf?.createdAt ?? row.createdAt,
+        }
+      : null;
 
   return {
     sessionId: row.sessionId,
@@ -211,8 +246,9 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     archived,
     deleted,
     forkedFrom,
+    tangentOf,
   };
 }
 
-export { activeSessions, archivedSessions, sortInventory } from "./inventory-display";
+export { activeSessions, archivedSessions, sortInventory, tangentsOf } from "./inventory-display";
 export { relativeTime } from "./time-format";

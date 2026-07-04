@@ -22,6 +22,29 @@ export { buildQuotedComposerText } from "./quote";
 
 const TOOLBAR_CLASS = "aui-selection-toolbar-root";
 
+/**
+ * The payload a "Tangent" action carries (plan 37, M3): the stable selected-text snapshot plus the
+ * SINGLE source message it was scoped to. A tangent seeds from one message's selection, so the action
+ * only fires for a selection contained in one `data-message-id` (a cross-item selection has no single
+ * source and leaves Tangent disabled).
+ */
+export type TangentSelection = {
+  readonly text: string;
+  readonly sourceMessageId: string;
+};
+
+/**
+ * The single source message id of a range, or null when the selection is NOT contained in one message
+ * (its endpoints live in different segments, or it touched no segment). Copy/Quote accept cross-item
+ * ranges; Tangent requires exactly one source.
+ */
+const singleSourceMessageId = (range: TranscriptRange | null): string | null => {
+  if (!range || range.start.segmentId !== range.end.segmentId || !range.start.segmentId) {
+    return null;
+  }
+  return range.start.segmentId;
+};
+
 // Until the toolbar measures itself, place it with these declared dimensions so the
 // first paint is already roughly clamped. Real width is read back in a layout effect.
 const DEFAULT_TOOLBAR_SIZE: ToolbarSize = { width: 224, height: 34 };
@@ -134,14 +157,19 @@ const usePersistedHighlight = (range: TranscriptRange | null): void => {
  *
  * "Copy" writes the snapshot to the clipboard (leaving any surviving highlight in
  * place); "Quote" hands the text to `onQuote` (the host wires it into its composer as
- * a markdown blockquote via buildQuotedComposerText); "Tangent" is a disabled
- * placeholder for now.
+ * a markdown blockquote via buildQuotedComposerText); "Tangent" (plan 37) hands the
+ * snapshot + its single source message id to `onTangent`, and is enabled only when the
+ * selection is contained in ONE message (a cross-item selection has no single source).
+ * When `onTangent` is omitted (Storybook-only), Tangent stays disabled.
  *
  * Composer-agnostic: render it once anywhere in the app; it only needs transcript items
  * to carry `data-message-id` so a selection (single- or cross-item) can be scoped to
  * conversation text and re-resolved after the native selection collapses.
  */
-export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> = ({ onQuote }) => {
+export const QuoteSelectionToolbar: FC<{
+  onQuote: (selected: string) => void;
+  onTangent?: (selection: TangentSelection) => void;
+}> = ({ onQuote, onTangent }) => {
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
 
@@ -226,12 +254,26 @@ export const QuoteSelectionToolbar: FC<{ onQuote: (selected: string) => void }> 
     void copyText(snapshot.text).then((ok) => (ok ? setSnapshot(null) : setCopyFailed(true)));
   };
 
+  // Tangent seeds from a SINGLE message's selection: available only when `onTangent` is wired AND the
+  // range resolves to one source message. It hands the frozen snapshot (never a live selection read) +
+  // that source id up, then dismisses - the tangent takeover owns the flow from there. <!-- D-002 -->
+  const tangentSourceId = singleSourceMessageId(snapshot.range);
+  const handleTangent =
+    onTangent && tangentSourceId
+      ? () => {
+          window.getSelection()?.removeAllRanges?.();
+          setSnapshot(null);
+          onTangent({ text: snapshot.text, sourceMessageId: tangentSourceId });
+        }
+      : null;
+
   return (
     <SelectionToolbar
       anchor={snapshot.anchor}
       copyFailed={copyFailed}
       onCopy={handleCopy}
       onQuote={handleQuote}
+      onTangent={handleTangent}
     />
   );
 };
@@ -247,11 +289,14 @@ export function SelectionToolbar({
   copyFailed,
   onCopy,
   onQuote,
+  onTangent,
 }: {
   anchor: Anchor;
   copyFailed: boolean;
   onCopy: () => void;
   onQuote: () => void;
+  /** Opens a tangent from the selection; null/omitted disables Tangent (cross-item selection, or unwired). */
+  onTangent?: (() => void) | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<ToolbarSize | null>(null);
@@ -305,11 +350,23 @@ export function SelectionToolbar({
         Quote
       </button>
       <div className="bg-border/60 h-4 w-px" aria-hidden="true" />
-      {/* Tangent is a placeholder for now; wiring comes later. */}
+      {/* Tangent (plan 37): enabled only for a single-message selection with a wired handler; otherwise
+        a dimmed, disabled affordance (cross-item selection, or a Storybook-only render). */}
       <button
         type="button"
-        disabled
-        className="aui-selection-toolbar-tangent flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium opacity-40 transition-colors disabled:cursor-not-allowed"
+        onClick={onTangent ?? undefined}
+        disabled={!onTangent}
+        title={
+          onTangent
+            ? "Open a tangent from this selection"
+            : "Select within one message to open a tangent"
+        }
+        className={cn(
+          "aui-selection-toolbar-tangent flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+          onTangent
+            ? "cursor-pointer hover:bg-accent hover:text-accent-foreground"
+            : "opacity-40 disabled:cursor-not-allowed",
+        )}
       >
         <GitBranchIcon className="size-3.5" />
         Tangent

@@ -1,17 +1,21 @@
 import {
   type ConnectionStatus,
+  freshSessionId,
   type HostPresence,
   type ModelRef,
   type PermanentDeleteResult,
   PRODUCER_IDS,
   type ProviderQuestionAnswer,
   type PublishInput,
+  planTangent,
   type SessionConnection,
   type SessionEvent,
   type SessionIdentity,
   type SessionTransport,
   events as sessionEvents,
   streamTransport,
+  type TangentAnchorSeed,
+  type TangentFoldMode,
   type TrevorEventInput,
   viewerIdentity,
 } from "@trevor/session";
@@ -38,6 +42,11 @@ const RICHTER_URL = import.meta.env.VITE_RICHTER_URL;
 const transport = RICHTER_URL
   ? streamTransport(RICHTER_URL)
   : streamTransport(window.location.origin);
+
+/** This tab's shared transport singleton, exported so a self-contained surface (e.g. the tangent
+ *  takeover) can bind a SECOND session's stream/actions to the same backend, and tests can substitute a
+ *  recording transport. Prefer the hooks below; reach for this only when wiring another session id. */
+export const sessionTransport: SessionTransport = transport;
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 2_000;
 
@@ -155,6 +164,47 @@ export function permanentlyDeleteSession(sessionId: string): Promise<PermanentDe
 /** Ensures a session with the given id exists (idempotent) and returns it. */
 export function ensureSession(sessionId: string): Promise<string> {
   return transport.ensureSession(sessionId);
+}
+
+/**
+ * Creates a fresh, ISOLATED tangent session (plan 37, M5) branched from a selected snapshot: mints a
+ * tangent id, ensures it in the store, and publishes ONLY the `session.tangentOf` lineage marker (via
+ * {@link planTangent} - no parent transcript is copied). Returns the new tangent session id the takeover
+ * subscribes to. The seed snapshot rides the tangent's FIRST prompt (see `seedTangentPrompt`), not a
+ * standalone message, so isolation is structural.
+ */
+export function createTangentSession(anchor: TangentAnchorSeed): Promise<string> {
+  return createTangentSessionWith(transport, anchor);
+}
+
+/** {@link createTangentSession} with an injected transport, for deterministic hook tests. */
+export async function createTangentSessionWith(
+  sessionTransport: SessionTransport,
+  anchor: TangentAnchorSeed,
+): Promise<string> {
+  const tangentSessionId = freshSessionId({ prefix: "tangent" });
+  const plan = planTangent({ anchor, tangentSessionId });
+  await sessionTransport.ensureSession(tangentSessionId);
+  for (const input of plan.events) {
+    await publishEvent(sessionTransport, tangentSessionId, input);
+  }
+  return tangentSessionId;
+}
+
+/**
+ * Records an EXPLICIT tangent fold-back (plan 37, M8) on the TANGENT session's log - the durable,
+ * auditable marker that the user carried a chosen piece of the tangent back toward the parent for review.
+ * It is written to the TANGENT (never the parent), so it can never enter the parent's model context; the
+ * folded text lands in the parent COMPOSER separately, as editable text the user reviews before sending.
+ */
+export function recordTangentFoldBack(
+  tangentSessionId: string,
+  p: { parentSessionId: string; mode: TangentFoldMode; preview: string },
+): Promise<void> {
+  return publishEvent(transport, tangentSessionId, {
+    producerId: PRODUCER_IDS.web,
+    ...sessionEvents.tangentFoldedBack({ tangentSessionId, ...p }),
+  });
 }
 
 // --- read side: the live event stream ---
@@ -385,6 +435,15 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
  * caller that only acts (or only receives) depends on just that half.
  */
 export function useSessionActions(sessionId: string | null): SessionActions {
+  return useSessionActionsWithTransport(transport, sessionId);
+}
+
+/** Same write-side hook with an injected transport, so a self-contained surface (the tangent takeover)
+ *  can publish into a SECOND session, and hook tests can drive a recording transport. */
+export function useSessionActionsWithTransport(
+  sessionTransportArg: SessionTransport,
+  sessionId: string | null,
+): SessionActions {
   // Every browser-published event is stamped with the shared web producer id (PRODUCER_IDS.web, owned
   // in @trevor/session) and gated on a live session, so that guard lives here once and the public
   // methods below are one-line delegations to the matching event builder.
@@ -393,9 +452,12 @@ export function useSessionActions(sessionId: string | null): SessionActions {
       if (!sessionId) {
         return;
       }
-      await publishEvent(transport, sessionId, { producerId: PRODUCER_IDS.web, ...built });
+      await publishEvent(sessionTransportArg, sessionId, {
+        producerId: PRODUCER_IDS.web,
+        ...built,
+      });
     },
-    [sessionId],
+    [sessionTransportArg, sessionId],
   );
 
   return useMemo(() => createSessionActions(publishVia), [publishVia]);

@@ -38,10 +38,14 @@ type Story = StoryObj<typeof QuoteSelectionToolbar>;
 export const SelectToQuote: Story = {
   render: () => {
     const [draft, setDraft] = useState("");
+    const [tangent, setTangent] = useState<string | null>(null);
     return (
       <div className="flex max-w-2xl flex-col gap-4">
         <QuoteSelectionToolbar
           onQuote={(selected) => setDraft((prev) => buildQuotedComposerText(prev, selected).value)}
+          onTangent={(selection) =>
+            setTangent(`tangent from ${selection.sourceMessageId}: “${selection.text}”`)
+          }
         />
         <div
           data-message-id="msg-1"
@@ -49,11 +53,12 @@ export const SelectToQuote: Story = {
         >
           The blob store is content-addressed: bytes are named by their sha256, so a stored blob is
           immutable and identical content is stored exactly once. Highlight any part of this
-          sentence and click Quote.
+          sentence and click Quote - or Tangent to branch a side conversation from it.
         </div>
         <div data-message-id="msg-2" className="flex flex-col gap-3 pl-3.5 text-sm">
           A second message. Shift-extend a selection from the message above into this one: the
-          cross-item range is captured and the toolbar acts on the whole span.
+          cross-item range is captured for Copy/Quote, but Tangent needs one source message so it
+          dims for a cross-item span.
         </div>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           composer (quoted text lands here)
@@ -65,6 +70,11 @@ export const SelectToQuote: Story = {
             placeholder="Quote a selection above…"
           />
         </label>
+        {tangent ? (
+          <p className="rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-foreground">
+            {tangent}
+          </p>
+        ) : null}
       </div>
     );
   },
@@ -117,10 +127,13 @@ export const PersistedHighlight: Story = {
 const Placement = ({
   anchor,
   copyFailed = false,
+  tangentEnabled = false,
   caption,
 }: {
   anchor: Anchor;
   copyFailed?: boolean;
+  /** Whether the Tangent action is live (single-message selection) vs dimmed (cross-item / unwired). */
+  tangentEnabled?: boolean;
   caption: string;
 }) => (
   <div className="relative h-72 w-full text-xs text-muted-foreground">
@@ -142,6 +155,7 @@ const Placement = ({
       copyFailed={copyFailed}
       onCopy={() => {}}
       onQuote={() => {}}
+      onTangent={tangentEnabled ? () => {} : null}
     />
   </div>
 );
@@ -197,6 +211,25 @@ export const ClipboardFailure: Story = {
       anchor={{ x: window.innerWidth / 2, y: 220 }}
       copyFailed
       caption="Clipboard failure: when navigator.clipboard rejects (permissions/focus) the toolbar stays open in a red Retry state with the snapshot still available, rather than silently dropping the copy."
+    />
+  ),
+};
+
+export const TangentEnabled: Story = {
+  render: () => (
+    <Placement
+      anchor={{ x: window.innerWidth / 2, y: 220 }}
+      tangentEnabled
+      caption="Tangent enabled (plan 37): the selection sits inside ONE message, so Tangent lights up beside Copy and Quote. Clicking it seeds a branched side conversation from the snapshot + its source message."
+    />
+  ),
+};
+
+export const TangentDisabledCrossItem: Story = {
+  render: () => (
+    <Placement
+      anchor={{ x: window.innerWidth / 2, y: 220 }}
+      caption="Tangent disabled: the selection spans two messages (or nothing is wired), so Copy and Quote still act on the whole span but Tangent dims - a tangent needs a single source message."
     />
   ),
 };

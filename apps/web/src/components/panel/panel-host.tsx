@@ -22,7 +22,10 @@ import {
 } from "react";
 import { ArtifactPanel } from "@/artifact-panel/artifact-panel";
 import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state";
-import { QuoteSelectionToolbar } from "@/components/assistant-ui/quote-selection-toolbar";
+import {
+  QuoteSelectionToolbar,
+  type TangentSelection,
+} from "@/components/assistant-ui/quote-selection-toolbar";
 import { ActionShimmer } from "@/components/chat/action-shimmer";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { activeOptionId } from "@/components/chat/autocomplete-menu";
@@ -253,6 +256,9 @@ export function PanelHost(props: {
   /** The full model chooser (D-065), rendered as a takeover of the transcript/composer center column
    *  while the sidebars stay visible. Undefined (the common case) when the chooser is closed. */
   chooser?: ReactNode;
+  /** Open a tangent (plan 37) from a single-message selection in the transcript. Undefined leaves the
+   *  toolbar's Tangent action disabled (the Storybook-only default). */
+  onTangent?: (selection: TangentSelection) => void;
   /** Whether the open session is archived (D-094): gates the composer behind an unarchive notice. */
   archived: boolean;
   onUnarchive: () => void;
@@ -288,7 +294,8 @@ export function PanelHost(props: {
     artifactPanel,
     choosers,
   } = props;
-  const { sidebar, sessionName, chooser, archived, onUnarchive, question, handoff } = props;
+  const { sidebar, sessionName, chooser, archived, onUnarchive, question, handoff, onTangent } =
+    props;
   const { replayed } = stream;
   const {
     transcript,
@@ -343,7 +350,7 @@ export function PanelHost(props: {
       <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4">
         {/* Highlight text in any message (data-message-id) to get a floating Quote action
           that drops the selection into the composer as a markdown blockquote. */}
-        <QuoteSelectionToolbar onQuote={composer.quoteSelection} />
+        <QuoteSelectionToolbar onQuote={composer.quoteSelection} onTangent={onTangent} />
         {/* Thin top header (D-093): a dedicated strip for the two drawer-open toggles + the session
           name, so the toggles never sit over the transcript (they used to block text selection). The
           icons are revealed by hovering anywhere in this strip (group-hover), not just the icon. The

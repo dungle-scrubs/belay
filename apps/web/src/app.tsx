@@ -4,6 +4,7 @@ import {
   DEFAULT_SESSION_ID,
   type LoopControl,
   type ModelRef,
+  tangentsOf,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
 import { Archive, GitBranch, RotateCcw } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   resetArtifactPanelPreference,
   resizeArtifactPanel,
 } from "@/artifact-panel/artifact-panel-state";
+import type { TangentSelection } from "@/components/assistant-ui/quote-selection-toolbar";
 import { useLoopInventory } from "@/components/chat/loop/use-loop-inventory";
 import { loopPreviewForLine } from "@/components/chat/loop/use-loop-preview";
 import { ModelChooser } from "@/components/chooser/model-chooser";
@@ -45,6 +47,10 @@ import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
 import { jobToDetailModel, runningSubagents } from "@/support-panel/support-panel";
+import { type FoldBackContent, foldBackPreview } from "@/tangent/foldback";
+import { LiveTangentShell } from "@/tangent/live-tangent-shell";
+import { TangentDiscovery } from "@/tangent/tangent-discovery";
+import { type ActiveTangent, useTangent } from "@/tangent/use-tangent";
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
@@ -96,6 +102,7 @@ import {
   deleteSession,
   ensureSession,
   permanentlyDeleteSession,
+  recordTangentFoldBack,
   renameSession,
   useSession,
   useSessionActions,
@@ -601,6 +608,11 @@ export function App() {
     toggleModelFavorite,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
+  // Tangents (plan 37): a tangent is an isolated side conversation branched from a selected snapshot,
+  // shown in the center-column takeover. `tangent` owns its lifecycle; discovery lists this session's
+  // tangents. Both close the other center takeovers when opened (only one at a time).
+  const tangent = useTangent();
+  const [tangentDiscoveryOpen, setTangentDiscoveryOpen] = useState(false);
   // The tool detail takeover (plan 08): the id of the transcript row being inspected, or null when
   // closed. We hold the ID, not a snapshot, so the detail model is RE-DERIVED from the live transcript
   // each render (M6) - a running tool's detail updates in place through completion/error/abort, and the
@@ -834,6 +846,8 @@ export function App() {
     helpOpen ||
     detail !== null ||
     jobDetail !== null ||
+    tangent.active !== null ||
+    tangentDiscoveryOpen ||
     artifactPanel?.open === true;
 
   // App actions shared by their keyboard shortcut (the router below) and their palette command, so the
@@ -1087,6 +1101,64 @@ export function App() {
       <ToolDetailView model={jobDetail} onBack={closeJobDetail} className="h-full" />
     ) : undefined;
 
+  // Tangents (plan 37). Opening a tangent (from a selection) or the discovery list closes any other
+  // center takeover first - only one owns the center column at a time.
+  const closeOtherTakeovers = () => {
+    setChooserOpen(false);
+    modal.setArchiveOpen(false);
+    setDetailId(null);
+    setJobDetailId(null);
+  };
+  const openTangent = (selection: TangentSelection) => {
+    closeOtherTakeovers();
+    setTangentDiscoveryOpen(false);
+    tangent.open(selection, target);
+  };
+  const openTangentDiscovery = () => {
+    closeOtherTakeovers();
+    tangent.close();
+    setTangentDiscoveryOpen(true);
+  };
+  // Explicit fold-back (M8): place the chosen tangent content into THIS (parent) composer for review via
+  // the same quote-into-composer path, and record the durable marker on the tangent. It never auto-submits
+  // and never injects hidden parent context - the folded text is plainly visible, editable composer text.
+  const foldBackToParent = async (active: ActiveTangent, content: FoldBackContent) => {
+    composer.quoteSelection(content.text);
+    if (active.tangentSessionId) {
+      await recordTangentFoldBack(active.tangentSessionId, {
+        parentSessionId: active.parentSessionId,
+        mode: content.mode,
+        preview: foldBackPreview(content.text),
+      });
+    }
+  };
+  const tangentTakeover = tangent.active ? (
+    <LiveTangentShell
+      active={tangent.active}
+      error={tangent.error}
+      parentLabel={sessionName}
+      turnModel={{
+        provider: activeProvider,
+        reasoning: reasoning || undefined,
+        model: sendModelRef,
+      }}
+      onBack={tangent.close}
+      onFoldBack={foldBackToParent}
+    />
+  ) : undefined;
+  const tangentDiscoveryView = tangentDiscoveryOpen ? (
+    <TangentDiscovery
+      className="h-full"
+      tangents={tangentsOf(modal.inventory.sessions, target)}
+      nowMs={now}
+      onOpen={(summary) => {
+        setTangentDiscoveryOpen(false);
+        tangent.openExisting(summary);
+      }}
+      onBack={() => setTangentDiscoveryOpen(false)}
+    />
+  ) : undefined;
+
   // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the archived +
   // worktree affordances and the session id for orientation. `restart` is a temporary debug surface.
   const panelFooter = (
@@ -1129,6 +1201,16 @@ export function App() {
           worktree
         </button>
       ) : null}
+      <button
+        type="button"
+        onClick={openTangentDiscovery}
+        title="Tangents branched from this session"
+        aria-label="Tangents from this session"
+        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+      >
+        <GitBranch className="size-3" />
+        tangents
+      </button>
       <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
         {target}
       </div>
@@ -1291,6 +1373,7 @@ export function App() {
           nowMs: now,
         }}
         sessionName={sessionName}
+        onTangent={openTangent}
         chooser={
           editor.isOpen ? (
             <PromptSurfaceEditor
@@ -1301,7 +1384,12 @@ export function App() {
               vimEnabled={vimEnabled}
             />
           ) : (
-            (jobDetailView ?? detailView ?? archiveBrowser ?? chooser)
+            (tangentTakeover ??
+            tangentDiscoveryView ??
+            jobDetailView ??
+            detailView ??
+            archiveBrowser ??
+            chooser)
           )
         }
         archived={archived}

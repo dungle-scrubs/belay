@@ -21,6 +21,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   archived: false,
   deleted: false,
   forkedFrom: null,
+  tangentOf: null,
   ...over,
 });
 

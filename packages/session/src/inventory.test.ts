@@ -11,6 +11,7 @@ import {
   type SessionSummary,
   sortInventory,
   summarizeSession,
+  tangentsOf,
 } from "./inventory";
 import { events } from "./protocol";
 
@@ -57,6 +58,7 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
   rename: null,
   deleted: null,
   forkedFrom: null,
+  tangentOf: null,
   hostPresent: false,
   ...over,
 });
@@ -214,6 +216,7 @@ test("sortInventory puts the current project first, each block by recency desc",
     archived: false,
     deleted: false,
     forkedFrom: null,
+    tangentOf: null,
   });
   const list = [
     mk("a", "other", "2026-06-26T05:00:00.000Z"),
@@ -346,4 +349,76 @@ test("summarizeSession surfaces fork lineage from a session.forkedFrom event", (
 
 test("summarizeSession leaves forkedFrom null for a root (non-forked) session", () => {
   assert.equal(summarizeSession(baseRow()).forkedFrom, null);
+});
+
+test("summarizeSession surfaces tangent lineage from a session.tangentOf event", () => {
+  const marker = ev(
+    "session.tangentOf",
+    {
+      parentSessionId: "sess-parent",
+      sourceMessageId: "e42",
+      quote: "sha256 naming",
+      label: "why?",
+    },
+    "2026-06-27T00:00:00.000Z",
+  );
+  const s = summarizeSession(baseRow({ tangentOf: marker }));
+  assert.deepEqual(s.tangentOf, {
+    parentSessionId: "sess-parent",
+    sourceMessageId: "e42",
+    quote: "sha256 naming",
+    label: "why?",
+    createdAt: "2026-06-27T00:00:00.000Z",
+  });
+});
+
+test("summarizeSession leaves tangentOf null for a normal (non-tangent) session", () => {
+  assert.equal(summarizeSession(baseRow()).tangentOf, null);
+});
+
+test("activeSessions excludes tangents so they never clutter top-level navigation", () => {
+  const normal = summarizeSession(baseRow({ sessionId: "a" }));
+  const tangent = summarizeSession(
+    baseRow({
+      sessionId: "t",
+      tangentOf: ev("session.tangentOf", {
+        parentSessionId: "a",
+        sourceMessageId: "e2",
+        quote: "q",
+      }),
+    }),
+  );
+  assert.deepEqual(
+    activeSessions([normal, tangent]).map((s) => s.sessionId),
+    ["a"],
+    "the tangent is filtered out of the default view",
+  );
+});
+
+test("tangentsOf lists a parent's tangents newest-first, excluding deleted and other parents", () => {
+  const tangent = (id: string, parentSessionId: string, updatedAt: string, deleted = false) =>
+    summarizeSession(
+      baseRow({
+        sessionId: id,
+        updatedAt,
+        deleted: deleted ? ev("session.deleted", { deleted: true }) : null,
+        tangentOf: ev("session.tangentOf", {
+          parentSessionId,
+          sourceMessageId: "e2",
+          quote: `q-${id}`,
+        }),
+      }),
+    );
+  const list = [
+    tangent("t-old", "parent", "2026-06-26T01:00:00.000Z"),
+    tangent("t-new", "parent", "2026-06-26T09:00:00.000Z"),
+    tangent("t-other", "different-parent", "2026-06-26T10:00:00.000Z"),
+    tangent("t-deleted", "parent", "2026-06-26T11:00:00.000Z", true),
+    summarizeSession(baseRow({ sessionId: "normal" })),
+  ];
+  assert.deepEqual(
+    tangentsOf(list, "parent").map((s) => s.sessionId),
+    ["t-new", "t-old"],
+    "only this parent's live tangents, most-recent first",
+  );
 });

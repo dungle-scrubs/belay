@@ -31,6 +31,7 @@ export * from "./session-delete";
 export * from "./session-routes";
 export * from "./source-recall";
 export * from "./stream-transport";
+export * from "./tangent";
 export * from "./tool-script";
 export * from "./tool-script-sandbox";
 export * from "./tools";

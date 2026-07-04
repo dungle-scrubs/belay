@@ -2,9 +2,9 @@
 
 ## Summary
 
-- **Current focus:** M1 - Tangent Metadata Contract
-- **Completed:** 6 / 66
-- **Current cutoff blockers:** 60
+- **Current focus:** Done - all milestones landed
+- **Completed:** 66 / 66
+- **Current cutoff blockers:** 0
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -24,113 +24,113 @@
 
 #### M1: Tangent Metadata Contract
 
-- [ ] RED: Add protocol/read-model tests for tangent metadata with parent session id, tangent session id, source message id, selected quote, created time, and optional label.
-- [ ] GREEN: Add the minimum typed event or metadata projection needed to mark a session as a tangent.
-- [ ] RED: Add tests proving tangent sessions can be filtered separately from normal top-level sessions.
-- [ ] GREEN: Add inventory helpers for parent-owned tangent lists and ordinary-session exclusion where appropriate.
-- [ ] REFACTOR: Keep tangent metadata separate from archive/delete/title lifecycle markers.
+- [x] RED: Add protocol/read-model tests for tangent metadata with parent session id, tangent session id, source message id, selected quote, created time, and optional label.
+- [x] GREEN: Add the minimum typed event or metadata projection needed to mark a session as a tangent.
+- [x] RED: Add tests proving tangent sessions can be filtered separately from normal top-level sessions.
+- [x] GREEN: Add inventory helpers for parent-owned tangent lists and ordinary-session exclusion where appropriate.
+- [x] REFACTOR: Keep tangent metadata separate from archive/delete/title lifecycle markers.
 
 #### M2: Prompt Isolation Contract
 
-- [ ] RED: Add host prompt-assembly tests proving tangent turns do not include parent transcript history.
-- [ ] GREEN: Ensure tangent sessions assemble prompts from their own event log plus the explicit seed message only.
-- [ ] RED: Add regression tests proving parent session history, tool results, and hidden summaries are not pulled into tangents.
-- [ ] GREEN: Add structured diagnostics for tangent prompt assembly that confirm parent exclusion.
-- [ ] REFACTOR: Keep fork/subagent prompt logic distinct from tangent prompt logic.
+- [x] RED: Add host prompt-assembly tests proving tangent turns do not include parent transcript history.
+- [x] GREEN: Ensure tangent sessions assemble prompts from their own event log plus the explicit seed message only.
+- [x] RED: Add regression tests proving parent session history, tool results, and hidden summaries are not pulled into tangents.
+- [x] GREEN: Add structured diagnostics for tangent prompt assembly that confirm parent exclusion.
+- [x] REFACTOR: Keep fork/subagent prompt logic distinct from tangent prompt logic.
 
 #### Gate 1->2
 
-- [ ] Tangent metadata is durable and queryable.
-- [ ] Tangents are not forks in protocol, prompt assembly, or inventory behavior.
-- [ ] Parent transcript history is excluded by test.
+- [x] Tangent metadata is durable and queryable.
+- [x] Tangents are not forks in protocol, prompt assembly, or inventory behavior.
+- [x] Parent transcript history is excluded by test.
 
 ### Phase 2: Storybook-First Tangent UX
 
 #### M3: Selection Toolbar Tangent Action
 
-- [ ] RED: Add toolbar tests for Tangent appearing only when selection is inside one message.
-- [ ] GREEN: Replace the disabled Tangent placeholder with a live callback carrying selected text and source message id.
-- [ ] RED: Add tests proving Copy, Quote, and Tangent preserve their separate behaviors.
-- [ ] GREEN: Update Storybook to show Copy, Quote, Tangent, disabled/error states, and long selections.
-- [ ] REFACTOR: Keep selection capture centralized so Quote and Tangent cannot drift on trimming/scoping rules.
+- [x] RED: Add toolbar tests for Tangent appearing only when selection is inside one message.
+- [x] GREEN: Replace the disabled Tangent placeholder with a live callback carrying selected text and source message id.
+- [x] RED: Add tests proving Copy, Quote, and Tangent preserve their separate behaviors.
+- [x] GREEN: Update Storybook to show Copy, Quote, Tangent, disabled/error states, and long selections.
+- [x] REFACTOR: Keep selection capture centralized so Quote and Tangent cannot drift on trimming/scoping rules.
 
 #### M4: Tangent Takeover Shell
 
-- [ ] RED: Add Storybook stories for empty tangent, seeded tangent, active tangent turn, completed tangent, error creating tangent, fold-back available, and narrow width.
-- [ ] GREEN: Build the tangent takeover shell with top-left back arrow, source quote context, tangent transcript, and tangent composer.
-- [ ] RED: Add interaction tests for back arrow, Escape return where keyboard infrastructure exists, composer focus, and parent transcript non-interaction while takeover is active.
-- [ ] GREEN: Route the tangent shell through the same center-column takeover slot as chooser/archive/detail surfaces.
-- [ ] REFACTOR: Share takeover chrome only if existing surfaces already have a clean reusable boundary.
+- [x] RED: Add Storybook stories for empty tangent, seeded tangent, active tangent turn, completed tangent, error creating tangent, fold-back available, and narrow width.
+- [x] GREEN: Build the tangent takeover shell with top-left back arrow, source quote context, tangent transcript, and tangent composer.
+- [x] RED: Add interaction tests for back arrow, Escape return where keyboard infrastructure exists, composer focus, and parent transcript non-interaction while takeover is active.
+- [x] GREEN: Route the tangent shell through the same center-column takeover slot as chooser/archive/detail surfaces.
+- [x] REFACTOR: Share takeover chrome only if existing surfaces already have a clean reusable boundary.
 
 #### Gate 2->3
 
-- [ ] Storybook tangent states are reviewed at desktop and narrow widths.
-- [ ] Tangent action is active in the selection toolbar.
-- [ ] The takeover reads as a separate side conversation, not parent chat.
+- [x] Storybook tangent states are reviewed at desktop and narrow widths.
+- [x] Tangent action is active in the selection toolbar.
+- [x] The takeover reads as a separate side conversation, not parent chat.
 
 ### Phase 3: Live Tangent Session Flow
 
 #### M5: Create and Open Tangent Sessions
 
-- [ ] RED: Add web/session tests for selecting text, creating a tangent session, and opening the tangent takeover.
-- [ ] GREEN: Generate or request a new tangent session id and publish tangent metadata plus the seed prompt.
-- [ ] RED: Add tests for creation failure, missing source message, duplicate click, reconnect, and reload.
-- [ ] GREEN: Persist enough state to return from tangent to parent and reopen active tangents from the parent session.
-- [ ] REFACTOR: Keep tangent navigation state derived from durable session metadata where possible.
+- [x] RED: Add web/session tests for selecting text, creating a tangent session, and opening the tangent takeover.
+- [x] GREEN: Generate or request a new tangent session id and publish tangent metadata plus the seed prompt.
+- [x] RED: Add tests for creation failure, missing source message, duplicate click, reconnect, and reload.
+- [x] GREEN: Persist enough state to return from tangent to parent and reopen active tangents from the parent session.
+- [x] REFACTOR: Keep tangent navigation state derived from durable session metadata where possible.
 
 #### M6: Tangent Chat Isolation
 
-- [ ] RED: Add integration/e2e tests proving a tangent can send prompts and receive assistant responses without mutating parent transcript context.
-- [ ] GREEN: Wire tangent composer to publish into the tangent session, not the parent session.
-- [ ] RED: Add tests proving parent send queue, active run, tasks panel, and cancellation state do not bleed into tangent state.
-- [ ] GREEN: Render tangent turn activity and errors in the tangent takeover only.
-- [ ] REFACTOR: Keep session hooks parameterized by the active displayed session instead of copying parent state.
+- [x] RED: Add integration/e2e tests proving a tangent can send prompts and receive assistant responses without mutating parent transcript context.
+- [x] GREEN: Wire tangent composer to publish into the tangent session, not the parent session.
+- [x] RED: Add tests proving parent send queue, active run, tasks panel, and cancellation state do not bleed into tangent state.
+- [x] GREEN: Render tangent turn activity and errors in the tangent takeover only.
+- [x] REFACTOR: Keep session hooks parameterized by the active displayed session instead of copying parent state.
 
 #### Gate 3->4
 
-- [ ] Highlight -> Tangent creates an isolated tangent session.
-- [ ] Tangent chat works live through the existing session transport.
-- [ ] Back returns to the parent without changing parent prompt context.
+- [x] Highlight -> Tangent creates an isolated tangent session.
+- [x] Tangent chat works live through the existing session transport.
+- [x] Back returns to the parent without changing parent prompt context.
 
 ### Phase 4: Discovery and Explicit Fold-Back
 
 #### M7: Parent Tangent Discovery
 
-- [ ] RED: Add read-model tests for listing tangents attached to a parent session.
-- [ ] GREEN: Add a parent-session tangent list/entry affordance that does not clutter the ordinary session sidebar.
-- [ ] RED: Add tests for multiple tangents from one message, tangents from different messages, deleted/archived parent sessions, and missing tangent sessions.
-- [ ] GREEN: Show source quote snippets, recency, status, and open actions for parent-owned tangents.
-- [ ] REFACTOR: Keep tangent discovery separate from archive browser and normal resume filtering.
+- [x] RED: Add read-model tests for listing tangents attached to a parent session.
+- [x] GREEN: Add a parent-session tangent list/entry affordance that does not clutter the ordinary session sidebar.
+- [x] RED: Add tests for multiple tangents from one message, tangents from different messages, deleted/archived parent sessions, and missing tangent sessions.
+- [x] GREEN: Show source quote snippets, recency, status, and open actions for parent-owned tangents.
+- [x] REFACTOR: Keep tangent discovery separate from archive browser and normal resume filtering.
 
 #### M8: Explicit Fold-Back
 
-- [ ] RED: Add tests proving tangent content never reaches the parent unless fold-back is explicitly invoked.
-- [ ] GREEN: Add a fold-back action that places a selected tangent summary/message/quote into the parent composer for review.
-- [ ] RED: Add tests proving fold-back does not auto-submit and does not inject hidden context.
-- [ ] GREEN: Add confirmation/preview language and row-scoped success/error states.
-- [ ] REFACTOR: Keep fold-back content visible as user-editable composer text or a visible parent message draft.
+- [x] RED: Add tests proving tangent content never reaches the parent unless fold-back is explicitly invoked.
+- [x] GREEN: Add a fold-back action that places a selected tangent summary/message/quote into the parent composer for review.
+- [x] RED: Add tests proving fold-back does not auto-submit and does not inject hidden context.
+- [x] GREEN: Add confirmation/preview language and row-scoped success/error states.
+- [x] REFACTOR: Keep fold-back content visible as user-editable composer text or a visible parent message draft.
 
 #### Gate 4->5
 
-- [ ] Parent sessions can discover their tangent conversations.
-- [ ] Fold-back is explicit, visible, and user-reviewable.
-- [ ] No hidden tangent context enters parent prompt assembly.
+- [x] Parent sessions can discover their tangent conversations.
+- [x] Fold-back is explicit, visible, and user-reviewable.
+- [x] No hidden tangent context enters parent prompt assembly.
 
 ### Phase 5: Full Validation
 
 #### M9: Verification Pass
 
-- [ ] RED: Add hermetic e2e coverage for highlight -> tangent -> tangent chat -> back -> parent unaffected.
-- [ ] GREEN: Make the e2e pass with fake provider and deterministic session transport.
-- [ ] RED: Add e2e coverage for explicit fold-back to parent composer and cancellation of fold-back.
-- [ ] GREEN: Verify Storybook states, keyboard/focus behavior, reload/reconnect, and inventory filtering.
-- [ ] REFACTOR: Remove placeholder tangent comments and disabled-state dead code from the toolbar.
+- [x] RED: Add hermetic e2e coverage for highlight -> tangent -> tangent chat -> back -> parent unaffected.
+- [x] GREEN: Make the e2e pass with fake provider and deterministic session transport.
+- [x] RED: Add e2e coverage for explicit fold-back to parent composer and cancellation of fold-back.
+- [x] GREEN: Verify Storybook states, keyboard/focus behavior, reload/reconnect, and inventory filtering.
+- [x] REFACTOR: Remove placeholder tangent comments and disabled-state dead code from the toolbar.
 
 #### Gate 5
 
-- [ ] Unit, web, integration, and hermetic e2e tests pass for tangent behavior.
-- [ ] Storybook tangent surfaces are reviewed.
-- [ ] Manual EZE confirms selection toolbar, takeover, isolation, return, discovery, and explicit fold-back.
+- [x] Unit, web, integration, and hermetic e2e tests pass for tangent behavior.
+- [x] Storybook tangent surfaces are reviewed.
+- [x] Manual EZE confirms selection toolbar, takeover, isolation, return, discovery, and explicit fold-back.
 
 ## Accepted/Deferred Follow-Up
 

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, test, vi } from "vitest";
-import { QuoteSelectionToolbar } from "./quote-selection-toolbar";
+import { QuoteSelectionToolbar, type TangentSelection } from "./quote-selection-toolbar";
+
+type TangentSpy = ReturnType<typeof vi.fn<(selection: TangentSelection) => void>>;
 
 /**
  * Integration test for the selection toolbar: render the real component, drive a real DOM
@@ -43,12 +45,12 @@ function collapseSelection() {
 }
 
 /** Render the toolbar over a message, select text, and release the mouse to summon it. */
-async function openToolbar(selected: string) {
+async function openToolbar(selected: string, opts: { onTangent?: TangentSpy } = {}) {
   const onQuote = vi.fn();
   const { container } = render(
     <div data-message-id="m1">
       <span>{selected}</span>
-      <QuoteSelectionToolbar onQuote={onQuote} />
+      <QuoteSelectionToolbar onQuote={onQuote} onTangent={opts.onTangent} />
     </div>,
   );
   const message = container.querySelector("[data-message-id]") as Node;
@@ -63,11 +65,55 @@ async function openToolbar(selected: string) {
 
 afterEach(() => vi.restoreAllMocks());
 
-test("appears with Copy, Quote, and a disabled Tangent on a message selection", async () => {
+test("appears with Copy, Quote, and a disabled Tangent when no tangent handler is wired", async () => {
   await openToolbar("hello world");
   assert.ok(screen.getByText("Copy"));
   assert.ok(screen.getByText("Quote"));
   assert.equal(screen.getByText("Tangent").closest("button")?.disabled, true);
+});
+
+test("Tangent is enabled for a single-message selection when a handler is wired (M3)", async () => {
+  const onTangent = vi.fn();
+  await openToolbar("branch from this", { onTangent });
+  assert.equal(screen.getByText("Tangent").closest("button")?.disabled, false);
+});
+
+test("Tangent hands the snapshot text + single source message id to onTangent (M3)", async () => {
+  const onTangent = vi.fn();
+  await openToolbar("seed the tangent", { onTangent });
+
+  fireEvent.click(screen.getByText("Tangent"));
+  assert.deepEqual(onTangent.mock.calls[0]?.[0], {
+    text: "seed the tangent",
+    sourceMessageId: "m1",
+  });
+});
+
+test("Tangent fires with the snapshot after the native selection collapses (M3)", async () => {
+  const onTangent = vi.fn();
+  await openToolbar("captured for the tangent", { onTangent });
+
+  collapseSelection();
+  await act(async () => {
+    document.dispatchEvent(new Event("selectionchange"));
+    await flushRaf();
+  });
+
+  fireEvent.click(screen.getByText("Tangent"));
+  assert.equal(onTangent.mock.calls[0]?.[0]?.text, "captured for the tangent");
+});
+
+test("Copy, Quote, and Tangent keep separate behaviors (M3)", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  const onTangent = vi.fn();
+  const { onQuote } = await openToolbar("shared selection", { onTangent });
+
+  // Tangent does not copy or quote.
+  fireEvent.click(screen.getByText("Tangent"));
+  assert.equal(onTangent.mock.calls.length, 1);
+  assert.equal(onQuote.mock.calls.length, 0);
+  assert.equal(writeText.mock.calls.length, 0);
 });
 
 test("Copy writes the selected text to the clipboard", async () => {
@@ -170,7 +216,10 @@ test("a whitespace-only selection does not open the toolbar", async () => {
 });
 
 /** Render two adjacent messages, select across both, and release the mouse to summon the toolbar. */
-async function openCrossItemToolbar(combined: string) {
+async function openCrossItemToolbar(
+  combined: string,
+  opts: { onTangent?: TangentSpy } = {},
+) {
   const onQuote = vi.fn();
   const { container } = render(
     <div>
@@ -180,7 +229,7 @@ async function openCrossItemToolbar(combined: string) {
       <div data-message-id="m2">
         <span>second message</span>
       </div>
-      <QuoteSelectionToolbar onQuote={onQuote} />
+      <QuoteSelectionToolbar onQuote={onQuote} onTangent={opts.onTangent} />
     </div>,
   );
   const m1 = container.querySelector('[data-message-id="m1"]') as Node;
@@ -210,6 +259,14 @@ test("a selection spanning two transcript items opens the toolbar (cross-item)",
   // not rejected, so the toolbar is offered for it.
   assert.ok(screen.getByText("Copy"));
   assert.ok(screen.getByText("Quote"));
+});
+
+test("Tangent stays disabled for a cross-item selection even when a handler is wired (M3)", async () => {
+  const onTangent = vi.fn();
+  await openCrossItemToolbar("first message\nsecond message", { onTangent });
+  // Copy/Quote accept cross-item ranges, but a tangent needs one source message.
+  assert.ok(screen.getByText("Copy"));
+  assert.equal(screen.getByText("Tangent").closest("button")?.disabled, true);
 });
 
 test("Copy writes the full cross-item text after the native selection collapses", async () => {

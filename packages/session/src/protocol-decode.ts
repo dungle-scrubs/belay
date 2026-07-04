@@ -579,6 +579,23 @@ export type DecodedEvent =
       readonly parentSessionId: string;
       readonly forkSeq: number;
     }
+  | {
+      readonly type: "session.tangentOf";
+      readonly parentSessionId: string;
+      /** The parent transcript message the selection came from. */
+      readonly sourceMessageId: string;
+      /** The selected snapshot the tangent is seeded from (the anchor quote). */
+      readonly quote: string;
+      readonly label?: string;
+    }
+  | {
+      readonly type: "tangent.foldedBack";
+      readonly tangentSessionId: string;
+      readonly parentSessionId: string;
+      /** "quote" | "message" | "summary"; kept open for forward-compat fold-back modes. */
+      readonly mode: string;
+      readonly preview: string;
+    }
   | { readonly type: "user.shell"; readonly requestId: string; readonly command: string }
   | {
       readonly type: "shell.result";
@@ -927,6 +944,24 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         type: "session.forkedFrom",
         parentSessionId: str(p.parentSessionId),
         forkSeq: asAnyNumber(p.forkSeq),
+      };
+    case "session.tangentOf": {
+      const label = optStr(p.label);
+      return {
+        type: "session.tangentOf",
+        parentSessionId: str(p.parentSessionId),
+        sourceMessageId: str(p.sourceMessageId),
+        quote: str(p.quote),
+        ...(label ? { label } : {}),
+      };
+    }
+    case "tangent.foldedBack":
+      return {
+        type: "tangent.foldedBack",
+        tangentSessionId: str(p.tangentSessionId),
+        parentSessionId: str(p.parentSessionId),
+        mode: str(p.mode, "quote"),
+        preview: str(p.preview),
       };
     case "user.shell":
       // A missing requestId falls back to the event's own id, so a forward-compat event still

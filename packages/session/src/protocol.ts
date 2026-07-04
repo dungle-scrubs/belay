@@ -326,6 +326,13 @@ export interface CompactionManifest {
 /** How a continuation handoff produces the target prompt: model-generated, or the supplied text as-is. */
 export type HandoffMode = "generate" | "direct";
 
+/**
+ * What a tangent fold-back (plan 37, M8) carried back toward the parent: a `quote` of the selected
+ * source snapshot, a specific tangent `message`, or a `summary` of the tangent's outcome. Named so the
+ * durable fold-back record and the web preview label can never drift on the vocabulary.
+ */
+export type TangentFoldMode = "quote" | "message" | "summary";
+
 /** A publishable event before a producerId is attached: `{ type, payload }`. */
 export interface TrevorEventInput {
   readonly type: string;
@@ -763,6 +770,51 @@ export const events = {
     payload: { parentSessionId: p.parentSessionId, forkSeq: p.forkSeq },
   }),
   /**
+   * The TANGENT lineage record (plan 37): marks a session as a tangent branched from a SELECTED piece
+   * of a parent's transcript. Emitted ONCE on the CHILD (tangent) session as its first event. Unlike a
+   * fork (`session.forkedFrom`), a tangent does NOT copy the parent transcript - it records only the
+   * anchor (`parentSessionId`, the `sourceMessageId` the selection came from, and the selected `quote`
+   * snapshot) for navigation, attribution, and a later EXPLICIT fold-back. The metadata is NOT
+   * permission to include the parent transcript in the tangent prompt (D-001). `label` is an optional
+   * user title. The tangent's creation time is the event's own `createdAt` (never duplicated here).
+   */
+  sessionTangentOf: (p: {
+    parentSessionId: string;
+    sourceMessageId: string;
+    quote: string;
+    label?: string;
+  }): TrevorEventInput => ({
+    type: "session.tangentOf",
+    payload: {
+      parentSessionId: p.parentSessionId,
+      sourceMessageId: p.sourceMessageId,
+      quote: p.quote,
+      ...(p.label ? { label: p.label } : {}),
+    },
+  }),
+  /**
+   * An EXPLICIT tangent fold-back (plan 37, M8): the durable, auditable record that the user deliberately
+   * carried a chosen piece of a tangent's outcome (a `quote`/`message`/`summary`) back toward the PARENT
+   * session. It is NOT an automatic merge and NOT hidden context: the folded content is placed into the
+   * parent COMPOSER as editable text for the user to review and submit (or discard), never becoming parent
+   * prompt history on its own. Recorded on the TANGENT session's log (never the parent's), so it can never
+   * reach the parent's model context; `preview` is a bounded snippet for observability, not the transcript.
+   */
+  tangentFoldedBack: (p: {
+    tangentSessionId: string;
+    parentSessionId: string;
+    mode: TangentFoldMode;
+    preview: string;
+  }): TrevorEventInput => ({
+    type: "tangent.foldedBack",
+    payload: {
+      tangentSessionId: p.tangentSessionId,
+      parentSessionId: p.parentSessionId,
+      mode: p.mode,
+      preview: p.preview,
+    },
+  }),
+  /**
    * The prompt shell lane (D-082): a leading `!` in the composer runs a shell command immediately
    * through the live leader's protected `runShell` path, bypassing the model and the turn queue.
    * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
@@ -1181,6 +1233,7 @@ export const INVENTORY_EVENT_TYPES = {
   sessionTitle: "session.title",
   sessionDeleted: "session.deleted",
   sessionForkedFrom: "session.forkedFrom",
+  sessionTangentOf: "session.tangentOf",
 } as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;
 
 export type { DecodedEvent } from "./protocol-decode";

@@ -23,6 +23,7 @@ function summary(over: Partial<SessionSummary>): SessionSummary {
     archived: true,
     deleted: false,
     forkedFrom: null,
+    tangentOf: null,
     ...over,
   };
 }
