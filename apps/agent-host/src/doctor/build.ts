@@ -302,7 +302,7 @@ export async function collectDoctorProbeResults(
     providers: providerProbes,
     roots,
     tools,
-    observations: { distinct: obs.distinct, unknown: obs.unknown, total: obs.total, top: obs.top },
+    observations: obs,
     providerFailures: {
       retryExhausted: summary.retryExhausted,
       nonRetryableTerminal: summary.nonRetryableTerminal,

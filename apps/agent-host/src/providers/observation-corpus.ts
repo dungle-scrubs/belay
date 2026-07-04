@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
-import { appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { writeFileAtomicVia } from "@host/io/atomic-write";
 import { resolveTrevorHome, storagePathByName } from "@trevor/session/node-paths";
 import type { ProviderFailureClass } from "./failure-taxonomy";
 import {
@@ -40,6 +40,16 @@ export function corpusJsonlPath(kind: ObservationKind): string {
 /** The deduped aggregate index spanning every producer kind. */
 export function corpusIndexPath(): string {
   return storagePathByName("observation-index");
+}
+
+/** Async existence check for the one-time migration gate (reads/writes elsewhere operate-and-catch). */
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** A deduped index keyed by fingerprint. */
@@ -105,9 +115,18 @@ export async function rebuildCorpusIndex(): Promise<ObservationIndex> {
   return index;
 }
 
+/** Temp-write + rename, so a concurrent reader (or a mid-write crash) never observes a torn file. */
+function atomicWrite(path: string, content: string): Promise<void> {
+  return writeFileAtomicVia(
+    { writeFile: (p, d) => writeFile(p, d, "utf8"), rename },
+    path,
+    content,
+  );
+}
+
 async function writeIndex(index: ObservationIndex): Promise<void> {
   await mkdir(corpusDir(), { recursive: true });
-  await writeFile(corpusIndexPath(), `${JSON.stringify(index, null, 2)}\n`, "utf8");
+  await atomicWrite(corpusIndexPath(), `${JSON.stringify(index, null, 2)}\n`);
 }
 
 /**
@@ -174,7 +193,7 @@ export async function deleteByFingerprint(fingerprint: string): Promise<boolean>
         kept.push(line);
       }
     }
-    await writeFile(path, kept.length ? `${kept.join("\n")}\n` : "", "utf8");
+    await atomicWrite(path, kept.length ? `${kept.join("\n")}\n` : "");
   }
   if (removed) {
     await rebuildCorpusIndex();
@@ -235,7 +254,6 @@ function legacyToDelta(record: LegacyObservation): ObservationEnvelope | null {
   );
   return {
     ...delta,
-    firstSeen: first,
     lastSeen: last,
     count: typeof record.count === "number" && record.count > 0 ? record.count : 1,
   };
@@ -258,17 +276,15 @@ function legacySources(): readonly string[] {
  */
 export async function ensureMigrated(): Promise<void> {
   try {
-    if (existsSync(corpusJsonlPath("provider_failure"))) {
+    if (await pathExists(corpusJsonlPath("provider_failure"))) {
       return;
     }
     for (const source of legacySources()) {
-      if (!existsSync(source)) {
-        continue;
-      }
       let parsed: Record<string, LegacyObservation>;
       try {
         parsed = JSON.parse(await readFile(source, "utf8")) as Record<string, LegacyObservation>;
       } catch {
+        // A missing or unparseable legacy file: nothing to migrate from this source.
         continue;
       }
       if (parsed && typeof parsed === "object") {

@@ -9,16 +9,6 @@ import { type ObservationEnvelope, providerFailureEnvelope } from "./observation
 
 export type { ObservationInput } from "./failure-record-schema";
 export { fingerprintObservation } from "./failure-record-schema";
-export {
-  corpusDir,
-  corpusIndexPath,
-  corpusJsonlPath,
-  deleteByFingerprint,
-  deleteByKind,
-  deleteCorpus,
-  exportCorpus,
-  rebuildCorpusIndex,
-} from "./observation-corpus";
 export type { ObservationEnvelope } from "./observation-envelope";
 
 /**

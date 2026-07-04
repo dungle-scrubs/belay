@@ -56,19 +56,19 @@ describe("providerFailureEnvelope", () => {
     expect(env.shape).toMatchObject({
       classification: "unknown",
       retryable: false,
-      messageSkeleton: expect.any(String),
+      message: expect.any(String),
       fieldNames: ["error", "status"],
       outputStarted: false,
     });
   });
 
-  it("re-redacts the message into the shape skeleton (no secrets reach source/shape)", () => {
+  it("re-redacts the message into the shape (no secrets reach source/shape)", () => {
     const env = providerFailureEnvelope(
       input({ message: "Authorization: Bearer sk-ant-LEAK0123456789 failed" }),
       NOW,
     );
     expect(JSON.stringify(env)).not.toContain("sk-ant-LEAK0123456789");
-    expect(env.shape.messageSkeleton).toContain("«redacted»");
+    expect(env.shape.message).toContain("«redacted»");
   });
 });
 

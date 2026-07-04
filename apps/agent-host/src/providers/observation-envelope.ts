@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   fingerprintObservation,
+  hash16,
   type ObservationInput,
   sanitizeFailureDetail,
 } from "./failure-record-schema";
-import { redactSecrets } from "./failure-taxonomy";
 
 /**
  * The common, versioned observation envelope shared by every producer of the local observation corpus
@@ -83,7 +83,7 @@ function sanitizeField(value: ObservationField): ObservationField {
       : redacted;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => redactSecrets(String(entry)).slice(0, MAX_FIELD_LENGTH));
+    return value.map((entry) => sanitizeFailureDetail(String(entry)).slice(0, MAX_FIELD_LENGTH));
   }
   return value;
 }
@@ -143,7 +143,7 @@ export function providerFailureEnvelope(
       retryable: input.retryable,
       status: input.status,
       code: input.code,
-      messageSkeleton: input.message,
+      message: input.message,
       fieldNames: input.shapeFields,
       outputStarted: input.outputStarted,
     },
@@ -152,13 +152,8 @@ export function providerFailureEnvelope(
 
 /** A stable fingerprint for a later-producer shape: the kind plus its sorted redacted shape tokens. */
 function producerFingerprint(kind: ObservationKind, tokens: readonly string[]): string {
-  // Reuse the provider fingerprint machinery indirectly by hashing a stable, redacted token string.
   const joined = [kind, ...tokens.map((t) => sanitizeFailureDetail(t))].join("|");
-  let hash = 0;
-  for (let i = 0; i < joined.length; i += 1) {
-    hash = (hash * 31 + joined.charCodeAt(i)) >>> 0;
-  }
-  return hash.toString(16).padStart(16, "0").slice(0, 16);
+  return hash16(joined);
 }
 
 /** M7 (schema only): a tool-pattern shape summary. No raw output/prompt fields - only shape tokens. */
@@ -226,13 +221,14 @@ export function foldObservationDelta(
   if (!existing) {
     return delta;
   }
+  // Spread the later sighting (its lastSeen is already the max), then restore the stable identity, the
+  // earliest firstSeen, and the summed count.
   const latest = delta.lastSeen >= existing.lastSeen ? delta : existing;
   return {
     ...latest,
     id: existing.id,
     fingerprint: existing.fingerprint,
     firstSeen: existing.firstSeen <= delta.firstSeen ? existing.firstSeen : delta.firstSeen,
-    lastSeen: existing.lastSeen >= delta.lastSeen ? existing.lastSeen : delta.lastSeen,
     count: existing.count + delta.count,
   };
 }

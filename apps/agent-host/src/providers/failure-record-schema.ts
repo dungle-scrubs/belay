@@ -69,6 +69,11 @@ function fingerprintPartsFromEvidence(
   };
 }
 
+/** A 16-hex-char stable content hash (a SHA-256 prefix): the shared fingerprint primitive. */
+export function hash16(joined: string): string {
+  return createHash("sha256").update(joined).digest("hex").slice(0, 16);
+}
+
 /** A stable fingerprint for a failure shape, shared by every provider-failure surface. */
 export function failureFingerprint(parts: FingerprintParts): string {
   const joined = [
@@ -79,7 +84,7 @@ export function failureFingerprint(parts: FingerprintParts): string {
     [...(parts.shapeFields ?? [])].sort().join(","),
     failureMessageSkeleton(parts.message),
   ].join("|");
-  return createHash("sha256").update(joined).digest("hex").slice(0, 16);
+  return hash16(joined);
 }
 
 /** A stable fingerprint from the shared provider-failure evidence projection. */
@@ -111,25 +116,6 @@ export type ObservationInput = ObservationEvidenceInput & {
   readonly outputStarted: boolean;
 };
 
-/** One persisted, deduped observation: the input shape plus first/last-seen timestamps and a count. */
-export interface ProviderObservation {
-  readonly fingerprint: string;
-  readonly provider: string;
-  readonly model?: string;
-  readonly authMode?: string;
-  readonly phase: string;
-  readonly classification: ProviderFailureClass;
-  readonly retryable: boolean;
-  readonly status?: number;
-  readonly code?: string;
-  readonly message: string;
-  readonly shapeFields?: readonly string[];
-  readonly outputStarted: boolean;
-  readonly firstSeen: string;
-  readonly lastSeen: string;
-  readonly count: number;
-}
-
 /** A stable fingerprint for an observation. */
 export function fingerprintObservation(input: ObservationInput): string {
   return failureFingerprint({
@@ -140,41 +126,6 @@ export function fingerprintObservation(input: ObservationInput): string {
     shapeFields: input.shapeFields,
     message: input.message,
   });
-}
-
-/** Builds a fresh observation record from an input at time `nowIso`, message re-redacted. */
-export function buildObservation(input: ObservationInput, nowIso: string): ProviderObservation {
-  return {
-    fingerprint: fingerprintObservation(input),
-    provider: input.provider,
-    model: input.model,
-    authMode: input.authMode,
-    phase: input.phase,
-    classification: input.classification,
-    retryable: input.retryable,
-    status: input.status,
-    code: input.code,
-    message: sanitizeFailureDetail(input.message),
-    shapeFields: input.shapeFields,
-    outputStarted: input.outputStarted,
-    firstSeen: nowIso,
-    lastSeen: nowIso,
-    count: 1,
-  };
-}
-
-/** Folds a fresh sighting into an existing record: bump the count + lastSeen, keep the firstSeen. */
-export function mergeObservation(
-  existing: ProviderObservation,
-  fresh: ProviderObservation,
-): ProviderObservation {
-  return {
-    ...existing,
-    // Refresh the mutable shape fields to the latest sighting (message skeleton is identical anyway).
-    message: fresh.message,
-    lastSeen: fresh.lastSeen,
-    count: existing.count + 1,
-  };
 }
 
 /**
