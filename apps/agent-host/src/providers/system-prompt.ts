@@ -3,7 +3,7 @@ import type { ContextRegistry } from "@host/project-context/registry";
 import { contextRegistry } from "@host/project-context/registry";
 import type { TaskRegistry } from "@host/tools/tasks/tasks";
 import { taskRegistry } from "@host/tools/tasks/tasks";
-import type { ToolDef } from "./types";
+import type { ModelCapabilities, ToolDef } from "./types";
 
 /**
  * Owns system-prompt assembly and the registry reads that feed it: the context registry
@@ -61,46 +61,192 @@ const CODING_GUIDANCE = [
   "Never end a turn by announcing an action you then do not take ('let me read...', 'let me continue...'): in the same step, actually call the tools to do it. Only stop when the task is done or you need the user - and then give a real final answer, not a promise to continue.",
 ] as const;
 
-/** How to pick between this host's tools, and the workspace confinement contract. */
-const TOOL_SELECTION_GUIDANCE = [
-  "Prefer read, write, and edit over bash when a dedicated file tool fits the task.",
-  "Use grep (ripgrep-backed text/regex search) for exact strings, symbols, error text, or regular expressions, and glob for path or filename discovery.",
-  "Use ast_grep for STRUCTURAL (syntax-aware) search when text/regex is awkward - e.g. finding a call shape like 'console.log($$$)' or a function/JSX pattern regardless of formatting; it is read-only and only available when its binary is installed.",
-  "The doctor tool runs Trevor's own host self-diagnostic (provider/model auth readiness, internet reachability, available tools, storage, and workspace) and returns a health report; call it only when the user asks about Trevor's own health, setup, why a turn failed, or whether a provider/model/tool is available - never as routine context-gathering for ordinary coding work.",
-  "The trevor_expert tool answers questions about Trevor's OWN capabilities (which tools/commands/skills exist, what models are available, protocol/version, what a built-in feature does) from the live capability manifest; call it when the user asks what Trevor can do or how a built-in works, instead of guessing - it is read-only and loads only the relevant capability slices on demand.",
-  "The tool_script tool runs a short READ-ONLY TypeScript script that batches many read/search calls (read, glob, grep, ast_grep) through a sandboxed bridge and returns one compact result; reach for it ONLY for repeated read-only operations across MANY inputs (e.g. scanning dozens of files), not a one-off read or search - use the direct tool for those. It cannot write, mutate, run shells, spawn processes, or access the network, and it is bounded by a timeout and call/output budgets.",
-  "Use web_search for DISCOVERY - finding which page answers a question - and web_fetch to READ a source you already have a URL for (the docs page, article, or API/JSON endpoint a search surfaced). Search to locate, then fetch the selected URL to read it; do not fetch a URL you have not first found or been given.",
-  "web_fetch reads ONE explicit public URL. Its backend ladder is static first; it falls back to the Jina reader only when the static page is unusable (thin or JS-rendered); and Firecrawl is a scarce final fallback - configured-only and used last, only when both static and Jina fail. Prefer the default mode and a single fetch per source rather than forcing rendered mode.",
-  "Use archive_read with path for local zip inspection before falling back to shell unzip. Use archive_read with url only for a public archive that must be downloaded through the guarded URL policy.",
-  "Use archive_unpack only when the user asks to extract a local zip archive, and always provide an explicit destination plus include patterns when only selected entries are wanted.",
-  "Use video_inspect to SEE the contents of a LOCAL video file: it samples a bounded set of frames and feeds them back to you as vision input. Reach for it instead of shelling out to ffmpeg or trying to read a video as text; keep the frame budget small (a few frames) and let it degrade gracefully when the media tools are unavailable.",
-  "Use docs for CURRENT EXTERNAL documentation - the official docs of a product, API, library, SDK, or service (setup, usage, configuration, limits, reference). docs resolves a subject into a cached, citeable corpus you then search and read, layering caching and source citations over web_search/web_fetch; reach for it when you need authoritative external reference material rather than a single one-off page read.",
+/**
+ * The guidance-density tier for one turn (plan 50). A large served context window carries the full
+ * tool guidance; a smaller window emits a leaner prompt so the fixed prompt overhead does not eat the
+ * turn's budget - and, on a local rolling-window runtime that silently truncates, does not push the
+ * oldest messages out of the window. Selected from the SERVED window, never the model's native
+ * `contextLength`: the served window is what actually truncates (D-004).
+ */
+export type GuidanceTier = "full" | "core" | "minimal";
+
+// Served-window thresholds (tokens) for the tiers (plan 50). Below CORE the prompt keeps only the
+// core guidance; between CORE and FULL it condenses the detailed tool blocks; at/above FULL it is
+// unchanged. 16k mirrors the minimum-to-run guard (turn-preflight.ts); 64k is a typical small-cloud cut.
+const CORE_TIER_MIN_TOKENS = 16_000;
+const FULL_TIER_MIN_TOKENS = 64_000;
+
+/**
+ * Selects the guidance tier from the SERVED context window (plan 50, D-004). An absent or non-positive
+ * window falls back to "full": a missing window is not evidence of a small one, so the builder never
+ * silently narrows on unknown data. Pure and total, so the policy is unit-tested in isolation.
+ */
+export function guidanceTier(contextWindow: number | undefined): GuidanceTier {
+  if (contextWindow === undefined || contextWindow <= 0 || contextWindow >= FULL_TIER_MIN_TOKENS) {
+    return "full";
+  }
+  return contextWindow >= CORE_TIER_MIN_TOKENS ? "core" : "minimal";
+}
+
+/**
+ * The keep-level for one tool-guidance line across the density tiers (plan 50):
+ *  - "core"  always emitted verbatim - the fundamental file/search/edit/confinement guidance every
+ *            coding task needs, regardless of window.
+ *  - "high"  emitted verbatim at the full tier, CONDENSED at the core tier, dropped at minimal - the
+ *            detailed per-tool blocks (ast_grep, tool_script, web, archive, video, docs, LSP, MCP)
+ *            that only pay off once that tool is reached.
+ *  - "low"   emitted verbatim at the full tier only; dropped at core and minimal - the niche blocks
+ *            (doctor, trevor_expert, the web_fetch backend ladder, archive_unpack, the LSP/docs
+ *            not-cases, /loop scheduling) a small-window turn can do without.
+ */
+type ToolGuidanceLine =
+  | { readonly keep: "core"; readonly text: string }
+  | { readonly keep: "low"; readonly text: string }
+  // A "high" line carries both its verbatim `text` (full tier) and a short `condensed` form (core tier).
+  | { readonly keep: "high"; readonly text: string; readonly condensed: string };
+
+/**
+ * How to pick between this host's tools, and the workspace confinement contract - as a single declared
+ * table tagged by keep-level (plan 50). The `text` fields are verbatim, so the full tier renders exactly
+ * the pre-plan-50 prompt; `guidanceTier` + `renderToolGuidance` narrow it for smaller served windows.
+ */
+const TOOL_GUIDANCE: readonly ToolGuidanceLine[] = [
+  {
+    keep: "core",
+    text: "Prefer read, write, and edit over bash when a dedicated file tool fits the task.",
+  },
+  {
+    keep: "core",
+    text: "Use grep (ripgrep-backed text/regex search) for exact strings, symbols, error text, or regular expressions, and glob for path or filename discovery.",
+  },
+  {
+    keep: "high",
+    text: "Use ast_grep for STRUCTURAL (syntax-aware) search when text/regex is awkward - e.g. finding a call shape like 'console.log($$$)' or a function/JSX pattern regardless of formatting; it is read-only and only available when its binary is installed.",
+    condensed:
+      "Use ast_grep for STRUCTURAL (syntax-aware) search when text/regex is awkward; it is read-only and only available when its binary is installed.",
+  },
+  {
+    keep: "low",
+    text: "The doctor tool runs Trevor's own host self-diagnostic (provider/model auth readiness, internet reachability, available tools, storage, and workspace) and returns a health report; call it only when the user asks about Trevor's own health, setup, why a turn failed, or whether a provider/model/tool is available - never as routine context-gathering for ordinary coding work.",
+  },
+  {
+    keep: "low",
+    text: "The trevor_expert tool answers questions about Trevor's OWN capabilities (which tools/commands/skills exist, what models are available, protocol/version, what a built-in feature does) from the live capability manifest; call it when the user asks what Trevor can do or how a built-in works, instead of guessing - it is read-only and loads only the relevant capability slices on demand.",
+  },
+  {
+    keep: "high",
+    text: "The tool_script tool runs a short READ-ONLY TypeScript script that batches many read/search calls (read, glob, grep, ast_grep) through a sandboxed bridge and returns one compact result; reach for it ONLY for repeated read-only operations across MANY inputs (e.g. scanning dozens of files), not a one-off read or search - use the direct tool for those. It cannot write, mutate, run shells, spawn processes, or access the network, and it is bounded by a timeout and call/output budgets.",
+    condensed:
+      "Use tool_script to batch many READ-ONLY read/search calls (read, glob, grep, ast_grep) across MANY inputs; it cannot write, run shells, or use the network.",
+  },
+  {
+    keep: "high",
+    text: "Use web_search for DISCOVERY - finding which page answers a question - and web_fetch to READ a source you already have a URL for (the docs page, article, or API/JSON endpoint a search surfaced). Search to locate, then fetch the selected URL to read it; do not fetch a URL you have not first found or been given.",
+    condensed:
+      "Use web_search to DISCOVER which page answers a question, then web_fetch to READ a URL you already have or were given.",
+  },
+  {
+    keep: "low",
+    text: "web_fetch reads ONE explicit public URL. Its backend ladder is static first; it falls back to the Jina reader only when the static page is unusable (thin or JS-rendered); and Firecrawl is a scarce final fallback - configured-only and used last, only when both static and Jina fail. Prefer the default mode and a single fetch per source rather than forcing rendered mode.",
+  },
+  {
+    keep: "high",
+    text: "Use archive_read with path for local zip inspection before falling back to shell unzip. Use archive_read with url only for a public archive that must be downloaded through the guarded URL policy.",
+    condensed:
+      "Use archive_read for local zip inspection before shelling out to unzip (or with url for a public archive through the guarded URL policy).",
+  },
+  {
+    keep: "low",
+    text: "Use archive_unpack only when the user asks to extract a local zip archive, and always provide an explicit destination plus include patterns when only selected entries are wanted.",
+  },
+  {
+    keep: "high",
+    text: "Use video_inspect to SEE the contents of a LOCAL video file: it samples a bounded set of frames and feeds them back to you as vision input. Reach for it instead of shelling out to ffmpeg or trying to read a video as text; keep the frame budget small (a few frames) and let it degrade gracefully when the media tools are unavailable.",
+    condensed:
+      "Use video_inspect to SEE a LOCAL video's contents via a small set of sampled frames instead of shelling out to ffmpeg.",
+  },
+  {
+    keep: "high",
+    text: "Use docs for CURRENT EXTERNAL documentation - the official docs of a product, API, library, SDK, or service (setup, usage, configuration, limits, reference). docs resolves a subject into a cached, citeable corpus you then search and read, layering caching and source citations over web_search/web_fetch; reach for it when you need authoritative external reference material rather than a single one-off page read.",
+    condensed:
+      "Use docs for CURRENT EXTERNAL documentation (a product, API, library, SDK, or service) - a cached, citeable corpus you search and read; not for this repo's own source.",
+  },
   // Plan 24 M6 (D-002/D-003/D-006): LSP guidance is SELECTIVE-USE - the named moments where a
   // bounded language-server fact beats searching or reading, the explicit not-cases (text search
   // and exploration stay on grep/ast_grep/glob/read), and the hard non-blocking rule: correctness
   // truth stays with tests/typecheck/compiler output, and LSP never gates an edit.
-  "Use the lsp_* tools for precise language-server facts at chosen moments: lsp_workspace_symbols " +
-    "to find where a NAMED symbol (function, class, type, constant) is defined; " +
-    "lsp_document_symbols to orient in a large file without reading all of it; lsp_hover for the " +
-    "type signature or docs at an exact file:line:column; lsp_diagnostics for a targeted " +
-    "post-edit check of one file's current problems; lsp_code_actions to propose safe fixes " +
-    "(read-only proposals - apply the ones you accept with edit).",
-  "Do NOT use lsp_* tools for literal text or string search, config/docs/route discovery, or " +
-    "broad exploration - grep, ast_grep, glob, and read stay the right tools there. LSP is " +
-    "auxiliary and OPTIONAL: correctness truth stays with the tests, typecheck, and compiler " +
-    "output, and a missing, slow, or degraded language server is a bounded result to note and " +
-    "move past - never wait for LSP before editing.",
+  {
+    keep: "high",
+    text:
+      "Use the lsp_* tools for precise language-server facts at chosen moments: lsp_workspace_symbols " +
+      "to find where a NAMED symbol (function, class, type, constant) is defined; " +
+      "lsp_document_symbols to orient in a large file without reading all of it; lsp_hover for the " +
+      "type signature or docs at an exact file:line:column; lsp_diagnostics for a targeted " +
+      "post-edit check of one file's current problems; lsp_code_actions to propose safe fixes " +
+      "(read-only proposals - apply the ones you accept with edit).",
+    condensed:
+      "Use the lsp_* tools for precise language-server facts at chosen moments (symbol definitions, large-file orientation, hover signatures, targeted post-edit diagnostics, safe-fix proposals); they are auxiliary and never gate an edit.",
+  },
+  {
+    keep: "low",
+    text:
+      "Do NOT use lsp_* tools for literal text or string search, config/docs/route discovery, or " +
+      "broad exploration - grep, ast_grep, glob, and read stay the right tools there. LSP is " +
+      "auxiliary and OPTIONAL: correctness truth stays with the tests, typecheck, and compiler " +
+      "output, and a missing, slow, or degraded language server is a bounded result to note and " +
+      "move past - never wait for LSP before editing.",
+  },
   // Plan 23 M7 (D-001/D-003/D-005): MCP guidance stays GENERIC (named servers, never a specific
   // integration), search-capped (no catalog dumps), and qualified ('<server>:<tool>').
-  "The mcp tool talks to the user's configured MCP servers - external integrations connected to Trevor, each a named server exposing tools, resources, and prompts. Use its search action to DISCOVER capabilities by keyword and call with the qualified '<server>:<tool>' name to run one; prefer Trevor's built-in tools when they fit, and reach for mcp only when the task needs one of those configured external integrations. Results are ranked and capped - never expect or dump a full server catalog.",
-  "Do NOT use docs for the active workspace's own source truth - how THIS repository actually behaves, what its code, config, types, or tests do, or its local plans. That stays on read, glob, grep, ast_grep, the tests, and the compiler output, never docs; docs is for external documentation and is never a substitute for reading the repo you are working in.",
-  "Independent read-only lookups (read, glob, grep, web_search) run in parallel when you request several in a single step, so batch them together instead of one at a time; edits, writes, and bash run sequentially, so issue those one per step.",
-  "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
-  "Use ask_user ONLY when a concrete missing decision blocks useful progress - it pauses the turn until the user answers. Offer concrete choices and mark the one you recommend; do not use it to gather broad open-ended preferences or to ask what you can determine yourself by reading the code.",
-  "Recurring or scheduled work is the user's explicit /loop command, never something you start yourself. If the user wants an action repeated on a cadence or until a condition, point them at /loop (e.g. '/loop max 5 do \"run the tests\"' or '/loop every 5m do \"check CI\"'); do NOT invent hidden loops, background schedules, or self-repeating turns - a loop only runs when the user explicitly creates one.",
-  CONFINEMENT_GUIDANCE,
-  "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
+  {
+    keep: "high",
+    text: "The mcp tool talks to the user's configured MCP servers - external integrations connected to Trevor, each a named server exposing tools, resources, and prompts. Use its search action to DISCOVER capabilities by keyword and call with the qualified '<server>:<tool>' name to run one; prefer Trevor's built-in tools when they fit, and reach for mcp only when the task needs one of those configured external integrations. Results are ranked and capped - never expect or dump a full server catalog.",
+    condensed:
+      "Use the mcp tool's search action to DISCOVER a configured server's capabilities and call the qualified '<server>:<tool>' name to run one; prefer Trevor's built-in tools when they fit.",
+  },
+  {
+    keep: "low",
+    text: "Do NOT use docs for the active workspace's own source truth - how THIS repository actually behaves, what its code, config, types, or tests do, or its local plans. That stays on read, glob, grep, ast_grep, the tests, and the compiler output, never docs; docs is for external documentation and is never a substitute for reading the repo you are working in.",
+  },
+  {
+    keep: "core",
+    text: "Independent read-only lookups (read, glob, grep, web_search) run in parallel when you request several in a single step, so batch them together instead of one at a time; edits, writes, and bash run sequentially, so issue those one per step.",
+  },
+  {
+    keep: "core",
+    text: "edit requires its 'old' text to appear exactly once in the file; read the file first to choose a unique anchor, or use write for a full rewrite.",
+  },
+  {
+    keep: "core",
+    text: "Use ask_user ONLY when a concrete missing decision blocks useful progress - it pauses the turn until the user answers. Offer concrete choices and mark the one you recommend; do not use it to gather broad open-ended preferences or to ask what you can determine yourself by reading the code.",
+  },
+  {
+    keep: "low",
+    text: "Recurring or scheduled work is the user's explicit /loop command, never something you start yourself. If the user wants an action repeated on a cadence or until a condition, point them at /loop (e.g. '/loop max 5 do \"run the tests\"' or '/loop every 5m do \"check CI\"'); do NOT invent hidden loops, background schedules, or self-repeating turns - a loop only runs when the user explicitly creates one.",
+  },
+  { keep: "core", text: CONFINEMENT_GUIDANCE },
+  {
+    keep: "core",
+    text: "Use tools when they are the best fit for the task instead of claiming you have no tool access.",
+  },
 ];
+
+/**
+ * Renders the tool-guidance lines for a tier (plan 50): the full tier emits every line verbatim (so its
+ * output is byte-identical to the pre-plan-50 prompt); the core tier keeps the core lines and condenses
+ * the high-value blocks (dropping the niche ones); the minimal tier keeps only the core lines.
+ */
+function renderToolGuidance(tier: GuidanceTier): readonly string[] {
+  return TOOL_GUIDANCE.flatMap((line): string[] => {
+    if (tier === "full" || line.keep === "core") {
+      return [line.text];
+    }
+    if (tier === "core" && line.keep === "high") {
+      return [line.condensed];
+    }
+    return [];
+  });
+}
 
 /** How to maintain the working checklist (ported from V1's task guidance). */
 const TASK_GUIDANCE = [
@@ -151,6 +297,20 @@ export interface SystemPromptContext {
    * persisted style preference; the builder stays unaware of how a style is chosen or stored.
    */
   readonly styleGuidance?: string;
+  /**
+   * The SERVED context window (in tokens) of the model that will run this step (plan 50). Drives the
+   * guidance-density tier (`guidanceTier`): a small local window emits a leaner prompt so the fixed
+   * overhead does not blow the budget or trigger silent truncation. Threaded per step by the call site
+   * (the model can change mid-turn, plan 09.1), so the prompt re-tiers on the next step after a switch.
+   * Absent/unknown falls back to the full prompt - the builder never narrows on missing data (D-004).
+   */
+  readonly contextWindow?: number;
+  /**
+   * The served model's detected capabilities (plan 50), threaded alongside `contextWindow` from the
+   * route. Carried for capability-aware narrowing (a separate, later concern - the served window is the
+   * sole tier driver today, D-004); the no-tools route is already handled by an empty `tools` array.
+   */
+  readonly capabilities?: ModelCapabilities;
 }
 
 /** The presentation-only style block, or "" for the default style (no guidance). */
@@ -240,9 +400,13 @@ export class SystemPromptBuilder {
     // on the tooled path - the answer-only branch above never reads it.
     const snapshot = this.registrySnapshot(cwd, workspaceRoot);
 
+    // Density tier from the served window (plan 50): full for a large/absent window (byte-identical to
+    // the pre-plan-50 prompt), leaner for a small local window. Only the tool guidance narrows; the
+    // identity, execution context, coding conduct, and calibration rules hold across all tiers.
+    const tier = guidanceTier(context.contextWindow);
     const guidance = [
       ...CODING_GUIDANCE,
-      ...TOOL_SELECTION_GUIDANCE,
+      ...renderToolGuidance(tier),
       ...TASK_GUIDANCE,
       ...REPO_GUARDRAILS,
       ...TRANSCRIPT_MARKDOWN_GUIDANCE,

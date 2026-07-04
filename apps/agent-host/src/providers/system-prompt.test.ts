@@ -5,7 +5,13 @@ import { join } from "node:path";
 import { isWorkspaceConfined, WORKSPACE_CONFINED_TOOLS } from "@host/boot/paths";
 import { contextRegistry } from "@host/project-context/registry";
 import { test } from "vitest";
-import { buildSystemPrompt, SystemPromptBuilder, systemPromptBuilder } from "./system-prompt";
+import {
+  buildSystemPrompt,
+  guidanceTier,
+  promptOverheadChars,
+  SystemPromptBuilder,
+  systemPromptBuilder,
+} from "./system-prompt";
 
 /**
  * Characterization tests for the workspace-confinement policy (M10 / D-010).
@@ -431,4 +437,169 @@ test("style affects ONLY its block - tools, identity, and execution are unchange
   // The advertised tool inventory is present and unchanged regardless of the active style.
   assert.match(a, /- edit: Edit a file\./);
   assert.match(b, /- edit: Edit a file\./);
+});
+
+/**
+ * Route-aware guidance density (plan 50). The served context window drives a guidance TIER: a large
+ * or absent window renders the full prompt (byte-identical to before this plan); a smaller local
+ * window emits a leaner prompt so the fixed overhead does not blow the budget or trigger silent
+ * truncation. Only the tool guidance narrows - identity, execution context, coding conduct,
+ * confinement, and calibration hold across all tiers.
+ */
+
+const CAPS = { images: false, tools: true, contextLength: 200_000 } as const;
+const WS = { workspaceRoot: "/ws", cwd: "/ws" } as const;
+
+// --- M2: the guidanceTier policy is pure and served-window-driven (D-004) ---
+
+test("guidanceTier: an absent or non-positive window falls back to full (never narrow on missing data)", () => {
+  assert.equal(guidanceTier(undefined), "full");
+  assert.equal(guidanceTier(0), "full");
+  assert.equal(guidanceTier(-1), "full");
+});
+
+test("guidanceTier: thresholds are full >= 64k, core >= 16k, minimal below (boundaries inclusive)", () => {
+  assert.equal(guidanceTier(200_000), "full");
+  assert.equal(guidanceTier(64_000), "full");
+  assert.equal(guidanceTier(63_999), "core");
+  assert.equal(guidanceTier(32_000), "core");
+  assert.equal(guidanceTier(16_000), "core");
+  assert.equal(guidanceTier(15_999), "minimal");
+  assert.equal(guidanceTier(8_000), "minimal");
+});
+
+// --- M1: threading the route data is a transparent seam - a large/absent window is byte-identical ---
+
+test("M1: a large or absent contextWindow (with capabilities) is byte-identical to the pre-plan-50 prompt", () => {
+  const base = buildSystemPrompt(TOOLS, WS);
+  assert.equal(
+    buildSystemPrompt(TOOLS, { ...WS, contextWindow: 200_000, capabilities: CAPS }),
+    base,
+    "a large window renders the full prompt unchanged",
+  );
+  assert.equal(
+    buildSystemPrompt(TOOLS, { ...WS, contextWindow: undefined, capabilities: CAPS }),
+    base,
+    "an absent window renders the full prompt unchanged",
+  );
+});
+
+// --- M2: the minimal tier drops the detailed tool blocks but keeps the safety-critical core ---
+
+test("M2: a small window (< 16k) omits the detailed LSP/MCP/docs/archive/tool_script blocks", () => {
+  const minimal = buildSystemPrompt(TOOLS, { ...WS, contextWindow: 8_000 });
+  for (const dropped of [
+    "Use the lsp_* tools for precise language-server facts",
+    "The mcp tool talks to the user's configured MCP servers",
+    "Use docs for CURRENT EXTERNAL documentation",
+    "Use archive_read with path for local zip inspection",
+    "The tool_script tool runs a short READ-ONLY TypeScript script",
+    "Use ast_grep for STRUCTURAL",
+    "The doctor tool runs Trevor's own host self-diagnostic",
+    "do NOT invent hidden loops",
+  ]) {
+    assert.ok(!minimal.includes(dropped), `minimal tier omits: ${dropped}`);
+  }
+});
+
+test("M2: the minimal tier still keeps identity, execution context, core coding guidance, and confinement", () => {
+  const minimal = buildSystemPrompt(TOOLS, { ...WS, contextWindow: 8_000 });
+  assert.ok(minimal.includes("You are Trevor"), "identity is retained");
+  assert.ok(minimal.includes("Workspace root: /ws"), "execution context is retained");
+  assert.ok(
+    minimal.includes("Use glob to discover files by name or path, and grep to find exact strings"),
+    "core coding guidance is retained",
+  );
+  assert.ok(
+    minimal.includes("edit, glob, and grep are scoped to the workspace root"),
+    "the confinement contract is retained at every tier",
+  );
+  assert.ok(
+    minimal.includes("Use grep (ripgrep-backed text/regex search)"),
+    "the core search guidance is retained",
+  );
+  assert.ok(minimal.includes("Resist sycophancy"), "the calibration rules are retained");
+});
+
+// --- M2: the core (medium) tier condenses the high-value blocks and drops the niche ones ---
+
+test("M2: the core tier keeps a CONDENSED form of the high-value blocks (retained, not verbatim)", () => {
+  const core = buildSystemPrompt(TOOLS, { ...WS, contextWindow: 32_000 });
+  // A representative phrase from each retained block's CONDENSED form is present...
+  assert.ok(core.includes("symbol definitions, large-file orientation"), "lsp condensed present");
+  assert.ok(core.includes("Use the mcp tool's search action to DISCOVER"), "mcp condensed present");
+  assert.ok(
+    core.includes("a cached, citeable corpus you search and read; not for this repo's own source"),
+    "docs condensed present",
+  );
+  assert.ok(
+    core.includes("Use tool_script to batch many READ-ONLY"),
+    "tool_script condensed present",
+  );
+  assert.ok(core.includes("Use ast_grep for STRUCTURAL"), "ast_grep condensed present");
+  // ...while the VERBATIM long form of each is gone.
+  assert.ok(
+    !core.includes("lsp_workspace_symbols to find where a NAMED symbol"),
+    "the verbatim LSP block is dropped at core",
+  );
+  assert.ok(
+    !core.includes("The mcp tool talks to the user's configured MCP servers"),
+    "the verbatim MCP block is dropped at core",
+  );
+  assert.ok(
+    !core.includes("resolves a subject into a cached, citeable corpus you then search and read"),
+    "the verbatim docs block is dropped at core",
+  );
+});
+
+test("M2: the core tier DROPS the niche low-value blocks entirely", () => {
+  const core = buildSystemPrompt(TOOLS, { ...WS, contextWindow: 32_000 });
+  for (const dropped of [
+    "The doctor tool runs Trevor's own host self-diagnostic",
+    "The trevor_expert tool answers questions",
+    "Use archive_unpack only when the user asks",
+    "Firecrawl is a scarce final fallback",
+    "never wait for LSP before editing",
+    "do NOT invent hidden loops",
+  ]) {
+    assert.ok(!core.includes(dropped), `core tier drops the niche block: ${dropped}`);
+  }
+  // The core coding + confinement guidance still holds at the medium tier.
+  assert.ok(core.includes("edit, glob, and grep are scoped to the workspace root"));
+  assert.ok(core.includes("edit requires its 'old' text to appear exactly once"));
+});
+
+test("M2: an unknown window never silently narrows - it renders the full prompt", () => {
+  const unknown = buildSystemPrompt(TOOLS, { ...WS, contextWindow: undefined });
+  assert.ok(
+    unknown.includes("The mcp tool talks to the user's configured MCP servers"),
+    "the full MCP block is present when the window is unknown",
+  );
+});
+
+// --- M3: promptOverheadChars reflects the tier the model actually receives ---
+
+test("M3: promptOverheadChars shrinks as the served window shrinks (overhead tracks the tier)", () => {
+  const overhead = (window: number): number =>
+    promptOverheadChars(buildSystemPrompt(TOOLS, { ...WS, contextWindow: window }), TOOLS);
+  const full = overhead(200_000);
+  const core = overhead(32_000);
+  const minimal = overhead(8_000);
+  assert.ok(core < full, "the core-tier overhead is below the full-tier overhead");
+  assert.ok(minimal < core, "the minimal-tier overhead is below the core-tier overhead");
+});
+
+// --- M4 (D-004): the SERVED window wins over the model's native contextLength ---
+
+test("M4: a large native contextLength but a small served window still gets the small tier", () => {
+  const prompt = buildSystemPrompt(TOOLS, {
+    ...WS,
+    contextWindow: 8_000,
+    capabilities: { images: false, tools: true, contextLength: 200_000 },
+  });
+  assert.ok(
+    !prompt.includes("The mcp tool talks to the user's configured MCP servers"),
+    "the served window (8k) drives the tier, not the 200k native contextLength",
+  );
+  assert.ok(prompt.includes("You are Trevor"), "the minimal prompt is still well-formed");
 });

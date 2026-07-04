@@ -406,8 +406,15 @@ export function streamPiAiModel<TApi extends Api>(
           ...streamOptions,
           provider,
           signal: controller.signal,
+          // The served window rides into the prompt build (plan 50) so the guidance density tracks the
+          // model this step actually runs on - re-read per step, so a mid-turn switch (09.1) re-tiers the
+          // next step's prompt. A large/cloud window renders the full prompt exactly as before.
           systemPrompt:
-            systemPrompt ?? buildSystemPrompt(tools, { styleGuidance: activeStyleGuidance() }),
+            systemPrompt ??
+            buildSystemPrompt(tools, {
+              styleGuidance: activeStyleGuidance(),
+              contextWindow: streamOptions.contextWindow,
+            }),
         }),
         // The shared boundary normalizer (failure-normalizer.ts): a classified auth failure rides
         // through as-is; anything else is normalized into the failure taxonomy -> ProviderUnavailable

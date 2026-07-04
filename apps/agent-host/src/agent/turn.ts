@@ -165,8 +165,18 @@ export function publishTurn(
     // is sized from that restricted set, matching what the model is actually offered; a parent's
     // overhead also covers the delegation tools it can call.
     const toolDefs = offeredToolDefs(useTools, toolNames, delegate?.defs);
+    // Seed the fixed overhead against the SAME guidance tier the model will actually receive (plan 50,
+    // M3): a small-window turn renders a leaner prompt, so its overhead estimate must shrink too. The
+    // served window is resolved inside the provider stream, so pre-stream the best estimate is the prior
+    // turn's served window (seedUsage), falling back to the model's native ceiling (caps.contextLength);
+    // both absent (a cloud model, or a first turn) leaves it unset -> the full prompt, never a narrow on
+    // missing data. The one `promptOverheadChars` formula then reflects the tier with no second estimate.
+    const seedWindow = seedUsage?.contextWindow ?? (caps.contextLength || undefined);
     const breakdown = new BreakdownAccumulator(
-      promptOverheadChars(buildSystemPrompt(toolDefs), toolDefs),
+      promptOverheadChars(
+        buildSystemPrompt(toolDefs, { contextWindow: seedWindow, capabilities: caps }),
+        toolDefs,
+      ),
     );
     breakdown.seedHistory(history);
 
