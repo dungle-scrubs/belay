@@ -10,13 +10,20 @@
 
 ## Completed Current State / Hard Dependencies
 
-- [x] Handoff entry exists: `apps/agent-host/src/handoff-flow.ts` (spawn new host for new session).
-- [x] Worktree commands exist: `/worktree-new|switch|merge|delete|reconcile` (`apps/agent-host/src/main.ts`).
-- [x] `planner` skill exists (`~/.agents/skills/planner`) - workers run it in implement mode.
-- [x] HARD DEP identified: `.plans/21-workflows-runtime` (the engine the fleet workflow runs on).
-- [x] HARD DEP identified: `.plans/01-managed-worktree-hardening` (cwd-lock for N concurrent mutating trees).
+- [x] Handoff entry exists: `apps/agent-host/src/handoff/handoff-flow.ts` (spawn new host for new
+  session; reused as a **detached** spawn - no switch/retire).
+- [x] Worktree commands exist: `/worktree-new|switch|merge|delete|reconcile`
+  (`apps/agent-host/src/worktrees/commands.ts`, `makeWorktreeCommands`; moved out of `main.ts` in 22.2).
+- [x] `planner` skill exists (`~/.agents/skills/planner`) - workers run it in implement mode
+  (code-only, AFK).
+- [x] HARD DEP identified: `.plans/21-workflows-runtime` (the engine; authored + hardened, **not yet
+  implemented**; 46 gates on it **through M6**).
+- [x] HARD DEP `.plans/01-managed-worktree-hardening` - **merged** (cwd-lock; collision-only, not cwd
+  routing - the load-bearing per-leaf cwd routing is `21`/M6).
 - [x] Bounded-child folded into `21` (plan 12 dropped); the hardened `agent()` leaf is covered by the `21` dependency above.
-- [x] SUPPORTING identified: `.plans/15-forkable-sessions-lineage` (durable fleet run session).
+- [x] SUPPORTING `.plans/15-forkable-sessions-lineage` - **merged** (durable fleet run session).
+- [x] SUPPORTING identified: `.plans/45-subagent-variants` - **not yet implemented**; `45`/M2 verifier
+  reused by M4 when built, else a `code-review`/`simplify` leaf (M4 does not block on `45`).
 
 ## Current Cutoff Blockers
 
@@ -31,7 +38,8 @@
 **M2 - Confirm gate + handoff**
 - [ ] RED: specs presented for approval before any tree/agent; approve -> durable run spawned;
   reject -> nothing created.
-- [ ] GREEN: confirm-spec-first gate + reuse `handoff-flow` to spawn the fleet session/host.
+- [ ] GREEN: confirm-spec-first gate + reuse `handoff-flow` as a **detached** spawn (ensureSession +
+  spawnHost, no switchAndRetire); the launcher survives and is notified on completion.
 - [ ] RED: `fire-immediately` config variant.
 - [ ] GREEN: config-driven gate (default confirm).
 - [ ] REFACTOR: gate policy separate from the workflow body.
@@ -46,9 +54,10 @@
 **M3 - Worker leaves (planner implement in a tree)**
 - [ ] RED: each spec -> a write-capable worktree leaf running `planner` implement-mode against its plan;
   isolated; non-racing.
-- [ ] GREEN: the built-in `worktree-fleet` workflow - "implement" phase fanning out worker leaves on 21.
+- [ ] GREEN: the built-in `worktree-fleet` workflow - "implement" phase fanning out worker leaves on 21;
+  each invokes the planner **code-only, AFK**, committing to its fleet branch (no branch/merge/plan-dir ritual).
 - [ ] RED: failure/stall - failed worker marked failed, siblings continue, `<=1` retry.
-- [ ] GREEN: fail-soft + bounded retry + structured per-worker result.
+- [ ] GREEN: fail-soft + bounded retry (**new-ordinal** second leaf, deterministic on the journaled failure) + structured per-worker result.
 - [ ] REFACTOR: worker policy in the workflow, not the engine.
 
 **M4 - Flat audit phase**
