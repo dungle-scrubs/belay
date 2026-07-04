@@ -5,8 +5,8 @@
 > Current focus: M1: Shimmer Component
 
 - Total checklist items: 33
-- Completed: 10
-- Current cutoff blockers: 23
+- Completed: 15
+- Current cutoff blockers: 18
 
 ## 0. Hard Dependencies
 
@@ -26,11 +26,11 @@
 
 ## M2: Projection Rules
 
-- [ ] RED: Unit-test turn-level labels for active status, steering, reconnect/recovery, silent streaming, and fallback working
-- [ ] GREEN: Add pure projection helpers for turn-level action labels
-- [ ] RED: Unit-test tool labels for read, glob, grep, bash, write/edit/multi_edit, web search, docs, skill, process, and unknown fallback
-- [ ] GREEN: Add tool-label helpers using structured tool name/input and V1 vocabulary as reference
-- [ ] REFACTOR: Share projection between compact and full transcript rows
+- [x] RED: Unit-test turn-level labels for active status, steering, reconnect/recovery, silent streaming, and fallback working
+- [x] GREEN: Add pure projection helpers for turn-level action labels
+- [x] RED: Unit-test tool labels for read, glob, grep, bash, write/edit/multi_edit, web search, docs, skill, process, and unknown fallback
+- [x] GREEN: Add tool-label helpers using structured tool name/input and V1 vocabulary as reference
+- [x] REFACTOR: Share projection between compact and full transcript rows
 
 ## M3: Host Progress Labels
 
