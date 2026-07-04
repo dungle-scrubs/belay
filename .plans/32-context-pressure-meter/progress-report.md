@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M2: Storybook Visual States
+> Current focus: M3: SidePanel Wiring
 
 - Total checklist items: 29
-- Completed: 9
-- Current cutoff blockers: 20
+- Completed: 14
+- Current cutoff blockers: 15
 
 ## 0. Hard Dependencies
 
@@ -25,11 +25,11 @@
 
 ## M2: Storybook Visual States
 
-- [ ] RED: SidePanel stories for normal `42%`, warning `72%`, danger `91%`, critical `97%`, exactly full, and over-window
-- [ ] GREEN: Apply semantic fill classes by pressure band
-- [ ] RED: Visual/story tests for long window labels and narrow panel width
-- [ ] GREEN: Format the meter label as token count plus percent, preserving max-window label where it fits
-- [ ] REFACTOR: Avoid layout shift when the band changes live
+- [x] RED: SidePanel stories for normal `42%`, warning `72%`, danger `91%`, critical `97%`, exactly full, and over-window
+- [x] GREEN: Apply semantic fill classes by pressure band
+- [x] RED: Visual/story tests for long window labels and narrow panel width
+- [x] GREEN: Format the meter label as token count plus percent, preserving max-window label where it fits
+- [x] REFACTOR: Avoid layout shift when the band changes live
 
 ## M3: SidePanel Wiring
 

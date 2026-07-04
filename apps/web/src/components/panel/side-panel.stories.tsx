@@ -201,3 +201,59 @@ export const Empty: Story = {
     controls: Controls,
   },
 };
+
+// Context-pressure bands (plan 32): the meter carries pressure through color as usage
+// approaches the window. One story per band boundary so the visual-regression lane pins
+// each treatment (D-001/D-002).
+
+const pressureArgs = {
+  title: "auth-flow",
+  subtitle: "session · trevor-local",
+  workspace: "~/proj/api",
+  git: cleanMain,
+  breakdown,
+  totalTokens: 14100,
+  controls: Controls,
+} satisfies Partial<SidePanelStoryArgs>;
+
+/** Normal band: 42% of the window, quiet primary fill, no pressure implied. */
+export const PressureNormal: Story = {
+  render: renderSidePanel,
+  args: { ...pressureArgs, ctxUsed: 84_000, ctxMax: 200_000 },
+};
+
+/** Warning band: 72% - long tool output/reasoning could start to matter soon. */
+export const PressureWarning: Story = {
+  render: renderSidePanel,
+  args: { ...pressureArgs, ctxUsed: 144_000, ctxMax: 200_000 },
+};
+
+/** Danger band: 91% - meaningful risk of context pressure. */
+export const PressureDanger: Story = {
+  render: renderSidePanel,
+  args: { ...pressureArgs, ctxUsed: 182_000, ctxMax: 200_000 },
+};
+
+/** Critical band: 97% - overflow/recovery likely; restrained stronger treatment. */
+export const PressureCritical: Story = {
+  render: renderSidePanel,
+  args: { ...pressureArgs, ctxUsed: 194_000, ctxMax: 200_000 },
+};
+
+/** Exactly full: the bar caps at 100% and reads critical. */
+export const PressureFull: Story = {
+  render: renderSidePanel,
+  args: { ...pressureArgs, ctxUsed: 200_000, ctxMax: 200_000 },
+};
+
+/** Over the window: usage exceeds the max, so the label reads past 100% while the bar stays capped. */
+export const PressureOverWindow: Story = {
+  render: renderSidePanel,
+  args: { ...pressureArgs, ctxUsed: 216_000, ctxMax: 200_000 },
+};
+
+/** Long window label in the narrow (w-80) panel: the 1M-token window stays legible beside tokens+percent. */
+export const PressureLongWindow: Story = {
+  render: renderSidePanel,
+  args: { ...pressureArgs, ctxUsed: 420_000, ctxMax: 1_000_000 },
+};

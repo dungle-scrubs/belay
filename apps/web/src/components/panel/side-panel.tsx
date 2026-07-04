@@ -4,13 +4,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtTokens } from "@/derive";
 import { useArmedAfterMount } from "@/hooks/use-armed-after-mount";
 import { panelBreakdown } from "./breakdown";
-import { contextPressureState } from "./context-pressure";
+import { contextPressureState, type PressureBand } from "./context-pressure";
 import { DrawerToggle, SideDrawer } from "./side-drawer";
 import { Treemap } from "./treemap";
 import { WorkspaceIdentity } from "./workspace-identity";
 
 const pct = (part: number, whole: number): number =>
   whole > 0 ? Math.round((part / whole) * 100) : 0;
+
+// The panel owns the band -> color mapping; the policy owns which band a ratio is in. Color
+// carries the pressure state on the bar fill; the usage number picks up the danger/critical
+// tone (and critical alone is bolded) so the escalation reads without any extra copy.
+const METER_FILL: Record<PressureBand, string> = {
+  normal: "bg-primary",
+  warning: "bg-smui-yellow",
+  danger: "bg-smui-orange",
+  critical: "bg-destructive",
+};
+
+const METER_USAGE_TEXT: Record<PressureBand, string> = {
+  normal: "text-foreground",
+  warning: "text-foreground",
+  danger: "text-smui-orange",
+  critical: "font-semibold text-destructive",
+};
 
 export interface SidePanelHeaderProps {
   /** Session name, shown as the panel title. */
@@ -162,14 +179,17 @@ export function SidePanelBreakdown({
           <span className="shrink-0 text-muted-foreground">ctx</span>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
             <div
-              className={`h-full rounded-full bg-primary${
-                meterArmed ? " transition-[width] duration-300 ease-out" : ""
+              className={`h-full rounded-full ${METER_FILL[pressure.band]}${
+                meterArmed
+                  ? " transition-[width] duration-300 ease-out motion-reduce:transition-none"
+                  : ""
               }`}
               style={{ width: `${pressure.clampedPercent}%` }}
             />
           </div>
           <span className="shrink-0 tabular-nums text-muted-foreground">
-            <span className="text-foreground">{pressure.percent}%</span> of {pressure.windowLabel}
+            <span className={METER_USAGE_TEXT[pressure.band]}>{pressure.usageLabel}</span> of{" "}
+            {pressure.windowLabel}
           </span>
         </div>
       ) : null}
