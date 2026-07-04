@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { parseFrontmatter, sortedVisibleEntries, trimStr } from "@host/boot/manifest-discovery";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import type { Command } from "@host/commands/commands";
+import { interpolate, type SegmentExecutor } from "@host/commands/interpolation-engine";
 import { ToolInputError } from "@host/tools/errors";
 import { runCommand } from "@host/tools/run-shell";
 import { cap } from "@host/tools/shared";
@@ -256,48 +257,23 @@ export function buildSkillCommand(): Command {
 }
 
 /**
- * Runs the two skill shell-interpolation forms and substitutes stdout in place:
- *   - a fenced block opening with ```! (a multi-line script), and
- *   - a single line that is just `!command` (excluding markdown images `![`).
- * Every command goes through runCommand, so the safety floor, timeout, and cap apply.
+ * The skill-shell execution policy (provenance `skill-shell`, plan 40 M1): every runnable segment - a
+ * fenced ```` ```! ```` script or a whole-line `!command` - runs through the shared runCommand floor, so
+ * the always-prevented classification, timeout, and output cap apply. Unlike the command-file lane this
+ * runs an ARBITRARY command (bounded, not allow-listed); it is a SEPARATE opt-in seam (TREVOR_SKILL_SHELL)
+ * and never armed by the command-file gate. Parsing is shared with command files; only this policy differs.
+ */
+const skillShellExecutor: SegmentExecutor = async (segment) =>
+  (await runCommand(segment.kind === "command" ? segment.command : segment.script)).output;
+
+/**
+ * Runs the two skill shell-interpolation forms and substitutes stdout in place, through the shared
+ * interpolation parser + renderer. Behavior is unchanged from the original inline implementation: the
+ * parser finds the same `!command` / ```` ```! ```` forms, and {@link skillShellExecutor} runs each via
+ * runCommand.
  */
 async function interpolateShell(body: string): Promise<string> {
-  const lines = body.split("\n");
-  const out: string[] = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i] ?? "";
-    const trimmed = line.trim();
-
-    if (/^```!\s*$/.test(trimmed)) {
-      const script: string[] = [];
-
-      i += 1;
-
-      for (; i < lines.length; i += 1) {
-        const inner = lines[i] ?? "";
-
-        if (/^```\s*$/.test(inner.trim())) {
-          break;
-        }
-
-        script.push(inner);
-      }
-
-      out.push((await runCommand(script.join("\n"))).output);
-
-      continue; // i sits on the closing fence (or end); the loop step moves past it.
-    }
-
-    if (trimmed.length > 1 && trimmed.startsWith("!") && trimmed[1] !== "[") {
-      out.push((await runCommand(trimmed.slice(1).trim())).output);
-      continue;
-    }
-
-    out.push(line);
-  }
-
-  return out.join("\n");
+  return interpolate(body, skillShellExecutor);
 }
 
 /** Loads a skill's instruction body (frontmatter stripped, interpolation applied if on). */
