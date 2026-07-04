@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { activeMention } from "@/composer/active-mention";
+import { useAutocompleteMenuKeys } from "./use-autocomplete-menu-keys";
 
 /**
  * The `@`-file-mention menu, parallel to {@link useSlashMenu}: it owns ONLY the mention menu state and
@@ -95,48 +96,18 @@ export function useFileMentionMenu({
     [mention, draft, setDraft, setCaret, inputRef],
   );
 
-  const onMenuKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      if (!menuOpen) {
-        return false;
-      }
-      // Escape closes ONLY this menu (for the current token); it must not bubble to the window
-      // cancel/steer handler, so it is swallowed here.
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setDismissedFor(dismissKey);
-        return true;
-      }
-      const selected = matches[boundedMenuIndex];
-      if (!selected) {
-        // An open-but-empty menu owns nothing else: Backspace/typing edit the query, Enter submits.
-        return false;
-      }
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setMenuIndex((i) => (i + 1) % matches.length);
-        return true;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setMenuIndex((i) => (i - 1 + matches.length) % matches.length);
-        return true;
-      }
-      if (event.key === "Tab") {
-        event.preventDefault();
-        acceptFile(selected.path);
-        return true;
-      }
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        acceptFile(selected.path);
-        return true;
-      }
-      return false;
-    },
-    [acceptFile, boundedMenuIndex, dismissKey, matches, menuOpen],
-  );
+  // Escape closes ONLY this menu (for the current token); it must not bubble to the window
+  // cancel/steer handler - useAutocompleteMenuKeys already swallows it (preventDefault + stopPropagation).
+  const onEscape = useCallback(() => setDismissedFor(dismissKey), [dismissKey]);
+  const onAccept = useCallback((match: FileMatch) => acceptFile(match.path), [acceptFile]);
+  const onMenuKeyDown = useAutocompleteMenuKeys({
+    open: menuOpen,
+    matches,
+    activeIndex: boundedMenuIndex,
+    setActiveIndex: setMenuIndex,
+    onAccept,
+    onEscape,
+  });
 
   return {
     menuOpen,

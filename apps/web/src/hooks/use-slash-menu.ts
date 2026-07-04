@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useAutocompleteMenuKeys } from "./use-autocomplete-menu-keys";
 
 export interface SlashMenu {
   readonly menuOpen: boolean;
@@ -49,48 +50,28 @@ export function useSlashMenu({
     [inputRef, setDraft],
   );
 
-  const onMenuKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-      const selected = menuOpen ? menuMatches[boundedMenuIndex] : undefined;
-      if (!selected) {
-        return false;
+  // Tab always accepts the highlighted command; Enter does too, UNLESS it is already an exact match
+  // for the typed draft, in which case Enter falls through to a plain submit instead of re-accepting
+  // an already-complete command. `event.key` distinguishes the two (Tab never takes this branch).
+  const onAccept = useCallback(
+    (spec: CommandSpec, event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === "Enter" && spec.name === draft) {
+        event.currentTarget.form?.requestSubmit();
+      } else {
+        acceptCommand(spec.name);
       }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setMenuIndex((i) => (i + 1) % menuMatches.length);
-        return true;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setMenuIndex((i) => (i - 1 + menuMatches.length) % menuMatches.length);
-        return true;
-      }
-      if (event.key === "Tab") {
-        event.preventDefault();
-        acceptCommand(selected.name);
-        return true;
-      }
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        if (selected.name !== draft) {
-          acceptCommand(selected.name);
-        } else {
-          event.currentTarget.form?.requestSubmit();
-        }
-        return true;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setMenuDismissedFor(draft);
-        return true;
-      }
-
-      return false;
     },
-    [acceptCommand, boundedMenuIndex, draft, menuMatches, menuOpen],
+    [acceptCommand, draft],
   );
+  const onEscape = useCallback(() => setMenuDismissedFor(draft), [draft]);
+  const onMenuKeyDown = useAutocompleteMenuKeys({
+    open: menuOpen,
+    matches: menuMatches,
+    activeIndex: boundedMenuIndex,
+    setActiveIndex: setMenuIndex,
+    onAccept,
+    onEscape,
+  });
 
   return {
     menuOpen,
