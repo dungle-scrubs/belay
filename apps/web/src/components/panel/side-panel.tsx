@@ -1,9 +1,10 @@
 import type { GitStatus, UsageBreakdown } from "@trevor/session";
 import { type ReactNode, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fmtCtx, fmtTokens } from "@/derive";
+import { fmtTokens } from "@/derive";
 import { useArmedAfterMount } from "@/hooks/use-armed-after-mount";
 import { panelBreakdown } from "./breakdown";
+import { contextPressureState } from "./context-pressure";
 import { DrawerToggle, SideDrawer } from "./side-drawer";
 import { Treemap } from "./treemap";
 import { WorkspaceIdentity } from "./workspace-identity";
@@ -149,13 +150,14 @@ export function SidePanelBreakdown({
   const activeTotal = tab === "request" ? totalTokens : contextTokens;
 
   // The ctx meter snaps to its value on first appearance and through the initial
-  // replay; only live updates once the session is ready glide.
-  const showMeter = ctxUsed != null && ctxMax != null && ctxMax > 0;
-  const meterArmed = useArmedAfterMount(ready && showMeter);
+  // replay; only live updates once the session is ready glide. The pure policy owns
+  // the ratio/band/label; the panel owns only the markup and the band color mapping.
+  const pressure = contextPressureState(ctxUsed, ctxMax);
+  const meterArmed = useArmedAfterMount(ready && pressure != null);
 
   return (
     <>
-      {showMeter ? (
+      {pressure ? (
         <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs">
           <span className="shrink-0 text-muted-foreground">ctx</span>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
@@ -163,11 +165,11 @@ export function SidePanelBreakdown({
               className={`h-full rounded-full bg-primary${
                 meterArmed ? " transition-[width] duration-300 ease-out" : ""
               }`}
-              style={{ width: `${Math.min(100, pct(ctxUsed, ctxMax))}%` }}
+              style={{ width: `${pressure.clampedPercent}%` }}
             />
           </div>
           <span className="shrink-0 tabular-nums text-muted-foreground">
-            <span className="text-foreground">{pct(ctxUsed, ctxMax)}%</span> of {fmtCtx(ctxMax)}
+            <span className="text-foreground">{pressure.percent}%</span> of {pressure.windowLabel}
           </span>
         </div>
       ) : null}

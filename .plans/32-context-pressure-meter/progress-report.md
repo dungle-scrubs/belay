@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M1: Context Pressure Policy
+> Current focus: M2: Storybook Visual States
 
 - Total checklist items: 29
-- Completed: 4
-- Current cutoff blockers: 25
+- Completed: 9
+- Current cutoff blockers: 20
 
 ## 0. Hard Dependencies
 
@@ -17,11 +17,11 @@
 
 ## M1: Context Pressure Policy
 
-- [ ] RED: Unit tests for ratio thresholds at `0`, `69.9`, `70`, `84.9`, `85`, `94.9`, `95`, `100`, and `>100` percent
-- [ ] GREEN: Add pure `contextPressureState(ctxUsed, ctxMax)` helper
-- [ ] RED: Tests for invalid, missing, and zero-max values returning absent state
-- [ ] GREEN: Keep `SidePanelBreakdown` from rendering a meter when policy returns absent
-- [ ] REFACTOR: Keep formatting helpers local unless reused
+- [x] RED: Unit tests for ratio thresholds at `0`, `69.9`, `70`, `84.9`, `85`, `94.9`, `95`, `100`, and `>100` percent
+- [x] GREEN: Add pure `contextPressureState(ctxUsed, ctxMax)` helper
+- [x] RED: Tests for invalid, missing, and zero-max values returning absent state
+- [x] GREEN: Keep `SidePanelBreakdown` from rendering a meter when policy returns absent
+- [x] REFACTOR: Keep formatting helpers local unless reused
 
 ## M2: Storybook Visual States
 
