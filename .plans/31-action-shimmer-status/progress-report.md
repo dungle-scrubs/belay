@@ -4,23 +4,25 @@
 
 > Current focus: M1: Shimmer Component
 
-- Total checklist items: 31
-- Completed: 3
-- Current cutoff blockers: 28
+- Total checklist items: 33
+- Completed: 10
+- Current cutoff blockers: 23
 
 ## 0. Hard Dependencies
 
 - [x] Existing web transcript `WorkingIndicator` and tool rendering
 - [x] Existing assistant-ui Tailwind shimmer pattern in the repo
 - [x] Existing V1 action vocabulary references in `~/dev/trevor`
+- [x] `09.2-web-browser-test-suite` merged (Storybook visual-regression lane + baseline scripts under `tests/browser/`)
+- [x] Reorg plan 22.1 merged (`apps/agent-host/src/agent/turn.ts`; turn tests co-located under `apps/agent-host/src/agent/`)
 
 ## M1: Shimmer Component
 
-- [ ] RED: Storybook states for fallback working, thinking, steering, reading, searching, running shell, classifying, reconnecting, and reduced motion
-- [ ] GREEN: Build a reusable shimmer status component using assistant-ui's `shimmer` class pattern
-- [ ] RED: Component tests for label text, elapsed meta, interruptible meta, reduced-motion fallback, and stable layout
-- [ ] GREEN: Preserve existing `WorkingIndicator` call sites through a compatibility wrapper or controlled migration
-- [ ] REFACTOR: Remove pulse-dot-only assumptions from the component API
+- [x] RED: Storybook states for fallback working, thinking, steering, reading, searching, running shell, classifying, reconnecting, and reduced motion
+- [x] GREEN: Build a reusable shimmer status component using assistant-ui's `shimmer` class pattern
+- [x] RED: Component tests for label text, elapsed meta, interruptible meta, reduced-motion fallback, and stable layout
+- [x] GREEN: Preserve existing `WorkingIndicator` call sites through a compatibility wrapper or controlled migration
+- [x] REFACTOR: Remove pulse-dot-only assumptions from the component API
 
 ## M2: Projection Rules
 

@@ -5,8 +5,8 @@
 - [x] Existing web transcript `WorkingIndicator` and tool rendering in `apps/web/src/components/chat/message.tsx`.
 - [x] Existing assistant-ui Tailwind shimmer pattern already present in `apps/web/src/components/assistant-ui/tool-group.tsx` and documented at https://www.assistant-ui.com/tw-shimmer.
 - [x] Existing V1 action vocabulary references in `~/dev/trevor`: `Working...`, `Exploring...`, `Classifying with ...`, `applying steering`, and tool progress labels such as archive unpacking/summarizing.
-- [ ] `09.2-web-browser-test-suite` (lands first) - this plan's "Storybook/visual tests" and manual screenshot inspection for the shimmer state matrix (message rows, running tool rows, reduced-motion) run through 09.2's automated Storybook visual-regression lane; regenerate its committed baselines for the shimmer stories. <!-- D-003 -->
-- [ ] **Reorg (plan 22.1):** Plan 22.1 moves src/turn.ts to agent/turn.ts. Host progress-label emission lands in agent/turn.ts; the canonical turn test is test/turn.test.ts. <!-- D-004 -->
+- [x] `09.2-web-browser-test-suite` (merged) - this plan's "Storybook/visual tests" and manual screenshot inspection for the shimmer state matrix (message rows, running tool rows, reduced-motion) run through 09.2's automated Storybook visual-regression lane (`tests/browser/*`, baselines via `tests/browser/update-storybook-baselines.sh`); regenerate its committed baselines for the shimmer stories. <!-- D-003 -->
+- [x] **Reorg (plan 22.1, merged):** the reorg landed - `src/turn.ts` now lives at `apps/agent-host/src/agent/turn.ts` and host turn code (loop, tool messages, active-run) sits under `apps/agent-host/src/agent/`; turn tests are co-located there as `apps/agent-host/src/agent/*.test.ts` (e.g. `turn-machine.test.ts`, `loop.test.ts`), not a single `test/turn.test.ts`. Any host progress-label emission lands under `apps/agent-host/src/agent/`. <!-- D-004 -->
 
 ## 1. Architecture
 

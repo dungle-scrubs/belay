@@ -289,18 +289,6 @@
   animation: shimmer 1.5s infinite;
 }
 
-/* Working indicator dots: staggered opacity pulse (see WorkingIndicator). */
-@keyframes smui-pulse-dot {
-  0%,
-  80%,
-  100% {
-    opacity: 0.2;
-  }
-  40% {
-    opacity: 1;
-  }
-}
-
 /* SMUI re-theming for the shared Markdown renderer (.trevor-md, see markdown.tsx).
  * Scoped to .smui-md so it only applies inside the chat message components and
  * never touches the live app, whose markdown.css stays light. Overrides only the

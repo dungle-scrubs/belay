@@ -1,10 +1,10 @@
 import { type ArtifactRef, type PastePayload, pasteLineCount } from "@trevor/session";
-import { useBoolean, useInterval } from "ahooks";
+import { useBoolean } from "ahooks";
 import { ChevronRight, Copy, Wrench } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatElapsed } from "@/derive";
 import { cn } from "@/lib/utils";
+import { ActionShimmer } from "./action-shimmer";
 import { MarkdownBody } from "./markdown-body";
 import { MessageAttachments } from "./message-attachments";
 import { ToolSection } from "./tool-section";
@@ -36,33 +36,14 @@ export function MessageMeta({ items, className }: { items: string[]; className?:
   );
 }
 
-/** The three pulsing dots. */
-function PulseDots() {
-  return (
-    <span className="inline-flex items-center gap-0.5">
-      <span className="size-1 rounded-full bg-current [animation:smui-pulse-dot_1.4s_ease-in-out_infinite]" />
-      <span className="size-1 rounded-full bg-current [animation:smui-pulse-dot_1.4s_ease-in-out_infinite] [animation-delay:160ms]" />
-      <span className="size-1 rounded-full bg-current [animation:smui-pulse-dot_1.4s_ease-in-out_infinite] [animation-delay:320ms]" />
-    </span>
-  );
-}
-
-/** Live elapsed since `startedAt` (ms epoch), re-rendered each second; null when no start time. */
-function useElapsedLabel(startedAt?: number): string | null {
-  const [, tick] = useState(0);
-  // An undefined delay pauses the interval, so the ticker only runs while a start time is set.
-  useInterval(() => tick((n) => n + 1), startedAt === undefined ? undefined : 1000);
-  return startedAt === undefined ? null : formatElapsed(Date.now() - startedAt, { hours: true });
-}
-
 /**
- * Animated "working…" placeholder while a turn is starting / streaming silently. With `startedAt`
- * (the turn's start, ms epoch) and/or `interruptible`, it renders the bold turn form -
- * "Working … (5m 29s · esc to interrupt)" - with a live elapsed timer; otherwise a plain italic
- * "label …" (used by the connecting/thinking placeholders).
+ * Backwards-compatible alias for {@link ActionShimmer}. The active-status placeholder that once
+ * rendered pulsing dots now shimmers its label (plan 31); this wrapper keeps existing call sites
+ * working while the transcript migrates to `ActionShimmer` + structured action-label projection.
+ * New code should import `ActionShimmer` (and derive its label via `action-label.ts`) directly.
  */
 export function WorkingIndicator({
-  label = "working",
+  label = "Working",
   startedAt,
   interruptible = false,
 }: {
@@ -70,25 +51,7 @@ export function WorkingIndicator({
   startedAt?: number;
   interruptible?: boolean;
 }) {
-  const elapsed = useElapsedLabel(startedAt);
-  const meta = [elapsed, interruptible ? "esc to interrupt" : null].filter(Boolean).join(" · ");
-
-  if (meta) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-sm text-foreground">
-        <span className="font-semibold">{label}</span>
-        <PulseDots />
-        <span className="text-muted-foreground">({meta})</span>
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5 text-sm italic text-muted-foreground">
-      {label}
-      <PulseDots />
-    </span>
-  );
+  return <ActionShimmer label={label} startedAt={startedAt} interruptible={interruptible} />;
 }
 
 /**
