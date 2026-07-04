@@ -526,6 +526,70 @@ export const events = {
     },
   }),
   /**
+   * The workflow engine's run journal (plan 21 M4), streamed onto the session log keyed by `runId`.
+   * `workflow.agent` carries a deterministic call ORDINAL (D-019) - one per leaf INVOCATION, so two
+   * identical parallel leaves and a worker-plus-retry get distinct keys - plus the `(prompt,opts)`
+   * fingerprint (the per-ordinal resume invalidation check) and the leaf's `Usage` (restored on resume
+   * so budget-dependent loops replay). `workflow.leaf-failed` carries the fail-soft typed cause (D-008).
+   */
+  workflowStarted: (p: { runId: string; workflow: string; args?: unknown }): TrevorEventInput => ({
+    type: "workflow.started",
+    payload: {
+      runId: p.runId,
+      workflow: p.workflow,
+      ...(p.args !== undefined ? { args: p.args } : {}),
+    },
+  }),
+  workflowPhase: (p: { runId: string; title: string }): TrevorEventInput => ({
+    type: "workflow.phase",
+    payload: { runId: p.runId, title: p.title },
+  }),
+  workflowAgent: (p: {
+    runId: string;
+    ordinal: readonly number[];
+    fingerprint: string;
+    status: "completed" | "replayed";
+    usage: { readonly input: number; readonly output: number };
+    /** The serialized typed leaf result (success or typed failure) - the resume cache reconstructs it. */
+    result: unknown;
+  }): TrevorEventInput => ({
+    type: "workflow.agent",
+    payload: {
+      runId: p.runId,
+      ordinal: [...p.ordinal],
+      fingerprint: p.fingerprint,
+      status: p.status,
+      usage: { input: p.usage.input, output: p.usage.output },
+      result: p.result,
+    },
+  }),
+  workflowLeafFailed: (p: {
+    runId: string;
+    ordinal: readonly number[];
+    kind: string;
+    cause: string;
+    childSessionId: string;
+    detail?: unknown;
+  }): TrevorEventInput => ({
+    type: "workflow.leaf-failed",
+    payload: {
+      runId: p.runId,
+      ordinal: [...p.ordinal],
+      kind: p.kind,
+      cause: p.cause,
+      childSessionId: p.childSessionId,
+      ...(p.detail !== undefined ? { detail: p.detail } : {}),
+    },
+  }),
+  workflowLog: (p: { runId: string; message: string }): TrevorEventInput => ({
+    type: "workflow.log",
+    payload: { runId: p.runId, message: p.message },
+  }),
+  workflowCompleted: (p: { runId: string; ok: boolean; leaves: number }): TrevorEventInput => ({
+    type: "workflow.completed",
+    payload: { runId: p.runId, ok: p.ok, leaves: p.leaves },
+  }),
+  /**
    * A durable cross-turn compaction fold (D-040…D-043): the rolling summary that keeps the
    * prompt projection under the window. Appended, never mutating the log; each fold supersedes
    * the prior (the rolling chain), so the prompt-builder takes the latest. The manifest is this

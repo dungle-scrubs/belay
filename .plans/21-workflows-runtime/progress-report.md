@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 29
-- **Completed current work:** 26
+- **Current cutoff blockers:** 24
+- **Completed current work:** 31
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M4 - Run journal + resume (Phase 2)
+- **Current focus:** M5 - WorkflowBudgetGovernor (Phase 2)
 
 ## Completed Current State / Hard Dependencies
 
@@ -62,12 +62,12 @@
 
 ### Phase 2: Journaling, resume, budget
 
-**M4 - Run journal + resume**
-- [ ] RED: `workflow.*` events appended keyed by `runId`; each `workflow.agent` carries a **deterministic call ordinal keying each `agent()` invocation** (parallel array index / pipeline `(item, stage)`, **each composed with an intra-slot call counter** so a worker + its retry get distinct ordinals) and the leaf's `Usage`. (D-019)
-- [ ] GREEN: journaling + `workflow.*` (per-invocation ordinal + `Usage`) protocol additions. (D-019)
-- [ ] RED: resume = replay + **per-ordinal** `(prompt, opts)` invalidation (NOT content lookup): identical parallel leaves, a **second `agent()` call within one slot (a retry)**, + out-of-order completion resume correctly; first changed ordinal re-runs; cached leaves restore `Usage` so `budget.remaining()` loops replay identically. (D-019)
-- [ ] GREEN: resume engine (ordinal-keyed cache + `Usage` restore).
-- [ ] REFACTOR: generic journal projection.
+**M4 - Run journal + resume** (`workflow/ordinal.ts`, `workflow/journal.ts`, `packages/session` protocol)
+- [x] RED: `workflow.*` events appended keyed by `runId`; each `workflow.agent` carries a **deterministic call ordinal keying each `agent()` invocation** (fiber-local slot path + intra-slot counter; parallel array index / pipeline `(item, stage)`) so a worker + its retry get distinct ordinals (`["0.0.0","0.0.1"]`) and the leaf's `Usage`. (D-019) (`ordinal.test.ts`, `journal.test.ts`)
+- [x] GREEN: journaling (`journaledAgent` emits `workflow.agent`) + `workflow.*` (per-invocation ordinal + `Usage` + serialized result) protocol additions (`events.workflowStarted/Phase/Agent/LeafFailed/Log/Completed`). (D-019)
+- [x] RED: resume = replay + **per-ordinal** `(prompt, opts)` invalidation (NOT content lookup): two identical parallel leaves get distinct ordinals, a **second `agent()` call within one slot (a retry)**, + out-of-order completion all resume correctly; first changed ordinal re-runs live while unchanged siblings cache-hit; cached leaves restore `Usage` via `onUsage`. (D-019) (`journal.test.ts`)
+- [x] GREEN: resume engine (`RunCache` keyed by ordinal, fingerprint as the invalidation check; `cacheFromEvents` + `Usage` restore).
+- [x] REFACTOR: generic journal projection (`cacheFromEvents` rebuilds the cache from prior `workflow.agent` events).
 
 **M5 - WorkflowBudgetGovernor**
 - [ ] RED: cumulative `Usage` across leaves; ceiling -> new `agent()` typed error; `remaining()` loop support; **per-leaf token cap AND step budget settable per `agent()` call** (`opts.tokenBudget`/`opts.stepBudget`, distinct from `turn-budget.ts`'s global step cap); budget trip lets in-flight leaves **drain** with overshoot bounded by `(concurrency-cap x per-leaf token cap)`. (D-020)

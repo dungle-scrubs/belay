@@ -15,6 +15,7 @@
 import { Effect, Ref } from "effect";
 import { WorkflowRunError } from "./errors";
 import type { LeafFailure, LeafResult, LeafSuccess } from "./leaf";
+import { consumeOrdinal, type Ordinal, withChildSlot } from "./ordinal";
 
 /** The default runtime concurrency cap: how many leaves run at once before excess queues. */
 export const DEFAULT_CONCURRENCY = 8;
@@ -120,9 +121,12 @@ export function parallel(
 ): Effect.Effect<ReadonlyArray<unknown>, WorkflowRunError> {
   const onError = options.onError ?? "null";
   return assertCallSize(thunks.length).pipe(
-    Effect.flatMap(() =>
+    Effect.flatMap(() => consumeOrdinal),
+    Effect.flatMap((base: Ordinal) =>
       Effect.all(
-        thunks.map((thunk) => runLeafThunk(scheduler, thunk, onError)),
+        thunks.map((thunk, index) =>
+          withChildSlot([...base, index], runLeafThunk(scheduler, thunk, onError)),
+        ),
         { concurrency: scheduler.concurrency },
       ),
     ),
@@ -149,11 +153,18 @@ export function pipeline<T>(
   options: BatchOptions = {},
 ): Effect.Effect<ReadonlyArray<unknown>, WorkflowRunError> {
   const onError = options.onError ?? "null";
-  const runItem = (item: T, index: number): Effect.Effect<unknown, WorkflowRunError> =>
+  const runItem = (
+    base: Ordinal,
+    item: T,
+    index: number,
+  ): Effect.Effect<unknown, WorkflowRunError> =>
     Effect.gen(function* () {
       let previous: unknown;
-      for (const stage of stages) {
-        const value = yield* runLeafThunk(scheduler, () => stage(previous, item, index), onError);
+      for (const [stageIndex, stage] of stages.entries()) {
+        const value = yield* withChildSlot(
+          [...base, index, stageIndex],
+          runLeafThunk(scheduler, () => stage(previous, item, index), onError),
+        );
         if (value === null) {
           return null;
         }
@@ -162,9 +173,10 @@ export function pipeline<T>(
       return previous;
     });
   return assertCallSize(items.length).pipe(
-    Effect.flatMap(() =>
+    Effect.flatMap(() => consumeOrdinal),
+    Effect.flatMap((base: Ordinal) =>
       Effect.all(
-        items.map((item, index) => runItem(item, index)),
+        items.map((item, index) => runItem(base, item, index)),
         { concurrency: scheduler.concurrency },
       ),
     ),
