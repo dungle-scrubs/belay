@@ -11,28 +11,32 @@
  * home for the V2 action vocabulary, so tool renderers and the working row can't drift apart.
  */
 
-import { toolSummary } from "./tool-args";
+import type { ToolName } from "@trevor/session";
+import { toolSummary, truncateText } from "./tool-args";
 
 /** Shown when no better structured action is available (the honest, non-guessing default). */
 export const FALLBACK_ACTION_LABEL = "Working";
 
 /**
- * Squeeze a raw fragment (a path, a shell command, a query) into a single short line safe to show
- * as status: newlines/tabs collapse to single spaces and the result is capped with an ellipsis, so
- * a multiline or huge tool input can never leak into - or blow out - the label.
+ * Squeeze a raw fragment (a path, a shell command, a query, even an unrecognized tool name) into a
+ * single short line safe to show as status: newlines/tabs collapse to single spaces, then the
+ * result is capped with an ellipsis via the shared `truncateText` (tool-args.ts owns "cap +
+ * ellipsis" once; this only owns the whitespace collapse), so a multiline or huge fragment can
+ * never leak into - or blow out - the label.
  */
 export function redactLabelFragment(text: string, max = 48): string {
-  const single = text.replace(/\s+/g, " ").trim();
-  return single.length <= max ? single : `${single.slice(0, max - 1)}…`;
+  return truncateText(text.replace(/\s+/g, " ").trim(), max);
 }
 
 /**
  * The small V2 label map: tool name -> present-progress verb. The single source of the tool
- * vocabulary that the scattered per-renderer `runningLabel` literals used to duplicate. Archive
- * tools are handled separately (their verb depends on the direction), and any unmapped tool falls
- * back to naming itself in `toolActionLabel` rather than appearing here.
+ * vocabulary that the scattered per-renderer `runningLabel` literals used to duplicate. Keyed by
+ * the shared `ToolName` contract so a typo'd or renamed key is a compile error, not a silent
+ * fallback to "running". Archive tools are handled separately (their verb depends on the
+ * direction) and deliberately absent here; any tool with no entry (unmapped or truly unknown) falls
+ * back to naming itself in `toolActionLabel`/`toolActionLabelForTarget`.
  */
-const TOOL_VERBS: Readonly<Record<string, string>> = {
+const TOOL_VERBS: Partial<Record<ToolName, string>> = {
   read: "reading",
   write: "writing",
   edit: "editing",
@@ -48,32 +52,58 @@ const TOOL_VERBS: Readonly<Record<string, string>> = {
   process: "running process",
 };
 
-function isKnownTool(name: string): boolean {
+/**
+ * Narrows a raw (possibly wire-supplied, possibly unknown/legacy) tool name to the typed
+ * `ToolName` vocabulary. Used as the single gate before `toolVerb` - which is why `toolVerb` itself
+ * can stay strictly `ToolName`-typed instead of bare `string`.
+ */
+function isKnownTool(name: string): name is ToolName {
   return name in TOOL_VERBS || name.startsWith("archive");
 }
 
-/** The present-progress verb for a tool, without any argument target. */
-export function toolVerb(name: string): string {
+/** The present-progress verb for a KNOWN tool, without any argument target. */
+function toolVerb(name: ToolName): string {
   if (name.startsWith("archive")) {
     return name === "archive_read" ? "reading archive" : "extracting archive";
   }
   return TOOL_VERBS[name] ?? "running";
 }
 
+/** Shared "verb (+ redacted target)" composition for both `toolActionLabel` entry points below. An
+ *  UNKNOWN tool names itself ("running frobnicate") through the SAME redaction path as every other
+ *  fragment, so a malformed/huge/newline-bearing tool name can't leak either. */
+function composeToolLabel(name: string, target: string): string {
+  if (!isKnownTool(name)) {
+    const safeName = redactLabelFragment(name);
+    return safeName ? `running ${safeName}` : FALLBACK_ACTION_LABEL;
+  }
+  const verb = toolVerb(name);
+  const summary = target ? redactLabelFragment(target) : "";
+  return summary ? `${verb} ${summary}` : verb;
+}
+
 /**
  * A tool-call action label from the structured tool name + (optional) raw args JSON. Known tools
  * read as "<verb> <salient target>" (the target is the same salient field the transcript row shows,
- * redacted to a single short line); with no args the verb stands alone. An UNKNOWN tool names itself
- * ("running frobnicate") and deliberately never runs its args through `toolSummary`, so an unmapped
- * tool can never leak raw JSON arguments into the status line.
+ * redacted to a single short line); with no args the verb stands alone. Prefer
+ * `toolActionLabelForTarget` when the caller already has its own typed target string (a
+ * renderer's `query`/`url`/`path` prop) rather than raw JSON, so it isn't forced into a synthetic
+ * JSON round-trip.
  */
 export function toolActionLabel(name: string, argsJson?: string): string {
-  if (!isKnownTool(name)) {
-    return name ? `running ${name}` : FALLBACK_ACTION_LABEL;
-  }
-  const verb = toolVerb(name);
-  const summary = argsJson ? redactLabelFragment(toolSummary(name, argsJson)) : "";
-  return summary ? `${verb} ${summary}` : verb;
+  const target = argsJson ? toolSummary(name, argsJson) : "";
+  return composeToolLabel(name, target);
+}
+
+/**
+ * The lighter-weight sibling of `toolActionLabel`: takes the tool's already-resolved salient
+ * target as a plain string (a renderer's own `query`/`url`/`path`/subject prop) instead of raw args
+ * JSON. This is what production tool renderers (web_search/web_fetch/docs/session_recall/archive)
+ * call - they already extracted their salient value in `tool-message.tsx`'s dispatch, so re-encoding
+ * it as JSON just to have `toolActionLabel` decode it back out would be a pointless round-trip.
+ */
+export function toolActionLabelForTarget(name: string, target?: string): string {
+  return composeToolLabel(name, target ?? "");
 }
 
 /** Structured evidence for the turn-level status, derived from the active assistant segment. */

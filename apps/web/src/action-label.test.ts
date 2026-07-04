@@ -7,6 +7,7 @@ import {
   reconnectActionLabel,
   redactLabelFragment,
   toolActionLabel,
+  toolActionLabelForTarget,
   turnActionLabel,
 } from "./action-label";
 
@@ -94,7 +95,10 @@ test("tool: web_search / docs / archive have present-progress verbs", () => {
     "looking up docs effect",
   );
   assert.equal(toolActionLabel("archive_read", JSON.stringify({})), "reading archive");
-  assert.equal(toolActionLabel("archive_write", JSON.stringify({})), "extracting archive");
+  // The real second archive tool name is "archive_unpack" (see packages/session/src/tools.ts) -
+  // a fixture of "archive_write" would only pass via the loose `startsWith("archive")` prefix
+  // match, giving false confidence that the real tool name is exercised.
+  assert.equal(toolActionLabel("archive_unpack", JSON.stringify({})), "extracting archive");
 });
 
 test("tool: skill / process get running-verb labels", () => {
@@ -111,6 +115,65 @@ test("tool: unknown tool names itself and never leaks raw JSON args", () => {
 test("tool: no args yields the verb alone (never blank)", () => {
   assert.equal(toolActionLabel("read"), "reading");
   assert.equal(toolActionLabel(""), FALLBACK_ACTION_LABEL);
+});
+
+test("tool: an unknown tool's own NAME is redacted before interpolation, not just its args", () => {
+  const longName = `bad${"x".repeat(100)}tool`;
+  const label = toolActionLabel(longName, JSON.stringify({}));
+  assert.doesNotMatch(label, /\n/);
+  assert.ok(label.length <= 48 + "running ".length);
+  assert.match(label, /^running /);
+  assert.match(label, /…$/);
+
+  const newlineName = "weird\ntool\nname";
+  const label2 = toolActionLabel(newlineName, JSON.stringify({}));
+  assert.doesNotMatch(label2, /\n/);
+  assert.equal(label2, "running weird tool name");
+});
+
+// --- toolActionLabelForTarget: the lighter-weight sibling used by production renderers that
+// already have their own typed target string (query/url/path) rather than raw args JSON ---
+
+test("toolActionLabelForTarget: known tools compose verb + the caller's own target string", () => {
+  assert.equal(
+    toolActionLabelForTarget("web_search", "useSlashMenu"),
+    "searching the web useSlashMenu",
+  );
+  assert.equal(
+    toolActionLabelForTarget("web_fetch", "https://example.com/x"),
+    "fetching https://example.com/x",
+  );
+  assert.equal(
+    toolActionLabelForTarget("session_recall", "prior decision"),
+    "recalling prior decision",
+  );
+  assert.equal(toolActionLabelForTarget("docs", "Effect Schema"), "looking up docs Effect Schema");
+});
+
+test("toolActionLabelForTarget: no target yields the verb alone; unknown tool still redacts", () => {
+  assert.equal(toolActionLabelForTarget("web_search"), "searching the web");
+  assert.equal(toolActionLabelForTarget("frobnicate", "secret stuff"), "running frobnicate");
+});
+
+// --- toolSummary leak: the salient-field fallback must never leak sibling raw args (M2 fix) ---
+
+test("toolActionLabel: a write call missing `path` never leaks its `content` into the label", () => {
+  const label = toolActionLabel(
+    "write",
+    JSON.stringify({ content: "SECRET_API_KEY=hunter2\nDB_PASSWORD=swordfish" }),
+  );
+  assert.equal(label, "writing");
+  assert.doesNotMatch(label, /SECRET_API_KEY/);
+  assert.doesNotMatch(label, /hunter2/);
+});
+
+test("toolActionLabel: an edit call missing `path` never leaks `old`/`new` into the label", () => {
+  const label = toolActionLabel(
+    "edit",
+    JSON.stringify({ old: "const token = 'abc123';", new: "const token = 'xyz789';" }),
+  );
+  assert.equal(label, "editing");
+  assert.doesNotMatch(label, /abc123|xyz789/);
 });
 
 // --- redaction / truncation ---
