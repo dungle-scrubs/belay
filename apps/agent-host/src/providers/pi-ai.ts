@@ -158,11 +158,15 @@ export function toPiAiMessages(messages: readonly ChatMessage[]): Context["messa
       return { role: "user", content: userContent(message), timestamp: Date.now() };
     }
     if (message.role === "tool") {
+      // A tool result may carry inlined frame images (video_inspect, D-003): the serialized text
+      // plus up to a capped set of frame images, so a vision model can SEE the sampled frames. A
+      // non-vision turn never resolves them, so `images` is empty and this is the old text-only shape.
+      const images = message.images ?? [];
       return {
         role: "toolResult",
         toolCallId: message.toolCallId,
         toolName: message.name ?? "",
-        content: [{ type: "text", text: message.content }],
+        content: [{ type: "text", text: message.content }, ...images.map(imageBlock)],
         isError: false,
         timestamp: Date.now(),
       };

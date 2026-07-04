@@ -34,6 +34,7 @@ import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
 import { trevorExpertTool } from "./trevor-expert";
 import type { Tool } from "./types";
+import { videoInspectTool } from "./video-inspect/tool";
 import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
 import { writeTool } from "./write";
@@ -89,6 +90,8 @@ test("a tool without the readOnly flag is absent from READ_ONLY_TOOLS", () => {
     multiEditTool,
     archiveUnpackTool,
     bashTool,
+    // video_inspect (plan 39) forces the post-video finalization pass (a turn-level side effect): a barrier.
+    videoInspectTool,
     // mcp mutates EXTERNAL service state (plan 23 D-008): always a serial barrier.
     buildMcpTool(createMcpRuntime([])),
   ]) {
@@ -174,6 +177,8 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     }),
     clipboardWriteTool,
     archiveUnpackTool,
+    // video_inspect (plan 39): a serial barrier; its name/readOnly nature is config-independent.
+    videoInspectTool,
     supervisor.buildTool(),
     ...buildTaskTools(),
     buildSkillTool([]),

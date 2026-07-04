@@ -39,6 +39,9 @@ export const TOOL_DESCRIPTORS = [
   { name: "edit", readOnly: false },
   { name: "multi_edit", readOnly: false },
   { name: "archive_unpack", readOnly: false },
+  // video_inspect samples frames into blob artifacts and forces a post-video finalization pass, so
+  // it is a heavyweight serial barrier (a turn-level side effect), never a concurrent read.
+  { name: "video_inspect", readOnly: false },
   { name: "process", readOnly: false },
   { name: "task_create", readOnly: false },
   { name: "task_update", readOnly: false },

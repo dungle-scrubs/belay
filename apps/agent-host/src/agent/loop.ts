@@ -40,6 +40,8 @@ import {
 } from "../providers/protocol-anomaly";
 import { spanEffect } from "../telemetry/span";
 import { executeTool, offeredToolDefs, READ_ONLY_TOOLS } from "../tools";
+import { inlineVideoFrames, type VideoFrameResolver } from "../tools/video-inspect/continuation";
+import { VIDEO_INSPECT_TOOL_NAME } from "../tools/video-inspect/types";
 import { fitsAfterSwitch } from "./context-guard";
 import { normalizeConversationForProvider } from "./cross-model";
 import { type TurnLoopConfig, turnLoopConfig } from "./loop-config";
@@ -250,6 +252,10 @@ export interface RunAgentOptions {
   /** The telemetry sink for per-tool spans (plan 13 M3); NOOP (disabled) unless the host wires an
    *  exporter. Tool spans carry the tool name + ok/error/interrupted status, never args or output. */
   readonly telemetry?: TelemetrySink;
+  /** Resolves video_inspect frame artifacts to inline base64 images for the post-video finalization
+   *  pass (plan 39 M7). Wired by the host ONLY for a vision-capable provider; absent = the frames
+   *  ride back as text-only (a non-vision turn, or a test that does not exercise frame feedback). */
+  readonly resolveFrames?: VideoFrameResolver;
 }
 
 export function runAgent(
@@ -333,6 +339,10 @@ export function runAgent(
   // as assistant text instead of a typed tool call. A single nudge often gets it to use the typed
   // interface; a persistent anomaly then terminates with a diagnostic rather than nudging forever.
   let protocolNudged = false;
+  // Set once a video_inspect result commits (plan 39 M8): the NEXT model step offers NO tools and
+  // drops any stray tool_call, so the model answers directly from the returned frames instead of
+  // churning through more visible tool rounds to re-read the generated frame files.
+  let videoFinalize = false;
 
   // Graceful overflow recovery (D-034..D-038): in-loop, per-turn, cheap rungs only,
   // bounded so it can never spin. Recovery adjusts the reasoning level and the in-loop
@@ -763,7 +773,9 @@ export function runAgent(
         });
         const safeToRetry = () => textChars === 0 && toolCallsStarted === 0;
         const outputStarted = () => textChars > 0;
-        const mapped = modelStream(tools, currentReasoning).pipe(
+        // Post-video finalization (39 M8): offer NO tools so the model answers directly from the
+        // frames it already has, and (below) drop any tool_call it emits anyway - no visible churn.
+        const mapped = modelStream(videoFinalize ? [] : tools, currentReasoning).pipe(
           Stream.filterMap((event) => {
             if (event.type === "text") {
               textChars += event.text.length;
@@ -773,6 +785,12 @@ export function runAgent(
               toolCallsStarted += 1;
             }
             if (event.type === "tool_call") {
+              // On the finalization pass tools are gone: suppress a stray call entirely (never push
+              // it, never emit tool_start/tool_end) so it becomes hidden disabled feedback, then the
+              // step falls through to the model's direct answer.
+              if (videoFinalize) {
+                return Option.none<AgentEvent>();
+              }
               toolCalls.push(event.call);
               return Option.none<AgentEvent>();
             }
@@ -1080,15 +1098,26 @@ export function runAgent(
           // coherent, then the turn ends with the visible stop (turn.ts carries it onto the
           // terminal completion) rather than opening another step.
           const commit = Stream.unwrap(
-            Effect.sync(() => {
-              toolCalls.forEach((call, i) => {
-                conversation.push({
+            Effect.gen(function* () {
+              for (const [i, call] of toolCalls.entries()) {
+                const message: ChatMessage = {
                   role: "tool",
                   content: slots[i] ?? "",
                   toolCallId: call.id,
                   name: call.name,
-                });
-              });
+                };
+                if (call.name === VIDEO_INSPECT_TOOL_NAME) {
+                  // Attach the frame artifacts (39 M7): refs always, inline base64 images when a
+                  // vision resolver is wired - so the next pass shows the model the sampled frames.
+                  conversation.push(
+                    yield* Effect.promise(() => inlineVideoFrames(message, opts.resolveFrames)),
+                  );
+                  // Force the direct-answer pass (39 M8) once frames are in hand.
+                  videoFinalize = true;
+                } else {
+                  conversation.push(message);
+                }
+              }
               if (haltStop) {
                 return Stream.succeed<AgentEvent>({ type: "stop", stop: haltStop });
               }

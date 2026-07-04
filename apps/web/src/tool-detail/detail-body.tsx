@@ -3,6 +3,11 @@ import type { ReactNode } from "react";
 import { MultiEditDiff } from "@/components/chat/multi-edit-diff";
 import { ToolDiff } from "@/components/chat/tool-diff";
 import { ToolRenderer } from "@/components/chat/tool-message";
+import {
+  formatFrameTimestamp,
+  parseVideoInspectResult,
+  VideoInspectBody,
+} from "@/components/chat/video-inspect";
 import { cn } from "@/lib/utils";
 import type { ToolMessage } from "@/transcript";
 import {
@@ -60,6 +65,8 @@ export function DetailBody({
       return <RequestDetail model={model} onOpenPath={onOpenPath} />;
     case "tool_script":
       return <ToolScriptDetail model={model} />;
+    case "video_inspect":
+      return <VideoInspectDetail model={model} onOpenPath={onOpenPath} />;
     default:
       return <GenericDetail model={model} />;
   }
@@ -158,6 +165,64 @@ function ToolScriptDetail({ model }: { readonly model: ToolDetailModel }) {
       <OutputSection model={model} title="Result" />
     </>
   );
+}
+
+function VideoInspectDetail({
+  model,
+  onOpenPath,
+}: {
+  readonly model: ToolDetailModel;
+  readonly onOpenPath?: (path: string) => void;
+}) {
+  const parsed = parseVideoInspectResult(model.output);
+  const frames = parsed?.frames ?? [];
+  return (
+    <>
+      <DetailSection title="Video">
+        <FilePath path={videoDetailPath(model.args)} onOpenPath={onOpenPath} />
+      </DetailSection>
+      <ErrorSection model={model} />
+      {parsed ? (
+        <DetailSection title="Frames">
+          <VideoInspectBody parsed={parsed} />
+        </DetailSection>
+      ) : (
+        <OutputSection model={model} title="Frames" />
+      )}
+      {frames.length > 0 ? (
+        <DetailSection title="Timeline">
+          <div className="flex flex-col divide-y divide-border/70 border-border border-t text-xs">
+            {frames.map((frame) => (
+              <div key={frame.frameIndex} className="flex items-center gap-3 py-1.5">
+                <span className="w-10 shrink-0 text-muted-foreground">#{frame.frameIndex}</span>
+                <span className="w-14 shrink-0 font-mono">
+                  {formatFrameTimestamp(frame.timestampMs)}
+                </span>
+                {frame.width !== undefined && frame.height !== undefined ? (
+                  <span className="text-muted-foreground">
+                    {frame.width}×{frame.height}
+                  </span>
+                ) : null}
+                <span className="ml-auto shrink-0 text-muted-foreground">
+                  {frame.artifact ? "stored" : "unavailable"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      ) : null}
+    </>
+  );
+}
+
+/** The inspected video path from the raw args JSON (defensive - the detail never throws on bad args). */
+function videoDetailPath(args: string): string {
+  try {
+    const parsed = JSON.parse(args) as Record<string, unknown>;
+    return typeof parsed.path === "string" ? parsed.path : "";
+  } catch {
+    return "";
+  }
 }
 
 function ReadDetail({

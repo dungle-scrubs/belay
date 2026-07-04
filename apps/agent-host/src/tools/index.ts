@@ -43,6 +43,7 @@ import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
 import { trevorExpertTool } from "./trevor-expert";
 import type { Tool, ToolContext } from "./types";
+import { videoInspectTool } from "./video-inspect/tool";
 import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
 import { currentLeafWorkspace } from "./workspace";
@@ -110,6 +111,9 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   }),
   clipboardWriteTool,
   archiveUnpackTool,
+  // video_inspect (plan 39): sample frames from a local video into blob artifacts and feed them
+  // back to the model as vision input. A serial barrier - it forces the post-video finalization pass.
+  videoInspectTool,
   supervisor.buildTool(),
   ...buildTaskTools(),
   // ast_grep is registered only when its project-managed binary resolves (skipped on a platform

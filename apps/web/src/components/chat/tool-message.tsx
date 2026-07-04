@@ -10,6 +10,7 @@ import { SessionRecallResults } from "./session-recall";
 import { ToolDiff } from "./tool-diff";
 import { ToolOutput } from "./tool-output";
 import { type ToolStatus, toolMessageStatus } from "./tool-status";
+import { parseVideoInspectResult, VideoInspectResult } from "./video-inspect";
 import { parseWebFetchResult, WebFetchResult } from "./web-fetch";
 import { type WebSearchResultItem, WebSearchResults } from "./web-search";
 
@@ -277,6 +278,20 @@ const renderClipboard: RenderArm = ({ message, status, className }) => {
   );
 };
 
+// video_inspect renders the sampled-frame thumbnails plus metadata (duration, dimensions, frame
+// count, truncation) and warnings, or the unavailable note when ffprobe/ffmpeg are missing.
+const renderVideoInspect: RenderArm = ({ message, status, className }) => {
+  const a = parseToolArgs(message.args);
+  return (
+    <VideoInspectResult
+      className={className}
+      args={typeof a.path === "string" ? a.path : "video"}
+      parsed={parseVideoInspectResult(message.result)}
+      status={status}
+    />
+  );
+};
+
 // bash/grep render their text output (command output, matches) flat.
 const renderOutput: RenderArm = ({ message, status, className }) => (
   <ToolOutput
@@ -348,6 +363,9 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   lsp_workspace_symbols: renderOutput,
   lsp_code_actions: renderOutput,
   clipboard_write: renderClipboard,
+  // video_inspect (plan 39) shows the sampled frame thumbnails + metadata; a rich per-frame
+  // timeline lives in the detail takeover.
+  video_inspect: renderVideoInspect,
   bash: renderOutput,
   write: renderDiff,
   edit: renderDiff,

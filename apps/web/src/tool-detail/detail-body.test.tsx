@@ -158,3 +158,48 @@ test("tool_script defaults the toolsets label to safe_read when none were sent",
   render(<DetailBody model={model({ toolName: "tool_script", args: '{"script":"return 1;"}' })} />);
   assert.ok(screen.getByText("safe_read"));
 });
+
+test("video_inspect shows the video path, the frame timeline, and dimensions (plan 39 M9)", () => {
+  const onOpenPath = vi.fn();
+  render(
+    <DetailBody
+      model={model({
+        toolName: "video_inspect",
+        args: '{"path":"/tmp/clip.mp4","maxFrames":2}',
+        output: JSON.stringify({
+          processor: "video",
+          path: "/tmp/clip.mp4",
+          unavailable: false,
+          durationMs: 3000,
+          width: 16,
+          height: 12,
+          sampledFrameCount: 2,
+          truncated: true,
+          warnings: [],
+          frames: [
+            {
+              frameIndex: 0,
+              timestampMs: 0,
+              width: 16,
+              height: 12,
+              artifact: { kind: "image", mimeType: "image/png", size: 100, hash: "f0" },
+            },
+            {
+              frameIndex: 1,
+              timestampMs: 1000,
+              width: 16,
+              height: 12,
+              artifact: { kind: "image", mimeType: "image/png", size: 100, hash: "f1" },
+            },
+          ],
+        }),
+      })}
+      onOpenPath={onOpenPath}
+    />,
+  );
+  assert.ok(screen.getByText("Timeline"), "the per-frame timeline section renders");
+  assert.ok(screen.getByText("#0"), "the first frame index renders");
+  assert.ok(screen.getByText("1.0s"), "the second frame timestamp renders");
+  fireEvent.click(screen.getByText("/tmp/clip.mp4"));
+  assert.deepEqual(onOpenPath.mock.calls, [["/tmp/clip.mp4"]], "clicking the path opens the video");
+});

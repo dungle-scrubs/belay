@@ -16,6 +16,7 @@ import { buildSystemPrompt, promptOverheadChars } from "@host/providers/system-p
 import { spanEffect } from "@host/telemetry/span";
 import { offeredToolDefs } from "@host/tools/index";
 import { MAX_OUTPUT } from "@host/tools/shared";
+import { createVideoFrameResolver } from "@host/tools/video-inspect/continuation";
 import { DeltaBuffer } from "@host/transport/delta-buffer";
 import { warn } from "@host/transport/log";
 import { Emit } from "@host/transport/services";
@@ -26,6 +27,7 @@ import {
   type TrevorEventInput,
   type TurnStop,
 } from "@trevor/session";
+import { serviceUrl } from "@trevor/session/ports";
 import {
   METRIC_NAMES,
   NOOP_SINK,
@@ -154,7 +156,7 @@ export function publishTurn(
       );
       return;
     }
-    const { warm, history, useTools } = preflight;
+    const { warm, caps, history, useTools } = preflight;
 
     // Token-source breakdown ("where does the context go?"). Fixed overhead = the
     // system prompt + the tool schemas the provider re-sends every step; the rest
@@ -556,6 +558,15 @@ export function publishTurn(
         ...(switchCell ? { switch: switchCell } : {}),
         ...(rebuildProvider ? { rebuildProvider } : {}),
         ...(initialModel ? { initialModel } : {}),
+        // Vision turns only (39 M7): resolve video_inspect frame artifacts to inline images so the
+        // post-video pass shows the model the frames. Non-vision turns leave frames as text.
+        ...(caps.images
+          ? {
+              resolveFrames: createVideoFrameResolver(
+                process.env.BLOB_STORE_URL ?? serviceUrl("blob"),
+              ),
+            }
+          : {}),
       }),
       handle,
       // The whole turn is a `trevor.turn` span (provider + model + ok/error/interrupted status); the

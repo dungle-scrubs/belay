@@ -132,6 +132,37 @@ test("archive_unpack extracts selected entries into an explicit destination and 
   }
 });
 
+test("archive_read summarizes a video entry as a manifest, leaving frame extraction to video_inspect (plan 39 M6)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "trevor-archive-video-"));
+  try {
+    // A zip carrying a video entry: archive owns the safe manifest/validation, but it never shells
+    // out to ffmpeg. The video is summarized (manifest), so direct video_inspect stays the sole
+    // owner of frame extraction - the two responsibilities never merge.
+    const archivePath = join(dir, "media.zip");
+    await writeFile(
+      archivePath,
+      storedZip([
+        { name: "clip.mp4", content: new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]) },
+        { name: "notes.txt", content: "see clip.mp4" },
+      ]),
+    );
+
+    const result = await runArchiveRead({ path: archivePath });
+    const video = result.entries.find((entry) => entry.path === "clip.mp4");
+    assert.equal(
+      video?.processor,
+      "manifest",
+      "the video entry is summarized, not frame-extracted",
+    );
+    assert.equal(video?.preview, undefined, "no frames/preview leak from the archive read");
+    // The text entry beside it is still processed normally: archive safety is unaffected.
+    const notes = result.entries.find((entry) => entry.path === "notes.txt");
+    assert.equal(notes?.processor, "text");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("registered archive tools expose typed failure lines and readOnly metadata", async () => {
   const tool = buildArchiveReadTool();
   assert.equal(tool.readOnly, true);

@@ -50,6 +50,7 @@ const TOOL_VERBS: Partial<Record<ToolName, string>> = {
   session_recall: "recalling",
   skill: "running skill",
   process: "running process",
+  video_inspect: "inspecting video",
 };
 
 /**
