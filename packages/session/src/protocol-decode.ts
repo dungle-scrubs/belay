@@ -403,6 +403,26 @@ function coerceCatalog(value: unknown): Record<string, readonly CatalogEntry[]> 
   return out;
 }
 
+/**
+ * Decodes the host-owned model preference (plan 51) off `host.online`: the durable default (a single
+ * {@link ModelRef}, or null) + the favorites (pinned refs). Reuses the single tolerant {@link decodeModelRef}
+ * so a partial/garbled ref drops out, and defaults to `{ default: null, pinned: [] }` for a host that
+ * omits the field entirely (older host - back-compat).
+ */
+function decodeModelPrefs(value: unknown): {
+  readonly default: ModelRef | null;
+  readonly pinned: readonly ModelRef[];
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { default: null, pinned: [] };
+  }
+  const p = value as Record<string, unknown>;
+  const pinned = Array.isArray(p.pinned)
+    ? p.pinned.map(decodeModelRef).filter((r): r is ModelRef => r != null)
+    : [];
+  return { default: decodeModelRef(p.default), pinned };
+}
+
 function coerceProviderModels(value: unknown): Record<string, ProviderModel> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -654,6 +674,13 @@ export type DecodedEvent =
       readonly vimEnabled: boolean;
       /** The host's tracked background jobs (plan 09); empty when none announced. */
       readonly jobs: readonly JobSnapshot[];
+      /** The host-owned model preference (plan 51): the durable default + favorites (pinned). Defaults
+       *  to `{ default: null, pinned: [] }` when a host omits it (back-compat), so an older host yields
+       *  no default/favorites rather than a crash. */
+      readonly modelPrefs: {
+        readonly default: ModelRef | null;
+        readonly pinned: readonly ModelRef[];
+      };
     }
   | {
       readonly type: "provider.question.requested";
@@ -1011,6 +1038,7 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         catalog: coerceCatalog(p.catalog),
         vimEnabled: p.vimEnabled === true,
         jobs: coerceJobs(p.jobs),
+        modelPrefs: decodeModelPrefs(p.modelPrefs),
       };
     case "provider.question.requested":
       return {

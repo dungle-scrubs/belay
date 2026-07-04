@@ -3,6 +3,7 @@ import { useKeyPress } from "ahooks";
 import { Archive, GitBranch, Pencil, Trash2 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { RowContextMenu, type RowMenuItem } from "@/components/ui/row-context-menu";
 import { cn } from "@/lib/utils";
 import { DrawerToggle, SideDrawer } from "./side-drawer";
 
@@ -268,80 +269,6 @@ function SessionRow({
         </button>
       )}
     </div>
-  );
-}
-
-/** One entry in the row's right-click menu. `icon` is a lucide component (same shape as Pencil). */
-interface RowMenuItem {
-  readonly label: string;
-  readonly icon: typeof Pencil;
-  readonly onSelect: () => void;
-  readonly danger?: boolean;
-}
-
-/**
- * A right-click context menu for a session row (D-094): Rename, Archive, Delete. Styled with the
- * shadcn popover tokens but with NO extra radix dependency - a portal'd menu positioned at the
- * cursor over a transparent full-screen layer that dismisses it on an outside click/right-click;
- * Escape dismisses it too.
- */
-function RowContextMenu({
-  x,
-  y,
-  items,
-  onClose,
-}: {
-  x: number;
-  y: number;
-  items: readonly RowMenuItem[];
-  onClose: () => void;
-}) {
-  useKeyPress("Escape", onClose);
-
-  return createPortal(
-    <button
-      type="button"
-      aria-label="Close menu"
-      className="fixed inset-0 z-50 cursor-default"
-      onClick={onClose}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-    >
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape is handled at the window level above. */}
-      <div
-        role="menu"
-        style={{ position: "absolute", top: y, left: x }}
-        className="min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                item.onSelect();
-                onClose();
-              }}
-              className={cn(
-                "flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors",
-                item.danger
-                  ? "text-destructive hover:bg-destructive/10"
-                  : "hover:bg-accent hover:text-accent-foreground",
-              )}
-            >
-              <Icon className="size-3.5 shrink-0" />
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
-    </button>,
-    document.body,
   );
 }
 

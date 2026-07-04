@@ -371,6 +371,110 @@ test("without preference data, no pin stars or recent/pinned chips appear", () =
   );
 });
 
+test("the default glyph marks the default model row and its source (plan 51 D-002/D-003)", () => {
+  const defaultKey = modelRefKey({ sourceId: "lmstudio", modelId: "qwen3-30b" });
+  const { getByLabelText, getByRole } = render(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      onSelectModel={noop}
+      defaultKey={defaultKey}
+      pinnedKeys={new Set()}
+      onTogglePin={noop}
+      onSetDefault={noop}
+    />,
+  );
+  // Source overview: LM Studio holds the default, so its row carries the default glyph.
+  const lmRow = getByLabelText("Open LM Studio");
+  assert.ok(
+    within(lmRow).getByLabelText("Holds the default model"),
+    "the source shows the default glyph",
+  );
+  const codexRow = getByLabelText("Open OpenAI (Codex)");
+  assert.equal(
+    within(codexRow).queryByLabelText("Holds the default model"),
+    null,
+    "a non-default source has no glyph",
+  );
+  // Model detail: the default row carries the BadgeCheck default glyph.
+  fireEvent.click(getByRole("button", { name: "Open LM Studio" }));
+  assert.ok(
+    getByLabelText("Qwen3 30B is the default"),
+    "the default model row shows the default glyph",
+  );
+});
+
+test("a default+pinned+selected model shows all three glyphs at once (no overlap)", () => {
+  const ref = { sourceId: "lmstudio", modelId: "qwen3-30b" };
+  const key = modelRefKey(ref);
+  const { getByLabelText, getByText } = render(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      initialSourceId="lmstudio"
+      activeModel={{ ...ref, reasoning: null }}
+      defaultKey={key}
+      pinnedKeys={new Set([key])}
+      onTogglePin={noop}
+      onSetDefault={noop}
+      onSelectModel={noop}
+    />,
+  );
+  // Default (BadgeCheck), selected (the select button is pressed), pinned (the Unpin star) all present.
+  assert.ok(getByLabelText("Qwen3 30B is the default"), "default glyph");
+  assert.equal(getByLabelText("Select Qwen3 30B").getAttribute("aria-pressed"), "true", "selected");
+  assert.ok(getByLabelText("Unpin Qwen3 30B"), "pinned star");
+  // It appears once, in the default slot (sorted to the top of the list).
+  assert.ok(getByText("Qwen3 30B"));
+});
+
+test("right-clicking a model row opens the menu; Set as default / favorites call the handlers (D-002)", () => {
+  const defaults: ModelRef[] = [];
+  const favorites: ModelRef[] = [];
+  const { getByLabelText, getByRole } = render(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      initialSourceId="lmstudio"
+      pinnedKeys={new Set()}
+      onSetDefault={(ref) => defaults.push(ref)}
+      onTogglePin={(ref) => favorites.push(ref)}
+      onSelectModel={noop}
+    />,
+  );
+  // The menu attaches to the row WRAPPER (the select button's parent), not the nested buttons.
+  const wrapper = getByLabelText("Select Qwen3 30B").parentElement;
+  assert.ok(wrapper, "the row wrapper exists");
+  fireEvent.contextMenu(wrapper as Element);
+
+  // "Set as default" routes to onSetDefault with the row's stable ref.
+  fireEvent.click(getByRole("menuitem", { name: "Set as default" }));
+  assert.deepEqual(defaults, [{ sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null }]);
+
+  // Re-open and add to favorites (the model is not pinned, so the item reads "Add to favorites").
+  fireEvent.contextMenu(wrapper as Element);
+  fireEvent.click(getByRole("menuitem", { name: "Add to favorites" }));
+  assert.deepEqual(favorites, [{ sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null }]);
+});
+
+test("the favorites menu item reads Remove when the row is already pinned (D-002)", () => {
+  const key = modelRefKey({ sourceId: "lmstudio", modelId: "qwen3-30b" });
+  const { getByLabelText, getByRole, queryByRole } = render(
+    <ModelChooser
+      sources={SOURCES}
+      catalogBySource={CATALOG}
+      initialSourceId="lmstudio"
+      pinnedKeys={new Set([key])}
+      onSetDefault={noop}
+      onTogglePin={noop}
+      onSelectModel={noop}
+    />,
+  );
+  fireEvent.contextMenu(getByLabelText("Select Qwen3 30B").parentElement as Element);
+  assert.ok(getByRole("menuitem", { name: "Remove from favorites" }), "a pinned row offers Remove");
+  assert.equal(queryByRole("menuitem", { name: "Add to favorites" }), null);
+});
+
 test("a needs-auth source shows the auth panel (sign-in) instead of a model list", () => {
   const { getByLabelText, getByRole } = render(
     <ModelChooser sources={SOURCES} catalogBySource={{}} onSelectModel={noop} />,

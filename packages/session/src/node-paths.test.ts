@@ -158,6 +158,22 @@ test("storagePath resolves an entry under its category root and follows root ove
   );
 });
 
+test("the model-prefs entry is a config-home file that follows the TREVOR_HOME override (plan 51)", () => {
+  const entry = STORAGE_INVENTORY.find((e) => e.name === "model-prefs");
+  assert.ok(entry, "model-prefs is in the storage inventory");
+  assert.equal(entry.category, "config", "model-prefs lives under the config home, not state");
+  assert.equal(storagePath(entry, {}, "/Users/kevin"), "/Users/kevin/.trevorV2/model-prefs.json");
+  assert.equal(
+    storagePath(entry, { TREVOR_HOME: "/tmp/cfg" }, "/Users/kevin"),
+    "/tmp/cfg/model-prefs.json",
+    "the config override moves it, the state override must not",
+  );
+  assert.equal(
+    storagePath(entry, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
+    "/Users/kevin/.trevorV2/model-prefs.json",
+  );
+});
+
 test("the docs-corpus root is classified under the state home and follows the state override", () => {
   const docs = STORAGE_INVENTORY.find((entry) => entry.name === "docs-corpus");
   assert.ok(docs, "docs-corpus is in the storage inventory");

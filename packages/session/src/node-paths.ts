@@ -253,6 +253,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description: "Vim-mode prompt preference (plan 06): { enabled }.",
   },
   {
+    name: "model-prefs",
+    category: "config",
+    relativePath: "model-prefs.json",
+    description:
+      "Model default + favorites preference (plan 51): { default, pinned }; host-owned, announced on host.online.",
+  },
+  {
     name: "admission-config",
     category: "config",
     relativePath: "admission.json",

@@ -8,6 +8,7 @@ import {
   type SourceSummary,
 } from "@trevor/session";
 import { useCallback } from "react";
+import type { ModelPrefsView } from "@/derive";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { activeModelLabel, resolveReasoning } from "@/model-selection";
 
@@ -20,6 +21,7 @@ export function useActiveModel({
   hostModels,
   hostSources,
   hostCatalog,
+  hostModelPrefs,
   provider,
   setProvider,
   reasoningMap,
@@ -29,10 +31,14 @@ export function useActiveModel({
   sessionId,
   activeRunId,
   switchModel,
+  setModelDefault,
+  toggleModelFavorite,
 }: {
   readonly hostModels: Readonly<Record<string, ProviderModel>>;
   readonly hostSources: readonly SourceSummary[];
   readonly hostCatalog: Readonly<Record<string, readonly CatalogEntry[]>>;
+  /** The host-owned default + favorites (host.online `modelPrefs`, plan 51). */
+  readonly hostModelPrefs: ModelPrefsView;
   readonly provider: string | undefined;
   readonly setProvider: (provider: string) => void;
   readonly reasoningMap: Readonly<Record<string, string>> | undefined;
@@ -42,6 +48,10 @@ export function useActiveModel({
   readonly sessionId: string | null;
   readonly activeRunId: string | null;
   readonly switchModel: (runId: string, model: ModelRef) => void | Promise<void>;
+  /** Send the host set-default command (plan 51). */
+  readonly setModelDefault: (ref: ModelRef) => void;
+  /** Send the host toggle-favorite command (plan 51). */
+  readonly toggleModelFavorite: (ref: ModelRef) => void;
 }) {
   const firstAnnouncedProvider = Object.keys(hostModels)[0];
   const activeProvider =
@@ -70,12 +80,20 @@ export function useActiveModel({
     roster: hostModels,
     hostSources,
     hostCatalog,
+    hostModelPrefs,
     legacyProvider: activeProvider,
     legacyReasoning: reasoning || null,
     sessionId,
+    setDefaultCommand: setModelDefault,
+    toggleFavoriteCommand: toggleModelFavorite,
   });
 
-  const sendModel = selection.active ?? activeModelRef;
+  // The initial-model pick (plan 51 D-005, the "reset to qwen" fix): an explicit per-session `active`
+  // wins; otherwise the user's host-owned DEFAULT drives a fresh session; only then the legacy fallback
+  // (qwen). `selection.active` cannot be used here - it already collapses `active ?? legacyRef`, so it is
+  // never null for a fresh session (it is qwen) and would short-circuit the default. `selection.preferences`
+  // is the EFFECTIVE preferences with the host default overlaid.
+  const sendModel = selection.preferences.active ?? selection.preferences.default ?? activeModelRef;
   const activeEntry = catalogEntryFor(selection.catalogBySource, sendModel);
   const activeLabel = activeModelLabel({
     entry: activeEntry,

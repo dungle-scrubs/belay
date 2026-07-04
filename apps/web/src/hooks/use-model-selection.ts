@@ -4,14 +4,12 @@ import {
   type ModelPreferences,
   type ModelRef,
   type ProviderModel,
-  pinModel,
   type SourceSummary,
-  sameModel,
   selectModel,
-  unpinModel,
 } from "@trevor/session";
 import { useLocalStorageState } from "ahooks";
 import { useCallback, useMemo } from "react";
+import type { ModelPrefsView } from "@/derive";
 import {
   buildModelSelection,
   type ModelSelectionProjection,
@@ -19,10 +17,12 @@ import {
 } from "@/model-selection";
 
 /**
- * The model-selection state hook (D-065 M3/M6): owns the persisted {@link ModelPreferences} (active /
- * recent / pinned / per-model reasoning) and the read models the split control + full chooser render.
- * The pure projection + selection transitions live in `@/model-selection` and `@trevor/session`; this
- * is the React glue (localStorage persistence + memoized derivations).
+ * The model-selection state hook (D-065 M3/M6; plan 51): owns the BROWSER-LOCAL preferences (active /
+ * recent / per-model reasoning) and the read models the split control + full chooser render. The DEFAULT
+ * model + FAVORITES (pinned) are host-owned (plan 51): they arrive on `host.online` (injected as
+ * `hostModelPrefs`) and are mutated through the host command (`setDefault` / `togglePin` route to the
+ * command sender, not a localStorage write). The pure projection + selection transitions live in
+ * `@/model-selection` and `@trevor/session`; this is the React glue.
  *
  * The ACTIVE model is the persisted `active` ref, falling back to the legacy provider+reasoning
  * selection until the user makes an explicit pick - so the chooser is the source of truth once used,
@@ -31,18 +31,22 @@ import {
 
 /** Per-SESSION model state: the active pick + per-model reasoning (so two open sessions don't fight). */
 const MODEL_PREFS_KEY = "trevor.modelPreferences";
-/** GLOBAL model library: recents / pinned / default. These are user preferences, not conversation
- *  state, so they're shared across sessions - a fresh or handed-off session shows the models you
- *  actually use instead of an empty picker (the per-session split lost them before). */
+/** GLOBAL model library: RECENTS only. Recents are usage state (per browser), so they stay local; the
+ *  DEFAULT + FAVORITES moved host-side in plan 51 (durable + shared across every session/browser talking
+ *  to the host), so they are no longer written here. A pre-plan-51 blob may still carry stale
+ *  pinned/default keys; they are NOT migrated - the host announcement is authoritative and overlays them,
+ *  so a stale local value can never shadow the host's. */
 const GLOBAL_PREFS_KEY = "trevor.modelPreferences.global";
 
-type GlobalPrefs = Pick<ModelPreferences, "recent" | "pinned" | "default">;
+type GlobalPrefs = Pick<ModelPreferences, "recent">;
 type SessionPrefs = Pick<ModelPreferences, "active" | "reasoningByModel">;
 
 export interface ModelSelection extends ModelSelectionProjection {
   /** Select a model: clamps its reasoning to the model's surface, records active + recent, persists. */
   readonly select: (ref: ModelRef) => void;
-  /** Pin or unpin a model (idempotent), persisting the change. */
+  /** Set the durable DEFAULT model (plan 51): routes through the host command, not a local write. */
+  readonly setDefault: (ref: ModelRef) => void;
+  /** Toggle a FAVORITE (plan 51): routes through the host command; the host decides add-vs-remove. */
   readonly togglePin: (ref: ModelRef) => void;
 }
 
@@ -50,9 +54,12 @@ export function useModelSelection({
   roster,
   hostSources,
   hostCatalog,
+  hostModelPrefs,
   legacyProvider,
   legacyReasoning,
   sessionId,
+  setDefaultCommand,
+  toggleFavoriteCommand,
 }: {
   /** The host-announced provider roster (host.online `models`), the pre-catalog fallback. */
   readonly roster: Readonly<Record<string, ProviderModel>>;
@@ -60,6 +67,8 @@ export function useModelSelection({
   readonly hostSources: readonly SourceSummary[];
   /** The host-owned per-source catalog (host.online `catalog`, D-065). */
   readonly hostCatalog: Readonly<Record<string, readonly CatalogEntry[]>>;
+  /** The host-owned default + favorites (host.online `modelPrefs`, plan 51). */
+  readonly hostModelPrefs: ModelPrefsView;
   /** Today's sidebar provider selection, the active fallback until an explicit chooser pick. */
   readonly legacyProvider: string;
   /** Today's chosen reasoning level for the active provider (null = provider default). */
@@ -67,17 +76,22 @@ export function useModelSelection({
   /** The open session id; the persisted preferences are scoped to it so they don't leak across
    *  sessions (02.16 D-002). Null (pre-resolve) uses a throwaway key. */
   readonly sessionId: string | null;
+  /** Sends the host set-default command with the given ref (plan 51). */
+  readonly setDefaultCommand: (ref: ModelRef) => void;
+  /** Sends the host toggle-favorite command with the given ref (plan 51). */
+  readonly toggleFavoriteCommand: (ref: ModelRef) => void;
 }): ModelSelection {
-  // recents / pinned / default are a GLOBAL user library; active + per-model reasoning are per-session.
+  // Recents are a GLOBAL user library (per browser); active + per-model reasoning are per-session. The
+  // default + favorites are host-owned (plan 51), injected via `hostModelPrefs`.
   const [rawGlobal, setRawGlobal] = useLocalStorageState<GlobalPrefs>(GLOBAL_PREFS_KEY, {
-    defaultValue: { recent: [], pinned: [], default: null },
+    defaultValue: { recent: [] },
   });
   const [rawSession, setRawSession] = useLocalStorageState<SessionPrefs>(
     sessionScopedKey(MODEL_PREFS_KEY, sessionId),
     { defaultValue: { active: null, reasoningByModel: {} } },
   );
-  // Normalize the merged view on every read (decode drops unusable refs). Global wins on the shared
-  // keys, so a stale recent/pinned left in an old per-session blob can't shadow the global library.
+  // The browser-local preferences (active/recent/reasoning). Any stale pinned/default in an old blob is
+  // ignored here - the host `modelPrefs` is the source of those (overlaid in buildModelSelection).
   const preferences = useMemo(
     () => decodeModelPreferences({ ...rawSession, ...rawGlobal }),
     [rawSession, rawGlobal],
@@ -87,39 +101,45 @@ export function useModelSelection({
     () =>
       buildModelSelection({
         preferences,
+        modelPrefs: hostModelPrefs,
         roster,
         hostSources,
         hostCatalog,
         legacyProvider,
         legacyReasoning,
       }),
-    [preferences, roster, hostSources, hostCatalog, legacyProvider, legacyReasoning],
+    [
+      preferences,
+      hostModelPrefs,
+      roster,
+      hostSources,
+      hostCatalog,
+      legacyProvider,
+      legacyReasoning,
+    ],
   );
 
-  // selectModel touches both stores (active is per-session; recent + default are global), so compute
-  // the next prefs once from the merged view and split it back into the two backings.
+  // selectModel touches the per-session active/reasoning + the global recent list only (the default +
+  // favorites are host-owned now, so they are never written locally).
   const select = useCallback(
     (ref: ModelRef) => {
       const next = selectModel(preferences, ref, selection.reasoningSurface(ref));
       setRawSession({ active: next.active, reasoningByModel: next.reasoningByModel });
-      setRawGlobal({ recent: next.recent, pinned: next.pinned, default: next.default });
+      setRawGlobal({ recent: next.recent });
     },
     [preferences, selection, setRawSession, setRawGlobal],
   );
 
+  const setDefault = useCallback((ref: ModelRef) => setDefaultCommand(ref), [setDefaultCommand]);
   const togglePin = useCallback(
-    (ref: ModelRef) => {
-      const next = preferences.pinned.some((r) => sameModel(r, ref))
-        ? unpinModel(preferences, ref)
-        : pinModel(preferences, ref);
-      setRawGlobal({ recent: next.recent, pinned: next.pinned, default: next.default });
-    },
-    [preferences, setRawGlobal],
+    (ref: ModelRef) => toggleFavoriteCommand(ref),
+    [toggleFavoriteCommand],
   );
 
   return {
     ...selection,
     select,
+    setDefault,
     togglePin,
   };
 }

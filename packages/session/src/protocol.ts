@@ -993,6 +993,10 @@ export const events = {
     vimEnabled?: boolean;
     /** The host's tracked background jobs (plan 09), so the support panel renders promoted jobs live. */
     jobs?: readonly JobSnapshot[];
+    /** The host-owned model preference (plan 51): the durable DEFAULT model (the one a fresh session
+     *  starts on) + the FAVORITES (pinned). The browser reads default/favorites from here instead of a
+     *  per-browser localStorage blob; omitted by a host that predates the preference (back-compat). */
+    modelPrefs?: { default: ModelRef | null; pinned: readonly ModelRef[] };
   }): TrevorEventInput => ({
     type: "host.online",
     payload: {
@@ -1012,6 +1016,7 @@ export const events = {
       ...(p.catalog ? { catalog: p.catalog } : {}),
       ...(p.vimEnabled !== undefined ? { vimEnabled: p.vimEnabled } : {}),
       ...(p.jobs ? { jobs: p.jobs } : {}),
+      ...(p.modelPrefs ? { modelPrefs: p.modelPrefs } : {}),
     },
   }),
   /**

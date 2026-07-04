@@ -343,6 +343,23 @@ export function vimEnabledFrom(announcement: HostAnnouncement | null): boolean {
   return announcement?.vimEnabled ?? false;
 }
 
+/** The host-owned model preference: the durable default + favorites (pinned). */
+export interface ModelPrefsView {
+  readonly default: ModelRef | null;
+  readonly pinned: readonly ModelRef[];
+}
+
+/**
+ * The host-announced model preference (plan 51): the durable default model + the favorites (pinned). The
+ * host owns it (its `model-prefs.json`) and ships it on host.online; the chooser reads default/favorites
+ * from here instead of a per-browser localStorage blob, and the initial-model pick starts a fresh session
+ * on the default. Defaults to `{ default: null, pinned: [] }` until a host announces or when a host omits
+ * it (older host), so there is simply no default/favorites rather than a crash.
+ */
+export function modelPrefsFrom(announcement: HostAnnouncement | null): ModelPrefsView {
+  return announcement?.modelPrefs ?? { default: null, pinned: [] };
+}
+
 /** The host's latest tracked background jobs (plan 09): the freshest `host.online` job snapshots (the
  *  host re-announces on every job change), empty when none / no host. */
 export function jobsFrom(announcement: HostAnnouncement | null): readonly JobSnapshot[] {

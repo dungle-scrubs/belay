@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { EMPTY_PREFERENCES, type ProviderModel, selectModel } from "@trevor/session";
+import {
+  EMPTY_PREFERENCES,
+  type ModelRef,
+  modelRefKey,
+  type ProviderModel,
+  selectModel,
+} from "@trevor/session";
 import { test } from "vitest";
 import {
   activeModelLabel,
   buildModelSelection,
   legacyToCatalog,
   sessionScopedKey,
+  sortModelsByPreference,
 } from "./model-selection";
 
 /**
@@ -179,6 +186,7 @@ test("buildModelSelection derives the chooser read model from preferences plus h
 
   const selection = buildModelSelection({
     preferences,
+    modelPrefs: { default: null, pinned: [] },
     roster,
     hostSources,
     hostCatalog,
@@ -196,4 +204,67 @@ test("buildModelSelection derives the chooser read model from preferences plus h
   assert.equal(selection.sourceLabels.zai, "Z.ai");
   assert.equal(selection.quickGroups[0]?.sourceId, "zai");
   assert.equal(selection.recentKeys.has("zai/glm-5.2"), true);
+});
+
+test("buildModelSelection sources pinnedKeys + defaultKey from the host modelPrefs (plan 51 M4)", () => {
+  const def: ModelRef = { sourceId: "zai", modelId: "glm-5.2", reasoning: "high" };
+  const pin: ModelRef = { sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null };
+
+  const withDefault = buildModelSelection({
+    preferences: EMPTY_PREFERENCES,
+    modelPrefs: { default: def, pinned: [pin] },
+    roster,
+    hostSources: [],
+    hostCatalog: {},
+    legacyProvider: "qwen",
+    legacyReasoning: null,
+  });
+  assert.equal(withDefault.defaultKey, "zai/glm-5.2", "defaultKey is the host default's ref key");
+  assert.equal(
+    withDefault.pinnedKeys.has("lmstudio/qwen3-30b"),
+    true,
+    "favorites come from the host",
+  );
+  // The effective preferences overlay the host default (so the initial-pick default reads off here).
+  assert.deepEqual(withDefault.preferences.default, def);
+  assert.deepEqual(withDefault.preferences.pinned, [pin]);
+
+  const noDefault = buildModelSelection({
+    preferences: EMPTY_PREFERENCES,
+    modelPrefs: { default: null, pinned: [] },
+    roster,
+    hostSources: [],
+    hostCatalog: {},
+    legacyProvider: "qwen",
+    legacyReasoning: null,
+  });
+  assert.equal(noDefault.defaultKey, null, "no host default -> defaultKey null");
+  assert.equal(noDefault.pinnedKeys.size, 0);
+});
+
+test("sortModelsByPreference orders default -> favorites -> rest, stable, default+pinned once (M5)", () => {
+  const rows: ModelRef[] = [
+    { sourceId: "s", modelId: "a", reasoning: null },
+    { sourceId: "s", modelId: "b", reasoning: null }, // the default (and also pinned below)
+    { sourceId: "s", modelId: "c", reasoning: null }, // pinned
+    { sourceId: "s", modelId: "d", reasoning: null },
+    { sourceId: "s", modelId: "e", reasoning: null }, // pinned
+  ];
+  const pinnedKeys = new Set(["s/b", "s/c", "s/e"]);
+  const sorted = sortModelsByPreference(rows, { defaultKey: "s/b", pinnedKeys });
+
+  assert.deepEqual(
+    sorted.map((r) => r.modelId),
+    // default (b) first; then favorites in original order (c, e); then the rest in original order (a, d).
+    ["b", "c", "e", "a", "d"],
+  );
+  // The default+pinned model (b) appears exactly once (in the default slot).
+  assert.equal(sorted.filter((r) => modelRefKey(r) === "s/b").length, 1);
+
+  // No default: favorites lead, the rest follow, each stable.
+  const noDefault = sortModelsByPreference(rows, { defaultKey: null, pinnedKeys });
+  assert.deepEqual(
+    noDefault.map((r) => r.modelId),
+    ["b", "c", "e", "a", "d"],
+  );
 });

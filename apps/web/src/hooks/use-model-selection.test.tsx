@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { act, renderHook } from "@testing-library/react";
-import type { ProviderModel } from "@trevor/session";
+import type { ModelRef, ProviderModel } from "@trevor/session";
 import { beforeEach, test } from "vitest";
+import type { ModelPrefsView } from "@/derive";
 import { useModelSelection } from "./use-model-selection";
 
 /**
- * D-065 M3/M6: the model-selection state hook. Pins the active fallback (legacy provider selection
- * until an explicit pick), persisted selection with reasoning clamped to the chosen model's surface,
- * the recents feeding the quick picker, and the roster-projected sources/catalog.
+ * D-065 M3/M6 + plan 51 M4: the model-selection state hook. Pins the active fallback (legacy provider
+ * selection until an explicit pick), per-session persisted selection with reasoning clamped to the chosen
+ * model's surface, the recents feeding the quick picker, the roster-projected sources/catalog, and - plan
+ * 51 - default/favorites sourced from the injected host `modelPrefs` with `setDefault`/`togglePin` routing
+ * to the host command sender (not a localStorage write).
  */
 
 const roster: Record<string, ProviderModel> = {
@@ -27,18 +30,40 @@ const roster: Record<string, ProviderModel> = {
   },
 };
 
+const EMPTY_PREFS: ModelPrefsView = { default: null, pinned: [] };
+const noop = (_ref: ModelRef) => {};
+
+/** The host/command inputs every test shares; a test overrides only what it exercises. */
+function base(over: {
+  legacyProvider: string;
+  legacyReasoning: string | null;
+  sessionId: string;
+  hostSources?: Parameters<typeof useModelSelection>[0]["hostSources"];
+  hostCatalog?: Parameters<typeof useModelSelection>[0]["hostCatalog"];
+  hostModelPrefs?: ModelPrefsView;
+  setDefaultCommand?: (ref: ModelRef) => void;
+  toggleFavoriteCommand?: (ref: ModelRef) => void;
+}) {
+  return {
+    roster,
+    hostSources: over.hostSources ?? [],
+    hostCatalog: over.hostCatalog ?? {},
+    hostModelPrefs: over.hostModelPrefs ?? EMPTY_PREFS,
+    legacyProvider: over.legacyProvider,
+    legacyReasoning: over.legacyReasoning,
+    sessionId: over.sessionId,
+    setDefaultCommand: over.setDefaultCommand ?? noop,
+    toggleFavoriteCommand: over.toggleFavoriteCommand ?? noop,
+  };
+}
+
 beforeEach(() => localStorage.clear());
 
 test("active falls back to the legacy provider selection until an explicit pick", () => {
   const { result } = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources: [],
-      hostCatalog: {},
-      legacyProvider: "deepseek",
-      legacyReasoning: "high",
-      sessionId: "s1",
-    }),
+    useModelSelection(
+      base({ legacyProvider: "deepseek", legacyReasoning: "high", sessionId: "s1" }),
+    ),
   );
   assert.deepEqual(result.current.active, {
     sourceId: "deepseek",
@@ -51,14 +76,7 @@ test("active falls back to the legacy provider selection until an explicit pick"
 
 test("select records the active + recent and clamps reasoning to the model's surface", () => {
   const { result } = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources: [],
-      hostCatalog: {},
-      legacyProvider: "qwen",
-      legacyReasoning: "low",
-      sessionId: "s1",
-    }),
+    useModelSelection(base({ legacyProvider: "qwen", legacyReasoning: "low", sessionId: "s1" })),
   );
   // Pick deepseek carrying an unsupported reasoning - it clamps to deepseek's surface default.
   act(() =>
@@ -73,14 +91,7 @@ test("select records the active + recent and clamps reasoning to the model's sur
 
 test("sources/catalog are empty when the host has not reported them (no misleading roster projection)", () => {
   const { result } = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources: [],
-      hostCatalog: {},
-      legacyProvider: "qwen",
-      legacyReasoning: null,
-      sessionId: "s1",
-    }),
+    useModelSelection(base({ legacyProvider: "qwen", legacyReasoning: null, sessionId: "s1" })),
   );
   // The roster is NOT projected into fake sources - the chooser shows an explicit empty state instead.
   assert.deepEqual(result.current.sources, []);
@@ -121,14 +132,15 @@ test("the host-announced sources + catalog are preferred once they arrive (D-065
     ],
   };
   const { result } = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources,
-      hostCatalog,
-      legacyProvider: "qwen",
-      legacyReasoning: null,
-      sessionId: "s1",
-    }),
+    useModelSelection(
+      base({
+        hostSources,
+        hostCatalog,
+        legacyProvider: "qwen",
+        legacyReasoning: null,
+        sessionId: "s1",
+      }),
+    ),
   );
   // The real host source wins over the roster projection (no "qwen"/"deepseek" projected sources).
   assert.deepEqual(
@@ -145,14 +157,7 @@ test("02.16: a model pick in one session is invisible to another (per-session pe
   // Session A picks deepseek; session B (a different sessionId) must NOT inherit it - the prefs are
   // keyed by sessionId, so the cross-session live-switch leak is gone.
   const sessionA = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources: [],
-      hostCatalog: {},
-      legacyProvider: "qwen",
-      legacyReasoning: "low",
-      sessionId: "A",
-    }),
+    useModelSelection(base({ legacyProvider: "qwen", legacyReasoning: "low", sessionId: "A" })),
   );
   act(() =>
     sessionA.result.current.select({
@@ -164,14 +169,7 @@ test("02.16: a model pick in one session is invisible to another (per-session pe
   assert.equal(sessionA.result.current.active?.sourceId, "deepseek", "session A applied its pick");
 
   const sessionB = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources: [],
-      hostCatalog: {},
-      legacyProvider: "qwen",
-      legacyReasoning: "low",
-      sessionId: "B",
-    }),
+    useModelSelection(base({ legacyProvider: "qwen", legacyReasoning: "low", sessionId: "B" })),
   );
   // B still falls back to its legacy provider (qwen), unaffected by A's deepseek pick.
   assert.equal(sessionB.result.current.active?.sourceId, "qwen", "session B is isolated from A");
@@ -179,14 +177,9 @@ test("02.16: a model pick in one session is invisible to another (per-session pe
 
 test("02.16: two views of the SAME session share the persisted pick", () => {
   const first = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources: [],
-      hostCatalog: {},
-      legacyProvider: "qwen",
-      legacyReasoning: "low",
-      sessionId: "shared",
-    }),
+    useModelSelection(
+      base({ legacyProvider: "qwen", legacyReasoning: "low", sessionId: "shared" }),
+    ),
   );
   act(() =>
     first.result.current.select({
@@ -197,14 +190,63 @@ test("02.16: two views of the SAME session share the persisted pick", () => {
   );
   // A second hook on the same sessionId reads the same persisted key.
   const second = renderHook(() =>
-    useModelSelection({
-      roster,
-      hostSources: [],
-      hostCatalog: {},
-      legacyProvider: "qwen",
-      legacyReasoning: "low",
-      sessionId: "shared",
-    }),
+    useModelSelection(
+      base({ legacyProvider: "qwen", legacyReasoning: "low", sessionId: "shared" }),
+    ),
   );
   assert.equal(second.result.current.active?.sourceId, "deepseek", "same session shares the pick");
+});
+
+test("plan 51: default + favorites come from the host modelPrefs, not localStorage", () => {
+  const def: ModelRef = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: null };
+  const pin: ModelRef = { sourceId: "qwen", modelId: "qwen3-coder", reasoning: null };
+  const { result } = renderHook(() =>
+    useModelSelection(
+      base({
+        legacyProvider: "qwen",
+        legacyReasoning: null,
+        sessionId: "s1",
+        hostModelPrefs: { default: def, pinned: [pin] },
+      }),
+    ),
+  );
+  assert.equal(
+    result.current.defaultKey,
+    "deepseek/deepseek-v4",
+    "defaultKey from host modelPrefs",
+  );
+  assert.equal(
+    result.current.pinnedKeys.has("qwen/qwen3-coder"),
+    true,
+    "favorites from host modelPrefs",
+  );
+});
+
+test("plan 51: setDefault + togglePin route to the host command sender, not a local write", () => {
+  const defaults: ModelRef[] = [];
+  const favorites: ModelRef[] = [];
+  const { result } = renderHook(() =>
+    useModelSelection(
+      base({
+        legacyProvider: "qwen",
+        legacyReasoning: null,
+        sessionId: "s1",
+        setDefaultCommand: (ref) => defaults.push(ref),
+        toggleFavoriteCommand: (ref) => favorites.push(ref),
+      }),
+    ),
+  );
+  const ref: ModelRef = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: null };
+  act(() => result.current.setDefault(ref));
+  act(() => result.current.togglePin(ref));
+  assert.deepEqual(defaults, [ref], "setDefault invoked the host command with the ref");
+  assert.deepEqual(favorites, [ref], "togglePin invoked the host command with the ref");
+  // No local default/pinned was written - the global blob (if present at all) carries only recents; the
+  // host announcement is authoritative for default/favorites.
+  const globalBlob = localStorage.getItem("trevor.modelPreferences.global");
+  if (globalBlob) {
+    const parsed = JSON.parse(globalBlob) as Record<string, unknown>;
+    assert.equal("default" in parsed, false, "no local default write");
+    assert.equal("pinned" in parsed, false, "no local pinned write");
+  }
 });

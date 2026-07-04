@@ -2,6 +2,7 @@ import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import type { CommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
 import type { InternetMonitor } from "@host/connectivity/probe";
+import { modelPrefs } from "@host/prefs/model-prefs-store";
 import { vimEnabled } from "@host/prefs/vim-store";
 import { supervisor } from "@host/processes/processes";
 import type { CatalogSnapshot } from "@host/providers/catalog";
@@ -114,6 +115,11 @@ export function makePresence(deps: PresenceDeps) {
         // The host-owned Vim-mode prompt preference (plan 06), so the web gates its opt-in composer
         // motions on this machine's vim.json config rather than per-tab browser state.
         vimEnabled: vimEnabled(),
+        // The host-owned model preference (plan 51): the durable default + favorites, so a fresh session
+        // starts on the user's default (not qwen) and the chooser reads favorites from here rather than
+        // a per-browser localStorage blob. Read from the store's cache (cleared on a set-default /
+        // toggle-favorite, which re-announces).
+        modelPrefs: modelPrefs(),
         // The tracked background jobs (plan 09): promoted bash/shell commands + `process` jobs, so the
         // support panel renders them. The supervisor re-announces on every job change (main.ts wires
         // supervisor.onChange to this function).

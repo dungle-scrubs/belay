@@ -60,6 +60,15 @@ export const USER_STYLE_JSON = join(TREVOR_HOME, "style.json");
 export const USER_VIM_JSON = join(TREVOR_HOME, "vim.json");
 
 /**
+ * The user's model-selection preference (plan 51): a small `{ default, pinned }` JSON under the config
+ * home holding the durable DEFAULT model (the one a fresh session starts on) and the FAVORITES (pinned
+ * models). Host-owned + portable (travels with `TREVOR_HOME`) and shared across every session/browser
+ * talking to this host - which is what makes the default durable, closing the per-browser "reset to
+ * qwen" bug. Announced on `host.online` and mutated by the set-default / toggle-favorite command.
+ */
+export const USER_MODEL_PREFS_JSON = join(TREVOR_HOME, "model-prefs.json");
+
+/**
  * The user's local-admission config (plan 11): an optional `{ defaultCapacity, staleAfterMs,
  * capacityByResource }` JSON under the config home, read at host startup to size local-model concurrency.
  * Absent means the conservative default (one active generation per resource). Host-owned + portable.

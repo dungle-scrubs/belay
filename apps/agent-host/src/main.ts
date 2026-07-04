@@ -9,6 +9,8 @@ import { createProgrammaticCommandDispatcher } from "@host/commands/programmatic
 import { hooksRuntime } from "@host/hooks/host-runtime";
 import { lspManager } from "@host/lsp/host-runtime";
 import { mcpRuntime } from "@host/mcp/host-runtime";
+import { MODEL_PREFS_COMMANDS, runModelPrefsCommand } from "@host/prefs/model-prefs-command";
+import { modelPrefs, saveModelPrefs } from "@host/prefs/model-prefs-store";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
 import { supervisor } from "@host/processes/processes";
 import {
@@ -763,6 +765,19 @@ const programmaticCommands = createProgrammaticCommandDispatcher({
     },
     { name: "/internet-refresh", run: () => internet.refresh() },
     { name: "/catalog-refresh", run: () => refreshCatalog() },
+    // The model-preference mutations (plan 51): set the durable default / toggle a favorite. Each
+    // persists host-side and re-announces (the /vim re-announce pattern) so every open client updates
+    // without a restart; a malformed ref is rejected without a write. Registered from the one command
+    // list so the wiring can't drift from the command module.
+    ...MODEL_PREFS_COMMANDS.map((name) => ({
+      name,
+      run: (args: string) =>
+        runModelPrefsCommand(
+          { load: modelPrefs, save: saveModelPrefs, emit, announce: announceOnline },
+          name,
+          args,
+        ),
+    })),
     { name: "/source-signin", run: (args) => startSourceSignIn(args.trim()) },
     { name: "/source-signin-cancel", run: () => cancelSignIn() },
     { name: "/source-signin-code", run: (args) => submitSignInCode(args.trim()) },

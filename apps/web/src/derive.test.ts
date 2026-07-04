@@ -20,6 +20,7 @@ import {
   jobsFrom,
   lastUserModelFrom,
   latestSessionSwitch,
+  modelPrefsFrom,
   parseBangShell,
   parseCommand,
   pendingHandoffFrom,
@@ -165,6 +166,37 @@ test("vimEnabledFrom reflects the latest host.online preference (plan 06), false
       hostAnnouncement([online("h1", { vimEnabled: true }), online("h1", { vimEnabled: false })]),
     ),
     false,
+  );
+});
+
+test("modelPrefsFrom reads the host default + favorites, empty with no host / older host (plan 51)", () => {
+  assert.deepEqual(
+    modelPrefsFrom(null),
+    { default: null, pinned: [] },
+    "no host -> no default/favorites",
+  );
+  assert.deepEqual(
+    modelPrefsFrom(hostAnnouncement([online("h1")])),
+    { default: null, pinned: [] },
+    "host omitted the field (older host) -> empty preference, not a crash",
+  );
+  const def = { sourceId: "zai", modelId: "glm-5.2", reasoning: "high" };
+  const pin = { sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null };
+  assert.deepEqual(
+    modelPrefsFrom(
+      hostAnnouncement([online("h1", { modelPrefs: { default: def, pinned: [pin] } })]),
+    ),
+    { default: def, pinned: [pin] },
+  );
+  // The latest host.online wins (the host re-announces after a set-default / toggle-favorite).
+  assert.deepEqual(
+    modelPrefsFrom(
+      hostAnnouncement([
+        online("h1", { modelPrefs: { default: def, pinned: [pin] } }),
+        online("h1", { modelPrefs: { default: null, pinned: [] } }),
+      ]),
+    ),
+    { default: null, pinned: [] },
   );
 });
 

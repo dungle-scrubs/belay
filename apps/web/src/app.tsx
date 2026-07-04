@@ -63,6 +63,7 @@ import {
   jobsFrom,
   lastUserModelFrom,
   latestSessionSwitch,
+  modelPrefsFrom,
   parseBangShell,
   parseCommand,
   pendingHandoffFrom,
@@ -253,6 +254,8 @@ export function App() {
     requestFileIndex,
     openInEditor,
     refreshCatalog,
+    setModelDefault,
+    toggleModelFavorite,
     signInSource,
     submitSignInCode,
     unarchive,
@@ -325,6 +328,10 @@ export function App() {
   // load re-announces, so the chooser falls back to the roster projection until then.
   const hostSources = useMemo(() => sourcesFrom(announcement), [announcement]);
   const hostCatalog = useMemo(() => catalogFrom(announcement), [announcement]);
+  // The host-owned model preference (plan 51): the durable default + favorites the chooser reads and the
+  // fresh-session pick starts on. Empty until a host announces (then default/favorites come from here,
+  // not a per-browser blob).
+  const hostModelPrefs = useMemo(() => modelPrefsFrom(announcement), [announcement]);
   // The in-flight source sign-in (D-065 M5): show the verification URL while the flow is active. A
   // device-code flow (Codex) carries a userCode; a browser+paste flow (Anthropic) carries acceptsCode
   // and the user pastes the returned code back.
@@ -579,6 +586,7 @@ export function App() {
     hostModels,
     hostSources,
     hostCatalog,
+    hostModelPrefs,
     provider,
     setProvider,
     reasoningMap,
@@ -588,6 +596,8 @@ export function App() {
     sessionId,
     activeRunId: active,
     switchModel,
+    setModelDefault,
+    toggleModelFavorite,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
   // The tool detail takeover (plan 08): the id of the transcript row being inspected, or null when
@@ -965,7 +975,9 @@ export function App() {
         activeModel={sendModel}
         recentKeys={selection.recentKeys}
         pinnedKeys={selection.pinnedKeys}
+        defaultKey={selection.defaultKey}
         onTogglePin={selection.togglePin}
+        onSetDefault={selection.setDefault}
         deviceCode={signInDeviceCode}
         deviceCodeSourceId={signIn?.sourceId}
         onSubmitCode={(code) => void submitSignInCode(code)}

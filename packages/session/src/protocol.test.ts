@@ -802,6 +802,40 @@ test("host.online without a git field stays decode-tolerant (older host)", () =>
   assert.equal(decoded.branch, "main");
 });
 
+test("host.online carries modelPrefs when provided and omits the key when absent (plan 51)", () => {
+  const def = { sourceId: "zai", modelId: "glm-5.2", reasoning: "high" };
+  const pin = { sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null };
+  const base = {
+    providers: ["qwen"],
+    default: "qwen",
+    models: {},
+    instanceId: "i",
+    cwd: "~",
+    workspace: "~",
+    commands: [],
+    agents: [],
+  } as const;
+
+  // Provided: the default + favorites round-trip through decode.
+  const withPrefs = decodeTrevorEvent(
+    stored(events.hostOnline({ ...base, modelPrefs: { default: def, pinned: [pin] } })),
+  );
+  assert.equal(withPrefs?.type, "host.online");
+  if (withPrefs?.type !== "host.online") return;
+  assert.deepEqual(withPrefs.modelPrefs, { default: def, pinned: [pin] });
+
+  // Omitted: the wire payload carries no `modelPrefs` key (back-compat, like vimEnabled), and decode
+  // still yields the empty preference rather than a crash.
+  const omitted = events.hostOnline(base);
+  assert.equal("modelPrefs" in (omitted.payload as Record<string, unknown>), false);
+  const decodedOmitted = decodeTrevorEvent(stored(omitted));
+  assert.equal(decodedOmitted?.type === "host.online" && decodedOmitted.modelPrefs.default, null);
+  assert.equal(
+    decodedOmitted?.type === "host.online" && decodedOmitted.modelPrefs.pinned.length,
+    0,
+  );
+});
+
 test("host.online git coerces a partial/malformed payload to safe defaults", () => {
   const decoded = decodeTrevorEvent(
     stored({

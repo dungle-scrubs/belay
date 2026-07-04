@@ -12,6 +12,7 @@ import {
 } from "@trevor/session";
 import {
   ArrowLeft,
+  BadgeCheck,
   Check,
   ChevronRight,
   Cpu,
@@ -20,12 +21,21 @@ import {
   Search,
   Sparkles,
   Star,
+  StarOff,
 } from "lucide-react";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RowContextMenu, type RowMenuItem } from "@/components/ui/row-context-menu";
 import { fmtCtx } from "@/derive";
 import { cn } from "@/lib/utils";
+import { sortModelsByPreference } from "@/model-selection";
 import {
   type DeviceCodeFlow,
   needsAuthPanel,
@@ -129,6 +139,11 @@ export interface ModelChooserProps {
   readonly pinnedKeys?: ReadonlySet<string>;
   /** Pin/unpin a model from its row star; omit to hide the pin affordance entirely. */
   readonly onTogglePin?: (ref: ModelRef) => void;
+  /** The `modelRefKey` of the host DEFAULT model (plan 51): marks the default row + its source with a
+   *  distinct BadgeCheck glyph. Null / omitted when there is no default. */
+  readonly defaultKey?: string | null;
+  /** Set a model as the default from its row's right-click menu (plan 51); omit to hide the affordance. */
+  readonly onSetDefault?: (ref: ModelRef) => void;
   readonly className?: string;
 }
 
@@ -164,6 +179,8 @@ export function ModelChooser({
   recentKeys,
   pinnedKeys,
   onTogglePin,
+  defaultKey,
+  onSetDefault,
   className,
 }: ModelChooserProps) {
   const [openSourceId, setOpenSourceId] = useState<string | null>(initialSourceId ?? null);
@@ -173,6 +190,22 @@ export function ModelChooser({
   const openSource = openSourceId
     ? (sources.find((s) => s.sourceId === openSourceId) ?? null)
     : null;
+
+  // The source that holds the default model, for the source-level default glyph (plan 51 D-003). Prefer a
+  // catalog match (robust to any id shape); fall back to the ref-key prefix (`sourceId/modelId`) when the
+  // source's catalog has not loaded yet (a source id carries no "/").
+  const defaultSourceId = useMemo(() => {
+    if (!defaultKey) {
+      return null;
+    }
+    for (const [sid, entries] of Object.entries(catalogBySource)) {
+      if (entries.some((e) => modelRefKey(e) === defaultKey)) {
+        return sid;
+      }
+    }
+    const slash = defaultKey.indexOf("/");
+    return slash > 0 ? defaultKey.slice(0, slash) : null;
+  }, [catalogBySource, defaultKey]);
 
   return (
     <section
@@ -189,6 +222,8 @@ export function ModelChooser({
           recentKeys={recentKeys}
           pinnedKeys={pinnedKeys}
           onTogglePin={onTogglePin}
+          defaultKey={defaultKey}
+          onSetDefault={onSetDefault}
           onBack={() => {
             setOpenSourceId(null);
             setSearch("");
@@ -205,6 +240,7 @@ export function ModelChooser({
         <SourceOverview
           sources={sources}
           loading={loading}
+          defaultSourceId={defaultSourceId}
           onOpenSource={(id) => {
             setOpenSourceId(id);
             setSearch("");
@@ -219,10 +255,13 @@ export function ModelChooser({
 function SourceOverview({
   sources,
   loading,
+  defaultSourceId,
   onOpenSource,
 }: {
   sources: readonly SourceSummary[];
   loading?: boolean;
+  /** The source id that holds the default model, marked with the default glyph (plan 51 D-003). */
+  defaultSourceId?: string | null;
   onOpenSource: (sourceId: string) => void;
 }) {
   // "Configured only" hides sources that still need auth/setup. The toggle only appears when there is
@@ -293,7 +332,12 @@ function SourceOverview({
             </h3>
             <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2 @3xl:grid-cols-3">
               {rows.map((source) => (
-                <SourceRow key={source.sourceId} source={source} onOpen={onOpenSource} />
+                <SourceRow
+                  key={source.sourceId}
+                  source={source}
+                  isDefault={source.sourceId === defaultSourceId}
+                  onOpen={onOpenSource}
+                />
               ))}
             </div>
           </section>
@@ -308,12 +352,15 @@ function SourceOverview({
   );
 }
 
-/** One source row: label, host status summary, model count, the available action, and a click-through. */
+/** One source row: label, host status summary, model count, the available action, and a click-through. A
+ *  source that holds the default model carries the BadgeCheck default glyph beside its label (plan 51). */
 function SourceRow({
   source,
+  isDefault,
   onOpen,
 }: {
   source: SourceSummary;
+  isDefault?: boolean;
   onOpen: (sourceId: string) => void;
 }) {
   const state = projectSourceState(source);
@@ -331,7 +378,15 @@ function SourceRow({
       )}
     >
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-sm font-medium">{source.label}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium">{source.label}</span>
+          {isDefault ? (
+            <BadgeCheck
+              aria-label="Holds the default model"
+              className="size-3.5 shrink-0 text-primary"
+            />
+          ) : null}
+        </span>
         <span
           className={cn(
             "truncate text-xs",
@@ -361,6 +416,8 @@ function SourceDetail({
   recentKeys,
   pinnedKeys,
   onTogglePin,
+  defaultKey,
+  onSetDefault,
   onBack,
   onSearch,
   onToggleFilter,
@@ -377,6 +434,8 @@ function SourceDetail({
   recentKeys?: ReadonlySet<string>;
   pinnedKeys?: ReadonlySet<string>;
   onTogglePin?: (ref: ModelRef) => void;
+  defaultKey?: string | null;
+  onSetDefault?: (ref: ModelRef) => void;
   onBack: () => void;
   onSearch: (text: string) => void;
   onToggleFilter: (f: ChooserFilter) => void;
@@ -396,7 +455,8 @@ function SourceDetail({
 
   // The FULL filtered set (no page cap), so a large gateway catalog (OpenRouter, 256+) is browsable;
   // ModelList virtualizes it when it is large. Capability + text filters run first (entry-derivable),
-  // then the preference filters (membership in the recent/pinned sets) are layered on.
+  // then the preference filters (membership in the recent/pinned sets) are layered on, then the rows are
+  // auto-sorted default -> favorites -> rest (plan 51 D-004) so the preferred models surface first.
   const matched = useMemo(() => {
     const base = filterCatalog(entries, {
       text: search,
@@ -406,7 +466,7 @@ function SourceDetail({
         reasoning: filters.reasoning || undefined,
       },
     });
-    return base.filter((e) => {
+    const filtered = base.filter((e) => {
       const key = modelRefKey(e);
       if (filters.recent && !(recentKeys?.has(key) ?? false)) {
         return false;
@@ -416,7 +476,11 @@ function SourceDetail({
       }
       return true;
     });
-  }, [entries, search, filters, recentKeys, pinnedKeys]);
+    return sortModelsByPreference(filtered, {
+      defaultKey: defaultKey ?? null,
+      pinnedKeys: pinnedKeys ?? new Set(),
+    });
+  }, [entries, search, filters, recentKeys, pinnedKeys, defaultKey]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -487,6 +551,8 @@ function SourceDetail({
           activeModel={activeModel}
           pinnedKeys={pinnedKeys}
           onTogglePin={onTogglePin}
+          defaultKey={defaultKey}
+          onSetDefault={onSetDefault}
           onSelectModel={onSelectModel}
         />
       )}
@@ -507,15 +573,30 @@ function ModelList({
   activeModel,
   pinnedKeys,
   onTogglePin,
+  defaultKey,
+  onSetDefault,
   onSelectModel,
 }: {
   entries: readonly CatalogEntry[];
   activeModel?: ModelRef | null;
   pinnedKeys?: ReadonlySet<string>;
   onTogglePin?: (ref: ModelRef) => void;
+  defaultKey?: string | null;
+  onSetDefault?: (ref: ModelRef) => void;
   onSelectModel: (ref: ModelRef) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // The right-click menu (plan 51 D-002): its cursor position + the row's ref + whether that row is
+  // already a favorite (so the item reads Add vs Remove). Null when closed. Only wired when the chooser
+  // was given a default/favorite handler (Storybook stays presentational).
+  const [menu, setMenu] = useState<{
+    readonly x: number;
+    readonly y: number;
+    readonly ref: ModelRef;
+    readonly label: string;
+    readonly pinned: boolean;
+  } | null>(null);
+  const hasMenu = Boolean(onSetDefault || onTogglePin);
   const virtualize = entries.length > VIRTUALIZE_OVER;
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -524,75 +605,131 @@ function ModelList({
     overscan: 12,
     enabled: virtualize,
   });
-  const rowOf = (entry: CatalogEntry) => (
-    <ModelRow
-      entry={entry}
-      selected={activeModel != null && sameModel(activeModel, entry)}
-      pinned={pinnedKeys?.has(modelRefKey(entry)) ?? false}
-      onSelect={() =>
-        onSelectModel({ sourceId: entry.sourceId, modelId: entry.modelId, reasoning: null })
-      }
-      onTogglePin={
-        onTogglePin
-          ? () => onTogglePin({ sourceId: entry.sourceId, modelId: entry.modelId, reasoning: null })
-          : undefined
-      }
-    />
-  );
+  const refOf = (entry: CatalogEntry): ModelRef => ({
+    sourceId: entry.sourceId,
+    modelId: entry.modelId,
+    reasoning: null,
+  });
+  const rowOf = (entry: CatalogEntry) => {
+    const pinned = pinnedKeys?.has(modelRefKey(entry)) ?? false;
+    return (
+      <ModelRow
+        entry={entry}
+        selected={activeModel != null && sameModel(activeModel, entry)}
+        pinned={pinned}
+        isDefault={defaultKey != null && modelRefKey(entry) === defaultKey}
+        onSelect={() => onSelectModel(refOf(entry))}
+        onTogglePin={onTogglePin ? () => onTogglePin(refOf(entry)) : undefined}
+        onContextMenu={
+          hasMenu
+            ? (e) => {
+                e.preventDefault();
+                setMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  ref: refOf(entry),
+                  label: entry.displayName,
+                  pinned,
+                });
+              }
+            : undefined
+        }
+      />
+    );
+  };
+  const menuItems: RowMenuItem[] = menu
+    ? [
+        ...(onSetDefault
+          ? [
+              {
+                label: "Set as default",
+                icon: BadgeCheck,
+                onSelect: () => onSetDefault(menu.ref),
+              },
+            ]
+          : []),
+        ...(onTogglePin
+          ? [
+              {
+                label: menu.pinned ? "Remove from favorites" : "Add to favorites",
+                icon: menu.pinned ? StarOff : Star,
+                onSelect: () => onTogglePin(menu.ref),
+              },
+            ]
+          : []),
+      ]
+    : [];
   return (
-    <div
-      ref={scrollRef}
-      className="min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-      {virtualize ? (
-        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
-          {virtualizer.getVirtualItems().map((item) => {
-            const entry = entries[item.index];
-            if (!entry) {
-              return null;
-            }
-            return (
-              <div
-                key={entry.modelId}
-                ref={virtualizer.measureElement}
-                data-index={item.index}
-                className="absolute top-0 left-0 w-full pb-1"
-                style={{ transform: `translateY(${item.start}px)` }}
-              >
-                {rowOf(entry)}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {entries.map((entry) => (
-            <li key={entry.modelId}>{rowOf(entry)}</li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <>
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {virtualize ? (
+          <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
+            {virtualizer.getVirtualItems().map((item) => {
+              const entry = entries[item.index];
+              if (!entry) {
+                return null;
+              }
+              return (
+                <div
+                  key={entry.modelId}
+                  ref={virtualizer.measureElement}
+                  data-index={item.index}
+                  className="absolute top-0 left-0 w-full pb-1"
+                  style={{ transform: `translateY(${item.start}px)` }}
+                >
+                  {rowOf(entry)}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {entries.map((entry) => (
+              <li key={entry.modelId}>{rowOf(entry)}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {menu ? (
+        <RowContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
+      ) : null}
+    </>
   );
 }
 
-/** One catalog model row: name, capability tags, context length, cost tier, a selected check, and a
- *  pin star (when pinning is enabled). The select target and the pin toggle are SIBLING buttons (never
- *  nested), so the row stays valid + accessible; the pin star reveals on hover and stays lit when set. */
+/**
+ * One catalog model row: name, capability tags, context length, cost tier, and three SEPARABLE state
+ * glyphs (plan 51 D-002) - a BadgeCheck when it is the default, a selected Check, and a pin Star (when
+ * pinning is enabled). The select target and the pin toggle are SIBLING buttons (never nested), so the
+ * row stays valid + accessible; the pin star reveals on hover and stays lit when set. The default glyph
+ * sits inline by the name (out of the way of the right-edge Check/Star, so default+selected+pinned all
+ * show at once). A right-click on the row WRAPPER opens the context menu (Set as default / favorite),
+ * a progressive enhancement that never fights the row's nested buttons.
+ */
 function ModelRow({
   entry,
   selected,
   pinned,
+  isDefault,
   onSelect,
   onTogglePin,
+  onContextMenu,
 }: {
   entry: CatalogEntry;
   selected: boolean;
   pinned: boolean;
+  isDefault?: boolean;
   onSelect: () => void;
   onTogglePin?: () => void;
+  onContextMenu?: (e: ReactMouseEvent) => void;
 }) {
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the row's controls are its button children; onContextMenu is a progressive right-click enhancement over the wrapper.
     <div
+      onContextMenu={onContextMenu}
       className={cn(
         "group flex w-full items-center rounded-md transition-colors",
         selected ? "bg-primary/10" : "hover:bg-card",
@@ -608,6 +745,12 @@ function ModelRow({
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex items-center gap-2">
             <span className="truncate text-sm font-medium">{entry.displayName}</span>
+            {isDefault ? (
+              <BadgeCheck
+                aria-label={`${entry.displayName} is the default`}
+                className="size-4 shrink-0 text-primary"
+              />
+            ) : null}
             {entry.freshness.stale ? (
               <span className="shrink-0 text-label tracking-wider text-amber-600 dark:text-amber-400">
                 stale

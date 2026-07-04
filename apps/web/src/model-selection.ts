@@ -65,8 +65,18 @@ export function sessionScopedKey(base: string, sessionId: string | null): string
   return `${base}:${sessionId ?? "pending"}`;
 }
 
+/** The host-owned model preference (plan 51): the durable default + favorites (pinned). The host owns
+ *  it (model-prefs.json, announced on host.online); the projection reads default/favorites from HERE, not
+ *  from the browser-local `preferences` (which keeps only active/recent/reasoning). */
+export interface HostModelPrefs {
+  readonly default: ModelRef | null;
+  readonly pinned: readonly ModelRef[];
+}
+
 export interface ModelSelectionProjectionInput {
   readonly preferences: ModelPreferences;
+  /** The host-owned default + favorites (plan 51), the source of `defaultKey` / `pinnedKeys`. */
+  readonly modelPrefs: HostModelPrefs;
   readonly roster: Roster;
   readonly hostSources: readonly SourceSummary[];
   readonly hostCatalog: Readonly<Record<string, readonly CatalogEntry[]>>;
@@ -75,6 +85,8 @@ export interface ModelSelectionProjectionInput {
 }
 
 export interface ModelSelectionProjection {
+  /** The EFFECTIVE preferences: the browser-local active/recent/reasoning with the HOST default +
+   *  favorites overlaid, so the initial-pick default (M6) reads the host value off here. */
   readonly preferences: ModelPreferences;
   readonly active: ModelRef | null;
   readonly activeLabel: string;
@@ -85,6 +97,8 @@ export interface ModelSelectionProjection {
   readonly modelLabels: Readonly<Record<string, string>>;
   readonly recentKeys: ReadonlySet<string>;
   readonly pinnedKeys: ReadonlySet<string>;
+  /** The `modelRefKey` of the host default model, or null when there is no default (plan 51 D-004). */
+  readonly defaultKey: string | null;
   readonly reasoningSurface: (ref: Pick<ModelRef, "sourceId">) => ReasoningSurface;
 }
 
@@ -99,6 +113,7 @@ export interface LegacyCatalogBridge {
 
 export function buildModelSelection({
   preferences,
+  modelPrefs,
   roster,
   hostSources,
   hostCatalog,
@@ -106,6 +121,15 @@ export function buildModelSelection({
   legacyReasoning,
 }: ModelSelectionProjectionInput): ModelSelectionProjection {
   const catalog = legacyToCatalog(roster, hostSources, hostCatalog);
+
+  // The host owns default + favorites (plan 51); the browser owns active/recent/reasoning. Overlay the
+  // host values so the effective preferences the caller reads (the initial-pick default, M6) reflect the
+  // durable host source rather than a per-browser blob.
+  const effective: ModelPreferences = {
+    ...preferences,
+    default: modelPrefs.default,
+    pinned: modelPrefs.pinned,
+  };
 
   const legacyRef = catalog.legacyActiveRef(legacyProvider, legacyReasoning);
   const active = preferences.active ?? legacyRef;
@@ -116,7 +140,7 @@ export function buildModelSelection({
     : legacyProvider;
 
   return {
-    preferences,
+    preferences: effective,
     active,
     activeLabel,
     quickGroups: quickPickerModels(preferences),
@@ -125,9 +149,36 @@ export function buildModelSelection({
     sourceLabels: catalog.sourceLabels,
     modelLabels: catalog.modelLabels,
     recentKeys: new Set(preferences.recent.map(modelRefKey)),
-    pinnedKeys: new Set(preferences.pinned.map(modelRefKey)),
+    pinnedKeys: new Set(modelPrefs.pinned.map(modelRefKey)),
+    defaultKey: modelPrefs.default ? modelRefKey(modelPrefs.default) : null,
     reasoningSurface: catalog.reasoningSurface,
   };
+}
+
+/**
+ * Orders model rows default -> favorites -> rest (plan 51 D-004): the default first, then the favorites
+ * (pinned), then everything else, STABLE within each group (original order preserved). A row that is both
+ * the default and a favorite appears once, in the default slot (the default rank wins). Pure, so the
+ * ordering is unit-tested and shared by every model list (the chooser + the split control) - it can never
+ * drift between surfaces. Generic over any row that carries `{ sourceId, modelId }`.
+ */
+export function sortModelsByPreference<T extends Pick<ModelRef, "sourceId" | "modelId">>(
+  rows: readonly T[],
+  opts: { readonly defaultKey: string | null; readonly pinnedKeys: ReadonlySet<string> },
+): T[] {
+  const rank = (row: T): number => {
+    const key = modelRefKey(row);
+    if (opts.defaultKey != null && key === opts.defaultKey) {
+      return 0;
+    }
+    return opts.pinnedKeys.has(key) ? 1 : 2;
+  };
+  // Decorate with the original index so the sort is stable within each rank group regardless of the
+  // engine's sort stability guarantees.
+  return rows
+    .map((row, index) => ({ row, index, rank: rank(row) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.row);
 }
 
 export function legacyToCatalog(

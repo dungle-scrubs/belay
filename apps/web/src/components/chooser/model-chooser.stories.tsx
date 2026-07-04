@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { CatalogEntry, SourceSummary } from "@trevor/session";
+import { type CatalogEntry, modelRefKey, type SourceSummary } from "@trevor/session";
 import { LM_STUDIO_LOCAL_ENTRIES } from "@trevor/test-kit/lmstudio";
 import { ModelChooser } from "./model-chooser";
 
@@ -311,6 +311,55 @@ export const SourceDetailOpen: Story = {
         catalogBySource={CATALOG}
         initialSourceId="lmstudio"
         activeModel={{ sourceId: "lmstudio", modelId: "llama-3.3-70b", reasoning: null }}
+        onSelectModel={noop}
+        className="h-full"
+      />
+    </Panel>
+  ),
+};
+
+/** Plan 51: the model default + favorites. `qwen3-30b` is the DEFAULT (BadgeCheck glyph + sorted first);
+ *  `llama-3.3-70b` + `deepseek-r1` are FAVORITES (pinned Star, sorted next); the rest follow. LM Studio's
+ *  source row carries the source-level default glyph in the overview. Right-click any model row for the
+ *  Set-as-default / favorites menu. */
+const LMSTUDIO_DEFAULT = modelRefKey({ sourceId: "lmstudio", modelId: "qwen3-30b" });
+const LMSTUDIO_FAVORITES = new Set([
+  modelRefKey({ sourceId: "lmstudio", modelId: "llama-3.3-70b" }),
+  modelRefKey({ sourceId: "lmstudio", modelId: "deepseek-r1" }),
+]);
+
+export const DefaultAndFavorites: Story = {
+  render: () => (
+    <Panel width={620}>
+      <ModelChooser
+        sources={SOURCES}
+        catalogBySource={CATALOG}
+        initialSourceId="lmstudio"
+        activeModel={{ sourceId: "lmstudio", modelId: "qwen3-30b", reasoning: null }}
+        defaultKey={LMSTUDIO_DEFAULT}
+        pinnedKeys={LMSTUDIO_FAVORITES}
+        recentKeys={new Set()}
+        onTogglePin={noop}
+        onSetDefault={noop}
+        onSelectModel={noop}
+        className="h-full"
+      />
+    </Panel>
+  ),
+};
+
+/** The source overview with the source-level default glyph (plan 51 D-003): LM Studio holds the default,
+ *  so its row carries the BadgeCheck beside the label. */
+export const OverviewWithDefaultSource: Story = {
+  render: () => (
+    <Panel>
+      <ModelChooser
+        sources={SOURCES}
+        catalogBySource={CATALOG}
+        defaultKey={LMSTUDIO_DEFAULT}
+        pinnedKeys={LMSTUDIO_FAVORITES}
+        onTogglePin={noop}
+        onSetDefault={noop}
         onSelectModel={noop}
         className="h-full"
       />

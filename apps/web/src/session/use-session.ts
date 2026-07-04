@@ -302,6 +302,10 @@ export interface SessionActions {
   readonly refreshInternet: () => Promise<void>;
   /** Refresh the model catalog (D-065): re-query each source's live /models and re-announce. */
   readonly refreshCatalog: () => Promise<void>;
+  /** Set the durable DEFAULT model host-side (plan 51): the host persists it + re-announces. */
+  readonly setModelDefault: (ref: ModelRef) => Promise<void>;
+  /** Toggle a FAVORITE model host-side (plan 51): the host adds/removes it + re-announces. */
+  readonly toggleModelFavorite: (ref: ModelRef) => Promise<void>;
   /** Start a host-owned source sign-in (D-065 M5): run the OAuth device-code flow for `sourceId`. */
   readonly signInSource: (sourceId: string) => Promise<void>;
   /** Cancel the in-flight source sign-in flow (D-065 M5). */
@@ -342,6 +346,10 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
       publishVia(sessionEvents.editorOpen({ path, line, column })),
     refreshInternet: () => command("/internet-refresh", ""),
     refreshCatalog: () => command("/catalog-refresh", ""),
+    // The default/favorite mutations (plan 51) round-trip through the host: the ref rides as a JSON arg
+    // (a model id can contain "/", so a single-token encoding won't do); the host persists + re-announces.
+    setModelDefault: (ref: ModelRef) => command("/model-default", JSON.stringify(ref)),
+    toggleModelFavorite: (ref: ModelRef) => command("/model-favorite", JSON.stringify(ref)),
     signInSource: (sourceId: string) => command("/source-signin", sourceId),
     cancelSignIn: () => command("/source-signin-cancel", ""),
     submitSignInCode: (code: string) => command("/source-signin-code", code),
