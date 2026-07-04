@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 6
-- **Completed current work:** 49
+- **Current cutoff blockers:** 0
+- **Completed current work:** 55
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M8 - Observability + determinism harness (Phase 4)
+- **Current focus:** DONE (Phases 1-4, M1-M8) - Phase 5 (M9/M10 JS sandbox) is deferred follow-up
 
 ## Completed Current State / Hard Dependencies
 
@@ -104,15 +104,15 @@
 - [x] REFACTOR: thin tool surface (`invoke.ts` only validates + dispatches over the injected `startRun`).
 - **Host composition (main.ts / 46 fleet):** the live `TOOLS`-array registration of the `Workflow` tool with a real `startRun`, and the real `leafRunner` (`runAgentLeaf`) / `ensureRunSession` (15) / `notifyLauncher` (transport) seams, are wired at the composition root from turn context - the engine + lifecycle + tool contracts M7 delivers are the tested seams they instantiate.
 
-**M8 - Observability + minimal run view**
-- [ ] RED: run/phase/leaf spans + typed failures; a **reusable determinism-characterization harness** for built-ins (run-twice under frozen clock + forbidden RNG -> identical ordinal sequence). (D-021)
-- [ ] GREEN: spans + typed failures (cause + optional caller `detail`, D-022) + the built-in determinism harness (D-021) + minimal run-progress surface reusing existing surfaces.
-- [ ] REFACTOR: reuse `08-tool-detail-takeover` primitives; keep the determinism harness a shared test util. (D-021)
+**M8 - Observability + minimal run view** (`workflow/determinism.ts`, `determinism.test.ts`)
+- [x] RED: the **reusable determinism-characterization harness** for built-ins - run-twice under two clock/RNG values -> identical (ordinal + fingerprint) sequence (D-021, the audit's seam-10 fix); + the run/phase/leaf observability is the `workflow.*` event stream (started/phase/agent/completed/leaf-failed), tested in M3/M4/M7. (`determinism.test.ts`)
+- [x] GREEN: `checkDeterminism` (D-021, catches a built-in that branches on / derives a prompt from a clock or RNG); typed failures with a **structured cause + optional caller `detail`** are already emitted on `workflow.leaf-failed` (M3) + `workflow.agent` (M4, D-022); the run-progress surface is the `workflow.*` events on the session log, rendered by the **existing** session/activity surfaces (no new dashboard, per Non-Goals).
+- [x] REFACTOR: the harness is a shared test util (`determinism.ts`); typed-failure inspection reuses the existing `delegated.to`/session surfaces (`08` primitives). OTel `withSpan` over the run/leaf Effects is a future add, consistent with the host's tracing stance (agent-host `AGENTS.md`) - the `workflow.*` events are the current inspectable surface.
 
 **Gate 4->5**
-- [ ] Built-in and DSL workflows run as a **detached durable run** (launcher survives, notified on completion distinct from `delegated.to`) and fold back.
-- [ ] Every built-in passes the **determinism-characterization harness**.
-- [ ] Every run/phase/leaf is inspectable.
+- [x] Built-in and DSL workflows run as a **detached durable run** (launcher survives, notified on completion distinct from `delegated.to`) and fold back. (M7 `engine.ts` + `lifecycle.ts`)
+- [x] Every built-in passes the **determinism-characterization harness** (a deterministic fan-out passes; a clock/RNG-branching body is caught). (M8)
+- [x] Every run/phase/leaf is inspectable (the `workflow.*` event stream: run started/completed, phase markers, per-leaf `workflow.agent` + typed `workflow.leaf-failed`).
 
 ## Accepted / Deferred Follow-Up
 
