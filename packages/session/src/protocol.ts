@@ -381,6 +381,15 @@ export type HookDecisionKind =
   | "unapproved"
   | "trust_changed";
 
+/**
+ * Why a queued follow-up was superseded on the durable log (plan 47 D-003), for observability and
+ * rendering. `fold` is the first-Escape collapse of N queued prompts into one steering replacement
+ * (supersede-with-replacement); `unqueue` drops one queued prompt outright (supersede-no-replacement);
+ * `recall` pulls one queued prompt back into the composer to edit (also no replacement, re-enqueued on
+ * re-submit). Kept open (`string & {}`) so a forward-compat reason stays renderable.
+ */
+export type SupersedeReason = "fold" | "unqueue" | "recall" | (string & {});
+
 /** Who asked for a mid-turn model/reasoning switch: `manual` (the UI selector) now, `auto` (the future
  *  auto-router) later. The single seam both initiators attach to (plan 09.1 D-004). */
 export type ModelSwitchInitiator = "manual" | "auto";
@@ -710,6 +719,24 @@ export const events = {
   userCancel: (p: { runId: string }): TrevorEventInput => ({
     type: "user.cancel",
     payload: { runId: p.runId },
+  }),
+  /**
+   * Retracts one or more queued `user.message`s from the durable follow-up queue (plan 47 D-003): the
+   * FIRST event-to-event reference in the protocol. `supersedes` names the retracted messages by their
+   * durable `eventId`; the catch-up predicate and the host history projection then treat those messages
+   * as not-to-run and drop them from the prompt (the append-only-log equivalent of removing them from the
+   * queue - the log is never mutated). It carries NO replacement itself: the Escape-fold publishes its
+   * folded steering prompt as an ordinary `user.message` alongside this (so it reuses the normal turn
+   * machinery), and this event only records the retraction. `reason` distinguishes fold / unqueue /
+   * recall for observability + rendering. A superseded message already attempted (an assistant.started
+   * landed for it) is a no-op - the attempt watermark wins - so this never yanks a running turn.
+   */
+  userSupersede: (p: {
+    supersedes: readonly string[];
+    reason: SupersedeReason;
+  }): TrevorEventInput => ({
+    type: "user.supersede",
+    payload: { supersedes: [...p.supersedes], reason: p.reason },
   }),
   /**
    * A request to switch the active turn's model/reasoning mid-flight (plan 09.1): the control event the

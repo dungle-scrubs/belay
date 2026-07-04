@@ -44,6 +44,7 @@ import type {
   ProviderDiagnostic,
   ProviderIncidentReason,
   ProviderModel,
+  SupersedeReason,
   TaskSnapshot,
   TaskStatus,
   TurnStop,
@@ -572,6 +573,13 @@ export type DecodedEvent =
       readonly budget: number;
     }
   | { readonly type: "user.cancel"; readonly runId: string }
+  | {
+      readonly type: "user.supersede";
+      /** The retracted `user.message` eventIds (plan 47). */
+      readonly supersedes: readonly string[];
+      /** "fold" | "unqueue" | "recall"; kept open for forward-compat reasons. */
+      readonly reason: SupersedeReason;
+    }
   | { readonly type: "user.command"; readonly command: string; readonly args: string }
   | {
       readonly type: "command.result";
@@ -948,6 +956,14 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       };
     case "user.cancel":
       return { type: "user.cancel", runId };
+    case "user.supersede":
+      // The retracted ids are string eventIds; junk entries drop out so a malformed event can never
+      // supersede a message it never named. `reason` defaults to "unqueue" (the plainest retraction).
+      return {
+        type: "user.supersede",
+        supersedes: strList(p.supersedes),
+        reason: str(p.reason, "unqueue"),
+      };
     case "user.command":
       return { type: "user.command", command: str(p.command), args: str(p.args) };
     case "command.result": {

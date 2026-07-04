@@ -13,6 +13,7 @@ import {
   type SessionEvent,
   type SessionIdentity,
   type SessionTransport,
+  type SupersedeReason,
   events as sessionEvents,
   streamTransport,
   type TangentAnchorSeed,
@@ -336,6 +337,13 @@ export function useSessionWithTransport(
 
 export interface SessionActions {
   readonly publish: (prompt: UserTurnInput) => Promise<void>;
+  /**
+   * Retract queued follow-ups from the durable queue (plan 47 D-003): publish a `user.supersede`
+   * naming their durable eventIds so the host drops them from catch-up + the prompt projection. Powers
+   * the Escape-fold (`reason: "fold"`, published alongside the one folded replacement `user.message`),
+   * unqueue (`"unqueue"`), and recall-pull (`"recall"`) - all on the append-only log, never a mutation.
+   */
+  readonly supersede: (supersedes: readonly string[], reason: SupersedeReason) => Promise<void>;
   readonly cancel: (runId: string) => Promise<void>;
   /** Switch the in-flight turn's model/reasoning mid-flight (plan 09.1): publish a
    *  `model.switch.requested` keyed to the active runId, which the host routes to that turn's switch
@@ -400,6 +408,8 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
 
   return {
     publish: (prompt) => publishVia(sessionEvents.userMessage(prompt)),
+    supersede: (supersedes: readonly string[], reason: SupersedeReason) =>
+      publishVia(sessionEvents.userSupersede({ supersedes, reason })),
     cancel: (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
     switchModel: (runId: string, model: ModelRef) =>
       publishVia(sessionEvents.modelSwitchRequested({ runId, model, initiator: "manual" })),

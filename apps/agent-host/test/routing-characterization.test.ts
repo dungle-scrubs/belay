@@ -53,6 +53,9 @@ const ROUTED: readonly string[] = [
   "user.command",
   "user.message",
   "user.shell",
+  // The durable follow-up queue retraction (plan 47 D-003): handleEvent routes it to the scheduler
+  // (drop from the queue) and admits it so the projection excludes the superseded prompt.
+  "user.supersede",
 ];
 
 const UNROUTED: readonly string[] = [

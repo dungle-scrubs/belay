@@ -9,6 +9,7 @@ import {
   isSelfProducer,
   type PastePayload,
   type SessionEvent,
+  supersededMessageIds,
   type TaskSnapshot,
 } from "@trevor/session";
 import type { ChatMessage } from "../providers";
@@ -93,6 +94,10 @@ export function buildHistory(
   // objective after older turns collapse to a summary, and the live task list rides in the fold.
   const analysis = analyzeCompactionLog(events, selfProducerId);
   const goal = analysis.goal ? toUserTurn(analysis.goal) : null;
+  // Superseded queued follow-ups (plan 47 D-003) are excluded from the prompt entirely - the model
+  // never sees a prompt the user unqueued/folded/pulled back - while the supersede events stay on the
+  // append-only log (auditable). The retraction is a fold over the log, not a mutation.
+  const superseded = supersededMessageIds(events);
 
   // Pass 2 - project the baseline. When folded, the pins + rolling summary lead, then only the
   // RECENT turns (seq > throughSeq) are projected verbatim; the summary already represents the
@@ -111,10 +116,14 @@ export function buildHistory(
   // turn and dropped. Set by the lucid.feedback arm, cleared whenever a plain user turn is pushed.
   let feedbackTail = false;
   const pushUser = (turn: ChatMessage): void => {
-    // Collapse consecutive user turns to the latest: with one-turn-at-a-time dispatch this only
-    // fires for a genuinely abandoned turn (e.g. the host crashed mid-answer) - feed the model
-    // the latest prompt, not two unanswered. But a Lucid-feedback tail is real content, so a prompt
-    // arriving after it merges instead of clobbering it.
+    // Collapse consecutive user turns to the latest. With one-turn-at-a-time dispatch + the durable
+    // follow-up queue (plan 47), the only consecutive-user runs that reach here are the pending TAIL:
+    // an abandoned turn (host crashed mid-answer, blank reply dropped) or a queued follow-up being
+    // caught up (re-admitted at the tail, so it collapses the not-yet-run prompts behind it into the
+    // one turn actually running). Answered follow-ups each carry their assistant reply between them, so
+    // they never collapse - they stay distinct ordered turns. Feed the model the latest, not two
+    // unanswered prompts at once. But a Lucid-feedback tail (plan 27 M5) is real content, so a prompt
+    // arriving after it MERGES (concatenates) instead of clobbering it.
     const last = out[out.length - 1];
     if (last?.role === "user") {
       out[out.length - 1] = feedbackTail
@@ -140,6 +149,9 @@ export function buildHistory(
     if (decoded.type === "user.message") {
       if (isSelfProducer(event.producerId, selfProducerId)) {
         continue;
+      }
+      if (superseded.has(event.eventId)) {
+        continue; // a superseded queued follow-up (plan 47) - never sent to the model
       }
       tools.reset();
       pushUser(toUserTurn(decoded));

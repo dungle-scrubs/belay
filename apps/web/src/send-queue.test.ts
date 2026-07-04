@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import type { ArtifactRef, PastePayload } from "@trevor/session";
+import {
+  type ArtifactRef,
+  events,
+  type PastePayload,
+  PRODUCER_IDS,
+  type SessionEvent,
+  type TrevorEventInput,
+} from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import {
   combineQueued,
@@ -7,6 +15,7 @@ import {
   foldQueuedSteer,
   foldSteer,
   type QueuedPrompt,
+  queuedPromptsFrom,
   sendQueueReducer,
 } from "./send-queue";
 
@@ -202,4 +211,47 @@ test("a queued prompt round-trips its pasted payloads through the reducer (survi
   let queue: readonly QueuedPrompt[] = [];
   queue = sendQueueReducer(queue, { type: "enqueue", prompt: queued });
   assert.deepEqual(queue[0]?.pastes, [payload], "the payload metadata waits with the prompt");
+});
+
+/** A durable log event with a stable eventId (the id a supersede references), web-authored by default. */
+let queueSeq = 0;
+const logEv = (input: TrevorEventInput, eventId = `ev-${queueSeq}`): SessionEvent =>
+  storedEvent(input, { seq: queueSeq++, eventId, producerId: PRODUCER_IDS.web });
+
+test("queuedPromptsFrom projects the durable follow-up queue, id = the durable eventId", () => {
+  const log = [
+    logEv(events.userMessage({ text: "active", provider: "qwen" }), "ev-active"),
+    storedEvent(
+      { type: "assistant.started", payload: { runId: "r1" } },
+      { seq: queueSeq++, producerId: PRODUCER_IDS.host },
+    ),
+    logEv(events.userMessage({ text: "two", provider: "deepseek", reasoning: "high" }), "ev-2"),
+    logEv(events.userMessage({ text: "three", provider: "qwen" }), "ev-3"),
+  ];
+  const queue = queuedPromptsFrom(log, PRODUCER_IDS.host);
+  assert.deepEqual(
+    queue.map((q) => ({ id: q.id, text: q.text, provider: q.provider })),
+    [
+      { id: "ev-2", text: "two", provider: "deepseek" },
+      { id: "ev-3", text: "three", provider: "qwen" },
+    ],
+  );
+  assert.equal(queue[0]?.reasoning, "high", "the queued prompt keeps its snapshot reasoning");
+});
+
+test("queuedPromptsFrom excludes a superseded prompt (folded/unqueued)", () => {
+  const log = [
+    logEv(events.userMessage({ text: "active", provider: "qwen" }), "ev-active"),
+    storedEvent(
+      { type: "assistant.started", payload: { runId: "r1" } },
+      { seq: queueSeq++, producerId: PRODUCER_IDS.host },
+    ),
+    logEv(events.userMessage({ text: "keep", provider: "qwen" }), "ev-keep"),
+    logEv(events.userMessage({ text: "drop", provider: "qwen" }), "ev-drop"),
+    logEv(events.userSupersede({ supersedes: ["ev-drop"], reason: "unqueue" })),
+  ];
+  assert.deepEqual(
+    queuedPromptsFrom(log, PRODUCER_IDS.host).map((q) => q.text),
+    ["keep"],
+  );
 });

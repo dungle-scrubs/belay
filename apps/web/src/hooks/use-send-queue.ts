@@ -1,158 +1,111 @@
-import type { ArtifactRef, PastePayload } from "@trevor/session";
-import { usePrevious } from "ahooks";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import type { SessionEvent, SupersedeReason } from "@trevor/session";
+import { useCallback, useMemo } from "react";
 import {
   foldQueuedSteer,
-  foldSteer,
   type QueuedPrompt,
+  queuedPromptsFrom,
   type SteerMeta,
-  sendQueueReducer,
   type UserTurnInput,
 } from "@/send-queue";
 
 /**
- * The browser's local send-queue React state machine, lifted out of app.tsx so the
- * delicate double-send / echo-latch invariant lives in one place. The PURE transitions
- * and the fold-on-steer rule are in ./send-queue (unit-tested without React); this owns
- * only the React glue: the dispatchQueue reducer wiring, the busy/in-flight latch, and
- * the release + drain effects.
+ * The browser's binding onto the DURABLE follow-up queue (plan 47). The queue is no longer browser
+ * state drip-fed one prompt at a time - a follow-up submitted while a turn runs is PUBLISHED to the
+ * durable log immediately and the HOST owns scheduling, so this hook holds no queue of its own: it
+ * derives the still-queued prompts from the event log and turns the user's queue actions into durable
+ * events (publish / supersede).
  *
- * Contract (unchanged from the inline version):
- *   - submit(prompt) enqueues (FIFO); the head is published only once the session is idle
- *     and nothing is in flight, so the host never receives two prompts at once and the
- *     event log stays cleanly paired;
- *   - steer(...) folds the queued prompts + draft + queued/attached artifacts into ONE
- *     prompt and replaces the queue, so a cancelled turn is followed by a single combined
- *     interruption (not a replay). The caller publishes the cancel; the steer publishes
- *     only once the cancel resolves the turn (busy -> idle), keeping cancel ahead of steer.
+ * Contract:
+ *   - submit(prompt): publish the follow-up now (the host defers it behind the active turn + drains the
+ *     backlog in order); no busy-gating, no in-flight latch - the browser stopped being the scheduler.
+ *   - flushQueuedSteer(...): the Escape-fold (D-003). Fold the queued prompts into ONE steering
+ *     `user.message` and publish it, then publish a `user.supersede` retracting the folded prompts - a
+ *     supersede-WITH-replacement on the append-only log.
+ *   - unqueue(id): supersede-NO-replacement - drop one queued prompt without re-composing.
+ *   - pullNewest(): supersede the newest queued prompt (recall) and hand its text back so the caller can
+ *     pull it into the composer + the local recall ring; re-submitting re-enqueues it durably.
  */
 
 export interface UseSendQueue {
-  /** The prompt already POSTed to the durable log, waiting for its stream echo. */
-  readonly pending: QueuedPrompt | null;
+  /** The still-queued follow-ups projected from the durable log, in submit order (each id = eventId). */
   readonly queue: readonly QueuedPrompt[];
-  /** Enqueue a fresh prompt to publish when idle (the drain effect handles publishing). */
-  readonly submit: (prompt: QueuedPrompt) => void;
-  /** Hard steer: fold the queue + draft + artifacts + pasted payloads into one prompt. */
-  readonly steer: (
-    draft: string,
-    attachments: readonly ArtifactRef[],
-    pastes: readonly PastePayload[],
-    meta: SteerMeta,
-  ) => void;
+  /** Publish a fresh prompt now; the host schedules it behind the active turn. */
+  readonly submit: (prompt: UserTurnInput) => void;
   /**
-   * First-Escape queued steer (D-001): fold ONLY the queued prompts into one prompt and publish it
-   * now, draining the queue. The host queues a user.message that arrives mid-turn and runs it after
-   * the active turn, so this collapses the queue into one steering prompt WITHOUT cancelling. A no-op
-   * when the queue is empty (nothing to steer).
+   * First-Escape queued steer (D-003): fold ONLY the queued prompts into one `user.message`, publish it,
+   * and supersede the folded prompts - so the host runs the single folded prompt after the active turn
+   * instead of N queued prompts. A no-op when the queue is empty (nothing to steer).
    */
   readonly flushQueuedSteer: (meta: SteerMeta) => void;
+  /** Unqueue one durable prompt (supersede-no-replacement); the host drops it from the run. */
+  readonly unqueue: (id: string) => void;
+  /**
+   * Pull the NEWEST queued prompt back for editing (recall): supersede it (an immediate durable removal,
+   * so there is no edit-vs-run race) and return it, so the caller drops its text into the composer + the
+   * recall ring. Returns null when the queue is empty.
+   */
+  readonly pullNewest: () => QueuedPrompt | null;
 }
 
 export function useSendQueue({
-  busy,
+  events,
+  selfProducerId,
   publish,
-  resetKey,
+  supersede,
 }: {
-  /** True while a turn is in flight (active run, or awaiting the echo). */
-  readonly busy: boolean;
+  /** The durable event log the queue is projected from (resets on session switch, so no reset hook). */
+  readonly events: readonly SessionEvent[];
+  /** This client's producerId, so the host's own echoes are excluded from the queue. */
+  readonly selfProducerId?: string;
   readonly publish: (prompt: UserTurnInput) => Promise<void>;
-  /** Changes when the browser switches durable sessions; queued prompts must not cross sessions. */
-  readonly resetKey?: string | null;
+  readonly supersede: (supersedes: readonly string[], reason: SupersedeReason) => Promise<void>;
 }): UseSendQueue {
-  const [queue, dispatchQueue] = useReducer(sendQueueReducer, [] as QueuedPrompt[]);
-  const [pending, setPending] = useState<QueuedPrompt | null>(null);
-  // inFlight bridges the window between publishing a prompt and seeing its echo turn
-  // the session busy, so the drain effect can't fire twice and double-send. prevBusy
-  // catches the turn-ended edge (busy high -> low) to release the latch.
-  const inFlightRef = useRef(false);
-  const prevBusy = usePrevious(busy);
+  const queue = useMemo(() => queuedPromptsFrom(events, selfProducerId), [events, selfProducerId]);
 
-  useEffect(() => {
-    if (resetKey === undefined) {
-      return;
-    }
-    inFlightRef.current = false;
-    setPending(null);
-    dispatchQueue({ type: "clear" });
-  }, [resetKey]);
-
-  // Once the prompt echo reaches the transcript, App's busy fold turns true
-  // (`awaitingResponse` or `active`). At that point the local pending row would duplicate the durable
-  // user message, so drop it.
-  useEffect(() => {
-    if (busy) {
-      setPending(null);
-    }
-  }, [busy]);
-
-  // Release the in-flight latch when a turn ends (busy goes high then low), so the
-  // next queued prompt becomes eligible to publish. Runs before the drain effect.
-  useEffect(() => {
-    if (prevBusy && !busy) {
-      inFlightRef.current = false;
-    }
-  }, [busy, prevBusy]);
-
-  // Drain one prompt at a time: publish the head only when idle and nothing is in
-  // flight. Removing the head and latching inFlight before the echo arrives keeps a
-  // re-render from publishing the next prompt early.
-  useEffect(() => {
-    if (busy || inFlightRef.current || queue.length === 0) {
-      return;
-    }
-    const next = queue[0];
-    if (!next) {
-      return;
-    }
-    inFlightRef.current = true;
-    setPending(next);
-    dispatchQueue({ type: "drainHead" });
-    void publish(next).catch(() => {
-      inFlightRef.current = false;
-      setPending((current) => (current?.id === next.id ? null : current));
-    });
-  }, [busy, queue, publish]);
-
-  const submit = useCallback((prompt: QueuedPrompt) => {
-    dispatchQueue({ type: "enqueue", prompt });
-  }, []);
-
-  const steer = useCallback(
-    (
-      draft: string,
-      attachments: readonly ArtifactRef[],
-      pastes: readonly PastePayload[],
-      meta: SteerMeta,
-    ) => {
-      // Fold the queued prompts + draft + every queued/attached artifact + pasted payload into ONE
-      // steering prompt (foldSteer keeps the images AND the pastes the user lined up).
-      const steered = foldSteer(queue, draft, attachments, pastes, meta);
-      dispatchQueue({ type: "steer", prompt: steered });
+  const submit = useCallback(
+    (prompt: UserTurnInput) => {
+      // Publish immediately (plan 47 M1): the host defers a mid-turn prompt behind the active turn and
+      // drains the backlog in order, so the browser no longer withholds/drip-feeds follow-ups.
+      void publish(prompt).catch(() => {
+        // A transient transport failure: the prompt is simply not queued. The composer keeps the draft
+        // path elsewhere; a hard failure surfaces via the connection status, not a silent local buffer.
+      });
     },
-    [queue],
+    [publish],
   );
 
   const flushQueuedSteer = useCallback(
     (meta: SteerMeta) => {
-      // Fold ONLY the queued prompts into one steering prompt and publish it now, then drop the
-      // queue. We bypass the busy-gated drain on purpose: the host's TurnScheduler queues a
-      // user.message that arrives mid-turn and runs it after the active turn, so the first Escape
-      // collapses the queue into one prompt WITHOUT cancelling. Draining the queue here is what lets
-      // a deliberate second Escape fall through to cancel (the queue is now empty). <!-- D-001 -->
+      // Fold the queue into ONE steering prompt and publish it, then supersede the folded prompts
+      // (D-003) - a supersede-with-replacement. A no-op when the queue is empty (nothing to fold).
       const folded = foldQueuedSteer(queue, meta);
       if (!folded) {
         return;
       }
-      dispatchQueue({ type: "clear" });
-      void publish(folded).catch(() => {
-        // The publish failed (transient transport error): put the folded prompt back so it is not
-        // lost - it drains when the turn ends, and the queue is non-empty again for a retry.
-        dispatchQueue({ type: "enqueue", prompt: folded });
-      });
+      void publish(folded).catch(() => {});
+      void supersede(
+        queue.map((prompt) => prompt.id),
+        "fold",
+      );
     },
-    [queue, publish],
+    [queue, publish, supersede],
   );
 
-  return { pending, queue, submit, steer, flushQueuedSteer };
+  const unqueue = useCallback(
+    (id: string) => {
+      void supersede([id], "unqueue");
+    },
+    [supersede],
+  );
+
+  const pullNewest = useCallback((): QueuedPrompt | null => {
+    const newest = queue[queue.length - 1];
+    if (!newest) {
+      return null;
+    }
+    void supersede([newest.id], "recall");
+    return newest;
+  }, [queue, supersede]);
+
+  return { queue, submit, flushQueuedSteer, unqueue, pullNewest };
 }

@@ -430,3 +430,58 @@ test("D-082: user.shell / shell.result are prompt-invisible (never reach the mod
     false,
   );
 });
+
+test("plan 47: excludes a superseded queued follow-up from the prompt (never sent to the model)", () => {
+  // Two follow-ups queue behind an answered turn; the user unqueues the first. The projection must
+  // drop it entirely, while the supersede event stays on the log (auditable).
+  const u1 = ev(events.userMessage({ text: "first", provider: "qwen" }));
+  const a1 = ev(events.assistantCompleted({ runId: "r1", text: "did first" }), SELF);
+  const u2 = ev(events.userMessage({ text: "unqueue me", provider: "qwen" }));
+  const u3 = ev(events.userMessage({ text: "keep me", provider: "qwen" }));
+  const sup = ev(events.userSupersede({ supersedes: [u2.eventId], reason: "unqueue" }));
+  const a3 = ev(events.assistantCompleted({ runId: "r3", text: "did keep me" }), SELF);
+  assert.deepEqual(project([u1, a1, u2, u3, sup, a3]), [
+    { role: "user", content: "first" },
+    { role: "assistant", content: "did first" },
+    { role: "user", content: "keep me" },
+    { role: "assistant", content: "did keep me" },
+  ]);
+});
+
+test("plan 47: an Escape-fold drops the N folded prompts, keeping only the folded replacement", () => {
+  const u1 = ev(events.userMessage({ text: "active", provider: "qwen" }));
+  const a1 = ev(events.assistantCompleted({ runId: "r1", text: "did active" }), SELF);
+  const u2 = ev(events.userMessage({ text: "two", provider: "qwen" }));
+  const u3 = ev(events.userMessage({ text: "three", provider: "qwen" }));
+  // The fold publishes one folded steering user.message + a supersede naming the two folded prompts.
+  const folded = ev(events.userMessage({ text: "two\nthree", provider: "qwen" }));
+  const sup = ev(events.userSupersede({ supersedes: [u2.eventId, u3.eventId], reason: "fold" }));
+  const aF = ev(events.assistantCompleted({ runId: "rF", text: "did the fold" }), SELF);
+  assert.deepEqual(project([u1, a1, u2, u3, folded, sup, aF]), [
+    { role: "user", content: "active" },
+    { role: "assistant", content: "did active" },
+    { role: "user", content: "two\nthree" },
+    { role: "assistant", content: "did the fold" },
+  ]);
+});
+
+test("plan 47: answered follow-ups stay distinct ordered turns (not collapsed to the latest)", () => {
+  // The scoped-collapse contract: once each queued follow-up is answered, they are distinct turns -
+  // the collapse only ever eats the genuinely-unanswered tail, never answered follow-ups.
+  const log = [
+    ev(events.userMessage({ text: "one", provider: "qwen" })),
+    ev(events.assistantCompleted({ runId: "r1", text: "a" }), SELF),
+    ev(events.userMessage({ text: "two", provider: "qwen" })),
+    ev(events.assistantCompleted({ runId: "r2", text: "b" }), SELF),
+    ev(events.userMessage({ text: "three", provider: "qwen" })),
+    ev(events.assistantCompleted({ runId: "r3", text: "c" }), SELF),
+  ];
+  assert.deepEqual(project(log), [
+    { role: "user", content: "one" },
+    { role: "assistant", content: "a" },
+    { role: "user", content: "two" },
+    { role: "assistant", content: "b" },
+    { role: "user", content: "three" },
+    { role: "assistant", content: "c" },
+  ]);
+});

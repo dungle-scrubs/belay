@@ -1,130 +1,120 @@
 import assert from "node:assert/strict";
 import { act, renderHook } from "@testing-library/react";
+import { PRODUCER_IDS, type SessionEvent, type SupersedeReason } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
-import type { QueuedPrompt, UserTurnInput } from "@/send-queue";
+import type { UserTurnInput } from "@/send-queue";
 import { useSendQueue } from "./use-send-queue";
 
 /**
- * The send-queue React glue (the reducer + fold rules are unit-tested in send-queue.test.ts;
- * this drives the hook in a DOM). Guards the two invariants the inline App version was lifted
- * to protect: drain one-prompt-at-a-time with no double-send, and hard-steer folding the queue
- * + draft into a single prompt. S-WEB-4 / S-WEB-5.
+ * The durable follow-up queue binding (plan 47). The browser stopped being the scheduler: submit
+ * publishes immediately, the queue is projected from the log, and the Escape-fold / unqueue / recall
+ * pull emit durable supersedes. These drive the hook in a DOM against a recording publish + supersede.
  */
 
-const prompt = (id: string, text: string): QueuedPrompt => ({ id, text, provider: "qwen" });
+const HOST = PRODUCER_IDS.host;
+let seq = 0;
+const userEv = (eventId: string, text: string): SessionEvent =>
+  storedEvent(
+    { type: "user.message", payload: { text, provider: "qwen" } },
+    { seq: seq++, eventId, producerId: PRODUCER_IDS.web },
+  );
+const startedEv = (runId: string): SessionEvent =>
+  storedEvent({ type: "assistant.started", payload: { runId } }, { seq: seq++, producerId: HOST });
 
-test("drains one prompt at a time and never double-sends", async () => {
+function harness(events: readonly SessionEvent[]) {
   const published: string[] = [];
-  const publish = async (prompt: UserTurnInput) => {
-    published.push(prompt.text);
+  const superseded: Array<{ ids: readonly string[]; reason: SupersedeReason }> = [];
+  const publish = async (p: UserTurnInput) => {
+    published.push(p.text);
   };
+  const supersede = async (ids: readonly string[], reason: SupersedeReason) => {
+    superseded.push({ ids, reason });
+  };
+  const view = renderHook(
+    (props: { events: readonly SessionEvent[] }) =>
+      useSendQueue({ events: props.events, selfProducerId: HOST, publish, supersede }),
+    { initialProps: { events } },
+  );
+  return { view, published, superseded };
+}
 
-  let busy = false;
-  const { result, rerender } = renderHook(() => useSendQueue({ busy, publish }));
-
-  // Two prompts submitted while idle: only the head publishes; the second waits behind the
-  // in-flight latch even though the session is still (briefly) idle.
-  act(() => result.current.submit(prompt("1", "first")));
-  act(() => result.current.submit(prompt("2", "second")));
-  assert.deepEqual(published, ["first"]);
-  assert.equal(result.current.pending?.text, "first");
+test("the queue is projected from the log (follow-ups behind the active turn), in order", () => {
+  const log = [userEv("e1", "active"), startedEv("r1"), userEv("e2", "two"), userEv("e3", "three")];
+  const { view } = harness(log);
   assert.deepEqual(
-    result.current.queue.map((p) => p.text),
-    ["second"],
-  );
-
-  // The turn runs (busy goes high) then ends (busy goes low): the release effect frees the
-  // latch and the drain effect publishes the second prompt - now, and only now.
-  busy = true;
-  rerender();
-  assert.equal(Boolean(result.current.pending), false);
-  busy = false;
-  rerender();
-  assert.deepEqual(published, ["first", "second"]);
-  assert.equal(result.current.pending?.text, "second");
-  assert.deepEqual(result.current.queue, []);
-});
-
-test("a submitted prompt's ModelRef is forwarded to publish (D-065)", () => {
-  const calls: Array<{ text: string; model: unknown }> = [];
-  const publish = async (prompt: UserTurnInput) => {
-    calls.push({ text: prompt.text, model: prompt.model });
-  };
-  const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
-  const { result } = renderHook(() => useSendQueue({ busy: false, publish }));
-  act(() => result.current.submit({ id: "1", text: "hi", provider: "deepseek", model }));
-  assert.deepEqual(calls, [{ text: "hi", model }], "the snapshot ModelRef reaches publish");
-});
-
-test("hard steer folds the queued prompts + draft into a single prompt", () => {
-  const publish = async () => {};
-  // Busy throughout, so the submits accumulate in the queue instead of draining.
-  const { result } = renderHook(() => useSendQueue({ busy: true, publish }));
-
-  act(() => result.current.submit(prompt("1", "first")));
-  act(() => result.current.submit(prompt("2", "second")));
-  act(() => result.current.steer("a third thought", [], [], { id: "s", provider: "qwen" }));
-
-  assert.equal(result.current.queue.length, 1);
-  const folded = result.current.queue[0]?.text ?? "";
-  assert.ok(
-    folded.includes("first") && folded.includes("second") && folded.includes("a third thought"),
-    folded,
+    view.result.current.queue.map((q) => ({ id: q.id, text: q.text })),
+    [
+      { id: "e2", text: "two" },
+      { id: "e3", text: "three" },
+    ],
   );
 });
 
-test("flushQueuedSteer publishes the folded queue once and drains it, without cancel", async () => {
-  const published: string[] = [];
-  const publish = async (prompt: UserTurnInput) => {
-    published.push(prompt.text);
-  };
-  // Busy throughout (a turn is active), so submits accumulate instead of draining.
-  const { result, rerender } = renderHook(() => useSendQueue({ busy: true, publish }));
-
-  act(() => result.current.submit(prompt("1", "first")));
-  act(() => result.current.submit(prompt("2", "second")));
-  assert.equal(result.current.queue.length, 2);
-
-  // First Escape: fold the queue into one prompt and publish it now (the host queues it mid-turn).
-  act(() => result.current.flushQueuedSteer({ id: "s", provider: "qwen" }));
-  assert.deepEqual(published, ["first\nsecond"], "one folded prompt, one line per queued prompt");
-  assert.deepEqual(result.current.queue, [], "the queue is drained so a second Escape can cancel");
-
-  // Across a re-render the flush does not double-send: the queue is already empty, so it is a no-op.
-  rerender();
-  act(() => result.current.flushQueuedSteer({ id: "s2", provider: "qwen" }));
-  assert.deepEqual(published, ["first\nsecond"], "no second publish");
+test("submit publishes immediately (no busy-gate); the host owns scheduling", async () => {
+  const { view, published } = harness([userEv("e1", "active"), startedEv("r1")]);
+  await act(async () => {
+    view.result.current.submit({ text: "follow up", provider: "qwen" });
+  });
+  assert.deepEqual(published, ["follow up"]);
 });
 
-test("flushQueuedSteer is a no-op with an empty queue", () => {
-  const published: string[] = [];
-  const publish = async (prompt: UserTurnInput) => {
-    published.push(prompt.text);
-  };
-  const { result } = renderHook(() => useSendQueue({ busy: true, publish }));
-  act(() => result.current.flushQueuedSteer({ id: "s", provider: "qwen" }));
+test("flushQueuedSteer folds the queue into one prompt + supersedes the folded ids (fold)", async () => {
+  const log = [userEv("e1", "active"), startedEv("r1"), userEv("e2", "two"), userEv("e3", "three")];
+  const { view, published, superseded } = harness(log);
+  await act(async () => {
+    view.result.current.flushQueuedSteer({ id: "s", provider: "qwen" });
+  });
+  assert.deepEqual(
+    published,
+    ["two\nthree"],
+    "one folded steering prompt, one line per queued prompt",
+  );
+  assert.deepEqual(superseded, [{ ids: ["e2", "e3"], reason: "fold" }]);
+});
+
+test("flushQueuedSteer is a no-op with an empty queue (nothing to fold)", async () => {
+  const { view, published, superseded } = harness([userEv("e1", "active"), startedEv("r1")]);
+  await act(async () => {
+    view.result.current.flushQueuedSteer({ id: "s", provider: "qwen" });
+  });
   assert.deepEqual(published, []);
+  assert.deepEqual(superseded, []);
 });
 
-test("session changes clear queued prompts and the in-flight latch", () => {
-  const published: string[] = [];
-  const publish = async (prompt: UserTurnInput) => {
-    published.push(prompt.text);
-  };
-  const { result, rerender } = renderHook(
-    ({ sessionId }: { sessionId: string }) =>
-      useSendQueue({ busy: true, publish, resetKey: sessionId }),
-    { initialProps: { sessionId: "s1" } },
-  );
+test("unqueue supersedes one prompt with no replacement", async () => {
+  const log = [userEv("e1", "active"), startedEv("r1"), userEv("e2", "drop me")];
+  const { view, published, superseded } = harness(log);
+  await act(async () => {
+    view.result.current.unqueue("e2");
+  });
+  assert.deepEqual(published, [], "unqueue publishes no replacement");
+  assert.deepEqual(superseded, [{ ids: ["e2"], reason: "unqueue" }]);
+});
 
-  act(() => result.current.submit(prompt("1", "old directory prompt")));
-  assert.equal(result.current.queue.length, 1);
+test("pullNewest supersedes the newest queued prompt (recall) and returns it for the composer", async () => {
+  const log = [
+    userEv("e1", "active"),
+    startedEv("r1"),
+    userEv("e2", "older"),
+    userEv("e3", "newest"),
+  ];
+  const { view, superseded } = harness(log);
+  let pulled: { id: string; text: string } | null = null;
+  await act(async () => {
+    const result = view.result.current.pullNewest();
+    pulled = result ? { id: result.id, text: result.text } : null;
+  });
+  assert.deepEqual(pulled, { id: "e3", text: "newest" });
+  assert.deepEqual(superseded, [{ ids: ["e3"], reason: "recall" }]);
+});
 
-  rerender({ sessionId: "s2" });
-  assert.equal(result.current.pending, null);
-  assert.deepEqual(result.current.queue, []);
-
-  act(() => result.current.submit(prompt("2", "new directory prompt")));
-  assert.equal(result.current.queue.length, 1);
-  assert.deepEqual(published, []);
+test("pullNewest returns null with an empty queue", async () => {
+  const { view, superseded } = harness([userEv("e1", "active"), startedEv("r1")]);
+  let hadResult = true;
+  await act(async () => {
+    hadResult = view.result.current.pullNewest() !== null;
+  });
+  assert.equal(hadResult, false, "nothing to pull from an empty queue");
+  assert.deepEqual(superseded, []);
 });

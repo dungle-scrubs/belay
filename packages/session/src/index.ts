@@ -14,6 +14,7 @@ export * from "./envelope";
 export * from "./error-message";
 export * from "./event";
 export * from "./file-mention";
+export * from "./follow-up-queue";
 export * from "./fork";
 export * from "./identity";
 export * from "./image-tokens";

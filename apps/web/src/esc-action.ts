@@ -21,10 +21,12 @@ export interface EscState {
    *  dismisses it - which also escapes a host-died-mid-draft "Drafting…" that has no live host. */
   readonly handoffPending: boolean;
   /**
-   * How many prompts are queued behind the in-progress work (the local send queue, excluding the
-   * already-published pending row). With work in progress and a non-empty queue, the FIRST Escape
-   * folds the queue into one steering prompt instead of cancelling - cancel waits for a deliberate
-   * second press, by which point the flush has emptied the queue. <!-- D-001 -->
+   * How many durable follow-ups are queued behind the in-progress work (plan 47). With work in progress
+   * and a non-empty queue, the FIRST Escape folds the queue into one steering prompt (a durable
+   * supersede-with-replacement) instead of cancelling - cancel waits for a deliberate second press. The
+   * caller passes 0 right after a fold (the folded steer re-enters the durable queue, so a `justFolded`
+   * latch counts it as empty), so the second Escape routes here to cancel rather than re-folding.
+   * <!-- D-001 D-003 -->
    */
   readonly queued: number;
 }

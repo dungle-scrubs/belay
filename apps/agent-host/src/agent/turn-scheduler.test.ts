@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { PRODUCER_IDS, type SessionEvent } from "@trevor/session";
+import { PRODUCER_IDS, pendingFollowUps, type SessionEvent } from "@trevor/session";
 import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./turn-scheduler";
@@ -40,6 +40,17 @@ const startedEv = (runId: string, seq = counter++): SessionEvent =>
   storedEvent(
     { type: "assistant.started", payload: { runId } },
     { seq, producerId: PRODUCER_IDS.host },
+  );
+
+/** A user.supersede retracting one or more prior user.message eventIds (plan 47 D-003). */
+const supersedeEv = (
+  supersedes: readonly string[],
+  reason = "unqueue",
+  seq = counter++,
+): SessionEvent =>
+  storedEvent(
+    { type: "user.supersede", payload: { supersedes: [...supersedes], reason } },
+    { seq, producerId: PRODUCER_IDS.web },
   );
 
 function harness(opts: { leader?: boolean } = {}) {
@@ -213,6 +224,39 @@ test("/clear drops queued prompts and the catch-up target but keeps the active r
   assert.equal(h.scheduler.pendingCatchUp(), null); // catch-up target dropped
 });
 
+test("a superseded queued prompt is dropped from the drain (unqueue / fold, plan 47)", () => {
+  const h = harness();
+  const a = userEv("a");
+  const b = userEv("b");
+  const c = userEv("c");
+  h.scheduler.noteTurn(a); // run0 active
+  h.scheduler.noteTurn(b); // queued
+  h.scheduler.noteTurn(c); // queued
+  // Unqueue b: it must never run, even though a is still in flight ahead of it.
+  h.scheduler.noteTurn(supersedeEv([b.eventId]));
+  assert.equal(h.scheduler.debug().queued, 1, "b was removed from the queue, leaving c");
+  h.scheduler.processCompletion("run0", a.seq); // a done -> drain skips b, runs c
+  assert.deepEqual(h.started, [a, c]);
+});
+
+test("supersede is a no-op for an already-active prompt (the attempt watermark wins)", () => {
+  const h = harness();
+  const a = userEv("a");
+  h.scheduler.noteTurn(a); // run0 active
+  // A supersede naming the active prompt cannot yank the running turn - there is no queued entry.
+  h.scheduler.noteTurn(supersedeEv([a.eventId]));
+  assert.equal(h.scheduler.isBusy(), true, "the running turn survives a supersede");
+});
+
+test("pendingCatchUp is null once the latest prompt is superseded", () => {
+  const h = harness({ leader: false });
+  const p = userEv("draft I changed my mind on");
+  h.scheduler.noteTurn(p);
+  assert.equal(h.scheduler.pendingCatchUp(), p);
+  h.scheduler.noteTurn(supersedeEv([p.eventId]));
+  assert.equal(h.scheduler.pendingCatchUp(), null, "a superseded prompt is never caught up");
+});
+
 test("reconnect clears the queue but leaves an in-flight run intact", () => {
   const h = harness();
   h.scheduler.noteTurn(userEv("a")); // run0 active
@@ -333,4 +377,49 @@ test("isAnswerablePrompt: a browser prompt is answerable", () => {
 
 test("isAnswerablePrompt: the host's own prompt is NOT answerable (self-echo)", () => {
   assert.equal(isAnswerablePrompt(HOST, HOST), false);
+});
+
+/**
+ * Hermetic durable-queue e2e (plan 47 M8): a client queues follow-ups, disconnects, and the host
+ * re-derives the whole backlog from the log alone (pendingFollowUps) and drains it IN ORDER through the
+ * scheduler's FIFO - even across a "restart" mid-backlog. Supersession (fold/unqueue) is excluded from
+ * the drain, and it never re-runs an already-attempted prompt (no restart loop). This ties the pure
+ * ordering rule to the live scheduler the leader catch-up loop wires together in leadership.ts.
+ */
+function replayLog(scheduler: TurnScheduler, log: readonly SessionEvent[]): void {
+  // The host's leader catch-up: derive the pending backlog from the log, then note each in order.
+  for (const prompt of pendingFollowUps(log, PRODUCER_IDS.host)) {
+    scheduler.noteTurn(prompt);
+  }
+}
+
+test("e2e: a disconnected client's 3-follow-up backlog drains all in order from the log alone", () => {
+  const h = harness();
+  const a = userEv("a");
+  const b = userEv("b");
+  const c = userEv("c");
+  // No host acted while the client was connected: the backlog is three unanswered prompts on the log.
+  replayLog(h.scheduler, [a, b, c]);
+  assert.deepEqual(h.started, [a], "the first prompt runs, the rest defer");
+  h.scheduler.processCompletion("run0", a.seq);
+  h.scheduler.processCompletion("run1", b.seq);
+  assert.deepEqual(h.started, [a, b, c], "all three drained in submit order");
+});
+
+test("e2e: a restart mid-backlog resumes the remaining prompts in order, excluding an unqueued one", () => {
+  const a = userEv("a");
+  const b = userEv("b");
+  const c = userEv("c");
+  const started0 = startedEv("run0", a.seq + 1); // a was attempted before the crash
+  const completed0 = a; // model 'a' completed (reuse seq semantics via processCompletion below)
+  // The NEW leader restarts and replays the log: a is attempted (claimed), b + c remain. The user had
+  // unqueued b (supersede) while disconnected, so only c survives.
+  const supB = supersedeEv([b.eventId], "unqueue");
+  const h = harness();
+  const log = [a, started0, b, c, supB];
+  replayLog(h.scheduler, log);
+  // a is already attempted (claimed by run0) -> not re-run; b is unqueued; only c is caught up.
+  assert.deepEqual(h.started, [c], "restart resumes only the surviving, never-attempted prompt");
+  assert.equal(h.scheduler.debug().queued, 0);
+  void completed0;
 });

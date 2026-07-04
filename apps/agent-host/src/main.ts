@@ -525,6 +525,8 @@ const { goLive, onBecomeLeader } = makeLeadership({
   emit,
   lease,
   scheduler,
+  selfProducerId: PRODUCER_ID,
+  conversationEvents: () => conversationLog.events(),
   turnMachine,
   internet,
   providers,
@@ -844,6 +846,18 @@ function handleEvent(message: SessionEvent): void {
   }
   if (decoded.type === "user.message" && isAnswerableProducer(message.producerId, PRODUCER_ID)) {
     scheduler.noteTurn(message);
+  } else if (
+    decoded.type === "user.supersede" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
+    // A queued follow-up was retracted on the durable log (plan 47 D-003): drop it from the deferred
+    // queue + catch-up target (scheduler), and admit the event so the prompt projection excludes the
+    // superseded message. The active turn is untouched - supersede is a no-op for an attempted prompt.
+    scheduler.noteTurn(message);
+    admit(message);
+    if (live && lease.isLeader()) {
+      log("host", "supersede", { count: decoded.supersedes.length, reason: decoded.reason });
+    }
   } else if (decoded.type === "assistant.started") {
     // Track the run as in flight (a started with no completion) so a later leader can reap it if a
     // crash/reload leaves it dangling. Cleared on its completion below.

@@ -99,6 +99,10 @@ export class TurnScheduler {
    *  prompt ATTEMPT. Catch-up only re-runs a prompt nothing has attempted yet, so a prompt already
    *  attempted (then orphaned by a crash/restart) is never auto-re-run on the next leadership. */
   private lastStartSeq = -1;
+  /** The `user.message` eventIds a `user.supersede` retracted (plan 47 D-003): a superseded prompt is
+   *  dropped from the deferred queue and never drained/caught up. The supersede events stay on the log
+   *  (the projection excludes them too), so the retraction is durable + auditable, not a log mutation. */
+  private readonly supersededIds = new Set<string>();
   /** A compaction fold is running in the idle slot: hold every turn behind it (D-041). */
   private compacting = false;
 
@@ -122,6 +126,25 @@ export class TurnScheduler {
       this.submit(event);
     } else if (decoded?.type === "assistant.started") {
       this.noteAttempt(event.seq);
+    } else if (decoded?.type === "user.supersede") {
+      this.recordSupersession(decoded.supersedes);
+    }
+  }
+
+  /**
+   * A `user.supersede` retracted one or more queued prompts (plan 47 D-003): record the ids, and drop
+   * any still-deferred prompt naming them from the queue + the catch-up target so it never drains. The
+   * active turn is left alone - a supersede is a no-op for an already-attempted prompt (the browser
+   * gates on the attempt watermark, and a running turn has no queued entry to remove). Private: reached
+   * through `noteTurn` when a `user.supersede` arrives.
+   */
+  private recordSupersession(ids: readonly string[]): void {
+    for (const id of ids) {
+      this.supersededIds.add(id);
+    }
+    this.queue = this.queue.filter((event) => !this.supersededIds.has(event.eventId));
+    if (this.lastUser && this.supersededIds.has(this.lastUser.eventId)) {
+      this.lastUser = null;
     }
   }
 
@@ -147,6 +170,9 @@ export class TurnScheduler {
    * drained, which keeps the prompt view strictly paired.
    */
   private submit(event: SessionEvent): void {
+    if (this.supersededIds.has(event.eventId)) {
+      return; // retracted before it could run (a supersede that raced ahead of its prompt)
+    }
     if (this.active || this.compacting) {
       this.queue.push(event);
       return;
@@ -178,7 +204,13 @@ export class TurnScheduler {
     if (this.active || this.compacting || !this.deps.isLeader()) {
       return;
     }
-    const next = this.queue.shift();
+    // Skip past any prompt superseded while it waited (unqueued / folded / pulled into the composer):
+    // a supersede is a durable retraction, so a superseded head never runs. `recordSupersession`
+    // usually removes them eagerly; this is the belt-and-suspenders drain-time guard.
+    let next = this.queue.shift();
+    while (next && this.supersededIds.has(next.eventId)) {
+      next = this.queue.shift();
+    }
     if (next) {
       this.startNow(next);
     }
@@ -235,6 +267,9 @@ export class TurnScheduler {
   pendingCatchUp(): SessionEvent | null {
     if (!this.lastUser) {
       return null;
+    }
+    if (this.supersededIds.has(this.lastUser.eventId)) {
+      return null; // retracted on the log - not to run
     }
     const answered = this.lastUser.seq <= this.lastAnswerSeq;
     const attempted = this.lastUser.seq <= this.lastStartSeq;

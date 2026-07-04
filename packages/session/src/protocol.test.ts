@@ -1497,3 +1497,27 @@ test("isTerminalDelegationStatus: done/failed/interrupted are terminal, running 
   // An unknown/forward-compat status is treated as non-terminal, so a link is never wrongly closed.
   assert.equal(isTerminalDelegationStatus("weird"), false);
 });
+
+test("userSupersede round-trips the retracted ids + reason (the first event-to-event reference)", () => {
+  const built = events.userSupersede({ supersedes: ["ev-2", "ev-3"], reason: "fold" });
+  assert.deepEqual(built, {
+    type: "user.supersede",
+    payload: { supersedes: ["ev-2", "ev-3"], reason: "fold" },
+  });
+  assert.deepEqual(decodeTrevorEvent(stored(built)), {
+    type: "user.supersede",
+    supersedes: ["ev-2", "ev-3"],
+    reason: "fold",
+  });
+});
+
+test("userSupersede decode drops junk ids and defaults a missing reason to unqueue", () => {
+  const decoded = decodeTrevorEvent(
+    stored({ type: "user.supersede", payload: { supersedes: ["ev-9", 7, null, "ev-10"] } }),
+  );
+  assert.deepEqual(decoded, {
+    type: "user.supersede",
+    supersedes: ["ev-9", "ev-10"],
+    reason: "unqueue",
+  });
+});

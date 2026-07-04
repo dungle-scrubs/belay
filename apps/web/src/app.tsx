@@ -5,6 +5,7 @@ import {
   foldLucidReview,
   type LoopControl,
   type ModelRef,
+  PRODUCER_IDS,
   tangentsOf,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
@@ -259,6 +260,7 @@ export function App() {
   const { events, presence, replayed, replayThroughSeq, status } = stream;
   const {
     publish,
+    supersede,
     cancel,
     switchModel,
     command,
@@ -289,7 +291,12 @@ export function App() {
   // These scan the whole event log; without memoizing, every keystroke in the draft
   // input (and the 4s clock tick) would rebuild them. host depends on now; the others
   // only on events, so they skip the tick.
-  const transcript = useMemo(() => toTranscript(events), [events]);
+  // The durable follow-up queue (plan 47): the transcript hides prompts superseded or still queued
+  // behind an in-flight turn (the queue panel renders those), excluding the host's own echoes.
+  const transcript = useMemo(
+    () => toTranscript(events, { selfProducerId: PRODUCER_IDS.host }),
+    [events],
+  );
   // Openable artifacts come from BOTH submitted user-message attachments and published Lucid artifacts
   // (plan 27): a Lucid card opens the addressable viewer, an attachment its plain viewer.
   const transcriptArtifacts = useMemo(
@@ -629,18 +636,17 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Local send queue: a prompt submitted while a turn is in flight waits here and is
-  // published only once the session is idle, so the host never receives two prompts
-  // at once (which would run concurrent, out-of-order turns) and the event log stays
-  // cleanly paired. ESC-steer prepends, so an interruption preempts what's waiting.
-  // The reducer wiring + the in-flight/echo latch + the release/drain effects live in
-  // useSendQueue; app.tsx calls submit/steer and renders the queue.
-  const { pending, queue, submit, steer, flushQueuedSteer } = useSendQueue({
-    busy,
+  // Durable follow-up queue (plan 47): a prompt submitted while a turn runs is PUBLISHED to the log
+  // immediately and the HOST owns scheduling (it drains the backlog in order), so the browser no longer
+  // withholds/drip-feeds. `queue` is projected from the log (each id = the durable eventId a supersede
+  // names); submit publishes, the Escape-fold + unqueue + recall-pull all emit durable supersedes.
+  const { queue, submit, flushQueuedSteer, unqueue, pullNewest } = useSendQueue({
+    events,
+    selfProducerId: PRODUCER_IDS.host,
     publish,
-    resetKey: sessionId,
+    supersede,
   });
-  const visibleQueue = pending ? [pending, ...queue] : queue;
+  const visibleQueue = queue;
 
   const showThinkingOn = showThinking ?? true;
   const {
@@ -765,6 +771,7 @@ export function App() {
       return;
     }
     history.record(text); // record ordinary prompts for recall (empty/attachments-only is skipped)
+    justFoldedRef.current = false; // a fresh prompt is a new queue - the next Escape folds it again
     setDraft(""); // clears the draft text AND its image-token refs (via the composer's syncDraft)
     // Image refs (token order) ride first so the host maps token #k -> the k-th image artifact;
     // document attachments follow as a note.
@@ -772,7 +779,6 @@ export function App() {
     const artifacts = all.length ? all : undefined;
     setAttachments([]);
     submit({
-      id: crypto.randomUUID(),
       text,
       provider: activeProvider,
       reasoning: reasoning || undefined,
@@ -831,6 +837,19 @@ export function App() {
     // last line, multi-line editing keeps normal caret movement (no preventDefault).
     const caret = el.selectionStart ?? 0;
     if (event.key === "ArrowUp" && caretOnFirstLine(el.value, caret)) {
+      // Plan 47 M7: at an EMPTY composer, Up first pulls the NEWEST durable-queued follow-up back for
+      // editing - an immediate supersede-removal (so there is no edit-vs-run race), pushed onto the
+      // recall ring so re-submitting re-enqueues it. With text already typed, or an empty queue, Up falls
+      // through to ordinary prompt-history recall; Up never hijacks the caret off the first line.
+      if (draft === "" && queue.length > 0) {
+        const pulled = pullNewest();
+        if (pulled) {
+          event.preventDefault();
+          history.record(pulled.text);
+          recallInto(el, pulled.text);
+          return;
+        }
+      }
       const recalled = history.recallPrev(draft);
       if (recalled !== null) {
         event.preventDefault();
@@ -855,24 +874,41 @@ export function App() {
     model: sendModelRef,
   });
 
-  // First Escape with queued prompts (D-001): fold the queue into ONE steering prompt and publish
-  // it now, WITHOUT cancelling. The host queues that user.message mid-turn and runs it after the
-  // active turn, so the transcript reads current message -> folded steering prompt with no cancelled
-  // assistant message in between. The draft is left untouched (D-003); cancel waits for a deliberate
-  // second Escape, which sees the now-empty queue and routes to onCancel.
+  // Progressive Escape after a fold (plan 47 D-003): the folded steering prompt is itself published as
+  // a durable queued follow-up, so it re-enters the queue projection. This latch marks "we just folded"
+  // so the NEXT Escape counts the queue as empty and cancels (the folded steer keeps running), instead
+  // of re-folding the steer into itself. Reset when the user queues something new or cancels.
+  const justFoldedRef = useRef(false);
+
+  // First Escape with queued prompts (D-003): fold the queue into ONE steering prompt and publish it
+  // now (as a durable user.message), superseding the folded prompts, WITHOUT cancelling. The host runs
+  // the single folded prompt after the active turn; a deliberate second Escape then cancels.
   const onFlushQueuedSteer = () => {
     flushQueuedSteer(steerMeta());
+    justFoldedRef.current = true;
     // Return focus to the composer so the user can keep typing immediately after steering.
     inputRef.current?.focus();
   };
 
-  // Explicit cancel (Escape with no queued prompts to steer): abort the active turn / awaiting turn /
-  // manual fold. A typed draft still folds into one steering prompt that runs after the cancel (its
-  // image-token refs ride with the document attachments so a steered prompt keeps its images); the
-  // queue is empty on this branch, so this no longer collapses queued prompts - that is onFlushQueuedSteer.
+  // Explicit cancel (Escape with no queued prompts to steer, Mod+., or the Stop control): abort the
+  // active turn / awaiting turn / manual fold. A typed draft is published as the next durable follow-up
+  // (it runs in order after the cancel, keeping its image/document attachments), rather than folding the
+  // already-durable queue - plan 47 runs queued follow-ups as distinct ordered turns, not a collapse.
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
-    steer(draft, [...imageRefs, ...attachments], pastes, steerMeta());
+    justFoldedRef.current = false;
+    const text = draft.trim();
+    const all = [...imageRefs, ...attachments];
+    if (text || all.length > 0) {
+      submit({
+        text,
+        provider: activeProvider,
+        reasoning: reasoning || undefined,
+        model: sendModelRef,
+        artifacts: all.length ? all : undefined,
+        pastes: pastes.length ? pastes : undefined,
+      });
+    }
     setDraft("");
     setAttachments([]);
     if (runId !== null) {
@@ -947,8 +983,9 @@ export function App() {
     draft,
     modalOpen,
     handoffPending: pendingHandoff !== null,
-    // The queue length (excluding the already-published pending row) decides queued-steer vs cancel.
-    queued: queue.length,
+    // The durable queue length decides queued-steer vs cancel. After a fold the folded steer re-enters
+    // the queue, so the justFolded latch counts it as empty - the next Escape cancels, not re-folds.
+    queued: justFoldedRef.current ? 0 : queue.length,
     setDraft,
     onCancel,
     onFlushQueuedSteer,
@@ -1353,6 +1390,7 @@ export function App() {
           awaitingResponse: awaitingResponse && !hostlessPending,
           turnStartedAt,
           queue: visibleQueue,
+          onUnqueue: unqueue,
         }}
         scroll={scroll}
         tasks={tasks}

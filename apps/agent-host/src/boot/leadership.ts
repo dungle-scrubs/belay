@@ -14,7 +14,7 @@ import {
 import type { Lease } from "@host/session/lease";
 import { log, warn } from "@host/transport/log";
 import type { EmitEvent } from "@host/transport/services";
-import { events } from "@trevor/session";
+import { events, pendingFollowUps, type SessionEvent } from "@trevor/session";
 import { Cause, Effect } from "effect";
 import { envNumber } from "./env";
 import { WORKSPACE_ROOT } from "./paths";
@@ -52,7 +52,12 @@ export interface LeadershipDeps {
   /** The lease: started once on go-live, ticked on a timer, and read for leader gating. */
   readonly lease: Pick<Lease, "isLeader" | "start" | "tick">;
   /** The turn scheduler: the leader reconcile drops stale prompts + catches up pending ones. */
-  readonly scheduler: Pick<TurnScheduler, "clearPending" | "pendingCatchUp" | "noteTurn">;
+  readonly scheduler: Pick<TurnScheduler, "clearPending" | "noteTurn" | "isBusy">;
+  /** This host's producerId, so catch-up excludes the host's own user.message echoes. */
+  readonly selfProducerId: string;
+  /** The durable events seen this connection (main.ts's conversationLog): the leader re-derives the
+   *  whole follow-up backlog from them (plan 47), so a disconnected client's queue still drains. */
+  conversationEvents(): readonly SessionEvent[];
   /** The turn machine: dangling in-flight runs decide reap-vs-resume on taking leadership. */
   readonly turnMachine: Pick<TurnMachine, "hasInFlight">;
   /** The internet monitor (D-060): the new leader kicks a fresh probe + re-announce. */
@@ -93,6 +98,8 @@ export function makeLeadership(deps: LeadershipDeps) {
     emit,
     lease,
     scheduler,
+    selfProducerId,
+    conversationEvents,
     turnMachine,
     internet,
     providers,
@@ -153,10 +160,20 @@ export function makeLeadership(deps: LeadershipDeps) {
         }),
       ).catch(() => {});
     }
-    const pending = scheduler.pendingCatchUp();
-    if (pending) {
-      scheduler.noteTurn(pending); // catch up a prompt that arrived while probing
-      return;
+    // Re-derive the whole durable follow-up backlog from the log (plan 47 M2): every unanswered,
+    // not-superseded prompt in submit order, not just the latest. `noteTurn`-ing them in order runs the
+    // first now and defers the rest behind it (the scheduler's FIFO), so a disconnected client's queue
+    // drains all-in-order and a host restart mid-backlog resumes the remaining prompts. Guarded on idle
+    // so a leadership flap mid-turn never re-queues the running prompt.
+    if (!scheduler.isBusy()) {
+      const pending = pendingFollowUps(conversationEvents(), selfProducerId);
+      if (pending.length > 0) {
+        log("host", "catch-up", { pending: pending.length });
+        for (const prompt of pending) {
+          scheduler.noteTurn(prompt);
+        }
+        return;
+      }
     }
     const local = providers[DEFAULT_PROVIDER];
     if (!local) {

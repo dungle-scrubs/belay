@@ -160,6 +160,7 @@ function PanelHostHarness(props: {
         compact: false,
         onDoctorRefresh: vi.fn(),
         onOpenPath: vi.fn(),
+        onUnqueue: vi.fn(),
         queue: [],
         showThinking: true,
         toolBatches: readOnlyToolBatches([]),

@@ -1,18 +1,23 @@
-import type { ArtifactRef, ModelRef, PastePayload } from "@trevor/session";
+import {
+  type ArtifactRef,
+  decodeTrevorEvent,
+  type ModelRef,
+  type PastePayload,
+  pendingFollowUps,
+  type SessionEvent,
+} from "@trevor/session";
 
 /**
- * The browser's local send queue + hard-steer fold - the "when does my prompt go out"
- * state machine, lifted out of app.tsx so it is unit-testable without React rendering.
- * app.tsx owns the React glue (the busy/in-flight gating and the drain effect); this
- * owns the pure transitions and the fold-on-steer rule, in one place.
- *
- * The contract:
- *   - a prompt submitted while a turn is in flight is enqueued (FIFO); the head is
- *     published and dropped once the session is idle, so the host never receives two
- *     prompts at once and the event log stays cleanly paired;
- *   - a hard steer (ESC mid-turn) folds the queued prompts + the draft into ONE prompt
- *     and the queued + attached artifacts into one list, replacing the queue, so the
- *     cancelled turn is followed by a single combined interruption (not a replay).
+ * The browser's view of the DURABLE follow-up queue + the hard-steer fold (plan 47). A prompt submitted
+ * while a turn runs is no longer withheld in browser state - it is published to the durable log at
+ * submit time and the HOST owns scheduling (the host drains the backlog in order). So this module no
+ * longer runs a drain state machine; it only:
+ *   - projects the still-queued follow-ups out of the log ({@link queuedPromptsFrom}), each carrying its
+ *     durable `eventId` as its id (the id a supersede references), so the panel + Escape-fold + unqueue
+ *     all operate on the append-only log rather than private browser state;
+ *   - folds the queued prompts (+ optionally the draft) into ONE steering prompt text (`combineQueued`/
+ *     `combineSteer`), which the Escape-fold publishes as a single `user.message` replacement alongside
+ *     a `user.supersede` retracting the folded prompts.
  */
 
 /** The publishable user turn payload shared by session actions and the local send queue. */
@@ -36,6 +41,32 @@ export interface UserTurnInput {
  */
 export interface QueuedPrompt extends UserTurnInput {
   readonly id: string;
+}
+
+/**
+ * Projects the still-queued follow-ups out of the durable log (plan 47 M1): every unanswered,
+ * not-superseded `user.message` behind the active turn, in submit order, each carrying its durable
+ * `eventId` as its `id`. That id is what the Escape-fold / unqueue / recall-pull supersede references,
+ * so the browser never needs a private queue - the log is the source of truth, surviving a reload and a
+ * host restart. `selfProducerId` excludes the host's own echoes.
+ */
+export function queuedPromptsFrom(
+  events: readonly SessionEvent[],
+  selfProducerId?: string,
+): QueuedPrompt[] {
+  return pendingFollowUps(events, selfProducerId).map((event) => {
+    const decoded = decodeTrevorEvent(event);
+    const message = decoded?.type === "user.message" ? decoded : null;
+    return {
+      id: event.eventId,
+      text: message?.text ?? "",
+      provider: message?.provider ?? "",
+      ...(message?.reasoning ? { reasoning: message.reasoning } : {}),
+      ...(message?.model ? { model: message.model } : {}),
+      ...(message?.artifacts?.length ? { artifacts: message.artifacts } : {}),
+      ...(message?.pastes?.length ? { pastes: message.pastes } : {}),
+    };
+  });
 }
 
 /**

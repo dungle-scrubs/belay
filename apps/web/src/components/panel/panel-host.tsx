@@ -83,6 +83,8 @@ export interface TranscriptView {
   readonly awaitingResponse: boolean;
   readonly turnStartedAt: number | null;
   readonly queue: readonly QueuedPrompt[];
+  /** Unqueue a durable follow-up (plan 47): supersede it so the host drops it from the run. */
+  readonly onUnqueue: (id: string) => void;
 }
 
 /**
@@ -311,6 +313,7 @@ export function PanelHost(props: {
     showThinking,
     compact,
     queue,
+    onUnqueue,
   } = tv;
   const { active, awaitingResponse, turnStartedAt } = tv;
   const rows = useMemo(
@@ -471,7 +474,7 @@ export function PanelHost(props: {
           />
         ) : null}
 
-        <QueuedPrompts queue={queue} />
+        <QueuedPrompts queue={queue} onUnqueue={onUnqueue} />
 
         {/* Pinned bottom: composer, then a two-column footer (status + model controls).
           Files dropped anywhere here upload as attachments. */}

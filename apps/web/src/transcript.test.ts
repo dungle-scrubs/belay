@@ -1538,3 +1538,39 @@ test("plan 27: two distinct lucid artifacts render as two cards", () => {
   ];
   assert.equal(toTranscript(log).filter((m) => m.kind === "lucid").length, 2);
 });
+
+/** A web-authored user prompt with a stable eventId (a durable follow-up the queue references). */
+const webUser = (seq: number, eventId: string, text: string): SessionEvent =>
+  storedEvent(
+    { type: "user.message", payload: { text, provider: "qwen" } },
+    { seq, eventId, producerId: "trevor-web", createdAt: "2026-06-24T00:00:00.000Z" },
+  );
+
+const HOST_SELF = { selfProducerId: "trevor-host" };
+const userTexts = (list: readonly Message[]): string[] =>
+  list.filter((m) => m.kind === "user").map((m) => (m.kind === "user" ? m.text : ""));
+
+test("plan 47: a follow-up queued behind an in-flight turn is hidden (rendered by the queue panel)", () => {
+  const log = [
+    webUser(1, "e1", "active prompt"),
+    ev(2, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    webUser(3, "e2", "queued follow-up"),
+  ];
+  // The active prompt renders; the queued follow-up behind the running turn does not (no double-render).
+  assert.deepEqual(userTexts(toTranscript(log, HOST_SELF)), ["active prompt"]);
+});
+
+test("plan 47: a superseded (folded/unqueued) prompt is hidden from the transcript", () => {
+  const log = [
+    webUser(1, "e1", "active prompt"),
+    ev(2, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    webUser(3, "e2", "unqueued follow-up"),
+    ev(4, events.userSupersede({ supersedes: ["e2"], reason: "unqueue" })),
+  ];
+  assert.deepEqual(userTexts(toTranscript(log, HOST_SELF)), ["active prompt"]);
+});
+
+test("plan 47: with no turn in flight, the awaiting prompt renders normally (no suppression)", () => {
+  const log = [webUser(1, "e1", "awaiting prompt")];
+  assert.deepEqual(userTexts(toTranscript(log, HOST_SELF)), ["awaiting prompt"]);
+});
