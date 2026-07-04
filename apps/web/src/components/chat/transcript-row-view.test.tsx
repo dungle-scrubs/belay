@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ArtifactRef } from "@trevor/session";
 import { test, vi } from "vitest";
 import { RECOVERY_ACTION_LABEL, reconnectActionLabel } from "@/action-label";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
@@ -627,5 +628,80 @@ test("fix: the recovered row renders via the shared RECOVERY_ACTION_LABEL consta
   assert.ok(
     text.includes(RECOVERY_ACTION_LABEL),
     "the row's recovery text must equal whatever the shared constant currently says",
+  );
+});
+
+// --- plan 34: transcript image rendering wired through the real user-message row ---
+
+const imageArt = (seed: string, name: string): ArtifactRef => ({
+  kind: "image",
+  mimeType: "image/png",
+  size: 10,
+  hash: seed.repeat(64).slice(0, 64),
+  name,
+});
+
+const userMsg = (over: Partial<Extract<Message, { kind: "user" }>>): TranscriptRow =>
+  userRow({ kind: "user", id: "iu", text: "", artifacts: [], pastes: [], ...over });
+
+test("plan 34: a prompt keeps its [Image #N] tokens in the visible text while the images render below", () => {
+  const { container } = renderRow(
+    userMsg({
+      id: "iu1",
+      text: "the first [Image #1] and the second [Image #2] shots",
+      artifacts: [imageArt("a", "first.png"), imageArt("b", "second.png")],
+    }),
+  );
+  // The tokens stay in the prose (they are not stripped when the images render).
+  assert.match(container.textContent ?? "", /\[Image #1\]/);
+  assert.match(container.textContent ?? "", /\[Image #2\]/);
+  // ...and both images render as tiles below.
+  assert.equal(container.querySelectorAll("img").length, 2, "an image renders per artifact");
+});
+
+test("plan 34: token #k maps to image artifact k - the k-th tile names the k-th artifact", () => {
+  renderRow(
+    userMsg({
+      id: "iu2",
+      text: "[Image #1] then [Image #2]",
+      artifacts: [imageArt("a", "alpha.png"), imageArt("b", "bravo.png")],
+    }),
+  );
+  assert.ok(
+    screen.getByRole("button", { name: "open image 1: alpha.png" }),
+    "token #1 -> artifact 1",
+  );
+  assert.ok(
+    screen.getByRole("button", { name: "open image 2: bravo.png" }),
+    "token #2 -> artifact 2",
+  );
+});
+
+test("plan 34: an image-only prompt renders the image set with no prose block", () => {
+  const { container } = renderRow(userMsg({ id: "iu3", artifacts: [imageArt("a", "only.png")] }));
+  assert.equal(container.querySelectorAll("img").length, 1, "the image renders");
+  assert.equal(container.querySelector("p"), null, "no empty prose paragraph is rendered");
+});
+
+test("plan 34: a prompt mixing documents and images shows docs as file rows and only images open the carousel", () => {
+  const doc: ArtifactRef = {
+    kind: "document",
+    mimeType: "application/pdf",
+    size: 20,
+    hash: "d".repeat(64),
+    name: "notes.pdf",
+  };
+  renderRow(
+    userMsg({ id: "iu4", text: "see attached", artifacts: [imageArt("a", "shot.png"), doc] }),
+  );
+  // The document renders as a quiet file row, never as an image tile.
+  assert.ok(screen.getByText("notes.pdf"));
+  // Opening the image scopes the carousel to the message's images only - the document is not in it.
+  fireEvent.click(screen.getByRole("button", { name: "open image 1: shot.png" }));
+  const dialog = screen.getByRole("dialog");
+  assert.match(
+    dialog.textContent ?? "",
+    /Image 1 of 1/,
+    "only the one image is in the carousel set",
   );
 });

@@ -5,11 +5,20 @@ import { artifactSrc } from "@/blob";
 import { cn } from "@/lib/utils";
 
 /**
- * The user-message image set (D-092 M4): renders the images attached to a submitted prompt in the
- * SAME transcript item as the text, at natural dimensions until a responsive max width/height caps
- * them, contained (never cropped) so aspect ratio is preserved. Multiple images form one set for
- * layout and the same-message carousel (clicking any image calls `onOpen` with its set index).
- * A broken/missing/non-image artifact degrades to a quiet file/link row - never a broken-image icon.
+ * The user-message image set (D-092 M4, refined plan 34): renders the images attached to a submitted
+ * prompt in the SAME transcript item as the text, contained (never cropped) so aspect ratio is kept.
+ * A single image gets a taller cap and a subtle filename caption; a set of images gets a shorter cap
+ * and lays out as a scannable grid/row (names stay in the tooltip + aria-label so the grid isn't
+ * noisy). Each tile reserves a minimum footprint and shows a shimmer while the image decodes, so a
+ * slow or unavailable image never collapses the row and then jumps it (the 12.2 scroll contract,
+ * plan 34 D-003). A broken / missing / non-image artifact degrades to a quiet file/link row - never
+ * a broken-image icon. Clicking any image calls `onOpen` with its set index (the same-message
+ * carousel); the tile itself never owns carousel state.
+ *
+ * Compact-mode note (plan 34, not implemented here): a future compact transcript layout should
+ * summarize an image set as a single count chip (e.g. "3 images") that expands to this surface on
+ * demand, rather than rendering every tile inline. The submitted `ArtifactRef` list stays the source
+ * of truth, so compact mode is a presentation choice over the same data.
  */
 
 export interface MessageImagesProps {
@@ -63,44 +72,104 @@ function FileRow({
   );
 }
 
-/** One image tile - a 200px thumbnail (contained, aspect-preserved), click-to-open; falls back on error. */
+/**
+ * The tile's bordered frame. Reserves a minimum footprint (so a loading/unavailable image never
+ * collapses then jumps the row - plan 34 D-003) and carries the hover/focus affordances. A single
+ * image gets a taller cap so a screenshot stays legible; a set gets a shorter cap so the grid stays
+ * scannable. Focus + hover match the button primitive's tokens.
+ */
+const tileFrameClass = (single: boolean) =>
+  cn(
+    "group relative flex items-center justify-center overflow-hidden border border-border bg-card leading-none outline-none transition-colors hover:border-muted-foreground/40 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+    single
+      ? "min-h-[200px] min-w-[200px] max-w-full"
+      : "min-h-[120px] min-w-[120px] w-full @md:w-auto",
+  );
+
+/** The contained image inside a tile: at most the tile cap on either side, aspect preserved. */
+const tileImageClass = (single: boolean) =>
+  cn(
+    "block object-contain transition-opacity duration-200",
+    single ? "max-h-[360px] w-auto max-w-full" : "max-h-[200px] w-full max-w-[200px] @md:w-auto",
+  );
+
+/**
+ * The reserved-footprint shimmer an inline tile shows while its image decodes. Exported so the
+ * loading state is reviewable in Storybook (and reusable by a future image surface) without racing a
+ * real network load.
+ */
+export function InlineImageLoading({ single = false }: { single?: boolean }) {
+  return (
+    <div className={tileFrameClass(single)} role="status" aria-label="loading image">
+      <span aria-hidden className="skeleton absolute inset-0" />
+    </div>
+  );
+}
+
+/**
+ * One image tile: a contained, click-to-open thumbnail that shows a shimmer while it decodes and
+ * degrades to a quiet file row on error. `single` widens the cap and surfaces a subtle filename
+ * caption; a set keeps names in the tooltip + aria-label only.
+ */
 function ImageTile({
   artifact,
   index,
+  single,
   onOpenArtifact,
   onOpen,
   srcOf,
 }: {
   artifact: ArtifactRef;
   index: number;
+  single: boolean;
   onOpenArtifact?: (artifact: ArtifactRef) => void;
   onOpen?: (index: number) => void;
   srcOf: (hash: string) => string;
 }) {
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
   if (broken) {
     return <FileRow artifact={artifact} onOpenArtifact={onOpenArtifact} srcOf={srcOf} />;
   }
 
-  return (
+  const tile = (
     <button
       type="button"
       onClick={() => (onOpenArtifact ? onOpenArtifact(artifact) : onOpen?.(index))}
-      className="block cursor-pointer overflow-hidden border border-border bg-card p-0 leading-none"
+      className={cn("p-0", tileFrameClass(single))}
       aria-label={`open image ${index + 1}${artifact.name ? `: ${artifact.name}` : ""}`}
+      title={artifact.name}
     >
+      {loaded ? null : <span aria-hidden className="skeleton absolute inset-0" />}
       <img
         src={srcOf(artifact.hash)}
         alt={artifact.name ?? `image ${index + 1}`}
+        onLoad={() => setLoaded(true)}
         onError={() => setBroken(true)}
-        // A compact thumbnail: at most 200px on either side, contained so the aspect ratio is kept and
-        // nothing is cropped (the full image opens in the carousel far larger, so the tile must never
-        // out-size that popup). On a mobile-width container it fills its grid column (still capped at
-        // 200px); at tablet+ it sizes to the image for the flex-wrap row.
-        className="h-auto w-full max-h-[200px] max-w-[200px] object-contain @md:w-auto"
+        className={cn(tileImageClass(single), loaded ? "opacity-100" : "opacity-0")}
       />
     </button>
   );
+
+  // A single image carries a subtle truncated filename below it (room to scan); a set keeps the name
+  // in the tooltip/aria-label only so a grid of tiles doesn't turn noisy. The caption never widens
+  // the transcript - it truncates.
+  if (single && artifact.name) {
+    return (
+      <div className="flex w-fit max-w-full flex-col items-start gap-1">
+        {tile}
+        <span
+          className="block max-w-[24rem] truncate text-label text-muted-foreground"
+          title={artifact.name}
+        >
+          {artifact.name}
+        </span>
+      </div>
+    );
+  }
+
+  return tile;
 }
 
 export function MessageImages({
@@ -115,15 +184,20 @@ export function MessageImages({
     return null;
   }
 
+  const single = images.length === 1;
+
   return (
     // `@container` so the image set lays out by THIS block's width, not the viewport (the ancestor a
     // container query needs - the section below reads it).
     <div className={cn("@container flex flex-col gap-2", className)}>
       {images.length > 0 ? (
-        // Mobile-width container: a tidy two-column grid (tiles fill their column). At tablet width
-        // it switches to a flex row that wraps the 200px tiles. Both keep a row + column gap.
         <section
-          className="grid grid-cols-2 items-start gap-2 @md:flex @md:flex-wrap"
+          className={cn(
+            // Mobile-width container: a tidy two-column grid (tiles fill their column). At tablet
+            // width it switches to a flex row that wraps the shorter tiles. A single image opts out
+            // of the grid so it can use the taller cap and full width.
+            single ? "block" : "grid grid-cols-2 items-start gap-2 @md:flex @md:flex-wrap",
+          )}
           aria-label="message images"
         >
           {images.map((artifact, i) => (
@@ -131,6 +205,7 @@ export function MessageImages({
               key={artifact.hash}
               artifact={artifact}
               index={i}
+              single={single}
               onOpenArtifact={onOpenArtifact}
               onOpen={onOpen}
               srcOf={srcOf}

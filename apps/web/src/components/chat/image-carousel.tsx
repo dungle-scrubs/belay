@@ -33,6 +33,7 @@ export function ImageCarousel({
   const count = images.length;
   const [index, setIndex] = useState(initialIndex);
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   // Seed the index from the clicked image each time the carousel opens (or the target changes).
   useEffect(() => {
@@ -41,9 +42,13 @@ export function ImageCarousel({
     }
   }, [open, initialIndex, count]);
 
-  // Reset the broken-image fallback when the visible image changes.
+  // Reset the broken + loading state when the visible image changes, so the next image shows its own
+  // shimmer while it decodes and re-evaluates its own availability.
   // biome-ignore lint/correctness/useExhaustiveDependencies: index drives the reset.
-  useEffect(() => setBroken(false), [index]);
+  useEffect(() => {
+    setBroken(false);
+    setLoaded(false);
+  }, [index]);
 
   if (count === 0) {
     return null;
@@ -71,9 +76,22 @@ export function ImageCarousel({
           near 85%). `w-fit` overrides the dialog's default full width so a small image gets a small
           popup; `max-w-[85vw]` (incl. the sm: override) caps a large one. */}
       <DialogContent className="w-fit max-w-[85vw] gap-3 sm:max-w-[85vw]" onKeyDown={onKeyDown}>
-        <DialogTitle className="text-sm font-normal text-muted-foreground">
-          Image {safeIndex + 1} of {count}
-          {current?.name ? ` · ${current.name}` : ""}
+        {/* The counter never truncates; a long filename does (with the full name in its tooltip) so
+            the title stays on one line and the modal doesn't blow past its width cap. */}
+        <DialogTitle className="flex min-w-0 items-center gap-2 text-sm font-normal text-muted-foreground">
+          <span className="shrink-0">
+            Image {safeIndex + 1} of {count}
+          </span>
+          {current?.name ? (
+            <>
+              <span aria-hidden className="shrink-0">
+                ·
+              </span>
+              <span className="min-w-0 truncate" title={current.name}>
+                {current.name}
+              </span>
+            </>
+          ) : null}
         </DialogTitle>
 
         <div className="flex items-center justify-center gap-2">
@@ -88,17 +106,26 @@ export function ImageCarousel({
             </button>
           ) : null}
 
-          <div className="flex min-w-0 items-center justify-center">
+          <div className="relative flex min-h-[240px] min-w-[240px] items-center justify-center">
             {current && !broken ? (
-              <img
-                src={srcOf(current.hash)}
-                alt={current.name ?? `image ${safeIndex + 1}`}
-                onError={() => setBroken(true)}
-                // Natural size, capped so the whole modal stays near 85% of the viewport - the height
-                // cap sits under 85vh to leave room for the title/dots + padding, the width under 85vw
-                // to leave room for the nav buttons. Contained, so aspect ratio is kept.
-                className="max-h-[75vh] max-w-[80vw] object-contain"
-              />
+              <>
+                {/* A shimmer reserves the inspection area while the full image decodes, so opening the
+                    carousel doesn't flash an empty modal that then resizes (plan 34). */}
+                {loaded ? null : <span aria-hidden className="skeleton absolute inset-0" />}
+                <img
+                  src={srcOf(current.hash)}
+                  alt={current.name ?? `image ${safeIndex + 1}`}
+                  onLoad={() => setLoaded(true)}
+                  onError={() => setBroken(true)}
+                  // Natural size, capped so the whole modal stays near 85% of the viewport - the height
+                  // cap sits under 85vh to leave room for the title/dots + padding, the width under 85vw
+                  // to leave room for the nav buttons. Contained, so aspect ratio is kept.
+                  className={cn(
+                    "max-h-[75vh] max-w-[80vw] object-contain transition-opacity duration-200",
+                    loaded ? "opacity-100" : "opacity-0",
+                  )}
+                />
+              </>
             ) : current ? (
               <a
                 href={srcOf(current.hash)}

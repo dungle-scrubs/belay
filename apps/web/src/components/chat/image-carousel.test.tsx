@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ArtifactRef } from "@trevor/session";
 import { test } from "vitest";
 import { ImageCarousel } from "./image-carousel";
 
 /**
- * D-092 M5: the same-message image carousel. Pins open render, previous/next cycling, keyboard
- * navigation, close, the index/count, and that the set is scoped to exactly the images given.
+ * D-092 M5 + plan 34: the same-message image carousel. Pins open render, previous/next cycling,
+ * keyboard navigation, close, the index/count, the filename display + long-name truncation, the
+ * loading shimmer and unavailable fallback, and that the set is scoped to exactly the images given.
  */
 
 function imageRef(seed: string, name: string): ArtifactRef {
@@ -89,4 +90,50 @@ test("a single image shows no prev/next controls", () => {
 test("the carousel is scoped to exactly the images given (same-message set)", () => {
   open([A, B]);
   assert.ok(screen.getByText(/of 2/), "only this message's two images are in the set");
+});
+
+test("the title shows the current image's filename beside the counter", () => {
+  open([A, B]);
+  const dialog = screen.getByRole("dialog");
+  assert.ok(within(dialog).getByText("a.png"), "the first image's name shows");
+  fireEvent.click(screen.getByRole("button", { name: "next image" }));
+  assert.ok(within(dialog).getByText("b.png"), "the name tracks the visible image");
+});
+
+test("a long filename truncates in the title and keeps the full name in its tooltip", () => {
+  const longName = "an-extremely-long-carousel-image-filename-that-must-not-overflow-the-modal.png";
+  open([{ ...A, name: longName }]);
+  const name = within(screen.getByRole("dialog")).getByText(longName);
+  assert.ok(
+    name.className.includes("truncate"),
+    "the name truncates rather than widening the modal",
+  );
+  assert.equal(name.getAttribute("title"), longName, "the full name stays available on hover");
+});
+
+test("the inspection area shimmers until the image decodes, then fades it in", () => {
+  open([A]);
+  const dialog = screen.getByRole("dialog");
+  assert.ok(dialog.querySelector(".skeleton"), "a loading shimmer reserves the inspection area");
+  const img = dialog.querySelector("img") as HTMLImageElement;
+  assert.ok(img.className.includes("opacity-0"), "the undecoded image is hidden");
+  fireEvent.load(img);
+  assert.equal(dialog.querySelector(".skeleton"), null, "the shimmer clears once decoded");
+  assert.ok(
+    (dialog.querySelector("img") as HTMLImageElement).className.includes("opacity-100"),
+    "the decoded image fades in",
+  );
+});
+
+test("an unavailable image degrades to a quiet file link, not a broken-image icon", () => {
+  open([A]);
+  const dialog = screen.getByRole("dialog");
+  fireEvent.error(dialog.querySelector("img") as HTMLImageElement);
+  assert.equal(dialog.querySelector("img"), null, "the broken <img> is gone");
+  const link = within(dialog).getByRole("link", { name: /a\.png/ });
+  assert.equal(
+    link.getAttribute("href"),
+    `mem://${"a".repeat(64)}`,
+    "it links to the raw artifact",
+  );
 });

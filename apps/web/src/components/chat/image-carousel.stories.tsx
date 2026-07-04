@@ -32,11 +32,13 @@ function imageRef(seed: string, name: string): ArtifactRef {
 const WIDE = imageRef("w", "wide.png");
 const TALL = imageRef("l", "tall.png");
 const SQUARE = imageRef("s", "square.png");
+const LONG_NAME = imageRef("z", "annotated-flow-diagram-final-v3-reviewed-2026-07-04-export.png");
 
 const DIMS: Record<string, [number, number, string]> = {
   [WIDE.hash]: [900, 300, "#a3be8c"],
   [TALL.hash]: [320, 760, "#b48ead"],
   [SQUARE.hash]: [600, 600, "#5e81ac"],
+  [LONG_NAME.hash]: [720, 480, "#88c0d0"],
 };
 
 function dataSrc(hash: string): string {
@@ -78,6 +80,8 @@ export const OneImage: Story = { render: () => <Demo images={[SQUARE]} /> };
 export const ManyImages: Story = { render: () => <Demo images={[WIDE, TALL, SQUARE]} /> };
 export const WideImage: Story = { render: () => <Demo images={[WIDE]} /> };
 export const TallImage: Story = { render: () => <Demo images={[TALL]} /> };
+/** A long filename truncates in the title beside the counter instead of widening the modal. */
+export const LongFilename: Story = { render: () => <Demo images={[LONG_NAME]} /> };
 export const BrokenImage: Story = {
   render: () => <Demo images={[SQUARE]} srcOf={() => "data:image/png;base64,not-real"} />,
 };
