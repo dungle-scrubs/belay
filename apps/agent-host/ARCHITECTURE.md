@@ -42,6 +42,12 @@ edge, replay dispatch, the command lane, and turn dispatch together.
   and migration (renamed from the old `context` dir, D-006).
 - `manifest/` - the capabilities manifest the host announces: build, sections, and the expert
   keyword routing.
+- `workflow/` - the deterministic workflow engine (plan 21) that spawns subagent leaves in phases
+  and folds their results back: the data-only `WorkflowSpec` DSL with its static determinism check,
+  the built-in/saved workflow registry with name+args resolution, and (across later milestones) the
+  `agent()` leaf, the structured-concurrency primitives, the ordinal-keyed run journal + resume, the
+  budget governor, and the detached durable-run lifecycle. The worktree-fleet (plan 46) is its first
+  consumer; it is an engine, not a user-facing feature surface.
 
 ### Tools and commands
 

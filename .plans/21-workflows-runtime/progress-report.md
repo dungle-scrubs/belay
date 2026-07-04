@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 55
-- **Completed current work:** 0
+- **Current cutoff blockers:** 50
+- **Completed current work:** 5
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Workflow contract & registry
+- **Current focus:** M2 - `agent()` leaf (forked, interruptible, multi-turn)
 
 ## Completed Current State / Hard Dependencies
 
@@ -24,12 +24,12 @@
 ### Phase 1: Engine core + DSL (no sandbox)
 
 **M1 - Workflow contract & registry**
-- [ ] RED: `WorkflowSpec` schema validation (phases, agents with `model` as a `ModelRef`,
-  sequential/parallel/pipeline, deps); DSL is data, so **statically** reject clocks/RNG and a non-literal header.
-- [ ] GREEN: `WorkflowSpec` (Effect Schema) + workflow registry (built-in + saved) + name+args entry.
-- [ ] RED: invalid spec / unknown name / bad args tests.
-- [ ] GREEN: validation + typed errors.
-- [ ] REFACTOR: spec schema separate from execution.
+- [x] RED: `WorkflowSpec` schema validation (phases, agents with `model` as a `ModelRef`,
+  sequential/parallel/pipeline, deps); DSL is data, so **statically** reject clocks/RNG and a non-literal header. (`workflow/spec.test.ts`)
+- [x] GREEN: `WorkflowSpec` (Effect Schema) + workflow registry (built-in + saved) + name+args entry. (`workflow/spec.ts`, `workflow/registry.ts`)
+- [x] RED: invalid spec / unknown name / bad args tests. (`workflow/spec.test.ts`, `workflow/registry.test.ts`)
+- [x] GREEN: validation + typed errors. (`workflow/errors.ts`: WorkflowSpecInvalid / WorkflowNotFound / WorkflowArgsInvalid)
+- [x] REFACTOR: spec schema separate from execution. (spec.ts holds only the schema + determinism scan; registry.ts holds only lookup/resolve; no interpreter here)
 
 **M2 - `agent()` leaf (forked, interruptible; over `runDelegatedChild`)**
 - [ ] RED: `agent(prompt, opts)` spawns one isolated child, returns text; `opts.schema` returns a
