@@ -66,6 +66,17 @@ const GENERAL: AgentDefinition = {
   source: "built-in",
 };
 
+/** The verifier variant (plan 45 M2): a read-only independent reviewer. Modeled here like the other
+ *  built-ins so the delegation-seam test drives the same shape discovery ships. */
+const VERIFIER: AgentDefinition = {
+  id: "verifier",
+  description: "independent read-only adversarial reviewer",
+  tools: ["*"],
+  readOnly: true,
+  body: "You are an independent adversarial reviewer. Open with `VERDICT: PASS` or `VERDICT: FAIL`.",
+  source: "built-in",
+};
+
 function context(transport: SessionTransport): DelegationContext {
   let n = 0;
   return {
@@ -166,6 +177,53 @@ test("a child turn that errors folds back as a failed link, never throwing into 
     .filter((e) => e.type === "delegated.to")
     .at(-1)?.payload as Record<string, unknown>;
   assert.equal(done.status, "failed", "the terminal link marks the failure");
+});
+
+// --- plan 45 M2: the verifier variant runs over the SAME delegation isolation, verdict parent-visible ---
+
+test("the verifier reviews in an isolated child and its verdict folds back to the parent (plan 45 M2)", async () => {
+  const t = recordingTransport();
+  let offered: string[] = [];
+  // A provider that captures the verifier's offered tools, then returns an explicit verdict.
+  const provider: Provider = {
+    ...answeringProvider(""),
+    stream: (_messages, tools) => {
+      offered = tools.map((tt) => tt.name);
+      return Stream.fromIterable<ProviderEvent>([
+        { type: "text", text: "VERDICT: FAIL\n- the edge case at src/x.ts:12 is unhandled" },
+        { type: "usage", usage: USAGE },
+      ]);
+    },
+  };
+  const out = await runDelegatedChild(context(t.transport), {
+    agent: VERIFIER,
+    task: "verify the change in src/x.ts",
+    provider,
+    parentRunId: "run-parent",
+    childRunId: "run-child",
+    mode: "inline",
+  });
+
+  // Independent review, not self-validation: it ran in its OWN isolated child session seeded with
+  // ONLY the task (no parent transcript), and read-only so it could never edit the work it judged.
+  const childLog = t.publishedBy("child-0");
+  assert.equal((childLog[0]?.payload as { text?: string }).text, "verify the change in src/x.ts");
+  assert.ok(offered.includes("read"), "the verifier keeps read-only tools");
+  for (const mut of ["write", "edit", "bash"]) {
+    assert.ok(!offered.includes(mut), `the verifier cannot mutate via ${mut}`);
+  }
+
+  // Parent-visible verdict: the distilled verdict is BOTH the returned result the parent acts on AND
+  // the terminal delegated.to link on the PARENT session.
+  assert.equal(out.failed, false, "a FAIL verdict is a completed review, not a delegation failure");
+  assert.match(out.result, /^VERDICT: FAIL/);
+  const done = t
+    .publishedBy("parent-session")
+    .filter((e) => e.type === "delegated.to")
+    .at(-1)?.payload as Record<string, unknown>;
+  assert.equal(done.agent, "verifier");
+  assert.equal(done.status, "done");
+  assert.match(String(done.result), /^VERDICT: FAIL/, "the parent link carries the frozen verdict");
 });
 
 // --- M3: the delegation tool surface (loop interception, depth-1, validation) ---

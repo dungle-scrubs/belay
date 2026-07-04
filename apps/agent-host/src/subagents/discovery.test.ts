@@ -55,13 +55,15 @@ function requireAgent(agents: ReadonlyMap<string, AgentDefinition>, id: string):
   return agent;
 }
 
-test("discovery yields the two built-ins plus the user fixture; disabled/description-less are skipped", () => {
+test("discovery yields the three built-ins plus the user fixture; disabled/description-less are skipped", () => {
   const agents = byId();
   assert.ok(agents.has("general-purpose"), "the general-purpose built-in");
   assert.ok(agents.has("explorer"), "the explorer built-in");
+  assert.ok(agents.has("verifier"), "the verifier built-in");
   assert.ok(agents.has("researcher"), "the user-defined agent");
   assert.ok(!agents.has("disabled-one"), "a disabled agent is dropped");
   assert.equal(agents.get("general-purpose")?.source, "built-in");
+  assert.equal(agents.get("verifier")?.source, "built-in");
   assert.equal(agents.get("researcher")?.source, "user");
 });
 
@@ -80,6 +82,28 @@ test("general-purpose resolves to the full tool set; explorer is clamped read-on
   for (const ro of ["read", "glob", "grep", "web_search"]) {
     assert.ok(explorer.includes(ro), `explorer keeps the read-only tool ${ro}`);
   }
+});
+
+test("the verifier is a read-only, independent adversarial reviewer with an explicit verdict (plan 45 M2)", () => {
+  const verifier = requireAgent(byId(), "verifier");
+  // Read-only: it must never be able to edit the work it judges - that independence is the point,
+  // and it is what separates it from the dropped inline self-validation (the parent fixing its own work).
+  const tools = resolveAgentTools(verifier);
+  for (const mut of ["write", "edit", "multi_edit", "bash"]) {
+    assert.ok(!tools.includes(mut), `the verifier cannot mutate via ${mut}`);
+  }
+  for (const ro of ["read", "grep", "lsp_diagnostics"]) {
+    assert.ok(tools.includes(ro), `the verifier keeps the read-only tool ${ro}`);
+  }
+  // The description tells the model it is an independent reviewer that reports a verdict, not a doer.
+  assert.match(verifier.description, /independent/i);
+  assert.match(verifier.description, /verif/i);
+  // The body demands adversarial review and an explicit, parent-visible PASS/FAIL verdict, and forbids
+  // fixing the work (so it stays a reviewer, never revives self-validation).
+  assert.match(verifier.body, /adversarial/i);
+  assert.match(verifier.body, /VERDICT: PASS/);
+  assert.match(verifier.body, /VERDICT: FAIL/);
+  assert.match(verifier.body, /must NOT fix it/);
 });
 
 test("a user agent's explicit tool allow-list is honored (and unknown names dropped)", () => {

@@ -20,8 +20,9 @@ import { READ_ONLY_TOOLS, TOOL_DEFS } from "@host/tools/index";
  * is the system prompt. `tools: ['*']` means every tool; a `readOnly` flavor is clamped to the
  * read-only tools regardless. No per-agent model in this round - all inherit the session model.
  *
- * Two built-ins ship: `general-purpose` (all tools) and `explorer` (read-only). User-defined agents
- * are discovered from `<TREVOR_AGENTS_DIR>/<id>/AGENT.md` (frontmatter + body) like skills, and
+ * Three built-ins ship: `general-purpose` (all tools), `explorer` (read-only), and `verifier` (a
+ * read-only INDEPENDENT ADVERSARIAL reviewer - plan 45 M2). User-defined agents are discovered from
+ * `<TREVOR_AGENTS_DIR>/<id>/AGENT.md` (frontmatter + body) like skills, and
  * override a built-in of the same id. The discovered roster is announced in host.online so the model
  * can choose one by description.
  *
@@ -76,6 +77,25 @@ const EXPLORER_BODY = [
   "answers), not a transcript of your steps. The parent sees only your final message.",
 ].join("\n");
 
+const VERIFIER_BODY = [
+  "You are a verifier subagent: an INDEPENDENT, adversarial reviewer delegated a piece of work to",
+  "check by a parent agent. You run in your own isolated context and have READ-ONLY tools only - you",
+  "can read files, search the workspace, pull diagnostics, and search the web, but you CANNOT modify",
+  "anything. You did NOT do this work and you must NOT fix it: your only job is to judge it. This",
+  "independence is the point - a reviewer that could edit the work could no longer trust its own",
+  "verdict.",
+  "",
+  "Review skeptically. Assume the work may be wrong or incomplete and actively hunt for defects:",
+  "missed requirements, broken edge cases, unhandled errors, regressions, false claims, and gaps",
+  "between what was asked and what was done. Check claims against the actual code and artifacts rather",
+  "than trusting the summary you were handed.",
+  "",
+  "Return a SINGLE distilled final message that OPENS with an explicit verdict line - exactly",
+  "`VERDICT: PASS` or `VERDICT: FAIL` - then the specific findings and evidence (paths, lines,",
+  "reproductions) that justify it. The parent sees ONLY this final message and acts on your verdict,",
+  "so make the verdict unambiguous and the reasons concrete.",
+].join("\n");
+
 /** The built-in agent flavors (D-045). */
 const BUILT_INS: readonly AgentDefinition[] = [
   {
@@ -95,6 +115,20 @@ const BUILT_INS: readonly AgentDefinition[] = [
     skills: ["*"],
     readOnly: true,
     body: EXPLORER_BODY,
+    source: "built-in",
+  },
+  // The verifier variant (plan 45 M2, D-003): an independent adversarial reviewer that runs over the
+  // SAME delegation isolation as any other subagent (its own context, distinct from the parent) - it
+  // is a configured behavior, not a new mechanism. readOnly so it can never edit the work it judges,
+  // which is what keeps the review independent (distinct from the dropped inline self-validation).
+  {
+    id: "verifier",
+    description:
+      "An independent, read-only reviewer that adversarially verifies a piece of work and returns an explicit PASS/FAIL verdict with evidence. Delegate to it to double-check completed work skeptically - it reviews, it does not fix.",
+    tools: ["*"],
+    skills: ["*"],
+    readOnly: true,
+    body: VERIFIER_BODY,
     source: "built-in",
   },
 ];
