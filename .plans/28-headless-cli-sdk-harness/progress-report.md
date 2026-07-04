@@ -1,10 +1,10 @@
 # Headless CLI, SDK, and Harness - Progress Report
 
-> Current focus: M7 CLI Refactor Boundary
+> Current focus: M9 Test-Kit Relationship
 
 ## Summary
 
-- Current cutoff blockers: 25
+- Current cutoff blockers: 15
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
@@ -66,19 +66,19 @@
 
 ## M7: CLI Refactor Boundary
 
-- [ ] RED: Add CLI tests proving command output and exit behavior remain stable while implementation moves behind SDK helpers
-- [ ] GREEN: Route suitable operations through SDK workflow functions
-- [ ] RED: Add tests proving launcher-only behavior stays in CLI/app layer
-- [ ] GREEN: Keep local orchestration in `apps/trevor-cli` or explicit Node-only local package
-- [ ] REFACTOR: Keep CLI formatting/spinner/exit-code code out of SDK
+- [x] RED: Add CLI tests proving command output and exit behavior remain stable while implementation moves behind SDK helpers
+- [x] GREEN: Route suitable operations through SDK workflow functions
+- [x] RED: Add tests proving launcher-only behavior stays in CLI/app layer
+- [x] GREEN: Keep local orchestration in `apps/trevor-cli` or explicit Node-only local package
+- [x] REFACTOR: Keep CLI formatting/spinner/exit-code code out of SDK
 
 ## M8: Headless CLI Commands
 
-- [ ] RED: Add tests for prompt, stream, cancel, transcript, artifacts upload/download, capabilities, and doctor/export commands
-- [ ] GREEN: Implement CLI commands over SDK workflows
-- [ ] RED: Add tests for JSON output mode and human-readable mode
-- [ ] GREEN: Support scriptable output without spinners/noise in machine modes
-- [ ] REFACTOR: Keep command names consistent with existing lifecycle commands
+- [x] RED: Add tests for prompt, stream, cancel, transcript, artifacts upload/download, capabilities, and doctor/export commands
+- [x] GREEN: Implement CLI commands over SDK workflows
+- [x] RED: Add tests for JSON output mode and human-readable mode
+- [x] GREEN: Support scriptable output without spinners/noise in machine modes
+- [x] REFACTOR: Keep command names consistent with existing lifecycle commands
 
 ## M9: Test-Kit Relationship
 

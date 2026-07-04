@@ -1,56 +1,54 @@
+import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename } from "node:path";
-import {
-  errorMessage,
-  events,
-  PRODUCER_IDS,
-  type SessionSummary,
-  streamTransport,
-} from "@trevor/session";
+import { basename, extname } from "node:path";
+import { createTrevorClient, resolveOpenTarget } from "@trevor/sdk";
+import { errorMessage, PRODUCER_IDS, type SessionSummary } from "@trevor/session";
 import { nodeFs } from "./fs";
+import {
+  runArtifactGet,
+  runArtifactPut,
+  runCancel,
+  runCapabilities,
+  runDoctor,
+  runPrompt,
+  runTranscript,
+} from "./headless";
 import { loadHosts, removeHost } from "./host-registry";
 import { formatStatus, launch } from "./launch";
-import {
-  type HostControlIo,
-  type LifecycleIo,
-  resolveOpenTarget,
-  runArchive,
-  runList,
-  runStop,
-} from "./lifecycle";
+import { type HostControlIo, type LifecycleIo, runArchive, runList, runStop } from "./lifecycle";
 import { nodePlatform, processAlive } from "./platform";
 import { resolveProjectRoot, TREVOR_STATE_HOME } from "./project";
 import { serviceUrl } from "./services";
 import { createSpinner } from "./spinner";
 
 const STORE_URL = serviceUrl("store");
+const BLOB_URL = serviceUrl("blob");
 
-// One transport per process: every lifecycle subcommand reads/writes the same local session-store,
-// so the binding is built once here rather than re-rolled per subcommand.
-const transport = streamTransport(STORE_URL);
+// One SDK client per process, bound to the local session-store + blob-store. Every headless verb and the
+// lifecycle IO route through it, stamping the CLI producer id on the events they publish (plan 28 M7).
+const client = createTrevorClient({
+  sessionUrl: STORE_URL,
+  blobUrl: BLOB_URL,
+  producerId: PRODUCER_IDS.cli,
+});
 
-/** The real HTTP/transport IO for the lifecycle subcommands (talks to the local session-store). */
+/** The real HTTP/transport IO for the lifecycle subcommands, routed through the SDK client. */
 const lifecycleIo: LifecycleIo = {
   fetchSessions: async () => {
     try {
-      return await transport.fetchInventory();
+      return await client.fetchInventory();
     } catch (error) {
       throw new Error(`session-store unavailable - is Trevor running? (${errorMessage(error)})`);
     }
   },
-  publishArchived: async (sessionId, archived) => {
-    const event = events.sessionArchived({ archived });
-    await transport.publishEvent(sessionId, {
-      type: event.type,
-      producerId: PRODUCER_IDS.cli,
-      payload: event.payload,
-    });
-  },
+  publishArchived: (sessionId, archived) =>
+    archived ? client.archive(sessionId) : client.unarchive(sessionId),
   now: Date.now,
 };
 
 /** The host-control IO for stop/kill: the launcher's ownership records + real process signalling
- *  (the liveness probe is the launcher platform's `processAlive`, shared rather than re-rolled). */
+ *  (the liveness probe is the launcher platform's `processAlive`, shared rather than re-rolled). This is
+ *  launcher/local-owned (OS signals), NOT an SDK workflow (D-003). */
 const hostControlIo: HostControlIo = {
   lookupHost: (sessionId) => {
     const record = loadHosts(nodeFs, TREVOR_STATE_HOME)[sessionId];
@@ -60,6 +58,134 @@ const hostControlIo: HostControlIo = {
   signal: (pid, sig) => process.kill(pid, sig),
   removeHost: (sessionId) => removeHost(nodeFs, TREVOR_STATE_HOME, sessionId),
 };
+
+/** A flag's value from `--flag value`, or undefined when the flag is absent. */
+function flagValue(args: readonly string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+/** Positional args (everything that is not a `--flag` or a value consumed by one). */
+function positionals(args: readonly string[], valueFlags: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === undefined) {
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      if (valueFlags.includes(arg)) {
+        i += 1; // skip the flag's value
+      }
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".pdf": "application/pdf",
+};
+
+/** Dispatches a headless SDK-backed command; returns the stdout to print, or null when not a headless cmd. */
+async function runHeadless(cmd: string, rest: readonly string[]): Promise<string | null> {
+  const json = rest.includes("--json");
+  const timeout = flagValue(rest, "--timeout");
+  const timeoutMs = timeout ? Number(timeout) : undefined;
+  const pos = positionals(rest, ["--provider", "--timeout", "--section", "--name", "--mime"]);
+
+  if (cmd === "prompt") {
+    const [sessionId, ...textParts] = pos;
+    const text = textParts.join(" ");
+    if (!sessionId || !text) {
+      return "usage: trevor prompt <session> <text> [--provider p] [--json] [--timeout ms]";
+    }
+    const result = await runPrompt(client, {
+      sessionId,
+      text,
+      provider: flagValue(rest, "--provider") ?? "",
+      json,
+      ...(timeoutMs ? { timeoutMs } : {}),
+      ...(json ? {} : { onDelta: (delta) => process.stderr.write(delta) }),
+    });
+    return result.stdout;
+  }
+  if (cmd === "cancel") {
+    return (await runCancel(client, pos[0] ?? "", pos[1] ?? "")).stdout;
+  }
+  if (cmd === "transcript") {
+    if (!pos[0]) {
+      return "usage: trevor transcript <session> [--json]";
+    }
+    return (await runTranscript(client, pos[0], json)).stdout;
+  }
+  if (cmd === "doctor") {
+    if (!pos[0]) {
+      return "usage: trevor doctor <session> [--json] [--timeout ms]";
+    }
+    return (await runDoctor(client, pos[0], json, timeoutMs)).stdout;
+  }
+  if (cmd === "capabilities") {
+    if (!pos[0]) {
+      return "usage: trevor capabilities <session> [--json] [--section id]";
+    }
+    return (
+      await runCapabilities(client, pos[0], {
+        json,
+        ...(flagValue(rest, "--section") ? { section: flagValue(rest, "--section") } : {}),
+        ...(timeoutMs ? { timeoutMs } : {}),
+      })
+    ).stdout;
+  }
+  if (cmd === "artifact") {
+    return runArtifact(pos, rest, json);
+  }
+  return null;
+}
+
+/** `trevor artifact put <file>` / `get <hash> [outfile]`. */
+async function runArtifact(
+  pos: readonly string[],
+  rest: readonly string[],
+  json: boolean,
+): Promise<string> {
+  const [verb, target, out] = pos;
+  if (verb === "put") {
+    if (!target) {
+      return "usage: trevor artifact put <file> [--name n] [--mime m] [--json]";
+    }
+    const bytes = new Uint8Array(readFileSync(target));
+    const mime =
+      flagValue(rest, "--mime") ??
+      MIME_BY_EXT[extname(target).toLowerCase()] ??
+      "application/octet-stream";
+    const result = await runArtifactPut(client, bytes, mime, {
+      json,
+      name: flagValue(rest, "--name") ?? basename(target),
+    });
+    return result.stdout;
+  }
+  if (verb === "get") {
+    if (!target) {
+      return "usage: trevor artifact get <hash> [outfile]";
+    }
+    const bytes = await runArtifactGet(client, target);
+    if (out) {
+      writeFileSync(out, bytes);
+      return `Wrote ${bytes.length} bytes to ${out}.`;
+    }
+    process.stdout.write(bytes);
+    return "";
+  }
+  return "usage: trevor artifact put <file> | trevor artifact get <hash> [outfile]";
+}
 
 /**
  * Dispatches a `trevor` session-lifecycle subcommand (D-094 M1/M3): `list [--archived]`, `archive
@@ -77,6 +203,9 @@ async function runSubcommand(args: readonly string[]): Promise<string | null> {
   }
   if (cmd === "stop" || cmd === "kill") {
     return runStop(hostControlIo, (rest[0] ?? "").trim(), cmd === "kill");
+  }
+  if (cmd) {
+    return runHeadless(cmd, rest);
   }
   return null;
 }
@@ -100,6 +229,12 @@ Usage:
   trevor unarchive <session>   Unarchive a session.
   trevor stop <session>        Gracefully shut down the session's host (SIGTERM); keeps its log.
   trevor kill <session>        Force-terminate a wedged session host (SIGKILL); keeps its log.
+  trevor prompt <session> <text>   Submit a prompt and stream the turn (--json, --provider, --timeout).
+  trevor cancel <session> <runId>  Cancel the active run (publishes user.cancel; not stop/kill).
+  trevor transcript <session>      Print the session transcript (--json for machine output).
+  trevor doctor <session>          Print the host /doctor snapshot (--json).
+  trevor capabilities <session>    Print the host capability manifest export (--json, --section).
+  trevor artifact put <file>       Upload an artifact; artifact get <hash> [outfile] downloads it.
   trevor --debug               Start the host in debug mode (extra commands like /restart).
   trevor --help                Show this help.
   trevor --version             Show the launcher version.
@@ -168,10 +303,12 @@ async function main(): Promise<void> {
     await runOpen(args[1] ?? "");
     return;
   }
-  // Session-lifecycle subcommands (D-094) run against the local store and print, without launching.
+  // Session-lifecycle + headless subcommands run against the local store and print, without launching.
   const sub = await runSubcommand(args);
   if (sub !== null) {
-    process.stdout.write(`${sub}\n`);
+    if (sub.length > 0) {
+      process.stdout.write(`${sub}\n`);
+    }
     return;
   }
   await launchWith({ debug: args.includes("--debug") });
