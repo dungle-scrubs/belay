@@ -171,6 +171,7 @@ export function buildHostSpawnCommand(opts: {
   readonly hostMain: string;
   readonly nodePath: string;
   readonly tsxCli: string;
+  readonly allowEnvToken?: boolean;
 }): HostSpawnCommand {
   if (!opts.envFileExists) {
     return {
@@ -183,6 +184,7 @@ export function buildHostSpawnCommand(opts: {
     args: [
       "primary",
       "--read",
+      ...(opts.allowEnvToken ? ["--allow-env-token"] : []),
       "op",
       "run",
       `--env-file=${opts.envFile}`,
@@ -191,7 +193,7 @@ export function buildHostSpawnCommand(opts: {
       opts.tsxCli,
       opts.hostMain,
     ],
-    command: "opchain primary --read op run --env-file=<TREVOR_HOME>/.env.op -- tsx agent-host",
+    command: `opchain primary --read${opts.allowEnvToken ? " --allow-env-token" : ""} op run --env-file=<TREVOR_HOME>/.env.op -- tsx agent-host`,
     file: "opchain",
   };
 }
@@ -215,6 +217,7 @@ async function spawnHost(opts: {
     hostMain,
     nodePath: process.execPath,
     tsxCli,
+    allowEnvToken: process.env.OPCHAIN_TOKEN_OVERRIDE != null,
   });
   // Capture the host's logs per session (it's detached, so its output would otherwise vanish).
   const out = logFd(`host-${opts.sessionId}`);

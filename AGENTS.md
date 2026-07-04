@@ -209,3 +209,40 @@ explicitly picked up.
 
 When a plan and any other document disagree, **the plan wins**; when a plan and `CONTEXT.md` disagree
 on a term, fix one so they agree.
+
+## Remote host restart over SSH: inject the opchain token, never the keychain
+
+`trevor` spawns each agent-host through opchain
+(`opchain primary --read op run --env-file=<TREVOR_HOME>/.env.op -- tsx agent-host`), which
+resolves its 1Password **service-account token** from the macOS **login keychain**. That
+keychain is unlocked only by an interactive **GUI login** and is **not reachable from an SSH
+session**: macOS scopes keychain access to the console session, so an SSH-spawned opchain gets
+`errSecInteractionNotAllowed` (opchain exit 44) and the host dies on startup - even when a GUI
+session (Screen Sharing / JumpDesktop) has the same keychain unlocked. So a plain
+`ssh <host> 'trevor open <session>'` **cannot** start a host; only a command run inside the GUI
+session can rely on the keychain.
+
+**To restart a host on a remote machine over SSH, inject the token instead of relying on the
+remote keychain.** `buildHostSpawnCommand` (`apps/trevor-cli/src/platform.ts`) passes opchain
+`--allow-env-token` **only when `OPCHAIN_TOKEN_OVERRIDE` is set** - gated, so GUI launches stay
+byte-identical and the keychain path is unchanged. With the override present, opchain uses the
+env token and never touches the keychain. Then:
+
+1. Fetch the `primary-read` service-account token **silently** from a machine that already has
+   it in its keychain (opchain reads it via `security`, no Touch ID / no 1Password-app prompt -
+   do **not** use `op item get`, which triggers biometric):
+
+       opchain primary --read op run -- sh -c 'printf %s "$OP_SERVICE_ACCOUNT_TOKEN"'
+
+2. Pipe it over SSH **stdin** (so it never appears in argv / `ps` or on the remote disk) and
+   hand it to `trevor open`:
+
+       opchain primary --read op run -- sh -c 'printf %s "$OP_SERVICE_ACCOUNT_TOKEN"' \
+         | ssh <user>@<host> 'bash -lc '\''IFS= read -r T; cd ~/dev/trevorV2 \
+             && trevor stop <session> >/dev/null 2>&1; sleep 1 \
+             && OPCHAIN_TOKEN_OVERRIDE="$T" trevor open <session>'\'''
+
+The token is a scoped, revocable **read-only** service account; it only transits the encrypted
+SSH channel at restart time and is never persisted on the remote host. For a restart from a GUI
+session (Screen Sharing / JumpDesktop), skip all of this - `trevor open <session>` reads the
+keychain directly with no biometric.
