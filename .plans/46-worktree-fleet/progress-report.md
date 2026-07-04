@@ -10,8 +10,9 @@
 
 ## Completed Current State / Hard Dependencies
 
-- [x] Handoff entry exists: `apps/agent-host/src/handoff/handoff-flow.ts` (spawn new host for new
-  session; reused as a **detached** spawn - no switch/retire).
+- [x] Detached durable-run lifecycle **owned by `21`** (`21/D-018`): the fleet rides `21`'s run
+  lifecycle directly (durable session via `15`, launcher not switched/retired, notified on completion);
+  46 no longer drives `handoff-flow.ts` spawn mechanics itself.
 - [x] Worktree commands exist: `/worktree-new|switch|merge|delete|reconcile`
   (`apps/agent-host/src/worktrees/commands.ts`, `makeWorktreeCommands`; moved out of `main.ts` in 22.2).
 - [x] `planner` skill exists (`~/.agents/skills/planner`) - workers run it in implement mode
@@ -38,8 +39,8 @@
 **M2 - Confirm gate + handoff**
 - [ ] RED: specs presented for approval before any tree/agent; approve -> durable run spawned;
   reject -> nothing created.
-- [ ] GREEN: confirm-spec-first gate + reuse `handoff-flow` as a **detached** spawn (ensureSession +
-  spawnHost, no switchAndRetire); the launcher survives and is notified on completion.
+- [ ] GREEN: confirm-spec-first gate + **enter the run by riding `21`'s detached durable-run lifecycle
+  directly** (`21/D-018`); the launcher survives and is notified on completion (distinct from `delegated.to`).
 - [ ] RED: `fire-immediately` config variant.
 - [ ] GREEN: config-driven gate (default confirm).
 - [ ] REFACTOR: gate policy separate from the workflow body.
@@ -47,15 +48,16 @@
 **Gate 1->2**
 - [ ] A request yields validated specs bound to real plans.
 - [ ] No tree/agent created before approval (default gate).
-- [ ] The run is owned by a dedicated durable session via handoff.
+- [ ] The run is owned by a dedicated durable session via `21`'s run lifecycle (`21/D-018`).
 
 ### Phase 2: The `worktree-fleet` workflow
 
 **M3 - Worker leaves (planner implement in a tree)**
 - [ ] RED: each spec -> a write-capable worktree leaf running `planner` implement-mode against its plan;
   isolated; non-racing.
-- [ ] GREEN: the built-in `worktree-fleet` workflow - "implement" phase fanning out worker leaves on 21;
-  each invokes the planner **code-only, AFK**, committing to its fleet branch (no branch/merge/plan-dir ritual).
+- [ ] GREEN: the built-in `worktree-fleet` workflow - "implement" phase fanning out worker leaves on 21
+  (`21`'s **multi-turn** leaf on a **cloud** model, per-`agent()` whole-plan budget); each invokes the
+  planner **code-only, AFK**, committing to its fleet branch (no branch/merge/plan-dir ritual). (`21/D-017`, `21/D-020`)
 - [ ] RED: failure/stall - failed worker marked failed, siblings continue, `<=1` retry.
 - [ ] GREEN: fail-soft + bounded retry (**new-ordinal** second leaf, deterministic on the journaled failure) + structured per-worker result.
 - [ ] REFACTOR: worker policy in the workflow, not the engine.
@@ -73,9 +75,12 @@
 ### Phase 3: Aggregation + disposition
 
 **M5 - Aggregation report**
-- [ ] RED: per-tree `{ branch, status, diffstat, audit verdict + findings, conflict-with-base }` +
-  summary, stored durably, re-openable.
-- [ ] GREEN: aggregation + durable run report (projection of `21`'s journal).
+- [ ] RED: per-tree `{ branch, status, diffstat, audit verdict + findings, conflict-with-base,
+  worker-progress-summary, child-session-id }` + summary, stored durably, re-openable; a planner-leaf
+  failure is diagnosable without checking out the branch (worker returns a **structured partial-failure
+  result**).
+- [ ] GREEN: aggregation + durable run report (projection of `21`'s journal **joined with each worker's
+  `plan.db`**).
 - [ ] REFACTOR: keep the report derived, not separately authored.
 
 **M6 - Disposition policy**

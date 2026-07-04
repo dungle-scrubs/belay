@@ -17,9 +17,11 @@
 - [ ] `.plans/45-subagent-variants` (supporting; **not yet implemented**) - `45`/M2 retains the
   **verifier** leaf shape the audit phase (M4) reuses. M4 falls back to a `code-review`/`simplify`
   `agent()` leaf when `45`/M2 is unbuilt, so 46 is buildable **without** `45`. <!-- D-015 -->
-- [x] Existing handoff entry: `apps/agent-host/src/handoff/handoff-flow.ts` (spawn a new host for a new
-  session) - reused as a **detached** spawn (no browser switch / source-retire) to hand the run off to a
-  dedicated durable fleet session. <!-- D-013 -->
+- [x] Detached durable-run lifecycle is **owned by `21`** (`21/D-018`): the fleet **rides `21`'s run
+  lifecycle directly** - `21` spawns the durable, write-capable, resumable run session (via `15`) and
+  notifies the launcher on completion (distinct from `delegated.to`). 46 no longer drives
+  `handoff-flow.ts` spawn mechanics itself (contrast the interactive `/handoff`, which switches the
+  browser and retires the source). <!-- D-013 --> <!-- D-022 -->
 - [x] Existing worktree commands `/worktree-new|switch|merge|delete|reconcile`
   (`apps/agent-host/src/worktrees/commands.ts`, `makeWorktreeCommands`; extracted from `main.ts` in
   plan 22.2) - reused by the disposition step.
@@ -76,10 +78,14 @@ default" forbids. <!-- D-011 -->
 
 **One flat leaf, budgeted for a whole plan.** The planner is invoked in **autonomous/AFK opt-out** mode
 (no per-milestone confirm prompts, which a headless leaf cannot answer). One worker leaf runs the
-planner's implement loop to completion as a **single flat `21` leaf** (no sub-delegation, per `21`/D-005);
-its **per-leaf token + step budget is sized for a whole-plan implementation**, and the shared pool is
-sized for the concurrency cap (~4-5), so a heavyweight leaf is not budget-cancelled mid-plan and
-worst-case overshoot stays `(cap x per-leaf cap)` per `21`/D-013. <!-- D-012 -->
+planner's implement loop to completion as a **single flat `21` leaf** (no sub-delegation, per `21`/D-005) -
+concretely `21`'s **multi-turn worker leaf** (`21`/D-017), since a whole plan cannot complete in one turn
+(a single `21` turn is bounded by `EMERGENCY_MAX_STEPS = 256` and forced synthesis at 0.8 of the context
+window). Its **per-leaf token + step budget is sized for a whole-plan implementation** via `21`'s
+per-`agent()` caps (`opts.tokenBudget`/`opts.stepBudget`, `21`/D-020), and the shared pool is sized for
+the concurrency cap (~4-5), so a heavyweight leaf is not budget-cancelled mid-plan and worst-case
+overshoot stays `(cap x per-leaf cap)` per `21`/D-013. Workers default to a **cloud model** (local pins
+serialise by design, see D-020). <!-- D-012 --> <!-- D-021 --> <!-- D-020 -->
 
 ### Flat audit, orchestrator-owned <!-- D-004 -->
 
@@ -94,8 +100,12 @@ per `21`); the orchestration owns the audit. <!-- D-015 -->
 The run aggregates a per-tree record - `{ branch, status, diffstat, audit verdict + findings,
 conflict-with-base }` - plus a top-line summary, stored in the durable run record and re-openable. The
 record also surfaces each worker's **final progress-report summary + child session id + branch**, so a
-planner-leaf failure is diagnosable from the report without checking out the branch (the worker's
-milestone/gate state lives in its worktree's `plan.db`, not `21`'s journal). <!-- D-017 -->
+planner-leaf failure is diagnosable from the report without checking out the branch. Because the worker's
+milestone/gate state lives in its worktree's `plan.db`, **not** `21`'s journal, the report is a
+**projection of `21`'s journal JOINED with a per-worker `plan.db` read**: on a graceful planner failure
+the worker returns a **structured partial-failure result** (its summary journaled as the leaf result),
+and on a hard failure it rides `21`'s optional `leaf-failed` `detail` (`21/D-022`) plus the `plan.db`
+read. <!-- D-017 --> <!-- D-019 -->
 
 Disposition (default **leave-branches + report**): the fleet stops; the human merges or discards each
 tree via the existing `/worktree-merge` / `/worktree-delete`. Recorded alternatives: **PR-per-tree**
@@ -114,14 +124,17 @@ silent default. <!-- D-014 -->
   `21`/D-012), siblings continue, and it is surfaced in the report (logged, never silently dropped);
   **at most one auto-retry**. The retry is a **second `agent()` leaf at a new call ordinal**, fired
   deterministically when the first leaf's **journaled** result is a typed failure - never an in-leaf
-  re-roll - so a resumed run reproduces the same retry decisions under `21`'s ordinal-keyed replay
-  (`21`/D-009). <!-- D-016 -->
+  re-roll - so a resumed run reproduces the same retry decisions under `21`'s **per-invocation**
+  ordinal-keyed replay (`21`/D-009, `21`/D-019 - the retry is a second `agent()` call at its **own**
+  ordinal, distinct from the worker's, not a collision on the worker's slot). <!-- D-016 -->
 - Concurrency cap is configurable (default ~4-5; "five" fits comfortably); overflow queues on `21`'s
   scheduler. A budget policy sized for heavyweight planner leaves is set per D-012.
-- The run is a **detached** durable background session (`21` lifecycle): the launching session is **not**
-  switched or retired (contrast the interactive `/handoff`, which switches the browser and retires the
-  source); it survives the launching browser/tab closing, is resumable from `21`'s journal, and the
-  launcher is **notified on completion** via `21`'s run lifecycle. <!-- D-013 -->
+- The run is a **detached** durable background session **owned by `21`** (`21/D-018`): the fleet **rides
+  `21`'s run lifecycle directly** rather than building its own from `handoff-flow` (`D-022`). The
+  launching session is **not** switched or retired (contrast the interactive `/handoff`, which switches
+  the browser and retires the source); it survives the launching browser/tab closing, is resumable from
+  `21`'s journal, and the launcher is **notified on completion** (distinct from `delegated.to`) via
+  `21`'s run lifecycle. <!-- D-013 --> <!-- D-022 -->
 
 ### Key Constraints
 
@@ -138,7 +151,8 @@ silent default. <!-- D-014 -->
 
 - **`apps/agent-host`** owns the `worktree-fleet` workflow module, the request-parse step, the confirm
   gate, the handoff entry, and the disposition executor.
-- **`21`** owns execution (leaves, isolation, journaling, budget, lifecycle).
+- **`21`** owns execution (leaves, isolation, journaling, budget) **and the detached durable-run
+  lifecycle** (spawn via `15` + run-completion notify distinct from `delegated.to`, `21/D-018`).
 - **`01`** owns worktree creation/locking (`WorktreeManager`); disposition reuses the existing
   `/worktree-*` commands in `worktrees/commands.ts` (`makeWorktreeCommands`).
 - **`apps/web`** reuses existing surfaces (session sidebar activity, `/worktree` modal status); **no
@@ -184,9 +198,10 @@ inspectable as ordinary sessions; the `/worktree` modal shows live per-tree stat
 - **Tasks:**
   1. RED: tests that the specs are presented for approval **before** any tree/agent is created; approve
      -> a dedicated durable fleet run is spawned; reject -> nothing is created.
-  2. GREEN: the confirm-spec-first gate + reuse `handoff-flow`'s spawn mechanics as a **detached** run
-     (`ensureSession` + `spawnHost`, **no** `switchAndRetire`), so the launcher survives; the fleet run
-     is a `21` background durable session that notifies the launcher on completion. <!-- D-013 -->
+  2. GREEN: the confirm-spec-first gate + **enter the run by riding `21`'s detached durable-run lifecycle
+     directly** (`21/D-018`) - `21` spawns the durable session (via `15`), the launcher is **not**
+     switched/retired and survives, and is notified on completion (distinct from `delegated.to`). 46 no
+     longer drives `handoff-flow` spawn mechanics itself. <!-- D-013 --> <!-- D-022 -->
   3. RED: tests for the `fire-immediately` config variant.
   4. GREEN: config-driven gate (confirm vs fire-immediately; default confirm).
   5. REFACTOR: keep the gate policy separate from the workflow body.
@@ -213,8 +228,9 @@ inspectable as ordinary sessions; the `/worktree` modal shows live per-tree stat
   1. RED: tests that each spec -> a write-capable worktree leaf running `planner` implement-mode against
      its plan; isolated; non-racing across siblings.
   2. GREEN: the built-in `worktree-fleet` workflow - an "implement" phase fanning out worker leaves
-     (`isolation:'worktree'`) on `21`; each invokes the planner in **code-only, AFK** mode, committing to
-     its fleet-provisioned branch (no branch/merge/plan-dir ritual; see D-011/D-012).
+     (`isolation:'worktree'`, `21`'s **multi-turn** leaf on a **cloud** model with a per-`agent()`
+     whole-plan budget) on `21`; each invokes the planner in **code-only, AFK** mode, committing to its
+     fleet-provisioned branch (no branch/merge/plan-dir ritual; see D-011/D-012/D-021/D-020). <!-- D-021 --> <!-- D-020 -->
   3. RED: failure/stall tests - a failed worker is marked failed, siblings continue, `<=1` retry.
   4. GREEN: fail-soft + bounded retry (a **new-ordinal** second leaf, deterministic on the journaled
      failure; D-016) + a structured per-worker result.
@@ -250,8 +266,10 @@ inspectable as ordinary sessions; the `/worktree` modal shows live per-tree stat
   1. RED: tests for a per-tree record `{ branch, status, diffstat, audit verdict + findings,
      conflict-with-base, worker-progress-summary, child-session-id }` + summary, stored in the durable
      run record and re-openable; a planner-leaf failure is diagnosable from the report without checking
-     out the branch (D-017).
-  2. GREEN: aggregation + durable run report (a projection of `21`'s journal).
+     out the branch - the report is a **projection of `21`'s journal JOINED with a per-worker `plan.db`
+     read**, the worker returning a **structured partial-failure result** on graceful failure (D-017, D-019). <!-- D-019 -->
+  2. GREEN: aggregation + durable run report (a projection of `21`'s journal joined with each worker's
+     `plan.db`). <!-- D-019 -->
   3. REFACTOR: keep the report derived, not separately authored.
 
 #### M6: Disposition policy
@@ -319,7 +337,12 @@ inspectable as ordinary sessions; the `/worktree` modal shows live per-tree stat
 
 ## 5. Decisions
 
-Canonical decisions are in `.plans/46-worktree-fleet/plan.db` (D-001..D-018). Key decisions use
+Canonical decisions are in `.plans/46-worktree-fleet/plan.db` (D-001..D-022). Key decisions use
 `<!-- D-NNN -->` markers above; a bare `D-NNN` marker denotes **this** plan's ledger, and references to
-another plan's ledger are namespaced (e.g. `21`/D-009, `21`/D-012, `delegation`/D-047) so they are never
-mistaken for this plan's decisions.
+another plan's ledger are namespaced (e.g. `21`/D-009, `21`/D-012, `21`/D-017, `21`/D-018, `21`/D-020,
+`delegation`/D-047) so they are never mistaken for this plan's decisions.
+
+D-019..D-022 land the reverse-audit accommodations to `21`'s consumer-side hardening: the report is a
+`21`-journal projection joined with each worker's `plan.db` (D-019), workers default to cloud models
+(D-020), the whole-plan worker rides `21`'s multi-turn leaf (D-021), and the fleet rides `21`'s
+detached durable-run lifecycle directly (D-022).

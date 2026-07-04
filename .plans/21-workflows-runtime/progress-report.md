@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 52
+- **Current cutoff blockers:** 56
 - **Completed current work:** 0
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
@@ -36,8 +36,10 @@
   validated object (retry on mismatch); characterization: child sees ONLY the seeded task, never the
   parent transcript (preserve the `runDelegatedChild` isolation invariant, former plan 12).
 - [ ] GREEN: extract shared seed/isolation/fold-back; **forked interruptible leaf entry** running the child Effect in the orchestration fiber (not a detached `Effect.runPromise`) + schema-forced result.
-- [ ] RED: child-turn failure (`{failed:true}` flag, not a throw), schema-invalid-after-retry, and budget/cancel all surface through ONE **typed** channel with a **structured** cause; fiber interrupt actually halts an in-flight leaf.
-- [ ] GREEN: typed structured failure channel + interrupt-based cancellation that reaches the child turn.
+- [ ] RED: child-turn failure (`{failed:true}` flag, not a throw), schema-invalid-after-retry, and budget/cancel all surface through ONE **typed** channel with a **structured** cause (+ optional opaque caller `detail`, D-022); fiber interrupt actually halts an in-flight leaf.
+- [ ] GREEN: typed structured failure channel (cause + optional caller `detail`, D-022) + interrupt-based cancellation that reaches the child turn.
+- [ ] RED: a leaf drives its durable child session (15) across **multiple turns** to a semantic done-signal (per-turn step/context budgets + inter-turn compaction), still **one call ordinal**; single-turn leaf unchanged. (D-017)
+- [ ] GREEN: multi-turn leaf loop over the durable child session + **per-leaf token cap / per-turn step budget as `opts`** (`opts.tokenBudget`/`opts.stepBudget`). (D-017, D-020)
 - [ ] RED: `opts.model` as a `ModelRef` resolves via `providerForSource`/`buildSourceProvider` (`model-unresolvable` when absent); local-pinned leaf gates on `readiness().warm`, serialises behind the admission gate, surfaces `local-not-ready`.
 - [ ] GREEN: `ModelRef` resolution + local-readiness gate.
 - [ ] REFACTOR: leaf policy separate from `delegate_*` tool policy.
@@ -55,34 +57,35 @@
 
 **Gate 1->2**
 - [ ] DSL spec validates, statically rejects non-deterministic constructs, takes `model` as a `ModelRef`.
-- [ ] `agent()` isolated, schema-capable, `ModelRef`-resolved (local-readiness-gated), typed-fail-soft, genuinely interrupt-cancellable (halts in-flight).
+- [ ] `agent()` isolated, schema-capable, `ModelRef`-resolved (local-readiness-gated), typed-fail-soft, genuinely interrupt-cancellable (halts in-flight), and (heavyweight) runs **multi-turn** to a semantic completion under a per-`agent()` token/step cap.
 - [ ] `parallel`/`pipeline`/`phase`/`log` correct under the cap.
 
 ### Phase 2: Journaling, resume, budget
 
 **M4 - Run journal + resume**
-- [ ] RED: `workflow.*` events appended keyed by `runId`; each `workflow.agent` carries a **deterministic call ordinal** (parallel -> array index; pipeline -> `(item, stage)`) and the leaf's `Usage`.
-- [ ] GREEN: journaling + `workflow.*` (ordinal + `Usage`) protocol additions.
-- [ ] RED: resume = replay + **per-ordinal** `(prompt, opts)` invalidation (NOT content lookup): identical parallel leaves + out-of-order completion resume correctly; first changed ordinal re-runs; cached leaves restore `Usage` so `budget.remaining()` loops replay identically.
+- [ ] RED: `workflow.*` events appended keyed by `runId`; each `workflow.agent` carries a **deterministic call ordinal keying each `agent()` invocation** (parallel array index / pipeline `(item, stage)`, **each composed with an intra-slot call counter** so a worker + its retry get distinct ordinals) and the leaf's `Usage`. (D-019)
+- [ ] GREEN: journaling + `workflow.*` (per-invocation ordinal + `Usage`) protocol additions. (D-019)
+- [ ] RED: resume = replay + **per-ordinal** `(prompt, opts)` invalidation (NOT content lookup): identical parallel leaves, a **second `agent()` call within one slot (a retry)**, + out-of-order completion resume correctly; first changed ordinal re-runs; cached leaves restore `Usage` so `budget.remaining()` loops replay identically. (D-019)
 - [ ] GREEN: resume engine (ordinal-keyed cache + `Usage` restore).
 - [ ] REFACTOR: generic journal projection.
 
 **M5 - WorkflowBudgetGovernor**
-- [ ] RED: cumulative `Usage` across leaves; ceiling -> new `agent()` typed error; `remaining()` loop support; **per-leaf token cap** (distinct from `turn-budget.ts`'s step cap); budget trip lets in-flight leaves **drain** with overshoot bounded by `(concurrency-cap x per-leaf token cap)`.
-- [ ] GREEN: governor service (`Context.Tag` + `Layer`) + per-leaf token cap, reusing `turn-budget.ts` tiers for the per-leaf STEP budget.
+- [ ] RED: cumulative `Usage` across leaves; ceiling -> new `agent()` typed error; `remaining()` loop support; **per-leaf token cap AND step budget settable per `agent()` call** (`opts.tokenBudget`/`opts.stepBudget`, distinct from `turn-budget.ts`'s global step cap); budget trip lets in-flight leaves **drain** with overshoot bounded by `(concurrency-cap x per-leaf token cap)`. (D-020)
+- [ ] GREEN: governor service (`Context.Tag` + `Layer`) + per-`agent()` token cap (`opts`), reusing `turn-budget.ts` tiers for the per-leaf STEP budget. (D-020)
 - [ ] RED: shared-pool accounting.
 - [ ] GREEN: shared pool.
 - [ ] REFACTOR: budget separate from scheduler.
 
 **Gate 2->3**
-- [ ] A run survives restart and resumes with a correct **ordinal-keyed** cache-hit prefix (identical parallel leaves + out-of-order completion included); cached leaves restore `Usage`.
-- [ ] Budget is a typed spawn-gate ceiling with bounded overshoot (per-leaf token cap; in-flight drain).
+- [ ] A run survives restart and resumes with a correct **per-invocation ordinal-keyed** cache-hit prefix (identical parallel leaves, a second `agent()` call within one slot, + out-of-order completion included); cached leaves restore `Usage`.
+- [ ] Budget is a typed spawn-gate ceiling with bounded overshoot (per-`agent()` token/step caps; in-flight drain).
 
 ### Phase 3: Worktree-isolated write-capable leaves
 
-**M6 - Worktree isolation for leaves** (needs net-new per-leaf cwd routing, D-010)
+**M6 - Worktree isolation for leaves** (needs net-new per-leaf cwd routing, D-010/D-023)
+- [ ] **Owner decision (confirm before `46`/M3):** in-process cwd-threading (default) vs out-of-process leaves on `16`'s runner - sets M6 effort. (D-023)
 - [ ] RED: failing test that two **parallel** worktree leaves write to **distinct** trees - fails today because tools resolve a global `process.cwd()` (`bash.ts`, `read.ts`, `run-shell.ts`, `tools/index.ts`, `WORKSPACE_ROOT`).
-- [ ] GREEN: thread a **per-leaf cwd** through the tool boundary (recommended default) so each leaf resolves paths/`spawn` against its own worktree; cwd-lock prevents path collision. (Fallback: out-of-process leaves on `16`'s runner.)
+- [ ] GREEN: thread a **per-leaf cwd** through the tool boundary (recommended default); **de-globalize `WORKSPACE_ROOT` + the `confine()` guard keyed off it, and convert the `tools/index.ts` module-load `process.cwd()` snapshot to a per-call thunk** - not merely a cwd arg on bash/read/run-shell; cwd-lock prevents path collision. (Fallback: out-of-process leaves on `16`'s runner.) (D-023)
 - [ ] RED: `opts.isolation:'worktree'` provisions a managed worktree per leaf, lifts read-only for that leaf, and parallel write-capable leaves do not race.
 - [ ] GREEN: wire leaf -> `WorktreeManager` + cwd-lock + per-leaf cwd; write-capable in own tree; auto-cleanup; per-leaf worktree result (branch, diffstat, conflict-with-base).
 - [ ] REFACTOR: worktree policy in the leaf, not the scheduler.
@@ -94,18 +97,19 @@
 
 **M7 - Invocation surfaces (built-in + DSL tool)**
 - [ ] RED: invoke a built-in/saved workflow by name+args; a `Workflow` tool accepting a DSL spec.
-- [ ] GREEN: register the `Workflow` tool + named-workflow path; background run + completion notify.
-- [ ] RED: loop tests success/failure/cancel/notify.
-- [ ] GREEN: background run + `task-notification`-style fold-back.
+- [ ] GREEN: register the `Workflow` tool + named-workflow path; run as a **detached durable run** (session via 15, launcher not switched/retired) + **run-completion notify distinct from `delegated.to`**. (D-018)
+- [ ] RED: loop tests success/failure/cancel/notify; launcher survives and is notified without a switch. (D-018)
+- [ ] GREEN: detached durable-run spawn (via 15) + run-completion notify (distinct from `delegated.to`). (D-018)
 - [ ] REFACTOR: thin tool surface over the engine.
 
 **M8 - Observability + minimal run view**
-- [ ] RED: run/phase/leaf spans + typed failures.
-- [ ] GREEN: spans + typed failures + minimal run-progress surface reusing existing surfaces.
-- [ ] REFACTOR: reuse `08-tool-detail-takeover` primitives.
+- [ ] RED: run/phase/leaf spans + typed failures; a **reusable determinism-characterization harness** for built-ins (run-twice under frozen clock + forbidden RNG -> identical ordinal sequence). (D-021)
+- [ ] GREEN: spans + typed failures (cause + optional caller `detail`, D-022) + the built-in determinism harness (D-021) + minimal run-progress surface reusing existing surfaces.
+- [ ] REFACTOR: reuse `08-tool-detail-takeover` primitives; keep the determinism harness a shared test util. (D-021)
 
 **Gate 4->5**
-- [ ] Built-in and DSL workflows run in the background and fold back.
+- [ ] Built-in and DSL workflows run as a **detached durable run** (launcher survives, notified on completion distinct from `delegated.to`) and fold back.
+- [ ] Every built-in passes the **determinism-characterization harness**.
 - [ ] Every run/phase/leaf is inspectable.
 
 ## Accepted / Deferred Follow-Up
