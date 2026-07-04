@@ -9,7 +9,7 @@
   fiber-interrupt cancellation (M2), and a hard budget ceiling (M5). Formerly a separate plan 12
   ("bounded-child + takeover"), now **dissolved into this plan**: with no model router in V2 there is
   no host-owned execution packet that picks its own model, the leaf isolation + fold-back already
-  exist, the leaf hardening is exactly M2/M5 here, and 12's takeover UI had no consumer. <!-- D-009 -->
+  exist, the leaf hardening is exactly M2/M5 here, and 12's takeover UI had no consumer. <!-- D-007 -->
 - [ ] `.plans/01-managed-worktree-hardening` - the cwd-path advisory lock. Required before
   worktree-isolated, **write-capable** leaves can run in parallel without clobbering each other.
 - [ ] `.plans/15-forkable-sessions-lineage` (supporting) - durable session spawning/lineage that the
@@ -39,7 +39,7 @@ principle, lifted from Claude Code's Dynamic Workflows (reverse-engineered in
 It is the **engine** that the worktree-fleet (`.plans/46-worktree-fleet`) and any future multi-agent
 orchestration ride on. It is **not** itself a product feature surface; the fleet is its first consumer.
 
-### Effect-native, not a ported scheduler <!-- D-002 -->
+### Effect-native, not a ported scheduler
 
 The host is Node + Effect (stable v3). The runtime is an **Effect program**, so it does not reimplement
 a JS-semaphore scheduler:
@@ -49,7 +49,7 @@ a JS-semaphore scheduler:
 - errors = `Data.TaggedError` in the typed `E` channel;
 - dependencies = `Context.Tag` services + `Layer` (the budget governor and emit are services).
 
-### Primitives (the runtime "stdlib") <!-- D-003 -->
+### Primitives (the runtime "stdlib")
 
 | Primitive | Role | Implementation |
 |---|---|---|
@@ -60,7 +60,7 @@ a JS-semaphore scheduler:
 | `log(msg)` | narrator line | emits a progress event |
 | `workflow(ref, args)` | nested sub-workflow | **deferred** (see Non-Goals); v1 is flat |
 
-### The `agent()` leaf <!-- D-004 -->
+### The `agent()` leaf <!-- D-002 -->
 
 Each `agent()` resolves to one `runDelegatedChild` run: its own isolated child session, tool clamping,
 and `delegated.to` fold-back. Two extensions over today's delegation:
@@ -72,9 +72,9 @@ and `delegated.to` fold-back. Two extensions over today's delegation:
   "until managed worktrees, cwd-level locks, and a merge/reconciliation protocol exist."
 - **Depth/cap are runtime-owned**, distinct from the interactive `delegate_*` tools'
   `MAX_DELEGATION_DEPTH = 1` and `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4`. v1 is **flat**: leaves are
-  isolated delegated children that do not themselves orchestrate.
+  isolated delegated children that do not themselves orchestrate. <!-- D-005 -->
 
-### Journaling + resume <!-- D-005 -->
+### Journaling + resume
 
 A run is keyed by a `runId` and journaled as new `workflow.*` events
 (`workflow.started`, `workflow.phase`, `workflow.agent` started/completed, `workflow.completed`)
@@ -84,14 +84,14 @@ instantly; the first changed/new call and everything after runs live. Determinis
 no clocks/RNG inside a workflow spec/script; the `meta`/header is a static literal so it is parseable
 without executing the body.
 
-### Budget governor <!-- D-006 -->
+### Budget governor
 
 A net-new `WorkflowBudgetGovernor` (`Context.Tag` service) tracks cumulative `Usage` across all leaves
 in a shared pool. The ceiling is **hard**: once spend reaches the target, further `agent()` calls fail
 with a typed error - enabling `while (budget.remaining() > N)` loops. Per-leaf step budgets reuse the
 existing `turn-budget.ts` tiers.
 
-### Authoring model <!-- D-007 -->
+### Authoring model <!-- D-003 -->
 
 A workflow can be expressed three ways; **v1 ships the first two** (neither needs a sandbox):
 
@@ -104,7 +104,7 @@ A workflow can be expressed three ways; **v1 ships the first two** (neither need
    control flow, executed in the extracted shared `sandbox-runner`. The biggest, riskiest path; the
    DSL covers fan-out/pipeline/phases without it.
 
-### Lifecycle <!-- D-008 -->
+### Lifecycle
 
 A run is itself a durable background session (its own `runId`); it streams progress events and, on
 completion, notifies the launching session (reusing the background-delegation/`task-notification` path).
@@ -143,8 +143,8 @@ budget counters, and fold-back results; deeper inspection reuses `08-tool-detail
 
 ## 2. Relationship to existing plans
 
-- **Subsumes `45`/M3 (Teams)** entirely - bounded fan-out, aggregation, cancellation, and progress
-  visibility *are* this engine. The poisoned "teams" noun is dropped (see `45`/§4 `D-003`); the
+- <!-- D-004 --> **Subsumes `45`/M3 (Teams)** entirely - bounded fan-out, aggregation, cancellation, and progress
+  visibility *are* this engine. <!-- D-006 --> The poisoned "teams" noun is dropped (see `45`/§4 `D-003`); the
   orchestration noun is **workflow** (engine) / **fleet** (the `46` application).
 - **Subsumes the engine-half of `45`/M4 (Mutating Background Agents)** - worktree-isolated,
   write-capable leaves. The merge/reconcile/approval half is the fleet's (`46`).
@@ -183,7 +183,7 @@ in M2/M5 (no separate bounded-child plan).
   1. RED: tests that `agent(prompt, opts)` spawns one isolated child and returns text; with
      `opts.schema` returns a validated object (auto-retry on mismatch at the tool-call layer); plus a
      characterization test that the child sees ONLY the seeded task, never the parent transcript
-     (preserving the `runDelegatedChild` isolation invariant formerly emphasized by plan 12). <!-- D-009 -->
+     (preserving the `runDelegatedChild` isolation invariant formerly emphasized by plan 12). <!-- D-007 -->
   2. GREEN: implement the leaf wrapping `runDelegatedChild`; schema-forced structured result.
   3. RED: tests for leaf failure -> fail-soft `null`; cancellation -> fiber interrupt.
   4. GREEN: fail-soft + interrupt-based cancellation.
