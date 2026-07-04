@@ -2,21 +2,27 @@
 
 ## 0. Hard Dependencies
 
-- [x] The workflow `agent()` leaf **is** the existing `runDelegatedChild()`
+- [x] The workflow `agent()` leaf **reuses** the existing `runDelegatedChild()`
   (`apps/agent-host/src/agent/delegate.ts:91`) subagent leaf: its isolation (explicit-only context,
   no parent-transcript leak), tool clamping, and `delegated.to` fold-back already exist. This plan
-  **hardens that leaf in place** - schema-forced structured output + typed fail-soft +
-  fiber-interrupt cancellation (M2), and a hard budget ceiling (M5). Formerly a separate plan 12
-  ("bounded-child + takeover"), now **dissolved into this plan**: with no model router in V2 there is
-  no host-owned execution packet that picks its own model, the leaf isolation + fold-back already
-  exist, the leaf hardening is exactly M2/M5 here, and 12's takeover UI had no consumer. <!-- D-007 -->
-- [ ] `.plans/01-managed-worktree-hardening` - the cwd-path advisory lock. Required before
-  worktree-isolated, **write-capable** leaves can run in parallel without clobbering each other.
-- [ ] `.plans/15-forkable-sessions-lineage` (supporting) - durable session spawning/lineage that the
-  run journal and per-leaf child sessions ride on.
-- [ ] `.plans/16-tool-script` - **only** for the later model-authored-JS milestone (Phase 5). Its
-  out-of-process child runner + OS sandbox (16's M3/M4) must first be **extracted into a shared
-  `sandbox-runner` service**. Not required for v1; the DSL and built-in authoring paths need no sandbox.
+  **hardens that leaf** - schema-forced structured output + typed structured fail-soft +
+  fiber-interrupt cancellation (M2), and a bounded budget ceiling (M5). Because the existing entry's
+  detached `Effect.runPromise` cannot be interrupted or surface a typed cause, M2 **forks an
+  interruptible leaf entry** that reuses the extracted isolation/fold-back rather than hardening the
+  Promise-returning entry in place (`D-011`). Formerly a separate plan 12 ("bounded-child + takeover"),
+  now **dissolved into this plan**: with no model router in V2 there is no host-owned execution packet
+  that picks its own model, the leaf isolation + fold-back already exist, the leaf hardening is exactly
+  M2/M5 here, and 12's takeover UI had no consumer. <!-- D-007 --> <!-- D-011 -->
+- [x] `.plans/01-managed-worktree-hardening` - **merged** (completed, removed from `.plans/`): the
+  cwd-path advisory lock exists and is available. It prevents worktree-path **collision** but does
+  **not** route a working directory, so M6 additionally needs **per-leaf cwd routing through the tool
+  boundary** (net-new; today the tools read a global `process.cwd()`). See M6. <!-- D-010 --> <!-- D-016 -->
+- [x] `.plans/15-forkable-sessions-lineage` (supporting) - **merged**: durable session spawning/lineage
+  that the run journal and per-leaf child sessions ride on. <!-- D-016 -->
+- [x] `.plans/16-tool-script` - **merged**: its out-of-process child runner + OS sandbox have shipped.
+  Phase 5 does **not** wait on `16`; its remaining prerequisite is `21`'s own M9 - **extracting** that
+  already-shipped runner into a shared `sandbox-runner` service. Not required for v1 (the DSL and
+  built-in authoring paths need no sandbox). <!-- D-016 -->
 - [x] Existing leaf: `runDelegatedChild()` at `apps/agent-host/src/agent/delegate.ts:91` (isolation,
   read-only clamp for background, `delegated.to` fold-back link).
 - [x] Existing journal substrate: the append-only session log
@@ -53,23 +59,45 @@ a JS-semaphore scheduler:
 
 | Primitive | Role | Implementation |
 |---|---|---|
-| `agent(prompt, opts)` | spawn one subagent leaf | calls `runDelegatedChild`; returns text, or a schema-validated object when `opts.schema` is set |
-| `parallel(thunks)` | **barrier** fan-out | `Effect.all` over the runtime concurrency gate; a failed thunk degrades to `null` **and emits a typed `leaf-failed` event** (never rejects; `opts.onError:'fail'` rejects the batch instead) |
-| `pipeline(items, ...stages)` | per-item staged flow, **no barrier** | each item runs its own chain; a stage throw drops that item to `null` (**emitting `leaf-failed`**) and skips its rest (`opts.onError:'fail'` rejects instead) |
+| `agent(prompt, opts)` | spawn one subagent leaf | an **interruptible** leaf entry (forked from `runDelegatedChild`) that runs the child turn's Effect in the orchestration fiber; returns text, or a schema-validated object when `opts.schema` is set; `opts.model` is a `ModelRef` (source+model). <!-- D-011 --> <!-- D-014 --> |
+| `parallel(thunks)` | **barrier** fan-out | `Effect.all` over the runtime concurrency gate; a leaf's **typed failure** (child-turn-failed / schema-invalid / budget) degrades to `null` **after emitting a typed `leaf-failed` event carrying the structured cause** (never rejects; `opts.onError:'fail'` rejects the batch instead). <!-- D-012 --> |
+| `pipeline(items, ...stages)` | per-item staged flow, **no barrier** | each item runs its own chain; a stage's typed failure drops that item to `null` (**emitting `leaf-failed`**) and skips its rest (`opts.onError:'fail'` rejects instead). <!-- D-012 --> |
 | `phase(title)` | progress grouping | sets the current phase used to bucket subsequent leaves in the run view |
 | `log(msg)` | narrator line | emits a progress event |
 | `workflow(ref, args)` | nested sub-workflow | **deferred** (see Non-Goals); v1 is flat |
 
 ### The `agent()` leaf <!-- D-002 -->
 
-Each `agent()` resolves to one `runDelegatedChild` run: its own isolated child session, tool clamping,
-and `delegated.to` fold-back. Two extensions over today's delegation:
+Each `agent()` runs one isolated child turn - its own child session, tool clamping, and `delegated.to`
+fold-back - reusing the isolation/seed/fold-back logic of `runDelegatedChild` (`delegate.ts`). It is
+**not** a thin wrapper over the *existing* `runDelegatedChild`: that entry returns a never-throwing
+Promise from a **detached** `Effect.runPromise` (`delegate.ts:145`), which can be neither interrupted
+nor made to surface a typed cause. The leaf is instead a **forked, interruptible entry** that runs the
+child turn's Effect **inside the orchestration fiber tree** and returns a typed result/failure; the
+shared seed/isolation/fold-back is extracted so both entries reuse it. <!-- D-011 -->
 
-- **`opts.isolation: 'worktree'`** provisions a managed worktree (via `.plans/01-managed-worktree-hardening`'s `WorktreeManager`
-  + cwd-lock) for that leaf, and **lifts the D-047/D-048 read-only clamp for that leaf only** - because
-  each write-capable leaf works in its **own** tree, parallel writes cannot race. This is the
-  engine-half of `45`'s M4 (mutating background agents), and the sanctioned unlock D-047 deferred
-  "until managed worktrees, cwd-level locks, and a merge/reconciliation protocol exist."
+Extensions over today's delegation:
+
+- **Interruptible + typed failure.** Because the child Effect composes into the parent fiber, fiber
+  interruption (cancel, strict-mode reject, hard budget cancel) actually halts an in-flight leaf and
+  stops its spend. The leaf exposes ONE typed failure channel unifying child-turn-failure (today a
+  `{failed:true}` **flag**, not a throw), schema-invalid-after-retry, and budget-exhausted/cancelled;
+  `parallel`/`pipeline` observe this typed failure (never an exception), and every `leaf-failed` event
+  carries a **structured** cause (child failure taxonomy + child session id), not a folded error
+  string. <!-- D-012 -->
+- **`opts.model` is a `ModelRef` (source + model id)**, not a bare string - it resolves through
+  `providerForSource` / `buildSourceProvider` (`catalog.ts`) and fails with a typed
+  `model-unresolvable` when absent from the catalog. A leaf pinned to a **local** model gates on
+  `provider.readiness().warm` first and **serialises behind the existing background admission gate**
+  (the local-runtime queue) rather than thrashing the single loaded LM Studio model; a not-warm local
+  pin surfaces a typed `local-not-ready` failure. <!-- D-014 -->
+- **`opts.isolation: 'worktree'`** provisions a managed worktree (via `01`'s `WorktreeManager` +
+  cwd-lock) for that leaf and **lifts the read-only clamp** (delegation `D-047`/`D-048`) for that leaf
+  only. Safe **parallel** writes additionally require **per-leaf cwd routing through the tool boundary**:
+  the tools read a global `process.cwd()` today, and `01`'s cwd-lock prevents path collision but does
+  not route a working directory - see M6. This is the engine-half of `45`'s M4 (mutating background
+  agents), and the sanctioned unlock delegation-`D-047` deferred "until managed worktrees, cwd-level
+  locks, and a merge/reconciliation protocol exist." <!-- D-010 -->
 - **Depth/cap are runtime-owned**, distinct from the interactive `delegate_*` tools'
   `MAX_DELEGATION_DEPTH = 1` and `MAX_BACKGROUND_CHILDREN_PER_SESSION = 4`. v1 is **flat**: leaves are
   isolated delegated children that do not themselves orchestrate. <!-- D-005 -->
@@ -78,31 +106,52 @@ and `delegated.to` fold-back. Two extensions over today's delegation:
 
 A run is keyed by a `runId` and journaled as new `workflow.*` events
 (`workflow.started`, `workflow.phase`, `workflow.agent` started/completed, `workflow.completed`)
-appended to the existing session log - no new substrate. Resume replays the orchestration and matches
-each `agent()` call on `(prompt, opts)`: the longest unchanged prefix returns cached journal results
-instantly; the first changed/new call and everything after runs live. Determinism is a hard invariant:
-no clocks/RNG inside a workflow spec/script; the `meta`/header is a static literal so it is parseable
-without executing the body.
+appended to the existing session log - no new substrate. Each `workflow.agent` event carries a
+**deterministic call ordinal** assigned at `agent()` invocation in replay order (a `parallel` batch's
+thunks take their array index; a `pipeline` slot takes `(item-index, stage-index)`). The journal keys a
+leaf's result by that **ordinal, not by content**, so emission-ordered / out-of-order appends still
+reconstruct call -> result. Resume replays the orchestration and, at each ordinal, uses `(prompt, opts)`
+only as an **invalidation check**: the first ordinal whose `(prompt, opts)` differs - and everything
+after it - runs live; the unchanged prefix returns cached results. Content matching alone is discarded:
+it cannot disambiguate identical parallel leaves (e.g. N identical refuters, loop-until-dry) and is
+unsound under out-of-order completion. Cached leaves also **restore their journaled `Usage`** into the
+budget governor, so budget-dependent control flow replays deterministically. <!-- D-009 -->
+
+Determinism is necessary but **not sufficient on its own**: no clocks/RNG inside a workflow spec/script
+and a static-literal `meta`/header (parseable without executing the body) are **paired with** the
+ordinal journal above and Usage replay to make resume sound. Enforcement is per authoring path (see
+Authoring model). <!-- D-015 -->
 
 ### Budget governor
 
 A net-new `WorkflowBudgetGovernor` (`Context.Tag` service) tracks cumulative `Usage` across all leaves
-in a shared pool. The ceiling is **hard**: once spend reaches the target, further `agent()` calls fail
-with a typed error - enabling `while (budget.remaining() > N)` loops. Per-leaf step budgets reuse the
-existing `turn-budget.ts` tiers.
+in a shared pool. The ceiling gates **new `agent()` spawns**: once spend reaches the target, further
+`agent()` calls fail with a typed error - enabling `while (budget.remaining() > N)` loops. It bounds
+*starting* work, not a mid-flight kill: a budget trip lets already-running leaves **drain** (only an
+explicit hard cancel interrupts them, per the interruptible leaf). Because `turn-budget.ts` caps tool
+**steps**, not tokens, each leaf also gets a **per-leaf token cap** so no single leaf overshoots
+unboundedly; worst-case overshoot is therefore bounded by `(concurrency-cap x per-leaf token cap)`.
+Per-leaf **step** budgets reuse the existing `turn-budget.ts` tiers (a distinct axis from the token
+pool). On resume, cached leaves restore their journaled `Usage` (see Journaling + resume) so
+budget-dependent loops replay deterministically. <!-- D-013 -->
 
 ### Authoring model <!-- D-003 -->
 
 A workflow can be expressed three ways; **v1 ships the first two** (neither needs a sandbox):
 
 1. **Built-in / saved** - developer-authored TS/Effect modules in a workflow registry, invoked by
-   **name + args** (the fleet, `46`, is the first). Trusted, in-process.
+   **name + args** (the fleet, `46`, is the first). Trusted, in-process; determinism is by convention
+   (no clock ban is enforced on trusted modules).
 2. **Model-authored DSL** - the model emits a **validated structured spec** (phases; agents with
    prompt/schema/model/isolation; sequential/parallel/pipeline; deps) through a `Workflow` tool call;
-   the Effect interpreter walks it. No code execution.
-3. **Model-authored JS** (Claude-Code parity, **Phase 5, gated on `16`**) - real JS with arbitrary
-   control flow, executed in the extracted shared `sandbox-runner`. The biggest, riskiest path; the
-   DSL covers fan-out/pipeline/phases without it.
+   the Effect interpreter walks it. No code execution. Determinism is **statically checked** here: the
+   spec is data, so clock/RNG references and a non-literal header are rejected outright.
+3. **Model-authored JS** (Claude-Code parity, **Phase 5, gated on `21`'s own M9 sandbox-runner
+   extraction from the already-shipped `16`**) - real JS with arbitrary control flow, executed in the
+   extracted shared `sandbox-runner`. Determinism here **cannot be statically proven**; it is enforced
+   at **runtime by capability-removal** (neutered `Date.now`/`Math.random`/argless `new Date` that
+   throw; denied filesystem+network; curated globals), not by rejecting the source. The biggest,
+   riskiest path; the DSL covers fan-out/pipeline/phases without it. <!-- D-015 -->
 
 ### Lifecycle
 
@@ -114,19 +163,20 @@ This durability is what the fleet's resumable run shell (`46`) builds on.
 
 | Constraint | Impact |
 |-----------|--------|
-| Deterministic control flow | No clocks/RNG in specs; literal header; resume is sound and cheap. |
+| Deterministic control flow | No clocks/RNG in specs + literal header, **paired with** an ordinal-keyed journal and Usage replay; resume is sound and cheap. <!-- D-009 --> |
 | Stochastic leaves only | The model re-enters only at `agent()`; orchestration is code. |
-| Effect-native | Concurrency/cancellation/errors/DI reuse the host's Effect machinery. |
-| Leaf = isolated delegated child | Every `agent()` is a `runDelegatedChild` run, hardened here (schema/budget/typed-failure); no new spawn machinery. |
-| Write only in own worktree | Write-capable leaves require `isolation:'worktree'` + the cwd-lock (`01`). |
-| No sandbox in v1 | Built-in + DSL authoring need no code execution; JS is gated on `16`. |
-| Hard budget | Spend ceiling throws; cost is bounded by construction. |
+| Effect-native | Concurrency = `Effect.all`; **cancellation = fiber interrupt over an interruptible leaf** (child Effect runs in the parent fiber, not a detached `runPromise`); errors/DI reuse the host's Effect machinery. <!-- D-011 --> |
+| Leaf = isolated delegated child | Every `agent()` is a **forked, interruptible** entry reusing `runDelegatedChild`'s isolation/fold-back, hardened here (schema/budget/typed-structured-failure); not a wrapper over the detached-Promise entry. <!-- D-011 --> <!-- D-012 --> |
+| Write only in own worktree | Write-capable leaves require `isolation:'worktree'` + `01`'s cwd-lock **and per-leaf cwd routing through the tool boundary** (M6). <!-- D-010 --> |
+| No sandbox in v1 | Built-in + DSL authoring need no code execution; JS is gated on `21`'s M9 extraction of a shared runner from the shipped `16`. <!-- D-016 --> |
+| Bounded budget | Spend ceiling throws on new spawns; in-flight leaves drain; a per-leaf token cap bounds worst-case overshoot to `(concurrency-cap x per-leaf tokens)`. <!-- D-013 --> |
 | Fail-soft fan-out (default) | `parallel`/`pipeline` degrade a failed item to `null` **and always emit a typed `leaf-failed` event** (a null VALUE to the orchestration, never a silent failure); opt-in `onError:'fail'` rejects the batch instead. <!-- D-008 --> |
 
 ### Boundaries
 
 - **`apps/agent-host`** owns the runtime engine, the workflow registry, the `WorkflowBudgetGovernor`,
-  the `agent()` leaf wrapper over `runDelegatedChild`, journaling, and the `Workflow` tool surface.
+  the `agent()` leaf (a forked, interruptible entry reusing `runDelegatedChild`'s isolation/fold-back),
+  journaling, and the `Workflow` tool surface.
 - **`packages/session`** owns the `workflow.*` protocol/read-model additions, grown one event at a time.
 - **`apps/session-store`** is the journal (unchanged substrate; new event types only).
 - **`apps/web`** owns a minimal run-progress surface, reusing existing session/activity/takeover
@@ -138,11 +188,13 @@ This durability is what the fleet's resumable run shell (`46`) builds on.
 
 Spans cover the run (`runId`, workflow name, budget), each phase, and each leaf (child session id,
 isolation mode, model, duration, budget delta). Failures are typed (spec-invalid, leaf-failed,
-budget-exhausted, cancelled, worktree-lock-denied). The `leaf-failed` event is emitted by the M3
-fail-soft path itself (D-008), so a degraded-to-null leaf is always journaled - M8 adds
-spans/run-view over these events, it does not gate whether a failure is recorded. The minimal run
-view shows phase/leaf status, budget counters, and fold-back results; deeper inspection reuses
-`08-tool-detail-takeover` primitives.
+budget-exhausted, cancelled, worktree-lock-denied, model-unresolvable, local-not-ready). The
+`leaf-failed` event is emitted by the M3 fail-soft path itself (D-008), so a degraded-to-null leaf is
+always journaled - M8 adds spans/run-view over these events, it does not gate whether a failure is
+recorded. Each `leaf-failed` carries a **structured** cause (child failure taxonomy + child session id,
+per the leaf's typed failure channel), so a failure is diagnosable from the span without first opening
+the child transcript; deeper inspection still reuses `08-tool-detail-takeover` primitives. The minimal
+run view shows phase/leaf status (bucketed by call ordinal), budget counters, and fold-back results. <!-- D-012 -->
 
 ## 2. Relationship to existing plans
 
@@ -170,8 +222,9 @@ in M2/M5 (no separate bounded-child plan).
 - **Dependencies:** none
 - **Effort:** M
 - **Tasks:**
-  1. RED: tests for `WorkflowSpec` schema (phases; agents with prompt/schema/model/isolation;
-     sequential/parallel/pipeline; deps) including rejection of clocks/RNG and a non-literal header.
+  1. RED: tests for `WorkflowSpec` schema (phases; agents with prompt/schema/`model` as a `ModelRef`/
+     isolation; sequential/parallel/pipeline; deps). The DSL is data, so determinism is **statically
+     checked**: reject clock/RNG references and a non-literal header. <!-- D-014 --> <!-- D-015 -->
   2. GREEN: define `WorkflowSpec` (Effect `Schema`), a workflow **registry** (built-in + saved), and a
      name+args invocation entry.
   3. RED: tests for invalid spec, unknown workflow name, bad args.
@@ -187,10 +240,20 @@ in M2/M5 (no separate bounded-child plan).
      `opts.schema` returns a validated object (auto-retry on mismatch at the tool-call layer); plus a
      characterization test that the child sees ONLY the seeded task, never the parent transcript
      (preserving the `runDelegatedChild` isolation invariant formerly emphasized by plan 12). <!-- D-007 -->
-  2. GREEN: implement the leaf wrapping `runDelegatedChild`; schema-forced structured result.
-  3. RED: tests for leaf failure -> fail-soft `null`; cancellation -> fiber interrupt.
-  4. GREEN: fail-soft + interrupt-based cancellation.
-  5. REFACTOR: keep leaf policy separate from the interactive `delegate_*` tool policy.
+  2. GREEN: extract the shared seed/isolation/fold-back from `runDelegatedChild`; implement a **forked,
+     interruptible leaf entry** that runs the child turn's Effect **in the orchestration fiber** (not a
+     detached `Effect.runPromise`); schema-forced structured result. <!-- D-011 -->
+  3. RED: tests that a child-turn failure (the `{failed:true}` flag, not a throw), a
+     schema-invalid-after-retry, and a budget/cancel each surface through ONE **typed** failure channel
+     carrying a **structured** cause; and that fiber interruption actually halts an in-flight leaf
+     (stops its spend), not merely detaches it. <!-- D-011 --> <!-- D-012 -->
+  4. GREEN: the typed failure channel (structured cause) + interrupt-based cancellation that reaches the
+     child turn.
+  5. RED: `opts.model` as a `ModelRef` resolves via `providerForSource`/`buildSourceProvider`, failing
+     `model-unresolvable` when absent; a **local**-pinned leaf gates on `readiness().warm`, serialises
+     behind the background admission gate, and surfaces `local-not-ready` when not warm. <!-- D-014 -->
+  6. GREEN: `ModelRef` resolution + local-readiness gate.
+  7. REFACTOR: keep leaf policy separate from the interactive `delegate_*` tool policy.
 
 #### M3: Structured-concurrency primitives
 
@@ -203,8 +266,8 @@ in M2/M5 (no separate bounded-child plan).
   3. RED: tests for cap enforcement (excess queues) and a lifetime-cap backstop.
   4. GREEN: bounded scheduler over Effect; shared progress-event emission.
   5. RED: test that EVERY degrade-to-null (`parallel` and `pipeline`) emits a typed `leaf-failed`
-     event carrying the child's cause BEFORE returning null - a failed leaf is never a bare,
-     unrecorded null. <!-- D-008 -->
+     event carrying the child's **structured** cause (the M2 typed failure channel) BEFORE returning
+     null - a failed leaf is never a bare, unrecorded null. <!-- D-008 --> <!-- D-012 -->
   6. GREEN: emit the typed `leaf-failed` event on the fail-soft path itself (owned in M3, not
      deferred to M8's observability - M8 only adds spans/run-view over these already-emitted events).
   7. RED: test the opt-in strict mode - `parallel`/`pipeline` with `opts.onError:'fail'` reject the
@@ -214,13 +277,13 @@ in M2/M5 (no separate bounded-child plan).
 
 ### Gate 1->2
 
-- [ ] A workflow spec validates and rejects non-deterministic constructs.
-- [ ] `agent()` is isolated, schema-capable, fail-soft, and interrupt-cancellable.
+- [ ] A DSL spec validates, statically rejects non-deterministic constructs, and takes `model` as a `ModelRef`.
+- [ ] `agent()` is isolated, schema-capable, `ModelRef`-resolved (local-readiness-gated), typed-fail-soft, and genuinely interrupt-cancellable (interruption halts an in-flight leaf).
 - [ ] `parallel`/`pipeline`/`phase`/`log` behave correctly under the concurrency cap.
 
 ### Phase 2: Journaling, resume, budget
 
-**Goal:** a run is durable and resumable, and spend is a hard ceiling.
+**Goal:** a run is durable and resumable, and spend is bounded by a typed spawn-gate ceiling.
 
 **Gate from previous:** the engine core executes specs.
 
@@ -229,12 +292,16 @@ in M2/M5 (no separate bounded-child plan).
 - **Dependencies:** M3
 - **Effort:** L
 - **Tasks:**
-  1. RED: tests for `workflow.started`/`workflow.phase`/`workflow.agent`/`workflow.completed`
-     appended to the session log keyed by `runId`.
-  2. GREEN: implement journaling; add `workflow.*` to `packages/session` protocol.
-  3. RED: tests for resume = replay + `(prompt, opts)` prefix match -> cached results; first changed
-     call re-runs.
-  4. GREEN: resume engine.
+  1. RED: tests that `workflow.started`/`workflow.phase`/`workflow.agent`/`workflow.completed` append
+     to the session log keyed by `runId`, and that each `workflow.agent` carries a **deterministic call
+     ordinal** (parallel -> array index; pipeline -> `(item, stage)`) and the leaf's `Usage`. <!-- D-009 -->
+  2. GREEN: implement journaling; add `workflow.*` (with ordinal + `Usage`) to `packages/session`
+     protocol.
+  3. RED: resume = replay + **per-ordinal** `(prompt, opts)` invalidation (NOT a content lookup): two
+     **identical**-`(prompt,opts)` parallel leaves and an out-of-order completion resume correctly; the
+     first changed ordinal and everything after re-runs; cached leaves restore `Usage` so a
+     `budget.remaining()` loop replays the same iteration count. <!-- D-009 --> <!-- D-013 -->
+  4. GREEN: resume engine (ordinal-keyed cache + `Usage` restore).
   5. REFACTOR: keep the journal projection generic.
 
 #### M5: WorkflowBudgetGovernor
@@ -242,36 +309,47 @@ in M2/M5 (no separate bounded-child plan).
 - **Dependencies:** M3
 - **Effort:** M
 - **Tasks:**
-  1. RED: tests for cumulative `Usage` across leaves; hard ceiling -> `agent()` fails with a typed
-     error; `budget.remaining()` loop support.
-  2. GREEN: implement the governor service (`Context.Tag` + `Layer`), reusing `turn-budget.ts` tiers
-     per leaf.
+  1. RED: tests for cumulative `Usage` across leaves; ceiling -> a **new** `agent()` fails with a typed
+     error; `budget.remaining()` loop support; a **per-leaf token cap** (distinct from `turn-budget.ts`'s
+     step cap) so one leaf cannot overshoot unboundedly; a budget trip lets in-flight leaves **drain**
+     with overshoot bounded by `(concurrency-cap x per-leaf token cap)`. <!-- D-013 -->
+  2. GREEN: implement the governor service (`Context.Tag` + `Layer`) + the per-leaf token cap, reusing
+     `turn-budget.ts` tiers for the per-leaf **step** budget.
   3. RED: tests for shared-pool accounting.
   4. GREEN: shared pool.
   5. REFACTOR: keep budget separate from the scheduler.
 
 ### Gate 2->3
 
-- [ ] A run survives restart and resumes from the journal with a correct cache-hit prefix.
-- [ ] Budget is a hard, typed ceiling.
+- [ ] A run survives restart and resumes with a correct **ordinal-keyed** cache-hit prefix (identical parallel leaves and out-of-order completion included); cached leaves restore `Usage`.
+- [ ] Budget is a typed spawn-gate ceiling with bounded overshoot (per-leaf token cap; in-flight leaves drain).
 
 ### Phase 3: Worktree-isolated write-capable leaves
 
 **Goal:** parallel write-capable leaves run safely, each in its own tree.
 
-**Gate from previous:** `.plans/01-managed-worktree-hardening` cwd-lock is available.
+**Gate from previous:** `01`'s cwd-lock is **merged/available**; the remaining M6 prerequisite is
+**per-leaf cwd routing through the tool boundary** (net-new, M6 task 1).
 
 #### M6: Worktree isolation for leaves
 
-- **Dependencies:** M2, `.plans/01-managed-worktree-hardening`
-- **Effort:** L
+- **Dependencies:** M2; `.plans/01-managed-worktree-hardening` (**merged** - cwd-lock available); **and
+  per-leaf cwd routing through the tool boundary** (net-new; task 1 below). <!-- D-010 -->
+- **Effort:** L (larger if in-process cwd-threading is chosen over out-of-process leaves - owner
+  decision, D-010)
 - **Tasks:**
-  1. RED: tests that `opts.isolation:'worktree'` provisions a managed worktree per leaf, lifts the
-     read-only clamp for that leaf, and the cwd-lock prevents collision.
-  2. GREEN: wire the leaf to `WorktreeManager` + cwd-lock; write-capable in its own tree; auto-cleanup
-     if untouched.
-  3. RED: tests proving parallel write-capable leaves do not race; merge/reconcile is the caller's job.
-  4. GREEN: per-leaf worktree result (branch, diffstat, conflict-with-base).
+  1. RED: a failing test that two **parallel** worktree leaves write to **distinct** trees - which
+     fails today because the tools resolve a global `process.cwd()` (`bash.ts`, `read.ts`,
+     `run-shell.ts`, `tools/index.ts`, `WORKSPACE_ROOT`). This pins the per-leaf cwd requirement. <!-- D-010 -->
+  2. GREEN: thread a **per-leaf cwd** through the tool execution boundary (recommended default) so each
+     leaf resolves paths/`spawn` against its own worktree; `01`'s cwd-lock prevents path collision.
+     Fallback if in-process threading proves infeasible: run worktree leaves **out-of-process** on
+     `16`'s shipped runner. <!-- D-010 -->
+  3. RED: tests that `opts.isolation:'worktree'` provisions a managed worktree per leaf, lifts the
+     read-only clamp for that leaf, and parallel write-capable leaves **do not race**; merge/reconcile
+     is the caller's job.
+  4. GREEN: wire the leaf to `WorktreeManager` + cwd-lock + per-leaf cwd; write-capable in its own
+     tree; auto-cleanup if untouched; per-leaf worktree result (branch, diffstat, conflict-with-base).
   5. REFACTOR: keep worktree policy in the leaf, not the scheduler.
 
 ### Gate 3->4
@@ -312,11 +390,12 @@ in M2/M5 (no separate bounded-child plan).
 - [ ] Built-in and DSL workflows run in the background and fold back.
 - [ ] Every run/phase/leaf is inspectable.
 
-### Phase 5: Model-authored JS (gated on `16`)
+### Phase 5: Model-authored JS (gated on `21`'s M9 sandbox-runner extraction)
 
 **Goal:** the model can author arbitrary-control-flow JS workflows, sandboxed.
 
-**Gate from previous:** DSL authoring is solid and `.plans/16-tool-script` has shipped its runner.
+**Gate from previous:** DSL authoring is solid and `16` has shipped its runner (merged); the remaining
+prerequisite is `21`'s own M9 extraction of a shared `sandbox-runner` from it. <!-- D-016 -->
 
 #### M9: Extract shared `sandbox-runner` from `16`
 
@@ -335,7 +414,9 @@ in M2/M5 (no separate bounded-child plan).
 - **Effort:** L
 - **Tasks:**
   1. RED: tests for model-authored JS executed in the sandbox with the workflow-primitive bridge
-     (`agent`/`parallel`/`pipeline`/`phase`/`log`); determinism guards (no clocks/RNG).
+     (`agent`/`parallel`/`pipeline`/`phase`/`log`); determinism enforced at **runtime by
+     capability-removal** (neutered `Date.now`/`Math.random`/argless `new Date` throw; FS+network
+     denied), NOT by statically rejecting the source. <!-- D-015 -->
   2. GREEN: the JS authoring path on the shared `sandbox-runner`.
   3. REFACTOR: parity with DSL semantics.
 
@@ -349,11 +430,14 @@ in M2/M5 (no separate bounded-child plan).
 - **Multi-user "teams"** - permanently dropped (`45`/§4 `D-003`). "Fleet" is the orchestration noun.
 - **Inline self-validation** - dropped (`45`/§4 `D-033`); verification is a leaf, not self-check.
 - **A general fleet/dashboard UI** - reuse existing surfaces; a multi-run dashboard is deferred.
-- **Executing model-authored JS without the sandbox** - the JS path is gated on `16`, never ad hoc.
+- **Executing model-authored JS without the sandbox** - the JS path is gated on the shared
+  `sandbox-runner` (M9, extracted from the shipped `16`), never ad hoc.
 - **Replacing the interactive `delegate_*` tools** - they remain for conversational delegation.
 - **Nested `workflow()`** - v1 is flat; one level of nesting is a later upgrade.
 
 ## 5. Decisions
 
-Canonical decisions are in `.plans/21-workflows-runtime/plan.db`. Key decisions use `<!-- D-NNN -->`
-markers above.
+Canonical decisions are in `.plans/21-workflows-runtime/plan.db` (D-001..D-016). Key decisions use
+`<!-- D-NNN -->` markers above; a bare `D-NNN` marker denotes **this** plan's ledger. References to
+another plan's ledger are namespaced (e.g. `delegation/D-047`, `45/§4 D-033`) so they are never
+mistaken for this plan's decisions.
