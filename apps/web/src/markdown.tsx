@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { marked, type Tokens } from "marked";
 import { useEffect, useMemo, useRef } from "react";
+import { type HighlightResult, highlightCode, isFenceClosed } from "./code-highlight";
 import { MermaidBlock } from "./mermaid-block";
 import "./markdown.css";
 
@@ -74,14 +75,36 @@ renderer.table = (token: Tokens.Table) =>
 const COPY_ICON =
   '<svg class="trevor-md-code-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 
-renderer.code = ({ text, lang, escaped }: Tokens.Code) => {
+// Fenced-block language-route precedence (plan 36 M5): (1) Mermaid is split out to its diagram
+// component in `markdownParts` before it ever reaches this renderer; (2) an explicit, recognized
+// language with a closed fence is syntax-highlighted here; (3) everything else - unknown language,
+// bare fence, still-streaming fence, oversized block - falls through to the plain <pre><code> path.
+renderer.code = ({ text, lang, escaped, raw }: Tokens.Code) => {
   const language = lang?.match(/\S+/)?.[0] ?? "";
-  const className = language ? ` class="language-${escapeHtml(language)}"` : "";
   // Dedent so a block quoted from indented source renders flush-left; the copy matches what's shown.
   const code = dedentCode(text);
   const displayText = normalizeCodeText(code);
-  const codeHtml = escaped ? displayText : escapeHtml(displayText);
+  // Copy is always the dedented raw source, generated before highlighting - never the token markup.
   const copyText = encodeURIComponent(code);
+
+  // Highlight only an explicit-language block whose fence has closed (plan 36): a still-streaming
+  // block has no closing fence yet, so it stays plain until it settles rather than re-tokenizing on
+  // every chunk. `escaped` markup would already be HTML-encoded, so leave it for the plain path.
+  const highlight: HighlightResult =
+    !escaped && language && isFenceClosed(raw)
+      ? highlightCode(language, displayText)
+      : { highlighted: false };
+
+  const codeHtml = highlight.highlighted
+    ? highlight.html
+    : escaped
+      ? displayText
+      : escapeHtml(displayText);
+  const classes = [
+    highlight.highlighted ? "hljs" : "",
+    language ? `language-${escapeHtml(language)}` : "",
+  ].filter(Boolean);
+  const className = classes.length > 0 ? ` class="${classes.join(" ")}"` : "";
 
   return `<div class="trevor-md-codeblock"><button type="button" class="trevor-md-code-copy" data-trevor-copy-code="${copyText}" aria-label="Copy code block" title="Copy code block">${COPY_ICON}</button><pre><code${className}>${codeHtml}</code></pre></div>\n`;
 };

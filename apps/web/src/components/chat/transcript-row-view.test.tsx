@@ -345,7 +345,10 @@ const ordinary = true;
 
   assert.ok(screen.getByTestId("mermaid-block"));
   assert.equal(screen.getByTestId("mermaid-source").textContent, "graph TD\n  A-->B");
-  assert.ok(screen.getByText("const ordinary = true;"));
+  // The ordinary ts block is syntax-highlighted (its text is split across token spans), while the
+  // mermaid fence keeps its diagram route.
+  const tsCode = document.querySelector("pre code.language-ts");
+  assert.ok(tsCode?.textContent?.includes("const ordinary = true;"));
 });
 
 test("a user transcript message keeps Mermaid fences as ordinary code", () => {

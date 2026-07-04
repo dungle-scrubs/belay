@@ -91,8 +91,11 @@ test("keeps GFM tables, links, and ordinary code rendering across Mermaid splits
     "https://example.com",
   );
   assert.ok(container.querySelector(".trevor-md-table-scroll table"));
-  assert.ok(container.querySelector("pre code.language-sh"));
-  assert.ok(screen.getByText("echo done"));
+  const shCode = container.querySelector("pre code.language-sh");
+  assert.ok(shCode);
+  // The shell block is now syntax-highlighted, so its text is split across token spans; the block's
+  // textContent still carries the source verbatim.
+  assert.ok(shCode?.textContent?.includes("echo done"));
 });
 
 test("dedents a code block quoted from indented source, keeping relative indentation", () => {
@@ -128,4 +131,85 @@ test("the dedented code is what gets copied", () => {
     "x = 1\n    y = 2",
     "copy matches the dedented display",
   );
+});
+
+test("highlights explicit closed-fence languages into hljs token spans", () => {
+  const cases: readonly [string, string][] = [
+    ["ts", "```ts\nconst answer = 42;\n```"],
+    ["tsx", "```tsx\nconst App = () => <main />;\n```"],
+    ["bash", "```bash\necho hi\n```"],
+    ["json", '```json\n{ "answer": 42 }\n```'],
+    ["diff", "```diff\n- old line\n+ new line\n```"],
+  ];
+  for (const [language, text] of cases) {
+    const { container, unmount } = render(<Markdown text={text} />);
+    const code = container.querySelector(`code.hljs.language-${language}`);
+    assert.ok(code, `${language} block is highlighted with hljs + language class`);
+    assert.ok(
+      container.querySelector("code.hljs [class^='hljs-']"),
+      `${language} block emits at least one token span`,
+    );
+    unmount();
+  }
+});
+
+test("leaves unknown and no-language blocks as plain, unhighlighted code", () => {
+  const unknown = render(<Markdown text={"```wat\nsome tokens here\n```"} />);
+  assert.ok(unknown.container.querySelector("code.language-wat"));
+  assert.equal(unknown.container.querySelector("code.hljs"), null);
+  assert.equal(unknown.container.querySelector("[class^='hljs-']"), null);
+  unknown.unmount();
+
+  const bare = render(<Markdown text={"```\nplain text\n```"} />);
+  assert.equal(bare.container.querySelector("code.hljs"), null);
+  assert.equal(bare.container.querySelector("[class^='hljs-']"), null);
+  assert.equal(bare.container.querySelector("pre code")?.textContent, "plain text\n");
+});
+
+test("never syntax-highlights a mermaid fence, even when diagram routing is off", () => {
+  const { container } = render(
+    <Markdown mermaid={false} text={"```mermaid\ngraph TD\n  A-->B\n```"} />,
+  );
+  assert.ok(container.querySelector("pre code.language-mermaid"));
+  assert.equal(container.querySelector("code.hljs"), null);
+  assert.equal(container.querySelector("[class^='hljs-']"), null);
+  assert.equal(container.querySelector("pre code")?.textContent, "graph TD\n  A-->B\n");
+});
+
+test("copy stays the dedented raw source for a highlighted block", () => {
+  const writeText = vi.fn();
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  const { container } = render(
+    <Markdown text={"```ts\n    const x = 1;\n    const y = 2;\n```"} />,
+  );
+  assert.ok(container.querySelector("code.hljs"), "block is highlighted");
+  fireEvent.click(screen.getByLabelText("Copy code block"));
+  assert.equal(
+    writeText.mock.calls[0]?.[0],
+    "const x = 1;\nconst y = 2;",
+    "copy is the dedented source, not the token markup",
+  );
+});
+
+test("escapes dangerous code content through highlighting and DOMPurify", () => {
+  const { container } = render(
+    <Markdown text={'```ts\nconst payload = "<img src=x onerror=alert(1)>";\n```'} />,
+  );
+  // hljs runs (token spans present), but the string content is inert text, not a live element.
+  assert.ok(container.querySelector("code.hljs .hljs-string"));
+  assert.equal(container.querySelector("img"), null);
+  assert.equal(container.querySelector("script"), null);
+  assert.ok(
+    container.querySelector("pre code")?.textContent?.includes("<img src=x onerror=alert(1)>"),
+    "the payload survives only as literal text",
+  );
+});
+
+test("defers highlighting for a still-streaming (unterminated) code fence", () => {
+  const { container } = render(<Markdown text={"```ts\nconst answer = 42;\nconst pending ="} />);
+  assert.equal(container.querySelector("code.hljs"), null, "no highlight while the fence is open");
+  assert.equal(container.querySelector("[class^='hljs-']"), null);
+  const code = container.querySelector("pre code.language-ts");
+  assert.ok(code, "still renders as a plain ts code block");
+  assert.ok(code?.textContent?.includes("const pending ="));
 });

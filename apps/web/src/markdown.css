@@ -90,6 +90,74 @@
   white-space: pre;
 }
 
+/* Syntax highlighting tokens (plan 36). hljs emits <span class="hljs-*"> inside a highlighted <code>;
+   colors come from the SMUI palette variables (index.css :root / .dark) so they flip with light/dark
+   and never bake an absolute theme color. Any token class left unmapped inherits the default code
+   color. The `.hljs` class itself carries no theme here - background stays owned by `.trevor-md pre`. */
+.trevor-md .hljs-comment,
+.trevor-md .hljs-quote {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+.trevor-md .hljs-keyword,
+.trevor-md .hljs-selector-tag,
+.trevor-md .hljs-section,
+.trevor-md .hljs-doctag,
+.trevor-md .hljs-name,
+.trevor-md .hljs-tag {
+  color: hsl(var(--smui-purple));
+}
+.trevor-md .hljs-string,
+.trevor-md .hljs-regexp,
+.trevor-md .hljs-symbol,
+.trevor-md .hljs-bullet,
+.trevor-md .hljs-addition,
+.trevor-md .hljs-meta .hljs-string {
+  color: hsl(var(--smui-green));
+}
+.trevor-md .hljs-number,
+.trevor-md .hljs-literal {
+  color: hsl(var(--smui-orange));
+}
+.trevor-md .hljs-title,
+.trevor-md .hljs-title.function_ {
+  color: hsl(var(--smui-frost-2));
+}
+.trevor-md .hljs-title.class_,
+.trevor-md .hljs-type,
+.trevor-md .hljs-built_in {
+  color: hsl(var(--smui-yellow));
+}
+.trevor-md .hljs-attr,
+.trevor-md .hljs-attribute,
+.trevor-md .hljs-property,
+.trevor-md .hljs-variable,
+.trevor-md .hljs-template-variable,
+.trevor-md .hljs-variable.language_,
+.trevor-md .hljs-params,
+.trevor-md .hljs-selector-attr,
+.trevor-md .hljs-selector-class,
+.trevor-md .hljs-selector-id {
+  color: hsl(var(--smui-frost-3));
+}
+.trevor-md .hljs-meta,
+.trevor-md .hljs-meta .hljs-keyword {
+  color: hsl(var(--smui-frost-4));
+}
+.trevor-md .hljs-deletion {
+  color: hsl(var(--smui-red));
+}
+.trevor-md .hljs-link {
+  color: hsl(var(--smui-frost-2));
+  text-decoration: underline;
+}
+.trevor-md .hljs-emphasis {
+  font-style: italic;
+}
+.trevor-md .hljs-strong {
+  font-weight: 600;
+}
+
 .trevor-md-codeblock {
   position: relative;
   margin: 0.6em 0;
