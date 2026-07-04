@@ -1,15 +1,9 @@
-import {
-  attachFakeHost,
-  fakeProvider,
-  type Provider,
-  type ProviderEvent,
-} from "@trevor/agent-host/testing";
+import { answerProvider, attachFakeHost, hangingProvider } from "@trevor/agent-host/testing";
 import { runCancel, runPrompt, runTranscript } from "@trevor/cli/headless";
 import { createTrevorClient } from "@trevor/sdk";
 import { decodeTrevorEvent, PRODUCER_IDS, streamTransport } from "@trevor/session";
 import { subscribe, waitFor } from "@trevor/test-kit";
 import { bootBlob, bootStore } from "@trevor/test-kit/boot";
-import { Stream } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
@@ -17,27 +11,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * and blob-store, through the exact `@trevor/sdk` workflows the SDK and test-kit use - one protocol, three
  * consumers. A fake-provider host (the same one the eval harness attaches) reacts to the CLI's prompts.
  */
-
-const USAGE = { input: 1, output: 1, contextWindow: 1000, genMs: 1 };
-
-function answerProvider(text: string): Provider {
-  return fakeProvider({
-    step: (): ProviderEvent[] => [
-      { type: "text", text },
-      { type: "usage", usage: USAGE },
-    ],
-  });
-}
-
-function hangingProvider(): Provider {
-  return fakeProvider({
-    stream: () =>
-      Stream.concat(
-        Stream.fromIterable<ProviderEvent>([{ type: "text", text: "working" }]),
-        Stream.never,
-      ),
-  });
-}
 
 describe("headless CLI over local stores", () => {
   let store: Awaited<ReturnType<typeof bootStore>>;

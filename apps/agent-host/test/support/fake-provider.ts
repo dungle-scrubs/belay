@@ -114,6 +114,27 @@ export function fakeProvider(opts: FakeProviderOptions = {}): Provider {
   };
 }
 
+/** A provider that answers with fixed text in one step (no tool call) - the simplest scored turn. */
+export function answerProvider(text: string): Provider {
+  return fakeProvider({
+    step: () => [
+      { type: "text", text },
+      { type: "usage", usage },
+    ],
+  });
+}
+
+/** A provider whose stream emits one delta then never terminates, so a turn stays open for cancel/timeout. */
+export function hangingProvider(): Provider {
+  return fakeProvider({
+    stream: () =>
+      Stream.concat(
+        Stream.fromIterable<ProviderEvent>([{ type: "text", text: "working" }]),
+        Stream.never,
+      ),
+  });
+}
+
 /** A collecting Emit layer plus the array it appends every published event to. */
 export function collectingEmit(): {
   readonly layer: Layer.Layer<Emit>;

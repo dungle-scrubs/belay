@@ -1,12 +1,10 @@
 import {
+  answerProvider,
   createFakeEvalHarness,
   type EvalHarness,
-  fakeProvider,
+  hangingProvider,
   liveLaneStatus,
-  type Provider,
-  type ProviderEvent,
 } from "@trevor/agent-host/testing";
-import { Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
@@ -14,29 +12,6 @@ import { afterEach, describe, expect, it } from "vitest";
  * returns a structured record to score. The deterministic `fake` lane attaches a fake-provider host, so
  * these assertions are hermetic; the `live` lane is gated by an explicit skip reason.
  */
-
-const USAGE = { input: 1, output: 1, contextWindow: 1000, genMs: 1 };
-
-/** A provider that answers with fixed text in one step (no tool call), for a clean happy-path assertion. */
-function answerProvider(text: string): Provider {
-  return fakeProvider({
-    step: (): ProviderEvent[] => [
-      { type: "text", text },
-      { type: "usage", usage: USAGE },
-    ],
-  });
-}
-
-/** A provider whose stream emits one delta then never terminates, so a turn stays open for cancel/timeout. */
-function hangingProvider(): Provider {
-  return fakeProvider({
-    stream: () =>
-      Stream.concat(
-        Stream.fromIterable<ProviderEvent>([{ type: "text", text: "working" }]),
-        Stream.never,
-      ),
-  });
-}
 
 describe("eval harness (fake lane)", () => {
   let harness: EvalHarness | undefined;
