@@ -54,8 +54,8 @@ a JS-semaphore scheduler:
 | Primitive | Role | Implementation |
 |---|---|---|
 | `agent(prompt, opts)` | spawn one subagent leaf | calls `runDelegatedChild`; returns text, or a schema-validated object when `opts.schema` is set |
-| `parallel(thunks)` | **barrier** fan-out | `Effect.all` over the runtime concurrency gate; a failed thunk degrades to `null` (never rejects) |
-| `pipeline(items, ...stages)` | per-item staged flow, **no barrier** | each item runs its own chain; a stage throw drops that item to `null` and skips its rest |
+| `parallel(thunks)` | **barrier** fan-out | `Effect.all` over the runtime concurrency gate; a failed thunk degrades to `null` **and emits a typed `leaf-failed` event** (never rejects; `opts.onError:'fail'` rejects the batch instead) |
+| `pipeline(items, ...stages)` | per-item staged flow, **no barrier** | each item runs its own chain; a stage throw drops that item to `null` (**emitting `leaf-failed`**) and skips its rest (`opts.onError:'fail'` rejects instead) |
 | `phase(title)` | progress grouping | sets the current phase used to bucket subsequent leaves in the run view |
 | `log(msg)` | narrator line | emits a progress event |
 | `workflow(ref, args)` | nested sub-workflow | **deferred** (see Non-Goals); v1 is flat |
@@ -121,7 +121,7 @@ This durability is what the fleet's resumable run shell (`46`) builds on.
 | Write only in own worktree | Write-capable leaves require `isolation:'worktree'` + the cwd-lock (`01`). |
 | No sandbox in v1 | Built-in + DSL authoring need no code execution; JS is gated on `16`. |
 | Hard budget | Spend ceiling throws; cost is bounded by construction. |
-| Fail-soft fan-out | `parallel`/`pipeline` degrade a failed item to `null`, never reject the batch. |
+| Fail-soft fan-out (default) | `parallel`/`pipeline` degrade a failed item to `null` **and always emit a typed `leaf-failed` event** (a null VALUE to the orchestration, never a silent failure); opt-in `onError:'fail'` rejects the batch instead. <!-- D-008 --> |
 
 ### Boundaries
 
@@ -138,8 +138,11 @@ This durability is what the fleet's resumable run shell (`46`) builds on.
 
 Spans cover the run (`runId`, workflow name, budget), each phase, and each leaf (child session id,
 isolation mode, model, duration, budget delta). Failures are typed (spec-invalid, leaf-failed,
-budget-exhausted, cancelled, worktree-lock-denied). The minimal run view shows phase/leaf status,
-budget counters, and fold-back results; deeper inspection reuses `08-tool-detail-takeover` primitives.
+budget-exhausted, cancelled, worktree-lock-denied). The `leaf-failed` event is emitted by the M3
+fail-soft path itself (D-008), so a degraded-to-null leaf is always journaled - M8 adds
+spans/run-view over these events, it does not gate whether a failure is recorded. The minimal run
+view shows phase/leaf status, budget counters, and fold-back results; deeper inspection reuses
+`08-tool-detail-takeover` primitives.
 
 ## 2. Relationship to existing plans
 
@@ -199,7 +202,15 @@ in M2/M5 (no separate bounded-child plan).
   2. GREEN: implement over `Effect.all` with a runtime concurrency cap.
   3. RED: tests for cap enforcement (excess queues) and a lifetime-cap backstop.
   4. GREEN: bounded scheduler over Effect; shared progress-event emission.
-  5. REFACTOR: keep emission generic and reusable.
+  5. RED: test that EVERY degrade-to-null (`parallel` and `pipeline`) emits a typed `leaf-failed`
+     event carrying the child's cause BEFORE returning null - a failed leaf is never a bare,
+     unrecorded null. <!-- D-008 -->
+  6. GREEN: emit the typed `leaf-failed` event on the fail-soft path itself (owned in M3, not
+     deferred to M8's observability - M8 only adds spans/run-view over these already-emitted events).
+  7. RED: test the opt-in strict mode - `parallel`/`pipeline` with `opts.onError:'fail'` reject the
+     batch with a typed error on the first leaf failure (default stays fail-soft `null`).
+  8. GREEN: implement the strict-mode option.
+  9. REFACTOR: keep emission generic and reusable.
 
 ### Gate 1->2
 

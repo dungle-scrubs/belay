@@ -2,7 +2,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 46
+- **Current cutoff blockers:** 50
 - **Completed current work:** 0
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on `.plans/16-tool-script`)
 - **Superseded/obsolete checklist debt:** 0
@@ -44,6 +44,10 @@
 - [ ] GREEN: implement over `Effect.all` with a runtime concurrency cap.
 - [ ] RED: cap enforcement (excess queues) + lifetime-cap backstop.
 - [ ] GREEN: bounded scheduler + shared progress emission.
+- [ ] RED: every degrade-to-null emits a typed `leaf-failed` event (with cause) before returning null - never a bare unrecorded null.
+- [ ] GREEN: emit `leaf-failed` on the fail-soft path (owned in M3, not deferred to M8).
+- [ ] RED: opt-in strict mode (`onError:'fail'`) rejects the batch on the first leaf failure; default stays fail-soft.
+- [ ] GREEN: implement strict mode.
 - [ ] REFACTOR: generic, reusable emission.
 
 **Gate 1->2**
