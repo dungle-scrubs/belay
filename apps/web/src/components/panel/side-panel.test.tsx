@@ -114,3 +114,39 @@ test("meter stays un-armed through replay (ready=false)", async () => {
   assert.ok(fill);
   assert.equal(fill?.className.includes("transition-"), false);
 });
+
+// The meter carries pressure through color (and, at critical, weight) only - it deliberately does
+// NOT restate the transcript's overflow/recovery alerts, so the two never fight or duplicate copy.
+
+test.each([
+  ["normal", 84_000],
+  ["warning", 144_000],
+  ["danger", 182_000],
+  ["critical", 194_000],
+  ["over-window", 216_000],
+])("%s band renders no overflow/pressure prose in the meter", (_label, used) => {
+  const { container } = render(<SidePanelBreakdown ctxUsed={used} ctxMax={200_000} />);
+  const text = (container.textContent ?? "").toLowerCase();
+  for (const word of [
+    "overflow",
+    "context pressure",
+    "recover",
+    "warning",
+    "danger",
+    "critical",
+    "limit",
+  ]) {
+    assert.equal(text.includes(word), false, `meter should not print "${word}"`);
+  }
+});
+
+test("critical is a stronger color+weight treatment, not a textual alert", () => {
+  const { container, getByText } = render(
+    <SidePanelBreakdown ctxUsed={194_000} ctxMax={200_000} />,
+  );
+  // Stronger: destructive fill + a bolded destructive usage number...
+  assert.ok(container.querySelector(".bg-destructive"));
+  assert.ok(getByText(/\(97%\)/).className.includes("font-semibold"));
+  // ...but the only text is still "ctx", the usage number, and the window.
+  assert.equal((container.textContent ?? "").toLowerCase().includes("overflow"), false);
+});

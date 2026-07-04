@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M4: Context Event Awareness
+> Current focus: M5: Accessibility and E2E
 
 - Total checklist items: 29
-- Completed: 19
-- Current cutoff blockers: 10
+- Completed: 24
+- Current cutoff blockers: 5
 
 ## 0. Hard Dependencies
 
@@ -41,11 +41,11 @@
 
 ## M4: Context Event Awareness
 
-- [ ] RED: Tests for critical rendering with high ratio and with explicit context-pressure/overflow events elsewhere
-- [ ] GREEN: Keep normal/warning/danger color-only and critical restrained
-- [ ] RED: Verify no additional warning prose appears below critical
-- [ ] GREEN: Keep any critical copy short and non-overlapping
-- [ ] REFACTOR: Do not duplicate transcript alert wording
+- [x] RED: Tests for critical rendering with high ratio and with explicit context-pressure/overflow events elsewhere
+- [x] GREEN: Keep normal/warning/danger color-only and critical restrained
+- [x] RED: Verify no additional warning prose appears below critical
+- [x] GREEN: Keep any critical copy short and non-overlapping
+- [x] REFACTOR: Do not duplicate transcript alert wording
 
 ## M5: Accessibility and E2E
 
