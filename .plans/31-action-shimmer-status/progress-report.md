@@ -2,11 +2,11 @@
 
 ## Summary
 
-> Current focus: M1: Shimmer Component
+> Current focus: complete - all milestones (M1-M5) landed
 
 - Total checklist items: 33
-- Completed: 28
-- Current cutoff blockers: 5
+- Completed: 33
+- Current cutoff blockers: 0
 
 > M3 note (decision D-005): no new host protocol events were added. Every action label is a
 > deterministic web-side projection of already-decoded structured state (tool name/args,
@@ -59,8 +59,8 @@
 
 ## M5: Validation and E2E
 
-- [ ] RED: Live EZE test notes for silent model delay, running read/search, long bash, and reconnect/recovery
-- [ ] GREEN: Run Storybook and web tests; inspect desktop and narrow viewport screenshots
-- [ ] RED: Reduced-motion test coverage
-- [ ] GREEN: Confirm no remaining user-facing literal `working...` placeholders except fallback copy
-- [ ] REFACTOR: Document label vocabulary and source priority
+- [x] RED: Live EZE test notes for silent model delay, running read/search, long bash, and reconnect/recovery
+- [x] GREEN: Run Storybook and web tests; inspect desktop and narrow viewport screenshots
+- [x] RED: Reduced-motion test coverage
+- [x] GREEN: Confirm no remaining user-facing literal `working...` placeholders except fallback copy
+- [x] REFACTOR: Document label vocabulary and source priority

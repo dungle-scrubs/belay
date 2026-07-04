@@ -57,6 +57,26 @@ a **smaller** context window is **guarded** (refused, `outcome: blocked`, if the
 fit). A dedicated plan-25 `ModelChange` hook was considered and **dropped**; per-model prompt guidance,
 if pursued, belongs in the provider/catalog layer, not a user hook.
 
+## Action-status label vocabulary (`.plans/31-action-shimmer-status`)
+
+The active-turn status is a **shimmering present-progress label** (the `ActionShimmer` primitive,
+reusing the `tw-shimmer` overlay idiom + `motion-reduce:animate-none`), not a pulse dot. Its text is
+a **deterministic projection** of already-structured transcript/session state - never a fuzzy match
+over free-form prose, and never an inference of user intent. The one owner of the vocabulary is the
+pure `apps/web/src/action-label.ts` module; tool renderers and the working row read it so they can't
+drift apart.
+
+| Term | Meaning | Notes |
+|---|---|---|
+| **Action label** | The short present-progress status shown while a turn/tool is active: `thinking`, `applying steering`, `reading <path>`, `searching <pattern>`, `running <cmd>`, `searching the web`, `reconnecting (attempt n/m)`, `loading <model>`. | Derived from typed fields the host/web already own; rendered as plain readable text with an `aria-hidden` shimmer overlay (announced once, no motion for reduced-motion users). |
+| **`FALLBACK_ACTION_LABEL`** (`"Working"`) | The honest default when the event stream gives no better structured evidence. | Preferred over guessing. Projection helpers never return blank and never throw. |
+| **Label source priority** | steering → cold-start `loading <model>` → streaming vs. `thinking` for the turn; tool labels come from the salient tool arg (path/pattern/command/query). | An **unknown** tool names itself (`running <name>`) and never runs its args through the summarizer, so raw JSON/secrets can't leak. |
+| **Redaction/truncation** | Every dynamic fragment is collapsed to a single short line (`redactLabelFragment`, ≤48 chars, ellipsis). | A multiline or huge tool input can never blow out or leak into the status line. |
+
+No new **host** protocol events were added for labels (D-005): the existing protocol already carries
+the structured fields (tool name/args, `assistant.progress` usage, `context.compacting` tokens/budget,
+reconnect attempt), so labels are projected web-side.
+
 ## Durable follow-up queue vocabulary (`.plans/47-durable-follow-up-queue`)
 
 | Term | Meaning | Notes |

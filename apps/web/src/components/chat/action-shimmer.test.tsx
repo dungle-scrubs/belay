@@ -63,3 +63,14 @@ test("label text is announced once (base only), overlay is a hidden duplicate", 
   const announced = getByText("searching foo", { selector: "span:not([aria-hidden])" });
   assert.equal(announced.getAttribute("aria-hidden"), null);
 });
+
+test("reduced motion: the readable base label does not depend on the animated overlay", () => {
+  // The base span carries no animation utility - it is always solid, readable text - so disabling
+  // the overlay's animation (motion-reduce:animate-none) can never hide the label. This is the
+  // structural guarantee behind the reduced-motion fallback.
+  const { getByText, container } = render(<ShimmerText>reading app.tsx</ShimmerText>);
+  const base = getByText("reading app.tsx", { selector: "span:not([aria-hidden])" });
+  assert.doesNotMatch(base.className, /shimmer|animate/);
+  const overlay = container.querySelector("[aria-hidden]");
+  assert.ok(overlay?.className.includes("motion-reduce:animate-none"));
+});
