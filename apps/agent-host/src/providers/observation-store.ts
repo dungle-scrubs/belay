@@ -1,80 +1,72 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { resolveTrevorStateHome } from "@trevor/session/node-paths";
+import type { ObservationInput } from "./failure-record-schema";
 import {
-  buildObservation,
-  mergeObservation,
-  type ObservationInput,
-  type ProviderObservation,
-} from "./failure-record-schema";
+  appendObservation,
+  ensureMigrated,
+  type ObservationIndex,
+  readCorpusIndex,
+} from "./observation-corpus";
+import { type ObservationEnvelope, providerFailureEnvelope } from "./observation-envelope";
 
+export type { ObservationInput } from "./failure-record-schema";
+export { fingerprintObservation } from "./failure-record-schema";
 export {
-  buildObservation,
-  type FingerprintParts,
-  failureFingerprint,
-  fingerprintObservation,
-  type ObservationInput,
-  type ProviderObservation,
-} from "./failure-record-schema";
+  corpusDir,
+  corpusIndexPath,
+  corpusJsonlPath,
+  deleteByFingerprint,
+  deleteByKind,
+  deleteCorpus,
+  exportCorpus,
+  rebuildCorpusIndex,
+} from "./observation-corpus";
+export type { ObservationEnvelope } from "./observation-envelope";
 
 /**
- * The redacted provider-failure observation store (D-076 M5). Unknown or low-confidence provider
- * failure shapes are recorded here as REDACTED, DEDUPED observations so the classifier's rules can be
- * improved later without guessing. It deliberately stores only the SHAPE of a failure - provider,
- * model, auth mode, phase, status/code, a sanitized message skeleton, the top-level field NAMES of
- * the raw error, the output-started flag, the classifier verdict, the retry decision, and a stable
- * fingerprint - never prompts, keys, auth headers, raw response bodies, raw tool outputs, or raw
- * provider payloads. Writes are best-effort: a failed write never fails the user's turn.
+ * The producer-facing API of the redacted provider-failure observation corpus (plan 29, formerly the
+ * D-076 single-file store). Unknown or low-confidence provider failure shapes are recorded here as
+ * REDACTED, DEDUPED observations so the classifier's rules can be improved later without guessing. Only
+ * the SHAPE of a failure is stored - provider, model, auth mode, phase, status/code, a sanitized
+ * message skeleton, the top-level field NAMES of the raw error, the output-started flag, the classifier
+ * verdict, the retry decision, and a stable fingerprint - never prompts, keys, auth headers, raw
+ * response bodies, raw tool outputs, or raw provider payloads. Writes are best-effort: a failed write
+ * never fails the user's turn.
  *
- * `/doctor` (M6) reads the deduped records to report counts and fingerprints for unclassified
+ * `/doctor` (M4) reads the deduped index to report counts and top fingerprints for unclassified
  * provider failures, again without exposing any secret.
  *
- * Responsible for: persisting deduped, redacted failure observations to disk and summarizing them.
- * Not for: the record shapes and fingerprints themselves; those live in failure-record-schema.ts.
+ * Responsible for: the narrow record/read/summarize API plus the one-time legacy migration seam.
+ * Not for: filesystem mechanics (observation-corpus.ts), the envelope shape (observation-envelope.ts),
+ * or fingerprinting (failure-record-schema.ts).
+ *
+ * NON-CONSUMPTION BOUNDARY (plan 29 D-003, enforced by observation-boundary.test.ts): the corpus is
+ * diagnostic-only in this plan. Records written here are read back ONLY by `/doctor`, a debug export,
+ * or an explicit inspect/export command - NEVER injected into a model prompt or the history
+ * projection, and NEVER used to mutate a classifier rule at runtime. The classifier's rules stay
+ * static; improving them from this evidence is a deliberate, OFFLINE/MANUAL workflow that a later plan
+ * must authorize before any runtime consumer is wired.
  */
 
-/** The JSON file backing the store: `<TREVOR_STATE_HOME>/provider-observations.json`. */
-export function observationsPath(): string {
-  return join(resolveTrevorStateHome(), "provider-observations.json");
-}
-
-/** Reads all observations (best-effort): a missing or unreadable/corrupt file yields an empty map. */
-export async function readObservations(): Promise<Record<string, ProviderObservation>> {
-  try {
-    const raw = await readFile(observationsPath(), "utf8");
-    const parsed = JSON.parse(raw) as Record<string, ProviderObservation>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 /**
- * Records one observation, deduped by fingerprint. Best-effort: any read/write/serialize failure is
- * swallowed so a provider error never also fails the turn on a disk problem. Returns the resulting
- * record (or null when the write failed) for tests and callers that want to assert.
+ * Records one provider-failure observation, deduped by fingerprint. Best-effort: any failure is
+ * swallowed (returns null) so a provider error never also fails the turn on a disk problem. Runs the
+ * one-time legacy migration first so old single-file installs converge on the corpus path.
  */
 export async function recordObservation(
   input: ObservationInput,
   nowIso: string,
-): Promise<ProviderObservation | null> {
-  try {
-    const store = await readObservations();
-    const fresh = buildObservation(input, nowIso);
-    const prior = store[fresh.fingerprint];
-    const merged = prior ? mergeObservation(prior, fresh) : fresh;
-    store[fresh.fingerprint] = merged;
-    const path = observationsPath();
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${JSON.stringify(store, null, 2)}\n`, "utf8");
-    return merged;
-  } catch {
-    return null;
-  }
+): Promise<ObservationEnvelope | null> {
+  await ensureMigrated();
+  return appendObservation(providerFailureEnvelope(input, nowIso));
 }
 
-/** A compact summary for `/doctor` / debug (M6): how many distinct unclassified shapes, total
- *  sightings, and the top fingerprints by count - no secrets, just shape ids. */
+/** Reads the deduped observation index (best-effort), migrating any legacy single-file store first. */
+export async function readObservations(): Promise<ObservationIndex> {
+  await ensureMigrated();
+  return readCorpusIndex();
+}
+
+/** A compact summary for `/doctor` / debug (M4): distinct shapes, total + unknown sightings, and the
+ *  top fingerprints by count - no secrets, just shape ids. */
 export interface ObservationSummary {
   readonly distinct: number;
   readonly total: number;
@@ -82,13 +74,11 @@ export interface ObservationSummary {
   readonly top: readonly { readonly fingerprint: string; readonly count: number }[];
 }
 
-export function summarizeObservations(
-  store: Record<string, ProviderObservation>,
-): ObservationSummary {
-  const records = Object.values(store);
+export function summarizeObservations(index: ObservationIndex): ObservationSummary {
+  const records = Object.values(index);
   const total = records.reduce((sum, r) => sum + r.count, 0);
   const unknown = records
-    .filter((r) => r.classification === "unknown")
+    .filter((r) => r.shape.classification === "unknown")
     .reduce((sum, r) => sum + r.count, 0);
   const top = [...records]
     .sort((a, b) => b.count - a.count)

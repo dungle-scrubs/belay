@@ -169,6 +169,26 @@ test("the docs-corpus root is classified under the state home and follows the st
   );
 });
 
+test("the observation corpus resolves under the state home and follows the state override", () => {
+  const dir = STORAGE_INVENTORY.find((entry) => entry.name === "observation-corpus");
+  const jsonl = STORAGE_INVENTORY.find((entry) => entry.name === "observation-provider-failures");
+  const index = STORAGE_INVENTORY.find((entry) => entry.name === "observation-index");
+  assert.ok(dir && jsonl && index, "the observation corpus entries are in the inventory");
+  assert.equal(dir.category, "state");
+  assert.equal(
+    storagePath(dir, {}, "/Users/kevin"),
+    "/Users/kevin/.local/state/trevorV2/observations",
+  );
+  assert.equal(
+    storagePath(jsonl, { XDG_STATE_HOME: "/xdg/state" }, "/Users/kevin"),
+    "/xdg/state/trevorV2/observations/provider-failures.jsonl",
+  );
+  assert.equal(
+    storagePath(index, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
+    "/tmp/state/observations/index.json",
+  );
+});
+
 test("legacy-root resolves to ~/.trevor and external entries stay read-only", () => {
   const legacy = STORAGE_INVENTORY.find((entry) => entry.name === "legacy-root");
   assert.ok(legacy);

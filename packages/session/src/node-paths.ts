@@ -326,7 +326,28 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     name: "provider-observations",
     category: "state",
     relativePath: "provider-observations.json",
-    description: "Redacted, deduped provider-failure observations.",
+    description:
+      "Legacy pre-corpus single-file provider observations (plan 29); migrated into the observation corpus on first read, then left in place.",
+  },
+  {
+    name: "observation-corpus",
+    category: "state",
+    relativePath: "observations",
+    description:
+      "Local observation corpus dir (plan 29): redacted, shape-only diagnostic evidence (per-kind JSONL logs + index.json).",
+  },
+  {
+    name: "observation-provider-failures",
+    category: "state",
+    relativePath: "observations/provider-failures.jsonl",
+    description: "Append-only redacted provider-failure observation log (plan 29).",
+  },
+  {
+    name: "observation-index",
+    category: "state",
+    relativePath: "observations/index.json",
+    description:
+      "Deduped observation aggregate index across all producer kinds; repairable from the JSONL logs (plan 29).",
   },
   {
     name: "turn-stop-metrics",

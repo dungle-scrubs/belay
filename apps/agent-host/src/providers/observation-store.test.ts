@@ -1,38 +1,45 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ObservationInput } from "./failure-record-schema";
+import { corpusJsonlPath } from "./observation-corpus";
 import {
-  buildObservation,
   fingerprintObservation,
-  type ObservationInput,
-  observationsPath,
   readObservations,
   recordObservation,
   summarizeObservations,
 } from "./observation-store";
 
 /**
- * D-076 M5: the redacted, deduped provider-observation store. Pins the TREVOR_STATE_HOME override,
- * stable fingerprinting (transient values collapse so repeats dedupe), dedupe with first/last-seen +
- * count, best-effort write failure (never throws), redaction (no key/token/header/body in the
- * record), and the /doctor summary shape.
+ * The producer-facing corpus façade (plan 29). Pins the state-home corpus location, stable
+ * fingerprinting (transient values collapse so repeats dedupe), dedupe with first/last-seen + count,
+ * best-effort write failure (never throws), redaction (no key/token/header/body in the record), the
+ * /doctor summary shape, and the one-time migration of the legacy single-file store.
  */
 
 const NOW = "2026-06-27T12:00:00.000Z";
 let home: string;
 const savedHome = process.env.TREVOR_STATE_HOME;
+const savedConfig = process.env.TREVOR_HOME;
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "trevor-obs-"));
   process.env.TREVOR_STATE_HOME = home;
+  // Isolate the config home too, so migration never sees the developer's real ~/.trevorV2.
+  process.env.TREVOR_HOME = join(home, "config");
 });
 
 afterEach(() => {
-  if (savedHome === undefined) {
-    delete process.env.TREVOR_STATE_HOME;
-  } else {
-    process.env.TREVOR_STATE_HOME = savedHome;
+  for (const [key, value] of [
+    ["TREVOR_STATE_HOME", savedHome],
+    ["TREVOR_HOME", savedConfig],
+  ] as const) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
   }
   rmSync(home, { recursive: true, force: true });
 });
@@ -52,12 +59,6 @@ function input(over: Partial<ObservationInput> = {}): ObservationInput {
   };
 }
 
-describe("observationsPath", () => {
-  it("resolves under the runtime TREVOR_STATE_HOME override", () => {
-    expect(observationsPath()).toBe(join(home, "provider-observations.json"));
-  });
-});
-
 describe("fingerprintObservation", () => {
   it("is stable across transient values (addresses, ids, digits collapse)", () => {
     const a = fingerprintObservation(input({ message: "ECONNREFUSED 127.0.0.1:1234 reqid 9f3a" }));
@@ -76,13 +77,14 @@ describe("fingerprintObservation", () => {
 });
 
 describe("recordObservation", () => {
-  it("writes a fresh record with count 1 and first/last seen", async () => {
+  it("writes a fresh record with count 1 and first/last seen under the state corpus", async () => {
     const rec = await recordObservation(input(), NOW);
     expect(rec?.count).toBe(1);
     expect(rec?.firstSeen).toBe(NOW);
     expect(rec?.lastSeen).toBe(NOW);
-    const store = await readObservations();
-    expect(Object.keys(store)).toHaveLength(1);
+    expect(rec?.kind).toBe("provider_failure");
+    expect(existsSync(corpusJsonlPath("provider_failure"))).toBe(true);
+    expect(Object.keys(await readObservations())).toHaveLength(1);
   });
 
   it("dedupes repeats by fingerprint: count climbs, firstSeen holds, lastSeen advances", async () => {
@@ -92,8 +94,7 @@ describe("recordObservation", () => {
     expect(rec?.count).toBe(2);
     expect(rec?.firstSeen).toBe(NOW);
     expect(rec?.lastSeen).toBe(later);
-    const store = await readObservations();
-    expect(Object.keys(store)).toHaveLength(1);
+    expect(Object.keys(await readObservations())).toHaveLength(1);
   });
 
   it("never stores secrets - keys, tokens, headers, or raw bodies are redacted", async () => {
@@ -103,7 +104,7 @@ describe("recordObservation", () => {
       }),
       NOW,
     );
-    const onDisk = readFileSync(observationsPath(), "utf8");
+    const onDisk = readFileSync(corpusJsonlPath("provider_failure"), "utf8");
     expect(onDisk).not.toContain("sk-ant-SUPERSECRET01234");
     expect(onDisk).not.toContain("pi-TOPSECRET99");
     expect(onDisk).toContain("«redacted»");
@@ -111,9 +112,8 @@ describe("recordObservation", () => {
 
   it("stores field NAMES only, never raw payload values", async () => {
     await recordObservation(input({ shapeFields: ["error", "headers", "request"] }), NOW);
-    const store = await readObservations();
-    const rec = Object.values(store)[0];
-    expect(rec?.shapeFields).toEqual(["error", "headers", "request"]);
+    const rec = Object.values(await readObservations())[0];
+    expect(rec?.shape.fieldNames).toEqual(["error", "headers", "request"]);
   });
 
   it("is best-effort: a write failure returns null and does not throw", async () => {
@@ -139,9 +139,47 @@ describe("summarizeObservations", () => {
   });
 });
 
-describe("buildObservation", () => {
-  it("re-redacts the message even when the caller forgot to sanitize", () => {
-    const rec = buildObservation(input({ message: "token=sk-leakyleakyleaky00" }), NOW);
-    expect(rec.message).not.toContain("sk-leakyleakyleaky00");
+describe("legacy migration (M1/M9)", () => {
+  it("imports a pre-corpus single-file store, preserving fingerprint + count, and tombstones it", async () => {
+    // Seed the old state-home single file the pre-corpus store wrote.
+    const fp = fingerprintObservation(input());
+    const legacyPath = join(home, "provider-observations.json");
+    writeFileSync(
+      legacyPath,
+      JSON.stringify({
+        [fp]: {
+          fingerprint: fp,
+          provider: "gpt",
+          model: "gpt-5.5",
+          authMode: "oauth",
+          phase: "model-step",
+          classification: "unknown",
+          retryable: false,
+          message: "some never-before-seen provider error 12345",
+          shapeFields: ["error", "status"],
+          outputStarted: false,
+          firstSeen: "2026-06-01T00:00:00.000Z",
+          lastSeen: "2026-06-02T00:00:00.000Z",
+          count: 7,
+        },
+      }),
+      "utf8",
+    );
+
+    const index = await readObservations();
+    const rec = index[fp];
+    expect(rec?.count).toBe(7);
+    expect(rec?.firstSeen).toBe("2026-06-01T00:00:00.000Z");
+    expect(rec?.lastSeen).toBe("2026-06-02T00:00:00.000Z");
+    expect(rec?.shape.classification).toBe("unknown");
+
+    // The legacy file is tombstoned (preserved, not re-imported on the next read).
+    expect(existsSync(legacyPath)).toBe(false);
+    expect(existsSync(join(home, "provider-observations.migrated.json"))).toBe(true);
+
+    // A subsequent record does not double-import the legacy data.
+    await recordObservation(input({ message: "a brand new shape" }), NOW);
+    const after = await readObservations();
+    expect(after[fp]?.count).toBe(7);
   });
 });
