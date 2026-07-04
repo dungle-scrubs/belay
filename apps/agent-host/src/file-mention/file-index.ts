@@ -11,10 +11,9 @@
 import { relative, sep } from "node:path";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { walkContextTree } from "@host/project-context/walk";
-import type { FileMatch } from "@trevor/session";
+import { type FileMatch, isWorkspaceRelativePath, MAX_FILE_INDEX } from "@trevor/session";
 
-/** The cap on the announced index; a larger workspace is truncated (the browser searches the slice). */
-export const MAX_FILE_INDEX = 2000;
+export { MAX_FILE_INDEX };
 
 /** Converts an OS path to POSIX separators, so the wire + browser always see `/`. */
 function toPosix(path: string): string {
@@ -49,7 +48,8 @@ export function buildFileIndex(options: BuildFileIndexOptions = {}): FileIndex {
     const rel = toPosix(relative(root, absolute));
     // Confinement: never surface the root itself or a path that escapes it (`..`), so the browser
     // only ever sees a workspace-relative path - the write-side analogue of the tools' `confine()`.
-    if (rel === "" || rel === ".." || rel.startsWith("../")) {
+    // The shared predicate (also applied at decode time) so "escaping" can't drift between the sides.
+    if (!isWorkspaceRelativePath(rel)) {
       continue;
     }
     relativePaths.add(rel);

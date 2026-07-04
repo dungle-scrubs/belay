@@ -19,6 +19,25 @@ export interface FileMatch {
   readonly path: string;
 }
 
+/**
+ * The cap on a workspace file index: the ONE shared source for both the host's enumeration cap (it
+ * never announces more than this many paths) and the wire decoder's re-cap (a malformed or oversized
+ * `file.index.result` payload is clamped to the same limit rather than trusted at face value) - so the
+ * write side and the read side can never drift on "how many files is too many".
+ */
+export const MAX_FILE_INDEX = 2000;
+
+/**
+ * Whether `path` is safe to treat as workspace-relative: non-empty, not `..` itself, not a
+ * parent-escaping `../`-prefixed path, and not absolute (`/`-prefixed). The ONE shared predicate both
+ * the host's file-index builder (drops a non-conforming enumerated path) and the wire decoder (drops
+ * any path a malformed or malicious event could smuggle in) apply, so "what counts as
+ * workspace-relative" can never drift between the write side and the read side.
+ */
+export function isWorkspaceRelativePath(path: string): boolean {
+  return path !== "" && path !== ".." && !path.startsWith("../") && !path.startsWith("/");
+}
+
 /** A path split into its basename and (trailing-slash-free) directory portion. */
 export interface PathParts {
   readonly basename: string;
@@ -72,6 +91,10 @@ export interface FileMention {
  * itself, so the metadata can never drift from what the user sees after edits - and it never invents a
  * mention for an ordinary `@word` or an email. The path-selection slice ships the visible text as the
  * prompt; this derivation is the structured half a later content-injection plan builds on.
+ *
+ * Intentionally UNUSED in production yet (plan 30 D-004: visible-text-only submission this cut, no
+ * protocol slice for mention metadata) - tested and exported as the foundation a later plan wires up,
+ * not accidental dead code.
  */
 export function fileMentionsIn(
   text: string,
@@ -124,7 +147,8 @@ function subsequenceStart(needle: string, haystack: string): number {
  * position (earlier is better), and the matched string `length` (shorter, more specific is better).
  * The tiers, best first: exact basename, basename prefix, exact path segment, basename substring, path
  * substring, basename fuzzy subsequence, path fuzzy subsequence. An empty query ranks everything at a
- * neutral tier so the whole (capped) index shows shallow-first. Content is never read.
+ * neutral tier so the whole (capped) index sorts shortest-full-path-first (by raw character length,
+ * not directory depth - a short deep path can outrank a longer root-level file). Content is never read.
  */
 interface FileRank {
   readonly tier: number;
@@ -191,8 +215,8 @@ export interface FileSearchResult {
 /**
  * Ranks `index` against `query` and returns the best `cap` matches (see {@link rankFile}). Pure over
  * paths only - no filesystem, no content reads - so it runs in the browser over a host-supplied index.
- * An empty query returns the shallow-first index (capped). Reports truncation when matches exceed the
- * cap so the menu can say "more exist, narrow your query".
+ * An empty query returns the shortest-path-first index (capped). Reports truncation when matches
+ * exceed the cap so the menu can say "more exist, narrow your query".
  */
 export function searchWorkspaceFiles(
   index: readonly FileMatch[],

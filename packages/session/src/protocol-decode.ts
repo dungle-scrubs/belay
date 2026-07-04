@@ -4,7 +4,7 @@ import { asAnyNumber, asMaybeString, asString, asStringArray, oneOf } from "./co
 import { type CommandMenuPayload, decodeCommandMenu } from "./command-menu";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
-import type { FileMatch } from "./file-mention";
+import { type FileMatch, isWorkspaceRelativePath, MAX_FILE_INDEX } from "./file-mention";
 import type { LoopSnapshot } from "./loop-command";
 import {
   LOOP_DURABILITIES,
@@ -926,20 +926,25 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
       };
     case "file.index.requested":
       return { type: "file.index.requested", requestId: str(p.requestId, event.eventId) };
-    case "file.index.result":
+    case "file.index.result": {
+      // Relative-path-only payloads: rebuild `{ path }` matches from the string list, and drop any
+      // stray absolute / `..`-escaping path (the shared predicate, also applied host-side) so a
+      // malformed event can never surface one to the picker.
+      const files = strList(p.files)
+        .filter(isWorkspaceRelativePath)
+        .map((path) => ({ path }));
+      // Re-cap at decode time to the SAME shared limit the host enumeration caps at: the write side
+      // caps announced indexes at MAX_FILE_INDEX, but decode must not just trust the wire's
+      // `truncated` flag - a malformed or oversized payload is clamped here too, and clamping always
+      // forces truncated=true so the UI never claims a complete index it doesn't actually have.
+      const overCap = files.length > MAX_FILE_INDEX;
       return {
         type: "file.index.result",
         requestId: str(p.requestId, event.eventId),
-        // Relative-path-only payloads: rebuild `{ path }` matches from the string list, and drop any
-        // stray absolute / `..`-escaping path so a malformed event can never surface one to the picker.
-        files: strList(p.files)
-          .filter(
-            (path) =>
-              path !== "" && path !== ".." && !path.startsWith("../") && !path.startsWith("/"),
-          )
-          .map((path) => ({ path })),
-        truncated: p.truncated === true,
+        files: overCap ? files.slice(0, MAX_FILE_INDEX) : files,
+        truncated: overCap || p.truncated === true,
       };
+    }
     case "tasks.current":
       return { type: "tasks.current", tasks: coerceTasks(p.tasks), rev: num(p.rev) };
     case "tool.started":

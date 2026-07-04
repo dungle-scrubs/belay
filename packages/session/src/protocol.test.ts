@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
+import { MAX_FILE_INDEX } from "./file-mention";
 import {
   decodeTrevorEvent,
   events,
@@ -1412,4 +1413,20 @@ test("fileIndexResult decode drops absolute / escaping paths (confinement never 
     files: [{ path: "ok.ts" }],
     truncated: false,
   });
+});
+
+test("fileIndexResult decode re-caps at MAX_FILE_INDEX regardless of the wire's truncated flag", () => {
+  const oversized = Array.from({ length: MAX_FILE_INDEX + 10 }, (_, i) => `file-${i}.ts`);
+  const decoded = decodeTrevorEvent(
+    stored({
+      type: "file.index.result",
+      // The wire claims truncated: false (a malformed/lying host) - decode must not trust it once the
+      // payload itself exceeds the shared cap.
+      payload: { requestId: "r", files: oversized, truncated: false },
+    }),
+  );
+  assert.equal(decoded?.type, "file.index.result");
+  const files = decoded?.type === "file.index.result" ? decoded.files : [];
+  assert.equal(files.length, MAX_FILE_INDEX);
+  assert.equal(decoded?.type === "file.index.result" ? decoded.truncated : null, true);
 });

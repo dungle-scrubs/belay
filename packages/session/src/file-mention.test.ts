@@ -4,6 +4,7 @@ import {
   type FileMatch,
   fileMentionsIn,
   fileMentionText,
+  isWorkspaceRelativePath,
   searchWorkspaceFiles,
   splitWorkspacePath,
 } from "./file-mention";
@@ -33,7 +34,7 @@ test("fileMentionText prefixes the workspace path with @", () => {
   assert.equal(fileMentionText("apps/web/src/app.tsx"), "@apps/web/src/app.tsx");
 });
 
-test("an empty query returns the whole index, shallow (shorter path) first", () => {
+test("an empty query returns the whole index, shortest-path-first", () => {
   const result = searchWorkspaceFiles(index("apps/web/src/app.tsx", "a.ts", "README.md"), "", 10);
   assert.deepEqual(paths(result.matches), ["a.ts", "README.md", "apps/web/src/app.tsx"]);
   assert.equal(result.truncated, false);
@@ -119,4 +120,16 @@ test("fileMentionsIn stays aligned after an edit shifts the token", () => {
   const m = fileMentionsIn(after, known("README.md"));
   assert.equal(m.length, 1);
   assert.equal(after.slice(m[0]?.start, m[0]?.end), "@README.md");
+});
+
+test("isWorkspaceRelativePath accepts an ordinary relative path", () => {
+  assert.equal(isWorkspaceRelativePath("apps/web/src/app.tsx"), true);
+  assert.equal(isWorkspaceRelativePath("README.md"), true);
+});
+
+test("isWorkspaceRelativePath rejects empty, dot-dot, parent-escaping, and absolute paths", () => {
+  assert.equal(isWorkspaceRelativePath(""), false);
+  assert.equal(isWorkspaceRelativePath(".."), false);
+  assert.equal(isWorkspaceRelativePath("../secret.ts"), false);
+  assert.equal(isWorkspaceRelativePath("/etc/passwd"), false);
 });
