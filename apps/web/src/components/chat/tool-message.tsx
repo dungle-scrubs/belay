@@ -1,4 +1,10 @@
-import { decodeRecallResult, type ToolName } from "@trevor/session";
+import {
+  decodeRecallResult,
+  decodeSourceRecallIndexStatus,
+  decodeSourceRecallRefreshResult,
+  decodeSourceRecallResult,
+  type ToolName,
+} from "@trevor/session";
 import type { ReactElement } from "react";
 import { parseToolArgs, toolSummary } from "@/tool-args";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
@@ -7,6 +13,7 @@ import { DocsResult, parseDocsResult } from "./docs";
 import { ToolCall } from "./message";
 import { MultiEditDiff } from "./multi-edit-diff";
 import { SessionRecallResults } from "./session-recall";
+import { SourceRecallRefresh, SourceRecallResults, SourceRecallStatus } from "./source-recall";
 import { ToolDiff } from "./tool-diff";
 import { ToolOutput } from "./tool-output";
 import { type ToolStatus, toolMessageStatus } from "./tool-status";
@@ -220,6 +227,40 @@ const renderRecall: RenderArm = ({ message, status, className }) => {
   );
 };
 
+// source_recall renders its cited candidates (file/line/symbol/snippet) over a provider + freshness
+// meta line (or the searching indicator while running, or its error/unavailable note), separate from
+// session_recall's conversation-memory rows.
+const renderSourceRecall: RenderArm = ({ message, status, onOpenPath, className }) => {
+  const a = parseToolArgs(message.args);
+  return (
+    <SourceRecallResults
+      className={className}
+      query={typeof a.query === "string" ? a.query : ""}
+      result={decodeSourceRecallResult(message.result)}
+      status={status}
+      onOpenPath={onOpenPath}
+    />
+  );
+};
+
+// source_index_status renders per-repo readiness/freshness + discovered capabilities.
+const renderSourceIndexStatus: RenderArm = ({ message, status, className }) => (
+  <SourceRecallStatus
+    className={className}
+    result={decodeSourceRecallIndexStatus(message.result)}
+    status={status}
+  />
+);
+
+// source_index_refresh renders the re-index outcome (files updated / rate-limited / unavailable).
+const renderSourceIndexRefresh: RenderArm = ({ message, status, className }) => (
+  <SourceRecallRefresh
+    className={className}
+    result={decodeSourceRecallRefreshResult(message.result)}
+    status={status}
+  />
+);
+
 interface ParsedClipboard {
   copied?: boolean;
   charCount?: number;
@@ -339,6 +380,11 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   archive_unpack: renderArchive,
   docs: renderDocs,
   session_recall: renderRecall,
+  // source-recall tools (plan 38): indexed codebase search + index status/refresh, each with a rich
+  // cited/structured surface distinct from session_recall's conversation-memory rendering.
+  source_recall: renderSourceRecall,
+  source_index_status: renderSourceIndexStatus,
+  source_index_refresh: renderSourceIndexRefresh,
   ast_grep: renderGeneric,
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it
   // renders like other text-output tools (the dashboard surface is the /doctor command, not this).

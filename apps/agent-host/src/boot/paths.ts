@@ -74,6 +74,15 @@ export const USER_ADMISSION_JSON = join(TREVOR_HOME, "admission.json");
 export const USER_MCP_SERVERS_JSON = join(TREVOR_HOME, "mcp-servers.json");
 
 /**
+ * The indexed source-recall provider config (plan 38): an optional
+ * `{ providers: { "<id>": { kind, endpoint, enabled, ... } } }` JSON under the config home, read at
+ * host startup to configure which indexed-source backends (`source-recall`, Aleutian Trace) are
+ * available. Absent means no source-recall provider (the tools degrade to "unavailable"). Host-owned
+ * + portable; endpoints and repo/project mapping only - no secrets.
+ */
+export const USER_SOURCE_RECALL_JSON = join(TREVOR_HOME, "source-recall.json");
+
+/**
  * The user-global hooks file (plan 25): an optional `{ hooks: { "<id>": ... } }` JSON under the
  * config home, the USER root of hook discovery (project hooks live in the workspace's
  * `.trevor/hooks.json`). Hooks from either root never execute before explicit approval (D-006).

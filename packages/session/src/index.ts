@@ -29,6 +29,7 @@ export * from "./provider-question";
 export * from "./recall";
 export * from "./session-delete";
 export * from "./session-routes";
+export * from "./source-recall";
 export * from "./stream-transport";
 export * from "./tool-script";
 export * from "./tool-script-sandbox";

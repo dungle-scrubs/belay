@@ -41,6 +41,9 @@ import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
+import { loadSourceRecallConfig } from "./source-recall/config";
+import { createSourceRecallRegistry } from "./source-recall/registry";
+import { buildSourceRecallTools } from "./source-recall/tools";
 import { trevorExpertTool } from "./trevor-expert";
 import type { Tool, ToolContext } from "./types";
 import { videoInspectTool } from "./video-inspect/tool";
@@ -74,6 +77,11 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   archiveReadTool,
   docsTool,
   sessionRecallTool,
+  // source_recall / source_index_status / source_index_refresh (plan 38): indexed code search over a
+  // prebuilt provider index (source-recall daemon first, Aleutian Trace second), selected from
+  // <TREVOR_HOME>/source-recall.json. The registry NEVER fails - a missing/unreachable backend yields
+  // a structured "unavailable" result - so an unconfigured provider can't break an ordinary turn.
+  ...buildSourceRecallTools(createSourceRecallRegistry(loadSourceRecallConfig())),
   skillsListTool,
   skillViewTool,
   doctorTool,

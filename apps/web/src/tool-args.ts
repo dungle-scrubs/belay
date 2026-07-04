@@ -33,8 +33,11 @@ export function salientToolArg(name: string, args: Record<string, unknown>): unk
   if (name === "grep" || name === "glob") {
     return args.pattern;
   }
-  if (name === "web_search" || name === "session_recall") {
+  if (name === "web_search" || name === "session_recall" || name === "source_recall") {
     return args.query;
+  }
+  if (name === "source_index_status" || name === "source_index_refresh") {
+    return args.repo;
   }
   if (name === "web_fetch") {
     return args.url;

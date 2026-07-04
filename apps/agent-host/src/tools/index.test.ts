@@ -32,6 +32,9 @@ import { readTool } from "./read";
 import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
+import { EMPTY_SOURCE_RECALL_CONFIG } from "./source-recall/config";
+import { createSourceRecallRegistry } from "./source-recall/registry";
+import { buildSourceRecallTools } from "./source-recall/tools";
 import { trevorExpertTool } from "./trevor-expert";
 import type { Tool } from "./types";
 import { videoInspectTool } from "./video-inspect/tool";
@@ -50,6 +53,12 @@ const lspTestManager: LspManager = createLspManager({
   defaultWorkspaceRoot: "/w",
 });
 
+// The source-recall tools (plan 38) are built over a registry seam; their name/readOnly nature is
+// config-independent, so an EMPTY provider config (which can never reach a daemon) suffices here.
+const [sourceRecallTool, sourceIndexStatusTool, sourceIndexRefreshTool] = buildSourceRecallTools(
+  createSourceRecallRegistry(EMPTY_SOURCE_RECALL_CONFIG),
+);
+
 /**
  * Pins the `readOnly` partition that drives concurrent dispatch (D-050 / M1). `READ_ONLY_TOOLS`
  * is the cross-surface vocabulary from `@trevor/session` (D-031); these guard both directions:
@@ -67,6 +76,9 @@ test("the read-only tools declare the flag and appear in READ_ONLY_TOOLS", () =>
     archiveReadTool,
     docsTool,
     sessionRecallTool,
+    // source_recall / source_index_status (plan 38): read-only pulls over a prebuilt code index.
+    sourceRecallTool,
+    sourceIndexStatusTool,
     astGrepTool,
     doctorTool,
     // lsp_* (plan 24, D-007): explicit read-only language-server pulls; code actions are
@@ -92,6 +104,8 @@ test("a tool without the readOnly flag is absent from READ_ONLY_TOOLS", () => {
     bashTool,
     // video_inspect (plan 39) forces the post-video finalization pass (a turn-level side effect): a barrier.
     videoInspectTool,
+    // source_index_refresh (plan 38) triggers an external re-index (a side effect on the provider daemon): a barrier.
+    sourceIndexRefreshTool,
     // mcp mutates EXTERNAL service state (plan 23 D-008): always a serial barrier.
     buildMcpTool(createMcpRuntime([])),
   ]) {
@@ -152,6 +166,10 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     archiveReadTool,
     docsTool,
     sessionRecallTool,
+    // source-recall tools (plan 38): built over an EMPTY-config registry so name/readOnly are stable.
+    sourceRecallTool,
+    sourceIndexStatusTool,
+    sourceIndexRefreshTool,
     skillsListTool,
     skillViewTool,
     astGrepTool,

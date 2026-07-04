@@ -265,6 +265,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     relativePath: "hooks.json",
     description: "User-global hook definitions (plan 25): { hooks: { <id>: ... } }.",
   },
+  {
+    name: "source-recall-config",
+    category: "config",
+    relativePath: "source-recall.json",
+    description:
+      "Indexed source-recall provider config (plan 38): { providers: { <id>: { kind, endpoint, enabled, ... } } }; endpoints/repo mapping only, no secrets.",
+  },
   // state (TREVOR_STATE_HOME) - all machine-local runtime state
   {
     name: "sessions-db",

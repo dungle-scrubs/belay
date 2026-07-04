@@ -30,6 +30,14 @@ export const TOOL_DESCRIPTORS = [
   { name: "archive_read", readOnly: true },
   { name: "docs", readOnly: true },
   { name: "session_recall", readOnly: true },
+  // source_recall/source_index_status are read-only pulls over a prebuilt code index (plan 38); a
+  // query/status only reads a provider daemon and never mutates the workspace, so both are
+  // concurrent-safe reads. source_index_refresh triggers an external re-index (a side effect on the
+  // provider daemon's index, a different risk axis than workspace mutation, like mcp D-008), so it is
+  // a mutating serial barrier.
+  { name: "source_recall", readOnly: true },
+  { name: "source_index_status", readOnly: true },
+  { name: "source_index_refresh", readOnly: false },
   { name: "ast_grep", readOnly: true },
   { name: "doctor", readOnly: true },
   // clipboard_write mutates external clipboard state (a side effect), so it is a serial barrier.
