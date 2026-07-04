@@ -7,6 +7,7 @@ import { Schema } from "effect";
 import type { PromotionConfig } from "./promote-policy";
 import { promotedResultText, runPromotable } from "./promote-runner";
 import { simpleTool, toolExecution, toolInput } from "./shared";
+import { resolveCwd } from "./workspace";
 
 const Params = Schema.Struct({
   command: Schema.String.annotations({ description: "Shell command to run" }),
@@ -25,8 +26,8 @@ export function buildBashTool(supervisor: ProcessRegistry, config: PromotionConf
     description:
       "Run a shell command in the host working directory; returns stdout and stderr. A long-running command is promoted to a background job (pN) you can poll or kill with the process tool, rather than timing out.",
     params: Params,
-    execute: async (args) => {
-      const result = await runPromotable(supervisor, args.command, process.cwd(), {
+    execute: async (args, ctx) => {
+      const result = await runPromotable(supervisor, args.command, resolveCwd(ctx), {
         enabled: config.enabled,
         thresholdMs: config.thresholdMs,
         origin: { source: "bash" },

@@ -6,6 +6,7 @@
 import { Schema } from "effect";
 import { collectWorkspace } from "./search";
 import { simpleTool } from "./shared";
+import { resolveWorkspaceRoot } from "./workspace";
 
 export const MAX_GLOB = 500;
 
@@ -39,8 +40,13 @@ export const globTool = simpleTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: async (args) => {
-    const { items, truncated } = await collectWorkspace(args.pattern, MAX_GLOB, (entry) => entry);
+  execute: async (args, ctx) => {
+    const { items, truncated } = await collectWorkspace(
+      args.pattern,
+      MAX_GLOB,
+      (entry) => entry,
+      resolveWorkspaceRoot(ctx),
+    );
     return shapeGlob(items, truncated);
   },
 });

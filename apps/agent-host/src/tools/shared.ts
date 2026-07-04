@@ -7,7 +7,7 @@
 import { msg } from "@host/transport/messages";
 import { Effect, type Schema } from "effect";
 import { type ToolError, ToolExecutionError, ToolInputError } from "./errors";
-import type { Tool } from "./types";
+import type { Tool, ToolContext } from "./types";
 
 /** Largest tool output returned to the model; anything longer is truncated. */
 export const MAX_OUTPUT = 8000;
@@ -116,16 +116,16 @@ export function simpleTool<A>(spec: {
   readonly params: Schema.Schema<A, any>;
   readonly readOnly?: boolean;
   readonly capped?: boolean;
-  execute(args: A): string | Promise<string>;
+  execute(args: A, ctx?: ToolContext): string | Promise<string>;
 }): Tool<A> {
   return {
     name: spec.name,
     description: spec.description,
     params: spec.params,
     readOnly: spec.readOnly,
-    execute: (args) => {
+    execute: (args, ctx) => {
       const result = Effect.tryPromise({
-        try: () => Promise.resolve(spec.execute(args)),
+        try: () => Promise.resolve(spec.execute(args, ctx)),
         catch: (cause) => simpleToolError(spec.name, cause),
       });
       return spec.capped ? result.pipe(Effect.map(cap)) : result;

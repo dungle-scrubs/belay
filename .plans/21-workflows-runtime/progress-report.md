@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 17
-- **Completed current work:** 38
+- **Current cutoff blockers:** 11
+- **Completed current work:** 44
 - **Accepted/deferred follow-up:** 7 (Phase 5, gated on 21's M9 sandbox-runner extraction)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M6 - Worktree isolation / in-process cwd routing (Phase 3)
+- **Current focus:** M7 - Invocation surfaces + durable-run lifecycle (Phase 4)
 
 ## Completed Current State / Hard Dependencies
 
@@ -82,16 +82,17 @@
 
 ### Phase 3: Worktree-isolated write-capable leaves
 
-**M6 - Worktree isolation for leaves** (needs net-new per-leaf cwd routing, D-010/D-023)
+**M6 - Worktree isolation for leaves** (`tools/workspace.ts`, `workspace.test.ts`, `test/workflow-worktree.test.ts`)
 - **Process model DECIDED: in-process cwd-threading (D-024)**; out-of-process on `16`'s runner rejected. `46`/M3 unblocked.
-- [ ] RED: failing test that two **parallel** worktree leaves write to **distinct** trees - fails today because tools resolve a global `process.cwd()` (`bash.ts`, `read.ts`, `run-shell.ts`, `tools/index.ts`, `WORKSPACE_ROOT`).
-- [ ] GREEN: thread a **per-leaf cwd** through the tool boundary (in-process, D-024); **de-globalize `WORKSPACE_ROOT` + the `confine()` guard keyed off it, and convert the `tools/index.ts` module-load `process.cwd()` snapshot to a per-call thunk** - not merely a cwd arg on bash/read/run-shell; + a **guard** lint/test that no tool reads a global cwd; cwd-lock prevents path collision. (D-023, D-024)
-- [ ] RED: `opts.isolation:'worktree'` provisions a managed worktree per leaf, lifts read-only for that leaf, and parallel write-capable leaves do not race.
-- [ ] GREEN: wire leaf -> `WorktreeManager` + cwd-lock + per-leaf cwd; write-capable in own tree; auto-cleanup; per-leaf worktree result (branch, diffstat, conflict-with-base).
-- [ ] REFACTOR: worktree policy in the leaf, not the scheduler.
+- [x] RED: two **parallel** leaves write to **distinct** trees through the real `executeTool` boundary - the load-bearing 46/D-010 property (`test/workflow-worktree.test.ts`); before M6 the tools resolved a global `process.cwd()`/`WORKSPACE_ROOT`.
+- [x] GREEN: thread a **per-leaf cwd + root** through the tool boundary via `ctx.cwd`/`ctx.workspaceRoot`, injected at `executeTool` from a fiber-local `LeafWorkspaceRef` (`tools/workspace.ts`); **de-globalized** `process.cwd()` in bash/read/write (`resolveCwd`) and `WORKSPACE_ROOT`/`confine()` in edit/multi_edit/glob/grep/ast_grep (`resolveWorkspaceRoot` + `confineIn`); default (unset) = the ambient globals, so all 3237 existing tests are unchanged; + a **guard** test that the host-cwd tools read no bare `process.cwd()` (`workspace.test.ts`). (D-023, D-024)
+- [x] GREEN: the leaf routes its tool calls against its worktree - `runAgentLeaf` wraps its turns in `withLeafWorkspace(request.workspace, ...)`, so parallel `isolation:'worktree'` leaves never race. (leaf-host.ts)
+- **46/M3 owns (not a 21 blocker):** the actual `WorktreeManager` git provisioning (branch creation, cwd-lock, auto-cleanup) + the per-tree diffstat/conflict-with-base result; 46 provisions the tree via `01` and passes the `workspace` to the 21 leaf (the routing seam M6 delivers).
+- [x] REFACTOR: worktree policy lives in the leaf (`leaf-host.ts`), not the scheduler.
+- Note: the out-of-process `tool_script` bridge snapshot (`tools/index.ts`) + `run-shell.ts`/`archive`/`migrate-claude` (niche, not the leaf write path) keep the ambient default; the in-process leaf write/read tools are the load-bearing set and are all routed.
 
 **Gate 3->4**
-- [ ] Parallel write-capable worktree leaves are isolated and non-racing.
+- [x] Parallel write-capable worktree leaves are isolated and non-racing (per-leaf cwd routing; proven in `test/workflow-worktree.test.ts`).
 
 ### Phase 4: Authoring surfaces + observability
 

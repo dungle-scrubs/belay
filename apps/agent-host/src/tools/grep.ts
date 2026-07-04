@@ -2,11 +2,12 @@
  * Responsible for: the grep tool - ripgrep-backed workspace text search with match caps.
  * Not for: structural AST search (ast-grep.ts) or the process runner (search-process.ts).
  */
-import { WORKSPACE_ROOT } from "@host/boot/paths";
+
 import { rgPath } from "@vscode/ripgrep";
 import { Schema } from "effect";
 import { firstLine, runSearchProcess } from "./search-process";
 import { simpleTool, toolExecution, toolInput } from "./shared";
+import { resolveWorkspaceRoot } from "./workspace";
 
 const DEFAULT_MAX_MATCHES = 100;
 const MAX_MATCHES_CAP = 1000;
@@ -71,8 +72,10 @@ export const grepTool = simpleTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: async (args) => {
-    const result = await runSearchProcess(rgPath, buildArgs(args), { cwd: WORKSPACE_ROOT });
+  execute: async (args, ctx) => {
+    const result = await runSearchProcess(rgPath, buildArgs(args), {
+      cwd: resolveWorkspaceRoot(ctx),
+    });
     if (result.timedOut) {
       return toolExecution("search timed out");
     }

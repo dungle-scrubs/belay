@@ -28,6 +28,7 @@ import { publishTurn } from "../agent/turn";
 import type { ChatMessage, Provider } from "../providers";
 import { buildSourceProvider } from "../providers/catalog";
 import type { AgentDefinition } from "../subagents/discovery";
+import { type LeafWorkspace, withLeafWorkspace } from "../tools/workspace";
 import type { TurnOutcome } from "./leaf";
 import {
   type LeafDeps,
@@ -136,6 +137,10 @@ export interface AgentLeafRequest extends LeafRequest {
   readonly model?: ModelRef;
   readonly stepBudget?: number;
   readonly priority?: AdmissionPriority;
+  /** The leaf's isolated worktree workspace (its own cwd + confinement root). When set (an
+   *  `isolation:'worktree'` leaf), the leaf's tool calls route against it, so N parallel worktree
+   *  leaves in one host process write to DISTINCT trees without racing (M6, D-024). */
+  readonly workspace?: LeafWorkspace;
 }
 
 /**
@@ -231,7 +236,11 @@ export function runAgentLeaf(
         ),
     };
 
-    const result = yield* runLeaf(request, deps);
+    // A worktree-isolated leaf runs its turns with its own fiber-local workspace, so its tool calls
+    // resolve against its tree (not the host cwd) and parallel siblings never collide (M6, D-024).
+    const result = yield* request.workspace
+      ? withLeafWorkspace(request.workspace, runLeaf(request, deps))
+      : runLeaf(request, deps);
 
     yield* Effect.promise(() =>
       foldBackLink(

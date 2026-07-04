@@ -5,7 +5,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { relative } from "node:path";
-import { confine, WORKSPACE_ROOT } from "@host/boot/paths";
+import { confineIn, WORKSPACE_ROOT } from "@host/boot/paths";
 import { contextRegistry } from "@host/project-context/registry";
 import { msg } from "@host/transport/messages";
 import { applyUniqueReplacement, replaceMissMessage } from "./replace";
@@ -37,10 +37,11 @@ export async function readAndPrepareEdit(
   path: string,
   edits: readonly { readonly old: string; readonly new: string }[],
   where = "",
+  root: string = WORKSPACE_ROOT,
 ): Promise<EditPreparation> {
   let target: string;
   try {
-    target = confine(path);
+    target = confineIn(root, path);
   } catch (cause) {
     return { error: { kind: "execution", detail: msg(cause), cause } };
   }
@@ -63,5 +64,5 @@ export async function readAndPrepareEdit(
     }
     content = result.content;
   }
-  return { target, rel: relative(WORKSPACE_ROOT, target), content };
+  return { target, rel: relative(root, target), content };
 }

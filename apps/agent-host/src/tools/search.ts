@@ -13,8 +13,11 @@ import { SKIP_DIRS } from "./shared";
  * to the skip policy or the cwd contract lands in one place. The per-tool work - collecting paths
  * (glob) or reading + line-scanning each file (grep) - stays with the tool.
  */
-export async function* walkWorkspace(pattern: string): AsyncIterable<string> {
-  for await (const entry of glob(pattern, { cwd: WORKSPACE_ROOT })) {
+export async function* walkWorkspace(
+  pattern: string,
+  root: string = WORKSPACE_ROOT,
+): AsyncIterable<string> {
+  for await (const entry of glob(pattern, { cwd: root })) {
     if (SKIP_DIRS.test(`/${entry}/`)) {
       continue;
     }
@@ -34,9 +37,10 @@ export async function collectWorkspace<T>(
   pattern: string,
   max: number,
   select: (entry: string) => T | undefined,
+  root: string = WORKSPACE_ROOT,
 ): Promise<{ readonly items: T[]; readonly truncated: boolean }> {
   const items: T[] = [];
-  for await (const entry of walkWorkspace(pattern)) {
+  for await (const entry of walkWorkspace(pattern, root)) {
     const selected = select(entry);
     if (selected === undefined) {
       continue;

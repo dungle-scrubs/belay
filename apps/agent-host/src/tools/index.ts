@@ -42,9 +42,10 @@ import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
 import { trevorExpertTool } from "./trevor-expert";
-import type { Tool } from "./types";
+import type { Tool, ToolContext } from "./types";
 import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
+import { currentLeafWorkspace } from "./workspace";
 import { writeTool } from "./write";
 
 export type { ToolError } from "./errors";
@@ -232,13 +233,24 @@ export function executeTool(
     return renderFailure(name, new ToolInputError({ tool: name, detail }), runId, Date.now());
   }
   const startedAt = Date.now();
-  return tool.execute(decoded.right, { runId, callId }).pipe(
-    Effect.tap(() =>
-      Effect.sync(() =>
-        log("tool", "executed", { run: runId, name, ms: Date.now() - startedAt, ok: true }),
-      ),
-    ),
-    Effect.catchAll((error) => renderFailure(name, error, runId, startedAt)),
+  // Inject the fiber-local leaf workspace (a worktree-isolated leaf's own tree) into the ctx, so the
+  // cwd/root-reading tools resolve against it; absent = the ambient globals (every non-leaf turn). M6.
+  return currentLeafWorkspace.pipe(
+    Effect.flatMap((workspace) => {
+      const ctx: ToolContext = {
+        runId,
+        callId,
+        ...(workspace ? { cwd: workspace.cwd, workspaceRoot: workspace.root } : {}),
+      };
+      return tool.execute(decoded.right, ctx).pipe(
+        Effect.tap(() =>
+          Effect.sync(() =>
+            log("tool", "executed", { run: runId, name, ms: Date.now() - startedAt, ok: true }),
+          ),
+        ),
+        Effect.catchAll((error) => renderFailure(name, error, runId, startedAt)),
+      );
+    }),
   );
 }
 

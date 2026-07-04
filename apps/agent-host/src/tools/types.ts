@@ -12,6 +12,11 @@ import type { ToolError } from "./errors";
 export interface ToolContext {
   readonly runId?: string;
   readonly callId?: string;
+  /** The host cwd `read`/`write`/`bash` resolve against; absent = the ambient `process.cwd()`. Set by
+   *  the executor from a worktree leaf's fiber-local workspace (plan 21 M6, D-024). */
+  readonly cwd?: string;
+  /** The confinement root `edit`/`glob`/`grep` resolve against; absent = the global `WORKSPACE_ROOT`. */
+  readonly workspaceRoot?: string;
 }
 
 /**

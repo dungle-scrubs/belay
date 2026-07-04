@@ -7,6 +7,7 @@ import { writeFile } from "node:fs/promises";
 import { Schema } from "effect";
 import { type PreparedEdit, readAndPrepareEdit } from "./edit-core";
 import { simpleTool, toolExecution, toolInput } from "./shared";
+import { resolveWorkspaceRoot } from "./workspace";
 
 const Params = Schema.Struct({
   edits: Schema.Array(
@@ -36,11 +37,12 @@ export const multiEditTool = simpleTool({
     "Edits apply in order (later edits see earlier ones); each 'old' must appear exactly once in " +
     "its file at that point. All-or-nothing: if any edit fails, no file is written. Confined to the workspace.",
   params: Params,
-  execute: async (args) => {
+  execute: async (args, ctx) => {
     const edits = args.edits;
     if (edits.length === 0) {
       return toolInput("'edits' must be a non-empty array");
     }
+    const root = resolveWorkspaceRoot(ctx);
 
     // The schema guarantees each edit has string path/old/new; validate the value-level
     // preconditions (non-empty path and old) the old code checked.
@@ -70,7 +72,7 @@ export const multiEditTool = simpleTool({
     // before a single write, so the workspace is never left half-edited.
     const pending: PreparedEdit[] = [];
     for (const path of order) {
-      const prepared = await readAndPrepareEdit(path, byPath.get(path) ?? [], ` in ${path}`);
+      const prepared = await readAndPrepareEdit(path, byPath.get(path) ?? [], ` in ${path}`, root);
       if ("error" in prepared) {
         return prepared.error.kind === "input"
           ? toolInput(prepared.error.detail)

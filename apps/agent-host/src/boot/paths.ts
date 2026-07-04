@@ -114,11 +114,18 @@ export function isWorkspaceConfined(tool: string): boolean {
   return (WORKSPACE_CONFINED_TOOLS as readonly string[]).includes(tool);
 }
 
-/** Resolves a path inside the workspace, or throws if it escapes the root. */
-export function confine(path: string): string {
-  const resolved = resolve(WORKSPACE_ROOT, path);
-  if (resolved !== WORKSPACE_ROOT && !resolved.startsWith(WORKSPACE_ROOT + sep)) {
+/** Resolves a path inside a GIVEN workspace root, or throws if it escapes it. Parameterized so a
+ *  worktree-isolated workflow leaf can confine against its own tree instead of the global root
+ *  (plan 21 M6, D-024); `confine` is the global-root default. */
+export function confineIn(root: string, path: string): string {
+  const resolved = resolve(root, path);
+  if (resolved !== root && !resolved.startsWith(root + sep)) {
     throw new Error(`path escapes workspace root (${path})`);
   }
   return resolved;
+}
+
+/** Resolves a path inside the (global) workspace, or throws if it escapes the root. */
+export function confine(path: string): string {
+  return confineIn(WORKSPACE_ROOT, path);
 }

@@ -2,11 +2,12 @@
  * Responsible for: the ast_grep tool - structural AST pattern search over the workspace.
  * Not for: text/regex search (grep.ts) or binary resolution (ast-grep-bin.ts).
  */
-import { confine, WORKSPACE_ROOT } from "@host/boot/paths";
+import { confineIn } from "@host/boot/paths";
 import { Schema } from "effect";
 import { astGrepPath } from "./ast-grep-bin";
 import { firstLine, runSearchProcess } from "./search-process";
 import { simpleTool, toolExecution, toolInput } from "./shared";
+import { resolveWorkspaceRoot } from "./workspace";
 
 const DEFAULT_MAX_MATCHES = 100;
 const MAX_MATCHES_CAP = 500;
@@ -46,14 +47,14 @@ interface AstGrepMatch {
 
 /** Builds the `ast-grep run` argv. Argv array, never a shell string. Paths are confined to the
  *  workspace (an escape throws, surfaced as a typed error); default is the workspace root `.`. */
-function buildArgs(args: typeof Params.Type): string[] {
+function buildArgs(args: typeof Params.Type, root: string): string[] {
   const argv = ["run", "--pattern", args.pattern, "--json=stream"];
   if (args.lang) argv.push("--lang", args.lang);
   if (args.strictness) argv.push("--strictness", args.strictness);
   for (const g of args.globs ?? []) argv.push("--globs", g);
   const paths = args.paths && args.paths.length > 0 ? args.paths : ["."];
   for (const p of paths) {
-    confine(p); // validates the path stays in the workspace (throws on escape)
+    confineIn(root, p); // validates the path stays in the workspace (throws on escape)
     argv.push(p);
   }
   return argv;
@@ -88,14 +89,15 @@ export const astGrepTool = simpleTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: async (args) => {
+  execute: async (args, ctx) => {
     const bin = astGrepPath();
     if (!bin) {
       return toolExecution("ast-grep binary is not available");
     }
-    // confine() throws on a path escape; simpleTool routes that through the tool execution envelope.
-    const argv = buildArgs(args);
-    const result = await runSearchProcess(bin, argv, { cwd: WORKSPACE_ROOT });
+    // confineIn() throws on a path escape; simpleTool routes that through the tool execution envelope.
+    const root = resolveWorkspaceRoot(ctx);
+    const argv = buildArgs(args, root);
+    const result = await runSearchProcess(bin, argv, { cwd: root });
     if (result.timedOut) {
       return toolExecution("search timed out");
     }

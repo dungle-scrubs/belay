@@ -8,6 +8,7 @@ import { dirname, resolve } from "node:path";
 import { contextRegistry } from "@host/project-context/registry";
 import { Schema } from "effect";
 import { simpleTool } from "./shared";
+import { resolveCwd } from "./workspace";
 
 const Params = Schema.Struct({
   path: Schema.String.annotations({
@@ -27,8 +28,8 @@ export const writeTool = simpleTool({
   description:
     "Write a UTF-8 text file, creating parent directories. Path may be absolute or relative to the host working directory.",
   params: Params,
-  execute: async (args) => {
-    const target = resolve(process.cwd(), args.path);
+  execute: async (args, ctx) => {
+    const target = resolve(resolveCwd(ctx), args.path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, args.content, "utf8");
     // Lazy below-cwd AGENTS.md (D-080): writing into a subtree pulls in its directory-scoped context.
