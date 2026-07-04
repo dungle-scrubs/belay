@@ -86,7 +86,6 @@ export function ArchiveResult({
       status={status}
       error={parsed?.error}
       running={status === "running" && !parsed}
-      runningLabel={name === "archive_read" ? "reading archive" : "extracting archive"}
       className={className}
       renderBody={() => body}
     />

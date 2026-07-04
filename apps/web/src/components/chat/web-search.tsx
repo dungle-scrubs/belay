@@ -107,7 +107,6 @@ export function WebSearchResults({
       status={status}
       error={error}
       running={status === "running" && items.length === 0}
-      runningLabel="searching"
       defaultOpen={defaultOpen}
       className={className}
       border={border}

@@ -358,7 +358,6 @@ export function DocsResult({
       status={status}
       error={parsed?.error}
       running={status === "running" && !parsed}
-      runningLabel="looking up docs"
       defaultOpen={defaultOpen}
       className={className}
       renderBody={() => body}

@@ -5,8 +5,14 @@
 > Current focus: M1: Shimmer Component
 
 - Total checklist items: 33
-- Completed: 15
-- Current cutoff blockers: 18
+- Completed: 22
+- Current cutoff blockers: 11
+
+> M3 note (decision D-005): no new host protocol events were added. Every action label is a
+> deterministic web-side projection of already-decoded structured state (tool name/args,
+> assistant.progress usage, context.compacting tokens/budget, reconnect attempt/maxAttempts).
+> Redaction/truncation and the V1->V2 verb map live in the pure `action-label.ts` module and are
+> unit-tested in isolation with a missing-evidence fallback.
 
 ## 0. Hard Dependencies
 
@@ -34,13 +40,13 @@
 
 ## M3: Host Progress Labels
 
-- [ ] RED: Protocol tests for `assistant.progress`, `tool.progress`, reconnecting, recovery, and compaction progress label fields
-- [ ] GREEN: Preserve existing protocol labels and add missing structured labels where host-owned context is required
-- [ ] RED: Host tests for archive labels, steering labels, provider reconnect labels, and no raw/debug-only text leakage
-- [ ] GREEN: Route host-owned labels into transcript projection without web prose parsing
-- [ ] RED: Regression tests for short, redacted, single-line labels
-- [ ] GREEN: Add truncation/redaction rules for label fragments
-- [ ] REFACTOR: Deduplicate V1-derived keyword tables into a small V2 label map
+- [x] RED: Protocol tests for `assistant.progress`, `tool.progress`, reconnecting, recovery, and compaction progress label fields
+- [x] GREEN: Preserve existing protocol labels and add missing structured labels where host-owned context is required
+- [x] RED: Host tests for archive labels, steering labels, provider reconnect labels, and no raw/debug-only text leakage
+- [x] GREEN: Route host-owned labels into transcript projection without web prose parsing
+- [x] RED: Regression tests for short, redacted, single-line labels
+- [x] GREEN: Add truncation/redaction rules for label fragments
+- [x] REFACTOR: Deduplicate V1-derived keyword tables into a small V2 label map
 
 ## M4: Live UI Wiring
 

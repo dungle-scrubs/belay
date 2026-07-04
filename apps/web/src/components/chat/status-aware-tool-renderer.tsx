@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { ToolCall, WorkingIndicator } from "./message";
+import { toolActionLabel } from "@/action-label";
+import { ActionShimmer } from "./action-shimmer";
+import { ToolCall } from "./message";
 import type { ToolStatus } from "./tool-status";
 
 interface StatusAwareToolRendererProps {
@@ -8,6 +10,10 @@ interface StatusAwareToolRendererProps {
   status?: ToolStatus;
   error?: ReactNode;
   running?: boolean;
+  /**
+   * Overrides the running-status label. Defaults to the centralized `toolActionLabel(name)` verb
+   * (plan 31), so a renderer only sets this when its tool name isn't in the shared vocabulary map.
+   */
   runningLabel?: string;
   defaultOpen?: boolean;
   border?: boolean;
@@ -58,7 +64,7 @@ export function StatusAwareToolRenderer({
         className={className}
         onOpenPath={onOpenPath}
       >
-        {runningLabel ? <WorkingIndicator label={runningLabel} /> : null}
+        <ActionShimmer label={runningLabel ?? toolActionLabel(name)} />
       </ToolCall>
     );
   }

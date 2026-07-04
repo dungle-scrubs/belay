@@ -65,7 +65,6 @@ export function SessionRecallResults({
         status={status}
         error={error}
         running={status === "running" && !result}
-        runningLabel="recalling"
         defaultOpen={defaultOpen}
         className={className}
       />

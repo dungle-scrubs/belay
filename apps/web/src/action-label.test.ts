@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  compactionActionLabel,
   FALLBACK_ACTION_LABEL,
+  RECOVERY_ACTION_LABEL,
   reconnectActionLabel,
   redactLabelFragment,
   toolActionLabel,
@@ -132,8 +134,16 @@ test("tool: a multiline bash command never leaks a newline into the label", () =
   assert.match(label, /^running /);
 });
 
-// --- reconnect ---
+// --- reconnect / recovery / compaction ---
 
 test("reconnect: structured attempt label", () => {
   assert.equal(reconnectActionLabel(2, 5), "reconnecting (attempt 2/5)");
+});
+
+test("recovery + compaction: short present-progress labels, single line, no punctuation blowup", () => {
+  for (const label of [RECOVERY_ACTION_LABEL, compactionActionLabel()]) {
+    assert.doesNotMatch(label, /\n/);
+    assert.ok(label.length <= 48);
+    assert.ok(label.length > 0);
+  }
 });

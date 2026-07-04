@@ -151,7 +151,6 @@ export function WebFetchResult({
       status={status}
       error={parsed?.error}
       running={status === "running" && !parsed}
-      runningLabel="fetching"
       defaultOpen={defaultOpen}
       className={className}
       renderBody={() => body}
