@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
+import { toolActionLabelForTarget } from "@/action-label";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
@@ -107,6 +108,7 @@ export function WebSearchResults({
       status={status}
       error={error}
       running={status === "running" && items.length === 0}
+      runningLabel={toolActionLabelForTarget("web_search", query)}
       defaultOpen={defaultOpen}
       className={className}
       border={border}

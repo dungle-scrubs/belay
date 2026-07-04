@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
+import { toolActionLabelForTarget } from "@/action-label";
 import { fmtBytes } from "@/derive";
 import { MarkdownBody } from "./markdown-body";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
@@ -251,6 +252,9 @@ function CorpusRow({ corpus }: { corpus: DocsCorpus }) {
 interface DocsResultProps {
   /** A short label for the tool row (e.g. "resolve Effect Schema"). */
   args: string;
+  /** The bare salient target (subject/query/url/corpusId, no action prefix), used ONLY for the
+   *  running-state shimmer label so it doesn't double up on `args`'s own leading action word. */
+  runningTarget?: string;
   parsed?: ParsedDocs | null;
   status?: ToolStatus;
   /** Whether the body starts expanded; the global compact setting drives this. */
@@ -269,6 +273,7 @@ interface DocsResultProps {
  */
 export function DocsResult({
   args,
+  runningTarget,
   parsed,
   status = "done",
   defaultOpen = true,
@@ -358,6 +363,7 @@ export function DocsResult({
       status={status}
       error={parsed?.error}
       running={status === "running" && !parsed}
+      runningLabel={toolActionLabelForTarget("docs", runningTarget)}
       defaultOpen={defaultOpen}
       className={className}
       renderBody={() => body}

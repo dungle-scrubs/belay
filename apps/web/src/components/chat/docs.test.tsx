@@ -299,6 +299,22 @@ test("a running docs call shows the working indicator", () => {
   );
 });
 
+test("plan 31 fix: a running docs call shows the specific subject, not just the bare verb", () => {
+  const { container } = render(
+    <ToolRenderer
+      message={toolMsg({
+        args: JSON.stringify({ action: "resolve", subject: "Effect Schema" }),
+        done: false,
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  assert.ok(
+    (container.textContent ?? "").includes("Effect Schema"),
+    "the running label names the specific subject being looked up",
+  );
+});
+
 test("docs dispatches to the structured documentation renderer", () => {
   const { container } = render(
     <ToolRenderer

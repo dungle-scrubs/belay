@@ -11,8 +11,11 @@ interface StatusAwareToolRendererProps {
   error?: ReactNode;
   running?: boolean;
   /**
-   * Overrides the running-status label. Defaults to the centralized `toolActionLabel(name)` verb
-   * (plan 31), so a renderer only sets this when its tool name isn't in the shared vocabulary map.
+   * The running-status label. Production renderers pass this explicitly, built from their own
+   * already-typed target (query/url/path) via `toolActionLabelForTarget` (plan 31), so the shimmer
+   * names the specific thing in flight ("reading apps/web/src/app.tsx") rather than a bare verb.
+   * Falls back to the centralized `toolActionLabel(name)` bare verb when omitted - the safety net
+   * for a caller that has no typed target to offer.
    */
   runningLabel?: string;
   defaultOpen?: boolean;

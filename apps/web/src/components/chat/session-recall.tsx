@@ -1,4 +1,5 @@
 import { type RecallResult, relativeTime } from "@trevor/session";
+import { toolActionLabelForTarget } from "@/action-label";
 import { cn } from "@/lib/utils";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
@@ -65,6 +66,7 @@ export function SessionRecallResults({
         status={status}
         error={error}
         running={status === "running" && !result}
+        runningLabel={toolActionLabelForTarget("session_recall", query)}
         defaultOpen={defaultOpen}
         className={className}
       />

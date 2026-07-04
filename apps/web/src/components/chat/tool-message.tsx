@@ -198,6 +198,7 @@ const renderDocs: RenderArm = ({ message, status, className }) => {
     <DocsResult
       className={className}
       args={target ? `${action} ${target}` : action}
+      runningTarget={target}
       parsed={parseDocsResult(message.result)}
       status={status}
     />

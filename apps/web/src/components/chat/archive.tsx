@@ -1,6 +1,13 @@
 import { FileArchive, ImageIcon, TriangleAlert } from "lucide-react";
+import { toolActionLabelForTarget } from "@/action-label";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
+
+/** `renderArchive` (tool-message.tsx) passes this sentinel as `args` when the call carries neither a
+ *  path nor a url yet - never a genuine source name, so it must not be shown as a running target
+ *  (the verb "reading archive"/"extracting archive" already says "archive"; appending the sentinel
+ *  would read "reading archive archive"). */
+const NO_SOURCE_SENTINEL = "archive";
 
 export interface ArchiveEntry {
   readonly path: string;
@@ -78,6 +85,7 @@ export function ArchiveResult({
   className,
 }: ArchiveResultProps) {
   const body = parsed ? <ArchiveBody parsed={parsed} /> : null;
+  const target = args === NO_SOURCE_SENTINEL ? undefined : args;
 
   return (
     <StatusAwareToolRenderer
@@ -86,6 +94,7 @@ export function ArchiveResult({
       status={status}
       error={parsed?.error}
       running={status === "running" && !parsed}
+      runningLabel={toolActionLabelForTarget(name, target)}
       className={className}
       renderBody={() => body}
     />

@@ -126,3 +126,43 @@ test("running and error archive rows use status-aware rendering", () => {
   );
   assert.ok((failed.container.textContent ?? "").includes("ARCHIVE_ENTRY_UNSAFE"));
 });
+
+test("plan 31 fix: a running archive row shows the specific source, not just the bare verb", () => {
+  const readRunning = render(
+    <ToolRenderer
+      message={toolMsg({
+        name: "archive_read",
+        args: JSON.stringify({ path: "/tmp/evidence.zip" }),
+        done: false,
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  assert.ok(
+    (readRunning.container.textContent ?? "").includes("/tmp/evidence.zip"),
+    "the running label names the specific archive source, not just 'reading archive'",
+  );
+
+  const unpackRunning = render(
+    <ToolRenderer
+      message={toolMsg({
+        name: "archive_unpack",
+        args: JSON.stringify({ path: "/tmp/evidence.zip", destination: "/tmp/out" }),
+        done: false,
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  const text = unpackRunning.container.textContent ?? "";
+  assert.ok(text.toLowerCase().includes("extracting archive"));
+  assert.ok(text.includes("/tmp/evidence.zip"), "the running label names the archive source");
+});
+
+test("plan 31 fix: no path/url yet renders the bare verb, never a duplicated 'archive archive'", () => {
+  const { container } = render(
+    <ToolRenderer message={toolMsg({ args: "{}", done: false })} onOpenPath={noop} />,
+  );
+  const text = (container.textContent ?? "").toLowerCase();
+  assert.ok(text.includes("reading archive"));
+  assert.doesNotMatch(text, /archive archive/);
+});

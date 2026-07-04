@@ -98,6 +98,21 @@ test("shows a working indicator while still running", () => {
   );
 });
 
+test("plan 31 fix: the running indicator shows the specific query, not just the bare verb", () => {
+  const { container } = render(
+    <SessionRecallResults
+      query="which database did we choose"
+      result={null}
+      status="running"
+      nowMs={NOW}
+    />,
+  );
+  assert.ok(
+    (container.textContent ?? "").includes("which database did we choose"),
+    "the running label names the specific recall query",
+  );
+});
+
 test("renders a neutral note for no_hits and unavailable", () => {
   const noHits = render(
     <SessionRecallResults query="q" result={result({ status: "no_hits" })} nowMs={NOW} />,

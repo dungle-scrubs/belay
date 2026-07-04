@@ -139,6 +139,22 @@ test("a running web_fetch shows the working indicator", () => {
   );
 });
 
+test("plan 31 fix: a running web_fetch shows the specific URL, not just the bare verb", () => {
+  const { container } = render(
+    <ToolRenderer
+      message={toolMsg({
+        args: JSON.stringify({ url: "https://docs.example.com/guide" }),
+        done: false,
+      })}
+      onOpenPath={noop}
+    />,
+  );
+  assert.ok(
+    (container.textContent ?? "").includes("https://docs.example.com/guide"),
+    "the running label names the specific URL being fetched",
+  );
+});
+
 test("web_fetch dispatches to the source-content renderer", () => {
   const { container } = render(
     <ToolRenderer

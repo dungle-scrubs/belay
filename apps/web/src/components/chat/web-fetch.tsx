@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
+import { toolActionLabelForTarget } from "@/action-label";
 import { MarkdownBody } from "./markdown-body";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
@@ -151,6 +152,7 @@ export function WebFetchResult({
       status={status}
       error={parsed?.error}
       running={status === "running" && !parsed}
+      runningLabel={toolActionLabelForTarget("web_fetch", url)}
       defaultOpen={defaultOpen}
       className={className}
       renderBody={() => body}
