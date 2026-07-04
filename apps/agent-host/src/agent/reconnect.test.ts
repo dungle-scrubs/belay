@@ -244,17 +244,25 @@ it.effect("an auth failure is terminal and unchanged (never retried)", () =>
 describe("M5: an unknown terminal failure is recorded as a redacted observation", () => {
   let obsHome: string;
   const savedHome = process.env.TREVOR_STATE_HOME;
+  const savedConfig = process.env.TREVOR_HOME;
 
   beforeEach(() => {
     obsHome = mkdtempSync(join(tmpdir(), "trevor-recon-obs-"));
     process.env.TREVOR_STATE_HOME = obsHome;
+    // Isolate the config home too, so the corpus migration never imports the developer's real store.
+    process.env.TREVOR_HOME = join(obsHome, "config");
   });
 
   afterEach(() => {
-    if (savedHome === undefined) {
-      delete process.env.TREVOR_STATE_HOME;
-    } else {
-      process.env.TREVOR_STATE_HOME = savedHome;
+    for (const [key, value] of [
+      ["TREVOR_STATE_HOME", savedHome],
+      ["TREVOR_HOME", savedConfig],
+    ] as const) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
     rmSync(obsHome, { recursive: true, force: true });
   });
@@ -268,9 +276,10 @@ describe("M5: an unknown terminal failure is recorded as a redacted observation"
       assert.equal(summary.distinct, 1, "exactly one observed shape");
       assert.equal(summary.unknown, 1, "classified unknown");
       const rec = Object.values(store)[0];
-      assert.equal(rec?.classification, "unknown");
-      assert.equal(rec?.outputStarted, false, "no token had streamed before the failure");
-      assert.deepEqual(rec?.shapeFields, ["error", "status"], "field NAMES only");
+      assert.equal(rec?.kind, "provider_failure");
+      assert.equal(rec?.shape.classification, "unknown");
+      assert.equal(rec?.shape.outputStarted, false, "no token had streamed before the failure");
+      assert.deepEqual(rec?.shape.fieldNames, ["error", "status"], "field NAMES only");
     }),
   );
 

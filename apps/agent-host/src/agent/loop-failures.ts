@@ -8,10 +8,15 @@
 import {
   type Provider,
   type ProviderError,
+  type ProviderFailureEvidence,
   ProviderUnavailable,
   providerFailureEvidence,
 } from "@host/providers";
-import { buildProviderFailureLogFields } from "@host/providers/failure-record-schema";
+import {
+  buildProviderFailureLogFields,
+  type ObservationInput,
+} from "@host/providers/failure-record-schema";
+import type { ProviderFailureClass } from "@host/providers/failure-taxonomy";
 import { recordObservation } from "@host/providers/observation-store";
 import { providerFailures } from "@host/providers/provider-failure-log";
 import { providerIncidents } from "@host/providers/provider-incidents";
@@ -47,39 +52,65 @@ export function logProviderFailure(
 }
 
 /**
+ * Whether a terminal failure is classifier-gap evidence worth recording in the observation corpus
+ * (plan 29 M6). Only `unknown` shapes qualify: they are the ones the classifier could not confidently
+ * place, so their redacted shape is useful for improving the rules later. Every well-classified,
+ * actionable class (auth, quota/billing, context overflow, model/runtime unavailable, request
+ * rejected) already carries its own user action, and the retryable transient classes are ordinary
+ * outage noise - recording either would only spam the corpus without adding classifier signal.
+ */
+export function isClassifierGapFailure(classification: ProviderFailureClass | undefined): boolean {
+  return classification === "unknown";
+}
+
+/**
+ * Normalizes a terminal provider failure into the common observation input (plan 29 M6). Faithfully
+ * carries the retry decision (`retryable`) and shape (status/code/field names/output-started) so the
+ * corpus can later separate non-retryable from retry-exhausted unknown shapes. The message is
+ * evidence.detail - the same sanitized text the debug failure-log line fingerprints - so an
+ * observation and its log line share one fingerprint for correlation.
+ */
+export function observationInputFromFailure(
+  provider: Provider,
+  evidence: ProviderFailureEvidence,
+  outputStarted: boolean,
+): ObservationInput {
+  return {
+    provider: provider.id,
+    model: provider.model,
+    phase: "model-step",
+    classification: evidence.classification ?? "unknown",
+    retryable: evidence.retryable,
+    status: evidence.status,
+    code: evidence.code,
+    message: evidence.detail,
+    shapeFields: evidence.shapeFields,
+    outputStarted,
+  };
+}
+
+/**
  * Best-effort: when a model step fails terminally with an UNKNOWN provider failure shape, record it
- * as a redacted, deduped observation under TREVOR_STATE_HOME (D-076 M5). Emits nothing and never
- * fails - the underlying store swallows any write error - so it can be `concat`-ed ahead of the real
- * failure without changing the turn's outcome. Only `unknown` is observed; well-classified terminal
- * failures (auth, quota, model/runtime unavailable, request rejected) already carry their own action.
+ * as a redacted, deduped observation under TREVOR_STATE_HOME (D-076 M5, plan 29 M6). Emits nothing and
+ * never fails - the underlying store swallows any write error - so it can be `concat`-ed ahead of the
+ * real failure without changing the turn's outcome. Only classifier-gap (`unknown`) shapes are
+ * observed; well-classified terminal failures already carry their own action.
  */
 export function observeUnknownFailure(
   provider: Provider,
   error: ProviderError,
   outputStarted: boolean,
 ): Stream.Stream<never, never> {
-  if (error._tag !== "ProviderUnavailable" || error.classification !== "unknown") {
+  if (error._tag !== "ProviderUnavailable" || !isClassifierGapFailure(error.classification)) {
     return Stream.empty;
   }
-  const evidence = providerFailureEvidence(error);
+  const input = observationInputFromFailure(
+    provider,
+    providerFailureEvidence(error),
+    outputStarted,
+  );
   return Stream.fromEffect(
-    Effect.promise(() =>
-      recordObservation(
-        {
-          provider: error.provider,
-          model: provider.model,
-          phase: "model-step",
-          classification: "unknown",
-          retryable: evidence.retryable,
-          status: evidence.status,
-          code: evidence.code,
-          message: error.detail,
-          shapeFields: evidence.shapeFields,
-          outputStarted,
-        },
-        new Date().toISOString(),
-      ),
-    ),
+    Effect.promise(() => recordObservation(input, new Date().toISOString())),
   ).pipe(Stream.drain);
 }
 
