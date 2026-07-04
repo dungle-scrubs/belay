@@ -142,6 +142,9 @@ importers:
 
   apps/trevor-cli:
     dependencies:
+      '@trevor/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@trevor/server-kit':
         specifier: workspace:*
         version: link:../../packages/server-kit
@@ -343,6 +346,25 @@ importers:
 
   packages/repo-policy:
     devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.0.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/sdk:
+    dependencies:
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../session
+    devDependencies:
+      '@trevor/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
+      '@trevor/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0

@@ -1,68 +1,68 @@
 # Headless CLI, SDK, and Harness - Progress Report
 
-> Current focus: Hard Dependencies
+> Current focus: M7 CLI Refactor Boundary
 
 ## Summary
 
-- Current cutoff blockers: 58
+- Current cutoff blockers: 25
 - Deferred follow-up: 0
 - Superseded checklist debt: 0
 
 ## Hard Dependencies
 
-- [ ] `14-capability-manifest-and-trevor-expert` complete before capability discovery/export SDK helpers
+- [x] `14-capability-manifest-and-trevor-expert` complete before capability discovery/export SDK helpers (the capability-manifest builder/export surface lives in `@trevor/session`; the SDK reads it via the `/trevor-export` command over the protocol)
 - [x] `.plans/trevor-v2` D-085 project launcher exists before CLI layering work
 - [x] `.plans/trevor-v2` D-094 session lifecycle controls exist before lifecycle SDK/CLI semantics
 
 ## M1: Package Contract and Dependency Direction
 
-- [ ] RED: Add package-boundary tests proving CLI can depend on SDK, while SDK does not depend on CLI
-- [ ] GREEN: Create `packages/sdk` with exports for client construction and workflow types
-- [ ] RED: Add tests proving SDK imports `@trevor/session` primitives rather than duplicating event/session types
-- [ ] GREEN: Re-export or wrap shared protocol types intentionally
-- [ ] REFACTOR: Document app-vs-package boundaries
+- [x] RED: Add package-boundary tests proving CLI can depend on SDK, while SDK does not depend on CLI
+- [x] GREEN: Create `packages/sdk` with exports for client construction and workflow types
+- [x] RED: Add tests proving SDK imports `@trevor/session` primitives rather than duplicating event/session types
+- [x] GREEN: Re-export or wrap shared protocol types intentionally
+- [x] REFACTOR: Document app-vs-package boundaries
 
 ## M2: Transport and Backend Binding
 
-- [ ] RED: Add tests for binding a client to local session-store URL and Richter URL through `streamTransport(url)`
-- [ ] GREEN: Implement `createTrevorClient({ sessionUrl, blobUrl, identity? })`
-- [ ] RED: Add tests for ensure session, replay/tail connect, publish, reconnect caller responsibility, and backend error reporting
-- [ ] GREEN: Provide typed session operations over `SessionTransport`
-- [ ] REFACTOR: Keep backend selection URL-based; no `@trevor/richter` adapter package
+- [x] RED: Add tests for binding a client to local session-store URL and Richter URL through `streamTransport(url)`
+- [x] GREEN: Implement `createTrevorClient({ sessionUrl, blobUrl, identity? })`
+- [x] RED: Add tests for ensure session, replay/tail connect, publish, reconnect caller responsibility, and backend error reporting
+- [x] GREEN: Provide typed session operations over `SessionTransport`
+- [x] REFACTOR: Keep backend selection URL-based; no `@trevor/richter` adapter package
 
 ## M3: Artifact Client
 
-- [ ] RED: Add tests for upload/download/list-or-read helpers over blob-store wire contracts
-- [ ] GREEN: Implement artifact helpers using existing blob protocol and `ArtifactRef` types
-- [ ] RED: Add tests for missing blob-store URL, upload size errors, content type, and hash/ref stability
-- [ ] GREEN: Return structured artifact refs and typed failures
-- [ ] REFACTOR: Keep artifact bytes out of session event helpers unless explicitly attached
+- [x] RED: Add tests for upload/download/list-or-read helpers over blob-store wire contracts
+- [x] GREEN: Implement artifact helpers using existing blob protocol and `ArtifactRef` types
+- [x] RED: Add tests for missing blob-store URL, upload size errors, content type, and hash/ref stability
+- [x] GREEN: Return structured artifact refs and typed failures
+- [x] REFACTOR: Keep artifact bytes out of session event helpers unless explicitly attached
 
 ## M4: Transcript, Inventory, and Capabilities
 
-- [ ] RED: Add tests for reading session inventory, transcript projection, host presence/status, and capability export
-- [ ] GREEN: Implement typed inventory/transcript/capabilities helpers
-- [ ] RED: Add tests proving SDK does not scrape web UI or prompt text for capabilities
-- [ ] GREEN: Use `14-capability-manifest-and-trevor-expert` export surfaces when available
-- [ ] REFACTOR: Keep raw event access available for advanced clients
+- [x] RED: Add tests for reading session inventory, transcript projection, host presence/status, and capability export
+- [x] GREEN: Implement typed inventory/transcript/capabilities helpers
+- [x] RED: Add tests proving SDK does not scrape web UI or prompt text for capabilities
+- [x] GREEN: Use `14-capability-manifest-and-trevor-expert` export surfaces when available
+- [x] REFACTOR: Keep raw event access available for advanced clients
 
 ## M5: Prompt, Stream, and Cancel Workflow
 
-- [ ] RED: Add tests for submitting a user prompt into an existing session and streaming correlated turn events
-- [ ] GREEN: Implement `prompt`, `streamTurn`, and `subscribe` style workflows over session events
-- [ ] RED: Add tests for cancellation semantics matching D-094 cancel, not stop/kill
-- [ ] GREEN: Implement cancel helper using established run/session event contract
-- [ ] REFACTOR: Avoid introducing hidden single-call `ask()` API as the primary design
-- [ ] RED: Add tests for an optional `switchModel` workflow that sends the `.plans/09.1-mid-turn-model-switch` switch control event into an active run (initiator: programmatic), and for a typed `model.switched` event projection
-- [ ] GREEN: Implement the optional switch-model workflow over the session event contract, parallel to `cancel`; surface `model.switched` as a typed read with raw event access as the fallback
+- [x] RED: Add tests for submitting a user prompt into an existing session and streaming correlated turn events
+- [x] GREEN: Implement `prompt`, `streamTurn`, and `subscribe` style workflows over session events
+- [x] RED: Add tests for cancellation semantics matching D-094 cancel, not stop/kill
+- [x] GREEN: Implement cancel helper using established run/session event contract
+- [x] REFACTOR: Avoid introducing hidden single-call `ask()` API as the primary design
+- [x] RED: Add tests for an optional `switchModel` workflow that sends the `.plans/09.1-mid-turn-model-switch` switch control event into an active run (initiator: programmatic), and for a typed `model.switched` event projection
+- [x] GREEN: Implement the optional switch-model workflow over the session event contract, parallel to `cancel`; surface `model.switched` as a typed read with raw event access as the fallback
 
 ## M6: Session Lifecycle Workflow
 
-- [ ] RED: Add tests for archive/unarchive/list/open-target semantics matching existing CLI lifecycle behavior
-- [ ] GREEN: Move or share pure lifecycle workflow logic so CLI and SDK cannot drift
-- [ ] RED: Add tests distinguishing cancel, stop, kill, archive, and unarchive
-- [ ] GREEN: Expose SDK lifecycle helpers where protocol-safe; leave OS signalling to CLI/local layer
-- [ ] REFACTOR: Keep process ownership records out of SDK core
+- [x] RED: Add tests for archive/unarchive/list/open-target semantics matching existing CLI lifecycle behavior
+- [x] GREEN: Move or share pure lifecycle workflow logic so CLI and SDK cannot drift
+- [x] RED: Add tests distinguishing cancel, stop, kill, archive, and unarchive
+- [x] GREEN: Expose SDK lifecycle helpers where protocol-safe; leave OS signalling to CLI/local layer
+- [x] REFACTOR: Keep process ownership records out of SDK core
 
 ## M7: CLI Refactor Boundary
 
