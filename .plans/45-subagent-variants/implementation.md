@@ -3,7 +3,7 @@
 ## 0. Hard Dependencies
 
 - [x] D-045-D-049 define the existing general-purpose, explorer, inline/background read-only, isolated-session, and ephemeral-agent model.
-- [x] `.plans/12-bounded-child-takeover` now owns bounded-child.
+- [x] The delegated-child leaf lives in `.plans/21-workflows-runtime` (bounded-child folded into `21`; plan 12 dropped); this plan does not own it. <!-- D-004 -->
 - [x] `.plans/01-managed-worktree-hardening` owns cwd lock hardening needed before mutating background agents.
 - [ ] **Reorg (plan 22.1):** Plan 22.1 renames src/agents.ts to subagents/. The verifier variant lands under subagents/; delegation stays in agent/delegate.ts. <!-- D-003 -->
 
@@ -13,7 +13,7 @@ Extracted from H-165. After the M1 discovery, this plan owns the **verifier suba
 Teams/multi-agent fan-out and the mutating-background-agent **engine** were split out to
 `.plans/21-workflows-runtime`, and the mutating-worktree **application** (merge/reconcile/approval) to
 `.plans/46-worktree-fleet`. This plan does not reopen shipped general-purpose/explorer/ephemeral
-definitions, and it does not own bounded-child.
+definitions, and it does not own the delegated-child leaf (that lives in `.plans/21-workflows-runtime`).
 
 ## Phases
 

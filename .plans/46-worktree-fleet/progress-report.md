@@ -15,7 +15,7 @@
 - [x] `planner` skill exists (`~/.agents/skills/planner`) - workers run it in implement mode.
 - [x] HARD DEP identified: `.plans/21-workflows-runtime` (the engine the fleet workflow runs on).
 - [x] HARD DEP identified: `.plans/01-managed-worktree-hardening` (cwd-lock for N concurrent mutating trees).
-- [x] HARD DEP identified: `.plans/12-bounded-child-takeover` (bounded-child behind each leaf; transitive via 21).
+- [x] Bounded-child folded into `21` (plan 12 dropped); the hardened `agent()` leaf is covered by the `21` dependency above.
 - [x] SUPPORTING identified: `.plans/15-forkable-sessions-lineage` (durable fleet run session).
 
 ## Current Cutoff Blockers

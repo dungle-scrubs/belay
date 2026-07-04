@@ -11,7 +11,7 @@
 ## Completed Current State / Hard Dependencies
 
 - [x] D-045-D-049 define the existing subagent model.
-- [x] `.plans/12-bounded-child-takeover` owns bounded-child.
+- [x] The delegated-child leaf lives in `.plans/21-workflows-runtime` (bounded-child folded in; plan 12 dropped); 45 does not own it.
 - [x] `.plans/01-managed-worktree-hardening` owns cwd lock hardening.
 - [x] M1 Variant Rebaseline resolved: split decided (teams + mutating-bg engine -> `.plans/21-workflows-runtime`;
   mutating-worktree app -> `.plans/46-worktree-fleet`; verifier stays here).

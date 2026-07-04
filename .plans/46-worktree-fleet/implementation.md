@@ -8,7 +8,7 @@
 - [ ] `.plans/01-managed-worktree-hardening` - the `WorktreeManager` + cwd-path advisory lock that make
   parallel, write-capable worker trees safe (transitively required by `21`'s isolated leaves; called
   out here because the fleet is the first real driver of N concurrent mutating trees).
-- [ ] `.plans/12-bounded-child-takeover` - bounded-child runtime behind every leaf (transitive via `21`).
+- [x] (was `.plans/12-bounded-child-takeover`) - the bounded-child runtime is **folded into `21`**'s hardened `agent()` leaf (plan 12 dropped); covered by the `21` dependency above, no separate plan. <!-- D-009 -->
 - [ ] `.plans/15-forkable-sessions-lineage` (supporting) - the durable fleet run is a session.
 - [x] Existing handoff entry: `apps/agent-host/src/handoff-flow.ts` (spawn a new host for a new
   session and move on) - reused to hand the run off to a dedicated durable fleet session.
