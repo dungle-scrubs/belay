@@ -24,7 +24,6 @@ import { fmtCtx, fmtTokens } from "../../derive";
 import { toolSummary } from "../../tool-args";
 import {
   LEGACY_RECONNECT_ATTEMPTS,
-  limitMarkerSummary,
   type Message,
   type ToolMessage as ToolMessageData,
 } from "../../transcript";
@@ -301,7 +300,7 @@ export function TranscriptRowView({
       return (
         <div className="pl-3.5">
           <ToneAlert tone="yellow" icon={Icon} title="usage limit reached">
-            {limitMarkerSummary(message, Date.now())}
+            {descriptor.secondary}
           </ToneAlert>
         </div>
       );

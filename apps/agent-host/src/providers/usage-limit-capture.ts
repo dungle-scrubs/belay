@@ -30,21 +30,18 @@ export { unifiedHeaderKeys };
 
 /**
  * Maps Claude's `anthropic-ratelimit-unified-*` response headers into a `limit` ProviderEvent, or null
- * when the response carried no unified rate-limit headers (not the Claude path). Pure - defers the whole
- * parse to the shared normalizer; this just reshapes its `UsageLimit` into the ProviderEvent variant.
+ * when the response carried no unified rate-limit headers (not the Claude path) OR the status is the
+ * steady-state `ok` (`allowed`) that rides EVERY successful response. Only `approaching`/`reached` are
+ * noteworthy - surfacing "ok" would put an "all good" limit marker on every Claude turn, unlike every
+ * sibling marker (which fires only on a notable transition). Pure - defers the parse to the shared
+ * normalizer; this reshapes its `UsageLimit` (already optional-omitting) into the ProviderEvent variant.
  */
 export function anthropicLimitEvent(headers: Record<string, string>): LimitEvent | null {
   const limit = parseAnthropicUnifiedHeaders(headers);
-  if (!limit) {
+  if (!limit || limit.status === "ok") {
     return null;
   }
-  return {
-    type: "limit",
-    status: limit.status,
-    scope: limit.scope,
-    ...(limit.resetsAt !== undefined ? { resetsAt: limit.resetsAt } : {}),
-    ...(limit.utilization !== undefined ? { utilization: limit.utilization } : {}),
-  };
+  return { type: "limit", ...limit };
 }
 
 /**

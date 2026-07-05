@@ -553,6 +553,9 @@ export function publishTurn(
           const key = `${provider.id}:${event.scope}:${event.status}`;
           if (!emittedLimits.has(key)) {
             emittedLimits.add(key);
+            // Land any buffered assistant text before the marker (like every sibling marker), so an
+            // error-path limit on a partially-streamed step sits after that text, not ahead of it.
+            yield* flushAll;
             yield* emit.publish(
               events.assistantLimit({
                 provider: provider.id,

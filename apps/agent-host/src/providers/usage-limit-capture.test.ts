@@ -38,6 +38,18 @@ describe("anthropicLimitEvent (M2 - Claude success headers)", () => {
   it("returns null when the response carries no unified rate-limit headers", () => {
     expect(anthropicLimitEvent({ "content-type": "application/json" })).toBeNull();
   });
+
+  it("returns null for the steady-state `allowed` (ok) that rides every successful response", () => {
+    // Anthropic sends the unified-status header on EVERY success; `allowed` -> "ok" must NOT surface a
+    // marker, or every Claude turn would carry an "all good" limit row.
+    expect(
+      anthropicLimitEvent({
+        "anthropic-ratelimit-unified-status": "allowed",
+        "anthropic-ratelimit-unified-5h-status": "allowed",
+        "anthropic-ratelimit-unified-5h-reset": "2026-07-05T00:00:00Z",
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("failureLimitEvent (M3 - Codex error path, detect-only)", () => {
