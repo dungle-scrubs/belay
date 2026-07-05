@@ -33,11 +33,8 @@ const tool = (id: string, name = "read"): Message => ({
 
 function rows(transcript: readonly Message[], over: Partial<ToolBatchLookup> = {}) {
   return buildTranscriptRows({
-    active: null,
-    awaitingResponse: false,
     toolBatches: { ...readOnlyToolBatches(transcript), ...over },
     transcript,
-    turnStartedAt: null,
   });
 }
 
@@ -97,20 +94,19 @@ describe("buildTranscriptRows", () => {
     assert.deepEqual(result.map(transcriptRowKey), ["message:r1", "message:w1", "message:r2"]);
   });
 
-  test("appends working rows at the live edge", () => {
+  test("never appends a live-edge working row (plan 50 retired it for the pinned header)", () => {
+    // The in-flight indicator is now the pinned TurnStatusHeader above the checklist, not a scrolling
+    // transcript row, so an active turn adds no extra row here.
     const transcript = [user("u1"), assistant("a1")];
     const result = buildTranscriptRows({
-      active: "run-1",
-      awaitingResponse: false,
       toolBatches: readOnlyToolBatches(transcript),
       transcript,
-      turnStartedAt: 123,
     });
 
     assert.deepEqual(
       result.map((row) => row.kind),
-      ["message", "message", "working"],
+      ["message", "message"],
     );
-    assert.equal(result[2]?.kind === "working" ? result[2].startedAt : null, 123);
+    assert.equal(result.length, 2, "no extra live-edge row is appended for an active turn");
   });
 });

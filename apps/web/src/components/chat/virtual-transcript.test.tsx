@@ -137,7 +137,8 @@ function Harness({
 }
 
 /** A mixed live transcript: a user prompt, a streaming assistant (thinking, not done), a running tool,
- *  a completed tool, a final response, and the trailing working row. */
+ *  a completed tool, and a final response. The live-turn indicator is the pinned TurnStatusHeader
+ *  (plan 50), not a transcript row, so no trailing working row appears here. */
 function liveRows(): TranscriptRow[] {
   return [
     userRow(1),
@@ -184,7 +185,6 @@ function liveRows(): TranscriptRow[] {
         model: "glm",
       },
     },
-    { kind: "working", id: "working:live", interruptible: true, startedAt: 0 },
   ];
 }
 

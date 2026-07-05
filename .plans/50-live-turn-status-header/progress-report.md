@@ -48,27 +48,35 @@ debt at authoring time.
 
 ### M2: `turnStatusHeaderFrom` derive + mount pinned + retire scrolling row
 
-- [ ] RED: `turnStatusHeaderFrom(events, session)` fixture tests - task-active ->
-      in-progress `activeForm`; no task -> `turnActionLabel`; tool-running ->
-      tool-verb; `usage.output` from newest `assistant.progress`; `undefined`
-      after `assistant.completed` (`apps/web/src/derive.test.ts`).
-- [ ] GREEN: Implement the derive composing `activeTurnStartedAt`, `liveCallFrom`,
-      `turnActionLabel` (active-turn `warm`/`streaming`/`steering` evidence),
-      `tasksFrom(...).find(in_progress)`.
-- [ ] RED: `panel-host` story/integration - pinned header above the task list for
-      an active turn, absent after completion, and no `working` row appended to
-      the transcript.
-- [ ] GREEN: Mount `TurnStatusHeader` atop `SupportPanel`/`TasksPanel`
-      (`panel-host.tsx:462`); remove the `working` row (`transcript-rows.ts`,
-      `transcript-row-view.tsx`); relocate `esc to interrupt`.
-- [ ] REFACTOR: One `activeTurn` selector driving header presence + interrupt
-      affordance; module comments.
+- [x] RED: `turnStatusHeaderFrom(events, {awaitingResponse})` fixture tests -
+      task-active -> in-progress `activeForm`; no task -> `turnActionLabel`;
+      tool-running -> tool-verb; `usage.output` from newest `assistant.progress`;
+      `undefined` after `assistant.completed`; the awaiting gap still pins
+      `Working` (`apps/web/src/derive.test.ts`).
+- [x] GREEN: Implement the derive composing `activeTurnStartedAt`, a monotonic
+      `liveOutputTokens` (same live-turn boundary as `liveCallFrom`, clamped max
+      per R-3), `turnActionLabel`/`toolActionLabel` (active-turn evidence +
+      running-tool verb), `tasksFrom(...).find(in_progress)`; `isTurnActive` is the
+      shared active-turn predicate.
+- [x] RED: `panel-host` integration - pinned header above the task list for an
+      active turn (headline/`↓` cell/state), the `esc to interrupt` affordance from
+      its new home, and none of it when no turn is active; `transcript-rows` no
+      longer appends a `working` row; `transcript-row-view` renders no duplicate
+      shimmer for a silent turn (ReasoningTrace kept).
+- [x] GREEN: Mount `TurnStatusHeader` + `esc to interrupt` hint atop
+      `SupportPanel`/`TasksPanel` (`panel-host.tsx`); remove the `working` row
+      (`transcript-rows.ts`, `transcript-row-view.tsx`, `virtual-transcript.tsx`);
+      neutralize the silent-assistant bare-shimmer fallback (R-4).
+- [x] REFACTOR: `isTurnActive` is the one active-turn selector driving header
+      presence (and thus the co-located interrupt affordance); module comments on
+      the derive and the mount.
 
 **Gate 2→3**
 
-- [ ] Pinned header appears for active turns (task and no-task) and disappears on
+- [x] Pinned header appears for active turns (task and no-task) and disappears on
       completion; exactly one live indicator.
-- [ ] `esc to interrupt` works from its new home.
+- [x] `esc to interrupt` surfaces from its new home (pinned region); the interrupt
+      BEHAVIOR is the untouched global Escape handler.
 
 ---
 

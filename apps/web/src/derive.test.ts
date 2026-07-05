@@ -18,6 +18,7 @@ import {
   hostStatus,
   isHostlessPendingPrompt,
   isSessionArchived,
+  isTurnActive,
   jobsFrom,
   lastUserModelFrom,
   latestSessionSwitch,
@@ -32,6 +33,7 @@ import {
   tasksFrom,
   tasksStale,
   toolSummary,
+  turnStatusHeaderFrom,
   unreconciledSubagents,
   vimEnabledFrom,
 } from "./derive";
@@ -961,4 +963,121 @@ test("resolveKnownRoot falls back to the inventory summary, then the projects ma
 
 test("resolveKnownRoot is null when no source knows the root (keeps the plain no-host hint)", () => {
   assert.equal(resolveKnownRoot({ host: { workspace: null, cwd: null } }), null);
+});
+
+// --- plan 50: turnStatusHeaderFrom - the pinned live turn-status header projection ---
+
+const userMessage = () => evt("user.message", { text: "do it" });
+const started = (runId: string, over: Record<string, unknown> = {}) =>
+  evt("assistant.started", { runId, warm: true, model: "qwen", ...over });
+const progress = (runId: string, output: number) =>
+  evt("assistant.progress", { runId, usage: { output } });
+const completed = (runId: string) => evt("assistant.completed", { runId, text: "done" });
+const taskEvent = (activeForm: string, subject: string, status = "in_progress") =>
+  evt("tasks.current", { tasks: [{ id: "t1", subject, activeForm, status }], rev: 1 });
+
+test("turnStatusHeaderFrom is undefined when no turn is active", () => {
+  assert.equal(turnStatusHeaderFrom([], { awaitingResponse: false }), undefined);
+  assert.equal(
+    turnStatusHeaderFrom([userMessage(), started("r1"), completed("r1")], {
+      awaitingResponse: false,
+    }),
+    undefined,
+    "a settled turn pins nothing",
+  );
+});
+
+test("turnStatusHeaderFrom: an in-progress task drives the headline from its activeForm", () => {
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      progress("r1", 340),
+      taskEvent("Adding schemas and tests…", "Add schemas and tests"),
+    ],
+    { awaitingResponse: false },
+  );
+  assert.equal(header?.headline, "Adding schemas and tests…");
+  // The engine state is the distinct HOW (a warm, silent turn -> thinking), kept separate from the WHAT.
+  assert.equal(header?.state, "thinking");
+  assert.equal(header?.outputTokens, 340);
+  assert.ok(header?.startedAt, "the active run's start time drives the elapsed cell");
+});
+
+test("turnStatusHeaderFrom: with no task the headline falls back to the engine turnActionLabel", () => {
+  const header = turnStatusHeaderFrom([userMessage(), started("r1")], { awaitingResponse: false });
+  assert.equal(header?.headline, "thinking");
+  assert.equal(header?.state, "thinking");
+});
+
+test("turnStatusHeaderFrom: a running tool with no task drives a tool-verb headline", () => {
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      evt("tool.started", {
+        runId: "r1",
+        callId: "c1",
+        name: "read",
+        arguments: JSON.stringify({ path: "src/foo.ts" }),
+      }),
+    ],
+    { awaitingResponse: false },
+  );
+  assert.equal(header?.headline, "reading src/foo.ts");
+  assert.equal(header?.state, "reading src/foo.ts");
+});
+
+test("turnStatusHeaderFrom: a completed tool no longer drives the headline", () => {
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      evt("tool.started", { runId: "r1", callId: "c1", name: "read", arguments: "{}" }),
+      evt("tool.completed", { runId: "r1", callId: "c1", name: "read", result: "ok" }),
+    ],
+    { awaitingResponse: false },
+  );
+  // No tool is mid-flight now, so the engine phase carries the state again.
+  assert.equal(header?.state, "thinking");
+  assert.equal(header?.headline, "thinking");
+});
+
+test("turnStatusHeaderFrom: output tokens come from the newest assistant.progress snapshot", () => {
+  const header = turnStatusHeaderFrom(
+    [userMessage(), started("r1"), progress("r1", 100), progress("r1", 340)],
+    { awaitingResponse: false },
+  );
+  assert.equal(header?.outputTokens, 340);
+});
+
+test("turnStatusHeaderFrom: the token cell is absent until the first progress snapshot", () => {
+  const header = turnStatusHeaderFrom([userMessage(), started("r1")], { awaitingResponse: false });
+  assert.equal(header?.outputTokens, undefined);
+});
+
+test("turnStatusHeaderFrom is undefined after assistant.completed", () => {
+  const header = turnStatusHeaderFrom(
+    [userMessage(), started("r1"), progress("r1", 340), completed("r1")],
+    { awaitingResponse: false },
+  );
+  assert.equal(header, undefined);
+});
+
+test("turnStatusHeaderFrom: the awaiting gap (no run yet) still pins a Working header", () => {
+  const header = turnStatusHeaderFrom([userMessage()], { awaitingResponse: true });
+  assert.equal(header?.headline, "Working");
+  assert.equal(header?.outputTokens, undefined);
+  assert.ok(header?.startedAt, "the trailing user.message drives the elapsed cell before the run");
+});
+
+test("isTurnActive is the shared active-turn predicate (active run OR awaiting response)", () => {
+  assert.equal(isTurnActive([], false), false);
+  assert.equal(isTurnActive([], true), true, "awaiting a response counts as active");
+  assert.equal(isTurnActive([userMessage(), started("r1")], false), true, "a live run is active");
+  assert.equal(
+    isTurnActive([userMessage(), started("r1"), completed("r1")], false),
+    false,
+    "a settled turn is inactive",
+  );
 });

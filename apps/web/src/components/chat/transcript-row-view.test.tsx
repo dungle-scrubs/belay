@@ -568,52 +568,33 @@ test("plan 25 M9: a hook context note renders attributed to its tool", () => {
   assert.match(text, /prefer the v2 config/);
 });
 
-// --- plan 31 M4: shimmer action status wired into the live transcript rows ---
-
-const workingRow = (
-  over: Partial<Extract<TranscriptRow, { kind: "working" }>> = {},
-): TranscriptRow => ({
-  kind: "working",
-  id: "working:r1",
-  interruptible: true,
-  startedAt: Date.now(),
-  ...over,
-});
+// --- plan 31 M4 / plan 50: shimmer action status in the live transcript rows ---
 
 /** The shimmer overlay is the aria-hidden `.shimmer` duplicate the ActionShimmer primitive renders. */
 function shimmerOverlay(container: HTMLElement): Element | null {
   return container.querySelector("[aria-hidden].shimmer");
 }
 
-test("plan 31 M4: the working row shows the interruptible shimmer status", () => {
-  const { container } = renderRow(workingRow());
-  const text = container.textContent ?? "";
-  assert.match(text, /Working/);
-  assert.match(text, /esc to interrupt/);
-  const overlay = shimmerOverlay(container);
-  assert.ok(overlay, "working row must render a shimmer overlay");
-  assert.ok(overlay?.classList.contains("motion-reduce:animate-none"));
-});
-
-test("plan 31 M4: a silent warm turn shimmers 'thinking' via the projection", () => {
+test("plan 50: a silent warm turn renders NO in-transcript shimmer (the pinned header owns it)", () => {
+  // The live "thinking" indicator moved to the ONE pinned TurnStatusHeader, so a silent, reasoning-less
+  // in-flight segment renders nothing here rather than a second shimmering indicator (R-4).
   const { container } = renderRow(assistant({ text: "", done: false, warm: true }));
-  assert.match(container.textContent ?? "", /thinking/);
-  assert.ok(shimmerOverlay(container), "silent turn must shimmer");
+  assert.equal(shimmerOverlay(container), null, "no duplicate live indicator in the transcript");
+  assert.doesNotMatch(container.textContent ?? "", /thinking/);
 });
 
-test("plan 31 M4: a silent cold turn shimmers the loading-model label", () => {
+test("plan 50: a silent cold turn no longer renders a loading-model shimmer in the transcript", () => {
   const { container } = renderRow(assistant({ text: "", done: false, warm: false, model: "qwen" }));
-  assert.match(container.textContent ?? "", /loading qwen/);
+  assert.equal(shimmerOverlay(container), null);
+  assert.doesNotMatch(container.textContent ?? "", /loading qwen/);
 });
 
-test("plan 31 M4 a11y: the status label is readable text and the shimmer is hidden from AT", () => {
-  const { container } = renderRow(workingRow({ startedAt: undefined }));
-  // Exactly one announced (non-aria-hidden) copy of the label; the shimmer duplicate is hidden.
-  const announced = [...container.querySelectorAll("span")].filter(
-    (el) => el.textContent === "Working" && el.getAttribute("aria-hidden") === null,
-  );
-  assert.equal(announced.length, 1);
-  assert.equal(shimmerOverlay(container)?.getAttribute("aria-hidden"), "true");
+test("plan 50: a silent turn WITH reasoning tokens still renders the reasoning trace (real content)", () => {
+  // Neutralizing the bare shimmer fallback must NOT drop ReasoningTrace - that is actual thinking-token
+  // content, not a duplicate live indicator.
+  renderRow(assistant({ thinking: "weighing the options", text: "", done: false, warm: true }));
+  assert.ok(screen.getByRole("button", { name: /thinking/i }), "reasoning content still renders");
+  assert.ok(screen.getByText("weighing the options"));
 });
 
 test("plan 31 M4: settled assistant rows never shimmer", () => {
@@ -772,12 +753,16 @@ test("plan 35 M3: an errored assistant row shows reasoning alongside the error a
   assert.ok(screen.getByText("boom"));
 });
 
-test("plan 35 M3: with no thinking text a silent turn falls back to the working shimmer", () => {
+test("plan 50: with no thinking text a silent turn renders neither a disclosure nor a shimmer", () => {
   const { container } = renderRow(assistant({ thinking: "", text: "", done: false, warm: true }));
   // No reasoning disclosure is rendered when there is no thinking text...
   assert.equal(screen.queryByRole("button", { name: /thinking/i }), null);
-  // ...and the ActionShimmer fallback carries the status instead.
-  assert.ok(container.querySelector("[aria-hidden].shimmer"), "silent turn shows the shimmer");
+  // ...and the retired ActionShimmer fallback no longer duplicates the pinned header's status (R-4).
+  assert.equal(
+    container.querySelector("[aria-hidden].shimmer"),
+    null,
+    "no duplicate live indicator",
+  );
 });
 
 test("plan 34: an image-only prompt renders the image set with no prose block", () => {

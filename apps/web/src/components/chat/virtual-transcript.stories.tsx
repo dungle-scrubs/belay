@@ -99,7 +99,7 @@ const ROWS: readonly TranscriptRow[] = [
 const RUNNING_ROWS: readonly TranscriptRow[] = [
   ...ROWS.slice(0, 4),
   row(tool("t5", "bash", { command: "pnpm build" })), // no result -> still running
-  { kind: "working", id: "working:live", interruptible: true, startedAt: 0 },
+  // The live-turn indicator is the pinned TurnStatusHeader (plan 50), not a transcript row.
 ];
 
 function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boolean }) {

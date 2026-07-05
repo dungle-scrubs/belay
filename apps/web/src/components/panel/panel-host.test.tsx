@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { LoopControl, LoopInventoryRow } from "@trevor/session";
+import type { LoopControl, LoopInventoryRow, TaskSnapshot } from "@trevor/session";
 import { useRef } from "react";
 import { expect, test, vi } from "vitest";
 import { useComposer } from "@/hooks/use-composer";
@@ -37,8 +37,15 @@ function PanelHostHarness(props: {
     readonly matches: readonly { path: string }[];
     readonly index: number;
   };
+  readonly turnStatusHeader?: {
+    readonly headline: string;
+    readonly startedAt?: number;
+    readonly outputTokens?: number;
+    readonly state?: string;
+  };
+  readonly tasks?: readonly TaskSnapshot[];
 }) {
-  const { onLoopControl, fileMenu } = props;
+  const { onLoopControl, fileMenu, turnStatusHeader, tasks } = props;
   const composer = useComposer();
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -154,10 +161,8 @@ function PanelHostHarness(props: {
         sessions: [],
       }}
       stream={stream}
-      tasks={[]}
+      tasks={tasks ?? []}
       transcript={{
-        active: null,
-        awaitingResponse: false,
         compact: false,
         onDoctorRefresh: vi.fn(),
         onOpenPath: vi.fn(),
@@ -166,7 +171,7 @@ function PanelHostHarness(props: {
         showThinking: true,
         toolBatches: readOnlyToolBatches([]),
         transcript: [],
-        turnStartedAt: null,
+        ...(turnStatusHeader ? { turnStatusHeader } : {}),
       }}
     />
   );
@@ -212,6 +217,41 @@ test("an open file-mention menu WITH matches points the composer at the active o
   const input = screen.getByRole("textbox");
   expect(input.getAttribute("aria-controls")).toBe("file-mention-menu");
   expect(input.getAttribute("aria-activedescendant")).toBe("file-mention-menu-opt-0");
+});
+
+test("plan 50: the pinned turn-status header renders above the task list during an active turn", () => {
+  const { container } = render(
+    <PanelHostHarness
+      onLoopControl={vi.fn()}
+      turnStatusHeader={{
+        headline: "Adding schemas and tests…",
+        startedAt: Date.now(),
+        outputTokens: 2600,
+        state: "thinking",
+      }}
+      tasks={[
+        {
+          id: "t1",
+          subject: "Add schemas and tests",
+          activeForm: "Adding schemas and tests…",
+          status: "in_progress",
+          blockedBy: [],
+          blocks: [],
+        },
+      ]}
+    />,
+  );
+  const text = container.textContent ?? "";
+  // The header line, its live output-token cell, and the esc-to-interrupt affordance are present.
+  expect(text).toMatch(/↓ 2\.6k tokens · thinking/);
+  expect(text).toMatch(/esc to interrupt/);
+  // The header is pinned ABOVE the checklist: its headline text precedes the "tasks 0/1" count.
+  expect(text.indexOf("Adding schemas and tests…")).toBeLessThan(text.indexOf("tasks 0/1"));
+});
+
+test("plan 50: no pinned header (and no esc-to-interrupt) when no turn is active", () => {
+  const { container } = render(<PanelHostHarness onLoopControl={vi.fn()} />);
+  expect(container.textContent ?? "").not.toMatch(/esc to interrupt/);
 });
 
 test("the transcript well keeps its scroll identity and shows the themed (not hidden) scrollbar", () => {

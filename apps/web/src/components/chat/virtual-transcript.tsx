@@ -38,10 +38,15 @@ export interface VirtualTranscriptProps {
 }
 
 function estimateRowSize(
-  row: TranscriptRow,
+  row: TranscriptRow | undefined,
   compact: boolean,
   expandedRows: ReadonlySet<string>,
 ): number {
+  // A momentary out-of-range index (the virtualizer can ask before `rows` settles) gets a small
+  // neutral estimate; measureElement corrects the real row once it mounts.
+  if (!row) {
+    return 32;
+  }
   // A collapsed compact row is one line (~CompactRow's h-6 = 24px + the row's bottom padding); an
   // expanded one falls through to the full estimate (its detail is the full renderer, then
   // measureElement corrects it anyway).
@@ -52,9 +57,6 @@ function estimateRowSize(
     !expandedRows.has(row.message.id)
   ) {
     return 28;
-  }
-  if (row.kind === "working") {
-    return 32;
   }
   if (row.kind === "tool_batch") {
     return 36 + row.tools.length * 22;
@@ -118,16 +120,11 @@ export function VirtualTranscript({
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (index) =>
-      estimateRowSize(
-        rows[index] ?? { kind: "working", id: "fallback", interruptible: true },
-        compact,
-        expandedRows,
-      ),
-    getItemKey: (index) =>
-      transcriptRowKey(
-        rows[index] ?? { kind: "working", id: `missing:${index}`, interruptible: true },
-      ),
+    estimateSize: (index) => estimateRowSize(rows[index], compact, expandedRows),
+    getItemKey: (index) => {
+      const row = rows[index];
+      return row ? transcriptRowKey(row) : `missing:${index}`;
+    },
     // --- non-default virtualizer options, each justified for scroll stability (02.8 audit) ---
     // overscan: render 10 rows beyond the viewport each way so a normal wheel/trackpad flick lands on
     // already-measured rows (no estimate-correction nudge as they scroll into view).

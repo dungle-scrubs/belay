@@ -67,7 +67,6 @@ import { activeMention } from "./composer/active-mention";
 import { type FileIndexAsked, shouldRequestFileIndex } from "./composer/file-index-request";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
-  activeTurnStartedAt,
   catalogFrom,
   commandsFrom,
   defaultProviderFrom,
@@ -92,6 +91,7 @@ import {
   tasksFrom,
   tasksStale,
   truncate,
+  turnStatusHeaderFrom,
   unreconciledSubagents,
   vimEnabledFrom,
   workspaceBasename,
@@ -507,8 +507,6 @@ export function App() {
     }
     return truncate(text, 60);
   }, [transcript, target]);
-  // The in-flight turn's start time (ms epoch), driving the live "Working (elapsed)" timer.
-  const turnStartedAt = useMemo(() => activeTurnStartedAt(events), [events]);
   // Web stall guard: a turn left in flight by a host that crashed/restarted mid-turn (or a socket
   // flap that dropped the terminal event) with nothing rejoining to finish it would spin "Working"
   // forever. When no leader host is connected to ever close it, the browser closes it itself - the
@@ -538,6 +536,14 @@ export function App() {
         graceMs: ORPHAN_GRACE_MS,
       }),
     [events, host.leaderId, status, replayed, now],
+  );
+  // The ONE pinned live turn-status header (plan 50): the in-flight status line above the checklist,
+  // undefined when no turn is active. `hostlessPending` suppresses it for a prompt stranded with no
+  // host (the no-host status line carries that affordance instead), matching the retired working row's
+  // gate; it composes elapsed/output-tokens/engine-state from events entirely web-side.
+  const turnStatusHeader = useMemo(
+    () => turnStatusHeaderFrom(events, { awaitingResponse: awaitingResponse && !hostlessPending }),
+    [events, awaitingResponse, hostlessPending],
   );
   const reconciledRunRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1496,12 +1502,11 @@ export function App() {
           onOpenDetail,
           showThinking: showThinkingOn,
           compact,
-          active,
-          // Suppress the "Working" row when the trailing prompt is stranded with no host (02.14); the
-          // no-host status line carries the affordance instead. `busy`/the send queue are unchanged, so a
-          // follow-up prompt still queues behind it and the host's reattach catch-up runs them in order.
-          awaitingResponse: awaitingResponse && !hostlessPending,
-          turnStartedAt,
+          // The pinned live turn-status header (plan 50) replaces the scrolling "Working" row. It is
+          // already suppressed for a host-stranded prompt (turnStatusHeaderFrom is gated on
+          // `awaitingResponse && !hostlessPending`), so the no-host status line still carries that
+          // affordance; `busy`/the send queue are unchanged, so follow-ups still queue and catch up.
+          turnStatusHeader,
           queue: visibleQueue,
           onUnqueue: unqueue,
         }}

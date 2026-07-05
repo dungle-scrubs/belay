@@ -1,8 +1,7 @@
 import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@trevor/session";
 import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
-import { RECOVERY_ACTION_LABEL, reconnectActionLabel, turnActionLabel } from "@/action-label";
-import { ActionShimmer } from "@/components/chat/action-shimmer";
+import { RECOVERY_ACTION_LABEL, reconnectActionLabel } from "@/action-label";
 import { compactDisplayFor } from "@/components/chat/compact-display";
 import { CompactRow } from "@/components/chat/compact-row";
 import { CompactingBar } from "@/components/chat/compacting-bar";
@@ -157,18 +156,6 @@ export function TranscriptRowView({
     return (
       <div className="pl-3.5">
         <ConcurrentTools tools={row.tools.map((tool) => toConcurrentTool(tool, onOpenPath))} />
-      </div>
-    );
-  }
-
-  if (row.kind === "working") {
-    return (
-      <div className="pl-3.5">
-        <ActionShimmer
-          label="Working"
-          startedAt={row.startedAt}
-          interruptible={row.interruptible}
-        />
       </div>
     );
   }
@@ -474,19 +461,16 @@ export function TranscriptRowView({
   }
 
   if (message.kind === "assistant" && !message.text && !message.done) {
+    // The live "thinking/streaming/loading" indicator now lives in the ONE pinned TurnStatusHeader
+    // (plan 50), so a silent in-flight segment no longer renders its own ActionShimmer fallback - that
+    // would be a second live indicator (R-4). Actual reasoning-token content (ReasoningTrace) is real
+    // content, not a duplicate indicator, so it still renders here, as do any overflow/error notes.
+    if (!thinking && !overflowNote && !errorNote) {
+      return null;
+    }
     return (
       <div className="flex flex-col gap-3 pl-3.5">
-        {thinking ? (
-          <ReasoningTrace content={thinking} streaming={reasoningStreaming} />
-        ) : (
-          <ActionShimmer
-            label={turnActionLabel({
-              warm: message.warm,
-              model: message.model,
-              streaming: false,
-            })}
-          />
-        )}
+        {thinking ? <ReasoningTrace content={thinking} streaming={reasoningStreaming} /> : null}
         {overflowNote}
         {errorNote}
       </div>

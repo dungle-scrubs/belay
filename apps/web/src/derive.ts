@@ -23,6 +23,7 @@ import {
   type WorktreeSummary,
 } from "@trevor/session";
 import type { PanelJob } from "@/support-panel/support-panel";
+import { type TurnActionEvidence, toolActionLabel, turnActionLabel } from "./action-label";
 
 export { parseToolArgs, toolSummary } from "./tool-args";
 
@@ -773,6 +774,148 @@ export function activeTurnStartedAt(events: readonly SessionEvent[]): number | n
     }
   }
   return null;
+}
+
+/**
+ * The live turn-status header projection (plan 50): the ONE pinned status line's data for the
+ * in-flight turn, or `undefined` when no turn is active (there is nothing to pin). The composed shape
+ * is the semantic `headline` (the WHAT - the in-progress task, else the engine action), the `startedAt`
+ * for the elapsed cell, the live `outputTokens` (the `↓` cell, absent until the first progress
+ * snapshot), and the engine `state` (the HOW). `state` is always supplied when present; the
+ * presentational `TurnStatusHeader` owns the redundancy rule that drops it when it equals the headline.
+ */
+export interface TurnStatusHeaderData {
+  readonly headline: string;
+  readonly startedAt?: number;
+  readonly outputTokens?: number;
+  readonly state?: string;
+}
+
+/**
+ * Whether a turn is in flight for the pinned status header (plan 50): an active run OR the awaiting gap
+ * between a submitted prompt and its `assistant.started`. The SINGLE active-turn predicate that header
+ * presence keys off - it is also what the retired scrolling `working` row used, so the pinned header
+ * and the interrupt affordance beside it can never drift apart (R-4). `awaitingResponse` is passed in
+ * because it depends on the coalesced transcript tail (the last message being a user turn), which the
+ * raw event fold here does not reconstruct.
+ */
+export function isTurnActive(events: readonly SessionEvent[], awaitingResponse: boolean): boolean {
+  return activeTurnRunId(events) !== null || awaitingResponse;
+}
+
+/**
+ * The active run's engine evidence for `turnActionLabel`: warmth + model ref from its
+ * `assistant.started`, and `streaming` once it has emitted any assistant text. Empty (cold, unnamed,
+ * not streaming) when no run is in flight - the awaiting gap, where the engine label degrades to the
+ * `Working` fallback. Steering is not reconstructed web-side, so it is left unset here.
+ */
+function activeTurnEvidence(
+  events: readonly SessionEvent[],
+  runId: string | null,
+): TurnActionEvidence {
+  let warm = false;
+  let model = "";
+  let streaming = false;
+  if (runId) {
+    for (const event of events) {
+      const decoded = decodeTrevorEvent(event);
+      if (!decoded) {
+        continue;
+      }
+      if (decoded.type === "assistant.started" && decoded.runId === runId) {
+        warm = decoded.warm;
+        model = decoded.model;
+      } else if (decoded.type === "assistant.delta" && decoded.runId === runId && decoded.text) {
+        streaming = true;
+      }
+    }
+  }
+  return { warm, model, streaming };
+}
+
+/**
+ * The newest tool still running in the active turn - a `tool.started` with no matching `tool.completed`
+ * - as a present-progress verb via the shared `toolActionLabel` (so the header reads "reading
+ * src/foo.ts", never re-deriving the verb vocabulary). `undefined` when no tool is mid-flight. Map
+ * insertion order keeps the most-recently-started still-running call last.
+ */
+function runningToolLabel(
+  events: readonly SessionEvent[],
+  runId: string | null,
+): string | undefined {
+  if (!runId) {
+    return undefined;
+  }
+  const running = new Map<string, { name: string; arguments: string }>();
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (!decoded || !("runId" in decoded) || decoded.runId !== runId) {
+      continue;
+    }
+    if (decoded.type === "tool.started") {
+      running.set(decoded.callId, { name: decoded.name, arguments: decoded.arguments });
+    } else if (decoded.type === "tool.completed") {
+      running.delete(decoded.callId);
+    }
+  }
+  const newest = [...running.values()].at(-1);
+  return newest ? toolActionLabel(newest.name, newest.arguments) : undefined;
+}
+
+/**
+ * The live turn's output-token count for the `↓` cell: the MAX `assistant.progress` `usage.output`
+ * within the in-flight turn, or `undefined` before the first snapshot / after completion. It shares
+ * `liveCallFrom`'s live-turn boundary (walk back, stop at the first `assistant.completed`) but is
+ * CLAMPED MONOTONIC - it takes the max rather than the newest, so an advisory dip in a later progress
+ * snapshot can never regress the cell within a turn (D-002/R-3).
+ */
+function liveOutputTokens(events: readonly SessionEvent[]): number | undefined {
+  let max: number | undefined;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    const decoded = event ? decodeTrevorEvent(event) : null;
+    if (!decoded) {
+      continue;
+    }
+    if (decoded.type === "assistant.completed") {
+      break;
+    }
+    if (decoded.type === "assistant.progress" && decoded.usage) {
+      const out = decoded.usage.output;
+      max = max === undefined ? out : Math.max(max, out);
+    }
+  }
+  return max;
+}
+
+/**
+ * The pinned live turn-status header (plan 50), composed from primitives already on the wire.
+ * `undefined` when no turn is active. Otherwise: the `headline` is the in-progress task's
+ * present-progressive `activeForm` (the WHAT), falling back to the engine `state` when no task is
+ * active; the `state` (the HOW) is a running tool's verb, else the `turnActionLabel` engine phase
+ * (thinking/streaming/loading/Working); `startedAt` drives the elapsed cell; `outputTokens` is the live
+ * monotonic output count (hidden until the first progress snapshot). This is the one projection - the
+ * component only renders it and owns the redundancy/hidden-cell rendering rules.
+ */
+export function turnStatusHeaderFrom(
+  events: readonly SessionEvent[],
+  { awaitingResponse }: { readonly awaitingResponse: boolean },
+): TurnStatusHeaderData | undefined {
+  if (!isTurnActive(events, awaitingResponse)) {
+    return undefined;
+  }
+  const runId = activeTurnRunId(events);
+  const state =
+    runningToolLabel(events, runId) ?? turnActionLabel(activeTurnEvidence(events, runId));
+  const inProgress = tasksFrom(events).find((task) => task.status === "in_progress");
+  const startedAt = activeTurnStartedAt(events);
+  const outputTokens = liveOutputTokens(events);
+  return {
+    headline: inProgress?.activeForm ?? state,
+    ...(startedAt !== null ? { startedAt } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+    state,
+  };
 }
 
 /** The epoch-ms timestamp of the most recent event with a parseable `createdAt`, or null. */

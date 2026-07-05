@@ -35,6 +35,7 @@ import { FILE_MENTION_LISTBOX_ID, FileMentionMenu } from "@/components/chat/file
 import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
+import { TurnStatusHeader } from "@/components/chat/turn-status-header";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { RowChooserModal } from "@/components/command-modal";
 import { HandoffApprovalSurface } from "@/components/handoff/handoff-approval-surface";
@@ -46,7 +47,12 @@ import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 import type { ScrollFollowController } from "@/scroll-follow";
 import type { SessionStream } from "@/session/use-session";
-import type { HostStatus, PendingHandoff, PendingQuestion } from "../../derive";
+import type {
+  HostStatus,
+  PendingHandoff,
+  PendingQuestion,
+  TurnStatusHeaderData,
+} from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
 import type { SupportSubagent } from "../../support-panel/support-panel";
@@ -78,10 +84,9 @@ export interface TranscriptView {
   readonly showThinking: boolean;
   /** Compact transcript layout (plan 05): collapse non-primary rows to one line. */
   readonly compact: boolean;
-  /** The running run id, or null once the turn ends; drives the persistent "Working" pulse. */
-  readonly active: string | null;
-  readonly awaitingResponse: boolean;
-  readonly turnStartedAt: number | null;
+  /** The pinned live turn-status header (plan 50): the one in-flight status line above the checklist,
+   *  or undefined when no turn is active. Replaces the retired scrolling "Working" row. */
+  readonly turnStatusHeader?: TurnStatusHeaderData;
   readonly queue: readonly QueuedPrompt[];
   /** Unqueue a durable follow-up (plan 47): supersede it so the host drops it from the run. */
   readonly onUnqueue: (id: string) => void;
@@ -318,17 +323,10 @@ export function PanelHost(props: {
     queue,
     onUnqueue,
   } = tv;
-  const { active, awaitingResponse, turnStartedAt } = tv;
+  const { turnStatusHeader } = tv;
   const rows = useMemo(
-    () =>
-      buildTranscriptRows({
-        active,
-        awaitingResponse,
-        toolBatches,
-        transcript,
-        turnStartedAt,
-      }),
-    [active, awaitingResponse, toolBatches, transcript, turnStartedAt],
+    () => buildTranscriptRows({ toolBatches, transcript }),
+    [toolBatches, transcript],
   );
   // Every scroll event reaches the controller, even before the list reveals (`data-transcript-ready`
   // false). The controller recognizes its own settle-loop writes as self-writes, so they no longer need
@@ -458,6 +456,19 @@ export function PanelHost(props: {
             </button>
           ) : null}
         </div>
+
+        {/* The ONE pinned live turn-status line (plan 50), above the checklist for the whole active
+          turn - even when there are no task rows. The `esc to interrupt` hint that the retired
+          scrolling working row carried lives here beside it (never inside the metrics parenthetical);
+          the interrupt BEHAVIOR is the global Escape handler, unchanged. */}
+        {turnStatusHeader ? (
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pt-1 font-mono">
+            <TurnStatusHeader {...turnStatusHeader} />
+            <span className="text-label tracking-wider text-muted-foreground/50">
+              esc to interrupt
+            </span>
+          </div>
+        ) : null}
 
         {/* Live task checklist, above the composer. */}
         <SupportPanel
