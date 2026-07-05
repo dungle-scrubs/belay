@@ -100,7 +100,7 @@ describe("trevor-export - redaction (M6)", () => {
       title: "Tools",
       status: "error",
       note: "failed reading /Users/kevin/dev/secret.key with token sk-ABCDEF1234567890XYZ",
-      items: [{ id: "x", label: "x", summary: "see /Users/kevin/.trevorV2/creds.json" }],
+      items: [{ id: "x", label: "x", summary: "see /Users/kevin/.trevor/creds.json" }],
     },
   ];
 

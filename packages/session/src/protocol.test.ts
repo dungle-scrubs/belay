@@ -813,10 +813,10 @@ test("host.online round-trips the structured git status (D-088)", () => {
 test("host.online round-trips managed worktrees and defaults to [] when absent (D-091)", () => {
   const worktree = {
     id: "wt1",
-    baseRepo: "/dev/trevorV2",
-    baseRepoName: "trevorV2",
+    baseRepo: "/dev/trevor",
+    baseRepoName: "trevor",
     branch: "feat/x",
-    path: "~/.trevorV2/.worktrees/h/feat-x-wt1",
+    path: "~/.trevor/.worktrees/h/feat-x-wt1",
     sessionId: "s-wt1",
     dirty: true,
     ahead: 2,

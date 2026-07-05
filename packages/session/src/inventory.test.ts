@@ -39,8 +39,8 @@ const hostOnlineEvent = (over: Record<string, unknown> = {}): SessionEvent =>
     providers: ["qwen"],
     default: "qwen",
     models: {},
-    cwd: "~/dev/trevorV2",
-    workspace: "~/dev/trevorV2",
+    cwd: "~/dev/trevor",
+    workspace: "~/dev/trevor",
     commands: [],
     agents: [],
     ...over,
@@ -66,9 +66,9 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
 test("summarizeSession projects title, cwd/workspace, project, and counts", () => {
   const s = summarizeSession(baseRow());
   assert.equal(s.title, "add the resume chooser please");
-  assert.equal(s.cwd, "~/dev/trevorV2");
-  assert.equal(s.workspace, "~/dev/trevorV2");
-  assert.equal(s.project, "trevorV2");
+  assert.equal(s.cwd, "~/dev/trevor");
+  assert.equal(s.workspace, "~/dev/trevor");
+  assert.equal(s.project, "trevor");
   assert.equal(s.eventCount, 12);
 });
 
@@ -220,11 +220,11 @@ test("sortInventory puts the current project first, each block by recency desc",
   });
   const list = [
     mk("a", "other", "2026-06-26T05:00:00.000Z"),
-    mk("b", "trevorV2", "2026-06-26T01:00:00.000Z"),
-    mk("c", "trevorV2", "2026-06-26T09:00:00.000Z"),
+    mk("b", "trevor", "2026-06-26T01:00:00.000Z"),
+    mk("c", "trevor", "2026-06-26T09:00:00.000Z"),
     mk("d", "other", "2026-06-26T02:00:00.000Z"),
   ];
-  const sorted = sortInventory(list, "trevorV2");
+  const sorted = sortInventory(list, "trevor");
   assert.deepEqual(
     sorted.map((s) => s.sessionId),
     ["c", "b", "a", "d"],

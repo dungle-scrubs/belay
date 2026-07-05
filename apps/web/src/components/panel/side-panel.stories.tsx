@@ -169,7 +169,7 @@ export const NoImagesHeavyThinking: Story = {
   args: {
     title: "refactor-loop",
     subtitle: "session · trevor-local",
-    workspace: "~/dev/trevorV2",
+    workspace: "~/dev/trevor",
     git: dirtyAhead,
     ctxUsed: 82000,
     ctxMax: 200000,
@@ -196,7 +196,7 @@ export const Empty: Story = {
   args: {
     title: "trevor-local",
     subtitle: "no call yet",
-    workspace: "~/dev/trevorV2",
+    workspace: "~/dev/trevor",
     ctxUsed: 0,
     ctxMax: 200000,
     controls: Controls,

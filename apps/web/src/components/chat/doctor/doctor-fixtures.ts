@@ -5,7 +5,7 @@
  * stale, long paths). Shared by the dashboard and area-card stories.
  *
  * Content is Trevor-flavoured on purpose - qwen local + gpt cloud, the
- * ~/.trevorV2 / ~/.pi roots, rg + ast-grep, Firecrawl - so the
+ * ~/.trevor / ~/.pi roots, rg + ast-grep, Firecrawl - so the
  * layout is exercised against believable text lengths.
  */
 import {
@@ -17,7 +17,7 @@ import {
 } from "@trevor/session";
 
 export const HOST: DoctorHostContext = {
-  workspace: "~/dev/trevorV2/apps/agent-host",
+  workspace: "~/dev/trevor/apps/agent-host",
   instanceId: "1d8e680d",
   role: "leader",
 };
@@ -100,7 +100,7 @@ export const providersAuthMissing: DoctorArea = {
       status: "error",
       title: "GPT-5.5 missing API key",
       message: "No credentials resolved for the cloud provider, so cloud turns will fail.",
-      source: "~/.trevorV2/.env.op",
+      source: "~/.trevor/.env.op",
       nextAction: { label: "Add the key, then reload", command: "opchain primary --read op run" },
     },
   ],
@@ -421,7 +421,7 @@ export const lspUnconfigured: DoctorArea = {
 };
 
 const LSP_MISSING_DETAIL =
-  "typescript-language-server is not installed (checked ~/dev/trevorV2/node_modules/.bin and " +
+  "typescript-language-server is not installed (checked ~/dev/trevor/node_modules/.bin and " +
   "PATH); install: pnpm add -g typescript-language-server";
 
 export const lspMissing: DoctorArea = {
@@ -640,8 +640,8 @@ export const storageOk: DoctorArea = {
   status: "ok",
   verdict: "All roots resolved and writable.",
   facts: [
-    { label: "config", value: "~/.trevorV2", status: "ok" },
-    { label: "state", value: "~/.local/state/trevorV2", status: "ok" },
+    { label: "config", value: "~/.trevor", status: "ok" },
+    { label: "state", value: "~/.local/state/trevor", status: "ok" },
     { label: "legacy", value: "~/.trevor · none", status: "not_checked" },
     { label: "temp", value: "/var/folders/4p/T", status: "ok" },
     { label: "external:pi", value: "~/.pi · external (read-only)", status: "ok" },
@@ -655,8 +655,8 @@ export const storageRootInvalid: DoctorArea = {
   status: "error",
   verdict: "A storage root needs attention.",
   facts: [
-    { label: "config", value: "~/.trevorV2", status: "ok" },
-    { label: "state", value: "~/.local/state/trevorV2 · not writable", status: "error" },
+    { label: "config", value: "~/.trevor", status: "ok" },
+    { label: "state", value: "~/.local/state/trevor · not writable", status: "error" },
     { label: "legacy", value: "~/.trevor · none", status: "not_checked" },
   ],
   findings: [
@@ -665,9 +665,9 @@ export const storageRootInvalid: DoctorArea = {
       status: "error",
       title: "state not writable",
       message: "Trevor cannot write this root.",
-      source: "~/.local/state/trevorV2",
+      source: "~/.local/state/trevor",
       evidence: "stat: EACCES permission denied\nowner: root  mode: 0755",
-      nextAction: { label: "Check permissions on", command: "~/.local/state/trevorV2" },
+      nextAction: { label: "Check permissions on", command: "~/.local/state/trevor" },
     },
   ],
 };
@@ -679,8 +679,8 @@ export const storageLegacyImportable: DoctorArea = {
   status: "warn",
   verdict: "Legacy data is importable.",
   facts: [
-    { label: "config", value: "~/.trevorV2", status: "ok" },
-    { label: "state", value: "~/.local/state/trevorV2", status: "ok" },
+    { label: "config", value: "~/.trevor", status: "ok" },
+    { label: "state", value: "~/.local/state/trevor", status: "ok" },
     { label: "legacy", value: "~/.trevor · legacy data (importable)", status: "warn" },
   ],
   findings: [
@@ -800,7 +800,7 @@ export const workspaceGit: DoctorArea = {
   status: "ok",
   verdict: "Git worktree on main.",
   facts: [
-    { label: "cwd", value: "~/dev/trevorV2/apps/agent-host" },
+    { label: "cwd", value: "~/dev/trevor/apps/agent-host" },
     { label: "branch", value: "main", status: "ok" },
     { label: "status", value: "3 files changed" },
   ],

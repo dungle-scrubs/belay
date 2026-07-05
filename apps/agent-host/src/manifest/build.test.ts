@@ -21,7 +21,7 @@ const deps: ManifestDeps = {
   catalog: null,
   runtime: { role: "leader", instanceId: "abc", turn: "idle" },
   host: { version: "2.0.0" },
-  workspace: { root: "/Users/secret/dev/trevorV2", cwd: "/Users/secret/dev/trevorV2" },
+  workspace: { root: "/Users/secret/dev/trevor", cwd: "/Users/secret/dev/trevor" },
 };
 
 describe("assembleManifest composition root (M6)", () => {

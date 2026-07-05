@@ -23,9 +23,9 @@ const NOW = Date.parse("2026-06-27T12:00:00.000Z");
 function summary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return {
     title: `session ${over.sessionId}`,
-    cwd: "~/dev/trevorV2",
-    workspace: "~/dev/trevorV2",
-    project: "trevorV2",
+    cwd: "~/dev/trevor",
+    workspace: "~/dev/trevor",
+    project: "trevor",
     branch: "main",
     git: null,
     createdAt: "2026-06-25T00:00:00.000Z",
@@ -49,7 +49,7 @@ test("selectSessions lists active current-project sessions newest-first by defau
     summary({ sessionId: "other", project: "otherRepo" }),
   ];
   assert.deepEqual(
-    selectSessions(list, "trevorV2", { archived: false }).map((s) => s.sessionId),
+    selectSessions(list, "trevor", { archived: false }).map((s) => s.sessionId),
     ["b", "a"],
     "archived + other-project excluded; recency desc",
   );
@@ -62,7 +62,7 @@ test("selectSessions with archived:true lists only archived current-project sess
     summary({ sessionId: "filed-other", archived: true, project: "otherRepo" }),
   ];
   assert.deepEqual(
-    selectSessions(list, "trevorV2", { archived: true }).map((s) => s.sessionId),
+    selectSessions(list, "trevor", { archived: true }).map((s) => s.sessionId),
     ["filed"],
   );
 });
@@ -100,8 +100,8 @@ test("runList renders the fetched inventory scoped to the project", async () => 
         summary({ sessionId: "filed", archived: true }),
       ]),
   });
-  const out = await runList(io, "trevorV2", false);
-  assert.ok(out.includes("Sessions for trevorV2"));
+  const out = await runList(io, "trevor", false);
+  assert.ok(out.includes("Sessions for trevor"));
   assert.ok(out.includes("keep"));
   assert.ok(!out.includes("filed"), "archived excluded from the default list");
 });
@@ -169,7 +169,7 @@ test("runStop on a dead-process record cleans up the stale record without signal
 });
 
 test("expandHome expands a leading ~ against home and leaves absolute paths alone", () => {
-  assert.equal(expandHome("~/dev/trevorV2", "/Users/kevin"), "/Users/kevin/dev/trevorV2");
+  assert.equal(expandHome("~/dev/trevor", "/Users/kevin"), "/Users/kevin/dev/trevor");
   assert.equal(expandHome("~", "/Users/kevin"), "/Users/kevin");
   assert.equal(expandHome("/abs/path", "/Users/kevin"), "/abs/path");
   assert.equal(expandHome("relative", "/Users/kevin"), "relative", "a non-~ path is untouched");
@@ -177,12 +177,12 @@ test("expandHome expands a leading ~ against home and leaves absolute paths alon
 
 test("resolveOpenTarget resolves a known session to its expanded workspace root", () => {
   const list = [
-    summary({ sessionId: "s1", workspace: "~/dev/trevorV2" }),
+    summary({ sessionId: "s1", workspace: "~/dev/trevor" }),
     summary({ sessionId: "s2", workspace: "~/dev/other" }),
   ];
   assert.deepEqual(resolveOpenTarget(list, "s1", "/Users/kevin"), {
     sessionId: "s1",
-    root: "/Users/kevin/dev/trevorV2",
+    root: "/Users/kevin/dev/trevor",
   });
 });
 
@@ -195,7 +195,7 @@ test("resolveOpenTarget falls back to cwd when workspace is null", () => {
 });
 
 test("resolveOpenTarget refuses an archived session and points to unarchive (D-094 M2)", () => {
-  const list = [summary({ sessionId: "filed", workspace: "~/dev/trevorV2", archived: true })];
+  const list = [summary({ sessionId: "filed", workspace: "~/dev/trevor", archived: true })];
   const result = resolveOpenTarget(list, "filed", "/Users/kevin");
   assert.ok("error" in result, "an archived session is not openable directly");
   assert.ok(result.error.includes("archived"), "the error names the archived state");

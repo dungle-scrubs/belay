@@ -37,22 +37,17 @@ test("resolveProjectRoot walks up to the nearest .git, else falls back to cwd", 
 
 test("resolveSession derives a stable URL-safe id and persists the mapping", () => {
   const fs = fakeFs();
-  const id = resolveSession(
-    fs,
-    "/home/.trevorV2",
-    "/Users/kevin/dev/trevorV2",
-    "2026-06-26T00:00:00Z",
-  );
+  const id = resolveSession(fs, "/home/.trevor", "/Users/kevin/dev/trevor", "2026-06-26T00:00:00Z");
   assert.match(id, /^[a-z0-9-]+$/);
   assert.equal(id.includes("/"), false);
 
   // The mapping is persisted and reused verbatim on the next resolve (same project → same session).
-  const map = loadProjectMap(fs, "/home/.trevorV2");
-  assert.equal(map["/Users/kevin/dev/trevorV2"]?.sessionId, id);
+  const map = loadProjectMap(fs, "/home/.trevor");
+  assert.equal(map["/Users/kevin/dev/trevor"]?.sessionId, id);
   const again = resolveSession(
     fs,
-    "/home/.trevorV2",
-    "/Users/kevin/dev/trevorV2",
+    "/home/.trevor",
+    "/Users/kevin/dev/trevor",
     "2026-07-01T00:00:00Z",
   );
   assert.equal(again, id);
@@ -60,15 +55,15 @@ test("resolveSession derives a stable URL-safe id and persists the mapping", () 
 
 test("distinct project roots get distinct persisted sessions", () => {
   const fs = fakeFs();
-  const a = resolveSession(fs, "/home/.trevorV2", "/work/app-a", "t");
-  const b = resolveSession(fs, "/home/.trevorV2", "/work/app-b", "t");
+  const a = resolveSession(fs, "/home/.trevor", "/work/app-a", "t");
+  const b = resolveSession(fs, "/home/.trevor", "/work/app-b", "t");
   assert.notEqual(a, b);
-  const map = loadProjectMap(fs, "/home/.trevorV2");
+  const map = loadProjectMap(fs, "/home/.trevor");
   assert.equal(Object.keys(map).length, 2);
 });
 
 test("a malformed projects.json reads as an empty map (never throws)", () => {
   const fs = fakeFs();
-  fs.writeFile("/home/.trevorV2/projects.json", "not json{");
-  assert.deepEqual(loadProjectMap(fs, "/home/.trevorV2"), {});
+  fs.writeFile("/home/.trevor/projects.json", "not json{");
+  assert.deepEqual(loadProjectMap(fs, "/home/.trevor"), {});
 });

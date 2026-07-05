@@ -1,6 +1,6 @@
 # apps - Agent Instructions
 
-`apps/` holds every Trevor V2 application, and these rules cover all of them:
+`apps/` holds every Trevor application, and these rules cover all of them:
 
 - **`apps/web`** - the browser frontend: React 19 + Vite + Effect, a Tether
   WebSocket participant.

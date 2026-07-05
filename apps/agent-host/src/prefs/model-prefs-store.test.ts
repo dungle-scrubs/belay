@@ -40,7 +40,7 @@ describe("parseModelPrefs", () => {
 
 describe("loadModelPrefs", () => {
   test("reads a persisted default + favorites from the config file (path is injectable)", () => {
-    const prefs = loadModelPrefs("/home/.trevorV2/model-prefs.json", () =>
+    const prefs = loadModelPrefs("/home/.trevor/model-prefs.json", () =>
       JSON.stringify({ default: REF, pinned: [PIN] }),
     );
     expect(prefs).toEqual({ default: REF, pinned: [PIN] });
@@ -64,10 +64,10 @@ describe("saveModelPrefs", () => {
     const files = new Map<string, string>();
     saveModelPrefs(
       { default: REF, pinned: [PIN] },
-      "/home/.trevorV2/model-prefs.json",
+      "/home/.trevor/model-prefs.json",
       (p, c) => void files.set(p, c),
     );
-    const written = files.get("/home/.trevorV2/model-prefs.json");
+    const written = files.get("/home/.trevor/model-prefs.json");
     expect(written).toBeDefined();
     expect(JSON.parse(written ?? "")).toEqual({ default: REF, pinned: [PIN] });
   });

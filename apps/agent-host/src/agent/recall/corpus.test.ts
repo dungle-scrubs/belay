@@ -30,7 +30,7 @@ const ev = (
 const REF: RecallSessionRef = {
   sessionId: "s",
   label: "a session",
-  project: "trevorV2",
+  project: "trevor",
   origin: "sibling-session",
 };
 
@@ -147,7 +147,7 @@ test("assembleCorpus excludes the current session's active-prompt tail and fold 
       session: {
         sessionId: "cur",
         label: "current",
-        project: "trevorV2",
+        project: "trevor",
         origin: "current-compacted",
       },
       events: currentLog,

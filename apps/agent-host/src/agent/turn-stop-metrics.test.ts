@@ -37,7 +37,7 @@ test("turn stop debug metrics append under XDG state", async () => {
     },
   });
 
-  assert.equal(turnStopMetricsPath(), join(stateHome, "trevorV2", "turn-stops.jsonl"));
+  assert.equal(turnStopMetricsPath(), join(stateHome, "trevor", "turn-stops.jsonl"));
   const rows = readFileSync(turnStopMetricsPath(), "utf8").trim().split("\n");
   assert.equal(rows.length, 1);
   assert.deepEqual(JSON.parse(rows[0] ?? "{}"), {

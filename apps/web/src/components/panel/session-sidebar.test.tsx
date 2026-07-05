@@ -16,9 +16,9 @@ const ago = (ms: number) => new Date(NOW - ms).toISOString();
 function summary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return {
     title: `session ${over.sessionId}`,
-    cwd: "~/dev/trevorV2",
-    workspace: "~/dev/trevorV2",
-    project: "trevorV2",
+    cwd: "~/dev/trevor",
+    workspace: "~/dev/trevor",
+    project: "trevor",
     branch: "main",
     git: null,
     createdAt: ago(1000 * 60 * 60),
@@ -44,7 +44,7 @@ test("visibleSessions scopes to the current project, excludes archived, newest f
     summary({ sessionId: "other", project: "otherRepo" }),
   ];
   assert.deepEqual(
-    visibleSessions(list, "trevorV2").map((s) => s.sessionId),
+    visibleSessions(list, "trevor").map((s) => s.sessionId),
     ["b", "a"],
     "archived + other-project excluded; recency desc",
   );
@@ -56,7 +56,7 @@ test("cross-project sessions never appear even when more recent", () => {
     summary({ sessionId: "newer-other", project: "otherRepo", updatedAt: ago(1000) }),
   ];
   assert.deepEqual(
-    visibleSessions(list, "trevorV2").map((s) => s.sessionId),
+    visibleSessions(list, "trevor").map((s) => s.sessionId),
     ["mine"],
   );
 });
@@ -69,7 +69,7 @@ test("renders rows with title + branch and marks the current session selected", 
         summary({ sessionId: "s2", title: "other work" }),
       ]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
@@ -88,7 +88,7 @@ test("a running session shows a running indicator", () => {
     <SessionSidebar
       sessions={[summary({ sessionId: "cur", activity: "running", host: "live" })]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
@@ -114,7 +114,7 @@ test("rows show running, queued, and settled states distinctly (D-093 M3)", () =
         }),
       ]}
       currentSessionId="run"
-      currentProject="trevorV2"
+      currentProject="trevor"
       // The live send-queue owner marks "queue" as having work waiting behind its active turn.
       liveActivity={new Map([["queue", "queued"]])}
       onSelect={noop}
@@ -148,7 +148,7 @@ test("activity stays visible for a session the user is NOT currently viewing (D-
         summary({ sessionId: "bg", title: "background run", activity: "running", host: "live" }),
       ]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
@@ -175,7 +175,7 @@ test("a row inline-renames: edit -> Enter saves (optimistic) and reports the new
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "old name" })]}
       currentSessionId="s1"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       onRename={(id, title) => renames.push([id, title])}
       nowMs={NOW}
@@ -198,7 +198,7 @@ test("Escape cancels a rename without reporting it; an empty title is rejected",
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "keep me" })]}
       currentSessionId="s1"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       onRename={(id, title) => renames.push([id, title])}
       nowMs={NOW}
@@ -227,7 +227,7 @@ test("without action handlers, there is no rename affordance and right-click ope
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "no edit" })]}
       currentSessionId="s1"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
@@ -262,7 +262,7 @@ test("clicking a row selects that session", () => {
         summary({ sessionId: "s2", title: "switch to me" }),
       ]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={(id) => picked.push(id)}
       nowMs={NOW}
     />,
@@ -282,7 +282,7 @@ test("switching is allowed even while the current session is running (D-093 M4)"
         summary({ sessionId: "s2", title: "switch target" }),
       ]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={(id) => picked.push(id)}
       nowMs={NOW}
     />,
@@ -304,7 +304,7 @@ test("with no action handlers the sidebar is presentational: no controls, no lif
         summary({ sessionId: "filed", title: "filed", archived: true }),
       ]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
@@ -333,7 +333,7 @@ test("right-click opens a Rename/Archive/Delete menu; Archive fires immediately 
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "ship it" })]}
       currentSessionId="s1"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       onRename={noop}
       onArchive={(id) => archived.push(id)}
@@ -358,7 +358,7 @@ test("the menu's Delete confirms first, then fires onDelete (soft delete)", () =
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "scratch" })]}
       currentSessionId="s1"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       onRename={noop}
       onArchive={noop}
@@ -395,7 +395,7 @@ test("the menu's Rename opens the inline title edit", () => {
     <SessionSidebar
       sessions={[summary({ sessionId: "s1", title: "old title" })]}
       currentSessionId="s1"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       onRename={(id, title) => renames.push([id, title])}
       onArchive={noop}
@@ -417,14 +417,14 @@ test("an empty list shows a project-scoped empty state with an accessible nav la
     <SessionSidebar
       sessions={[]}
       currentSessionId="none"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
   );
   assert.ok(container.querySelector('[aria-label="sessions"]'), "the nav is labelled");
   assert.ok(
-    (container.textContent ?? "").includes("No sessions for trevorV2"),
+    (container.textContent ?? "").includes("No sessions for trevor"),
     "the empty state names the project",
   );
 });
@@ -437,7 +437,7 @@ test("the collapse toggle renders only when the app wires onToggle, and fires it
     <SessionSidebar
       sessions={[summary({ sessionId: "cur" })]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       onToggle={() => (collapsed += 1)}
       nowMs={NOW}
@@ -455,7 +455,7 @@ test("the header renders `New session` only when onNewSession is wired, and acti
     <SessionSidebar
       sessions={[summary({ sessionId: "cur" })]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       onNewSession={() => (opened += 1)}
       nowMs={NOW}
@@ -469,7 +469,7 @@ test("the header renders `New session` only when onNewSession is wired, and acti
     <SessionSidebar
       sessions={[summary({ sessionId: "cur" })]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
@@ -482,7 +482,7 @@ test("the sidebar stays a static header in standalone/Storybook use (no toggle w
     <SessionSidebar
       sessions={[summary({ sessionId: "cur" })]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={noop}
       nowMs={NOW}
     />,
@@ -503,7 +503,7 @@ test("session rows are keyboard-focusable buttons that select on activation", ()
         summary({ sessionId: "s2", title: "other" }),
       ]}
       currentSessionId="cur"
-      currentProject="trevorV2"
+      currentProject="trevor"
       onSelect={(id) => (selected = id)}
       nowMs={NOW}
     />,

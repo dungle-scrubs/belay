@@ -11,7 +11,7 @@ import {
 test("virtualization performance artifacts default to the local state directory", () => {
   assert.ok(
     DEFAULT_VIRTUALIZATION_PERFORMANCE_ARTIFACT_ROOT.endsWith(
-      ".local/state/trevorV2/virtualization-performance/artifacts",
+      ".local/state/trevor/virtualization-performance/artifacts",
     ),
   );
 });

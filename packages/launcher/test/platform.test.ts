@@ -4,7 +4,7 @@ import { buildHostSpawnCommand } from "../src/platform";
 
 test("host spawn command uses opchain when the Trevor env file exists", () => {
   const command = buildHostSpawnCommand({
-    envFile: "/home/.trevorV2/.env.op",
+    envFile: "/home/.trevor/.env.op",
     envFileExists: true,
     hostMain: "/repo/apps/agent-host/src/main.ts",
     nodePath: "/usr/local/bin/node",
@@ -17,7 +17,7 @@ test("host spawn command uses opchain when the Trevor env file exists", () => {
     "--read",
     "op",
     "run",
-    "--env-file=/home/.trevorV2/.env.op",
+    "--env-file=/home/.trevor/.env.op",
     "--",
     "/usr/local/bin/node",
     "/repo/node_modules/tsx/cli.mjs",
@@ -31,7 +31,7 @@ test("host spawn command uses opchain when the Trevor env file exists", () => {
 
 test("host spawn command falls back to direct node when the Trevor env file is absent", () => {
   const command = buildHostSpawnCommand({
-    envFile: "/home/.trevorV2/.env.op",
+    envFile: "/home/.trevor/.env.op",
     envFileExists: false,
     hostMain: "/repo/apps/agent-host/src/main.ts",
     nodePath: "/usr/local/bin/node",

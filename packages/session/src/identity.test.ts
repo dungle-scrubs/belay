@@ -23,8 +23,8 @@ import {
  */
 
 test("projectSessionId is stable for a given root", () => {
-  const a = projectSessionId("/Users/kevin/dev/trevorV2");
-  const b = projectSessionId("/Users/kevin/dev/trevorV2");
+  const a = projectSessionId("/Users/kevin/dev/trevor");
+  const b = projectSessionId("/Users/kevin/dev/trevor");
   assert.equal(a, b);
 });
 

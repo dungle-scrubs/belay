@@ -1,12 +1,12 @@
-# Trevor V2 - Features Ledger
+# Trevor - Features Ledger
 
-This is the **implemented-feature ledger** for Trevor V2: a map of behavior that
+This is the **implemented-feature ledger** for Trevor: a map of behavior that
 **currently exists in this repository**, with implementation anchors and validation
 references so a future agent can update it without rediscovering the whole system.
 
 It is **descriptive, not aspirational**. It records what exists now and excludes
 dropped work, unstarted backlog, and roadmap items. Planned work and the architecture /
-roadmap source of truth live under [`.plans/`](.plans/) (the canonical Trevor V2
+roadmap source of truth live under [`.plans/`](.plans/) (the canonical Trevor
 umbrella plan plus the numbered feature plans); per the root [`AGENTS.md`](AGENTS.md)
 planning rule, the canonical plan wins when documents disagree. An entry becomes true
 here only when the behavior is in code or tests.

@@ -69,8 +69,8 @@
 
 ### WS4 M1 - Public-identity consistency + guard
 
-- [ ] RED: Add a check that no "V2"/"trevorV2" leaks into public-facing identity (README, package `description`, app `<title>`, public docs).
-- [ ] GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings (README, package `description`, app `<title>`, public docs); the `~/.trevorV2` dir is already renamed to `~/.trevor` by plan 56 - no back-compat shim. <!-- D-008 -->
+- [ ] RED: Add a check that no "V2"/"trevor" leaks into public-facing identity (README, package `description`, app `<title>`, public docs).
+- [ ] GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings (README, package `description`, app `<title>`, public docs); the `~/.trevor` dir is already renamed to `~/.trevor` by plan 56 - no back-compat shim. <!-- D-008 -->
 - [ ] REFACTOR: One neutral public tagline/description shared across README + package metadata.
 
 ## Accepted / Deferred Follow-up

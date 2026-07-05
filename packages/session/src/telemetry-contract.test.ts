@@ -50,7 +50,7 @@ test("redactSecrets strips bearer tokens, api keys, auth headers, and query toke
 });
 
 test("redactAttributeValue collapses raw paths and caps length", () => {
-  const path = redactAttributeValue("/Users/kevin/dev/trevorV2/apps/agent-host/src/main.ts");
+  const path = redactAttributeValue("/Users/kevin/dev/trevor/apps/agent-host/src/main.ts");
   assert.ok(path.includes("<path>"), "an absolute path is collapsed");
   assert.ok(!path.includes("/Users/kevin"), "the raw home path never survives");
 

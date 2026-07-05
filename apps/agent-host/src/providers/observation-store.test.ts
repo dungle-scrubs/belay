@@ -26,7 +26,7 @@ const savedConfig = process.env.TREVOR_HOME;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), "trevor-obs-"));
   process.env.TREVOR_STATE_HOME = home;
-  // Isolate the config home too, so migration never sees the developer's real ~/.trevorV2.
+  // Isolate the config home too, so migration never sees the developer's real ~/.trevor.
   process.env.TREVOR_HOME = join(home, "config");
 });
 

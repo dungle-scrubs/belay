@@ -34,7 +34,7 @@ function result(over: Partial<SourceRecallResult>): SourceRecallResult {
     providerId: "source-recall:local",
     providerKind: "source-recall",
     query: "how are sessions verified before a turn runs",
-    repo: "trevorV2",
+    repo: "trevor",
     results: [],
     freshness: {
       indexedAt: ago(1000 * 60 * 20),
@@ -66,7 +66,7 @@ const HITS = result({
       score: 0.94,
       matchReason: "bm25+vector",
       searchQuality: "ast",
-      repoName: "trevorV2",
+      repoName: "trevor",
     },
     {
       providerId: "source-recall:local",
@@ -79,7 +79,7 @@ const HITS = result({
       score: 0.81,
       matchReason: "vector",
       searchQuality: "ast",
-      repoName: "trevorV2",
+      repoName: "trevor",
     },
   ],
 });
@@ -188,7 +188,7 @@ const STATUS: SourceRecallIndexStatus = {
   capabilities: ["chunk_search", "semantic_index", "status", "refresh"],
   repos: [
     {
-      name: "trevorV2",
+      name: "trevor",
       readiness: "ready",
       freshness: {
         indexedAt: ago(1000 * 60 * 20),
@@ -227,7 +227,7 @@ const REFRESH: SourceRecallRefreshResult = {
   status: "ok",
   providerId: "source-recall:local",
   providerKind: "source-recall",
-  repo: "trevorV2",
+  repo: "trevor",
   filesUpdated: 7,
   refreshMs: 214,
   diagnostics: [],

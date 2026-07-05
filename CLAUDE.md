@@ -1,3 +1,3 @@
-# Trevor V2
+# Trevor
 
 See [AGENTS.md](./AGENTS.md) for instructions in this repository.

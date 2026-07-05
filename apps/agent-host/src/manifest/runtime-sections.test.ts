@@ -147,13 +147,13 @@ describe("runtime / protocol / workspace summaries (M4)", () => {
   it("workspace section shows the project basename + branch, never the absolute home path", async () => {
     const body = await run(
       workspaceSection({
-        root: "/Users/secret/dev/trevorV2",
-        cwd: "/Users/secret/dev/trevorV2/apps/web",
+        root: "/Users/secret/dev/trevor",
+        cwd: "/Users/secret/dev/trevor/apps/web",
         branch: "main",
       }),
     );
     expect(JSON.stringify(body)).not.toContain("/Users/secret");
-    expect(body.items.find((i) => i.id === "root")?.summary).toBe("trevorV2");
+    expect(body.items.find((i) => i.id === "root")?.summary).toBe("trevor");
     expect(body.items.find((i) => i.id === "branch")?.summary).toBe("main");
   });
 });

@@ -1,6 +1,6 @@
-# Trevor V2 - Agent Instructions
+# Trevor - Agent Instructions
 
-Trevor V2 is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite +
+Trevor is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite +
 Effect); the host is `apps/agent-host` (Node + Effect). Both are Tether
 WebSocket participants. Per-directory `AGENTS.md` files (e.g.
 `apps/AGENTS.md`) layer additional rules; the rules below are project-wide.
@@ -8,7 +8,7 @@ WebSocket participants. Per-directory `AGENTS.md` files (e.g.
 ## Repository visibility: PRIVATE - never make it public
 
 This repository is **private and MUST remain private**
-(`github.com/dungle-scrubs/trevorV2`). Do **not** run
+(`github.com/dungle-scrubs/trevor`). Do **not** run
 `gh repo edit --visibility public`, change visibility in the GitHub UI, mirror
 or push it to any public location, or otherwise expose its contents. Treat any
 request to make it public as requiring explicit, unambiguous owner confirmation
@@ -48,7 +48,7 @@ model load state with **LM Studio's own tooling** (its REST API and the `lms` CL
 **Do NOT use emberlm (or any other model control plane) for this project, ever.**
 Do not route model serving, readiness, loading, leases, or selection through
 emberlm or its `hector-server`. emberlm is a separate machine-level tool; it is
-not a dependency of Trevor V2 and must not become one. Provider integration lives
+not a dependency of Trevor and must not become one. Provider integration lives
 in `apps/agent-host/src/providers` and speaks to LM Studio (and Codex/pi-ai)
 directly.
 
@@ -72,16 +72,16 @@ invent a new dot-directory, cache root, or home-relative path unless the plan
 explicitly adds a new root.
 
 - **User settings and editable config** live under `TREVOR_HOME`, defaulting to
-  `~/.trevorV2`. This is hand-editable, portable configuration only - the
+  `~/.trevor`. This is hand-editable, portable configuration only - the
   user-global `AGENTS.md` and `config.jsonc`, plus small per-concern preference
   files like `style.json` (`{ activeStyle }`) and `vim.json`
   (`{ "enabled": true }` opts the prompt composer into Vim motions; disabled by
   default) - not runtime state. The single code owner for the env override and
   default directory name is the node-only `@trevor/session/node-paths` subpath;
   Node packages should import `TREVOR_HOME` or `resolveTrevorHome` from there
-  instead of spelling `~/.trevorV2` themselves.
+  instead of spelling `~/.trevor` themselves.
 - **All machine-local runtime state** lives under `TREVOR_STATE_HOME`, defaulting
-  to `${XDG_STATE_HOME:-~/.local/state}/trevorV2`. This is everything the app owns
+  to `${XDG_STATE_HOME:-~/.local/state}/trevor`. This is everything the app owns
   at runtime: the session-store SQLite database, blob-store bytes, managed
   worktrees, the host/lock/project registries (`hosts.json`, `locks/`,
   `projects.json`), launcher logs, provider observations, and best-effort debug
@@ -90,8 +90,8 @@ explicitly adds a new root.
   history along. Import `TREVOR_STATE_HOME` or `resolveTrevorStateHome` from
   `@trevor/session/node-paths`. Keep debug-metric writes best-effort and never let
   a diagnostics failure affect a user turn.
-- **Legacy shared service data** may still exist under `~/.trevor` from older
-  V2 runs or V1-era local tooling. Do not add new features or active V2 writes
+- **Legacy shared service data** may still exist under `~/.trevor_legacy` from trevor legacy
+  local tooling. Do not add new features or active Trevor writes
   there; only touch it when maintaining or migrating old data.
 - **Temporary scratch** belongs in the OS temp directory (`tmpdir()`), for tests,
   transcodes, and short-lived intermediate files that can disappear at any time.
@@ -106,7 +106,7 @@ explicitly adds a new root.
 A new file-backed feature must resolve its location through the root policy in
 `@trevor/session/node-paths` (`resolveRootPolicy` / `rootCategory` / the
 `STORAGE_INVENTORY`) and add itself to the inventory, rather than spelling a
-home-relative path. A drift test fails if a new `~/.trevorV2` literal appears
+home-relative path. A drift test fails if a new `~/.trevor` literal appears
 outside that owner. This taxonomy is the single citation for storage placement;
 see `.plans/03-filesystem-root-taxonomy` for the detailed model and rationale.
 
@@ -238,7 +238,7 @@ env token and never touches the keychain. Then:
    hand it to `trevor open`:
 
        opchain primary --read op run -- sh -c 'printf %s "$OP_SERVICE_ACCOUNT_TOKEN"' \
-         | ssh <user>@<host> 'bash -lc '\''IFS= read -r T; cd ~/dev/trevorV2 \
+         | ssh <user>@<host> 'bash -lc '\''IFS= read -r T; cd ~/dev/trevor \
              && trevor stop <session> >/dev/null 2>&1; sleep 1 \
              && OPCHAIN_TOKEN_OVERRIDE="$T" trevor open <session>'\'''
 

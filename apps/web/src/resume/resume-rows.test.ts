@@ -8,9 +8,9 @@ const NOW = Date.parse("2026-06-26T12:00:00.000Z");
 const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   sessionId: "s",
   title: "a session",
-  cwd: "~/dev/trevorV2",
-  workspace: "~/dev/trevorV2",
-  project: "trevorV2",
+  cwd: "~/dev/trevor",
+  workspace: "~/dev/trevor",
+  project: "trevor",
   branch: "main",
   git: null,
   createdAt: "2026-06-25T12:00:00.000Z",
@@ -27,7 +27,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
 
 const ctx = (over: Partial<ResumeContext> = {}): ResumeContext => ({
   currentSessionId: "cur",
-  currentProject: "trevorV2",
+  currentProject: "trevor",
   busy: false,
   nowMs: NOW,
   ...over,
@@ -78,7 +78,7 @@ test("metadata carries location, branch, event count, and a relative time", () =
     ctx({ currentSessionId: "none" }),
   );
   const meta = rows[0]?.metadata ?? "";
-  assert.ok(meta.includes("~/dev/trevorV2"), meta);
+  assert.ok(meta.includes("~/dev/trevor"), meta);
   assert.ok(meta.includes("main"), meta);
   assert.ok(meta.includes("42 events"), meta);
   assert.ok(meta.includes("3h ago"), meta);

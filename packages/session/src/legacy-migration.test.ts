@@ -9,9 +9,9 @@ import {
 } from "./legacy-migration";
 
 const HOME = "/Users/kevin";
-const LEGACY_DB = "/Users/kevin/.trevor/sessions.db";
-const LEGACY_BLOBS = "/Users/kevin/.trevor/blobs";
-const TARGET_DB = "/Users/kevin/.local/state/trevorV2/sessions.db";
+const LEGACY_DB = "/Users/kevin/.trevor_legacy/sessions.db";
+const LEGACY_BLOBS = "/Users/kevin/.trevor_legacy/blobs";
+const TARGET_DB = "/Users/kevin/.local/state/trevor/sessions.db";
 
 const probe = (...existing: string[]) => ({ exists: (path: string) => existing.includes(path) });
 

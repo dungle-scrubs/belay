@@ -45,7 +45,7 @@ const session = (over: Partial<SessionSummary> = {}): SessionSummary => ({
   title: "Current",
   cwd: null,
   workspace: null,
-  project: "trevorV2",
+  project: "trevor",
   branch: null,
   git: null,
   createdAt: "2026-06-28T00:00:00.000Z",
@@ -62,10 +62,10 @@ const session = (over: Partial<SessionSummary> = {}): SessionSummary => ({
 
 const worktree: WorktreeSummary = {
   id: "wt-feature",
-  baseRepo: "/Users/kevin/dev/trevorV2",
-  baseRepoName: "trevorV2",
+  baseRepo: "/Users/kevin/dev/trevor",
+  baseRepoName: "trevor",
   branch: "feature/modal-state",
-  path: "~/.trevorV2/.worktrees/feature-modal-state",
+  path: "~/.trevor/.worktrees/feature-modal-state",
   sessionId: "s-worktree",
   dirty: false,
   ahead: 0,
@@ -130,7 +130,7 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
   );
 
   assert.deepEqual(mockInventory.enabledCalls, [false]);
-  assert.equal(result.current.currentProject, "trevorV2");
+  assert.equal(result.current.currentProject, "trevor");
   assert.deepEqual(result.current.worktrees, [worktree]);
   assert.deepEqual(result.current.worktreeActivity.get("s-worktree"), {
     host: "stale",
@@ -142,7 +142,7 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
   assert.equal(mockInventory.enabledCalls.at(-1), true);
 
   rerender({ sessions: [] });
-  assert.equal(result.current.currentProject, "trevorV2");
+  assert.equal(result.current.currentProject, "trevor");
 });
 
 test("opening the archive browser enables the inventory fetch", () => {

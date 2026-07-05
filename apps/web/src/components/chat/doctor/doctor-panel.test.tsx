@@ -13,7 +13,7 @@ import { DoctorPanel } from "./doctor-panel";
 
 const SNAPSHOT: DoctorSnapshot = doctorSnapshot({
   checkedAt: "12s ago",
-  host: { workspace: "~/dev/trevorV2" },
+  host: { workspace: "~/dev/trevor" },
   areas: [
     doctorArea("core", "ok", {
       label: "Core",

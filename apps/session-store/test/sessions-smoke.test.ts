@@ -176,7 +176,7 @@ test("GET /sessions returns the inventory read model with live presence folded i
   await transport.publishEvent("with-host", {
     type: "host.online",
     producerId: "host",
-    payload: { instanceId: "h1", cwd: "~/dev/trevorV2", workspace: "~/dev/trevorV2" },
+    payload: { instanceId: "h1", cwd: "~/dev/trevor", workspace: "~/dev/trevor" },
   });
   await transport.ensureSession("bare");
 
@@ -193,8 +193,8 @@ test("GET /sessions returns the inventory read model with live presence folded i
 
   const withHost = byId.get("with-host");
   assert.equal(withHost?.title, "build the inventory");
-  assert.equal(withHost?.cwd, "~/dev/trevorV2");
-  assert.equal(withHost?.project, "trevorV2");
+  assert.equal(withHost?.cwd, "~/dev/trevor");
+  assert.equal(withHost?.project, "trevor");
   assert.equal(withHost?.host, "live");
 
   const bare = byId.get("bare");

@@ -34,7 +34,7 @@ function fakeFs(present: Iterable<string> = []): LauncherFs {
 
 test("the CLI and a non-CLI caller resolve the SAME project root + session id via @trevor/launcher", () => {
   const cwd = "/work/app/src/deep";
-  const home = "/state/trevorV2";
+  const home = "/state/trevor";
   const gitRoot = "/work/app";
 
   // Two independent callers (the CLI and the supervisor), each with its own fresh fs + registry, both

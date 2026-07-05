@@ -16,7 +16,7 @@ test("a not-writable root renders an inline error finding with its repair action
   assert.match(text, /state not writable/);
   assert.match(text, /Trevor cannot write this root/);
   assert.match(text, /Check permissions on/);
-  assert.match(text, /\.local\/state\/trevorV2/);
+  assert.match(text, /\.local\/state\/trevor/);
 });
 
 test("importable legacy data renders an inline warning with the migration nudge", () => {
@@ -39,7 +39,7 @@ test("a healthy storage area rests as one line and reveals every root fact on ex
 });
 
 test("a very long root path renders without throwing", () => {
-  const longPath = `~/.local/state/trevorV2/${"segment-".repeat(40)}end`;
+  const longPath = `~/.local/state/trevor/${"segment-".repeat(40)}end`;
   const area: DoctorArea = {
     id: "storage",
     label: "Storage / Roots",

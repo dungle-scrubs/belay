@@ -27,9 +27,9 @@ const ago = (ms: number) => new Date(NOW - ms).toISOString();
 function summary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return {
     title: `session ${over.sessionId}`,
-    cwd: "~/dev/trevorV2",
-    workspace: "~/dev/trevorV2",
-    project: "trevorV2",
+    cwd: "~/dev/trevor",
+    workspace: "~/dev/trevor",
+    project: "trevor",
     branch: "main",
     git: null,
     createdAt: ago(1000 * 60 * 60 * 24),
@@ -90,7 +90,7 @@ export const ManySessions: Story = {
       <SessionSidebar
         sessions={MANY}
         currentSessionId="cur"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         nowMs={NOW}
         className="h-full"
@@ -108,7 +108,7 @@ export const RowActions: Story = {
       <SessionSidebar
         sessions={MANY}
         currentSessionId="cur"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         onRename={noop}
         onArchive={noop}
@@ -131,7 +131,7 @@ export const WithNewSession: Story = {
       <SessionSidebar
         sessions={MANY}
         currentSessionId="cur"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         onNewSession={noop}
         onToggle={noop}
@@ -155,7 +155,7 @@ export const CurrentOnly: Story = {
           }),
         ]}
         currentSessionId="cur"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         nowMs={NOW}
         className="h-full"
@@ -192,7 +192,7 @@ export const ActivityStates: Story = {
           }),
         ]}
         currentSessionId="run"
-        currentProject="trevorV2"
+        currentProject="trevor"
         liveActivity={new Map([["queue", "queued"]])}
         onSelect={noop}
         nowMs={NOW}
@@ -208,7 +208,7 @@ export const Empty: Story = {
       <SessionSidebar
         sessions={[]}
         currentSessionId="none"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         nowMs={NOW}
         className="h-full"
@@ -233,7 +233,7 @@ export const LongTitlesAndBranch: Story = {
           summary({ sessionId: "s2", title: "short one" }),
         ]}
         currentSessionId="cur"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         nowMs={NOW}
         className="h-full"
@@ -248,7 +248,7 @@ export const NarrowWidth: Story = {
       <SessionSidebar
         sessions={MANY}
         currentSessionId="cur"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         nowMs={NOW}
         className="h-full"
@@ -269,7 +269,7 @@ export const TallList: Story = {
           }),
         )}
         currentSessionId="s0"
-        currentProject="trevorV2"
+        currentProject="trevor"
         onSelect={noop}
         nowMs={NOW}
         className="h-full"
@@ -290,7 +290,7 @@ export const WithResumeModal: Story = {
   render: () => {
     const context: ResumeContext = {
       currentSessionId: "cur",
-      currentProject: "trevorV2",
+      currentProject: "trevor",
       busy: false,
       nowMs: NOW,
     };
@@ -300,7 +300,7 @@ export const WithResumeModal: Story = {
           <SessionSidebar
             sessions={MANY}
             currentSessionId="cur"
-            currentProject="trevorV2"
+            currentProject="trevor"
             onSelect={noop}
             onToggle={noop}
             nowMs={NOW}

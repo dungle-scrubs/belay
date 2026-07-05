@@ -212,7 +212,7 @@ export interface HooksRuntimeOptions {
   readonly workspaceRoot?: string;
   /** Trust anchor for user hooks (default TREVOR_HOME). */
   readonly userConfigDir?: string;
-  /** The V1 user hooks dir the legacy HOOK.md scan checks (M10); default `~/.trevor/hooks`.
+  /** The V1 user hooks dir the legacy HOOK.md scan checks (M10); default `~/.trevor_legacy/hooks`.
    *  Injectable so tests never touch the real legacy home. */
   readonly legacyUserHooksDir?: string;
   /** Runner tunables passed through to every execution; injectable for tests. */

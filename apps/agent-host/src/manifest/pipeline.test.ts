@@ -47,7 +47,7 @@ function leakyDeps(): ManifestDeps {
     catalog: null,
     runtime: { role: "leader", instanceId: "abc12345" },
     host: { version: "2.0.0" },
-    workspace: { root: "/Users/kevin/dev/trevorV2", cwd: "/Users/kevin/dev/trevorV2" },
+    workspace: { root: "/Users/kevin/dev/trevor", cwd: "/Users/kevin/dev/trevor" },
   };
 }
 

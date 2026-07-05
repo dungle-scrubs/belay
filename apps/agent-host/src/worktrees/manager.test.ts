@@ -15,7 +15,7 @@ function fakeFs(): WorktreeFs & { files: Map<string, string> } {
   };
 }
 
-const HOME = "/home/.trevorV2";
+const HOME = "/home/.trevor";
 
 /** A clean-branch git runner for any cwd; per-cwd overrides simulate dirty/conflict/etc. */
 function gitFactory(
@@ -32,9 +32,9 @@ function gitFactory(
       "rev-parse --is-inside-work-tree": { status: 0, stdout: "true\n" },
       "rev-parse --path-format=absolute --git-common-dir": {
         status: 0,
-        stdout: "/dev/trevorV2/.git\n",
+        stdout: "/dev/trevor/.git\n",
       },
-      "rev-parse --show-toplevel": { status: 0, stdout: "/dev/trevorV2\n" },
+      "rev-parse --show-toplevel": { status: 0, stdout: "/dev/trevor\n" },
       "branch --show-current": { status: 0, stdout: "main\n" },
       "status --porcelain": { status: 0, stdout: "" },
       "rev-list --left-right --count @{upstream}...HEAD": { status: 0, stdout: "0\t0\n" },
@@ -42,7 +42,7 @@ function gitFactory(
       "rev-parse --git-common-dir": { status: 0, stdout: ".git\n" },
       "diff --name-only --diff-filter=U": { status: 0, stdout: "" },
       "rev-parse HEAD": { status: 0, stdout: "cafef00d\n" },
-      "worktree add -b feat/x /home/.trevorV2/.worktrees/": { status: 0, stdout: "" },
+      "worktree add -b feat/x /home/.trevor/.worktrees/": { status: 0, stdout: "" },
     };
     if (key.startsWith("worktree add")) {
       return { status: 0, stdout: "" };
@@ -80,11 +80,11 @@ function manager(
 }
 
 const ctx = {
-  baseRepo: "/dev/trevorV2",
-  baseRepoName: "trevorV2",
-  basePath: "/dev/trevorV2",
-  baselineSessionId: "trevorV2-base",
-  currentPath: "/dev/trevorV2",
+  baseRepo: "/dev/trevor",
+  baseRepoName: "trevor",
+  basePath: "/dev/trevor",
+  baselineSessionId: "trevor-base",
+  currentPath: "/dev/trevor",
 };
 
 test("create records a worktree at the grouped path and binds it to a session", () => {
@@ -108,7 +108,7 @@ test("create records a worktree at the grouped path and binds it to a session", 
 test("create surfaces a git failure as a typed error and records nothing", () => {
   const fs = fakeFs();
   const failing = gitFactory({
-    "/dev/trevorV2": { "worktree add -b feat/x ": { status: 128, stdout: "" } },
+    "/dev/trevor": { "worktree add -b feat/x ": { status: 128, stdout: "" } },
   });
   // Force any `worktree add` to fail by overriding the prefix path.
   const mgr = manager(fs, (cwd) => (args) => {
@@ -147,7 +147,7 @@ test("summaries lists a baseline row first, then managed worktrees with git stat
   const rows = mgr.summaries(ctx.basePath);
   assert.equal(rows[0]?.baseline, true);
   assert.equal(rows[0]?.current, true); // currentPath === basePath
-  assert.equal(rows[0]?.path, "~/trevorV2");
+  assert.equal(rows[0]?.path, "~/trevor");
   assert.equal(rows.length, 2);
   assert.equal(rows[1]?.baseline, false);
   assert.equal(rows[1]?.branch, "main"); // git-read from the worktree (clean default)
@@ -175,7 +175,7 @@ test("resolveSwitch returns the baseline target, a worktree target, and blocks a
   const mgr = manager(fs, gitFactory());
   assert.deepEqual(mgr.resolveSwitch("baseline", ctx.basePath), {
     ok: true,
-    path: "/dev/trevorV2",
+    path: "/dev/trevor",
     sessionId: projectSessionId(ctx.baseRepo),
   });
 

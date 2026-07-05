@@ -224,7 +224,7 @@ async function runSubcommand(args: readonly string[]): Promise<string | null> {
  * extension. All orchestration lives in launch.ts; this only wires the real platform and prints the
  * secret-free status line.
  */
-const USAGE = `trevor - open this project in Trevor V2
+const USAGE = `trevor - open this project in Trevor
 
 Usage:
   trevor                       Resolve the project (nearest git root), ready the shared services,
@@ -300,7 +300,7 @@ async function main(): Promise<void> {
     return;
   }
   if (args.includes("--version") || args.includes("-v")) {
-    process.stdout.write("trevor v2 (trevorV2 launcher)\n");
+    process.stdout.write("trevor launcher\n");
     return;
   }
   // `trevor open <session>` is a launch variant (spinner + full platform), handled before the

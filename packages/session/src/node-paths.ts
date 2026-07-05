@@ -8,18 +8,18 @@ export type TrevorPathEnv = Readonly<Record<string, string | undefined>>;
  * (the XDG split). CONFIG lives in {@link TREVOR_HOME} - hand-edited, portable, backed up; STATE
  * lives in {@link TREVOR_STATE_HOME} - machine-local runtime data the app owns. The node-only owner
  * of both, so every store/host/launcher derives its paths from one place instead of re-joining
- * `~/.trevorV2/...` ad hoc. Browser code imports only browser-safe subpaths.
+ * `~/.trevor/...` ad hoc. Browser code imports only browser-safe subpaths.
  */
 
 /** The config home's directory name under `$HOME` (the dotfolder users point `TREVOR_HOME` at). */
-export const TREVOR_HOME_DIRNAME = ".trevorV2";
+export const TREVOR_HOME_DIRNAME = ".trevor";
 
 /** The state home's directory name under the XDG state base (`$XDG_STATE_HOME`/`~/.local/state`). */
-export const TREVOR_STATE_DIRNAME = "trevorV2";
+export const TREVOR_STATE_DIRNAME = "trevor";
 
 /**
  * The config home: user-editable, portable configuration - `AGENTS.md`, `.env.op`, `auth.json`,
- * `config.jsonc`. NOT runtime state. Override with `TREVOR_HOME`; defaults to `~/.trevorV2`.
+ * `config.jsonc`. NOT runtime state. Override with `TREVOR_HOME`; defaults to `~/.trevor`.
  */
 export function resolveTrevorHome(
   env: TrevorPathEnv = process.env,
@@ -35,7 +35,7 @@ export const TREVOR_HOME = resolveTrevorHome();
  * blobs, managed worktrees, the host/lock/project registries, logs, and provider observations. Kept
  * out of the config dir so a backup or a config sync never drags the session history along, and a
  * config-dir rename never orphans the data. Precedence: explicit `TREVOR_STATE_HOME`, then
- * `$XDG_STATE_HOME/trevorV2`, then `~/.local/state/trevorV2`.
+ * `$XDG_STATE_HOME/trevor`, then `~/.local/state/trevor`.
  */
 export function resolveTrevorStateHome(
   env: TrevorPathEnv = process.env,
@@ -97,8 +97,8 @@ export interface RootCategory {
   readonly description: string;
 }
 
-/** The legacy `~/.trevor` dotdir from pre-XDG-split runs - detect-only, never a new-write target. */
-export const LEGACY_TREVOR_DIRNAME = ".trevor";
+/** The legacy `~/.trevor_legacy` dotdir from pre-XDG-split runs - detect-only, never a new-write target. */
+export const LEGACY_TREVOR_DIRNAME = ".trevor_legacy";
 
 /**
  * Resolves the full root taxonomy from injected env + home (pure, so diagnostics and tests stay
@@ -142,7 +142,7 @@ export function resolveRootPolicy(
       envOverride: null,
       writable: false,
       description:
-        "Old ~/.trevor data from pre-XDG-split runs; detect-only, never a new-write target.",
+        "Old ~/.trevor_legacy data from pre-XDG-split runs; detect-only, never a new-write target.",
     },
     {
       id: "temp",
@@ -218,7 +218,7 @@ export interface StorageEntry {
  * is the escape hatch the taxonomy is enforced through (D-006): a new file-backed feature must add its
  * location here - and cite this plan - rather than invent an unclassified home-relative path. Tests
  * assert every entry maps to a known category and that names are unique; the host drift guard fails if
- * a new `~/.trevorV2` / `~/.trevor` literal appears outside this owner module.
+ * a new home-root `~/.trevor` literal appears outside this owner module.
  */
 export const STORAGE_INVENTORY: readonly StorageEntry[] = [
   // config (TREVOR_HOME) - hand-editable, portable settings only
@@ -401,12 +401,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description:
       "Per-project permanently-ignored CLAUDE.md migration paths (plan 26): { <projectRoot>: [relPath, ...] }.",
   },
-  // legacy (~/.trevor) - detect-only
+  // legacy (~/.trevor_legacy) - detect-only
   {
     name: "legacy-root",
     category: "legacy",
     relativePath: "",
-    description: "Old ~/.trevor data (sessions.db, blobs) from pre-XDG-split runs.",
+    description: "Old ~/.trevor_legacy data (sessions.db, blobs) from pre-XDG-split runs.",
   },
   // external (read-only)
   {

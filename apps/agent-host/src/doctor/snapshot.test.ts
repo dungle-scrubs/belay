@@ -38,8 +38,8 @@ function root(over: Partial<DoctorRootProbe> & Pick<DoctorRootProbe, "id">): Doc
 
 /** A healthy resolved root set (sanitized paths) the storage default builds from. */
 const HEALTHY_ROOTS: readonly DoctorRootProbe[] = [
-  root({ id: "config", label: "config", path: "~/.trevorV2" }),
-  root({ id: "state", label: "state", path: "~/.local/state/trevorV2" }),
+  root({ id: "config", label: "config", path: "~/.trevor" }),
+  root({ id: "state", label: "state", path: "~/.local/state/trevor" }),
   root({
     id: "legacy",
     label: "legacy",
@@ -72,7 +72,7 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
     providers: [{ key: "qwen", label: "Qwen", model: "qwen3", kind: "local", status: "warm" }],
     internet: ONLINE,
     tools: ["read", "grep", "bash"],
-    workspace: { cwd: "~/dev/trevorV2", workspace: "~/dev/trevorV2", branch: "main" },
+    workspace: { cwd: "~/dev/trevor", workspace: "~/dev/trevor", branch: "main" },
     storage: { roots: HEALTHY_ROOTS },
     build: { version: "2.0.0", node: "v22.0.0", runtime: "trevor" },
     peripherals: {
@@ -619,8 +619,8 @@ test("an unwritable state root is an error finding and lifts the Storage area to
   const finding = area?.findings?.find((f) => f.id === "storage.state");
   assert.ok(finding, "an unwritable root gets a problem finding");
   assert.equal(finding?.status, "error");
-  assert.equal(finding?.source, "~/.local/state/trevorV2");
-  assert.equal(finding?.nextAction?.command, "~/.local/state/trevorV2");
+  assert.equal(finding?.source, "~/.local/state/trevor");
+  assert.equal(finding?.nextAction?.command, "~/.local/state/trevor");
   assert.ok(
     area?.facts?.some((f) => f.label === "state" && /not writable/.test(f.value)),
     "the state fact reads not writable",
@@ -779,10 +779,10 @@ test("the Workspace area shows the cwd-lock state as a fact (held reads ok, no f
   const snap = buildDoctorSnapshot(
     input({
       workspace: {
-        cwd: "~/dev/trevorV2",
-        workspace: "~/dev/trevorV2",
+        cwd: "~/dev/trevor",
+        workspace: "~/dev/trevor",
         branch: "main",
-        cwdLock: { state: "held", path: "~/.local/state/trevorV2/cwd-locks/x.lock" },
+        cwdLock: { state: "held", path: "~/.local/state/trevor/cwd-locks/x.lock" },
       },
     }),
   );
@@ -802,12 +802,12 @@ test("a contended cwd lock raises a warn finding with a non-destructive next act
   const snap = buildDoctorSnapshot(
     input({
       workspace: {
-        cwd: "~/dev/trevorV2",
-        workspace: "~/dev/trevorV2",
+        cwd: "~/dev/trevor",
+        workspace: "~/dev/trevor",
         branch: "main",
         cwdLock: {
           state: "contended",
-          path: "~/.local/state/trevorV2/cwd-locks/x.lock",
+          path: "~/.local/state/trevor/cwd-locks/x.lock",
           owner: "host deadbeef (session other-9999, pid 4242, alive, ...)",
         },
       },
@@ -827,12 +827,12 @@ test("a stale cwd lock raises a warn finding that explains it is auto-reclaimed"
   const snap = buildDoctorSnapshot(
     input({
       workspace: {
-        cwd: "~/dev/trevorV2",
-        workspace: "~/dev/trevorV2",
+        cwd: "~/dev/trevor",
+        workspace: "~/dev/trevor",
         branch: "main",
         cwdLock: {
           state: "stale",
-          path: "~/.local/state/trevorV2/cwd-locks/x.lock",
+          path: "~/.local/state/trevor/cwd-locks/x.lock",
           owner: "host deadbeef (session gone-0000, pid 999, no live process, ...)",
         },
       },

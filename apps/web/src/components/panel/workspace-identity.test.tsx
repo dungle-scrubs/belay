@@ -30,9 +30,9 @@ test("gitLine returns null when there is no branch and no commit", () => {
 });
 
 test("renders cwd and a clean branch line", () => {
-  const { container } = render(<WorkspaceIdentity cwd="~/dev/trevorV2" git={base} />);
+  const { container } = render(<WorkspaceIdentity cwd="~/dev/trevor" git={base} />);
   const text = container.textContent ?? "";
-  assert.ok(text.includes("~/dev/trevorV2"), text);
+  assert.ok(text.includes("~/dev/trevor"), text);
   assert.ok(text.includes("main"), text);
   assert.ok(!text.includes("↑") && !text.includes("↓"), "no arrows when ahead/behind are 0");
 });
@@ -40,7 +40,7 @@ test("renders cwd and a clean branch line", () => {
 test("renders dirty asterisk and ahead/behind arrows", () => {
   const { container } = render(
     <WorkspaceIdentity
-      cwd="~/dev/trevorV2"
+      cwd="~/dev/trevor"
       git={{ ...base, branch: "feat/x", dirty: true, ahead: 2, behind: 3 }}
     />,
   );

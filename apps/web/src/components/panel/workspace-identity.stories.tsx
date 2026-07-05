@@ -30,38 +30,38 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const CleanBranch: Story = {
-  args: { cwd: "~/dev/trevorV2", git: base },
+  args: { cwd: "~/dev/trevor", git: base },
 };
 
 export const DirtyBranch: Story = {
-  args: { cwd: "~/dev/trevorV2", git: { ...base, branch: "feature/sidebar", dirty: true } },
+  args: { cwd: "~/dev/trevor", git: { ...base, branch: "feature/sidebar", dirty: true } },
 };
 
 export const AheadOnly: Story = {
-  args: { cwd: "~/dev/trevorV2", git: { ...base, ahead: 3 } },
+  args: { cwd: "~/dev/trevor", git: { ...base, ahead: 3 } },
 };
 
 export const BehindOnly: Story = {
-  args: { cwd: "~/dev/trevorV2", git: { ...base, behind: 5 } },
+  args: { cwd: "~/dev/trevor", git: { ...base, behind: 5 } },
 };
 
 export const Diverged: Story = {
   args: {
-    cwd: "~/dev/trevorV2",
+    cwd: "~/dev/trevor",
     git: { ...base, branch: "feat/x", dirty: true, ahead: 2, behind: 4 },
   },
 };
 
 export const DetachedHead: Story = {
   args: {
-    cwd: "~/dev/trevorV2",
+    cwd: "~/dev/trevor",
     git: { ...base, branch: null, detached: "a1b2c3d", upstream: false },
   },
 };
 
 export const NoUpstream: Story = {
   args: {
-    cwd: "~/dev/trevorV2",
+    cwd: "~/dev/trevor",
     git: { ...base, branch: "wip/local", upstream: false, ahead: 0, behind: 0 },
   },
 };
@@ -72,14 +72,14 @@ export const NonGitCwd: Story = {
 
 export const LongPath: Story = {
   args: {
-    cwd: "~/dev/trevorV2/apps/agent-host/src/very/deeply/nested/directory/structure",
+    cwd: "~/dev/trevor/apps/agent-host/src/very/deeply/nested/directory/structure",
     git: base,
   },
 };
 
 export const LongBranch: Story = {
   args: {
-    cwd: "~/dev/trevorV2",
+    cwd: "~/dev/trevor",
     git: {
       ...base,
       branch: "feature/extremely-long-branch-name-that-should-truncate-cleanly",

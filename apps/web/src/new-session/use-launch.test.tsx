@@ -75,7 +75,7 @@ test("a reused host navigates immediately without a host.online wait", async () 
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
 
-  act(() => result.current.launch("~/dev/trevorV2"));
+  act(() => result.current.launch("~/dev/trevor"));
   act(() => {
     deliverControl(
       rec.connects,
@@ -218,7 +218,7 @@ test("a launched host whose session already had a host.online navigates (a stale
     ) as SessionEvent,
   ]);
 
-  act(() => result.current.launch("~/dev/trevorV2"));
+  act(() => result.current.launch("~/dev/trevor"));
   act(() => {
     deliverControl(
       rec.connects,

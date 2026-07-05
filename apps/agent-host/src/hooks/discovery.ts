@@ -50,7 +50,7 @@ export interface HookDiscoveryReport {
 
 /**
  * One legacy V1 `HOOK.md` handler found near a hook root (plan 25 M10, D-009): V1 kept hooks as
- * `.trevor/hooks/<id>/HOOK.md` files with frontmatter. V2 REPORTS them for migration - discovery
+ * `.trevor/hooks/<id>/HOOK.md` files with frontmatter. Trevor reports them for migration - discovery
  * never parses them into definitions and never executes them. `executable` marks a file whose
  * frontmatter declares a `command:` (the V1 executable-handler shape) vs a prompt-only file.
  */
@@ -79,9 +79,9 @@ const MAX_LEGACY_FRONTMATTER_CHARS = 4_096;
 /** The two V1 HOOK.md locations, relative to their anchors. */
 const LEGACY_PROJECT_HOOKS_DIR = join(".trevor", "hooks");
 
-/** The V1 user hooks home, `~/.trevor/hooks` (V1's config root, not V2's TREVOR_HOME). */
+/** The legacy user hooks home, `~/.trevor_legacy/hooks` (not active TREVOR_HOME). */
 function defaultLegacyUserHooksDir(): string {
-  return join(homedir(), ".trevor", "hooks");
+  return join(homedir(), ".trevor_legacy", "hooks");
 }
 
 export interface LegacyHookScanRoots {

@@ -1,4 +1,4 @@
-# Trevor V2 - Domain Context
+# Trevor - Domain Context
 
 Durable home for cross-cutting domain vocabulary. The former canonical umbrella
 (`.plans/trevor-v2/implementation.md` §3) is being retired in favor of the numbered plans; new
@@ -38,7 +38,7 @@ cross-plan terms are anchored here. When a term is baked into the protocol, keep
 
 ## Dropped term: "teams"
 
-"Teams" (V1 multi-user roster/inbox/DM/audit) is **permanently cut** (umbrella §4, D-003). Do **not**
+"Teams" (trevor legacy multi-user roster/inbox/DM/audit) is **permanently cut** (umbrella §4, D-003). Do **not**
 reintroduce "teams" for multi-agent orchestration. The orchestration nouns are **workflow** (the
 engine/pattern) and **fleet** (the worktree application). Likewise, **inline self-validation** is cut
 (D-033); a verifier *subagent/auditor leaf* is distinct and allowed.
@@ -131,8 +131,8 @@ token spaces (`$` vs `!`), see the reconciliation note below.
 | Term | Meaning | Notes |
 |---|---|---|
 | **Argument substitution** | Replacing `$`-placeholders in a command file's body with the invocation's arguments at dispatch. The `$`-space feature. | The shared engine is `packages/session/src/command-args.ts` (`tokenizeArgs` + `expandArgs`), dual-consumed by the host (authoritative) and web (keystroke preview), per the `command-family.ts:10` hoist doctrine. |
-| **Positional `$N`** | 0-based positional argument: `$0` = first token, `$1` = second, … | Diverges from V1 Trevor (1-based) and shell; chosen for Claude-Code parity (D-001). A reference beyond the provided count substitutes empty string (D-004). |
-| **`$ARGUMENTS`** | Expands to the **raw** argument string exactly as typed - quotes and interior whitespace preserved. | Not the tokenized re-join (V1's behavior); positional `$N` use tokenized values, `$ARGUMENTS` stays raw (D-002). |
+| **Positional `$N`** | 0-based positional argument: `$0` = first token, `$1` = second, … | Diverges from trevor legacy (1-based) and shell; chosen for Claude-Code parity (D-001). A reference beyond the provided count substitutes empty string (D-004). |
+| **`$ARGUMENTS`** | Expands to the **raw** argument string exactly as typed - quotes and interior whitespace preserved. | Not the tokenized re-join (trevor legacy behavior); positional `$N` use tokenized values, `$ARGUMENTS` stays raw (D-002). |
 | **Shell-style tokenizer** | Whitespace splits tokens; single **and** double quotes group + strip; backslash escapes the next char; `\$1` stays literal while `$1` expands. | Richer than `loop-parser.ts` `tokenize()` (double-quote-only regex, no escapes), so a new char-scanning module, not a reuse (D-003). |
 | **Custom command file** | A `.trevor/commands/*.md` (project root) or config-home (user root) file; command name = `/<basename>`. Loaded into the plan-40 `CommandFile` primitive (`rootKind` project/user). | Project overrides same-named user file (D-006). Loader mirrors `skills/skills.ts` ordered roots. `.claude/commands/` import is a non-goal (D-009). |
 | **No-placeholder auto-append** | When a body carries NO `$` placeholder and the invocation has non-empty args, the raw args are appended as a trailing `ARGUMENTS: <raw>` block. | Claude-Code parity default (the M2 open question, resolved): a placeholder-free command body still receives its input. An escaped `\$0` is literal, not a placeholder, so it does not suppress the append. |

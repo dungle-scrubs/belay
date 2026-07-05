@@ -10,9 +10,9 @@ const NOW = Date.parse("2026-06-26T12:00:00.000Z");
 const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   sessionId: "s",
   title: "a session",
-  cwd: "~/dev/trevorV2",
-  workspace: "~/dev/trevorV2",
-  project: "trevorV2",
+  cwd: "~/dev/trevor",
+  workspace: "~/dev/trevor",
+  project: "trevor",
   branch: "main",
   git: null,
   createdAt: "2026-06-25T12:00:00.000Z",
@@ -46,7 +46,7 @@ function renderModal(
   const onOpenChange = vi.fn();
   const context: ResumeContext = {
     currentSessionId: "cur",
-    currentProject: "trevorV2",
+    currentProject: "trevor",
     busy: false,
     nowMs: NOW,
   };
@@ -89,7 +89,7 @@ test("the current session row is disabled and never resumes", () => {
 
 test("while busy, switching to another session is blocked", () => {
   const { onResume } = renderModal({
-    context: { currentSessionId: "cur", currentProject: "trevorV2", busy: true, nowMs: NOW },
+    context: { currentSessionId: "cur", currentProject: "trevor", busy: true, nowMs: NOW },
   });
   fireEvent.click(screen.getByText("other session"));
   assert.equal(onResume.mock.calls.length, 0);

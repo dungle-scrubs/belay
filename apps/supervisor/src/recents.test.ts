@@ -18,7 +18,7 @@ function fakeFs(files: Record<string, string> = {}): LauncherFs {
   };
 }
 
-const HOME = "/state/trevorV2";
+const HOME = "/state/trevor";
 
 test("readRecents returns projects.json entries recency-sorted (newest first)", () => {
   const fs = fakeFs({

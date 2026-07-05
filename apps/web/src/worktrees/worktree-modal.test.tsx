@@ -7,8 +7,8 @@ import { WORKTREE_CHOOSER, type WorktreeRowsContext } from "./worktree-rows";
 
 const wt = (over: Partial<WorktreeSummary>): WorktreeSummary => ({
   id: "wt",
-  baseRepo: "/dev/trevorV2",
-  baseRepoName: "trevorV2",
+  baseRepo: "/dev/trevor",
+  baseRepoName: "trevor",
   branch: "feat/x",
   path: "~/.worktrees/h/feat-x-wt",
   sessionId: "s-wt",
@@ -59,7 +59,7 @@ test("renders the baseline + worktree branches grouped by base repo", () => {
   renderModal();
   assert.ok(screen.getByText("main (baseline)"));
   assert.ok(screen.getByText("feat/sidebar"));
-  assert.ok(screen.getByText("trevorV2")); // base-repo group heading
+  assert.ok(screen.getByText("trevor")); // base-repo group heading
 });
 
 test("switching to a worktree fires onSwitch with its id and closes", () => {

@@ -12,10 +12,10 @@ import { WORKTREE_CHOOSER, type WorktreeActivity, type WorktreeRowsContext } fro
 
 const wt = (over: Partial<WorktreeSummary>): WorktreeSummary => ({
   id: "wt",
-  baseRepo: "/dev/trevorV2",
-  baseRepoName: "trevorV2",
+  baseRepo: "/dev/trevor",
+  baseRepoName: "trevor",
   branch: "feat/x",
-  path: "~/.trevorV2/.worktrees/h/feat-x-wt",
+  path: "~/.trevor/.worktrees/h/feat-x-wt",
   sessionId: "s-wt",
   dirty: false,
   ahead: 0,
@@ -32,7 +32,7 @@ const worktrees: WorktreeSummary[] = [
   wt({
     id: "baseline",
     branch: "main",
-    path: "~/dev/trevorV2",
+    path: "~/dev/trevor",
     baseline: true,
     current: true,
     sessionId: "base",
@@ -122,12 +122,12 @@ export const Empty: Story = {
 export const ManyRows: Story = {
   args: {
     worktrees: [
-      wt({ id: "baseline", branch: "main", path: "~/dev/trevorV2", baseline: true, current: true }),
+      wt({ id: "baseline", branch: "main", path: "~/dev/trevor", baseline: true, current: true }),
       ...Array.from({ length: 30 }, (_, i) =>
         wt({
           id: `m${i}`,
           branch: `feat/branch-${i}`,
-          path: `~/.trevorV2/.worktrees/h/feat-branch-${i}`,
+          path: `~/.trevor/.worktrees/h/feat-branch-${i}`,
           dirty: i % 4 === 0,
           ahead: i % 3,
           sessionId: `s-m${i}`,
@@ -140,11 +140,11 @@ export const ManyRows: Story = {
 export const LongBranch: Story = {
   args: {
     worktrees: [
-      wt({ id: "baseline", branch: "main", path: "~/dev/trevorV2", baseline: true }),
+      wt({ id: "baseline", branch: "main", path: "~/dev/trevor", baseline: true }),
       wt({
         id: "long",
         branch: "feature/extremely-long-branch-name-that-should-truncate-cleanly-in-the-row",
-        path: "~/.trevorV2/.worktrees/h/feature-extremely-long-branch-name-that-should-truncate-cleanly-in-the-row-abcd",
+        path: "~/.trevor/.worktrees/h/feature-extremely-long-branch-name-that-should-truncate-cleanly-in-the-row-abcd",
         dirty: true,
         ahead: 12,
         behind: 7,

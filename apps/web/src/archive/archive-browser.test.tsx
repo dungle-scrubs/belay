@@ -9,8 +9,8 @@ const NOW = Date.parse("2026-06-29T12:00:00.000Z");
 function row(over: Partial<ArchivedSessionRow> & { sessionId: string }): ArchivedSessionRow {
   return {
     title: `Session ${over.sessionId}`,
-    project: "trevorV2",
-    cwd: "~/dev/trevorV2",
+    project: "trevor",
+    cwd: "~/dev/trevor",
     updatedAt: "2026-06-29T09:00:00.000Z",
     eventCount: 42,
     protectedReason: null,

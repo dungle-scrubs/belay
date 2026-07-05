@@ -9,9 +9,9 @@
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "dev:op": "opchain primary --read op run --env-file=${TREVOR_HOME:-$HOME/.trevorV2}/.env.op -- tsx watch src/main.ts",
+    "dev:op": "opchain primary --read op run --env-file=${TREVOR_HOME:-$HOME/.trevor}/.env.op -- tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "start:op": "opchain primary --read op run --env-file=${TREVOR_HOME:-$HOME/.trevorV2}/.env.op -- tsx src/main.ts",
+    "start:op": "opchain primary --read op run --env-file=${TREVOR_HOME:-$HOME/.trevor}/.env.op -- tsx src/main.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {

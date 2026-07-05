@@ -5,7 +5,7 @@ import { sessionStoreDbPath } from "./config";
 test("session-store defaults its database under the STATE home, not the config dir", () => {
   assert.equal(
     sessionStoreDbPath({}, "/Users/kevin"),
-    "/Users/kevin/.local/state/trevorV2/sessions.db",
+    "/Users/kevin/.local/state/trevor/sessions.db",
   );
 });
 
@@ -16,7 +16,7 @@ test("session-store follows TREVOR_STATE_HOME / XDG_STATE_HOME", () => {
   );
   assert.equal(
     sessionStoreDbPath({ XDG_STATE_HOME: "/var/state" }, "/Users/kevin"),
-    "/var/state/trevorV2/sessions.db",
+    "/var/state/trevor/sessions.db",
   );
 });
 

@@ -13,9 +13,9 @@ import {
   TREVOR_STATE_DIRNAME,
 } from "./node-paths";
 
-test("resolveTrevorHome defaults to the Trevor V2 config home", () => {
-  assert.equal(resolveTrevorHome({}, "/Users/kevin"), "/Users/kevin/.trevorV2");
-  assert.equal(TREVOR_HOME_DIRNAME, ".trevorV2");
+test("resolveTrevorHome defaults to the Trevor config home", () => {
+  assert.equal(resolveTrevorHome({}, "/Users/kevin"), "/Users/kevin/.trevor");
+  assert.equal(TREVOR_HOME_DIRNAME, ".trevor");
 });
 
 test("resolveTrevorHome honors the TREVOR_HOME override", () => {
@@ -26,14 +26,14 @@ test("resolveTrevorHome honors the TREVOR_HOME override", () => {
 });
 
 test("resolveTrevorStateHome defaults under the XDG state base, not the config dir", () => {
-  assert.equal(resolveTrevorStateHome({}, "/Users/kevin"), "/Users/kevin/.local/state/trevorV2");
-  assert.equal(TREVOR_STATE_DIRNAME, "trevorV2");
+  assert.equal(resolveTrevorStateHome({}, "/Users/kevin"), "/Users/kevin/.local/state/trevor");
+  assert.equal(TREVOR_STATE_DIRNAME, "trevor");
 });
 
 test("resolveTrevorStateHome honors XDG_STATE_HOME", () => {
   assert.equal(
     resolveTrevorStateHome({ XDG_STATE_HOME: "/var/state" }, "/Users/kevin"),
-    "/var/state/trevorV2",
+    "/var/state/trevor",
   );
 });
 
@@ -70,11 +70,8 @@ test("resolveRootPolicy resolves all approved root categories in a stable order"
 });
 
 test("config and state categories resolve through the home/state owners", () => {
-  assert.equal(rootCategory("config", {}, "/Users/kevin").path, "/Users/kevin/.trevorV2");
-  assert.equal(
-    rootCategory("state", {}, "/Users/kevin").path,
-    "/Users/kevin/.local/state/trevorV2",
-  );
+  assert.equal(rootCategory("config", {}, "/Users/kevin").path, "/Users/kevin/.trevor");
+  assert.equal(rootCategory("state", {}, "/Users/kevin").path, "/Users/kevin/.local/state/trevor");
 });
 
 test("legacy and external roots are read-only and correctly owned", () => {
@@ -96,7 +93,7 @@ test("env overrides affect only the intended root", () => {
   assert.equal(rootCategory("config", configOverride, "/Users/kevin").path, "/tmp/cfg");
   assert.equal(
     rootCategory("state", configOverride, "/Users/kevin").path,
-    "/Users/kevin/.local/state/trevorV2",
+    "/Users/kevin/.local/state/trevor",
     "TREVOR_HOME must not move the state root",
   );
 
@@ -104,7 +101,7 @@ test("env overrides affect only the intended root", () => {
   assert.equal(rootCategory("state", stateOverride, "/Users/kevin").path, "/tmp/state");
   assert.equal(
     rootCategory("config", stateOverride, "/Users/kevin").path,
-    "/Users/kevin/.trevorV2",
+    "/Users/kevin/.trevor",
     "TREVOR_STATE_HOME must not move the config root",
   );
 });
@@ -150,7 +147,7 @@ test("storagePath resolves an entry under its category root and follows root ove
   assert.ok(sessionsDb);
   assert.equal(
     storagePath(sessionsDb, {}, "/Users/kevin"),
-    "/Users/kevin/.local/state/trevorV2/sessions.db",
+    "/Users/kevin/.local/state/trevor/sessions.db",
   );
   assert.equal(
     storagePath(sessionsDb, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
@@ -162,7 +159,7 @@ test("the model-prefs entry is a config-home file that follows the TREVOR_HOME o
   const entry = STORAGE_INVENTORY.find((e) => e.name === "model-prefs");
   assert.ok(entry, "model-prefs is in the storage inventory");
   assert.equal(entry.category, "config", "model-prefs lives under the config home, not state");
-  assert.equal(storagePath(entry, {}, "/Users/kevin"), "/Users/kevin/.trevorV2/model-prefs.json");
+  assert.equal(storagePath(entry, {}, "/Users/kevin"), "/Users/kevin/.trevor/model-prefs.json");
   assert.equal(
     storagePath(entry, { TREVOR_HOME: "/tmp/cfg" }, "/Users/kevin"),
     "/tmp/cfg/model-prefs.json",
@@ -170,7 +167,7 @@ test("the model-prefs entry is a config-home file that follows the TREVOR_HOME o
   );
   assert.equal(
     storagePath(entry, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
-    "/Users/kevin/.trevorV2/model-prefs.json",
+    "/Users/kevin/.trevor/model-prefs.json",
   );
 });
 
@@ -178,7 +175,7 @@ test("the docs-corpus root is classified under the state home and follows the st
   const docs = STORAGE_INVENTORY.find((entry) => entry.name === "docs-corpus");
   assert.ok(docs, "docs-corpus is in the storage inventory");
   assert.equal(docs.category, "state");
-  assert.equal(storagePath(docs, {}, "/Users/kevin"), "/Users/kevin/.local/state/trevorV2/docs");
+  assert.equal(storagePath(docs, {}, "/Users/kevin"), "/Users/kevin/.local/state/trevor/docs");
   assert.equal(
     storagePath(docs, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
     "/tmp/state/docs",
@@ -193,11 +190,11 @@ test("the observation corpus resolves under the state home and follows the state
   assert.equal(dir.category, "state");
   assert.equal(
     storagePath(dir, {}, "/Users/kevin"),
-    "/Users/kevin/.local/state/trevorV2/observations",
+    "/Users/kevin/.local/state/trevor/observations",
   );
   assert.equal(
     storagePath(jsonl, { XDG_STATE_HOME: "/xdg/state" }, "/Users/kevin"),
-    "/xdg/state/trevorV2/observations/provider-failures.jsonl",
+    "/xdg/state/trevor/observations/provider-failures.jsonl",
   );
   assert.equal(
     storagePath(index, { TREVOR_STATE_HOME: "/tmp/state" }, "/Users/kevin"),
@@ -205,7 +202,7 @@ test("the observation corpus resolves under the state home and follows the state
   );
 });
 
-test("legacy-root resolves to ~/.trevor and external entries stay read-only", () => {
+test("legacy-root resolves to ~/.trevor_legacy and external entries stay read-only", () => {
   const legacy = STORAGE_INVENTORY.find((entry) => entry.name === "legacy-root");
   assert.ok(legacy);
   assert.equal(storagePath(legacy, {}, "/Users/kevin"), `/Users/kevin/${LEGACY_TREVOR_DIRNAME}`);

@@ -16,7 +16,7 @@ import { executeTool } from "./index";
 
 const SNAPSHOT: DoctorSnapshot = doctorSnapshot({
   checkedAt: "just now",
-  host: { workspace: "~/dev/trevorV2", instanceId: "abcd1234", role: "leader" },
+  host: { workspace: "~/dev/trevor", instanceId: "abcd1234", role: "leader" },
   areas: [
     doctorArea("core", "ok", {
       label: "Core",

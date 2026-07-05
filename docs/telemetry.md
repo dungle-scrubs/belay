@@ -32,7 +32,7 @@ Inspect it with no collector at all:
 
 ```sh
 TREVOR_OTEL_EXPORTER=file trevor
-tail -f "${TREVOR_STATE_HOME:-$HOME/.local/state/trevorV2}/otel/agent-host.jsonl"
+tail -f "${TREVOR_STATE_HOME:-$HOME/.local/state/trevor}/otel/agent-host.jsonl"
 ```
 
 `TREVOR_PROVIDER_TRACE=1` additionally writes `otel/provider-attempts.jsonl` (failure class, retry

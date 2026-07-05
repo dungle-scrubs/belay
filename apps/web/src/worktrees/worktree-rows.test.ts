@@ -9,8 +9,8 @@ import {
 
 const wt = (over: Partial<WorktreeSummary>): WorktreeSummary => ({
   id: "wt",
-  baseRepo: "/dev/trevorV2",
-  baseRepoName: "trevorV2",
+  baseRepo: "/dev/trevor",
+  baseRepoName: "trevor",
   branch: "feat/x",
   path: "~/.worktrees/h/feat-x-wt",
   sessionId: "s-wt",
@@ -36,7 +36,7 @@ test("baseline row is labeled and grouped by base repo", () => {
     ctx(),
   );
   assert.equal(rows[0]?.label, "main (baseline)");
-  assert.equal(rows[0]?.group, "trevorV2");
+  assert.equal(rows[0]?.group, "trevor");
   assert.equal(rows[1]?.label, "feat/x");
 });
 
@@ -89,10 +89,10 @@ test("while busy, every non-current row is disabled (switch-blocked)", () => {
 
 test("rows from different base repos carry distinct group headings", () => {
   const rows = buildWorktreeRows(
-    [wt({ id: "a", baseRepoName: "trevorV2" }), wt({ id: "b", baseRepoName: "opchain" })],
+    [wt({ id: "a", baseRepoName: "trevor" }), wt({ id: "b", baseRepoName: "opchain" })],
     ctx(),
   );
-  assert.equal(rows[0]?.group, "trevorV2");
+  assert.equal(rows[0]?.group, "trevor");
   assert.equal(rows[1]?.group, "opchain");
 });
 

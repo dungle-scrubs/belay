@@ -47,12 +47,12 @@ test("a legacy text dump falls back to the plain command-result row", () => {
   const { container } = render(
     <DoctorResult
       command="/doctor"
-      text={"workspace: ~/dev/trevorV2\nproviders:\n  qwen - warm"}
+      text={"workspace: ~/dev/trevor\nproviders:\n  qwen - warm"}
       ok
     />,
   );
   assert.ok(
-    (container.textContent ?? "").includes("workspace: ~/dev/trevorV2"),
+    (container.textContent ?? "").includes("workspace: ~/dev/trevor"),
     "the text dump shows verbatim",
   );
 });

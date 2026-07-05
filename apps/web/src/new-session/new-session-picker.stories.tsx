@@ -19,7 +19,7 @@ const project = (root: string, ms: number): SupervisorProject => ({
 });
 
 const RECENTS: SupervisorProject[] = [
-  project("~/dev/trevorV2", 1000 * 60 * 12),
+  project("~/dev/trevor", 1000 * 60 * 12),
   project("~/dev/opchain", 1000 * 60 * 60 * 4),
   project("~/dev/launchdawg", 1000 * 60 * 60 * 24),
   project("~/dev/emberlm", 1000 * 60 * 60 * 24 * 3),

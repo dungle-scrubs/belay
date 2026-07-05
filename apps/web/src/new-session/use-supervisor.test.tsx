@@ -67,7 +67,7 @@ test("opening the picker publishes projects.list.requested and renders the retur
       sessionEvents.projectsListResult({
         requestId,
         projects: [
-          { root: "~/dev/trevorV2", sessionId: "s1", updatedAt: "2026-07-04T11:00:00.000Z" },
+          { root: "~/dev/trevor", sessionId: "s1", updatedAt: "2026-07-04T11:00:00.000Z" },
         ],
       }),
       1,
@@ -75,7 +75,7 @@ test("opening the picker publishes projects.list.requested and renders the retur
   });
   assert.deepEqual(
     result.current.recents.map((r) => r.root),
-    ["~/dev/trevorV2"],
+    ["~/dev/trevor"],
   );
 });
 
@@ -149,7 +149,7 @@ test("a reused host navigates immediately without a host.online wait", async () 
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});
 
-  act(() => result.current.onPickRecent("~/dev/trevorV2"));
+  act(() => result.current.onPickRecent("~/dev/trevor"));
   const requestId = publishedTo(rec.publishedBy(SUPERVISOR_SESSION_ID), "session.launch.requested")
     ?.payload.requestId as string;
   act(() => {

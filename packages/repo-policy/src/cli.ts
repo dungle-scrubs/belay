@@ -3,11 +3,15 @@ import {
   formatFilenameViolations,
   listGitTrackedFiles,
 } from "./filename-policy";
+import { findResidualNameViolations, formatResidualNameViolations } from "./residual-name-policy";
 
-const violations = findFilenameViolations(listGitTrackedFiles());
+const paths = listGitTrackedFiles();
+const filenameViolations = findFilenameViolations(paths);
+const residualNameViolations = findResidualNameViolations(paths);
 
-console.log(formatFilenameViolations(violations));
+console.log(formatFilenameViolations(filenameViolations));
+console.log(formatResidualNameViolations(residualNameViolations));
 
-if (violations.length > 0) {
+if (filenameViolations.length > 0 || residualNameViolations.length > 0) {
   process.exitCode = 1;
 }

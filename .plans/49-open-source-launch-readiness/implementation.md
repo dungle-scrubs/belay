@@ -7,14 +7,14 @@
 Prepare the codebase to be released as an open-source product. Four independent workstreams remove the
 blockers that would bite a first public release: the `tool_script` sandbox is macOS-only, the repo
 carries owner-specific private workflow, configuration is a scatter of ~25 env vars with no file, and
-the "Trevor V2" identity is personal. This plan is **business-model-agnostic** - every workstream is a
+the "Trevor" identity is personal. This plan is **business-model-agnostic** - every workstream is a
 prerequisite whether the project ships fully-open or open-core, so no licensing choice is baked in.
 <!-- D-001 -->
 
 ## 0. Hard Dependencies
 
 - [ ] **`.plans/56-rename-to-trevor` (hard dependency, WS4; sequenced first).** Plan 56 performs the real
-  project rename - the `~/.trevorV2` -> `~/.trevor` home dir, the working directory, the GitHub repo, and
+  project rename - the `~/.trevor` -> `~/.trevor` home dir, the working directory, the GitHub repo, and
   all identifiers/fixtures - and lands before 49. WS4 therefore builds on the completed rename and does not
   redo the dir/path work. <!-- D-008 -->
 - [ ] **`.plans/28-headless-cli-sdk-harness` (hard dependency, WS3).** `trevor init` and `trevor doctor`
@@ -33,7 +33,7 @@ prerequisite whether the project ships fully-open or open-core, so no licensing 
 - [x] Shipped AGENTS/CLAUDE handling WS2 edits (plan 26, complete): the `/init` AGENTS.md generator
   (`apps/agent-host/src/project-context/init-agents.ts`), CLAUDE.md migration-only merge, `.trevor/rules`.
 - [x] Shipped config substrate WS3 consolidates onto: `packages/session/src/ports.ts` (`RESERVED_PORTS`,
-  `serviceUrl`), `packages/session/src/node-paths.ts` (`TREVOR_HOME` default `~/.trevorV2`,
+  `serviceUrl`), `packages/session/src/node-paths.ts` (`TREVOR_HOME` default `~/.trevor`,
   `TREVOR_STATE_HOME`; `config.jsonc` already *reserved in docstrings* with no loader),
   `apps/agent-host/src/boot/config.ts` (from plan 22.1).
 - [x] Shipped naming surfaces WS4 touches: `TREVOR_*` env prefix, `@trevor/*` package scope,
@@ -68,7 +68,7 @@ Four independent workstreams, each rooted in an existing seam so the work is ext
   env vars override the file (file provides defaults, env wins). `trevor init` scaffolds the file from
   the existing `/init` evidence primitive; a new `/doctor` **Config** area validates it. Scattered
   `TREVOR_*` / provider-key reads migrate to reading the resolved config. <!-- D-004 -->
-- **WS4 - Naming/branding.** The structural rename (the `~/.trevorV2` -> `~/.trevor` home dir, working
+- **WS4 - Naming/branding.** The structural rename (the `~/.trevor` -> `~/.trevor` home dir, working
   dir, GitHub repo, and all identifiers/fixtures) is done by plan 56, sequenced first. WS4's remaining
   scope is the PUBLIC product identity only: README/package-description/tagline polish and **trademarking**
   "Trevor". No further dir/path work - 56 owns that; `TREVOR_*`, `@trevor/*`, `.trevor/` stay.
@@ -207,10 +207,10 @@ scaffold and validate it.
 - **Dependencies:** none
 - **Effort:** S
 - **Tasks:**
-  1. RED: Add a check that no "V2"/"trevorV2" leaks into public-facing identity (README, package
+  1. RED: Add a check that no "V2"/"trevor" leaks into public-facing identity (README, package
      `description`, app `<title>`, public docs).
   2. GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings (README, package
-     `description`, app `<title>`, public docs). The `~/.trevorV2` dir is already renamed to `~/.trevor`
+     `description`, app `<title>`, public docs). The `~/.trevor` dir is already renamed to `~/.trevor`
      by plan 56 - no back-compat shim. <!-- D-008 -->
   3. REFACTOR: One neutral public tagline/description shared across README + package metadata.
 

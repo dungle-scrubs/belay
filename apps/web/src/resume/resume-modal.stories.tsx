@@ -25,9 +25,9 @@ const git: GitStatus = {
 const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   sessionId: "s",
   title: "a session",
-  cwd: "~/dev/trevorV2",
-  workspace: "~/dev/trevorV2",
-  project: "trevorV2",
+  cwd: "~/dev/trevor",
+  workspace: "~/dev/trevor",
+  project: "trevor",
   branch: "main",
   git: null,
   createdAt: "2026-06-25T12:00:00.000Z",
@@ -133,7 +133,7 @@ const meta = {
     onOpenChange: () => {},
     onResume: () => {},
     sessions,
-    context: { currentSessionId: "cur", currentProject: "trevorV2", busy: false, nowMs: NOW },
+    context: { currentSessionId: "cur", currentProject: "trevor", busy: false, nowMs: NOW },
   },
 } satisfies Meta<typeof ResumeChooserStory>;
 
@@ -144,7 +144,7 @@ export const CurrentDirectorySessions: Story = {};
 
 export const BusyBlocksSwitching: Story = {
   args: {
-    context: { currentSessionId: "cur", currentProject: "trevorV2", busy: true, nowMs: NOW },
+    context: { currentSessionId: "cur", currentProject: "trevor", busy: true, nowMs: NOW },
   },
 };
 

@@ -58,7 +58,7 @@ function makePlatform(opts: FakeOpts = {}): Spy {
   let spawnPid = 9000;
   const platform: LaunchPlatform = {
     fs,
-    home: "/home/.trevorV2",
+    home: "/home/.trevor",
     cwd: opts.cwd ?? opts.gitRoot ?? "/work/app",
     pid: opts.pid ?? 1234,
     reporter: { step: () => {} },
@@ -91,9 +91,9 @@ function makePlatform(opts: FakeOpts = {}): Spy {
   // Pre-seat a concurrent live lock holder if requested.
   if (opts.lockHeldByLive) {
     const root = opts.gitRoot ?? "/work/app";
-    const sessionId = resolveSession(fs, "/home/.trevorV2", root, "t");
+    const sessionId = resolveSession(fs, "/home/.trevor", root, "t");
     fs.writeFile(
-      `/home/.trevorV2/locks/${sessionId}.lock`,
+      `/home/.trevor/locks/${sessionId}.lock`,
       JSON.stringify({ pid: opts.lockHeldByLive, acquiredAt: "t" }),
     );
   }
@@ -174,8 +174,8 @@ test("--debug threads the debug flag through to the spawned host", async () => {
 test("a healthy recorded host is reused, not re-spawned", async () => {
   const fs = fakeFs();
   fs.writeFile("/work/app/.git", "");
-  const sessionId = resolveSession(fs, "/home/.trevorV2", "/work/app", "t");
-  recordHost(fs, "/home/.trevorV2", {
+  const sessionId = resolveSession(fs, "/home/.trevor", "/work/app", "t");
+  recordHost(fs, "/home/.trevor", {
     sessionId,
     pid: 5555,
     root: "/work/app",

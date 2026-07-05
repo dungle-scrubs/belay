@@ -52,7 +52,7 @@ describe("deny-first sandbox profile (M4)", () => {
   });
 
   it("does NOT allow reading the user's home secrets outside the allowlist", () => {
-    // No allow line covers $HOME broadly - the crown jewels (~/.ssh, ~/.pi, ~/.trevorV2) stay deny-read.
+    // No allow line covers $HOME broadly - the crown jewels (~/.ssh, ~/.pi, ~/.trevor) stay deny-read.
     const allowedReadRoots = [
       ...profile.matchAll(/\(allow file-read\* \(subpath "([^"]+)"\)\)/g),
     ].map((m) => m[1]);

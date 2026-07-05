@@ -18,9 +18,9 @@ import { createSiblingReader, type SiblingReaderOptions } from "./reader";
 function summary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return {
     title: `session ${over.sessionId}`,
-    cwd: "~/dev/trevorV2",
-    workspace: "~/dev/trevorV2",
-    project: "trevorV2",
+    cwd: "~/dev/trevor",
+    workspace: "~/dev/trevor",
+    project: "trevor",
     branch: null,
     git: null,
     createdAt: "2026-06-20T00:00:00.000Z",
@@ -59,8 +59,8 @@ function baseOptions(over: Partial<SiblingReaderOptions> = {}): SiblingReaderOpt
       participantId: "trevor-host:recall",
     },
     currentSessionId: "cur",
-    currentWorkspace: "~/dev/trevorV2",
-    currentProject: "trevorV2",
+    currentWorkspace: "~/dev/trevor",
+    currentProject: "trevor",
     ...over,
   };
 }
@@ -72,7 +72,7 @@ beforeEach(() => {
 test("reads same-project siblings and excludes other projects + the current session", async () => {
   rt.setInventory([
     summary({ sessionId: "cur" }), // the current session - excluded
-    summary({ sessionId: "sib", workspace: "~/dev/trevorV2", project: "trevorV2" }),
+    summary({ sessionId: "sib", workspace: "~/dev/trevor", project: "trevor" }),
     summary({ sessionId: "other", workspace: "~/dev/otherRepo", project: "otherRepo" }),
   ]);
   rt.seed("sib", [ev(events.userMessage({ text: "sibling memory", provider: "qwen" }), "sib", 0)]);

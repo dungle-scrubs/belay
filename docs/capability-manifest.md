@@ -56,7 +56,7 @@ A subsystem with no live backend (MCP/LSP/hooks/docs until their runtimes land) 
   "scope": "human",
   "generatedAt": "2026-07-01T00:00:00.000Z",
   "host": { "version": "2.0.0" },
-  "workspace": { "root": "trevorV2" },      // collapsed label, never an absolute path
+  "workspace": { "root": "trevor" },      // collapsed label, never an absolute path
   "truncated": false,
   "sections": [
     {

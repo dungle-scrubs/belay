@@ -3,10 +3,10 @@ name: implement-plan
 as_slash_command: true
 argument-hint: "[<NN-name>... | next | all]"
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Skill, Task
-description: "Use when the owner asks to implement, build, finish, run, or do one or more existing numbered Trevor V2 plans under `.plans/`, or to work the backlog - the execution counterpart to authoring a plan (plan-next-feature), so prefer this when the plan already exists and the ask is to build it. Triggers: implement the plan, implement plans, do these plans, do plans NN-MM, build the plan, run the plan, finish the plan, implement-plan, work the backlog."
+description: "Use when the owner asks to implement, build, finish, run, or do one or more existing numbered Trevor plans under `.plans/`, or to work the backlog - the execution counterpart to authoring a plan (plan-next-feature), so prefer this when the plan already exists and the ask is to build it. Triggers: implement the plan, implement plans, do these plans, do plans NN-MM, build the plan, run the plan, finish the plan, implement-plan, work the backlog."
 ---
 
-# Implement Trevor V2 Plan(s)
+# Implement Trevor Plan(s)
 
 End-to-end execution of numbered plans: worktree -> implement -> full test (incl. e2e) -> simplify ->
 delete plan dir -> ff-merge to `main` -> prune. This is the IMPLEMENT counterpart to
@@ -33,8 +33,8 @@ a remote branch, or change repository visibility - those remain separately gated
 
 ## Paths
 
-- **Repo root (primary worktree, on `main`)**: `/Users/kevin/dev/trevorV2`
-- **Plans**: `/Users/kevin/dev/trevorV2/.plans/<NN[.n]>-<name>/` - each a self-contained plan-db
+- **Repo root (primary worktree, on `main`)**: `/Users/kevin/dev/trevor`
+- **Plans**: `/Users/kevin/dev/trevor/.plans/<NN[.n]>-<name>/` - each a self-contained plan-db
   (`implementation.md`, `progress-report.md`, `plan.db`, `artifacts/`). A directory with **no
   `plan.db`** is a stub - skip it and report.
 - **Per-plan worktree**: `/Users/kevin/dev/.trevor-wt/<NN[.n]>-<name>` (matches the existing
@@ -84,7 +84,7 @@ follows the root taxonomy in `AGENTS.md` (`@trevor/session/node-paths`).
 
 1. **Expand `TARGET`** into a concrete plan set. For `all`, take every plan dir that has a `plan.db`.
    For `next`, compute the eligible set then take the first. Read the plan set from **`main`**
-   (`git -C /Users/kevin/dev/trevorV2 ls-tree --name-only main .plans/`), which is the source of
+   (`git -C /Users/kevin/dev/trevor ls-tree --name-only main .plans/`), which is the source of
    truth for what's still open - a deleted plan dir means that plan is already done.
 2. **Order topologically.** For each plan read `## 0. Hard Dependencies` in its `implementation.md`.
    A plan is eligible only when **every** hard-dependency plan is complete (its `.plans/<dep>/`
@@ -99,7 +99,7 @@ follows the root taxonomy in `AGENTS.md` (`@trevor/session/node-paths`).
 
 ## Per-plan lifecycle
 
-Run these steps for each plan `P = <NN[.n]>-<name>` in order. `REPO=/Users/kevin/dev/trevorV2`,
+Run these steps for each plan `P = <NN[.n]>-<name>` in order. `REPO=/Users/kevin/dev/trevor`,
 `WT=/Users/kevin/dev/.trevor-wt/P`.
 
 ### 1. Gate on dependencies and freshness

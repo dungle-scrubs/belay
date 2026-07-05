@@ -1,6 +1,6 @@
-# Trevor V2 Security Risks
+# Trevor Security Risks
 
-Trevor V2 is currently best treated as a trusted local developer tool with a
+Trevor is currently best treated as a trusted local developer tool with a
 browser UI. It is not secure against a hostile browser, malicious extension,
 malicious local webpage, or shared-machine attacker.
 
@@ -244,7 +244,7 @@ against the workspace (model-mediated, but a crafted prompt reliably drives it).
   optionally strip `sk-...`/`bearer ...`-shaped lines before `appendHistory`.
 
 - **S2 (CONFIRMED SAFE): no secret crosses to the browser.** No API key, auth
-  token, 1Password/OP secret, or `~/.pi/auth.json` / `~/.trevorV2` **content**
+  token, 1Password/OP secret, or `~/.pi/auth.json` / `~/.trevor` **content**
   reaches the web client. The `host.online` payload, `SourceSummary` (auth STATE
   enum only), `host.sourceAuth` (public device-code `verificationUrl` + user
   code, never a key), doctor snapshot
