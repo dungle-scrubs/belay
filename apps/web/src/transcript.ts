@@ -4,6 +4,7 @@ import {
   type CommandMenuPayload,
   decodeTrevorEvent,
   inputEstimateTokens,
+  type LimitStatus,
   lucidArtifactRef,
   type ModelSwitchEndpoint,
   type ModelSwitchInitiator,
@@ -17,6 +18,7 @@ import {
   type SessionEvent,
   supersededMessageIds,
   type TurnStop,
+  timeUntil,
   type Usage,
   type UsageBreakdown,
 } from "@trevor/session";
@@ -245,6 +247,53 @@ export type LucidArtifactMessage = {
 export function formatSwitchEndpoint(endpoint: ModelSwitchEndpoint): string {
   return endpoint.reasoning ? `${endpoint.model} (${endpoint.reasoning})` : endpoint.model;
 }
+
+// A provider usage-limit signal (plan 44.4), folded from `assistant.limit`: the session is approaching
+// or has reached a provider rate/usage window (Claude's unified rate-limit headers, a terminal Codex
+// 429). `approaching` renders as a quiet muted breadcrumb (like the model-switch marker); `reached`
+// renders as a louder alert (like `recovered`). `resetsAt` (unix epoch SECONDS) and `utilization`
+// (0..1) ride only when the provider exposed them. Detection only - it never pauses or switches anything.
+export type LimitMessage = {
+  kind: "limit";
+  id: string;
+  provider: string;
+  status: LimitStatus;
+  scope: string;
+  resetsAt?: number;
+  utilization?: number;
+};
+
+/** A usage-limit window id as a compact label - the known Anthropic windows read nicely; an unknown or
+ *  window-less scope reads as a generic "usage". Shared by the full row and its compact form. */
+export function formatLimitScope(scope: string): string {
+  switch (scope) {
+    case "five_hour":
+      return "5h window";
+    case "seven_day":
+      return "7d window";
+    case "seven_day_opus":
+      return "7d Opus window";
+    case "unified":
+    case "unknown":
+      return "usage";
+    default:
+      return scope;
+  }
+}
+
+/** The one-line summary of a usage-limit marker (`provider · window[ · resets in X][ · N% used]`),
+ *  shared by the full row and its compact form so the two surfaces can't drift. `nowMs` is injected so
+ *  the humanized `resetsAt` (via `timeUntil`) is deterministic in tests. */
+export function limitMarkerSummary(message: LimitMessage, nowMs: number): string {
+  const parts = [message.provider, formatLimitScope(message.scope)];
+  if (message.resetsAt !== undefined) {
+    parts.push(`resets ${timeUntil(message.resetsAt, nowMs)}`);
+  }
+  if (message.utilization !== undefined) {
+    parts.push(`${Math.round(message.utilization * 100)}% used`);
+  }
+  return parts.join(" · ");
+}
 export type Message =
   | {
       kind: "user";
@@ -268,6 +317,7 @@ export type Message =
   | QuestionMessage
   | HookDecisionMessage
   | ModelSwitchMessage
+  | LimitMessage
   | LucidArtifactMessage;
 
 /**
@@ -725,6 +775,19 @@ export function toTranscript(
         });
         break;
       }
+      case "assistant.limit":
+        // A provider usage-limit signal (plan 44.4): a standalone marker. Not run-scoped, so it does not
+        // finalize an open assistant segment - it just marks the point the provider reported the limit.
+        messages.push({
+          kind: "limit",
+          id: event.eventId,
+          provider: decoded.provider,
+          status: decoded.status,
+          scope: decoded.scope,
+          ...(decoded.resetsAt !== undefined ? { resetsAt: decoded.resetsAt } : {}),
+          ...(decoded.utilization !== undefined ? { utilization: decoded.utilization } : {}),
+        });
+        break;
       case "assistant.reconnecting": {
         // Finalize any open segment so the reconnected attempt's output starts fresh below the
         // marker (a reconnect fires before any token, so usually nothing is open).

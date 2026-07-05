@@ -24,6 +24,7 @@ import { fmtCtx, fmtTokens } from "../../derive";
 import { toolSummary } from "../../tool-args";
 import {
   LEGACY_RECONNECT_ATTEMPTS,
+  limitMarkerSummary,
   type Message,
   type ToolMessage as ToolMessageData,
 } from "../../transcript";
@@ -281,6 +282,30 @@ export function TranscriptRowView({
     // breadcrumb, not an alarming card.
     const descriptor = messageKindDescriptor(message);
     const Icon = descriptor.icon;
+    return (
+      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+        <Icon className="size-3 shrink-0" />
+        {quietMarkerText(descriptor)}
+      </div>
+    );
+  }
+
+  if (message.kind === "limit") {
+    // A provider usage-limit marker (plan 44.4). `approaching` is a QUIET muted breadcrumb (like the
+    // model-switch marker) - background activity, not alarming. `reached` is the LOUDER alert (a yellow
+    // ToneAlert, like `recovered`) since the window is actually exhausted. Both humanize `resetsAt` via
+    // the shared summary. Detection only - neither offers an action; the transcript just records it.
+    const descriptor = messageKindDescriptor(message);
+    const Icon = descriptor.icon;
+    if (message.status === "reached") {
+      return (
+        <div className="pl-3.5">
+          <ToneAlert tone="yellow" icon={Icon} title="usage limit reached">
+            {limitMarkerSummary(message, Date.now())}
+          </ToneAlert>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
         <Icon className="size-3 shrink-0" />

@@ -62,6 +62,9 @@ const UNROUTED: readonly string[] = [
   "admission.status",
   "assistant.continued",
   "assistant.delta",
+  // A provider usage-limit signal (plan 44.4): host-emitted from the turn pipeline, web-rendered +
+  // read by the SDK harness projection; handleEvent never consumes it (detection only, D-004).
+  "assistant.limit",
   "assistant.reconnecting",
   "assistant.recovered",
   "assistant.thinking",

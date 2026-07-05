@@ -157,6 +157,33 @@ test("status markers (recovered / continued / reconnecting / guardrail / compact
   assert.equal(compactDisplayFor(cases[3] as Message)?.primary, "Guardrail: bash");
 });
 
+test("44.4: a usage-limit marker compacts to an info row labelled by status + window", () => {
+  const approaching = compactDisplayFor({
+    kind: "limit",
+    id: "l1",
+    provider: "anthropic",
+    status: "approaching",
+    scope: "five_hour",
+    utilization: 0.9,
+  });
+  assert.ok(approaching);
+  assert.equal(approaching.kind, "limit");
+  assert.equal(approaching.status, "info");
+  assert.equal(approaching.primary, "Usage limit approaching");
+  assert.match(approaching.secondary ?? "", /anthropic/);
+  assert.match(approaching.secondary ?? "", /5h window/);
+  assert.match(approaching.secondary ?? "", /90% used/);
+
+  const reached = compactDisplayFor({
+    kind: "limit",
+    id: "l2",
+    provider: "codex",
+    status: "reached",
+    scope: "unknown",
+  });
+  assert.equal(reached?.primary, "Usage limit reached");
+});
+
 test("a delegation row reflects its child status, and a question row is detail-eligible", () => {
   const running = compactDisplayFor({
     kind: "delegation",

@@ -104,6 +104,40 @@ test("09.1 M3: a blocked switch renders its reason instead of a delta", () => {
   assert.ok(screen.getByText(/smaller context window/));
 });
 
+test("44.4: an approaching usage-limit renders a QUIET breadcrumb, not an alarming card", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "limit",
+      id: "lim1",
+      provider: "anthropic",
+      status: "approaching",
+      scope: "five_hour",
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.match(text, /approaching/i);
+  assert.match(text, /5h/i);
+  // Quiet muted breadcrumb - no alert role (that is reserved for the louder "reached").
+  assert.equal(container.querySelector('[role="alert"]'), null);
+});
+
+test("44.4: a reached usage-limit renders a LOUDER alert with the humanized reset", () => {
+  // resetsAt ~ 2h ahead of the fixed clock the row uses in the test (see limitResetLabel injection).
+  const { container } = renderRow(
+    messageRow({
+      kind: "limit",
+      id: "lim2",
+      provider: "codex",
+      status: "reached",
+      scope: "unknown",
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.match(text, /reached/i);
+  // The louder treatment uses the alert card (like `recovered`), not the quiet breadcrumb.
+  assert.ok(container.querySelector('[role="alert"]'));
+});
+
 test("a compact tool row also exposes the inspect affordance without expanding first (plan 08 M5)", () => {
   const onOpenDetail = vi.fn();
   render(

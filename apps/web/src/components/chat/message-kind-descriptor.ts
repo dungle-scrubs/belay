@@ -1,11 +1,16 @@
-import { ArrowLeftRight, CornerDownRight, ShieldAlert, Webhook } from "lucide-react";
+import { ArrowLeftRight, CornerDownRight, Gauge, ShieldAlert, Webhook } from "lucide-react";
 import type { ElementType } from "react";
-import { formatSwitchEndpoint, hookDecisionActionLabel, type Message } from "../../transcript";
+import {
+  formatSwitchEndpoint,
+  hookDecisionActionLabel,
+  limitMarkerSummary,
+  type Message,
+} from "../../transcript";
 import type { CompactStatus } from "./compact-display";
 
 type DescribedMessage = Extract<
   Message,
-  { kind: "continued" | "guardrail" | "hookDecision" | "modelSwitch" }
+  { kind: "continued" | "guardrail" | "hookDecision" | "modelSwitch" | "limit" }
 >;
 
 export interface MessageKindDescriptor {
@@ -17,7 +22,10 @@ export interface MessageKindDescriptor {
   readonly secondary: string | null;
 }
 
-export function messageKindDescriptor(message: DescribedMessage): MessageKindDescriptor {
+export function messageKindDescriptor(
+  message: DescribedMessage,
+  nowMs: number = Date.now(),
+): MessageKindDescriptor {
   switch (message.kind) {
     case "continued":
       return {
@@ -62,6 +70,18 @@ export function messageKindDescriptor(message: DescribedMessage): MessageKindDes
           message.outcome === "blocked"
             ? `switch to ${formatSwitchEndpoint(message.to)} blocked${message.reason ? ` · ${message.reason}` : ""}`
             : `${formatSwitchEndpoint(message.from)} -> ${formatSwitchEndpoint(message.to)}`,
+      };
+    case "limit":
+      // A usage-limit marker (plan 44.4). The compact/quiet path uses this descriptor for both statuses;
+      // the FULL row (transcript-row-view) upgrades `reached` to a louder alert. `info`-toned either way
+      // in the dense compact view - the primary label carries the severity.
+      return {
+        kind: "limit",
+        status: "info",
+        icon: Gauge,
+        isQuietMarker: true,
+        primary: `Usage limit ${message.status}`,
+        secondary: limitMarkerSummary(message, nowMs),
       };
   }
 }

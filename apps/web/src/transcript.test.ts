@@ -7,7 +7,14 @@ import {
 } from "@trevor/session";
 import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
-import { type Message, panelModel, readOnlyToolBatches, toTranscript } from "./transcript";
+import {
+  formatLimitScope,
+  limitMarkerSummary,
+  type Message,
+  panelModel,
+  readOnlyToolBatches,
+  toTranscript,
+} from "./transcript";
 
 const usage = {
   input: 5_800,
@@ -111,6 +118,63 @@ test("09.1 M3: model.switched folds into a modelSwitch marker between the before
     order.indexOf("modelSwitch") > order.indexOf("assistant"),
     "the marker sits after the first assistant segment",
   );
+});
+
+test("44.4: assistant.limit folds into a limit marker carrying provider/status/scope/reset", () => {
+  const log = [
+    ev(
+      1,
+      events.assistantStarted({ runId: "r1", model: "opus", provider: "anthropic", warm: true }),
+    ),
+    ev(
+      2,
+      events.assistantLimit({
+        provider: "anthropic",
+        status: "approaching",
+        scope: "five_hour",
+        resetsAt: 1_780_000_000,
+        utilization: 0.9,
+      }),
+    ),
+    ev(3, events.assistantDelta({ runId: "r1", text: "still going" })),
+    ev(4, events.assistantCompleted({ runId: "r1", text: "still going" })),
+  ];
+  const marker = toTranscript(log).find((m) => m.kind === "limit");
+  assert.ok(marker, "a limit marker is folded from assistant.limit");
+  assert.equal(marker?.kind === "limit" && marker.status, "approaching");
+  assert.equal(marker?.kind === "limit" && marker.scope, "five_hour");
+  assert.equal(marker?.kind === "limit" && marker.provider, "anthropic");
+  assert.equal(marker?.kind === "limit" && marker.resetsAt, 1_780_000_000);
+  assert.equal(marker?.kind === "limit" && marker.utilization, 0.9);
+});
+
+test("44.4: limitMarkerSummary humanizes provider/window/reset/utilization deterministically", () => {
+  const now = Date.parse("2026-07-04T12:00:00.000Z");
+  assert.equal(
+    limitMarkerSummary(
+      {
+        kind: "limit",
+        id: "l",
+        provider: "anthropic",
+        status: "approaching",
+        scope: "five_hour",
+        resetsAt: now / 1000 + 2 * 3600,
+        utilization: 0.9,
+      },
+      now,
+    ),
+    "anthropic · 5h window · resets in 2h · 90% used",
+  );
+  // A detect-only reached with no reset/utilization is just provider + window.
+  assert.equal(
+    limitMarkerSummary(
+      { kind: "limit", id: "l", provider: "codex", status: "reached", scope: "unknown" },
+      now,
+    ),
+    "codex · usage",
+  );
+  assert.equal(formatLimitScope("seven_day_opus"), "7d Opus window");
+  assert.equal(formatLimitScope("some_future_window"), "some_future_window");
 });
 
 test("09.1 M3: a blocked model.switched carries its reason into the marker", () => {

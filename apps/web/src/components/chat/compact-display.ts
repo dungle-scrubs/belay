@@ -169,6 +169,8 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
       };
     case "modelSwitch":
       return compactFromDescriptor(messageKindDescriptor(message));
+    case "limit":
+      return compactFromDescriptor(messageKindDescriptor(message));
   }
 }
 

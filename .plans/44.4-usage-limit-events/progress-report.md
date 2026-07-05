@@ -97,20 +97,24 @@ and its `SDKRateLimitEvent` branch are deleted (D-007)._
 
 ### M4: Harness projection + web transcript fold
 
-- [ ] RED: Failing test — `projectTranscript`
-      (`packages/sdk/src/transcript.ts:39-82`) includes `assistant.limit` rows.
-- [ ] GREEN: Add the `assistant.limit` branch to `projectTranscript`.
-- [ ] RED: Web transcript fold fixture/Storybook — `assistant.limit` renders a
-      marker (`apps/web/src/transcript.ts`).
-- [ ] GREEN: Render approaching vs reached with humanized `resetsAt`.
-- [ ] REFACTOR: Share `resetsAt` humanizer; module comments on both consumers.
+- [x] RED: `projectTranscript` test — `assistant.limit` folds to a `limit` entry with the structured
+      signal for automation (`packages/sdk/src/transcript.test.ts`).
+- [x] GREEN: `assistant.limit` branch added to `projectTranscript` (new `limit` role +
+      `TranscriptLimit` structured field + plain-text summary).
+- [x] RED: Web transcript fold test + row-view marker tests + compact-display test + Storybook story
+      (`apps/web/src/transcript.test.ts`, `transcript-row-view.test.tsx`, `compact-display.test.tsx`,
+      `usage-limit-marker.stories.tsx`).
+- [x] GREEN: `LimitMessage` + fold case; `approaching` = quiet muted breadcrumb, `reached` = louder
+      yellow ToneAlert (like `recovered`); `resetsAt` humanized via the shared `timeUntil`.
+- [x] REFACTOR: Shared `limitMarkerSummary` + `formatLimitScope` humanizers (unit-tested with an
+      injected clock); `timeUntil` shared from `@trevor/session`; module comments on both consumers.
 
 **Gate 3→done**
 
-- [ ] Harness projection exposes `assistant.limit`.
-- [ ] Web transcript renders approaching + reached with reset time.
-- [ ] `pnpm typecheck` + `pnpm test` green across `session`, `agent-host`,
-      `sdk`, `web`.
+- [x] Harness projection exposes `assistant.limit` (SDK `limit` role + structured `TranscriptLimit`).
+- [x] Web transcript renders approaching (quiet) + reached (alert) with humanized reset time.
+- [x] `pnpm typecheck` + `pnpm test` green across `session`, `agent-host`, `sdk`, `web`.
+      Storybook baseline for the new marker: see below.
 
 ---
 
