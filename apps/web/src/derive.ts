@@ -5,6 +5,7 @@ import {
   type CommandSpec,
   type DecodedEvent,
   decodeTrevorEvent,
+  expandArgs,
   type GitStatus,
   HOST_ROLE,
   type HostPresence,
@@ -746,6 +747,46 @@ export function parseCommand(
   }
 
   return { command, args: space === -1 ? "" : text.slice(space + 1).trim() };
+}
+
+/** The live substitution preview for a file-loaded custom command (plan 44.5 M6): the command name, its
+ *  argument-hint, the expanded body, and any `$N` refs that defaulted to empty (a "you haven't filled
+ *  that arg yet" cue). */
+export interface CommandArgPreview {
+  readonly command: string;
+  readonly argumentHint?: string;
+  readonly text: string;
+  readonly missing: readonly string[];
+}
+
+/**
+ * The live substitution preview for the composer draft, or null when it does not apply (plan 44.5 M6).
+ * It fires only PAST the first space (`/fix ‹args›`) - so it is complementary to the slash menu, which
+ * closes on that space - and only for a command whose spec carries a `body` (a file-loaded custom
+ * command; built-ins announce none). It runs the SHARED `@trevor/session` `expandArgs` over the body,
+ * trimming the args exactly as the host's `parseCommand` will, so the preview matches what the host
+ * will actually submit for the same input.
+ */
+export function commandArgPreview(
+  draft: string,
+  specs: readonly CommandSpec[],
+): CommandArgPreview | null {
+  if (!draft.startsWith("/") || !draft.includes(" ")) {
+    return null;
+  }
+  const space = draft.indexOf(" ");
+  const name = draft.slice(0, space);
+  const spec = specs.find((s) => s.name === name);
+  if (!spec?.body) {
+    return null;
+  }
+  const { text, diagnostics } = expandArgs(spec.body, draft.slice(space + 1).trim());
+  return {
+    command: name,
+    ...(spec.argumentHint ? { argumentHint: spec.argumentHint } : {}),
+    text,
+    missing: diagnostics.missing,
+  };
 }
 
 /**

@@ -31,6 +31,7 @@ import { ActionShimmer } from "@/components/chat/action-shimmer";
 import { ArchivedNotice } from "@/components/chat/archived-notice";
 import { activeOptionId } from "@/components/chat/autocomplete-menu";
 import { CommandMenu, SLASH_MENU_LISTBOX_ID } from "@/components/chat/command-menu";
+import { CommandPreview } from "@/components/chat/command-preview";
 import { FILE_MENTION_LISTBOX_ID, FileMentionMenu } from "@/components/chat/file-mention-menu";
 import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { PromptInput } from "@/components/chat/prompt-input";
@@ -43,6 +44,7 @@ import { SessionSidebar } from "@/components/panel/session-sidebar";
 import { DrawerToggle } from "@/components/panel/side-drawer";
 import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/side-panel";
 import { QuestionSurface } from "@/components/question";
+import type { CommandArgPreview } from "@/derive";
 import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 import type { ScrollFollowController } from "@/scroll-follow";
@@ -126,6 +128,9 @@ export interface ComposeWiring {
   readonly menuIndex: number;
   readonly slashQuery: string | null;
   readonly acceptCommand: (name: string) => void;
+  /** The live substitution preview for a file-loaded custom command (plan 44.5 M6), or null. Shown in
+   *  the same overlay slot as the slash menu, but PAST the first space - so the two never co-occur. */
+  readonly commandPreview: CommandArgPreview | null;
   /** The `@`-file-mention menu (plan 30): the sibling overlay of the slash menu, mutually exclusive
    *  with it per line. App owns the active-token detection + host search; PanelHost renders the list. */
   readonly fileMenu: {
@@ -552,6 +557,15 @@ export function PanelHost(props: {
                   truncated={compose.fileMenu.truncated}
                   loading={compose.fileMenu.loading}
                   onPick={compose.fileMenu.onPick}
+                />
+              ) : null}
+
+              {/* The live custom-command substitution preview (plan 44.5 M6): the same bottom-full slot,
+                but PAST the first space (where both menus above have closed), so it never stacks. */}
+              {compose.commandPreview && !compose.menuOpen && !compose.fileMenu.open ? (
+                <CommandPreview
+                  className="absolute inset-x-0 bottom-full z-20 mb-2"
+                  preview={compose.commandPreview}
                 />
               ) : null}
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  type CommandSpec,
   HOST_ROLE,
   type HostPresence,
   type ProviderQuestionContract,
@@ -8,6 +9,7 @@ import {
 import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import {
+  commandArgPreview,
   commandsFrom,
   defaultProviderFrom,
   detectOrphanedSubagents,
@@ -1110,4 +1112,33 @@ test("isTurnActive is the shared active-turn predicate (active run OR awaiting r
     false,
     "a settled turn is inactive",
   );
+});
+
+const FIX_SPEC: CommandSpec = {
+  name: "/fix",
+  summary: "fix an issue",
+  argumentHint: "<issue>",
+  body: "Fix issue #$0 for $ARGUMENTS",
+};
+
+test("commandArgPreview: previews the substitution past the first space (plan 44.5 M6)", () => {
+  const preview = commandArgPreview("/fix 123", [FIX_SPEC]);
+  assert.equal(preview?.command, "/fix");
+  assert.equal(preview?.argumentHint, "<issue>");
+  assert.equal(preview?.text, "Fix issue #123 for 123");
+  assert.deepEqual(preview?.missing, []);
+});
+
+test("commandArgPreview: null before the first space (the slash menu still owns that region)", () => {
+  assert.equal(commandArgPreview("/fix", [FIX_SPEC]), null);
+});
+
+test("commandArgPreview: null for a non-file command (no body announced)", () => {
+  assert.equal(commandArgPreview("/help now", [{ name: "/help", summary: "help" }]), null);
+});
+
+test("commandArgPreview: reports a $N ref that has no arg yet as missing", () => {
+  const preview = commandArgPreview("/fix ", [FIX_SPEC]);
+  assert.equal(preview?.text, "Fix issue # for ");
+  assert.deepEqual(preview?.missing, ["$0"]);
 });

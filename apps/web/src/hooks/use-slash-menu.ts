@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { type CommandArgPreview, commandArgPreview } from "@/derive";
 import { useAutocompleteMenuKeys } from "./use-autocomplete-menu-keys";
 
 export interface SlashMenu {
@@ -16,6 +17,13 @@ export interface SlashMenu {
   readonly slashQuery: string | null;
   readonly acceptCommand: (name: string) => void;
   readonly onMenuKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => boolean;
+  /**
+   * The live substitution preview for a file-loaded custom command (plan 44.5 M6), or null. The MENU
+   * itself closes once a space is typed (`slashQuery` guards on `!draft.includes(" ")`); the preview is
+   * its complement - it fires PAST the first space (`/fix ‹args›`) for a command whose spec carries a
+   * body, so the composer can show the resolved prompt while the args are being typed.
+   */
+  readonly preview: CommandArgPreview | null;
 }
 
 export function useSlashMenu({
@@ -38,6 +46,10 @@ export function useSlashMenu({
   );
   const menuOpen = menuMatches.length > 0 && slashQuery !== null && draft !== menuDismissedFor;
   const boundedMenuIndex = Math.min(menuIndex, menuMatches.length - 1);
+  // The live substitution preview lives PAST the first space, exactly where the menu closes (the
+  // `!draft.includes(" ")` guard above) - so the two never overlap: menu while choosing, preview while
+  // filling args. Computed from the same announced specs the menu filters (they carry the command body).
+  const preview = useMemo(() => commandArgPreview(draft, commandSpecs), [draft, commandSpecs]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset highlight when the filter changes.
   useEffect(() => setMenuIndex(0), [slashQuery]);
@@ -80,5 +92,6 @@ export function useSlashMenu({
     slashQuery,
     acceptCommand,
     onMenuKeyDown,
+    preview,
   };
 }

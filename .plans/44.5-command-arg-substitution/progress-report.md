@@ -2,16 +2,16 @@
 
 Implementation resume state for plan 44.5. RED/GREEN/REFACTOR task tracking per milestone.
 
-**Stage:** in progress
+**Stage:** complete
 
-> **Current focus:** Phase 2 · M4 - register + expand-on-dispatch
+> **Current focus:** COMPLETE - all milestones green
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks | 54 |
-| Checked (done) | 33 |
+| Checked (done) | 54 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
@@ -74,20 +74,20 @@ Phase 3 (M5-M6) is the web preview polish.
 
 ### M4: Register + expand-on-dispatch
 
-- [ ] RED: a loaded `CommandFile` becomes an invocable command (`commands.ts` `buildCommandRegistry`); `/fix` resolves
-- [ ] GREEN: register loaded command files into the registry
-- [ ] RED: `/fix 123` expands via interpolate-then-substitute (D-007) -> `"Fix issue #123"`
-- [ ] GREEN: wire two-step expansion into dispatch
-- [ ] RED: expanded text submitted as the turn's `user.message`; `$ARGUMENTS` gets exact raw args
-- [ ] GREEN: wire expansion output into prompt submission; thread raw args through
-- [ ] RED: immediate TS slash command still receives raw `args` unchanged (no regression)
-- [ ] GREEN: confirm substitution path scoped to file-loaded commands only
-- [ ] REFACTOR: dispatch-boundary comment; confirm web dispatches unknown leading-slash input vs sending literal
+- [x] RED: a loaded `CommandFile` becomes an invocable command (`commands.ts` `buildCommandRegistry`); `/fix` resolves
+- [x] GREEN: register loaded command files into the registry
+- [x] RED: `/fix 123` expands via interpolate-then-substitute (D-007) -> `"Fix issue #123"`
+- [x] GREEN: wire two-step expansion into dispatch
+- [x] RED: expanded text submitted as the turn's `user.message`; `$ARGUMENTS` gets exact raw args
+- [x] GREEN: wire expansion output into prompt submission; thread raw args through
+- [x] RED: immediate TS slash command still receives raw `args` unchanged (no regression)
+- [x] GREEN: confirm substitution path scoped to file-loaded commands only
+- [x] REFACTOR: dispatch-boundary comment; confirm web dispatches unknown leading-slash input vs sending literal
 
 ### Gate 2->3
 
-- [ ] End-to-end: a `.trevor/commands/*.md` file with `$0`/`$1`/`$ARGUMENTS` invokes and submits the expanded prompt (driven via the `verify` skill, not tests alone)
-- [ ] Immediate TS commands unaffected; interpolation still gated/off-by-default
+- [x] End-to-end: a `.trevor/commands/*.md` file with `$0`/`$1`/`$ARGUMENTS` invokes and submits the expanded prompt (driven via the `verify` skill, not tests alone)
+- [x] Immediate TS commands unaffected; interpolation still gated/off-by-default
 
 ---
 
@@ -95,22 +95,22 @@ Phase 3 (M5-M6) is the web preview polish.
 
 ### M5: Publish custom-command catalog + menu listing
 
-- [ ] RED: host publishes the custom-command catalog (id + `argument-hint` + body) over the command-menu contract
-- [ ] GREEN: catalog publication + web command-menu entries for custom commands
-- [ ] REFACTOR: reuse existing `command-menu.ts` shapes, no bespoke channel
+- [x] RED: host publishes the custom-command catalog (id + `argument-hint` + body) over the command-menu contract
+- [x] GREEN: catalog publication + web command-menu entries for custom commands
+- [x] REFACTOR: reuse existing `command-menu.ts` shapes, no bespoke channel
 
 ### M6: Live keystroke preview + Storybook
 
-- [ ] RED (story): a Storybook story renders the `/fix 123` substitution preview from a fixture body via `@trevor/session` `expandArgs`
-- [ ] GREEN: web preview component consuming the shared session module
-- [ ] RED: `derive.ts` feeds the tokenized preview (dispatch keeps first-space split; preview shows expansion)
-- [ ] GREEN: wire preview into the composer flow
-- [ ] REFACTOR: Storybook baselines + a11y; centered story per house style
+- [x] RED (story): a Storybook story renders the `/fix 123` substitution preview from a fixture body via `@trevor/session` `expandArgs`
+- [x] GREEN: web preview component consuming the shared session module
+- [x] RED: `derive.ts` feeds the tokenized preview (dispatch keeps first-space split; preview shows expansion)
+- [x] GREEN: wire preview into the composer flow
+- [x] REFACTOR: Storybook baselines + a11y; centered story per house style
 
 ### Gate 3 (done)
 
-- [ ] Custom commands appear in the menu; preview matches host expansion for the same input
-- [ ] Storybook baselines committed; lint + typecheck + tests green
+- [x] Custom commands appear in the menu; preview matches host expansion for the same input
+- [x] Storybook baselines committed; lint + typecheck + tests green
 
 ---
 

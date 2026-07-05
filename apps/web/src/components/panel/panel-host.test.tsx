@@ -88,6 +88,7 @@ function PanelHostHarness(props: {
       }}
       compose={{
         acceptCommand: vi.fn(),
+        commandPreview: null,
         caret: 0,
         disabled: false,
         fileMenu: {

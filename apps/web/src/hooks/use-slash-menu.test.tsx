@@ -9,6 +9,7 @@ const commands: CommandSpec[] = [
   { name: "/clear", summary: "Start fresh" },
   { name: "/compact", summary: "Compact context" },
   { name: "/doctor", summary: "Doctor" },
+  { name: "/fix", summary: "Fix an issue", argumentHint: "<issue>", body: "Fix issue #$0" },
 ];
 
 function useHarness(initialDraft: string) {
@@ -109,4 +110,19 @@ test("escape dismisses the menu for the current draft", () => {
   assert.equal(escapeKey.prevented(), true);
   assert.equal(escapeKey.stopped(), true);
   assert.equal(result.current.menuOpen, false);
+});
+
+test("the substitution preview stays visible PAST the first space, where the menu closes (44.5 M6)", () => {
+  const { result } = renderHook(() => useHarness("/fix 123"));
+  // The menu itself is closed once a space is typed...
+  assert.equal(result.current.menuOpen, false);
+  // ...but the live preview takes over, resolving the placeholder for the typed args.
+  assert.equal(result.current.preview?.command, "/fix");
+  assert.equal(result.current.preview?.text, "Fix issue #123");
+});
+
+test("no preview while still choosing the command (before the first space)", () => {
+  const { result } = renderHook(() => useHarness("/fi"));
+  assert.equal(result.current.menuOpen, true);
+  assert.equal(result.current.preview, null);
 });

@@ -1466,6 +1466,7 @@ export function App() {
           menuIndex: slashMenu.menuIndex,
           slashQuery: slashMenu.slashQuery,
           acceptCommand: slashMenu.acceptCommand,
+          commandPreview: slashMenu.preview,
           fileMenu: {
             open: fileMenu.menuOpen,
             matches: fileMenu.matches,
