@@ -37,11 +37,11 @@
 
 ### Phase 1 - M2: Picker modal (presentational)
 
-- [ ] RED: Stories for recents / empty recents / path empty-invalid-valid / folder icon shown-vs-hidden / `Create` gating.
-- [ ] GREEN: Implement the presentational picker over injected `recents`/`validation`/`localPickerAvailable`/`onPickFolder`/`onCreate`.
-- [ ] RED: Story/test for the in-flight "starting host…" state (controls locked, no shift).
-- [ ] GREEN: Implement "starting host…" as an in-place swap.
-- [ ] REFACTOR: Fix row heights/control slots against reflow; confirm no per-component cursor rule.
+- [x] RED: Stories for recents / empty recents / path empty-invalid-valid / folder icon shown-vs-hidden / `Create` gating.
+- [x] GREEN: Implement the presentational picker over injected `recents`/`validation`/`localPickerAvailable`/`onPickFolder`/`onCreate`.
+- [x] RED: Story/test for the in-flight "starting host…" state (controls locked, no shift).
+- [x] GREEN: Implement "starting host…" as an in-place swap.
+- [x] REFACTOR: Fix row heights/control slots against reflow; confirm no per-component cursor rule.
 
 ### Phase 2 - M3: Wire recents, path validation, native folder
 
