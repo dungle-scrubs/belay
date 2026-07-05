@@ -1,22 +1,23 @@
 # Trevor Open-Source Launch Readiness - Implementation Plan
 
-> **Status: SCAFFOLD.** This plan captures the four launch-readiness workstreams and their decided
+> **Status: SCAFFOLD.** This plan captures the five launch-readiness workstreams and their decided
 > shape from the productization brainstorm. Milestones are at a coarse grain and several backend/scope
 > choices are deliberately left open (flagged `OPEN`). Flesh out each phase before implementing.
 
-Prepare the codebase to be released as an open-source product. Four independent workstreams remove the
+Prepare the codebase to be released as an open-source product. Five independent workstreams remove the
 blockers that would bite a first public release: the `tool_script` sandbox is macOS-only, the repo
-carries owner-specific private workflow, configuration is a scatter of ~25 env vars with no file, and
-the "Trevor" identity is personal. This plan is **business-model-agnostic** - every workstream is a
+carries owner-specific private workflow, configuration is a scatter of ~25 env vars with no file, the
+"Trevor" identity needs public polish, and launch security/dependency checks are not yet repeatable.
+This plan is **business-model-agnostic** - every workstream is a
 prerequisite whether the project ships fully-open or open-core, so no licensing choice is baked in.
 <!-- D-001 -->
 
 ## 0. Hard Dependencies
 
-- [ ] **`.plans/56-rename-to-trevor` (hard dependency, WS4; sequenced first).** Plan 56 performs the real
-  project rename - the `~/.trevor` -> `~/.trevor` home dir, the working directory, the GitHub repo, and
-  all identifiers/fixtures - and lands before 49. WS4 therefore builds on the completed rename and does not
-  redo the dir/path work. <!-- D-008 -->
+- [x] **Former `.plans/56-rename-to-trevor` dependency completed (WS4).** The structural V2-to-Trevor
+  rename landed and the completed plan directory was deleted. WS4 therefore no longer waits on plan 56
+  and only keeps the public identity/tagline/trademark work plus a regression guard for old name markers.
+  <!-- D-009 -->
 - [ ] **`.plans/28-headless-cli-sdk-harness` (hard dependency, WS3).** `trevor init` and `trevor doctor`
   are CLI verbs; they need the `apps/trevor-cli` executable + arg-parsing surface plan 28 introduces.
   <!-- D-007 -->
@@ -39,17 +40,17 @@ prerequisite whether the project ships fully-open or open-core, so no licensing 
 - [x] Shipped naming surfaces WS4 touches: `TREVOR_*` env prefix, `@trevor/*` package scope,
   `apps/trevor-cli`, `.trevor/` paths - all kept; only the public *identity* changes. <!-- D-005 -->
 
-**Downstream plans:** none. Plan 49 is a capstone with only upstream dependencies - now including the
-plan 56 rename (higher-numbered but sequenced first, so upstream in run order) - and threads no downstream
-accommodation of its own. <!-- D-006 --> <!-- D-008 -->
+**Downstream plans:** none. Plan 49 is a capstone with only upstream dependencies; the former rename
+dependency is complete and no longer counts as current cutoff work. <!-- D-006 --> <!-- D-009 -->
 
 **Non-goals (out of scope, deferred):** the licensing choice (fully-open vs open-core) and any
-business-model / hosted-substrate work. A LICENSE file + headers is a *fifth* item to add once that
-decision is made; it is intentionally excluded here so the readiness work does not wait on it. <!-- D-001 -->
+business-model / hosted-substrate work. A LICENSE file + headers are separate governance work to add once
+that decision is made; they are intentionally excluded here so the readiness work does not wait on it.
+<!-- D-001 -->
 
 ## 1. Architecture
 
-Four independent workstreams, each rooted in an existing seam so the work is extension, not rewrite:
+Five independent workstreams, each rooted in an existing seam so the work is extension, not rewrite:
 
 - **WS1 - Cross-platform sandbox.** Today `tool_script` runs under macOS `sandbox-exec` only; on Linux
   `selectSandboxMode` returns `child-process` and `resolveRunnerLaunch` **fails closed** (refuses unless
@@ -68,11 +69,17 @@ Four independent workstreams, each rooted in an existing seam so the work is ext
   env vars override the file (file provides defaults, env wins). `trevor init` scaffolds the file from
   the existing `/init` evidence primitive; a new `/doctor` **Config** area validates it. Scattered
   `TREVOR_*` / provider-key reads migrate to reading the resolved config. <!-- D-004 -->
-- **WS4 - Naming/branding.** The structural rename (the `~/.trevor` -> `~/.trevor` home dir, working
-  dir, GitHub repo, and all identifiers/fixtures) is done by plan 56, sequenced first. WS4's remaining
-  scope is the PUBLIC product identity only: README/package-description/tagline polish and **trademarking**
-  "Trevor". No further dir/path work - 56 owns that; `TREVOR_*`, `@trevor/*`, `.trevor/` stay.
-  <!-- D-005 --> <!-- D-008 -->
+- **WS4 - Naming/branding.** The structural V2-to-Trevor rename has already landed. WS4's remaining
+  scope is the PUBLIC product identity only: README/package-description/tagline polish, a regression
+  guard for old name markers, and **trademarking** "Trevor". No further dir/path work - `TREVOR_*`,
+  `@trevor/*`, `.trevor/` stay. <!-- D-005 --> <!-- D-009 -->
+- **WS5 - Security/dependency launch gates.** A public export cannot be cut from informal checks. WS5
+  adds repeatable release blockers: verified TruffleHog history scan, sensitive-file/current-code scan,
+  local pre-push TruffleHog hook, dependency vulnerability audit, dependency-upgrade analysis, and
+  Dependabot coverage. Current baseline: `trufflehog git file://. --only-verified --no-update` was clean
+  on 2026-07-05; `pnpm audit --audit-level high` fails on Playwright advisory
+  `GHSA-7mvr-c777-76hp` until Playwright is patched to `>=1.55.1` across the root/browser/Storybook paths.
+  <!-- D-010 -->
 
 ### Key Constraints
 
@@ -82,13 +89,16 @@ Four independent workstreams, each rooted in an existing seam so the work is ext
 | WS3 depends on plans 28 + 41 (numbered before 49) | Ordering already satisfies this - 49 is the capstone; do not start WS3 before 28/41 land. |
 | Public/private split, not destructive scrub <!-- D-003 --> | Owner keeps full plan history + private workflow; the guard, not deletion, defines the public surface. |
 | No mass rename <!-- D-005 --> | WS4 is bounded to public-facing identity; internal `TREVOR_*`/`@trevor/*` identifiers are untouched. |
+| Launch security fails closed <!-- D-010 --> | Any high/critical dependency vulnerability, confirmed secret, missing local secret scan, or missing dependency-update coverage blocks public release until patched or explicitly accepted. |
 
 ### Boundaries
 
 WS1 lives in `apps/agent-host/src/tool-script/` + `packages/session/src/tool-script-sandbox.ts`. WS2 is
 repo-structure + `packages/repo-policy`. WS3 is `packages/session` (config loader) + `apps/trevor-cli`
-(verbs) + `apps/agent-host/src/doctor` (validation area). WS4 is docs + public identifiers only. The four
-do not share code; they can be implemented in any order except WS3-after-28/41.
+(verbs) + `apps/agent-host/src/doctor` (validation area). WS4 is docs + public identifiers only. WS5 is
+release/readiness automation: `packages/repo-policy`, `lefthook.yml`, dependency manifests, and
+`.github/dependabot.yml`. The five workstreams do not share code; they can be implemented in any order
+except WS3-after-28/41.
 
 ### Observability
 
@@ -207,11 +217,11 @@ scaffold and validate it.
 - **Dependencies:** none
 - **Effort:** S
 - **Tasks:**
-  1. RED: Add a check that no "V2"/"trevor" leaks into public-facing identity (README, package
+  1. RED: Add a check that no old V2-era name markers leak into public-facing identity (README, package
      `description`, app `<title>`, public docs).
-  2. GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings (README, package
-     `description`, app `<title>`, public docs). The `~/.trevor` dir is already renamed to `~/.trevor`
-     by plan 56 - no back-compat shim. <!-- D-008 -->
+  2. GREEN: Set the public identity to "Trevor"; drop old V2-era markers from public-facing strings
+     (README, package `description`, app `<title>`, public docs). The config dir is already `~/.trevor`,
+     so no back-compat shim is in scope. <!-- D-009 -->
   3. REFACTOR: One neutral public tagline/description shared across README + package metadata.
 
 #### M2 (OPEN - external): Trademark clearance
@@ -220,6 +230,36 @@ scaffold and validate it.
 - **Effort:** OPEN
 - **Task:** Trademark search + filing for "Trevor" in the relevant class. Non-code; tracked here so it is
   not forgotten before public launch. <!-- D-005 -->
+
+### Phase WS5: Security / Dependency Launch Gates
+
+**Goal:** every public export is gated by repeatable security and dependency checks; the current
+Playwright audit finding is explicit release-blocking work. <!-- D-010 -->
+
+#### M1: Secret-history and local secret-scan gate
+
+- **Dependencies:** none
+- **Effort:** S
+- **Tasks:**
+  1. RED: Add a `repo-policy` readiness test that fails when the local pre-push TruffleHog hook is missing
+     or a public export contains sensitive files such as real `.env`, `*.pem`, `*.key`, or credentials JSON.
+  2. GREEN: Add the local pre-push hook through `lefthook.yml` (or a repo-owned equivalent) to run
+     `trufflehog git file://. --only-verified --no-update` before push.
+  3. REFACTOR: Document the launch-time secret scan result in the readiness output without putting secret
+     scanning in GitHub Actions.
+
+#### M2: Dependency vulnerability and update gate
+
+- **Dependencies:** none
+- **Effort:** M
+- **Tasks:**
+  1. RED: Add a launch-readiness check that treats `pnpm audit --audit-level high` failure as a release
+     blocker and reports the vulnerable dependency path.
+  2. GREEN: Patch the current Playwright advisory (`GHSA-7mvr-c777-76hp`) by moving all Playwright paths to
+     a patched version (`>=1.55.1`) or by upgrading/transitively overriding the Storybook runner path if
+     needed.
+  3. REFACTOR: Add weekly Dependabot coverage for GitHub Actions and the npm/pnpm workspace, plus a
+     dependency-upgrade analysis step that separates safe patch/minor updates from major migrations.
 
 ---
 
@@ -231,6 +271,7 @@ scaffold and validate it.
 | Private artifact leaks into the public repo | high | medium | WS2 M1 guard fails CI on any disallowed path/string before release | owner |
 | WS3 blocked waiting on 28/41 | low | low | Numbering already orders 28/41 before 49; loader (M1) is standalone and can land early | owner |
 | "Trevor" trademark unavailable | medium | low | WS4 M2 clearance early; a fallback name is a later decision, not a blocker to the readiness code | owner |
+| Dependency or secret finding blocks launch late | high | medium | WS5 makes scans repeatable before export; high/critical audit findings and verified secrets block release | owner |
 
 ---
 
@@ -248,4 +289,6 @@ scaffold and validate it.
 
 Canonical decisions are in `.plans/49-open-source-launch-readiness/plan.db`. Key decisions use
 `<!-- D-NNN -->` markers above: D-001 (scope/framing + non-goals), D-002 (WS1 sandbox), D-003 (WS2 split),
-D-004 (WS3 config), D-005 (WS4 naming), D-006 (numbering/terminal), D-007 (hard deps).
+D-004 (WS3 config), D-005 (WS4 naming), D-006 (numbering/terminal, historical), D-007 (hard deps),
+D-008 (former rename dependency, historical), D-009 (rename dependency complete), D-010
+(security/dependency launch gates).

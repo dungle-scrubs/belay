@@ -5,11 +5,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 26
+- **Current cutoff blockers:** 31
 - **Completed current work:** 0
 - **Accepted/deferred follow-up:** 4
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** Flesh out phases, then WS1 M1 - Linux environment fact + explicit fail-closed contract
+- **Current focus:** Flesh out phases, then WS5 M2 - Dependency vulnerability and update gate
 
 ## Completed Current State / Hard Dependencies
 
@@ -17,12 +17,12 @@
 - [x] AGENTS/CLAUDE handling WS2 edits (plan 26): `apps/agent-host/src/project-context/init-agents.ts` (`/init` generator), CLAUDE.md migration-only merge, `.trevor/rules`.
 - [x] Config substrate WS3 consolidates onto: `packages/session/src/ports.ts`, `packages/session/src/node-paths.ts` (`TREVOR_HOME`, `config.jsonc` reserved with no loader), `apps/agent-host/src/boot/config.ts` (plan 22.1).
 - [x] Naming surfaces WS4 keeps: `TREVOR_*` prefix, `@trevor/*` scope, `apps/trevor-cli`, `.trevor/` paths (only public identity changes).
+- [x] Former plan 56 rename dependency completed: the structural V2-to-Trevor rename landed, the completed plan directory was deleted, and WS4 now keeps only public identity/tagline/trademark work plus an old-name regression guard. <!-- D-009 -->
 
 ## Current Cutoff Blockers
 
 ### Hard-dependency gates (external plans; must land before the dependent milestone)
 
-- [ ] `.plans/56-rename-to-trevor` complete (WS4 builds on the finished rename; 56 is sequenced first). <!-- D-008 -->
 - [ ] `.plans/28-headless-cli-sdk-harness` reaches implementing/complete (WS3 M2/M3 need the CLI surface).
 - [ ] `.plans/41-doctor-health-surface` reaches implementing/complete (WS3 M3 config area builds on it).
 - [ ] `.plans/21-workflows-runtime` M9 shared `sandbox-runner` coordinated with WS1 M3 (whichever lands first, the other accommodates).
@@ -69,9 +69,21 @@
 
 ### WS4 M1 - Public-identity consistency + guard
 
-- [ ] RED: Add a check that no "V2"/"trevor" leaks into public-facing identity (README, package `description`, app `<title>`, public docs).
-- [ ] GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings (README, package `description`, app `<title>`, public docs); the `~/.trevor` dir is already renamed to `~/.trevor` by plan 56 - no back-compat shim. <!-- D-008 -->
+- [ ] RED: Add a check that no old V2-era name markers leak into public-facing identity (README, package `description`, app `<title>`, public docs).
+- [ ] GREEN: Set the public identity to "Trevor"; drop old V2-era markers from public-facing strings (README, package `description`, app `<title>`, public docs); the config dir is already `~/.trevor`, so no back-compat shim is in scope. <!-- D-009 -->
 - [ ] REFACTOR: One neutral public tagline/description shared across README + package metadata.
+
+### WS5 M1 - Secret-history and local secret-scan gate
+
+- [ ] RED: Add a `repo-policy` readiness test that fails when the local pre-push TruffleHog hook is missing or a public export contains sensitive files such as real `.env`, `*.pem`, `*.key`, or credentials JSON.
+- [ ] GREEN: Add the local pre-push hook through `lefthook.yml` (or a repo-owned equivalent) to run `trufflehog git file://. --only-verified --no-update` before push.
+- [ ] REFACTOR: Document the launch-time secret scan result in the readiness output without putting secret scanning in GitHub Actions.
+
+### WS5 M2 - Dependency vulnerability and update gate
+
+- [ ] RED: Add a launch-readiness check that treats `pnpm audit --audit-level high` failure as a release blocker and reports the vulnerable dependency path.
+- [ ] GREEN: Patch the current Playwright advisory (`GHSA-7mvr-c777-76hp`) by moving all Playwright paths to a patched version (`>=1.55.1`) or by upgrading/transitively overriding the Storybook runner path if needed.
+- [ ] REFACTOR: Add weekly Dependabot coverage for GitHub Actions and the npm/pnpm workspace, plus a dependency-upgrade analysis step that separates safe patch/minor updates from major migrations.
 
 ## Accepted / Deferred Follow-up
 
@@ -87,4 +99,4 @@
 
 ### Non-goal (deferred, not counted)
 
-- Licensing choice (fully-open vs open-core) and any hosted-substrate/business work; a LICENSE file + headers is a fifth item to add once that decision is made. <!-- D-001 -->
+- Licensing choice (fully-open vs open-core) and any hosted-substrate/business work; a LICENSE file + headers are separate governance work to add once that decision is made. <!-- D-001 -->
