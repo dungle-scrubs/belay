@@ -13,7 +13,13 @@ import { Loader2 } from "lucide-react";
  * hint for a session whose root cannot be resolved (nowhere to launch).
  */
 export type HostLaunchState =
-  | { readonly phase: "startable"; readonly onStart: () => void }
+  | {
+      readonly phase: "startable";
+      readonly onStart: () => void;
+      /** A prior attempt's give-up reason (e.g. a host.online timeout) surfaced beside Start, so a
+       *  silently-dropped launch is explained; absent when there is no lingering error. */
+      readonly error?: string | null;
+    }
   | { readonly phase: "starting"; readonly restarting: boolean }
   | { readonly phase: "failed"; readonly error: string; readonly onRetry: () => void }
   | { readonly phase: "hint"; readonly command: string };
@@ -49,7 +55,13 @@ export function HostLaunchStatus({ state }: { readonly state: HostLaunchState })
   if (state.phase === "startable") {
     return (
       <span className="inline-flex items-center gap-2 text-smui-yellow">
-        ● no host
+        {state.error ? (
+          <span role="alert" className="text-smui-red">
+            ● {state.error}
+          </span>
+        ) : (
+          "● no host"
+        )}
         <button type="button" onClick={() => state.onStart()} className={chipButtonClass}>
           Start host
         </button>

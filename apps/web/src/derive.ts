@@ -171,14 +171,16 @@ export function resolveKnownRoot(sources: {
   readonly summary?: Pick<SessionSummary, "workspace" | "cwd"> | undefined;
   readonly project?: Pick<SupervisorProject, "root"> | undefined;
 }): string | null {
-  return (
-    sources.host.workspace ??
-    sources.host.cwd ??
-    sources.summary?.workspace ??
-    sources.summary?.cwd ??
-    sources.project?.root ??
-    null
-  );
+  // First NON-EMPTY source wins: an empty-string workspace/cwd/root is treated as absent (not a launchable
+  // root), so it never becomes a "start host" pointing at nowhere.
+  const candidates = [
+    sources.host.workspace,
+    sources.host.cwd,
+    sources.summary?.workspace,
+    sources.summary?.cwd,
+    sources.project?.root,
+  ];
+  return candidates.find((root) => root != null && root !== "") ?? null;
 }
 
 export type HostAnnouncement = Extract<DecodedEvent, { readonly type: "host.online" }>;

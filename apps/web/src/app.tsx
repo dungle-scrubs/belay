@@ -1441,7 +1441,7 @@ export function App() {
                     onRetry: sessionLaunch.retry,
                   }
                 : knownRoot !== null
-                  ? { phase: "startable", onStart: onStartHost }
+                  ? { phase: "startable", onStart: onStartHost, error: sessionLaunch.error }
                   : { phase: "hint", command: hostCommand }
           }
         />

@@ -88,6 +88,11 @@ test("a reused host navigates immediately without a host.online wait", async () 
     );
   });
   assert.deepEqual(onNavigate.mock.calls, [["sess-reused"]], "a reused host navigates at once");
+  assert.equal(
+    result.current.launchState,
+    "idle",
+    "a reused host resolves back to idle so a no-op navigate (session view) is not stuck on starting",
+  );
 });
 
 test("a freshly launched host navigates only after its host.online", async () => {

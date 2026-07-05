@@ -18,6 +18,29 @@ test("startable shows a Start host button that fires onStart", () => {
   assert.equal(onStart.mock.calls.length, 1, "activating it fires the start");
 });
 
+test("startable surfaces a lingering give-up error beside Start (host.online timeout)", () => {
+  const onStart = vi.fn();
+  render(
+    <HostLaunchStatus
+      state={{
+        phase: "startable",
+        onStart,
+        error: "The host did not come online in time. Try again.",
+      }}
+    />,
+  );
+  assert.ok(
+    screen.getByText("The host did not come online in time. Try again.", { exact: false }),
+    "a timed-out start is explained, not silently dropped",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start host" }));
+  assert.equal(
+    onStart.mock.calls.length,
+    1,
+    "the user can re-initiate through the same Start affordance",
+  );
+});
+
 test("a fresh start reads 'starting host…'", () => {
   render(<HostLaunchStatus state={{ phase: "starting", restarting: false }} />);
   assert.ok(screen.getByText("starting host…"));

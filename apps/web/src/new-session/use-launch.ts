@@ -98,6 +98,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
       const requestId = crypto.randomUUID();
       launchReqRef.current = requestId;
       lastRootRef.current = root;
+      launchTokenRef.current += 1; // a fresh launch invalidates any prior pending host.online continuation
       setError(null);
       setLaunchState("starting");
       void transport.publishEvent(SUPERVISOR_SESSION_ID, {
@@ -107,8 +108,6 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
     },
     [transport],
   );
-
-  const launch = useCallback((root: string) => publish(root), [publish]);
 
   const retry = useCallback(() => {
     const root = lastRootRef.current;
@@ -143,11 +142,19 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
           setError(decoded.error ?? "The session could not be started.");
           setLaunchState("failed");
         } else if (decoded.status === "reused") {
+          // A reused host is already live: navigate at once, then drop to idle. The idle reset matters in
+          // the session view, where navigating to the (already-viewed) reused session is a no-op - without
+          // it the badge would hang on "starting" forever if presence never materializes (a stale reuse);
+          // idle returns the "start host" affordance instead of a dead spinner.
           navigateRef.current(decoded.sessionId);
+          setLaunchState("idle");
         } else {
           launchTokenRef.current += 1;
           const token = launchTokenRef.current;
           const targetSessionId = decoded.sessionId;
+          // The host.online watch is one-shot but NOT cancellable (awaitEvent takes no AbortSignal), so a
+          // superseded launch's watch lingers until host.online or the timeout - the token guard below keeps
+          // it correct (no late navigate/setState); cancelling it cleanly is a transport follow-up.
           void transport
             .awaitEvent(targetSessionId, watchIdentity, isHostOnline, {
               timeoutMs: hostOnlineTimeoutMs,
@@ -176,7 +183,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
     launchState,
     error,
     inFlight: launchState !== "idle",
-    launch,
+    launch: publish,
     retry,
     reset,
   };
