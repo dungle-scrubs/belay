@@ -15,11 +15,9 @@ import type { SessionLog } from "./log";
  * durable log on every process start, a missed update can never outlive one process lifetime: the log
  * is the source of truth, this is a cache the log rebuilds.
  *
- * The incremental update in {@link recordAppend} projects exactly the fields `SessionLog.projectRow`
- * computes from a full scan - latest `host.online`, first `user.message` (set once), the lifecycle
- * slice (appended), and the latest archive/title/delete/lineage markers - keyed off the same
- * `INVENTORY_EVENT_TYPES` / `LIFECYCLE_TYPES` constants, so the warm-scan path and the incremental
- * path can't drift on which event feeds which slot. A parity test pins the two together.
+ * {@link recordAppend} must fold each event into exactly the slot `SessionLog.projectRow` scans it into;
+ * both key off the shared `INVENTORY_EVENT_TYPES` / `LIFECYCLE_TYPES` constants and a parity test pins
+ * the incremental path to the full scan, so a new projected slot that misses one path is caught.
  */
 
 /** One session's read-model row: the durable projection minus the server-folded `hostPresent`. */
@@ -67,14 +65,12 @@ export class InventoryProjection {
       eventCount: current.eventCount + 1,
       // Mirrors COALESCE(MAX(e.createdAt), s.createdAt): ISO timestamps sort lexicographically.
       updatedAt: event.createdAt > current.updatedAt ? event.createdAt : current.updatedAt,
-      // Latest wins - appends arrive in seq order, so the newest of a type is the last seen.
       hostOnline: event.type === INVENTORY_EVENT_TYPES.hostOnline ? event : current.hostOnline,
-      // Set once - the earliest user.message is the title source (first wins).
+      // First wins - the earliest user.message is the title source, never overwritten.
       firstUser:
         event.type === INVENTORY_EVENT_TYPES.userMessage && current.firstUser === null
           ? event
           : current.firstUser,
-      // Appended in seq order (the slice `projectRow` gathers via eventsOfTypes).
       lifecycle: LIFECYCLE_TYPE_SET.has(event.type)
         ? [...current.lifecycle, event]
         : current.lifecycle,

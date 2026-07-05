@@ -173,7 +173,7 @@ export function buildSessionStore(dbPath: string): SessionStore {
           return;
         }
         log.deleteSession(sessionId);
-        projection.remove(sessionId); // drop the purged session from the read model too
+        projection.remove(sessionId);
         json(res, 200, { ok: true, sessionId } satisfies PermanentDeleteResult);
       },
     },

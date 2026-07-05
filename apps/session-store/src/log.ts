@@ -52,6 +52,12 @@ interface AggregateRow {
  *  replay/type-lookup reads and the query-plan diagnostic all speak the exact same projection. */
 const EVENT_COLUMNS = "sessionId, seq, eventId, type, producerId, payload, createdAt";
 
+/** The per-session "latest/first event of a type" lookup (`ORDER BY seq DESC/ASC LIMIT 1`). Shared by
+ *  `latestOfType`/`firstOfType` and the `explainTypeLookup` diagnostic so the query-plan guardrail always
+ *  explains the exact statement the hot path runs - it can't pass while the real query silently drifts. */
+const typeLookupSql = (order: "ASC" | "DESC"): string =>
+  `SELECT ${EVENT_COLUMNS} FROM events WHERE sessionId = ? AND type = ? ORDER BY seq ${order} LIMIT 1`;
+
 /**
  * The slow-query threshold (plan 45.1 M3, D-004): a single synchronous store query taking longer than
  * this blocks the event loop for that long (node:sqlite is synchronous on the one thread), so crossing
@@ -298,13 +304,7 @@ export class SessionLog {
   private latestOfType(sessionId: string, type: string): SessionEvent | null {
     const row = this.query(
       "latestOfType",
-      () =>
-        this.db
-          .prepare(
-            `SELECT ${EVENT_COLUMNS}
-           FROM events WHERE sessionId = ? AND type = ? ORDER BY seq DESC LIMIT 1`,
-          )
-          .get(sessionId, type) as EventRow | undefined,
+      () => this.db.prepare(typeLookupSql("DESC")).get(sessionId, type) as EventRow | undefined,
     );
     return row ? rowToEvent(row) : null;
   }
@@ -313,13 +313,7 @@ export class SessionLog {
   private firstOfType(sessionId: string, type: string): SessionEvent | null {
     const row = this.query(
       "firstOfType",
-      () =>
-        this.db
-          .prepare(
-            `SELECT ${EVENT_COLUMNS}
-           FROM events WHERE sessionId = ? AND type = ? ORDER BY seq ASC LIMIT 1`,
-          )
-          .get(sessionId, type) as EventRow | undefined,
+      () => this.db.prepare(typeLookupSql("ASC")).get(sessionId, type) as EventRow | undefined,
     );
     return row ? rowToEvent(row) : null;
   }
@@ -348,10 +342,7 @@ export class SessionLog {
    */
   explainTypeLookup(): string {
     const rows = this.db
-      .prepare(
-        `EXPLAIN QUERY PLAN SELECT ${EVENT_COLUMNS}
-           FROM events WHERE sessionId = ? AND type = ? ORDER BY seq DESC LIMIT 1`,
-      )
+      .prepare(`EXPLAIN QUERY PLAN ${typeLookupSql("DESC")}`)
       .all("s", "t") as unknown as { detail: string }[];
     return rows.map((r) => r.detail).join("; ");
   }

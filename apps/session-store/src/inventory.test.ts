@@ -43,6 +43,11 @@ test("recordAppend folds each event into the row, matching a fresh projectRow sc
       producerId: "web",
       payload: { parentSessionId: "p", forkSeq: 3 },
     },
+    {
+      type: "session.tangentOf",
+      producerId: "web",
+      payload: { parentSessionId: "p", sourceMessageId: "m1", quote: "q", label: "L" },
+    },
     { type: "session.archived", producerId: "web", payload: { archived: true } },
     { type: "session.title", producerId: "web", payload: { title: "Renamed" } },
     { type: "session.deleted", producerId: "web", payload: { deleted: true } },
@@ -63,7 +68,7 @@ test("recordAppend folds each event into the row, matching a fresh projectRow sc
 
   const row = projection.get("s1");
   assert.equal(row?.eventCount, inputs.length);
-  assert.equal(row?.updatedAt, "2026-06-24T00:10:00.000Z");
+  assert.equal(row?.updatedAt, "2026-06-24T00:11:00.000Z"); // the last event's timestamp (minute = index)
   assert.equal((row?.firstUser?.payload as { text?: string }).text, "first"); // set once
   assert.equal((row?.hostOnline?.payload as { cwd?: string }).cwd, "~/new"); // latest wins
   assert.deepEqual(
@@ -74,6 +79,7 @@ test("recordAppend folds each event into the row, matching a fresh projectRow sc
   assert.equal(row?.rename?.type, "session.title");
   assert.equal(row?.deleted?.type, "session.deleted");
   assert.equal(row?.forkedFrom?.type, "session.forkedFrom");
+  assert.equal(row?.tangentOf?.type, "session.tangentOf");
 });
 
 test("ensure creates an empty row (matching an empty session), idempotently; remove drops it", () => {
