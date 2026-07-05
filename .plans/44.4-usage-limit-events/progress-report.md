@@ -114,7 +114,9 @@ and its `SDKRateLimitEvent` branch are deleted (D-007)._
 - [x] Harness projection exposes `assistant.limit` (SDK `limit` role + structured `TranscriptLimit`).
 - [x] Web transcript renders approaching (quiet) + reached (alert) with humanized reset time.
 - [x] `pnpm typecheck` + `pnpm test` green across `session`, `agent-host`, `sdk`, `web`.
-      Storybook baseline for the new marker: see below.
+- [x] Storybook baselines regenerated in the pinned container (`update-storybook-baselines.sh`): 4 new
+      `chat-usagelimitmarker--*` PNGs committed; unrelated drift (modelswitchmarker, artifactpanel)
+      reverted via `git checkout`.
 
 ---
 
