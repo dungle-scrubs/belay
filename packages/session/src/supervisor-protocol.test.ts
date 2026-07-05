@@ -25,7 +25,7 @@ const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): Sess
 });
 
 test("SUPERVISOR_SESSION_ID is the reserved control session constant", () => {
-  assert.equal(SUPERVISOR_SESSION_ID, "trevor-supervisor");
+  assert.equal(SUPERVISOR_SESSION_ID, "trevor-supervisor-control");
 });
 
 test("session.launch.requested round-trips its requestId + root", () => {

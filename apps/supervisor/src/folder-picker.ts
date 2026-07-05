@@ -37,11 +37,18 @@ class OsascriptFolderPicker implements FolderPicker {
       return { cancelled: true };
     }
     try {
-      const { stdout } = await execFileAsync("osascript", ["-e", CHOOSE_FOLDER_SCRIPT]);
+      // A generous timeout so a wedged osascript (e.g. a box with no window server) can't leak a child
+      // forever; it far exceeds any real folder choice, so it never interrupts a user mid-selection.
+      const { stdout } = await execFileAsync("osascript", ["-e", CHOOSE_FOLDER_SCRIPT], {
+        timeout: 600_000,
+      });
+      const chosen = stdout.trim();
+      if (!chosen) {
+        return { cancelled: true };
+      }
       // `POSIX path of` yields a trailing-slashed directory; normalize to a canonical no-trailing-slash
       // root (but keep "/" itself) so it matches how the launcher stores project roots.
-      const path = stdout.trim().replace(/\/+$/, "") || "/";
-      return stdout.trim() ? { cancelled: false, path } : { cancelled: true };
+      return { cancelled: false, path: chosen.replace(/\/+$/, "") || "/" };
     } catch {
       // Non-zero exit: the user cancelled (-128) or no GUI/osascript is available. Either way, no path.
       return { cancelled: true };

@@ -5,6 +5,7 @@ import {
   isAnswerableProducer,
   projectSessionId,
   type SessionEvent,
+  type SessionLaunchOkStatus,
   type SupervisorProject,
   type TrevorEventInput,
 } from "@trevor/session";
@@ -30,7 +31,7 @@ export interface SupervisorDeps {
   readonly launch: (input: {
     readonly sessionId: string;
     readonly root: string;
-  }) => Promise<"launched" | "reused">;
+  }) => Promise<SessionLaunchOkStatus>;
   /** Pops the native folder picker (local + best-effort); resolves the chosen path or `cancelled`. */
   readonly pickFolder: () => Promise<{ readonly path?: string; readonly cancelled: boolean }>;
   /** The launcher's recent project roots (`projects.json`), recency-sorted; empty when absent. */
@@ -46,8 +47,8 @@ export async function handleSupervisorEvent(
   event: SessionEvent,
   deps: SupervisorDeps,
 ): Promise<void> {
-  // Richter-only side-channel: act only on requests from ANOTHER producer (the browser), never on the
-  // results this supervisor itself published. This is the same self-echo gate the host uses.
+  // Self-echo suppression: act only on requests from ANOTHER producer (the browser), never on the
+  // results this supervisor itself published. This is the same gate the host uses.
   if (!isAnswerableProducer(event.producerId, deps.selfProducerId)) {
     return;
   }

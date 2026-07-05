@@ -21,8 +21,10 @@ export const DEFAULT_SESSION_ID = "trevor-local";
  * request/response side-channel - so it never carries a host turn; a launched host announces
  * `host.online` on its OWN session, which the browser then navigates to. One constant so the browser
  * and the supervisor can never subscribe to different control sessions and silently stop pairing.
+ * Distinct from the supervisor's PRODUCER id (`PRODUCER_IDS.supervisor`) so a session id and a
+ * producer id can never alias to the same literal.
  */
-export const SUPERVISOR_SESSION_ID = "trevor-supervisor";
+export const SUPERVISOR_SESSION_ID = "trevor-supervisor-control";
 
 /**
  * The `runtimeKind` each participant declares on its stream identity. The store

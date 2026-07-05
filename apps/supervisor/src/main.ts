@@ -6,13 +6,13 @@ import {
   SUPERVISOR_SESSION_ID,
   streamTransport,
   type TrevorEventInput,
-  viewerIdentity,
 } from "@trevor/session";
 import { RESERVED_PORTS, serviceUrl } from "@trevor/session/ports";
-import { handleSupervisorEvent, type SupervisorDeps } from "./dispatch";
+import type { SupervisorDeps } from "./dispatch";
 import { pickProjectFolder } from "./folder-picker";
 import { nodeLaunch } from "./launch-runner";
 import { readRecents } from "./recents";
+import { subscribeControlSession } from "./subscribe";
 
 /**
  * The `trevor supervisor` daemon (plan 44.1): the one persistent local actor that can spawn a host on
@@ -51,6 +51,8 @@ const deps: SupervisorDeps = {
   // The registry read lives under TREVOR_STATE_HOME (the launcher's projects.json), read through the
   // launcher's own map loader so there is one reader.
   listProjects: () => readRecents(nodeFs, TREVOR_STATE_HOME),
+  // MUST be the same identity `emit` stamps, or self-echo suppression breaks (the supervisor would act
+  // on its own published results).
   selfProducerId: PRODUCER_IDS.supervisor,
   log,
 };
@@ -81,31 +83,10 @@ async function ensureSessionReady(attempts = 30): Promise<void> {
   }
 }
 
-/** Subscribes to the control session (replay-then-tail) with simple reconnect. */
-function connect(): void {
-  transport.connectSession({
-    sessionId: SUPERVISOR_SESSION_ID,
-    identity: viewerIdentity({
-      displayName: "trevor-supervisor",
-      instanceId: INSTANCE_ID,
-      participantId: PRODUCER_IDS.supervisor,
-    }),
-    onEvent: (event) => void handleSupervisorEvent(event, deps),
-    onStatus: (status) => {
-      if (status === "open") {
-        log("subscribed to control session", { session: SUPERVISOR_SESSION_ID });
-      } else if (status === "closed") {
-        log("control session closed; reconnecting", { ms: 1000 });
-        setTimeout(connect, 1000);
-      }
-    },
-  });
-}
-
 async function main(): Promise<void> {
   await startHealthServer();
   await ensureSessionReady();
-  connect();
+  subscribeControlSession(transport, deps, { instanceId: INSTANCE_ID, log });
   log("started", { session: SUPERVISOR_SESSION_ID, store: STORE_URL });
 }
 

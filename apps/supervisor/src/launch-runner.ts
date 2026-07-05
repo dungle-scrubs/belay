@@ -1,4 +1,5 @@
 import { type LaunchPlatform, launch, nodePlatform } from "@trevor/launcher";
+import type { SessionLaunchOkStatus } from "@trevor/session";
 
 /**
  * The node-backed launch runner (plan 44.1). It reuses the launcher core's FULL spawn-or-reuse
@@ -16,7 +17,7 @@ import { type LaunchPlatform, launch, nodePlatform } from "@trevor/launcher";
 export async function nodeLaunch(input: {
   readonly sessionId: string;
   readonly root: string;
-}): Promise<"launched" | "reused"> {
+}): Promise<SessionLaunchOkStatus> {
   const platform: LaunchPlatform = { ...nodePlatform(), openBrowser: () => Promise.resolve() };
   const outcome = await launch(platform, {
     session: { sessionId: input.sessionId, root: input.root },

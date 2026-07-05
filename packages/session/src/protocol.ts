@@ -412,6 +412,9 @@ export interface ModelSwitchEndpoint {
  */
 export const SESSION_LAUNCH_STATUSES = ["launched", "reused", "failed"] as const;
 export type SessionLaunchStatus = (typeof SESSION_LAUNCH_STATUSES)[number];
+/** The non-failure launch outcomes the launcher resolves: a fresh/replaced host (`launched`) or an
+ *  already-live one (`reused`). Shared so the launcher runner and the dispatcher can't drift. */
+export type SessionLaunchOkStatus = Exclude<SessionLaunchStatus, "failed">;
 
 /** One recent project the supervisor reports in `projects.list.result` (plan 44.1): the canonical
  *  root, its derived session id, and when the launcher last touched the mapping. */

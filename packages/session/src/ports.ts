@@ -17,7 +17,7 @@ export const RESERVED_PORTS = {
   supervisor: 17425,
 } as const;
 
-/** A reserved shared-service name (`web` | `blob` | `store`). */
+/** A reserved shared-service name (`web` | `blob` | `store` | `supervisor`). */
 export type ServiceName = keyof typeof RESERVED_PORTS;
 
 /**
