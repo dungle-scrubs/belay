@@ -137,6 +137,11 @@ async function anthropicLogin(cb: LoginCallbacks): Promise<Record<string, unknow
   const { loginAnthropic } = await import("@earendil-works/pi-ai/oauth");
   const credentials = await loginAnthropic({
     onAuth: (info) => cb.onAuthUrl({ url: info.url, instructions: info.instructions }),
+    // The busy/remote paste fallback: loginAnthropic runs onManualCodeInput RACING its localhost callback
+    // server, so a browser that cannot reach 127.0.0.1 (a remote/headless host) can paste the redirect
+    // code and complete the sign-in. This is the callback that actually drives the host's `requestCode`
+    // (and registers the code resolver); `onPrompt` alone is unreachable while the callback server waits.
+    onManualCodeInput: () => cb.requestCode(),
     onPrompt: () => cb.requestCode(),
   });
   return credentials as unknown as Record<string, unknown>;

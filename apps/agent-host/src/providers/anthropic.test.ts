@@ -11,7 +11,7 @@ import { PiAiProviderBase } from "./pi-ai-base";
  * wiring: the id/label/model surface, the cloud kind, and the Claude reasoning + vision shape (from the
  * anthropic registry, or the safe fallback for a just-released id). The OAuth-resolver DISPATCH is
  * covered where it is observable - catalog.test.ts (`providerForSource` routes `anthropic` here, never
- * claudeCodeProvider) and credentials.test.ts (`oauthCredentialResolver` failure modes) - since the
+ * codex / the deleted Agent-SDK route) and credentials.test.ts (`oauthCredentialResolver` failure modes) - since the
  * resolver is private and reads the real ~/.pi/auth.json, so a hermetic readiness assertion is awkward.
  */
 

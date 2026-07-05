@@ -16,7 +16,8 @@ import { type PiAiProviderBase, piAiProvider } from "./pi-ai-base";
 import { lookupPiModel } from "./pi-model";
 import { oauthCredentialResolver } from "./provider-auth";
 
-/** The pi-ai registry id + the ~/.pi/auth.json OAuth entry for the Claude subscription (Claude Pro/Max). */
+/** The one `anthropic` id this source uses everywhere: the pi-ai registry id, the provider id, and the
+ *  ~/.pi/auth.json OAuth entry for the Claude subscription (Claude Pro/Max). */
 const ANTHROPIC = "anthropic";
 
 export interface AnthropicConfig {
@@ -36,10 +37,10 @@ export interface AnthropicConfig {
  */
 export function anthropicProvider(config: AnthropicConfig): PiAiProviderBase {
   return piAiProvider({
-    id: "anthropic",
+    id: ANTHROPIC,
     label: config.label,
     model: config.model,
-    credentials: oauthCredentialResolver({ providerId: "anthropic", oauthName: ANTHROPIC }),
+    credentials: oauthCredentialResolver({ providerId: ANTHROPIC, oauthName: ANTHROPIC }),
     // A registry miss surfaces downstream (pi-ai-base falls back to the declared shape; the stream
     // surfaces an unserved id as an error), as before lookupPiModel centralized the cast.
     resolveModel: () => lookupPiModel(ANTHROPIC, config.model) as Model<Api>,
