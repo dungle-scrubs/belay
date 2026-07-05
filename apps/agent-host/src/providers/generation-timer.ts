@@ -3,7 +3,7 @@
  * token (reasoning or visible) to done, so tokens/sec covers the same span the output tokens were
  * produced in - timing from the first visible token alone undercounts reasoning models (hidden
  * reasoning runs first), and timing the whole request over-penalizes cloud latency. Shared by the
- * provider stream adapters (pi-ai, claude-code) so the measurement can't drift between them.
+ * provider stream adapters (the pi-ai cloud + local paths) so the measurement can't drift between them.
  */
 
 export interface GenerationTimer {

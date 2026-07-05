@@ -32,17 +32,6 @@ export function oauthPresent(auth: Record<string, unknown>, oauthName: string): 
   return auth[oauthName] != null;
 }
 
-/**
- * Whether a CLI-token env var is present + non-empty - the configured signal for a source whose
- * credential lives in a CLI token STORE (env), NOT `~/.pi/auth.json` (D-003). The claude-code source
- * reads its `CLAUDE_CODE_OAUTH_TOKEN` through here, so "what counts as a present CLI token" is defined
- * once, beside the `~/.pi/auth.json` presence predicates it deliberately does NOT share a store with.
- */
-export function cliTokenPresent(env: NodeJS.ProcessEnv, cliTokenEnv: string): boolean {
-  const token = env[cliTokenEnv];
-  return typeof token === "string" && token.length > 0;
-}
-
 async function readAuth(
   providerId: string,
   authPath: string,

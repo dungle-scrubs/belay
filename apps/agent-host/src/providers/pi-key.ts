@@ -94,14 +94,16 @@ export function piKeyProviderFromConfig(config: PiKeyConfig): PiAiProviderBase {
  *
  * For deepseek/zai/minimax the pi-ai provider id and the auth.json entry coincide (so `authName` is
  * omitted and defaults to `piProvider`); the browser KEY differs only for Z.ai (key "glm", pi/auth
- * "zai"). Anthropic Direct sets an explicit `authName` ("anthropic-api"): its pi-ai registry id is
- * "anthropic", but its auth.json entry is kept distinct so it never reads a legacy OAuth entry named
- * "anthropic" (the removed subscription-mints-a-key path) as if it were a `{ key }` (D-002).
+ * "zai"). Anthropic Direct sets an explicit `authName` ("anthropic-api") AND matches its browser `key`
+ * to it: its pi-ai registry id stays "anthropic" (for the model lookup), but its auth.json entry, its
+ * roster key, and its catalog source id are all the distinct "anthropic-api" - so none of them collide
+ * with the Claude subscription OAuth (`sourceId`/`oauthName` "anthropic") that this key would shadow
+ * (53.1 D-001; the catalog derives its api-key source id from `piKeyAuthName`, not `piProvider`).
  */
 export interface PiKeyProviderDef {
   /** Browser-facing registry key + provider id (user.message.provider). */
   readonly key: string;
-  /** pi-ai provider id whose registry the model lives in; also the catalog source id. */
+  /** pi-ai provider id whose registry the model lives in (the model-shape lookup). */
   readonly piProvider: string;
   /** `~/.pi/auth.json` entry holding this provider's `{ key }`; defaults to `piProvider` when omitted. */
   readonly authName?: string;
@@ -147,9 +149,10 @@ export const PI_KEY_PROVIDERS: readonly PiKeyProviderDef[] = [
   },
   // Anthropic Direct API: a plain generated key (usage-billed), NOT the Claude subscription OAuth. Its
   // pi-ai registry is "anthropic" (which carries the direct `anthropic-messages` API + base URL); its
-  // auth.json entry is the distinct "anthropic-api" so it never collides with a legacy OAuth entry.
+  // browser key, auth.json entry, and catalog source id are all the distinct "anthropic-api" so none
+  // collide with the Claude subscription OAuth entry named "anthropic" (53.1 D-001).
   {
-    key: "anthropic",
+    key: "anthropic-api",
     piProvider: "anthropic",
     authName: "anthropic-api",
     modelEnvVar: "ANTHROPIC_MODEL",

@@ -36,32 +36,32 @@ deferred or superseded debt at authoring time. The 44.4 re-thread is tracked in 
 
 ### M2: Make `anthropic` the single subscription source; delete the Agent-SDK route
 
-- [ ] RED: `buildCatalogSnapshot` — exactly ONE oauth Claude source (`anthropic`, "Claude
+- [x] RED: `buildCatalogSnapshot` — exactly ONE oauth Claude source (`anthropic`, "Claude
       subscription"); unconfigured action is `["authenticate"]`, not `["configure"]`.
-- [ ] GREEN: In `SOURCES` replace the `CLAUDE_CODE_SOURCE_ID` row with the `anthropic`
-      oauth row (`oauthName:"anthropic"`, no `cliTokenEnv`).
-- [ ] RED: `providerForSource` — `anthropic` dispatches to `anthropicProvider`, never
+- [x] GREEN: In `SOURCES` replace the `CLAUDE_CODE_SOURCE_ID` row with the `anthropic`
+      oauth row (`oauthName:"anthropic"`, no `cliTokenEnv`). (Restored tool-capable — see deviation note.)
+- [x] RED: `providerForSource` — `anthropic` dispatches to `anthropicProvider`, never
       `claudeCodeProvider`.
-- [ ] GREEN: Restore the oauth `anthropic → anthropicProvider` branch; remove the
+- [x] GREEN: Restore the oauth `anthropic → anthropicProvider` branch; remove the
       `CLAUDE_CODE_SOURCE_ID → claudeCodeProvider` branch + import; restore `oauthPresent`
-      configured-signal, drop the `cliTokenEnv` branch for this source.
-- [ ] RED: Assert the Agent-SDK route is gone — no `claudeCodeProvider` constructible,
+      configured-signal, drop the `cliTokenEnv` branch (+ dead `env` threading).
+- [x] RED: Assert the Agent-SDK route is gone — no `claudeCodeProvider` constructible,
       nothing imports `claude-code.ts`.
-- [ ] GREEN: Delete `claude-code.ts` + its test; sweep `CLAUDE_CODE_SOURCE_ID` /
-      `CLAUDE_CODE_OAUTH_ENV` references.
-- [ ] RED: `buildCatalogSnapshot` — Anthropic Direct api-key source still resolves from its
-      distinct `piKeyAuthName` entry, unaffected by the restored OAuth entry.
-- [ ] GREEN: Confirm `pi-key.ts` keeps Direct API on a distinct `authName`; adjust only on
-      a real collision.
-- [ ] REFACTOR: Update `catalog.ts` module doc/registry comments (ONE Claude OAuth
+- [x] GREEN: Delete `claude-code.ts` + its test; sweep `CLAUDE_CODE_SOURCE_ID` /
+      `CLAUDE_CODE_OAUTH_ENV` / `cliTokenPresent` references (incl. comment-only mentions).
+- [x] RED: `buildCatalogSnapshot` — Anthropic Direct api-key source resolves from its distinct
+      `anthropic-api` id/entry, unaffected by the restored OAuth `anthropic` entry.
+- [x] GREEN: Re-id the Direct API pi-key row (`key:"anthropic"→"anthropic-api"`); catalog source
+      id now derives from `piKeyAuthName(def)`, freeing `anthropic` for the OAuth subscription.
+- [x] REFACTOR: Update `catalog.ts` module doc/registry comments (ONE Claude OAuth
       subscription + Direct API peer); remove setup-token prose.
 
 **Gate 1→2**
 
-- [ ] One oauth Claude source (`anthropic`, action `authenticate`) + the Direct API row.
-- [ ] `signInTargetFor("anthropic")` returns the `loginAnthropic` target.
-- [ ] No symbol imports `claudeCodeProvider`; `claude-code.ts` deleted.
-- [ ] `pnpm --filter @trevor/agent-host test` green.
+- [x] One oauth Claude source (`anthropic`, action `authenticate`) + the Direct API row (`anthropic-api`).
+- [x] `signInTargetFor("anthropic")` returns the `loginAnthropic` target.
+- [x] No symbol imports `claudeCodeProvider`; `claude-code.ts` deleted.
+- [x] `pnpm --filter @trevor/agent-host test` green (unit + integration: 3666 passed, 4 skipped).
 
 ---
 

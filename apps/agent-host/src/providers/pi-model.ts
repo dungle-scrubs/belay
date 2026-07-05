@@ -43,7 +43,7 @@ export interface ModelShape {
  * entry, falling back to the provider's declared shape when the id is not in the installed registry -
  * so a just-released model id still starts the host. `resolveModel` may return undefined or throw for
  * a miss; both degrade to the fallback. The one owner of this derivation, shared by the pi-ai cloud
- * base and the claude-code provider so their constructors can't drift.
+ * base and the Claude subscription provider so their constructors can't drift.
  */
 export function deriveModelShape(
   resolveModel: () => Model<Api> | undefined,

@@ -7,7 +7,7 @@ import type {
   SourceSummary,
   SourceType,
 } from "@trevor/session";
-import { CLAUDE_CODE_OAUTH_ENV, CLAUDE_CODE_SOURCE_ID, claudeCodeProvider } from "./claude-code";
+import { anthropicProvider } from "./anthropic";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { lmStudioIsVision, lmStudioSupportsTools } from "./lmstudio-native";
@@ -15,7 +15,7 @@ import { reloadModelOverrides, resolveContextWindow } from "./model-metadata-ove
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyAuthName, piKeyProviderFromConfig } from "./pi-key";
 import { lookupPiModel } from "./pi-model";
-import { AUTH_PATH, cliTokenPresent, oauthPresent, staticKeyEntry } from "./provider-auth";
+import { AUTH_PATH, oauthPresent, staticKeyEntry } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
 import { asLiveModel, fetchSourceModels, type LiveModel } from "./source-models";
 import type { Provider } from "./types";
@@ -52,12 +52,8 @@ interface SourceDef {
   /** A fixed OpenAI-compatible base URL for a source NOT in pi-ai's registry (e.g. Ollama Cloud);
    *  overrides the registry-derived URL and is what `/models` is queried against. */
   readonly baseUrl?: string;
-  /** The CLI-token env var whose PRESENCE is this source's configured signal, read from the CLI token
-   *  STORE (env) instead of `~/.pi/auth.json` (D-003). Set for the claude-code source; its subprocess
-   *  reads the same token, so marking configured from anything else would show ready and fail at stream. */
-  readonly cliTokenEnv?: string;
-  /** Whether this source can expose tools to the model. Defaults to true; the claude-code source sets
-   *  it false (text-only in this cut - D-004), so its catalog entries carry no Tools chip. */
+  /** Whether this source can expose tools to the model. Defaults to true; a text-only cloud source can
+   *  set it false so its catalog entries carry no Tools chip. No source sets it today. */
   readonly toolCapable?: boolean;
 }
 
@@ -71,26 +67,29 @@ const SOURCES: readonly SourceDef[] = [
     piProvider: "openai",
     oauthName: "openai-codex",
   },
-  // The ONE Claude subscription source (53 D-001): a single Anthropic OAuth, billed to the Claude
-  // subscription via the Agent SDK (setup-token). Its configured signal is the CLI token STORE
-  // (cliTokenEnv), NOT `~/.pi/auth.json`; its subprocess reads the same token, so a different store
-  // would show ready and fail at stream (D-003). Text-only in this cut, so toolCapable false. The
-  // separate Anthropic *Direct API* (a plain generated key) is an api-key peer below, not this row.
+  // The ONE Claude subscription source (53.1 D-001): the Anthropic (Claude Pro/Max) OAuth. Its
+  // configured signal is the `~/.pi/auth.json` `anthropic` OAuth entry; the in-app "Sign in" runs
+  // `loginAnthropic` (PKCE) and it streams via `anthropicProvider` on pi-ai's subscription path. No
+  // `cliTokenEnv`, so its action projects to `authenticate` (a real sign-in), not `configure`. It is a
+  // normal tool-capable cloud source (the pi-ai anthropic-messages path offers tools; the old text-only
+  // limit was specific to the deleted Agent-SDK route, not this one). The separate Anthropic *Direct
+  // API* (a plain generated key on the distinct `anthropic-api` entry) is an api-key peer below.
   {
-    sourceId: CLAUDE_CODE_SOURCE_ID,
+    sourceId: "anthropic",
     type: "oauth",
-    label: "Claude Code subscription",
+    label: "Claude subscription",
     piProvider: "anthropic",
-    cliTokenEnv: CLAUDE_CODE_OAUTH_ENV,
-    toolCapable: false,
+    oauthName: "anthropic",
   },
   // The static-key cloud sources (DeepSeek, Z.ai, MiniMax, Anthropic Direct) are derived from the
-  // shared pi-key registry: the source id is the pi-ai provider id and the key comes from the row's
-  // auth.json entry (piKeyAuthName - distinct for Anthropic Direct), so one registry row owns both the
-  // roster provider and this source. Adding a pi-key provider updates the registry, not this list.
+  // shared pi-key registry: the catalog source id is the row's `~/.pi/auth.json` entry (piKeyAuthName)
+  // and the key comes from it, so one registry row owns both the roster provider and this source. For
+  // Anthropic Direct that entry is the DISTINCT `anthropic-api` (piProvider stays `anthropic` for the
+  // registry lookup), so its source id never collides with the Claude subscription OAuth row above.
+  // Adding a pi-key provider updates the registry, not this list.
   ...PI_KEY_PROVIDERS.map(
     (def): SourceDef => ({
-      sourceId: def.piProvider,
+      sourceId: piKeyAuthName(def),
       type: "api-key",
       label: def.sourceLabel,
       piProvider: def.piProvider,
@@ -143,20 +142,12 @@ function staticKeyOf(source: SourceDef, auth: Record<string, unknown>): string |
   return source.authName ? staticKeyEntry(auth, source.authName) : null;
 }
 
-/** Resolves one source's auth state: local runtimes are always configured; a CLI-token source
- *  (claude-code) needs its env token PRESENT - read from the CLI token STORE (env), NOT
- *  `~/.pi/auth.json` (D-003); an oauth source needs its `~/.pi/auth.json` OAuth entry; an api-key
- *  source needs a present static key (all via the shared predicates). */
-function resolveSourceAuth(
-  source: SourceDef,
-  auth: Record<string, unknown>,
-  env: NodeJS.ProcessEnv = process.env,
-): SourceAuth {
+/** Resolves one source's auth state: local runtimes are always configured; an oauth source (the Claude
+ *  subscription, OpenAI) needs its `~/.pi/auth.json` OAuth entry; an api-key source needs a present
+ *  static key (all via the shared predicates). */
+function resolveSourceAuth(source: SourceDef, auth: Record<string, unknown>): SourceAuth {
   if (source.type === "local") {
     return { configured: true, staticKey: null };
-  }
-  if (source.cliTokenEnv) {
-    return { configured: cliTokenPresent(env, source.cliTokenEnv), staticKey: null };
   }
   if (source.oauthName) {
     return { configured: oauthPresent(auth, source.oauthName), staticKey: null };
@@ -167,11 +158,8 @@ function resolveSourceAuth(
 
 /** The per-source auth state in ONE pass over SOURCES, so the configured signal + static key are
  *  resolved once and shared by the snapshot builder and the live-models fetch. */
-function projectSourceAuth(
-  auth: Record<string, unknown>,
-  env: NodeJS.ProcessEnv = process.env,
-): Map<string, SourceAuth> {
-  return new Map(SOURCES.map((source) => [source.sourceId, resolveSourceAuth(source, auth, env)]));
+function projectSourceAuth(auth: Record<string, unknown>): Map<string, SourceAuth> {
+  return new Map(SOURCES.map((source) => [source.sourceId, resolveSourceAuth(source, auth)]));
 }
 
 /** The pi-ai registry Model for an id (full object), for shape + reasoning enrichment, or undefined. */
@@ -258,8 +246,9 @@ function cloudEntry(
   model: PiModel | undefined,
   reasoningLevels: readonly string[],
 ): CatalogEntry {
-  // Tools are always-on for cloud EXCEPT a source that declares itself text-only (claude-code,
-  // toolCapable false - D-004), so its chooser row honestly shows no Tools chip.
+  // Tools are always-on for cloud EXCEPT a source that declares itself text-only (toolCapable false),
+  // so a future text-only cloud source's chooser rows would honestly show no Tools chip. No source sets
+  // it today (the Claude subscription streams tools through pi-ai), but the knob stays for that case.
   const capabilities = withReasoning(
     source.toolCapable === false ? [] : ["tools"],
     reasoningLevels,
@@ -327,11 +316,8 @@ export function buildCatalogSnapshot(
   modelsBySource: Readonly<Record<string, readonly (string | LiveModel)[]>>,
   staleSources: ReadonlySet<string> = new Set(),
   sourceAuth?: ReadonlyMap<string, SourceAuth>,
-  env: NodeJS.ProcessEnv = process.env,
 ): CatalogSnapshot {
-  // A CLI-token source (claude-code) derives configured from `env`, so tests can inject token
-  // presence; the default projection reads process.env for that source and `auth` for the rest.
-  const resolvedAuth = sourceAuth ?? projectSourceAuth(auth, env);
+  const resolvedAuth = sourceAuth ?? projectSourceAuth(auth);
   const catalogBySource: Record<string, CatalogEntry[]> = {};
   const sources: SourceSummary[] = [];
   for (const source of SOURCES) {
@@ -354,12 +340,12 @@ export function buildCatalogSnapshot(
       modelCount: entries.length,
       auth: configured ? "authenticated" : "none",
       freshness,
-      // A CLI-token source (claude-code) has NO in-app OAuth flow - its token comes from
-      // `claude setup-token` - so it offers the manual "configure" hint, not the device-code
-      // "authenticate" an oauth source triggers (which has no sign-in target for it).
+      // An oauth source (the Claude subscription, OpenAI) offers the in-app device-code / browser
+      // "authenticate" sign-in; an api-key / gateway / local source offers the manual "configure" hint
+      // (add a key to the host store / start the runtime).
       actions: configured
         ? ["refresh"]
-        : source.type === "oauth" && !source.cliTokenEnv
+        : source.type === "oauth"
           ? ["authenticate"]
           : ["configure"],
     });
@@ -369,7 +355,7 @@ export function buildCatalogSnapshot(
 
 /**
  * Builds the concrete {@link Provider} for a source + model id, dispatching on the source's type +
- * auth shape: local -> LM Studio, oauth -> Codex / the Claude Code subscription (Agent SDK),
+ * auth shape: local -> LM Studio, oauth -> Codex / the Claude subscription (pi-ai OAuth),
  * api-key/gateway -> a static-key pi provider (Anthropic Direct, DeepSeek, Z.ai, MiniMax, OpenRouter)
  * or (when there's a fixed base URL and no pi registry entry) an OpenAI-compatible one.
  * The ONE owner of the adapter-per-source mapping, so catalog turn-resolution can't dispatch a source
@@ -385,11 +371,11 @@ export function providerForSource(
     return lmStudioProvider({ model: modelId, label });
   }
   if (source.type === "oauth") {
-    // Each OAuth subscription has its own provider (different registry + token shape): the Claude Code
-    // subscription streams Claude through the Agent SDK, billed to the setup-token (D-001/D-003); Codex
-    // handles OpenAI. (The Anthropic Direct API is a static-key peer below, not an oauth subscription.)
-    return source.sourceId === CLAUDE_CODE_SOURCE_ID
-      ? claudeCodeProvider({ model: modelId, label })
+    // Each OAuth subscription has its own provider (different registry + token shape): the Claude
+    // subscription streams Claude via pi-ai's anthropic-messages path on the OAuth token (53.1 D-001);
+    // Codex handles OpenAI. (The Anthropic Direct API is a static-key peer below, not an oauth source.)
+    return source.sourceId === "anthropic"
+      ? anthropicProvider({ model: modelId, label })
       : codexProviderFromConfig({ model: modelId, label });
   }
   // A gateway/api-key source NOT in pi-ai's registry (Ollama Cloud) streams through its fixed

@@ -2,7 +2,7 @@
  * Responsible for: normalizing a raw thrown provider-stream cause into the typed ProviderError -
  * cause-chain detail enrichment + secret redaction, structured evidence extraction, taxonomy
  * classification (retryable/class/userAction), and the structured classified-failure debug log.
- * The ONE boundary mapper every provider stream shares (pi-ai and claude-code), so a Max-plan
+ * The ONE boundary mapper every provider stream shares (all pi-ai paths), so a Claude subscription
  * overload classifies for auto-reconnect exactly like the same failure from any other adapter.
  * Not for: the classification rules (failure-taxonomy.ts) or evidence extraction internals
  * (failure-evidence.ts).
