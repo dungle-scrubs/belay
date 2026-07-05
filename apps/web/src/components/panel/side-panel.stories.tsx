@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { GitStatus, UsageBreakdown } from "@trevor/session";
 import type { ReactNode } from "react";
+import { HostLaunchStatus } from "@/new-session/host-launch-status";
 import {
   SidePanel,
   SidePanelBreakdown,
@@ -256,4 +257,61 @@ export const PressureOverWindow: Story = {
 export const PressureLongWindow: Story = {
   render: renderSidePanel,
   args: { ...pressureArgs, ctxUsed: 420_000, ctxMax: 1_000_000 },
+};
+
+// No-host recovery badge (plan 44.3): the `statusNode` variants the header shows when the viewed session
+// has no live host. One story per state so the visual-regression lane pins each treatment.
+
+const noHostArgs = {
+  title: "auth-flow",
+  subtitle: "session · trevor-local",
+  workspace: "~/proj/api",
+  git: cleanMain,
+  breakdown,
+  totalTokens: 14100,
+  ctxUsed: 84_000,
+  ctxMax: 200_000,
+  controls: Controls,
+} satisfies Partial<SidePanelStoryArgs>;
+
+const noop = () => {};
+
+/** A no-host session with a resolvable root: the badge offers "Start host" (the entry point today lacks). */
+export const NoHostStartable: Story = {
+  render: renderSidePanel,
+  args: {
+    ...noHostArgs,
+    statusNode: <HostLaunchStatus state={{ phase: "startable", onStart: noop }} />,
+  },
+};
+
+/** A fresh host coming up after Start: "starting host…". */
+export const StartingHost: Story = {
+  render: renderSidePanel,
+  args: {
+    ...noHostArgs,
+    statusNode: <HostLaunchStatus state={{ phase: "starting", restarting: false }} />,
+  },
+};
+
+/** Replacing a stale/dead host that was here before: the distinct "restarting host…" label. */
+export const RestartingStaleHost: Story = {
+  render: renderSidePanel,
+  args: {
+    ...noHostArgs,
+    statusNode: <HostLaunchStatus state={{ phase: "starting", restarting: true }} />,
+  },
+};
+
+/** A failed launch: the named error plus an explicit Retry, right in the badge. */
+export const FailedWithRetry: Story = {
+  render: renderSidePanel,
+  args: {
+    ...noHostArgs,
+    statusNode: (
+      <HostLaunchStatus
+        state={{ phase: "failed", error: "no local supervisor available", onRetry: noop }}
+      />
+    ),
+  },
 };

@@ -6,6 +6,7 @@ import {
   type LoopControl,
   type ModelRef,
   PRODUCER_IDS,
+  SUPERVISOR_SESSION_ID,
   tangentsOf,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
@@ -45,8 +46,10 @@ import { PanelHost } from "@/components/panel/panel-host";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
 import { sessionScopedKey } from "@/model-selection";
+import { HostLaunchStatus } from "@/new-session/host-launch-status";
 import { isNewSessionCommand, NEW_SESSION_COMMAND } from "@/new-session/new-session-command";
 import { NewSessionPicker } from "@/new-session/new-session-picker";
+import { useLaunch } from "@/new-session/use-launch";
 import { useSupervisor } from "@/new-session/use-supervisor";
 import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
@@ -83,6 +86,7 @@ import {
   pendingHandoffFrom,
   pendingQuestionFrom,
   providerModelsFrom,
+  resolveKnownRoot,
   sourceSignInFrom,
   sourcesFrom,
   tasksFrom,
@@ -112,8 +116,10 @@ import {
   permanentlyDeleteSession,
   recordTangentFoldBack,
   renameSession,
+  sessionTransport,
   useSession,
   useSessionActions,
+  useSessionWithTransport,
   webTabId,
 } from "./session/use-session";
 import { type Message, panelModel, readOnlyToolBatches, toTranscript } from "./transcript";
@@ -431,6 +437,63 @@ export function App() {
     localPickerAvailable,
     onNavigate: onLaunchNavigate,
   });
+  // Session-view "start host" (plan 44.3): the no-host badge can launch a host for the session already
+  // in view, driving the SAME launch machine as the picker (useLaunch) so the two surfaces never fork.
+  // The supervisor control subscription is armed only once a start is requested (the picker's `active`
+  // analogue) - a no-host session viewed idly holds no supervisor stream. The control log replays from
+  // seq 0, so a subscription opened the instant the user clicks Start still catches the durable result.
+  const [startRequested, setStartRequested] = useState(false);
+  const startControl = useSessionWithTransport(
+    sessionTransport,
+    startRequested ? SUPERVISOR_SESSION_ID : null,
+  );
+  const sessionLaunch = useLaunch({
+    controlEvents: startControl.events,
+    onNavigate: navigateToSession,
+  });
+  // The known root, derived ONCE (plan 44.3 M1.5) from the viewed session's own host announcement (a
+  // dead/stale host still latches its workspace/cwd), then the inventory summary, then the supervisor's
+  // projects mapping. Only a resolvable root turns the no-host hint into a "start host" affordance;
+  // otherwise the session view keeps the plain shell-command hint. (`recents` is populated only while
+  // the picker is open, so in the session view this resolves from the log + inventory, which cover any
+  // session a host was ever here for.)
+  const knownRoot = useMemo(
+    () =>
+      resolveKnownRoot({
+        host,
+        summary: modal.inventory.sessions.find((s) => s.sessionId === target),
+        project: supervisor.recents.find((p) => p.sessionId === target),
+      }),
+    [host, modal.inventory.sessions, supervisor.recents, target],
+  );
+  const onStartHost = useCallback(() => {
+    if (knownRoot === null) {
+      return;
+    }
+    setStartRequested(true);
+    sessionLaunch.launch(knownRoot);
+  }, [knownRoot, sessionLaunch.launch]);
+  // Once a host is present (the badge flips to "host active", so the launch UI is gone) or the viewed
+  // session changes, disarm the subscription and reset the launch - the reset bumps useLaunch's guard
+  // token so a superseded launch's pending host.online never navigates the new session late.
+  const resetSessionLaunch = sessionLaunch.reset;
+  useEffect(() => {
+    if (startRequested && host.present) {
+      setStartRequested(false);
+      resetSessionLaunch();
+    }
+  }, [startRequested, host.present, resetSessionLaunch]);
+  // Reset the launch (and disarm) whenever the viewed session changes, so a launch started on the
+  // previous session cannot navigate the new one late (reset bumps useLaunch's guard token). The ref
+  // compare makes `target` a real read, not a trigger-only dep.
+  const launchTargetRef = useRef(target);
+  useEffect(() => {
+    if (launchTargetRef.current !== target) {
+      launchTargetRef.current = target;
+      setStartRequested(false);
+      resetSessionLaunch();
+    }
+  }, [target, resetSessionLaunch]);
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
   const archived = useMemo(() => isSessionArchived(events), [events]);
@@ -1363,9 +1426,25 @@ export function App() {
       ) : host.present ? (
         <span className="text-smui-yellow">● host starting…</span>
       ) : (
-        <span className="text-smui-yellow">
-          ● no host — <code className="text-foreground">{hostCommand}</code>
-        </span>
+        // No live host: the 44.3 recovery affordances. A launch in flight reads "restarting host…" when
+        // a host was here before (a stale/dead host - `announcement !== null`) and "starting host…" for
+        // a never-hosted session; a failed launch shows the error + Retry; an idle no-host session with a
+        // resolvable root offers "Start host"; with no resolvable root it keeps the shell-command hint.
+        <HostLaunchStatus
+          state={
+            sessionLaunch.launchState === "starting"
+              ? { phase: "starting", restarting: announcement !== null }
+              : sessionLaunch.launchState === "failed"
+                ? {
+                    phase: "failed",
+                    error: sessionLaunch.error ?? "The host could not be started.",
+                    onRetry: sessionLaunch.retry,
+                  }
+                : knownRoot !== null
+                  ? { phase: "startable", onStart: onStartHost }
+                  : { phase: "hint", command: hostCommand }
+          }
+        />
       )
     ) : null;
 
@@ -1567,6 +1646,7 @@ export function App() {
         onPickFolder={supervisor.onPickFolder}
         onPathChange={supervisor.onPathChange}
         onCreate={supervisor.onCreate}
+        onRetry={supervisor.onRetry}
         nowMs={now}
       />
     </>
