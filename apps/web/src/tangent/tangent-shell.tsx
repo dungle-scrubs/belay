@@ -1,9 +1,13 @@
 import type { TangentFoldMode } from "@trevor/session";
 import { ChevronDown, CornerUpLeft, GitBranch } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type RefObject, useRef } from "react";
+import { ActionShimmer } from "@/components/chat/action-shimmer";
 import { MarkdownBody } from "@/components/chat/markdown-body";
+import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { cn } from "@/lib/utils";
+import { vimCaretClass } from "@/vim/caret";
+import { useVim } from "@/vim/use-vim";
 
 /**
  * A single tangent turn as the shell renders it: the tangent's OWN conversation, projected to a minimal
@@ -59,6 +63,9 @@ export interface TangentShellProps {
   /** Row-scoped feedback after a fold-back (M8), e.g. "Sent to the parent composer for review". */
   readonly foldBackNote?: FoldBackNote | null;
   readonly onBack: () => void;
+  /** The host-owned Vim prompt preference (plan 06): when true, the tangent composer runs the SAME Vim
+   *  layer as the main composer, so `/vim` is respected here too. */
+  readonly vimEnabled?: boolean;
   readonly className?: string;
   readonly scroll?: TangentScroll;
 }
@@ -84,10 +91,21 @@ export function TangentShell({
   onFoldBack,
   foldBackNote,
   onBack,
+  vimEnabled,
   className,
   scroll,
 }: TangentShellProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // The SAME Vim layer the main composer uses (D-007): identical motions/modes, so the tangent respects
+  // `/vim` too. Disabled = a pure no-op (onKeyDown returns false, mode stays "insert").
+  const vim = useVim(textareaRef, vimEnabled ?? false);
+
   const onComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    // Vim first: in insert it only catches Escape (-> normal, consumed via stopPropagation, so the
+    // takeover's cancel/close Escape needs a SECOND press); in normal/visual it owns the motions/edits.
+    if (vim.onKeyDown(event)) {
+      return;
+    }
     // Enter sends; Shift+Enter keeps the newline (matching the main composer's plain-Enter send).
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -147,9 +165,8 @@ export function TangentShell({
             ))
           )}
           {busy ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-              Working in the tangent…
+            <div className="px-1 py-0.5">
+              <ActionShimmer label="Working in the tangent" />
             </div>
           ) : null}
         </div>
@@ -182,15 +199,21 @@ export function TangentShell({
       {/* The tangent's own composer: sends into the tangent session, never the parent. */}
       <div className="shrink-0 border-t border-border px-3 py-3">
         <textarea
+          ref={textareaRef}
           value={composer.draft}
           onChange={(event) => composer.onDraftChange(event.target.value)}
           onKeyDown={onComposerKeyDown}
+          onFocus={vim.onFocus}
           disabled={composer.disabled}
           rows={2}
           placeholder={composer.placeholder ?? "Ask in this tangent…"}
-          className="w-full resize-none rounded-md border border-border bg-background p-2 text-sm text-foreground outline-none focus:border-primary/60 disabled:opacity-50"
+          className={cn(
+            "w-full resize-none rounded-md border border-border bg-background p-2 text-sm text-foreground outline-none focus:border-primary/60 disabled:opacity-50",
+            vimCaretClass(vim.mode),
+          )}
         />
-        <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex items-center justify-end">
+          {vim.enabled ? <VimModeIndicator mode={vim.mode} className="mr-auto" /> : null}
           <button
             type="button"
             onClick={composer.onSend}

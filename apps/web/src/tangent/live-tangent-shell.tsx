@@ -1,5 +1,5 @@
 import { activeTurnRunId, type ModelRef, type SessionTransport } from "@trevor/session";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useScrollFollow } from "@/hooks/use-scroll-follow";
 import {
   sessionTransport,
@@ -33,6 +33,12 @@ export interface LiveTangentShellProps {
    * reviewable - never an auto-submit, never hidden parent context.
    */
   readonly onFoldBack: (active: ActiveTangent, content: FoldBackContent) => Promise<void> | void;
+  /** True when the tangent takeover is the FRONTMOST surface, so it owns Escape (no palette/modal above
+   *  it). The two-step Escape - cancel a running tangent turn, then close - is armed only then, so Escape
+   *  behind a higher overlay never reaches the tangent. */
+  readonly escapeOwned?: boolean;
+  /** The host-owned Vim prompt preference (plan 06), forwarded to the tangent composer so `/vim` applies. */
+  readonly vimEnabled?: boolean;
   /** Injected transport for deterministic tests; defaults to the app's shared session transport. */
   readonly transport?: SessionTransport;
 }
@@ -52,11 +58,16 @@ export function LiveTangentShell({
   turnModel,
   onBack,
   onFoldBack,
+  escapeOwned = false,
+  vimEnabled = false,
   transport = sessionTransport,
 }: LiveTangentShellProps) {
   const stream = useSessionWithTransport(transport, active.tangentSessionId);
   const actions = useSessionActionsWithTransport(transport, active.tangentSessionId);
-  const turns = useMemo(() => tangentTurns(stream.events), [stream.events]);
+  const turns = useMemo(
+    () => tangentTurns(stream.events, active.quote),
+    [stream.events, active.quote],
+  );
   const [draft, setDraft] = useState("");
   const [foldBackNote, setFoldBackNote] = useState<FoldBackNote | null>(null);
   const scroll = useScrollFollow(turns.length);
@@ -68,6 +79,38 @@ export function LiveTangentShell({
   const creating = active.tangentSessionId === null;
   const busy = activeRun !== null || awaiting;
   const disabled = creating || error !== null || busy;
+
+  // Two-step Escape, armed only while the tangent OWNS the frontmost surface (no palette/modal above it):
+  // a press while a turn is running HARD-CANCELS it (publishes `user.cancel` -> the adopting host aborts the
+  // run + tears the model request down); a press while idle closes the takeover. So one Esc cancels the
+  // query, a second Esc closes it. BUBBLE phase (not capture) so the composer's Vim layer runs FIRST: in
+  // insert, Vim consumes Escape (-> normal) and stops propagation, so this is reached only on a SECOND press
+  // (normal mode); with Vim off, Escape reaches here directly. Fires even when focus is off the textarea.
+  //
+  // The handler reads fresh state through a ref that every render refreshes, so the window listener is
+  // registered ONCE per `escapeOwned` and never churns. A dep-driven listener would instead re-subscribe on
+  // every streaming render, since `busy`/`activeRun` change with each delta.
+  const escapeState = useRef({ busy, activeRun, cancel: actions.cancel, onBack });
+  escapeState.current = { busy, activeRun, cancel: actions.cancel, onBack };
+  useEffect(() => {
+    if (!escapeOwned) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      const s = escapeState.current;
+      if (s.busy) {
+        void s.cancel(s.activeRun ?? "");
+      } else {
+        s.onBack();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [escapeOwned]);
 
   const onSend = () => {
     const text = nextTangentPrompt(turns, active.quote, draft);
@@ -113,6 +156,7 @@ export function LiveTangentShell({
       onFoldBack={handleFoldBack}
       foldBackNote={foldBackNote}
       onBack={onBack}
+      vimEnabled={vimEnabled}
       scroll={{
         transcriptRef: scroll.transcriptRef,
         onScroll: scroll.onScroll,

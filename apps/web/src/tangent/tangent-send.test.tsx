@@ -38,6 +38,36 @@ test("tangentTurns projects the tangent's own user/assistant turns", () => {
   );
 });
 
+test("with the seed quote, the FIRST user turn drops its folded quote for display (citation split)", () => {
+  seq = 0;
+  const turns = tangentTurns(
+    [
+      ev("session.tangentOf", { parentSessionId: "p", sourceMessageId: "e2", quote: "Anthropic" }),
+      ev("user.message", { text: "> Anthropic\n\nwhat is this?", provider: "anthropic" }),
+      ev("assistant.completed", { runId: "r1", text: "It's a model provider." }),
+      ev("user.message", { text: "and the api?", provider: "anthropic" }),
+    ],
+    "Anthropic",
+  );
+  assert.deepEqual(
+    turns.filter((t) => t.role === "user").map((t) => t.text),
+    // The first turn shows only the question (the header carries the quote); the later prompt is untouched.
+    ["what is this?", "and the api?"],
+  );
+});
+
+test("a quote-only opening (no draft) keeps the quote in the bubble", () => {
+  seq = 0;
+  const turns = tangentTurns(
+    [
+      ev("session.tangentOf", { parentSessionId: "p", sourceMessageId: "e2", quote: "Anthropic" }),
+      ev("user.message", { text: "> Anthropic", provider: "anthropic" }),
+    ],
+    "Anthropic",
+  );
+  assert.equal(turns[0]?.text, "> Anthropic");
+});
+
 test("the first prompt folds the seed snapshot in; later prompts are plain (M6)", () => {
   const quote = "blobs are content-addressed by sha256";
   // No user turn yet: fold the seed into the opening prompt.

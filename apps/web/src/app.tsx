@@ -1039,7 +1039,9 @@ export function App() {
   // from a ref so it never goes stale and works regardless of which element has focus.
   // A modal/picker/takeover (model chooser, resume, worktree switcher) owns Escape while open -
   // it closes itself, and the turn on the transcript behind it must NOT be cancelled.
-  const modalOpen =
+  // Every frontmost surface EXCEPT the tangent takeover. Split out so the tangent can tell whether it is
+  // the SOLE frontmost surface (owns Escape) vs sitting behind a palette/modal (which then owns Escape).
+  const otherTakeoverOpen =
     chooserOpen ||
     modal.resumeOpen ||
     modal.worktreeOpen ||
@@ -1049,9 +1051,11 @@ export function App() {
     helpOpen ||
     detail !== null ||
     jobDetail !== null ||
-    tangent.active !== null ||
     tangentDiscoveryOpen ||
     artifactPanel?.open === true;
+  const modalOpen = otherTakeoverOpen || tangent.active !== null;
+  // The tangent owns Escape only when nothing is layered above it, so a higher overlay's Escape still wins.
+  const tangentOwnsEscape = tangent.active !== null && !otherTakeoverOpen;
 
   // App actions shared by their keyboard shortcut (the router below) and their palette command, so the
   // two surfaces can never drift (plan 07 M7/M8).
@@ -1348,6 +1352,8 @@ export function App() {
       }}
       onBack={tangent.close}
       onFoldBack={foldBackToParent}
+      escapeOwned={tangentOwnsEscape}
+      vimEnabled={vimEnabled}
     />
   ) : undefined;
   const tangentDiscoveryView = tangentDiscoveryOpen ? (
