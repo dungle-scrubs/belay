@@ -22,20 +22,23 @@ authoring time.
 
 ### M1: `assistant.limit` protocol event + loop plumbing
 
-- [ ] RED: Failing round-trip test — `assistant.limit` builds → decodes with
+- [x] RED: Failing round-trip test — `assistant.limit` builds → decodes with
       `{provider,status,scope,resetsAt,utilization}` (`packages/session`).
-- [ ] GREEN: Builder in `protocol.ts` + decoder in `protocol-decode.ts`.
-- [ ] RED: Failing test — a `ProviderEvent{type:"limit"}` through the agent loop
+- [x] GREEN: Builder in `protocol.ts` + decoder in `protocol-decode.ts`.
+- [x] RED: Failing test — a `ProviderEvent{type:"limit"}` through the agent loop
       makes `publishTurn` emit + persist one `assistant.limit` session event.
-- [ ] GREEN: `ProviderEvent` variant (`types.ts:62-73`) threaded through
-      `AgentEvent` (`loop.ts:85-150`) and `publishTurn` (`turn.ts`).
-- [ ] REFACTOR: Extract shared limit payload type + status/scope normalizer;
-      module-level comment.
+- [x] GREEN: `ProviderEvent` variant (`types.ts`) threaded through
+      `AgentEvent` (`loop.ts` — pure pass-through) and `publishTurn` (`turn.ts`,
+      dedup + metric BEFORE the usage catch-all).
+- [x] REFACTOR: Shared limit payload type + status/scope normalizer extracted to
+      `@trevor/session/usage-limit` (Step 0); module-level comment. `timeUntil`
+      humanizer added to `time-format.ts`.
 
 **Gate 1→2**
 
-- [ ] `assistant.limit` round-trips and persists.
-- [ ] Synthetic `ProviderEvent{type:"limit"}` yields exactly one session event.
+- [x] `assistant.limit` round-trips and persists.
+- [x] Synthetic `ProviderEvent{type:"limit"}` yields exactly one session event
+      (+ a dedup test for R-3 within a turn).
 
 ---
 

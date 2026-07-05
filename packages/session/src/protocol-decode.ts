@@ -62,6 +62,7 @@ import {
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
 } from "./provider-question";
+import { LIMIT_STATUSES, type LimitStatus } from "./usage-limit";
 
 // --- consume side: permissive coercion + discriminated decode ---
 //
@@ -538,6 +539,16 @@ export type DecodedEvent =
       readonly diagnostic?: ProviderDiagnostic;
     }
   | {
+      /** A provider usage-limit signal (plan 44.4): approaching/reached a rate/usage window. NOT
+       *  run-scoped (it reflects the provider/session, not one turn's output). */
+      readonly type: "assistant.limit";
+      readonly provider: string;
+      readonly status: LimitStatus;
+      readonly scope: string;
+      readonly resetsAt?: number;
+      readonly utilization?: number;
+    }
+  | {
       readonly type: "model.switched";
       readonly runId: string;
       readonly from: ModelSwitchEndpoint;
@@ -925,6 +936,22 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         ...(diagnostic ? { diagnostic } : {}),
       };
     }
+    case "assistant.limit":
+      // Not run-scoped, so `runId` is ignored here. Status coerces to the safe `reached` default for a
+      // forward-compat/garbled value; resetsAt/utilization stay ABSENT unless a finite number is present
+      // (never defaulted to 0, which would misread as "resets at the epoch / 0% used").
+      return {
+        type: "assistant.limit",
+        provider: str(p.provider),
+        status: oneOf(LIMIT_STATUSES, p.status, "reached"),
+        scope: str(p.scope, "unknown"),
+        ...(typeof p.resetsAt === "number" && Number.isFinite(p.resetsAt)
+          ? { resetsAt: p.resetsAt }
+          : {}),
+        ...(typeof p.utilization === "number" && Number.isFinite(p.utilization)
+          ? { utilization: p.utilization }
+          : {}),
+      };
     case "model.switched": {
       const decodeEndpoint = (v: unknown): ModelSwitchEndpoint => {
         const o = (v ?? {}) as Record<string, unknown>;

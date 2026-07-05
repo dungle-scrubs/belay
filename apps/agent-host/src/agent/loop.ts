@@ -814,7 +814,9 @@ export function runAgent(
                 checkpointBaselined = true;
               }
             }
-            // text/thinking/usage flow through unchanged (shared ModelEvent shapes).
+            // text/thinking/usage/limit flow through unchanged (shared ModelEvent shapes). A `limit`
+            // (plan 44.4) is a pure pass-through: it never counts as streamed output, so it does not
+            // affect the empty-answer/reconnect guards (safeToRetry stays keyed on text/tool calls).
             return Option.some<AgentEvent>(event);
           }),
         );

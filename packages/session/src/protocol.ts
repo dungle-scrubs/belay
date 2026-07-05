@@ -8,6 +8,7 @@ import type { CatalogEntry, ModelRef, SourceSignInState, SourceSummary } from ".
 import type { PastePayload } from "./paste-tokens";
 import type { DecodedEvent } from "./protocol-decode";
 import type { ProviderQuestionAnswer, ProviderQuestionContract } from "./provider-question";
+import type { LimitStatus } from "./usage-limit";
 
 export type { UsageBreakdown };
 
@@ -530,6 +531,29 @@ export const events = {
       initiator: p.initiator,
       outcome: p.outcome,
       ...(p.reason ? { reason: p.reason } : {}),
+    },
+  }),
+  /**
+   * A provider usage-limit signal (plan 44.4): the session is `approaching` or has `reached` a provider
+   * rate/usage window (Claude's `anthropic-ratelimit-unified-*` headers, a terminal Codex 429). One
+   * provider-agnostic payload with a Trevor-native `status`; `resetsAt` (unix epoch SECONDS) and
+   * `utilization` (0..1 fraction used) ride only when the provider exposed them, spread-omitted otherwise
+   * like `modelSwitched`'s optionals. Detection only (D-004) - the transcript marks it; nothing acts on it.
+   */
+  assistantLimit: (p: {
+    provider: string;
+    status: LimitStatus;
+    scope: string;
+    resetsAt?: number;
+    utilization?: number;
+  }): TrevorEventInput => ({
+    type: "assistant.limit",
+    payload: {
+      provider: p.provider,
+      status: p.status,
+      scope: p.scope,
+      ...(p.resetsAt != null ? { resetsAt: p.resetsAt } : {}),
+      ...(p.utilization != null ? { utilization: p.utilization } : {}),
     },
   }),
   /** A transient provider outage is being auto-retried before any token streamed (D-076…D-079):

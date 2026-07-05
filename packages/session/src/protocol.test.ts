@@ -123,6 +123,53 @@ test("events.loopStatus round-trips through decodeTrevorEvent", () => {
   });
 });
 
+test("events.assistantLimit round-trips a usage-limit signal through decodeTrevorEvent (44.4)", () => {
+  // approaching, with the constraining scope + a reset + utilization, all survive the round trip.
+  assert.deepEqual(
+    decodeTrevorEvent(
+      stored(
+        events.assistantLimit({
+          provider: "anthropic",
+          status: "approaching",
+          scope: "five_hour",
+          resetsAt: 1_780_000_000,
+          utilization: 0.9,
+        }),
+      ),
+    ),
+    {
+      type: "assistant.limit",
+      provider: "anthropic",
+      status: "approaching",
+      scope: "five_hour",
+      resetsAt: 1_780_000_000,
+      utilization: 0.9,
+    },
+  );
+});
+
+test("events.assistantLimit omits absent optionals and tolerates a garbled status (44.4)", () => {
+  // A detect-only `reached` with no reset/utilization keeps the payload minimal on the wire.
+  const decoded = decodeTrevorEvent(
+    stored(events.assistantLimit({ provider: "codex", status: "reached", scope: "unknown" })),
+  );
+  assert.deepEqual(decoded, {
+    type: "assistant.limit",
+    provider: "codex",
+    status: "reached",
+    scope: "unknown",
+  });
+
+  // An unknown status off the wire coerces to the safe "reached" default (never throws).
+  const garbled = decodeTrevorEvent(
+    stored({
+      type: "assistant.limit",
+      payload: { provider: "codex", status: "melting", scope: "unknown" },
+    }),
+  );
+  assert.equal(garbled?.type === "assistant.limit" && garbled.status, "reached");
+});
+
 test("events.userMessage round-trips through decodeTrevorEvent", () => {
   const decoded = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
   assert.equal(decoded?.type, "user.message");

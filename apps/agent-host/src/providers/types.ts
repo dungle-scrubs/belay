@@ -2,7 +2,7 @@
  * Responsible for: the shared provider contract - the Provider interface, the DescribableProvider
  * base, and the event/message/tool/readiness/capability types every adapter speaks.
  */
-import type { ArtifactRef, PastePayload, ProviderModel, Usage } from "@trevor/session";
+import type { ArtifactRef, LimitStatus, PastePayload, ProviderModel, Usage } from "@trevor/session";
 import type { Effect, Stream } from "effect";
 import type { LocalModelTarget } from "../admission/contract";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
@@ -54,16 +54,27 @@ export interface ToolCall {
 
 /**
  * The model-step events that pass through the host unchanged: assistant text,
- * reasoning ("thinking") text, token usage, and an overflow signal. Thinking is the
- * model's reasoning trace - kept on its own channel so callers can render or hide it
- * without polluting the answer. These four are shared verbatim with the agent loop's
+ * reasoning ("thinking") text, token usage, an overflow signal, and a usage-limit signal.
+ * Thinking is the model's reasoning trace - kept on its own channel so callers can render or hide it
+ * without polluting the answer. These are shared verbatim with the agent loop's
  * `AgentEvent` (agent/loop.ts), so the loop forwards them rather than re-declaring them.
+ *
+ * `limit` (plan 44.4) is the provider's usage-limit reading (Claude's `anthropic-ratelimit-unified-*`
+ * success headers, a terminal Codex 429), already normalized to the Trevor-native status/scope. It
+ * carries no `provider` - `turn.ts` stamps the turn's `provider.id` when it publishes `assistant.limit`.
  */
 export type ModelEvent =
   | { readonly type: "text"; readonly text: string }
   | { readonly type: "thinking"; readonly text: string }
   | { readonly type: "usage"; readonly usage: Usage }
-  | { readonly type: "overflow"; readonly reason: string };
+  | { readonly type: "overflow"; readonly reason: string }
+  | {
+      readonly type: "limit";
+      readonly status: LimitStatus;
+      readonly scope: string;
+      readonly resetsAt?: number;
+      readonly utilization?: number;
+    };
 
 /**
  * One streamed event from a provider: the shared model-step events plus a tool call.

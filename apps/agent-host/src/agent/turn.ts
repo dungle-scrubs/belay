@@ -208,6 +208,11 @@ export function publishTurn(
     // transient outage that gave up) - distinct from a non-retryable terminal failure, which never
     // reconnects. The /doctor surface reads the two categories separately.
     let reconnectAttempts = 0;
+    // Usage-limit signals already published this turn, keyed `provider:scope:status` (plan 44.4 R-3):
+    // a multi-step response repeating the same header - or a retried 429 re-classifying - must not
+    // flood the transcript, so a duplicate (provider,scope,status) within one turn is dropped. A
+    // genuine transition (approaching -> reached, or a different scope) is a new key and still emits.
+    const emittedLimits = new Set<string>();
     // The compact per-tool accounting for the Stop hook payload (plan 25 M7, D-004): every
     // EXECUTED tool completion this turn publishes is recorded (name + touched path when
     // cheaply derivable) - a hook-denied or halt-skipped call is not "what the turn ran", so it
@@ -539,6 +544,32 @@ export function publishTurn(
             outcome: event.outcome,
             initiator: event.initiator,
           });
+        } else if (event.type === "limit") {
+          // A provider usage-limit signal (plan 44.4): Claude's `anthropic-ratelimit-unified-*` header
+          // reading, or a terminal Codex 429. Publish a durable `assistant.limit` stamped with the turn's
+          // provider, deduped per (provider,scope,status) within the turn (R-3). Detection only (D-004):
+          // nothing here pauses, switches, or waits - the transcript just marks it. Placed BEFORE the
+          // final `else`, which is the usage catch-all and would otherwise read `event.usage` off a limit.
+          const key = `${provider.id}:${event.scope}:${event.status}`;
+          if (!emittedLimits.has(key)) {
+            emittedLimits.add(key);
+            yield* emit.publish(
+              events.assistantLimit({
+                provider: provider.id,
+                status: event.status,
+                scope: event.scope,
+                ...(event.resetsAt != null ? { resetsAt: event.resetsAt } : {}),
+                ...(event.utilization != null ? { utilization: event.utilization } : {}),
+              }),
+            );
+            // A low-cardinality usage-limit counter (D-004 stays detection-only): provider/status/scope
+            // are all bounded, so a limited turn is observable without a high-cardinality label.
+            recordMetric(sink, METRIC_NAMES.usageLimit, 1, {
+              provider: provider.id,
+              status: event.status,
+              scope: event.scope,
+            });
+          }
         } else {
           // input is the prompt size of the latest step (current context); output sums.
           usage = {

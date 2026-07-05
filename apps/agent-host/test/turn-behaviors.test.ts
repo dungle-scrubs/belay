@@ -30,6 +30,62 @@ test("the turn pipeline forwards the full prior conversation to the model", asyn
   assert.ok(String(final?.text).includes("Remember the number 42."));
 });
 
+test("44.4 M1: a provider limit ProviderEvent is published as one assistant.limit session event", async () => {
+  // The provider surfaces a usage-limit signal mid-step (Claude's unified header path); the loop
+  // forwards it and turn.ts publishes exactly one durable assistant.limit, carrying the turn's provider.
+  const provider = fakeProvider({
+    id: "anthropic",
+    step: () => [
+      { type: "limit", status: "approaching", scope: "five_hour", resetsAt: 1_780_000_000 },
+      { type: "text", text: "still working" },
+      { type: "usage", usage },
+    ],
+  });
+  const events = await runTurn(provider, [{ role: "user", content: "hi" }], { runId: "r-lim" });
+  const limits = events.filter((e) => e.type === "assistant.limit");
+  assert.equal(limits.length, 1, "exactly one assistant.limit is emitted");
+  assert.deepEqual(limits[0]?.payload, {
+    provider: "anthropic",
+    status: "approaching",
+    scope: "five_hour",
+    resetsAt: 1_780_000_000,
+  });
+});
+
+test("44.4 M1: repeated identical limit signals in one turn are deduped per (provider,scope,status)", async () => {
+  // A multi-step turn whose steps repeat the same approaching-five_hour header must not flood the
+  // transcript - R-3 dedup. A DIFFERENT (scope,status) key still emits.
+  let step = 0;
+  const provider = fakeProvider({
+    id: "anthropic",
+    step: () => {
+      step += 1;
+      if (step === 1) {
+        return [
+          { type: "limit", status: "approaching", scope: "five_hour" },
+          {
+            type: "tool_call",
+            call: { id: "c1", name: "bash", arguments: JSON.stringify({ command: "echo hi" }) },
+          },
+          { type: "usage", usage },
+        ];
+      }
+      return [
+        { type: "limit", status: "approaching", scope: "five_hour" }, // duplicate -> deduped
+        { type: "limit", status: "reached", scope: "seven_day" }, // new key -> emitted
+        { type: "text", text: "done" },
+        { type: "usage", usage },
+      ];
+    },
+  });
+  const events = await runTurn(provider, [{ role: "user", content: "hi" }], { runId: "r-dedup" });
+  const limits = events.filter((e) => e.type === "assistant.limit");
+  assert.deepEqual(
+    limits.map((e) => `${e.payload.status}:${e.payload.scope}`),
+    ["approaching:five_hour", "reached:seven_day"],
+  );
+});
+
 test("a sub-minimum context window fails the turn before the model is ever called", async () => {
   let called = false;
   const provider = fakeProvider({

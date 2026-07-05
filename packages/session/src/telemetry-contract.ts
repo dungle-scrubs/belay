@@ -154,6 +154,7 @@ export const METRIC_NAMES = {
   turnDuration: "trevor.turn.duration",
   turnStop: "trevor.turn.stop",
   modelSwitch: "trevor.turn.model_switch",
+  usageLimit: "trevor.turn.usage_limit",
   retryCount: "trevor.provider.retries",
   blobOutcome: "trevor.blob.outcome",
 } as const;
