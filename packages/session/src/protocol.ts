@@ -168,6 +168,18 @@ export interface CommandSpec {
   readonly name: string;
   readonly summary: string;
   readonly usage?: string;
+  /**
+   * The argument form for a file-loaded custom command (plan 44.5), from the command file's
+   * `argument-hint` frontmatter, e.g. `<issue-number>`. Drives the web menu's inline hint and the live
+   * substitution preview. Absent for built-in commands and for custom commands with no hint declared.
+   */
+  readonly argumentHint?: string;
+  /**
+   * The raw body template of a file-loaded custom command (plan 44.5), carrying its `$0`/`$ARGUMENTS`
+   * placeholders. Published so the web can render a LIVE substitution preview that matches what the host
+   * will submit. Present only for file-loaded commands; built-in commands announce no body.
+   */
+  readonly body?: string;
 }
 
 /**

@@ -195,3 +195,30 @@ test("/doctor's select threads the MCP rollup through to the snapshot (plan 23 M
   assert.equal(mcp?.status, "warn", "the injected MCP state survives the command's context slice");
   assert.match(mcp?.verdict ?? "", /"linear"/);
 });
+
+test("a loaded command file is announced as a spec and resolvable via commandFile (44.5 M4)", () => {
+  const registry = buildCommandRegistry([
+    { id: "/fix", rootKind: "project", body: "Fix issue #$0", summary: "fix an issue" },
+  ]);
+  const spec = registry.specs.find((s) => s.name === "/fix");
+  assert.equal(spec?.summary, "fix an issue");
+  assert.equal(registry.commandFile("/fix")?.body, "Fix issue #$0");
+  // A built-in command is NOT a command file - it dispatches through run(), not the SUBMIT branch.
+  assert.equal(registry.commandFile("/help"), undefined);
+});
+
+test("a loaded command file carrying an argument-hint announces it on its spec (44.5 M5)", () => {
+  const registry = buildCommandRegistry([
+    { id: "/fix", rootKind: "project", body: "Fix #$0", summary: "fix", argumentHint: "<issue>" },
+  ]);
+  assert.equal(registry.specs.find((s) => s.name === "/fix")?.argumentHint, "<issue>");
+});
+
+test("a loaded command file cannot shadow a built-in command of the same name", () => {
+  const registry = buildCommandRegistry([
+    { id: "/help", rootKind: "project", body: "not the real help", summary: "x" },
+  ]);
+  // The built-in /help spec is the only one, and /help is not treated as a submit-branch command file.
+  assert.equal(registry.specs.filter((s) => s.name === "/help").length, 1);
+  assert.equal(registry.commandFile("/help"), undefined);
+});

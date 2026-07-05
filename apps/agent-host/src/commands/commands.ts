@@ -16,6 +16,7 @@ import { buildSkillCommand } from "@host/skills/skills";
 import { runCommand } from "@host/tools/run-shell";
 import { msg } from "@host/transport/messages";
 import type { CommandMenuPayload, CommandSpec } from "@trevor/session";
+import type { LoadedCommandFile } from "./command-loader";
 
 /**
  * Immediate host commands (slash commands): the host runs these directly and
@@ -89,6 +90,13 @@ export interface CommandRegistry {
     args: string,
     ctx: CommandContext,
   ): Promise<{ text: string; ok: boolean; menu?: CommandMenuPayload }>;
+  /**
+   * The loaded command FILE for `name`, when the name resolves to a `.trevor/commands/*.md` command
+   * (plan 44.5) - the signal to the dispatch that this name takes the SUBMIT branch (expand its body
+   * into a user.message prompt) rather than `run()` (which produces a command.result). `undefined` for
+   * a built-in command or an unknown name, so those keep their existing lane.
+   */
+  commandFile(name: string): LoadedCommandFile | undefined;
 }
 
 const noContext = (): void => undefined;
@@ -245,7 +253,9 @@ function buildJobsStopCommand(): Command {
   };
 }
 
-export function buildCommandRegistry(): CommandRegistry {
+export function buildCommandRegistry(
+  commandFiles: readonly LoadedCommandFile[] = [],
+): CommandRegistry {
   const commands: Command<unknown>[] = [];
   /** Registers a command, preserving its narrow input type at the declaration site. */
   const add = <I>(command: Command<I>): void => {
@@ -327,8 +337,31 @@ export function buildCommandRegistry(): CommandRegistry {
 
   const byName = new Map(commands.map((c) => [c.spec.name, c]));
 
+  // File-loaded commands (plan 44.5): register each `.trevor/commands/*.md` command's SPEC so it is
+  // announced on host.online (the web menu lists it + `parseCommand` routes it), and hold a name->file
+  // map so the dispatch can take the SUBMIT branch. A built-in command of the same name always wins - a
+  // dropped-in file can never shadow a real host command handler.
+  const commandFilesByName = new Map<string, LoadedCommandFile>();
+  const fileSpecs: CommandSpec[] = [];
+  for (const file of commandFiles) {
+    if (byName.has(file.id) || commandFilesByName.has(file.id)) {
+      continue;
+    }
+    commandFilesByName.set(file.id, file);
+    fileSpecs.push({
+      name: file.id,
+      summary: file.summary,
+      // The body rides the spec so the web renders a live substitution preview (plan 44.5 M5/M6).
+      body: file.body,
+      ...(file.argumentHint !== undefined
+        ? { usage: `${file.id} ${file.argumentHint}`, argumentHint: file.argumentHint }
+        : {}),
+    });
+  }
+
   return {
-    specs: commands.map((c) => c.spec),
+    specs: [...commands.map((c) => c.spec), ...fileSpecs],
+    commandFile: (name) => commandFilesByName.get(name),
     async run(name, args, ctx) {
       const command = byName.get(name);
       if (!command) {

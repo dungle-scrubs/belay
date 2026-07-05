@@ -265,7 +265,18 @@ function coerceLoopSnapshot(value: unknown): LoopSnapshot {
 function coerceCommands(value: unknown): CommandSpec[] {
   return coerceArray(value, (c) => {
     const name = str(c.name);
-    return name ? { name, summary: str(c.summary), usage: optStr(c.usage) } : null;
+    if (!name) {
+      return null;
+    }
+    const argumentHint = optStr(c.argumentHint);
+    const body = optStr(c.body);
+    return {
+      name,
+      summary: str(c.summary),
+      usage: optStr(c.usage),
+      ...(argumentHint !== undefined ? { argumentHint } : {}),
+      ...(body !== undefined ? { body } : {}),
+    };
   });
 }
 

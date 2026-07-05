@@ -635,6 +635,42 @@ test("host.online round-trips the announced subagents (D-045)", () => {
   ]);
 });
 
+test("host.online round-trips a custom command's argument-hint + body on its spec (44.5 M5)", () => {
+  const decoded = decodeTrevorEvent(
+    stored(
+      events.hostOnline({
+        branch: "main",
+        providers: ["qwen"],
+        default: "qwen",
+        models: {},
+        instanceId: "i",
+        cwd: "~",
+        workspace: "~",
+        commands: [
+          {
+            name: "/fix",
+            summary: "fix an issue",
+            usage: "/fix <issue>",
+            argumentHint: "<issue>",
+            body: "Fix issue #$0",
+          },
+          { name: "/plain", summary: "no hint" },
+        ],
+        agents: [],
+      }),
+    ),
+  );
+  assert.equal(decoded?.type, "host.online");
+  if (decoded?.type !== "host.online") return;
+  const fix = decoded.commands.find((c) => c.name === "/fix");
+  assert.equal(fix?.argumentHint, "<issue>");
+  assert.equal(fix?.body, "Fix issue #$0");
+  // A built-in / hint-less command decodes without argumentHint or body fields.
+  const plain = decoded.commands.find((c) => c.name === "/plain");
+  assert.equal(plain?.argumentHint, undefined);
+  assert.equal(plain?.body, undefined);
+});
+
 test("host.online round-trips the model sources + catalog, defaulting to empty when absent (D-065)", () => {
   const source = {
     sourceId: "zai",

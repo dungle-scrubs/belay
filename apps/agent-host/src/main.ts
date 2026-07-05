@@ -3,8 +3,11 @@ import { promisify } from "node:util";
 import { leaseOptions, makeLeadership } from "@host/boot/leadership";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
+import { makeCommandFileDispatch } from "@host/commands/command-file-dispatch";
+import { loadCommandFiles } from "@host/commands/command-loader";
 import { buildCommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
+import { resolveInterpolationConfig } from "@host/commands/interpolation";
 import { createProgrammaticCommandDispatcher } from "@host/commands/programmatic-command";
 import { hooksRuntime } from "@host/hooks/host-runtime";
 import { lspManager } from "@host/lsp/host-runtime";
@@ -180,7 +183,15 @@ const residency = createHostResidency({
   staleAfterMs: admissionConfig.staleAfterMs,
 });
 const providers = buildProviders({ admissionGate, residency: residency.recorder });
-const commands = buildCommandRegistry();
+// File-loaded custom commands (plan 44.5): `.trevor/commands/*.md` bodies with `$0`/`$ARGUMENTS`
+// placeholders, loaded once at startup (a new/edited file needs a host restart, like skills). Their
+// specs are announced on host.online so the web menu lists them; invoking one takes the SUBMIT branch
+// below. A skip is fail-soft - it never blocks the rest of command registration.
+const commandFileLoad = loadCommandFiles();
+for (const diagnostic of commandFileLoad.diagnostics) {
+  warn("host", "command file skipped", { path: diagnostic.path, code: diagnostic.code });
+}
+const commands = buildCommandRegistry(commandFileLoad.files);
 // The `/loop` runtime (plan 17): the command surface drives a durable-loop store. Process loops run through
 // the real command boundary; current-session + background prompt loops inject a control prompt into the
 // session (a first cut - a dedicated background-agent spawn + a full turn-completion await are later
@@ -434,6 +445,16 @@ const {
   compactionController,
   turnMachine,
   forceCompact,
+});
+
+// The file-loaded-command SUBMIT branch (plan 44.5, M4): expands a `.trevor/commands/*.md` body
+// (interpolate-then-substitute, D-007) and publishes it as the turn's prompt through the control-prompt
+// seam - so a custom command drives the model like a typed prompt, not a `command.result`. Wired after
+// `publishControlPrompt` exists; the dispatch calls it only on the live leader (below).
+const commandFileDispatch = makeCommandFileDispatch({
+  interpolationConfig: resolveInterpolationConfig(process.env),
+  publish: publishControlPrompt,
+  emitResult: (result) => emit(events.commandResult(result)),
 });
 
 /**
@@ -818,7 +839,13 @@ const programmaticCommands = createProgrammaticCommandDispatcher({
       },
     },
   ],
-  fallback: (command, args) => runCommand(command, args),
+  // A file-loaded custom command (plan 44.5) takes the SUBMIT branch: expand its body and publish it as
+  // the turn's prompt. Everything else (built-in immediate commands) keeps the command.result lane with
+  // its raw `args` unchanged - so immediate TS commands are unaffected.
+  fallback: (command, args) => {
+    const file = commands.commandFile(command);
+    return file ? commandFileDispatch.submit(file, args) : runCommand(command, args);
+  },
 });
 
 /** Admits one event to the prompt projection and recomputes the derived history.
