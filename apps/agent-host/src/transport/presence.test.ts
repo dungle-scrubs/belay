@@ -41,6 +41,11 @@ test("announceOnline puts the host model preference on host.online (plan 51)", (
   );
   assert.equal(decoded?.type, "host.online");
   if (decoded?.type !== "host.online") return;
-  // The field is announced (read from the store cache) - empty on the test box (no model-prefs.json).
-  assert.deepEqual(decoded.modelPrefs, { default: null, pinned: [] });
+  // Assert the FIELD is announced and correctly shaped (the plan-51 wiring rides host.online) - NOT its
+  // exact value, which reads the host's REAL config home (`<TREVOR_HOME>/model-prefs.json`) and so varies
+  // by machine. The empty-load + parse behavior is unit-tested hermetically in model-prefs-store.test.ts
+  // (via its injectable `read`); here we only pin that the shaped preference is on the wire.
+  assert.ok(decoded.modelPrefs, "modelPrefs rides host.online");
+  assert.ok("default" in decoded.modelPrefs, "carries a default field");
+  assert.ok(Array.isArray(decoded.modelPrefs.pinned), "carries a pinned array");
 });
