@@ -4,14 +4,14 @@ Implementation resume state for plan 44.5. RED/GREEN/REFACTOR task tracking per 
 
 **Stage:** in progress
 
-> **Current focus:** Phase 2 · M3 - `.trevor/commands/*.md` loader
+> **Current focus:** Phase 2 · M4 - register + expand-on-dispatch
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks | 54 |
-| Checked (done) | 24 |
+| Checked (done) | 33 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
@@ -62,15 +62,15 @@ Phase 3 (M5-M6) is the web preview polish.
 
 ### M3: `.trevor/commands/*.md` loader
 
-- [ ] RED: loader reads `<cwd>/.trevor/commands/*.md` -> `CommandFile[]` (`rootKind: "project"`, `id: "/<basename>"`, body frontmatter-stripped)
-- [ ] GREEN: loader mirroring `skills/skills.ts` ordered-root + frontmatter-strip pattern
-- [ ] RED: subdirectory recursion, non-`.md` ignored, name from basename
-- [ ] GREEN: recursion + filter
-- [ ] RED: user root (config-home) loads; project file overrides same-named user file (D-006)
-- [ ] GREEN: root ordering + project-over-user precedence
-- [ ] RED: unreadable/malformed file skipped with structured diagnostic, no crash
-- [ ] GREEN: fail-soft load with diagnostic
-- [ ] REFACTOR: loader module comment; share frontmatter parser with `skills.ts` only if clean
+- [x] RED: loader reads `<cwd>/.trevor/commands/*.md` -> `CommandFile[]` (`rootKind: "project"`, `id: "/<basename>"`, body frontmatter-stripped)
+- [x] GREEN: loader mirroring `skills/skills.ts` ordered-root + frontmatter-strip pattern
+- [x] RED: subdirectory recursion, non-`.md` ignored, name from basename
+- [x] GREEN: recursion + filter
+- [x] RED: user root (config-home) loads; project file overrides same-named user file (D-006)
+- [x] GREEN: root ordering + project-over-user precedence
+- [x] RED: unreadable/malformed file skipped with structured diagnostic, no crash
+- [x] GREEN: fail-soft load with diagnostic
+- [x] REFACTOR: loader module comment; share frontmatter parser with `skills.ts` only if clean
 
 ### M4: Register + expand-on-dispatch
 
