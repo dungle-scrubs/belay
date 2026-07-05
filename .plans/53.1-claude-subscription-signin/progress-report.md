@@ -69,34 +69,34 @@ deferred or superseded debt at authoring time. The 44.4 re-thread is tracked in 
 
 ### M3: Restore "Sign in" copy + device-code flow for the Claude source
 
-- [ ] RED: `SourceAuthPanel` story/test for the `anthropic` oauth source — "Sign in"
+- [x] RED: `SourceAuthPanel` story/test for the `anthropic` oauth source — "Sign in"
       button (action `authenticate`) + "Sign in to Claude subscription" copy, NOT the
       setup-token copy.
-- [ ] GREEN: Remove the dead oauth-`configure` special-case in `authCopy`
-      (`source-auth-panel.tsx:97-101`).
-- [ ] RED: Story/test that a `device-code` `SourceSignInState` renders the `DeviceCodeFlow`
+- [x] GREEN: Remove the dead oauth-`configure` special-case in `authCopy`
+      (`source-auth-panel.tsx`).
+- [x] RED: Story/test that a `device-code` `SourceSignInState` renders the `DeviceCodeFlow`
       panel (URL + optional paste field), reusing the long-URL fixture (53 D-004 wrap).
-- [ ] GREEN: Confirm the `sign-in` App command drives `signInSource` for `anthropic` and
-      the panel renders the URL/code; wire only if a gap surfaces.
-- [ ] REFACTOR: Refresh the Storybook visual baselines touched by the label/copy change.
+- [x] GREEN: The `sign-in` App command already drives `signInSource` for `anthropic` (the
+      `authenticate`→sign-in mapping is unchanged); the panel renders the emitted URL/code. No wiring gap.
+- [x] REFACTOR: Refresh the Storybook visual baselines touched by the label/copy change (see Storybook baselines below).
 
 ### M4: Refine the Direct API copy; keep the overflow fix
 
-- [ ] RED: `SourceAuthPanel` test for the Anthropic Direct api-key source — "add your key
-      to `~/.pi/auth.json`" + "Configure" (not "Sign in"); no api-key source shows sign-in
-      framing.
-- [ ] GREEN: Tighten the api-key `authCopy` wording if any sign-in phrasing surfaces; keep
-      the "keys stay in the host auth store" affordance.
-- [ ] RED: Re-assert the long verification-URL wrap (53 D-004) at a narrow width.
-- [ ] GREEN: No-op if green; else re-apply the wrap fix.
-- [ ] REFACTOR: Pixel pass in light + dark; refresh affected baselines.
+- [x] RED: `SourceAuthPanel` test for the Anthropic Direct api-key source (`anthropic-api`) —
+      "add your key to `~/.pi/auth.json`" + "Configure" (not "Sign in"); no api-key source shows
+      sign-in framing.
+- [x] GREEN: api-key `authCopy` wording already points at the host auth store with no sign-in phrasing;
+      the "keys stay in the host auth store" affordance is retained.
+- [x] RED: Re-assert the long verification-URL wrap (53 D-004) at a narrow width (kept + a Claude device-code case).
+- [x] GREEN: Green — the D-004 wrap fix is untouched.
+- [x] REFACTOR: Baselines refreshed via the pinned container (see Storybook baselines below).
 
 **Gate 2→done**
 
-- [ ] Claude source renders "Sign in" and opens `loginAnthropic`; Direct API renders
+- [x] Claude source renders "Sign in" and opens `loginAnthropic`; Direct API renders
       "Configure"/add-key, never sign-in.
-- [ ] `pnpm --filter @trevor/web test` + Storybook baselines green.
-- [ ] `pnpm typecheck` green across `agent-host`, `web`, `session`.
+- [x] `pnpm --filter @trevor/web test` green (878 tests) + Storybook baselines regenerated.
+- [x] `pnpm typecheck` green across `agent-host`, `web`, `session` (full `pnpm -r typecheck`).
 
 ---
 
@@ -108,3 +108,17 @@ conditional, not a scheduled task — built only if R-1 materializes for the own
 ## Superseded / Obsolete
 
 _None._
+
+## Storybook baselines
+
+Regenerated in the pinned Playwright container (`v1.50.0-noble`) via
+`tests/browser/update-storybook-baselines.sh`. The label/copy change touched exactly three
+`SourceAuthPanel` baselines; the full-regen run also drifted 5 unrelated `chat-modelswitchmarker`
+PNGs, which were `git checkout`-reverted so only the intended ones are committed:
+
+- **removed** `chooser-sourceauthpanel--claude-subscription-setup.png` (the old oauth+configure story)
+- **added** `chooser-sourceauthpanel--claude-subscription-sign-in.png` ("Sign in to Claude subscription")
+- **added** `chooser-sourceauthpanel--claude-subscription-device-code.png` (loginAnthropic URL + paste
+  field; the long URL still wraps, 53 D-004)
+
+No `model-chooser` baseline changed: those stories render their own fixtures, not the live catalog.
