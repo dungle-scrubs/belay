@@ -6,6 +6,7 @@
 
 - [x] `03-filesystem-root-taxonomy`.
 - [x] Existing D-085 launcher and host registry.
+- [ ] `44.1-supervisor-foundation` - M2 consumes `@trevor/launcher` instead of re-extracting the launcher core.
 - [x] Existing session transport contract.
 - [x] Existing local services.
 - [ ] Spawnable host artifact.
@@ -23,8 +24,8 @@
 
 ### M2: Shared Launcher Core
 
-- [ ] RED: Add tests proving desktop and CLI resolve the same project root and session id for the same cwd
-- [ ] GREEN: Extract or expose reusable launcher/session/host-registry logic so Tauri can call the same behavior
+- [ ] RED: Add tests proving desktop and CLI resolve the same project root and session id for the same cwd (both via `@trevor/launcher`)
+- [ ] GREEN: Wire the desktop core to call `@trevor/launcher` (from 44.1) so Tauri gets the same launcher/session/host-registry behavior as the CLI
 - [ ] RED: Add tests for host ownership and lock compatibility between CLI and desktop
 - [ ] GREEN: Define a desktop supervisor adapter over the shared launcher core
 - [ ] REFACTOR: Avoid duplicating project/session mapping code in Rust and TypeScript unless it is generated/shared from one source
@@ -142,6 +143,6 @@
 
 ## Summary
 
-- Current cutoff blockers: 73 unchecked implementation/report items.
+- Current cutoff blockers: 74 unchecked implementation/report items.
 - Accepted/deferred follow-up: none.
 - Superseded/obsolete checklist debt: none.

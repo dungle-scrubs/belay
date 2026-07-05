@@ -4,6 +4,7 @@
 
 - [x] `03-filesystem-root-taxonomy` - desktop-owned durable state, debug state, launcher records, and temporary files must use the established storage roots.
 - [x] Existing D-085 launcher and host registry - `apps/trevor-cli/src/launch.ts`, `host-registry.ts`, and `project.ts` already define project root resolution, session id mapping, host reuse/spawn, locks, and shared service readiness.
+- [ ] `44.1-supervisor-foundation` - extracts that launcher logic into the `@trevor/launcher` package (for the CLI and the supervisor). Plan 48 M2 **consumes** `@trevor/launcher` rather than re-extracting the core itself. <!-- D-005 -->
 - [x] Existing session transport contract - web and host communicate through local session-store or Richter via `@trevor/session`; desktop supervision must not become an IPC shortcut.
 - [x] Existing local services - web, session-store, blob-store, and agent-host already run as separate workspace apps in development.
 - [ ] Spawnable host artifact - the Node + Effect host must ship as a sidecar artifact for Tauri, either as a standalone binary or bundled Node runtime.
@@ -79,9 +80,10 @@ The host is a Node + Effect app. The umbrella plan already marks a spawnable hos
 
 - **Dependencies:** M1
 - **Effort:** M
+- **Note:** `44.1-supervisor-foundation` already extracts the pure launcher core into `@trevor/launcher` for the CLI and the browser supervisor. This milestone **consumes** that package and adds the desktop supervisor adapter over it, rather than re-extracting the core. <!-- D-005 -->
 - **Tasks:**
-  1. RED: Add tests proving desktop and CLI resolve the same project root and session id for the same cwd.
-  2. GREEN: Extract or expose reusable launcher/session/host-registry logic so Tauri can call the same behavior.
+  1. RED: Add tests proving desktop and CLI resolve the same project root and session id for the same cwd (both via `@trevor/launcher`).
+  2. GREEN: Wire the desktop core to call `@trevor/launcher` (from 44.1) so Tauri gets the same launcher/session/host-registry behavior as the CLI.
   3. RED: Add tests for host ownership and lock compatibility between CLI and desktop.
   4. GREEN: Define a desktop supervisor adapter over the shared launcher core.
   5. REFACTOR: Avoid duplicating project/session mapping code in Rust and TypeScript unless it is generated/shared from one source.
