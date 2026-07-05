@@ -9,6 +9,7 @@
 - [x] Existing local services - web, session-store, blob-store, and agent-host already run as separate workspace apps in development.
 - [ ] Spawnable host artifact - the Node + Effect host must ship as a sidecar artifact for Tauri, either as a standalone binary or bundled Node runtime.
 - [ ] Desktop packaging decision - choose the app packaging/signing/update path for macOS first, with room for Windows/Linux later.
+- [ ] `.plans/56-rename-to-trevor` (coordination; sequenced first) - plan 56 renames the project to `trevor` and lands before 48. Build the Tauri app identity (bundle id, product name, window title) against the final `trevor` name and read all paths from `node-paths` (already `~/.trevor`); do not introduce `trevorV2` literals. <!-- D-006 -->
 
 ## 1. Architecture
 

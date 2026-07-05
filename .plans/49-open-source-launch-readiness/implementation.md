@@ -13,6 +13,10 @@ prerequisite whether the project ships fully-open or open-core, so no licensing 
 
 ## 0. Hard Dependencies
 
+- [ ] **`.plans/56-rename-to-trevor` (hard dependency, WS4; sequenced first).** Plan 56 performs the real
+  project rename - the `~/.trevorV2` -> `~/.trevor` home dir, the working directory, the GitHub repo, and
+  all identifiers/fixtures - and lands before 49. WS4 therefore builds on the completed rename and does not
+  redo the dir/path work. <!-- D-008 -->
 - [ ] **`.plans/28-headless-cli-sdk-harness` (hard dependency, WS3).** `trevor init` and `trevor doctor`
   are CLI verbs; they need the `apps/trevor-cli` executable + arg-parsing surface plan 28 introduces.
   <!-- D-007 -->
@@ -35,8 +39,9 @@ prerequisite whether the project ships fully-open or open-core, so no licensing 
 - [x] Shipped naming surfaces WS4 touches: `TREVOR_*` env prefix, `@trevor/*` package scope,
   `apps/trevor-cli`, `.trevor/` paths - all kept; only the public *identity* changes. <!-- D-005 -->
 
-**Downstream plans:** none. Plan 49 is the highest-numbered plan (capstone after 48); a terminal plan
-has only upstream dependencies, so there is no downstream accommodation to thread. <!-- D-006 -->
+**Downstream plans:** none. Plan 49 is a capstone with only upstream dependencies - now including the
+plan 56 rename (higher-numbered but sequenced first, so upstream in run order) - and threads no downstream
+accommodation of its own. <!-- D-006 --> <!-- D-008 -->
 
 **Non-goals (out of scope, deferred):** the licensing choice (fully-open vs open-core) and any
 business-model / hosted-substrate work. A LICENSE file + headers is a *fifth* item to add once that
@@ -63,9 +68,11 @@ Four independent workstreams, each rooted in an existing seam so the work is ext
   env vars override the file (file provides defaults, env wins). `trevor init` scaffolds the file from
   the existing `/init` evidence primitive; a new `/doctor` **Config** area validates it. Scattered
   `TREVOR_*` / provider-key reads migrate to reading the resolved config. <!-- D-004 -->
-- **WS4 - Naming/branding.** Keep "Trevor" as the product name and **trademark** it; drop the "V2"
-  suffix from the public identity (README, package descriptions, app title, `TREVOR_HOME` default path).
-  No mass identifier rename - `TREVOR_*`, `@trevor/*`, `.trevor/` stay. <!-- D-005 -->
+- **WS4 - Naming/branding.** The structural rename (the `~/.trevorV2` -> `~/.trevor` home dir, working
+  dir, GitHub repo, and all identifiers/fixtures) is done by plan 56, sequenced first. WS4's remaining
+  scope is the PUBLIC product identity only: README/package-description/tagline polish and **trademarking**
+  "Trevor". No further dir/path work - 56 owns that; `TREVOR_*`, `@trevor/*`, `.trevor/` stay.
+  <!-- D-005 --> <!-- D-008 -->
 
 ### Key Constraints
 
@@ -202,8 +209,9 @@ scaffold and validate it.
 - **Tasks:**
   1. RED: Add a check that no "V2"/"trevorV2" leaks into public-facing identity (README, package
      `description`, app `<title>`, public docs).
-  2. GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings and the
-     `~/.trevorV2` default path presentation (keep back-compat for the actual dir).
+  2. GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings (README, package
+     `description`, app `<title>`, public docs). The `~/.trevorV2` dir is already renamed to `~/.trevor`
+     by plan 56 - no back-compat shim. <!-- D-008 -->
   3. REFACTOR: One neutral public tagline/description shared across README + package metadata.
 
 #### M2 (OPEN - external): Trademark clearance

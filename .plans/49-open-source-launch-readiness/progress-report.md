@@ -5,7 +5,7 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 25
+- **Current cutoff blockers:** 26
 - **Completed current work:** 0
 - **Accepted/deferred follow-up:** 4
 - **Superseded/obsolete checklist debt:** 0
@@ -22,6 +22,7 @@
 
 ### Hard-dependency gates (external plans; must land before the dependent milestone)
 
+- [ ] `.plans/56-rename-to-trevor` complete (WS4 builds on the finished rename; 56 is sequenced first). <!-- D-008 -->
 - [ ] `.plans/28-headless-cli-sdk-harness` reaches implementing/complete (WS3 M2/M3 need the CLI surface).
 - [ ] `.plans/41-doctor-health-surface` reaches implementing/complete (WS3 M3 config area builds on it).
 - [ ] `.plans/21-workflows-runtime` M9 shared `sandbox-runner` coordinated with WS1 M3 (whichever lands first, the other accommodates).
@@ -69,7 +70,7 @@
 ### WS4 M1 - Public-identity consistency + guard
 
 - [ ] RED: Add a check that no "V2"/"trevorV2" leaks into public-facing identity (README, package `description`, app `<title>`, public docs).
-- [ ] GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings and the `~/.trevorV2` path presentation (keep the actual dir back-compat).
+- [ ] GREEN: Set the public identity to "Trevor"; drop "V2" from public-facing strings (README, package `description`, app `<title>`, public docs); the `~/.trevorV2` dir is already renamed to `~/.trevor` by plan 56 - no back-compat shim. <!-- D-008 -->
 - [ ] REFACTOR: One neutral public tagline/description shared across README + package metadata.
 
 ## Accepted / Deferred Follow-up
