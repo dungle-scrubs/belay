@@ -49,36 +49,47 @@ authoring time.
 _Depends on plan 53.1 — Claude now streams via pi-ai `anthropic-messages`; `claude-code.ts`
 and its `SDKRateLimitEvent` branch are deleted (D-007)._
 
-- [ ] RED (SPIKE): Characterization test over a real pi-ai `anthropic-messages` response —
-      which `anthropic-ratelimit-unified-*` headers pi-ai surfaces (`-status`, `-reset`,
-      5h/7d scope). Resolves R-2.
-- [ ] GREEN: At the pi-ai boundary map unified headers → `limit` ProviderEvent (`-status`
-      → enum, 5h/7d → `scope`, `-reset` → `resetsAt`, remaining/limit → `utilization`);
-      absent header → detect-only + log inspected keys.
-- [ ] RED: Failing test — `allowed_warning → "approaching"` from the header.
-- [ ] GREEN: Complete status mapping (`allowed→ok`, `allowed_warning→
-      approaching`, `rejected→reached`).
-- [ ] REFACTOR: Share the unified-header read with the Codex reset path (M3) in
-      `failure-evidence.ts`; table-drive the mapping; add boundary log line.
+- [x] RED (SPIKE): Characterization over the `anthropic-ratelimit-unified-*` header record
+      (`usage-limit.test.ts` + `usage-limit-capture.test.ts`). RESOLVED R-2: pi-ai's
+      `StreamOptions.onResponse(response:{status,headers:Record<string,string>})` surfaces ALL raw
+      response headers on the SUCCESS path (anthropic-messages.js:354 calls it with every header), so
+      an absolute `resetsAt` + `scope` + `utilization` ARE reachable when Anthropic emits the unified
+      headers. Capture is a REAL success-path read (not the error path).
+- [x] GREEN: `onResponse` wired in `pi-ai.ts` → `anthropicLimitEvent` maps `-status` → enum, the
+      5h/7d(-opus) window → `scope`, `-reset` → `resetsAt`, remaining/limit → `utilization`; the
+      `limit` ProviderEvent is drained as the step's FIRST event. Absent header → detect-only +
+      `usage-limit-absent` log listing the inspected keys.
+- [x] RED: `allowed_warning → "approaching"` asserted (usage-limit + usage-limit-capture tests).
+- [x] GREEN: Full status mapping (`allowed→ok`, `allowed_warning→approaching`, `rejected→reached`).
+- [x] REFACTOR: Shared, table-driven mapping lives in `@trevor/session/usage-limit`; the reset parse
+      (`parseResetToEpochSeconds`) is shared and handles integer-seconds / RFC3339 / HTTP-date; a
+      structured `usage-limit` boundary log line is emitted on every capture.
 
 ### M3: Codex capture + reset-time spike
 
-- [ ] RED (SPIKE): Characterization test of the pi-ai `rate_limited` /
-      `quota_billing` error shape — which reset field exists (`retry-after`
-      HTTP-date, `x-ratelimit-reset*`, or a snapshot)? Resolves R-1.
-- [ ] GREEN: On Codex 429 / `usageLimitExceeded`, emit `limit`
-      `{status:"reached"}`; populate `resetsAt` from the spike finding, else
-      detect-only + log inspected keys.
-- [ ] RED: If a `used_percent` snapshot exists, failing test for `approaching`
-      threshold mapping; else record Codex `approaching` as a scoped non-goal.
-- [ ] GREEN: Codex `approaching` (best-effort) or record the non-goal decision.
-- [ ] REFACTOR: Extend `failure-evidence.ts` to read reset header / HTTP-date
-      `retry-after`; taxonomy stays the single classifier.
+- [x] RED (SPIKE): `failureLimitEvent` characterization (`usage-limit-capture.test.ts`) over the
+      pi-ai `rate_limited` / `quota_billing` error shape. RESOLVED R-1: pi-ai strips the APIError to a
+      message string before the host sees it, so on the 429 ERROR path NO headers reach us - the reset
+      is not reliably exposed. `resetsAt` rides ONLY when a retry-after delta is present (integer
+      seconds via `retryAfterMsOf`, converted to an absolute epoch); otherwise detect-only.
+- [x] GREEN: On a rate/quota failure (a Codex 429 / usageLimitExceeded classified `rate_limited` or
+      `quota_billing`), the pi-ai boundary emits `limit {status:"reached", scope:"unknown"}` before
+      re-throwing; `resetsAt` from a retry-after when present, else detect-only + a `usage-limit` log
+      noting the reset is absent. The taxonomy stays the single classifier.
+- [x] RED/GREEN: Codex `approaching` recorded as a **scoped non-goal** (R-4 holds) - no per-turn
+      `used_percent` snapshot is reachable on the pi-ai error path (pi-ai surfaces only the thrown
+      APIError message, no in-band usage snapshot), so Codex ships `reached`-only. Claude `approaching`
+      still ships (M2 success headers).
+- [x] REFACTOR: The HTTP-date reset parse the plan flagged as a gap in `failure-evidence.ts` is added
+      in the SHARED normalizer (`parseResetToEpochSeconds`), ready to wire if a Codex reset header ever
+      surfaces; `failure-evidence.ts` is left untouched so the taxonomy stays the single classifier.
 
 **Gate 2→3**
 
-- [ ] Claude emits `approaching` + `reached`; reset/scope resolved (unified headers or documented gap).
-- [ ] Codex emits `reached`; reset path resolved (present or documented gap).
+- [x] Claude emits `approaching` + `reached`; reset/scope resolved - present via the unified success
+      headers (onResponse), documented detect-only fallback when absent.
+- [x] Codex emits `reached`; reset path resolved - documented gap (headers stripped on the error path),
+      detect-only with a logged reason. `approaching` scoped as a non-goal.
 
 ---
 

@@ -34,6 +34,12 @@ import { generationTimer } from "./generation-timer";
 import { reasoningStreamFields } from "./reasoning-policy";
 import { buildSystemPrompt, promptOverheadChars } from "./system-prompt";
 import type { ChatMessage, ProviderError, ProviderEvent, ToolDef } from "./types";
+import {
+  anthropicLimitEvent,
+  failureLimitEvent,
+  type LimitEvent,
+  unifiedHeaderKeys,
+} from "./usage-limit-capture";
 
 function parseArgs(raw: string): Record<string, unknown> {
   try {
@@ -261,10 +267,41 @@ async function* piAiEvents<TApi extends Api>(
   // closes the underlying request: upstream cancel where the adapter supports it. The reasoning
   // fields (effort, or nothing) come from the policy seam - it owns the omit too (see its doc).
   const reasoningFields = reasoningStreamFields(model, options.reasoning);
+  // Usage-limit capture (plan 44.4 M2). Claude's success path exposes the unified rate-limit headers via
+  // pi-ai's onResponse callback (invoked after the HTTP response is received, before its body streams);
+  // parse them into a `limit` ProviderEvent held here and DRAINED as the first event of the step below,
+  // so the marker precedes the answer. `limitEmitted` guards against a header-based + failure-based
+  // double-emit for the same attempt (a 429 that carries the unified headers).
+  let pendingLimit: LimitEvent | null = null;
+  let limitEmitted = false;
   const streamOptions = {
     apiKey: options.apiKey,
     ...reasoningFields,
     signal: options.signal,
+    onResponse: (response: {
+      readonly status: number;
+      readonly headers: Record<string, string>;
+    }) => {
+      const limit = anthropicLimitEvent(response.headers);
+      if (limit) {
+        pendingLimit = limit;
+        // One structured boundary line when a limit is read (the user-visible surface is the event).
+        debug("pi-ai", "usage-limit", {
+          provider: options.provider,
+          status: limit.status,
+          scope: limit.scope,
+          resetsAt: limit.resetsAt,
+          utilization: limit.utilization,
+        });
+      } else {
+        // No unified rate-limit headers on this response - log the inspected keys so the detect-only
+        // gap is explained, not silent (a source/plan that does not emit the unified headers).
+        debug("pi-ai", "usage-limit-absent", {
+          provider: options.provider,
+          keys: unifiedHeaderKeys(response.headers),
+        });
+      }
+    },
   };
   debug("pi-ai", "stream", {
     model: model.id,
@@ -274,93 +311,126 @@ async function* piAiEvents<TApi extends Api>(
     reasoningEffort: reasoningFields.reasoningEffort,
     contextWindow: options.contextWindow,
   });
-  for await (const event of stream(model, context, streamOptions)) {
-    debug("pi-ai", event.type);
-    if (
-      event.type === "text_delta" ||
-      event.type === "thinking_start" ||
-      event.type === "thinking_delta" ||
-      event.type === "toolcall_start"
-    ) {
-      timer.mark();
-    }
-    if (event.type === "text_delta") {
-      yield { type: "text", text: event.delta };
-    } else if (event.type === "thinking_delta") {
-      yield { type: "thinking", text: event.delta };
-    } else if (event.type === "toolcall_end") {
-      yield {
-        type: "tool_call",
-        call: {
-          id: event.toolCall.id,
-          name: event.toolCall.name,
-          arguments: JSON.stringify(event.toolCall.arguments ?? {}),
-        },
-      };
-    } else if (event.type === "done") {
-      // Some providers report cached/billable input here, which can be lower than the full prompt
-      // context. Budgeting and the ctx meter need the full prompt floor.
-      const usage = event.message?.usage;
-      const input = Math.max(usage?.input ?? 0, promptTokensEst);
-      debug("pi-ai", "done", {
-        stopReason: event.message?.stopReason,
-        input: usage?.input,
-        inputFloor: input,
-        output: usage?.output,
-      });
-      yield {
-        type: "usage",
-        usage: {
-          input,
-          output: usage?.output ?? 0,
-          contextWindow: options.contextWindow,
-          genMs: timer.genMs(),
-        },
-      };
-      // Did the finished response overflow the window? The classifier owns the decision
-      // (a window-filling "length" stop, or pi-ai's prompt-too-large variants) and the wording.
-      const overflowReason = classifyResponseOverflow(event.message, options.contextWindow);
-      if (overflowReason) {
-        yield { type: "overflow", reason: overflowReason };
+  try {
+    for await (const event of stream(model, context, streamOptions)) {
+      // Emit the Claude success-path limit (if any) as the FIRST event of the step, before the answer.
+      if (pendingLimit && !limitEmitted) {
+        limitEmitted = true;
+        yield pendingLimit;
       }
-    } else if (event.type === "error") {
-      // A clean interrupt (cancel/ESC) ends the stream quietly; the fiber interrupt
-      // propagates on its own.
-      if (event.reason === "aborted") {
-        return;
+      debug("pi-ai", event.type);
+      if (
+        event.type === "text_delta" ||
+        event.type === "thinking_start" ||
+        event.type === "thinking_delta" ||
+        event.type === "toolcall_start"
+      ) {
+        timer.mark();
       }
-      // LM Studio rejects a prompt larger than the loaded window with a context-length
-      // 400. It was being swallowed (unhandled `error` event), so a too-big prompt looked
-      // like an empty turn. Surface it as overflow so the loop trims & retries when there
-      // are tool results, or surfaces a clear too-small-window message when there aren't -
-      // LM Studio's message omits the sizes, so we attach the estimate and the window.
-      const detail = event.error.errorMessage ?? "provider stream error";
-      if (isContextOverflow(detail)) {
-        // The provider's native rejection can reveal a SMALLER real window than the one we sent (a
-        // stale bundled value); carry that real `N` in the reason so the host's self-heal (03.2 M3)
-        // learns reality, not the number we already had. LM Studio's message omits sizes, so its
-        // window parses to null and the reason keeps the window we sent, exactly as before.
-        const nativeWindow = parseOverflowWindow(detail);
-        const realWindow =
-          nativeWindow !== null && nativeWindow < options.contextWindow
-            ? nativeWindow
-            : options.contextWindow;
+      if (event.type === "text_delta") {
+        yield { type: "text", text: event.delta };
+      } else if (event.type === "thinking_delta") {
+        yield { type: "thinking", text: event.delta };
+      } else if (event.type === "toolcall_end") {
         yield {
-          type: "overflow",
-          reason: promptTooBig(promptTokensEst, realWindow),
+          type: "tool_call",
+          call: {
+            id: event.toolCall.id,
+            name: event.toolCall.name,
+            arguments: JSON.stringify(event.toolCall.arguments ?? {}),
+          },
         };
-        return;
+      } else if (event.type === "done") {
+        // Some providers report cached/billable input here, which can be lower than the full prompt
+        // context. Budgeting and the ctx meter need the full prompt floor.
+        const usage = event.message?.usage;
+        const input = Math.max(usage?.input ?? 0, promptTokensEst);
+        debug("pi-ai", "done", {
+          stopReason: event.message?.stopReason,
+          input: usage?.input,
+          inputFloor: input,
+          output: usage?.output,
+        });
+        yield {
+          type: "usage",
+          usage: {
+            input,
+            output: usage?.output ?? 0,
+            contextWindow: options.contextWindow,
+            genMs: timer.genMs(),
+          },
+        };
+        // Did the finished response overflow the window? The classifier owns the decision
+        // (a window-filling "length" stop, or pi-ai's prompt-too-large variants) and the wording.
+        const overflowReason = classifyResponseOverflow(event.message, options.contextWindow);
+        if (overflowReason) {
+          yield { type: "overflow", reason: overflowReason };
+        }
+      } else if (event.type === "error") {
+        // A clean interrupt (cancel/ESC) ends the stream quietly; the fiber interrupt
+        // propagates on its own.
+        if (event.reason === "aborted") {
+          return;
+        }
+        // LM Studio rejects a prompt larger than the loaded window with a context-length
+        // 400. It was being swallowed (unhandled `error` event), so a too-big prompt looked
+        // like an empty turn. Surface it as overflow so the loop trims & retries when there
+        // are tool results, or surfaces a clear too-small-window message when there aren't -
+        // LM Studio's message omits the sizes, so we attach the estimate and the window.
+        const detail = event.error.errorMessage ?? "provider stream error";
+        if (isContextOverflow(detail)) {
+          // The provider's native rejection can reveal a SMALLER real window than the one we sent (a
+          // stale bundled value); carry that real `N` in the reason so the host's self-heal (03.2 M3)
+          // learns reality, not the number we already had. LM Studio's message omits sizes, so its
+          // window parses to null and the reason keeps the window we sent, exactly as before.
+          const nativeWindow = parseOverflowWindow(detail);
+          const realWindow =
+            nativeWindow !== null && nativeWindow < options.contextWindow
+              ? nativeWindow
+              : options.contextWindow;
+          yield {
+            type: "overflow",
+            reason: promptTooBig(promptTokensEst, realWindow),
+          };
+          return;
+        }
+        // A refused credential is an auth failure, not an outage: surface it as such so the
+        // UI tells the user to re-auth rather than "provider unavailable".
+        if (isAuthFailure(detail)) {
+          throw new ProviderAuthError({ provider: options.provider, detail });
+        }
+        // Preserve the structured error object as the thrown cause (02.15) so the boundary's evidence
+        // extraction + cause-chain detail can mine a nested code/`.cause` it carries (e.g. a syscall
+        // ECONNRESET); the existing classification reads message + code either way.
+        throw new Error(detail, { cause: event.error });
       }
-      // A refused credential is an auth failure, not an outage: surface it as such so the
-      // UI tells the user to re-auth rather than "provider unavailable".
-      if (isAuthFailure(detail)) {
-        throw new ProviderAuthError({ provider: options.provider, detail });
-      }
-      // Preserve the structured error object as the thrown cause (02.15) so the boundary's evidence
-      // extraction + cause-chain detail can mine a nested code/`.cause` it carries (e.g. a syscall
-      // ECONNRESET); the existing classification reads message + code either way.
-      throw new Error(detail, { cause: event.error });
     }
+  } catch (cause) {
+    // Error-path usage-limit capture (plan 44.4 M3, detect-only): a rate/quota FAILURE (a Codex 429 /
+    // usageLimitExceeded, or any provider's hard usage stop) surfaces a `limit` ProviderEvent (status
+    // "reached") BEFORE the failure propagates, so the transcript records the limit even though the turn
+    // then goes terminal. A header-based limit already drained this attempt wins; otherwise the raw cause
+    // is classified through the failure taxonomy. The cause is re-thrown UNCHANGED, so failure
+    // normalization, reconnect, and interrupt handling downstream are all exactly as before.
+    if (pendingLimit && !limitEmitted) {
+      limitEmitted = true;
+      yield pendingLimit;
+    } else if (!limitEmitted) {
+      const limit = failureLimitEvent(cause, options.provider);
+      if (limit) {
+        limitEmitted = true;
+        debug("pi-ai", "usage-limit", {
+          provider: options.provider,
+          status: limit.status,
+          scope: limit.scope,
+          resetsAt: limit.resetsAt,
+          // The pi-ai error path strips headers, so a reset is usually absent (detect-only) - note which.
+          reset: limit.resetsAt === undefined ? "absent (detect-only)" : "present",
+        });
+        yield limit;
+      }
+    }
+    throw cause;
   }
 }
 
