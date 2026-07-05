@@ -121,13 +121,18 @@ export function sandboxPolicyHash(profile: string): string {
 
 /** Probes the host for the sandbox facts M2's {@link selectSandboxMode} consumes. */
 export function probeSandboxEnvironment(
-  env: { readonly platform: string; readonly safehouseAvailable?: boolean } = {
+  env: {
+    readonly platform: string;
+    readonly safehouseAvailable?: boolean;
+    readonly sandboxExecAvailable?: boolean;
+  } = {
     platform: process.platform,
   },
 ): SandboxEnvironment {
   return {
     platform: env.platform,
     safehouseAvailable: env.safehouseAvailable ?? false,
-    sandboxExecAvailable: env.platform === "darwin" && existsSync(SANDBOX_EXEC_PATH),
+    sandboxExecAvailable:
+      env.sandboxExecAvailable ?? (env.platform === "darwin" && existsSync(SANDBOX_EXEC_PATH)),
   };
 }

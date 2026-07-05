@@ -84,7 +84,7 @@ describe("sandbox launcher wrapping + diagnostics (M4)", () => {
 
 describe("sandbox environment probe + mode selection (M4)", () => {
   it("marks sandbox-exec available on macOS (where /usr/bin/sandbox-exec exists) and picks that mode", () => {
-    const env = probeSandboxEnvironment({ platform: "darwin" });
+    const env = probeSandboxEnvironment({ platform: "darwin", sandboxExecAvailable: true });
     // On this macOS host sandbox-exec resolves; the selection then prefers it (no Safehouse installed).
     expect(env.sandboxExecAvailable).toBe(true);
     expect(selectSandboxMode(env)).toBe("sandbox-exec");
