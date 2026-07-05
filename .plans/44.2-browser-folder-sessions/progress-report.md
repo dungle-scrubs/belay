@@ -4,11 +4,12 @@
 
 - **Current cutoff blockers:** 0
 - **Completed current work:** 34
-- **Accepted/deferred follow-up:** 1 (Storybook visual baselines - see below)
+- **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 - **Current focus:** Implemented M1-M4 on `feat/44.2-browser-folder-sessions`. Entry points (`＋`/`/new`),
   presentational picker, and the live supervisor wiring (recents / folder pick / path validation /
-  launch -> await host.online -> navigate) are done and green (jsdom `web` + `unit`).
+  launch -> await host.online -> navigate) are done and green (jsdom `web` + `unit`). Storybook visual
+  baselines for the 8 new stories were regenerated in the pinned container and committed.
 
 ## Completed Current State / Hard Dependencies
 
@@ -72,9 +73,9 @@
 
 ## Accepted / Deferred Follow-Up
 
-- Storybook visual-regression baselines for the new stories (`Panel/SessionSidebar` `WithNewSession`,
-  `NewSession/NewSessionPicker`) - the mandatory gate (`pnpm lint`/`typecheck`/`test`) is green; the
-  jsdom `*.test.tsx` are the behavioral proof. See "Storybook baseline status" in the run report.
+None. Storybook visual baselines for the 8 new stories (`Panel/SessionSidebar` `WithNewSession`,
+`NewSession/NewSessionPicker` x7) were regenerated in the pinned Playwright container and committed;
+the 5 unrelated `chat-modelswitchmarker` baselines the full regen touched were reverted (`git checkout`).
 
 ## Superseded / Obsolete Checklist Debt
 
