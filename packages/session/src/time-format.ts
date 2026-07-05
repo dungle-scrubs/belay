@@ -45,3 +45,35 @@ export function relativeTime(thenIso: string, nowMs: number): string {
   const d = new Date(then);
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
+
+/**
+ * A compact FUTURE-relative label from a time to `nowMs` (e.g. "in 2m", "in 3h", "in 5d"). The
+ * forward-looking sibling of {@link relativeTime}, which is past-only and so cannot render a countdown.
+ * `when` is either an ISO/HTTP-date string or a unix epoch in SECONDS (plan 44.4's `resetsAt` shape); a
+ * time at or behind `nowMs` reads "now", and an unparseable input reads "". `nowMs` is injected so the
+ * label is deterministic (no live clock in the render/test).
+ */
+export function timeUntil(when: string | number, nowMs: number): string {
+  const then = typeof when === "number" ? when * 1000 : Date.parse(when);
+  if (Number.isNaN(then)) {
+    return "";
+  }
+  const deltaMs = then - nowMs;
+  if (deltaMs <= 0) {
+    return "now";
+  }
+  const sec = Math.floor(deltaMs / 1000);
+  if (sec < 60) {
+    return "in <1m";
+  }
+  const min = Math.floor(sec / 60);
+  if (min < 60) {
+    return `in ${min}m`;
+  }
+  const hr = Math.floor(min / 60);
+  if (hr < 24) {
+    return `in ${hr}h`;
+  }
+  const day = Math.floor(hr / 24);
+  return `in ${day}d`;
+}

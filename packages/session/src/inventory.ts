@@ -251,4 +251,4 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
 }
 
 export { activeSessions, archivedSessions, sortInventory, tangentsOf } from "./inventory-display";
-export { relativeTime } from "./time-format";
+export { relativeTime, timeUntil } from "./time-format";
