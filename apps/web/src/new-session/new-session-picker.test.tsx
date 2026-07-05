@@ -91,7 +91,7 @@ test("Create is disabled while the path is empty or invalid, enabled when valid"
     />,
   );
   assert.equal(createButton().disabled, true, "invalid path disables Create");
-  const input = screen.getByLabelText("Folder path") as HTMLInputElement;
+  const input = screen.getByLabelText("Folder") as HTMLInputElement;
   assert.equal(input.getAttribute("aria-invalid"), "true", "invalid path marks the field");
 
   rerender(
@@ -121,7 +121,7 @@ test("Create launches the typed path", () => {
 
 test("typing in the path field reports the change", () => {
   const props = renderPicker();
-  fireEvent.change(screen.getByLabelText("Folder path"), { target: { value: "/tmp/x" } });
+  fireEvent.change(screen.getByLabelText("Folder"), { target: { value: "/tmp/x" } });
   assert.deepEqual((props.onPathChange as ReturnType<typeof vi.fn>).mock.calls, [["/tmp/x"]]);
 });
 
@@ -146,7 +146,7 @@ test("the starting-host state locks every control and swaps Create in place", ()
   assert.ok(screen.getByText("Starting host…"), "the in-place starting indicator shows");
   assert.equal(screen.queryByRole("button", { name: "Create" }), null, "Create is swapped out");
   // The path field and the folder icon are locked.
-  assert.equal((screen.getByLabelText("Folder path") as HTMLInputElement).disabled, true);
+  assert.equal((screen.getByLabelText("Folder") as HTMLInputElement).disabled, true);
   assert.equal((screen.getByLabelText("Browse for a folder") as HTMLButtonElement).disabled, true);
   // A recent cannot launch while starting (its button is disabled).
   const recentBtn = screen.getByText("trevorV2").closest("button") as HTMLButtonElement;

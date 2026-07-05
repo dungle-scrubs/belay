@@ -189,6 +189,33 @@ test("a freshly launched host navigates only after its host.online", async () =>
   assert.deepEqual(onNavigate.mock.calls, [["sess-new"]], "navigates once host.online arrives");
 });
 
+test("a launched host that never comes online gives up: idle + error, no navigate", async () => {
+  const { rec, result, onNavigate } = renderSupervisor();
+  await act(async () => {});
+  // Do NOT seed host.online for the target session, so awaitEvent times out (resolves null at 50ms).
+  act(() => result.current.onCreate("~/dev/never"));
+  const requestId = publishedTo(rec.publishedBy(SUPERVISOR_SESSION_ID), "session.launch.requested")
+    ?.payload.requestId as string;
+  act(() => {
+    deliverControl(
+      rec.connects,
+      sessionEvents.sessionLaunchResult({ requestId, sessionId: "sess-dead", status: "launched" }),
+      1,
+    );
+  });
+  // Let the host.online wait window (50ms) elapse and resolve null.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 90));
+  });
+  assert.equal(
+    onNavigate.mock.calls.length,
+    0,
+    "a host that never comes online is not navigated to",
+  );
+  assert.equal(result.current.launchState, "idle", "the launch gives up back to idle");
+  assert.ok(result.current.error, "a give-up surfaces an inline error");
+});
+
 test("a failed launch drops back to idle with a plain inline error and does not navigate", async () => {
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});

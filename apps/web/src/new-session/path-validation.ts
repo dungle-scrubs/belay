@@ -1,4 +1,5 @@
-import type { PathValidation } from "./new-session-picker";
+/** The verdict for the typed/pasted path: nothing entered, entered-but-not-a-path, or ready to launch. */
+export type PathValidation = "empty" | "invalid" | "valid";
 
 /**
  * Client-side validation for the New-session picker's typed/pasted path (plan 44.2 M3). A host-side

@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input";
 import { workspaceBasename } from "@/derive";
 import { cn } from "@/lib/utils";
+import type { PathValidation } from "./path-validation";
+import type { LaunchPhase } from "./use-supervisor";
 
 /**
  * The New-session picker (plan 44.2): the browser affordance to start a folder-bound session, driven
@@ -19,13 +21,6 @@ import { cn } from "@/lib/utils";
  * reflow. Interactive elements inherit the pointer cursor from the `index.css` base layer, so this adds
  * none.
  */
-
-/** The parent's verdict for the typed/pasted path: nothing entered, entered-but-not-a-path, or ready. */
-export type PathValidation = "empty" | "invalid" | "valid";
-
-/** The launch trajectory this component renders. 44.3 extends this union (e.g. `"failed"`) - the model
- *  is owned in one place (`use-supervisor.ts`) so recovery states layer on without a second state. */
-export type LaunchPhase = "idle" | "starting";
 
 export interface NewSessionPickerProps {
   readonly open: boolean;
@@ -146,7 +141,7 @@ export function NewSessionPicker({
                 disabled={starting}
                 onChange={(e) => onPathChange(e.target.value)}
                 aria-invalid={validation === "invalid"}
-                aria-label="Folder path"
+                aria-describedby={validation === "invalid" ? "new-session-path-hint" : undefined}
                 placeholder="/absolute/path or ~/path"
                 autoComplete="off"
                 spellCheck={false}
@@ -166,6 +161,7 @@ export function NewSessionPicker({
               ) : null}
             </div>
             <p
+              id="new-session-path-hint"
               className={cn(
                 "mt-1 h-4 text-xs",
                 validation === "invalid" ? "text-smui-red" : "text-transparent",

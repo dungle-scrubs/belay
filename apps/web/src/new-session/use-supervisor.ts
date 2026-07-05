@@ -11,8 +11,11 @@ import {
 } from "@trevor/session";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sessionTransport, useSessionWithTransport } from "@/session/use-session";
-import type { LaunchPhase, PathValidation } from "./new-session-picker";
-import { validatePath } from "./path-validation";
+import { type PathValidation, validatePath } from "./path-validation";
+
+/** The launch trajectory the picker renders. 44.3 extends this union (e.g. `"failed"`); the model is
+ *  owned here (the launch state machine) so recovery states layer on without a second state model. */
+export type LaunchPhase = "idle" | "starting";
 
 /**
  * The New-session picker's live wiring over the 44.1 supervisor contract (plan 44.2 M3/M4). This hook
@@ -144,7 +147,8 @@ export function useSupervisor(options: UseSupervisorOptions): SupervisorControll
   // navigates at once; a failed launch drops back to idle with a plain inline error.
   useEffect(() => {
     for (let i = cursorRef.current; i < controlEvents.length; i += 1) {
-      const decoded = decodeTrevorEvent(controlEvents[i] as SessionEvent);
+      const event = controlEvents[i];
+      const decoded = event ? decodeTrevorEvent(event) : null;
       if (!decoded) {
         continue;
       }
@@ -176,9 +180,18 @@ export function useSupervisor(options: UseSupervisorOptions): SupervisorControll
             .awaitEvent(targetSessionId, watchIdentity, isHostOnline, {
               timeoutMs: hostOnlineTimeoutMs,
             })
-            .then(() => {
-              if (launchTokenRef.current === token) {
+            .then((online) => {
+              if (launchTokenRef.current !== token) {
+                return; // the picker was reset (closed) - this launch is superseded
+              }
+              if (online) {
                 navigateRef.current(targetSessionId);
+              } else {
+                // host.online never arrived within the window (a host that failed to come online, a
+                // dropped stream). Give up the auto-navigate instead of landing on a host-less session;
+                // 44.3 formalizes the failed/retry recovery on this same idle+error drop.
+                setLaunchState("idle");
+                setError("The host did not come online in time. Try again.");
               }
             });
         }
