@@ -5,6 +5,7 @@ export * from "./capability-manifest";
 export * from "./capability-manifest-builder";
 export * from "./capability-manifest-compact";
 export * from "./capability-manifest-export";
+export * from "./command-args";
 export * from "./command-family";
 export * from "./command-menu";
 export * from "./connectivity";

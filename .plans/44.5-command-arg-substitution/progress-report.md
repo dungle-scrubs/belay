@@ -2,16 +2,16 @@
 
 Implementation resume state for plan 44.5. RED/GREEN/REFACTOR task tracking per milestone.
 
-**Stage:** ready (not started)
+**Stage:** in progress
 
-> **Current focus:** Phase 1 · M1 - RED: `tokenizeArgs("a b c")` -> `["a","b","c"]`
+> **Current focus:** Phase 2 · M3 - `.trevor/commands/*.md` loader
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks | 54 |
-| Checked (done) | 0 |
+| Checked (done) | 24 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
@@ -25,36 +25,36 @@ Phase 3 (M5-M6) is the web preview polish.
 
 ### M1: Shell-style tokenizer
 
-- [ ] RED: `tokenizeArgs("a b c")` -> `["a","b","c"]` (whitespace split)
-- [ ] GREEN: char-scanning whitespace tokenizer
-- [ ] RED: double-quoted span -> one token, quotes stripped (`"two words" x`)
-- [ ] GREEN: double-quote grouping
-- [ ] RED: single-quoted span -> one token, quotes stripped
-- [ ] GREEN: single-quote grouping
-- [ ] RED: backslash escapes (`a\ b` -> `["a b"]`; `\"x` -> `['"x']`)
-- [ ] GREEN: backslash escape handling in the scanner
-- [ ] RED: unterminated quote -> consume-to-end + diagnostic flag
-- [ ] GREEN: unterminated-quote handling
-- [ ] REFACTOR: extract char-scanner, name scan states, module comment vs `interpolation-engine.ts`
+- [x] RED: `tokenizeArgs("a b c")` -> `["a","b","c"]` (whitespace split)
+- [x] GREEN: char-scanning whitespace tokenizer
+- [x] RED: double-quoted span -> one token, quotes stripped (`"two words" x`)
+- [x] GREEN: double-quote grouping
+- [x] RED: single-quoted span -> one token, quotes stripped
+- [x] GREEN: single-quote grouping
+- [x] RED: backslash escapes (`a\ b` -> `["a b"]`; `\"x` -> `['"x']`)
+- [x] GREEN: backslash escape handling in the scanner
+- [x] RED: unterminated quote -> consume-to-end + diagnostic flag
+- [x] GREEN: unterminated-quote handling
+- [x] REFACTOR: extract char-scanner, name scan states, module comment vs `interpolation-engine.ts`
 
 ### M2: Substituter + public API
 
-- [ ] RED: `expandArgs("#$0 $1", "a b")` -> `"#a b"` (0-based, D-001)
-- [ ] GREEN: positional `$N` -> `tokens[N]`
-- [ ] RED: `$ARGUMENTS` raw as typed (`'"a b"  c'` preserved); `$0` on same input = `a b` (D-002)
-- [ ] GREEN: raw `$ARGUMENTS` expansion (raw string carried separately from tokens)
-- [ ] RED: missing-arg -> empty string (`[$2]` with one arg -> `[]`, D-004)
-- [ ] GREEN: out-of-range positional -> `""`
-- [ ] RED: escaped placeholder (`\$1 $1` -> `$1 v`; `\\$1` -> backslash + expansion, D-003)
-- [ ] GREEN: escape-aware substitution pass
-- [ ] RED: `expandArgs` returns `{ text, diagnostics }` (referenced placeholders, arg count, missing refs)
-- [ ] GREEN: diagnostics record
-- [ ] REFACTOR: settle public API, add `export * from "./command-args"` to session barrel, module comment
+- [x] RED: `expandArgs("#$0 $1", "a b")` -> `"#a b"` (0-based, D-001)
+- [x] GREEN: positional `$N` -> `tokens[N]`
+- [x] RED: `$ARGUMENTS` raw as typed (`'"a b"  c'` preserved); `$0` on same input = `a b` (D-002)
+- [x] GREEN: raw `$ARGUMENTS` expansion (raw string carried separately from tokens)
+- [x] RED: missing-arg -> empty string (`[$2]` with one arg -> `[]`, D-004)
+- [x] GREEN: out-of-range positional -> `""`
+- [x] RED: escaped placeholder (`\$1 $1` -> `$1 v`; `\\$1` -> backslash + expansion, D-003)
+- [x] GREEN: escape-aware substitution pass
+- [x] RED: `expandArgs` returns `{ text, diagnostics }` (referenced placeholders, arg count, missing refs)
+- [x] GREEN: diagnostics record
+- [x] REFACTOR: settle public API, add `export * from "./command-args"` to session barrel, module comment
 
 ### Gate 1->2
 
-- [ ] All Phase 1 tests pass; `command-args.ts` exported from the session barrel
-- [ ] Quoting, escaping, 0-based positionals, raw `$ARGUMENTS`, missing-arg empty-string each tested
+- [x] All Phase 1 tests pass; `command-args.ts` exported from the session barrel
+- [x] Quoting, escaping, 0-based positionals, raw `$ARGUMENTS`, missing-arg empty-string each tested
 
 ---
 
