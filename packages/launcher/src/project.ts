@@ -3,7 +3,7 @@ import { projectSessionId } from "@trevor/session";
 import { TREVOR_HOME, TREVOR_STATE_HOME } from "@trevor/session/node-paths";
 import { type LauncherFs, readJson, writeJson } from "./fs";
 
-export { TREVOR_HOME, TREVOR_STATE_HOME };
+export { projectSessionId, TREVOR_HOME, TREVOR_STATE_HOME };
 
 /**
  * Project identity for the launcher (D-085): resolve the project root from cwd, derive its stable

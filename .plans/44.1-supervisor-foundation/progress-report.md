@@ -19,17 +19,17 @@
 
 ### Phase 1 - M1: Extract `@trevor/launcher`
 
-- [ ] RED: Characterization tests pinning `launch()` for new-project / reuse / replace-stale over a fake platform.
-- [ ] GREEN: Create `packages/launcher` and move launch/resolve/decide/host-registry/lock logic behind an injected platform; re-point CLI imports.
-- [ ] RED: Test that CLI and a non-CLI caller resolve the same project root + session id for the same cwd.
-- [ ] GREEN: Expose a minimal `LauncherPlatform` port for non-CLI callers.
-- [ ] REFACTOR: Split platform interface from node impl; keep `buildHostSpawnCommand` internal; add a module-level ownership comment.
+- [x] RED: Characterization tests pinning `launch()` for new-project / reuse / replace-stale over a fake platform.
+- [x] GREEN: Create `packages/launcher` and move launch/resolve/decide/host-registry/lock logic behind an injected platform; re-point CLI imports.
+- [x] RED: Test that CLI and a non-CLI caller resolve the same project root + session id for the same cwd.
+- [x] GREEN: Expose a minimal `LauncherPlatform` port for non-CLI callers.
+- [x] REFACTOR: Split platform interface from node impl; keep `buildHostSpawnCommand` exported (its test needs it); add a module-level ownership comment.
 
 ### Gate 1->2
 
-- [ ] `@trevor/launcher` builds and typechecks as a workspace package.
-- [ ] `apps/trevor-cli` behavior unchanged (existing tests pass unmodified).
-- [ ] CLI and a non-CLI caller share project/session identity in tests.
+- [x] `@trevor/launcher` builds and typechecks as a workspace package.
+- [x] `apps/trevor-cli` behavior unchanged (existing tests pass unmodified).
+- [x] CLI and a non-CLI caller share project/session identity in tests.
 
 ### Phase 2 - M2: Supervisor protocol events
 

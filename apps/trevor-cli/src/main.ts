@@ -1,9 +1,20 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, extname } from "node:path";
+import {
+  formatStatus,
+  launch,
+  loadHosts,
+  nodeFs,
+  nodePlatform,
+  processAlive,
+  removeHost,
+  resolveProjectRoot,
+  serviceUrl,
+  TREVOR_STATE_HOME,
+} from "@trevor/launcher";
 import { createTrevorClient, resolveOpenTarget } from "@trevor/sdk";
 import { errorMessage, PRODUCER_IDS, type SessionSummary } from "@trevor/session";
-import { nodeFs } from "./fs";
 import {
   runArtifactGet,
   runArtifactPut,
@@ -13,12 +24,7 @@ import {
   runPrompt,
   runTranscript,
 } from "./headless";
-import { loadHosts, removeHost } from "./host-registry";
-import { formatStatus, launch } from "./launch";
 import { type HostControlIo, type LifecycleIo, runArchive, runList, runStop } from "./lifecycle";
-import { nodePlatform, processAlive } from "./platform";
-import { resolveProjectRoot, TREVOR_STATE_HOME } from "./project";
-import { serviceUrl } from "./services";
 import { createSpinner } from "./spinner";
 
 const STORE_URL = serviceUrl("store");

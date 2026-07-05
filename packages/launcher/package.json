@@ -1,26 +1,21 @@
 {
-  "name": "@trevor/cli",
+  "name": "@trevor/launcher",
   "private": true,
   "type": "module",
-  "bin": {
-    "trevor": "./bin/trevor.mjs"
-  },
   "exports": {
-    "./headless": "./src/headless.ts"
+    ".": "./src/index.ts"
   },
+  "types": "./src/index.ts",
   "scripts": {
-    "start": "tsx src/main.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/launcher": "workspace:*",
-    "@trevor/sdk": "workspace:*",
+    "@trevor/server-kit": "workspace:*",
     "@trevor/session": "workspace:*"
   },
   "devDependencies": {
     "@trevor/test-kit": "workspace:*",
     "@types/node": "^26.0.0",
-    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
 }

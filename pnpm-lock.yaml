@@ -145,12 +145,12 @@ importers:
 
   apps/trevor-cli:
     dependencies:
+      '@trevor/launcher':
+        specifier: workspace:*
+        version: link:../../packages/launcher
       '@trevor/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@trevor/server-kit':
-        specifier: workspace:*
-        version: link:../../packages/server-kit
       '@trevor/session':
         specifier: workspace:*
         version: link:../../packages/session
@@ -349,6 +349,25 @@ importers:
         specifier: ^3.21.4
         version: 3.21.4
     devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.0.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/launcher:
+    dependencies:
+      '@trevor/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
+      '@trevor/session':
+        specifier: workspace:*
+        version: link:../session
+    devDependencies:
+      '@trevor/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       '@types/node':
         specifier: ^26.0.0
         version: 26.0.0
