@@ -46,6 +46,8 @@ import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
 import { sessionScopedKey } from "@/model-selection";
 import { isNewSessionCommand, NEW_SESSION_COMMAND } from "@/new-session/new-session-command";
+import { NewSessionPicker } from "@/new-session/new-session-picker";
+import { useSupervisor } from "@/new-session/use-supervisor";
 import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
@@ -411,6 +413,24 @@ export function App() {
   // The single open-picker entry (plan 44.2, D-001): both the sidebar `＋ New session` and the `/new`
   // command call this, so the two entry points can never drift.
   const openNewSession = useCallback(() => modal.setNewOpen(true), [modal.setNewOpen]);
+  // On a launched/reused session, close the picker and navigate (the safe switch path). Closing sets
+  // newOpen false, which resets the supervisor hook's request/launch state.
+  const onLaunchNavigate = useCallback(
+    (launchedSessionId: string) => {
+      modal.setNewOpen(false);
+      navigateToSession(launchedSessionId);
+    },
+    [modal.setNewOpen, navigateToSession],
+  );
+  // The New-session picker's live wiring over the 44.1 supervisor control session (plan 44.2 M3/M4).
+  // The native folder pick is offered only when a LOCAL backend reports presence (null = remote
+  // Richter), degrading to recents + paste-a-path otherwise.
+  const localPickerAvailable = presence !== null;
+  const supervisor = useSupervisor({
+    active: modal.newOpen,
+    localPickerAvailable,
+    onNavigate: onLaunchNavigate,
+  });
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
   const archived = useMemo(() => isSessionArchived(events), [events]);
@@ -1534,6 +1554,21 @@ export function App() {
       />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={paletteCommands} />
       <ShortcutsHelp open={helpOpen} onOpenChange={setHelpOpen} />
+      <NewSessionPicker
+        open={modal.newOpen}
+        onOpenChange={modal.setNewOpen}
+        recents={supervisor.recents}
+        path={supervisor.path}
+        validation={supervisor.validation}
+        localPickerAvailable={localPickerAvailable}
+        launchState={supervisor.launchState}
+        error={supervisor.error}
+        onPickRecent={supervisor.onPickRecent}
+        onPickFolder={supervisor.onPickFolder}
+        onPathChange={supervisor.onPathChange}
+        onCreate={supervisor.onCreate}
+        nowMs={now}
+      />
     </>
   );
 }

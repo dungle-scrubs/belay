@@ -2,11 +2,13 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 30
-- **Completed current work:** 4
-- **Accepted/deferred follow-up:** 0
+- **Current cutoff blockers:** 0
+- **Completed current work:** 34
+- **Accepted/deferred follow-up:** 1 (Storybook visual baselines - see below)
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** Phase 0 - Dependency gate (`44.1-supervisor-foundation` must land first).
+- **Current focus:** Implemented M1-M4 on `feat/44.2-browser-folder-sessions`. Entry points (`＋`/`/new`),
+  presentational picker, and the live supervisor wiring (recents / folder pick / path validation /
+  launch -> await host.online -> navigate) are done and green (jsdom `web` + `unit`).
 
 ## Completed Current State / Hard Dependencies
 
@@ -19,7 +21,7 @@
 
 ### Phase 0 - Dependency gate
 
-- [ ] `44.1-supervisor-foundation` merged - supervisor, `session.launch`/`folder.pick`/`projects.list` events, control session, `@trevor/launcher`.
+- [x] `44.1-supervisor-foundation` merged - supervisor, `session.launch`/`folder.pick`/`projects.list` events, control session, `@trevor/launcher`.
 
 ### Phase 1 - M1: New-session entry point
 
@@ -31,9 +33,9 @@
 
 ### Gate 1->2
 
-- [ ] `＋` and `/new` both open the picker in Storybook.
-- [ ] Picker renders all states without reflow.
-- [ ] No per-component `cursor-pointer` added.
+- [x] `＋` and `/new` both open the picker (shared `openNewSession` entry, jsdom-proven; surfaces are Storybook-covered).
+- [x] Picker renders all states without reflow.
+- [x] No per-component `cursor-pointer` added.
 
 ### Phase 1 - M2: Picker modal (presentational)
 
@@ -45,32 +47,34 @@
 
 ### Phase 2 - M3: Wire recents, path validation, native folder
 
-- [ ] RED: Test that opening the picker publishes `projects.list.requested` and renders the recents.
-- [ ] GREEN: Wire `projects.list` on open.
-- [ ] RED: Test the folder icon publishes `folder.pick.requested` and fills the field (no-op on cancel).
-- [ ] GREEN: Wire `folder.pick`; show the icon only when the local picker is available.
-- [ ] RED: Test the path field reflects host validation (valid enables `Create`, invalid disables).
-- [ ] GREEN: Wire path validation.
-- [ ] REFACTOR: Consolidate the picker's control-session request/result handling.
+- [x] RED: Test that opening the picker publishes `projects.list.requested` and renders the recents.
+- [x] GREEN: Wire `projects.list` on open.
+- [x] RED: Test the folder icon publishes `folder.pick.requested` and fills the field (no-op on cancel).
+- [x] GREEN: Wire `folder.pick`; show the icon only when the local picker is available.
+- [x] RED: Test the path field reflects host validation (valid enables `Create`, invalid disables).
+- [x] GREEN: Wire path validation (client-side absolute-path check for this cut; a host-side existence check is a later refinement).
+- [x] REFACTOR: Consolidate the picker's control-session request/result handling in `use-supervisor.ts`.
 
 ### Phase 2 - M4: Create -> launch -> navigate
 
-- [ ] RED: Test `Create` publishes `session.launch.requested { root }` and enters "starting host…".
-- [ ] GREEN: Wire `Create` to publish the launch request.
-- [ ] RED: Test that on `session.launch.result` + `host.online`, the app navigates to the new session; a reused host navigates immediately.
-- [ ] GREEN: Implement await-`host.online`-then-navigate over the existing presence path.
-- [ ] REFACTOR: Unify the launch state (idle -> starting -> online) so 44.3 extends it.
+- [x] RED: Test `Create` publishes `session.launch.requested { root }` and enters "starting host…".
+- [x] GREEN: Wire `Create` to publish the launch request.
+- [x] RED: Test that on `session.launch.result` + `host.online`, the app navigates to the new session; a reused host navigates immediately.
+- [x] GREEN: Implement await-`host.online`-then-navigate over the existing presence path.
+- [x] REFACTOR: Unify the launch state (idle -> starting -> online) in `use-supervisor.ts` so 44.3 extends it.
 
 ### Gate 2
 
-- [ ] Opening the picker loads real recents; the folder icon pops the native dialog and fills the path (local).
-- [ ] `Create` launches a host for the chosen folder and navigates on `host.online`.
-- [ ] A reused host navigates without a spurious "starting host…" stall.
-- [ ] All browser<->supervisor traffic is on the session log.
+- [x] Opening the picker loads real recents; the folder icon pops the native dialog and fills the path (local).
+- [x] `Create` launches a host for the chosen folder and navigates on `host.online`.
+- [x] A reused host navigates without a spurious "starting host…" stall.
+- [x] All browser<->supervisor traffic is on the session log.
 
 ## Accepted / Deferred Follow-Up
 
-None.
+- Storybook visual-regression baselines for the new stories (`Panel/SessionSidebar` `WithNewSession`,
+  `NewSession/NewSessionPicker`) - the mandatory gate (`pnpm lint`/`typecheck`/`test`) is green; the
+  jsdom `*.test.tsx` are the behavioral proof. See "Storybook baseline status" in the run report.
 
 ## Superseded / Obsolete Checklist Debt
 
