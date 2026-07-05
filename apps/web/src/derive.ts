@@ -880,6 +880,12 @@ function liveOutputTokens(events: readonly SessionEvent[]): number | undefined {
     if (decoded.type === "assistant.completed") {
       break;
     }
+    // Honor the `/clear` boundary like `activeTurnRunId`/`toTranscript` do, so a `/clear` mid-turn (a
+    // prior run with progress but no `assistant.completed`) can't leak a stale token count into the
+    // fresh awaiting-gap header before `session.switch` swaps the log.
+    if (decoded.type === "user.command" && decoded.command === "/clear") {
+      break;
+    }
     if (decoded.type === "assistant.progress" && decoded.usage) {
       const out = decoded.usage.output;
       max = max === undefined ? out : Math.max(max, out);
@@ -911,7 +917,9 @@ export function turnStatusHeaderFrom(
   const startedAt = activeTurnStartedAt(events);
   const outputTokens = liveOutputTokens(events);
   return {
-    headline: inProgress?.activeForm ?? state,
+    // `||` (not `??`) so an empty-string `activeForm` also falls back to the engine state - never a blank
+    // headline (matching taskRowLabel's never-blank doctrine).
+    headline: inProgress?.activeForm || state,
     ...(startedAt !== null ? { startedAt } : {}),
     ...(outputTokens !== undefined ? { outputTokens } : {}),
     state,

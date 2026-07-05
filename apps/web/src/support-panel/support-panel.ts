@@ -6,6 +6,7 @@ import {
 } from "@trevor/session";
 import type { ToolDetailModel } from "@/tool-detail/detail-model";
 import type { Message } from "@/transcript";
+import { taskRowLabel } from "../tasks-display";
 
 /**
  * The thread support-panel read model (plan 09 M5): the pure projection of a thread's support surfaces -
@@ -71,7 +72,7 @@ export function buildSupportPanel(input: {
 }): ThreadSupportPanel {
   const tasks: SupportTaskRow[] = input.tasks.map((t) => ({
     id: t.id,
-    title: t.subject || t.activeForm,
+    title: taskRowLabel(t),
     status: t.status,
   }));
   // Subagents before jobs within the background group (the V1 ordering).

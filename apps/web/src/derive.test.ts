@@ -1074,6 +1074,26 @@ test("turnStatusHeaderFrom is undefined after assistant.completed", () => {
   assert.equal(header, undefined);
 });
 
+test("turnStatusHeaderFrom: a /clear mid-turn does not leak the prior run's tokens into the awaiting gap", () => {
+  // The pre-clear run streamed 500 tokens but never completed; after `/clear` + a fresh prompt the new
+  // awaiting-gap header must not show a stale `↓ 500` (the token walk stops at `/clear`, like its siblings).
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      progress("r1", 500),
+      evt("user.command", { command: "/clear", args: "" }),
+      userMessage(),
+    ],
+    { awaitingResponse: true },
+  );
+  assert.equal(
+    header?.outputTokens,
+    undefined,
+    "the pre-clear run's tokens do not leak past /clear",
+  );
+});
+
 test("turnStatusHeaderFrom: the awaiting gap (no run yet) still pins a Working header", () => {
   const header = turnStatusHeaderFrom([userMessage()], { awaitingResponse: true });
   assert.equal(header?.headline, "Working");
