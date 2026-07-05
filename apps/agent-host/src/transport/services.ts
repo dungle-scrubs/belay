@@ -1,11 +1,10 @@
 /**
- * Responsible for: the Emit service tag and the EmitEvent callback type - the seams for
- * publishing events to the Tether log.
- * Not for: the live publisher implementation - main provides it via a Layer.
+ * Responsible for: the Emit service tag, the EmitEvent callback type, and the live publisher Layer -
+ * the seams for publishing events to the Tether log.
  */
 
 import type { TrevorEventInput } from "@trevor/session";
-import { Context, type Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 /** Publishes one host-authored event to the durable log - the shape of main.ts's `emit`, threaded
  *  into the command/factory modules as a plain async callback (the imperative sibling of {@link Emit}). */
@@ -22,3 +21,27 @@ export class Emit extends Context.Tag("Emit")<
   Emit,
   { readonly publish: (event: TrevorEventInput) => Effect.Effect<void> }
 >() {}
+
+/**
+ * The live Emit Layer both the main session and each adopted tangent publish through: turn events go
+ * to the durable log via `emit`, and a second `assistant.completed` for an already-completed run (the
+ * fiber's onExit racing an immediate cancel) is dropped via `markCompleted`. Shared so the dedup
+ * discipline has exactly one definition instead of drifting copies per session.
+ */
+export function emitLiveLayer(
+  emit: EmitEvent,
+  markCompleted: (runId: string) => boolean,
+): Layer.Layer<Emit> {
+  return Layer.succeed(Emit, {
+    publish: (event) =>
+      Effect.promise(() => {
+        if (event.type === "assistant.completed") {
+          const runId = typeof event.payload.runId === "string" ? event.payload.runId : "";
+          if (runId && !markCompleted(runId)) {
+            return Promise.resolve();
+          }
+        }
+        return emit(event);
+      }),
+  });
+}

@@ -28,7 +28,7 @@ import { describeAgent, discoverAgents } from "@host/subagents/discovery";
 import { taskRegistry } from "@host/tools/tasks/tasks";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import { Emit } from "@host/transport/services";
+import { emitLiveLayer } from "@host/transport/services";
 import * as Sentry from "@sentry/node";
 import {
   catalogEntryFor,
@@ -45,13 +45,13 @@ import {
   type SessionEvent,
   streamTransport,
   type TrevorEventInput,
+  tangentsOf,
   viewerIdentity,
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
 import { resolveTelemetryConfig } from "@trevor/session/telemetry";
 import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
-import { Effect, Layer } from "effect";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
 import { nodeAdmissionCaps } from "./admission/store";
@@ -90,6 +90,7 @@ import { makeSourceSignIn } from "./providers/source-signin";
 import { createHostResidency } from "./residency/host";
 import { makeSerialRunCommands } from "./serial-run/commands";
 import { makeSessionSwitch } from "./session/session-switch";
+import { makeTangentAdoption } from "./session/tangent-adoption";
 import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { registerToolScriptSink } from "./tool-script/sink";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "./tools";
@@ -320,23 +321,9 @@ const compactionController = new CompactionController(providers[DEFAULT_PROVIDER
 
 const activeRun = new ActiveRun();
 
-/** The live Emit service: the turn program's events go to the Tether log via emit(). A second
- *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
- *  is dropped. */
-const EmitLive = Layer.succeed(Emit, {
-  publish: (event) =>
-    Effect.promise(() => {
-      if (event.type === "assistant.completed") {
-        const runId = typeof event.payload.runId === "string" ? event.payload.runId : "";
-        if (runId) {
-          if (!turnMachine.markCompleted(runId)) {
-            return Promise.resolve();
-          }
-        }
-      }
-      return emit(event);
-    }),
-});
+// The live Emit service: the turn program's events go to the Tether log via emit(), with the
+// already-completed dedup shared with each adopted tangent (see emitLiveLayer).
+const EmitLive = emitLiveLayer(emit, (runId) => turnMachine.markCompleted(runId));
 
 /** Cache window for the internet probe (D-060): reuse a result for ~30s to avoid constant checks. */
 const INTERNET_CACHE_MS = 30_000;
@@ -397,6 +384,11 @@ const lease = new Lease(
       emit(events.hostRole({ instanceId: INSTANCE_ID, role })).catch(() => {});
       if (role === "leader") {
         onBecomeLeader();
+        // Adopt this session's tangents on becoming leader (the poll below keeps them current); a
+        // standby drops any it held so tangents migrate with leadership.
+        void reconcileTangents();
+      } else {
+        tangentAdoption.teardownAll();
       }
     },
   },
@@ -411,6 +403,53 @@ let compactPending = false;
  *  Each OUTLIVES the parent turn that started it - the registry is session-level, not per-turn - so the
  *  cap holds across turns and /doctor can report active children. An entry clears when the child settles. */
 const backgroundChildren = new Map<string, BackgroundChildInfo>();
+
+// Tangent adoption (plan 37 takeover): the parent host ALSO answers the tangents branched off this
+// session, each in an isolated per-tangent worker (its own log/turn machinery, `startTurn` bound to
+// the tangent id) - never a fork. The manager is session-agnostic; `reconcileTangents` below feeds it
+// the discovered tangent ids while this host is the live leader. Gated on the same lease as the main
+// session, so workers migrate with leadership.
+const tangentAdoption = makeTangentAdoption({
+  parentSessionId: SESSION_ID,
+  producerId: PRODUCER_ID,
+  instanceId: INSTANCE_ID,
+  transport,
+  providers,
+  residency,
+  internet,
+  lease,
+  hostTelemetry,
+  providerTrace,
+});
+
+/**
+ * Reconciles the adopted-tangent workers to the parent's live tangents. Only the LIVE LEADER adopts:
+ * off-live or as a standby it tears every worker down (so tangents migrate with leadership), else it
+ * reads the inventory, filters to THIS session's non-deleted tangents (tangentsOf), and converges the
+ * worker set. Best-effort - an inventory read failure leaves the current workers in place. Driven
+ * from the leadership transition (below) and a modest poll (bottom of file).
+ */
+let reconcilingTangents = false;
+async function reconcileTangents(): Promise<void> {
+  if (!live || !lease.isLeader()) {
+    tangentAdoption.teardownAll();
+    return;
+  }
+  // Never stack inventory fetches: if the poll ticks (or a leadership transition fires) while a prior
+  // fetch is still in flight, skip - a slow/wedged store must not have 4s ticks pile requests onto it.
+  if (reconcilingTangents) {
+    return;
+  }
+  reconcilingTangents = true;
+  try {
+    const summaries = await transport.fetchInventory();
+    tangentAdoption.reconcile(tangentsOf(summaries, SESSION_ID).map((s) => s.sessionId));
+  } catch (error) {
+    warn("host", "tangent reconcile failed", { error: msg(error) });
+  } finally {
+    reconcilingTangents = false;
+  }
+}
 
 // The compaction command lane (plan 22.3, agent/compaction-commands): the between-turn fold gate
 // + trigger, the manual /compact fold (with its ESC-interruptible fiber, read back through the
@@ -1267,6 +1306,14 @@ process.once("SIGTERM", () => {
 });
 
 configureRecall();
+// Tangent adoption poll (plan 37 takeover): while the live leader, rediscover this session's tangents
+// (the inventory read model) every few seconds and reconcile a worker for each, so a tangent created
+// after go-live is picked up without a restart. `reconcileTangents` self-gates on live+leader (a
+// standby tears its workers down), and `.unref()` keeps this timer from holding the process open.
+const TANGENT_POLL_MS = 4_000;
+setInterval(() => {
+  void reconcileTangents();
+}, TANGENT_POLL_MS).unref();
 // Kick the async source/catalog load (D-065); it re-announces host.online once the live model lists
 // are in. Fire-and-forget - the host comes up immediately with empty sources, then fills them in.
 refreshCatalog();
