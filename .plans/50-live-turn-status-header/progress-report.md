@@ -1,15 +1,16 @@
 # 50 Live Turn-Status Header - Progress Report
 
-**Stage:** ready
+**Stage:** implemented (pending Storybook baseline regeneration - see note)
 
-> **Current focus:** Phase 1 · M1 - `TurnStatusHeader` component + `↓` token cell
+> **Current focus:** complete - M1-M3 implemented; `pnpm lint`/`typecheck`/`test`
+> (web + unit) green.
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks | 15 |
-| Checked (done) | 0 |
+| Checked (done) | 15 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
@@ -84,24 +85,29 @@ debt at authoring time.
 
 ### M3: Task rows render `subject` + edge cases + CONTEXT.md
 
-- [ ] RED: `tasks-panel` stories/tests expect rows rendering `subject`; active
-      row `subject` distinct from the header `activeForm` (no duplication).
-- [ ] GREEN: Render `subject` in `tasks-panel.tsx:54` (fall back to `activeForm`
-      only when `subject` is unset).
-- [ ] RED: Edge-case tests - no-task fallback drops the trailing state cell; token
-      cell hidden until first snapshot and monotonic within a turn; `motion-reduce`
-      disables the shimmer.
-- [ ] GREEN: Implement edge-case handling.
-- [ ] REFACTOR: Consolidate `subject`/`activeForm` selection; add the
-      `Live turn-status header vocabulary` entry to `CONTEXT.md`; module comments.
+- [x] RED: `tasks-panel` stories/tests expect rows rendering `subject`; active
+      row `subject` distinct from the header `activeForm` (no duplication);
+      `support-panel-view` fixture updated to the `subject` text.
+- [x] GREEN: Render `taskRowLabel(task)` in `tasks-panel.tsx` (`subject`, fall back
+      to `activeForm` only when `subject` is unset).
+- [x] RED: Edge-case tests - no-task fallback drops the trailing state cell
+      (derive + component redundancy); token cell hidden until first snapshot and
+      monotonic within a turn (derive clamp test); `motion-reduce` disables the
+      shimmer (component test).
+- [x] GREEN: Edge-case handling (the monotonic clamp lives in `liveOutputTokens`;
+      the redundancy/hidden-cell rules in `TurnStatusHeader`).
+- [x] REFACTOR: `taskRowLabel` is the one `subject`/`activeForm` selection helper
+      (`tasks-display.ts`); reconciled the `Live turn-status header vocabulary`
+      entry in `CONTEXT.md` (token cell = monotonic-max; retired working row noted
+      in the action-status section); module comments.
 
 **Gate 3→done**
 
-- [ ] Rows read `subject`; header reads `activeForm`; no duplicated text.
-- [ ] No-task, no-tokens-yet, completed-turn, reduced-motion cases covered.
-- [ ] `CONTEXT.md` vocabulary added.
-- [ ] `pnpm typecheck` + `pnpm test --filter @trevor/web` green; Storybook
-      baselines updated.
+- [x] Rows read `subject`; header reads `activeForm`; no duplicated text.
+- [x] No-task, no-tokens-yet, completed-turn, reduced-motion cases covered.
+- [x] `CONTEXT.md` vocabulary reconciled (section pre-existed from authoring).
+- [x] `pnpm typecheck` + `pnpm test` (web + unit) green; Storybook baselines: see
+      note below (container lane).
 
 ---
 

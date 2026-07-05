@@ -1,6 +1,11 @@
 import type { TaskSnapshot } from "@trevor/session";
 import { cn } from "@/lib/utils";
-import { buildTaskDisplay, type GroupTone, type TaskDisplayRow } from "@/tasks-display";
+import {
+  buildTaskDisplay,
+  type GroupTone,
+  type TaskDisplayRow,
+  taskRowLabel,
+} from "@/tasks-display";
 
 // Task glyphs, matching V1 (tui/src/app/tasks.rs): a FILLED square is the active/running task, an
 // EMPTY square is pending, a check marks a done task, a cross marks a failure/cancel. No half-circle.
@@ -51,7 +56,7 @@ function TaskRow({ task, first }: { task: TaskSnapshot; first: boolean }) {
       <Branch first={first} />
       <span className={cn("select-none", style.glyph)}>{TASK_GLYPH[task.status] ?? "□"}</span>
       <span className={style.text}>
-        {task.activeForm}
+        {taskRowLabel(task)}
         {task.blockedBy.length > 0 ? (
           <span className="text-label text-muted-foreground/60">
             {" "}

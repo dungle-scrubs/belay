@@ -12,6 +12,17 @@ import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 export const MAX_TASK_ROWS = 5;
 
 /**
+ * The text a checklist row renders (plan 50): the task's IMPERATIVE `subject` ("Add tools.json
+ * schemas"), so a row reads distinctly from the pinned turn-status header, which owns the tighter
+ * present-progressive `activeForm` ("Adding schemas and tests…"). Falls back to `activeForm` only when
+ * a task carries no subject (a legacy/partial snapshot), so a row is never blank. The single owner of
+ * the row-label field choice, so the panel and any future task surface can't diverge. <!-- D-005 -->
+ */
+export function taskRowLabel(task: TaskSnapshot): string {
+  return task.subject || task.activeForm;
+}
+
+/**
  * Just one task over the cap reads better as a literal `...1 more` overflow than as a grouped count, so
  * grouping only engages once the burst is large enough that a status breakdown is more scannable than a
  * row of individual low-priority tasks.

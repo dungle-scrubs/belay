@@ -68,6 +68,16 @@ test("no parenthetical is rendered when there are no metrics cells", () => {
   assert.equal(parenthetical(container), "", "no elapsed, no tokens, no distinct state -> no (…)");
 });
 
+test("reduced motion: the headline shimmer overlay carries motion-reduce:animate-none", () => {
+  // Under prefers-reduced-motion the shimmer band stops animating while the solid base label stays
+  // readable (the ShimmerText structural guarantee the header inherits).
+  const { container } = render(
+    <TurnStatusHeader headline="thinking" startedAt={Date.now()} outputTokens={2600} />,
+  );
+  const overlay = container.querySelector("[aria-hidden].shimmer");
+  assert.ok(overlay?.classList.contains("motion-reduce:animate-none"));
+});
+
 test("the headline inherits ShimmerText a11y: announced base + aria-hidden motion-reduce overlay", () => {
   const { container } = render(<TurnStatusHeader headline="reading src/foo.ts" />);
   const overlay = container.querySelector("[aria-hidden].shimmer");

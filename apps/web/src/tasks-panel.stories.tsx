@@ -40,6 +40,23 @@ function task(
 const many = (status: TaskStatus, count: number, label: string): TaskSnapshot[] =>
   Array.from({ length: count }, (_, i) => task(status, `${label} ${i + 1}`));
 
+/**
+ * Rows render the IMPERATIVE `subject` (plan 50), distinct from the pinned turn-status header, which
+ * shows the tighter present-progressive `activeForm`. Here the active row reads "Add tools.json
+ * schemas" while the header would read "Adding schemas and tests…" - no duplicated text.
+ */
+export const DistinctSubject: Story = {
+  render: () => (
+    <TasksPanel
+      tasks={[
+        task("in_progress", "Adding schemas and tests…", { subject: "Add tools.json schemas" }),
+        task("pending", "Wiring the parser", { subject: "Wire the parser" }),
+        task("completed", "Scaffolding the module", { subject: "Scaffold the module" }),
+      ]}
+    />
+  ),
+};
+
 /** A short, all-individual checklist - the everyday case, no grouping or overflow. */
 export const ShortList: Story = {
   render: () => (

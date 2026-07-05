@@ -63,8 +63,8 @@ The active-turn status is a **shimmering present-progress label** (the `ActionSh
 reusing the `tw-shimmer` overlay idiom + `motion-reduce:animate-none`), not a pulse dot. Its text is
 a **deterministic projection** of already-structured transcript/session state - never a fuzzy match
 over free-form prose, and never an inference of user intent. The one owner of the vocabulary is the
-pure `apps/web/src/action-label.ts` module; tool renderers and the working row read it so they can't
-drift apart.
+pure `apps/web/src/action-label.ts` module; tool renderers and the pinned turn-status header (plan 50,
+which retired the scrolling working row) read it so they can't drift apart.
 
 | Term | Meaning | Notes |
 |---|---|---|
@@ -89,7 +89,7 @@ checklist, mirroring Claude Code's working indicator:
 | **Turn-status header** | The pinned one-line live turn indicator above the task list: an action headline plus the parenthetical `elapsed · ↓ output-tokens · state`. | The single live turn indicator; replaces the scrolling `working` row. `esc to interrupt` relocates to the pinned region / composer. |
 | **Action headline** | The semantic *what*: the in-progress task's `activeForm` (gerund), falling back to `turnActionLabel` when no task is `in_progress`. | Distinct from the trailing state cell (the *how*). Reuses `tasks.current`; no new model output. |
 | **`subject` vs `activeForm`** | `subject` = imperative task title shown in the **checklist rows**; `activeForm` = present-progressive form reserved for the **header**. | Both already on `TaskSnapshot`; rows flip from `activeForm` to `subject` so header and row do not duplicate text. |
-| **`↓` output-token cell** | Live per-turn **output** tokens (`usage.output` via `liveCallFrom`), `fmtTokens`-abbreviated; resets per turn, hidden until the first `assistant.progress`, monotonic within a turn. `↓` = streamed down. | Distinct from the `usage-summary` panel (session totals) and from 44.4 `assistant.limit` (rate/quota). |
+| **`↓` output-token cell** | Live per-turn **output** tokens (`usage.output`, taken as a monotonic **max** over the live turn's `assistant.progress` snapshots, sharing `liveCallFrom`'s live-turn boundary), `fmtTokens`-abbreviated; resets per turn, hidden until the first `assistant.progress`, never decreases within a turn (R-3). `↓` = streamed down. | Distinct from the `usage-summary` panel (session totals) and from 44.4 `assistant.limit` (rate/quota). |
 | **Redundancy rule** | The trailing `state` cell (`turnActionLabel`) renders only when it differs from the headline; when the headline is itself the state, the cell is dropped. | Keeps a no-task line reading `thinking (2m 37s · ↓ 2.6k tokens)` from repeating "thinking". |
 
 The header is a **deterministic web-side projection** (same doctrine as the action-status label): headline

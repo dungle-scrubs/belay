@@ -1051,6 +1051,16 @@ test("turnStatusHeaderFrom: output tokens come from the newest assistant.progres
   assert.equal(header?.outputTokens, 340);
 });
 
+test("turnStatusHeaderFrom: output tokens never decrease within a turn (monotonic clamp, R-3)", () => {
+  // An advisory progress snapshot reporting FEWER output tokens than a prior one must not regress the
+  // cell (D-002/R-3): the header clamps to the max seen in the live turn.
+  const header = turnStatusHeaderFrom(
+    [userMessage(), started("r1"), progress("r1", 340), progress("r1", 200)],
+    { awaitingResponse: false },
+  );
+  assert.equal(header?.outputTokens, 340);
+});
+
 test("turnStatusHeaderFrom: the token cell is absent until the first progress snapshot", () => {
   const header = turnStatusHeaderFrom([userMessage(), started("r1")], { awaitingResponse: false });
   assert.equal(header?.outputTokens, undefined);

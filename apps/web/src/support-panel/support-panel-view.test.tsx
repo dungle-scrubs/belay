@@ -103,6 +103,7 @@ test("both sections present: tasks + background both render", () => {
       onOpenJobDetail={vi.fn()}
     />,
   );
-  assert.ok(screen.getByText("Doing a"), "the task row renders (via TasksPanel)");
+  // The checklist row renders the imperative `subject` (plan 50), not the `activeForm`.
+  assert.ok(screen.getByText("Task a"), "the task row renders (via TasksPanel)");
   assert.ok(screen.getByText("cmd-p1"), "the job row renders");
 });

@@ -44,6 +44,25 @@ test("renders nothing for an empty checklist", () => {
   assert.equal(container.firstChild, null);
 });
 
+test("plan 50: a row renders the imperative subject, distinct from the header's activeForm", () => {
+  render(
+    <TasksPanel
+      tasks={[
+        task("in_progress", "Adding schemas and tests…", { subject: "Add schemas and tests" }),
+      ]}
+    />,
+  );
+  // The row reads the imperative subject...
+  assert.ok(screen.getByText("Add schemas and tests"));
+  // ...not the present-progressive activeForm, which the pinned turn-status header owns (no duplication).
+  assert.equal(screen.queryByText("Adding schemas and tests…"), null);
+});
+
+test("plan 50: a row falls back to activeForm when a task carries no subject", () => {
+  render(<TasksPanel tasks={[task("in_progress", "Wiring the parser", { subject: "" })]} />);
+  assert.ok(screen.getByText("Wiring the parser"), "a subject-less task never renders blank");
+});
+
 // --- M4: cap, ordering, grouping, overflow ---
 
 test("caps the visible rows at five and shows a `...N more` overflow line", () => {
