@@ -223,7 +223,7 @@ export function App() {
   }, []);
 
   const sessionQuery = useQuery({
-    queryKey: ["richter-session", target],
+    queryKey: ["tether-session", target],
     queryFn: async () => {
       await ensureSession(target);
       return target;
@@ -430,7 +430,7 @@ export function App() {
   );
   // The New-session picker's live wiring over the 44.1 supervisor control session (plan 44.2 M3/M4).
   // The native folder pick is offered only when a LOCAL backend reports presence (null = remote
-  // Richter), degrading to recents + paste-a-path otherwise.
+  // Tether), degrading to recents + paste-a-path otherwise.
   const localPickerAvailable = presence !== null;
   const supervisor = useSupervisor({
     active: modal.newOpen,

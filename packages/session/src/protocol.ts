@@ -14,7 +14,7 @@ export type { UsageBreakdown };
 
 /**
  * The trevor session protocol: the `user.message`, `assistant.*`, `tool.*`, and
- * `host.*` events that ride on Richter's generic event log. Richter (wire.ts)
+ * `host.*` events that ride on Tether's generic event log. Tether (wire.ts)
  * owns only the envelope - `type` is a free string and `payload` an arbitrary
  * object - so the trevor-specific event names and payload shapes live HERE, once,
  * shared by both emitters (host + web) and consumers.
@@ -254,7 +254,7 @@ export interface WorktreeSummary {
 /**
  * A content-addressed artifact (image / document / other file) attached to a
  * message. The bytes do NOT ride the event - they live in the blob store beside
- * Richter (D-028); the event carries only this reference. `hash` is the sha256 the
+ * Tether (D-028); the event carries only this reference. `hash` is the sha256 the
  * bytes are stored under, so the same artifact is shared across every session and
  * fork that references it. See `blob.ts` for the store client.
  */

@@ -10,7 +10,7 @@ import { test } from "vitest";
  * stated reason unless the live host env is configured.
  */
 
-const base = process.env.RICHTER_URL;
+const base = process.env.TETHER_URL;
 const sid = process.env.SESSION_ID;
 const provider = process.env.PROVIDER_KEY ?? "gpt";
 const enabled = process.env.TREVOR_LIVE === "1" && Boolean(base) && Boolean(sid);

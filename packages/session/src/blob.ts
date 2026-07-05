@@ -3,12 +3,12 @@ import type { ArtifactRef } from "./protocol";
 
 /**
  * The artifact (blob) transport: a thin isomorphic client for the content-addressed
- * blob store that sits BESIDE Richter (D-028). The host and the web client both
- * speak it over `fetch` (a global in the browser and Node >= 22, like the Richter
+ * blob store that sits BESIDE Tether (D-028). The host and the web client both
+ * speak it over `fetch` (a global in the browser and Node >= 22, like the Tether
  * client here). Bytes are addressed by their sha256, so a stored blob is immutable
  * and shared across every session - and every fork - that references it.
  *
- * The blob store is NOT Richter: events carry only an ArtifactRef
+ * The blob store is NOT Tether: events carry only an ArtifactRef
  * (`{ kind, mimeType, size, hash }`); the bytes live in the store, fetched on demand.
  *
  * The wire contract (HEX64, the result type, the `/blobs` routes) lives in the zero-dep

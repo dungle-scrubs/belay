@@ -12,7 +12,7 @@ import {
  * {@link ForkFlowDeps}, the same shape `handoff-flow`/`workspace-switch` use.
  *
  * A fork creates a FRESH child session seeded with a copy of the parent's conversation up to a chosen
- * point ("branch from here"), entirely over the NORMAL append API - so the store/Richter stays a generic
+ * point ("branch from here"), entirely over the NORMAL append API - so the store/Tether stays a generic
  * append-only substrate with no fork columns. It reads the parent log, plans the fork ({@link planFork}:
  * the copied prefix followed by a trailing `session.forkedFrom` marker), ensures the child, and appends the
  * plan in order. The child is then a SELF-CONTAINED linear session; the trailing marker makes it fork-ready

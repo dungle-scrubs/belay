@@ -1,6 +1,6 @@
 /**
  * Responsible for: the Emit service tag and the EmitEvent callback type - the seams for
- * publishing events to the Richter log.
+ * publishing events to the Tether log.
  * Not for: the live publisher implementation - main provides it via a Layer.
  */
 
@@ -12,11 +12,11 @@ import { Context, type Effect } from "effect";
 export type EmitEvent = (event: TrevorEventInput) => Promise<void>;
 
 /**
- * Publishes one trevor event to the durable Richter log. Modeled as a service (not a
+ * Publishes one trevor event to the durable Tether log. Modeled as a service (not a
  * threaded callback) so the turn pipeline declares its need to emit in its `R` channel,
  * `main` provides the live publisher via a Layer, and tests provide a collecting layer.
  * This is the dependency-injection seam between the Effect turn program and the
- * imperative Richter transport that publishes its events.
+ * imperative Tether transport that publishes its events.
  */
 export class Emit extends Context.Tag("Emit")<
   Emit,

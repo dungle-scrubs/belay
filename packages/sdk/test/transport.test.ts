@@ -8,7 +8,7 @@ import { createTrevorClient, SdkError } from "../src/index";
  * SDK transport binding over a REAL local session-store (plan 28 M2 integration): the client binds to
  * an ephemeral store URL through the same `streamTransport` the browser/host use, and ensure/publish/
  * readLog/inventory all round-trip over real HTTP + WebSocket. A binding to an unreachable URL surfaces
- * as a typed `SdkError`. Richter shares this exact wire, so URL-based binding is the whole story (D-004).
+ * as a typed `SdkError`. Tether shares this exact wire, so URL-based binding is the whole story (D-004).
  */
 
 let store: RunningServer;

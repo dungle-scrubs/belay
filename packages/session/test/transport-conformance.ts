@@ -8,8 +8,8 @@ import { subscribe, waitFor } from "../src/testing";
  * backend must satisfy (ensure -> publish -> replay-then-tail -> presence -> fan-out).
  * It is owned HERE, by the protocol package, not by any one implementor - the caller
  * provides a freshly-booted transport and this file owns the assertions. The local
- * session-store runs it hermetically (apps/session-store/test); Richter runs the very
- * same suite against a live service (richter-transport.test.ts here, gated on RICHTER_URL),
+ * session-store runs it hermetically (apps/session-store/test); Tether runs the very
+ * same suite against a live service (tether-transport.test.ts here, gated on TETHER_URL),
  * so the two backends are proven identical rather than merely similar.
  */
 

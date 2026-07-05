@@ -110,11 +110,11 @@ import { makeWorktreeCommands } from "./worktrees/commands";
  * lives in @trevor/session and is shared with the web client, so host and browser
  * can never disagree on the protocol. The durable log is reached through a
  * SessionTransport; by default this host plugs in the local session-store, and sets
- * RICHTER_URL to opt into Richter instead. Either way the loop below depends only on
+ * TETHER_URL to opt into Tether instead. Either way the loop below depends only on
  * the contract, not on a backend.
  *
  * Many hosts may share one session (each with a distinct participant id so
- * Richter lets them coexist), but only the lease LEADER answers turns; others
+ * Tether lets them coexist), but only the lease LEADER answers turns; others
  * stand by and take over if the leader goes quiet (see @host/session/lease).
  *
  * Responsible for: composition root: wiring transport, session lease, command lane, turn dispatch.
@@ -129,13 +129,13 @@ const CONTROL_PRODUCER_ID = controlProducerId(PRODUCER_ID);
 // (not the bare host id), but tagged so it is never treated as a normal full-surface turn.
 const CLIP_PRODUCER_ID = clipProducerId(PRODUCER_ID);
 // Backend selection (the plugin seam): default to the local session-store; set
-// RICHTER_URL to opt into the Richter durable substrate instead. The host speaks
+// TETHER_URL to opt into the Tether durable substrate instead. The host speaks
 // the SessionTransport contract either way.
-const RICHTER_URL = process.env.RICHTER_URL;
+const TETHER_URL = process.env.TETHER_URL;
 const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? serviceUrl("store");
-// Richter speaks the same SessionTransport contract as the local store, so backend selection is just
-// which URL the stream transport points at (no separate adapter until Richter needs real divergence).
-const transport = streamTransport(RICHTER_URL ?? SESSION_STORE_URL);
+// Tether speaks the same SessionTransport contract as the local store, so backend selection is just
+// which URL the stream transport points at (no separate adapter until Tether needs real divergence).
+const transport = streamTransport(TETHER_URL ?? SESSION_STORE_URL);
 // The host telemetry sink (plan 13 M5): NOOP unless TREVOR_OTEL_EXPORTER=file selects the local file
 // exporter. Threaded into every turn (publishTurn) so turn/tool spans are emitted when enabled.
 const hostTelemetry = createTelemetrySink("agent-host");
@@ -320,7 +320,7 @@ const compactionController = new CompactionController(providers[DEFAULT_PROVIDER
 
 const activeRun = new ActiveRun();
 
-/** The live Emit service: the turn program's events go to the Richter log via emit(). A second
+/** The live Emit service: the turn program's events go to the Tether log via emit(). A second
  *  assistant.completed for an already-completed run (the fiber's onExit racing the immediate cancel)
  *  is dropped. */
 const EmitLive = Layer.succeed(Emit, {

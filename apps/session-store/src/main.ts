@@ -7,8 +7,8 @@ import { createSessionStore } from "./server";
  * The local session-store entrypoint: reads config from the environment and binds
  * the port. The server itself (and its SQLite log) lives in `./server` so tests can
  * run it on an ephemeral port against a throwaway database. This is the default,
- * Richter-free durable substrate for local-mode sessions; set RICHTER_URL on the
- * host/web to opt into Richter instead.
+ * Tether-free durable substrate for local-mode sessions; set TETHER_URL on the
+ * host/web to opt into Tether instead.
  */
 
 const DB_PATH = sessionStoreDbPath();

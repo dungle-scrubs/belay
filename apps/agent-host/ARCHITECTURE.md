@@ -5,7 +5,7 @@ reader should look first. Every module carries a `Responsible for:` header in it
 comment (see [AGENTS.md](./AGENTS.md) "Structure and naming"); this file is the directory-level
 view, kept honest by `test/architecture-map.test.ts`.
 
-The host is a Node + Effect Richter participant: it joins a session's durable event stream,
+The host is a Node + Effect Tether participant: it joins a session's durable event stream,
 elects a leader through the session lease, and runs the agent loop (model <-> tools) for each
 turn. `main.ts` is the only file at `src/` root - the composition root that wires the transport
 edge, replay dispatch, the command lane, and turn dispatch together.

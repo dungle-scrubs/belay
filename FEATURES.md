@@ -43,7 +43,7 @@ are both participants; all state is projected from the log.
 | Provider-question (`ask_user`) data contract: grouped questions, choices, answers, validation | `packages/session/src/provider-question.ts` | `provider-question.test.ts` |
 | Isomorphic stream transport: `/sessions` REST + WebSocket stream, replay + live | `packages/session/src/stream-transport.ts`, `transport.ts`, `session-routes.ts` | `stream-transport.test.ts` |
 | Reserved local ports (web 17420 / blob 17423 / store 17424) as one source of truth | `packages/session/src/ports.ts` | - |
-| Local session store: SQLite event log + WS fan-out (standalone Richter equivalent) | `apps/session-store/` | `e2e/boot.test.ts`, `e2e/golden-path.test.ts` |
+| Local session store: SQLite event log + WS fan-out (standalone Tether equivalent) | `apps/session-store/` | `e2e/boot.test.ts`, `e2e/golden-path.test.ts` |
 | Content-addressed blob store (sha256-named, immutable, dedup) for artifacts | `apps/blob-store/` | `e2e/blobs.test.ts` |
 | Server kit (shared HTTP/WS server scaffolding for the stores) | `packages/server-kit/` | package tests |
 

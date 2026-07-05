@@ -1,6 +1,6 @@
 /**
  * Tab-local composer persistence (D-083/D-084): the unsubmitted draft and the prompt-history recall
- * ring, kept in tab/session storage rather than the durable Richter log. Both are keyed by browser
+ * ring, kept in tab/session storage rather than the durable Tether log. Both are keyed by browser
  * tab id + session id, so distinct tabs and distinct sessions never see each other's drafts/history,
  * and survive a reload of the same tab. Every storage access is wrapped so private-mode / disabled
  * storage degrades to "no persistence" instead of breaking typing.

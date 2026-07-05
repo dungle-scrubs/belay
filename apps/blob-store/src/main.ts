@@ -6,7 +6,7 @@ import { createBlobServer } from "./server";
 /**
  * The blob-store entrypoint: reads config from the environment and binds the port. The
  * server itself (and its routes) lives in `./server` so tests can run it on an ephemeral
- * port against a throwaway directory. A content-addressed artifact store beside Richter
+ * port against a throwaway directory. A content-addressed artifact store beside Tether
  * (D-028), reachable by every participant (host + browser) so a blob is as durable and
  * shareable as the session log it is referenced from.
  */

@@ -7,7 +7,7 @@ import { NOOP_SINK, SPAN_NAMES, type TelemetrySink, withSpanSync } from "@trevor
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
- * the standalone equivalent of Richter). It owns an append-only, per-session,
+ * the standalone equivalent of Tether). It owns an append-only, per-session,
  * monotonically-sequenced event stream - the same shape every participant replays
  * - kept free of HTTP/WebSocket so it is directly testable; the server in `main.ts`
  * is a thin transport over it.

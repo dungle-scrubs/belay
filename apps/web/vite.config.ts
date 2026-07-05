@@ -8,7 +8,7 @@ import { defineConfig } from "vite";
 // RESERVED_PORTS.web is reserved for the Trevor web UI in ~/.agents/PORTS.md.
 // /sessions is proxied to the local session-store (REST + WebSocket, RESERVED_PORTS.store) so the
 // browser talks same-origin and avoids cross-origin (CORS) failures. Override VITE_SESSION_PROXY to point
-// at another backend; opt into Richter directly with VITE_RICHTER_URL (see src/session/use-session.ts).
+// at another backend; opt into Tether directly with VITE_TETHER_URL (see src/session/use-session.ts).
 // The Tailwind plugin only processes CSS that imports "tailwindcss", so the
 // live app (which does not yet import src/index.css) builds byte-identically;
 // Storybook opts in via .storybook/preview.ts. Shared by both since Storybook's

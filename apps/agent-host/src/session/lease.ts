@@ -1,7 +1,7 @@
 /**
- * Single-authority election for trevor hosts sharing one Richter session.
+ * Single-authority election for trevor hosts sharing one Tether session.
  *
- * Every host connects with a distinct participant id (so Richter lets them all
+ * Every host connects with a distinct participant id (so Tether lets them all
  * coexist and observe the log), but only ONE - the leader - answers turns and
  * touches the filesystem. Leadership is negotiated over the durable event log
  * with two payload-tagged signals (instanceId identifies the sender):

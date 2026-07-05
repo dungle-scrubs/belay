@@ -2,9 +2,9 @@
 
 `apps/` holds every Trevor V2 application, and these rules cover all of them:
 
-- **`apps/web`** - the browser frontend: React 19 + Vite + Effect, a Richter
+- **`apps/web`** - the browser frontend: React 19 + Vite + Effect, a Tether
   WebSocket participant.
-- **`apps/agent-host`** - the host: Node + Effect, also a Richter participant,
+- **`apps/agent-host`** - the host: Node + Effect, also a Tether participant,
   running the agent loop (model <-> tools) for each turn.
 
 These layer on the project-wide rules in the repo-root
@@ -46,8 +46,8 @@ and the boundaries it deliberately keeps imperative.
   (`Effect.runPromise` / `Effect.runPromiseExit`). Do not half-adopt inside one
   module, and do not let an isolated Effect island fight a surrounding sea of
   plain Promises.
-- **Schema / decode at trust boundaries.** Decoding wire data (e.g. Richter
-  envelopes via `@trevor/richter`) returns an `Either`; branch on it explicitly
+- **Schema / decode at trust boundaries.** Decoding wire data (e.g. Tether
+  envelopes via `@trevor/tether`) returns an `Either`; branch on it explicitly
   (`Either.isLeft`, as in `apps/agent-host/src/main.ts`) rather than trusting
   the shape. One schema is the source of truth for parse, decode, and typed
   error.

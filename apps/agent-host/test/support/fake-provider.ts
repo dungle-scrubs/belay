@@ -164,7 +164,7 @@ export async function runTurn(
 }
 
 /**
- * An Emit layer that publishes a turn's events to a real session-store / Richter transport,
+ * An Emit layer that publishes a turn's events to a real session-store / Tether transport,
  * rather than collecting them in memory. This is what makes a cross-service e2e possible: the
  * turn pipeline writes to the durable log and an independent subscriber tails the same stream.
  */

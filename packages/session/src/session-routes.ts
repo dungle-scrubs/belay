@@ -1,5 +1,5 @@
 /**
- * The session-store / Richter HTTP route vocabulary: the `/sessions` REST + stream path grammar, owned
+ * The session-store / Tether HTTP route vocabulary: the `/sessions` REST + stream path grammar, owned
  * ONCE so the store's server matchers, the client's URL builders, and the web dev proxy can't drift.
  * The sibling identity.ts already centralized the per-request PARAM codec (the `?after=` cursor +
  * stream identity); these are the path segments, the un-owned half it was missing. Mirrors

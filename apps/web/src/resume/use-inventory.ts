@@ -11,10 +11,10 @@ export interface InventoryState {
 }
 
 // The inventory rides the same backend as the session transport: same-origin in local dev, or the
-// configured Richter URL. A failed endpoint surfaces as an error in the chooser/sidebar. The fetch +
+// configured Tether URL. A failed endpoint surfaces as an error in the chooser/sidebar. The fetch +
 // `{ sessions }` envelope guard now lives on the transport seam (`fetchInventory`), so this hook only
 // owns the react-query polling/abort policy.
-const INVENTORY_BASE = import.meta.env.VITE_RICHTER_URL ?? window.location.origin;
+const INVENTORY_BASE = import.meta.env.VITE_TETHER_URL ?? window.location.origin;
 const transport = streamTransport(INVENTORY_BASE);
 
 /**

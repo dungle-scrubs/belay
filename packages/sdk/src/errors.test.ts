@@ -6,8 +6,8 @@ describe("urlClass", () => {
     expect(urlClass("http://127.0.0.1:17424/sessions/my-secret-session/events?token=abc")).toBe(
       "http://127.0.0.1:17424",
     );
-    expect(urlClass("https://user:pass@richter.example.com/sessions")).toBe(
-      "https://richter.example.com",
+    expect(urlClass("https://user:pass@tether.example.com/sessions")).toBe(
+      "https://tether.example.com",
     );
   });
 

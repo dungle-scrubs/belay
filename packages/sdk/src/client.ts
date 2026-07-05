@@ -45,7 +45,7 @@ import { projectTranscript, type Transcript } from "./transcript";
 
 /**
  * `@trevor/sdk` - the ergonomic, browser-safe workflow layer ABOVE `@trevor/session` (plan 28). It binds
- * one client to a session backend by URL (the local session-store or a Richter service - identical wire,
+ * one client to a session backend by URL (the local session-store or a Tether service - identical wire,
  * so the choice is just the URL, D-004), and exposes the useful headless Trevor workflows: read the
  * inventory/transcript, prompt + stream + cancel a turn, switch the model mid-turn, upload/download
  * artifacts, read capabilities/doctor, and run session lifecycle. It talks to backends through the
@@ -55,7 +55,7 @@ import { projectTranscript, type Transcript } from "./transcript";
  */
 
 export interface TrevorClientConfig {
-  /** The session backend URL: a local session-store or a Richter service (identical `/sessions` wire). */
+  /** The session backend URL: a local session-store or a Tether service (identical `/sessions` wire). */
   readonly sessionUrl: string;
   /** The content-addressed blob store URL; required only for the artifact workflows. */
   readonly blobUrl?: string;
@@ -65,7 +65,7 @@ export interface TrevorClientConfig {
   readonly producerId?: string;
   /**
    * The bound transport. Defaults to `streamTransport(sessionUrl)` - the one HTTP+WebSocket client both
-   * the local store and Richter speak. Injectable so tests can drive an in-memory recording transport.
+   * the local store and Tether speak. Injectable so tests can drive an in-memory recording transport.
    */
   readonly transport?: SessionTransport;
 }

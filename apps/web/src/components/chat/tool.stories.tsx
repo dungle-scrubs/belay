@@ -256,10 +256,10 @@ export const Grep: Story = {
   render: () => (
     <Variants>
       <Variant label="flat (default)">
-        <ToolOutput name="grep" args="useRichterSession" output={GREP_OUTPUT} />
+        <ToolOutput name="grep" args="useTetherSession" output={GREP_OUTPUT} />
       </Variant>
       <Variant label="border">
-        <ToolOutput name="grep" args="useRichterSession" output={GREP_OUTPUT} border />
+        <ToolOutput name="grep" args="useTetherSession" output={GREP_OUTPUT} border />
       </Variant>
     </Variants>
   ),

@@ -1,7 +1,7 @@
 # Trevor V2 - Agent Instructions
 
 Trevor V2 is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite +
-Effect); the host is `apps/agent-host` (Node + Effect). Both are Richter
+Effect); the host is `apps/agent-host` (Node + Effect). Both are Tether
 WebSocket participants. Per-directory `AGENTS.md` files (e.g.
 `apps/AGENTS.md`) layer additional rules; the rules below are project-wide.
 
@@ -130,7 +130,7 @@ source" or "in one `tests/` folder."
 - **Conformance / contract** - an interface every implementation must satisfy.
   Authored **with the contract owner** and parameterized over implementations:
   the transport contract lives in `packages/session/test/` and runs against both
-  `session-store` and Richter. A contract suite never lives inside one
+  `session-store` and Tether. A contract suite never lives inside one
   implementor.
 - **End-to-end / smoke** - boots multiple services and drives the whole system.
   Lives in the top-level **`e2e/`** workspace, never in a leaf package, because

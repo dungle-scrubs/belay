@@ -22,7 +22,7 @@ import type { LoadedCommandFile } from "./command-loader";
  * Immediate host commands (slash commands): the host runs these directly and
  * publishes a command.result, instead of routing the text to the model. This is
  * the V2 form of the old RPC "immediate host commands" lane (plan H-016) -
- * adapted to the Richter transport, where the browser publishes a user.command and
+ * adapted to the Tether transport, where the browser publishes a user.command and
  * the leader answers with command.result.
  *
  * Each command is a spec (announced in host.online so the browser knows which
