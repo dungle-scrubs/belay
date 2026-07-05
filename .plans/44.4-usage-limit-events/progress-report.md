@@ -41,17 +41,22 @@ authoring time.
 
 ## Phase 2 — Provider capture
 
-### M2: Claude Code capture (verified path)
+### M2: Claude capture via pi-ai unified rate-limit headers (spike)
 
-- [ ] RED: Synthetic `SDKRateLimitEvent` (`status:'rejected', resetsAt,
-      rateLimitType:'five_hour'`) through `claudeCodeEvents` → `limit`
-      ProviderEvent `{status:"reached", scope:"five_hour", resetsAt}`.
-- [ ] GREEN: `rate_limit_event` branch in `claudeCodeEvents`
-      (`claude-code.ts:150-177`) — status, scope, `resetsAt`, `utilization`.
-- [ ] RED: Failing test — `status:'allowed_warning' → "approaching"`.
+_Depends on plan 53.1 — Claude now streams via pi-ai `anthropic-messages`; `claude-code.ts`
+and its `SDKRateLimitEvent` branch are deleted (D-007)._
+
+- [ ] RED (SPIKE): Characterization test over a real pi-ai `anthropic-messages` response —
+      which `anthropic-ratelimit-unified-*` headers pi-ai surfaces (`-status`, `-reset`,
+      5h/7d scope). Resolves R-2.
+- [ ] GREEN: At the pi-ai boundary map unified headers → `limit` ProviderEvent (`-status`
+      → enum, 5h/7d → `scope`, `-reset` → `resetsAt`, remaining/limit → `utilization`);
+      absent header → detect-only + log inspected keys.
+- [ ] RED: Failing test — `allowed_warning → "approaching"` from the header.
 - [ ] GREEN: Complete status mapping (`allowed→ok`, `allowed_warning→
       approaching`, `rejected→reached`).
-- [ ] REFACTOR: Table-drive status/scope mapping; add boundary log line.
+- [ ] REFACTOR: Share the unified-header read with the Codex reset path (M3) in
+      `failure-evidence.ts`; table-drive the mapping; add boundary log line.
 
 ### M3: Codex capture + reset-time spike
 
@@ -69,7 +74,7 @@ authoring time.
 
 **Gate 2→3**
 
-- [ ] Claude Code emits `approaching` + `reached` with `scope` + `resetsAt`.
+- [ ] Claude emits `approaching` + `reached`; reset/scope resolved (unified headers or documented gap).
 - [ ] Codex emits `reached`; reset path resolved (present or documented gap).
 
 ---

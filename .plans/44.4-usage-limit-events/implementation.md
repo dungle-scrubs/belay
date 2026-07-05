@@ -7,11 +7,18 @@ supervisor — can read and eventually act on.
 
 ## 0. Hard Dependencies
 
-None. The enabling substrate already exists:
+- [ ] **Plan 53.1 (Claude subscription sign-in) — hard dependency.** 53.1 retires the
+  Agent-SDK `claude-code` route and streams the Claude subscription through pi-ai
+  `anthropic-messages`, which **deletes** `claude-code.ts` and its `SDKRateLimitEvent`
+  branch. Claude rate-limit capture therefore moves off the SDK onto the pi-ai HTTP path
+  (see D-007 / M2). Implement 53.1 first. <!-- D-007 -->
 
-- The Anthropic Agent SDK (`@anthropic-ai/claude-agent-sdk@0.3.199`) already
-  **delivers** `SDKRateLimitEvent` into the message stream; Trevor currently
-  drops it (`apps/agent-host/src/providers/claude-code.ts:150-177`).
+The rest of the substrate already exists:
+
+- After 53.1, Claude streams via pi-ai `anthropic-messages` — the **same pi-ai HTTP
+  client as Codex** — whose responses carry `anthropic-ratelimit-unified-*` headers
+  (`status: allowed|allowed_warning|rejected`, reset, 5h/7d scope), the same status enum
+  this plan's D-005 already normalizes. <!-- D-007 -->
 - A mature failure taxonomy already classifies `rate_limited` / `quota_billing`
   and mines `retry-after` seconds
   (`apps/agent-host/src/providers/failure-taxonomy.ts:131-178`,
@@ -23,9 +30,10 @@ None. The enabling substrate already exists:
 
 <!-- D-001 --> The signal reaches the transcript as a **dedicated first-class
 protocol event `assistant.limit`**, not a piggyback on `ProviderDiagnostic`.
-`ProviderDiagnostic` only rides failure/reconnect events; the SDK's
-`rate_limit_event` also fires on non-failure ("approaching") states that a
-failure-only channel cannot carry.
+`ProviderDiagnostic` only rides failure/reconnect events; the provider's rate-limit
+signal (Claude's `anthropic-ratelimit-unified-status: allowed_warning`, a Codex
+snapshot) also fires on non-failure ("approaching") states that a failure-only channel
+cannot carry.
 
 The flow mirrors every other model signal in Trevor: a provider-boundary mapper
 emits a normalized `ProviderEvent`, the agent loop lifts it to an `AgentEvent`,
@@ -33,9 +41,9 @@ emits a normalized `ProviderEvent`, the agent loop lifts it to an `AgentEvent`,
 persists it. Two consumers then read it.
 
 ```
-Claude Agent SDK  ──rate_limit_event──┐
-                                      ├─► ProviderEvent{type:"limit"} ─► AgentEvent
-pi-ai (Codex) ──429 / rate-limit hdr──┘        (types.ts)               (loop.ts)
+pi-ai (Claude) ──anthropic-ratelimit-unified hdr──┐
+                                                  ├─► ProviderEvent{type:"limit"} ─► AgentEvent
+pi-ai (Codex) ──429 / rate-limit hdr──────────────┘        (types.ts)               (loop.ts)
                                                                             │
                                                                    publishTurn (turn.ts)
                                                                             │
@@ -55,32 +63,35 @@ pi-ai (Codex) ──429 / rate-limit hdr──┘        (types.ts)             
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `provider` | `string` | `"claude-code"` \| `"codex"` \| ... |
+| `provider` | `string` | `"anthropic"` \| `"codex"` \| ... |
 | `status` | `"ok" \| "approaching" \| "reached"` | Trevor-native, normalized across providers |
 | `scope` | `string` | window id: `"five_hour" \| "seven_day" \| "seven_day_opus" \| ...` |
 | `resetsAt` | `number?` | unix epoch **seconds** when the window resets (optional) |
 | `utilization` | `number?` | 0–1 or 0–100 fraction used, when the provider supplies it (optional) |
 
-Status normalization (D-005): Claude SDK `allowed→ok`, `allowed_warning→approaching`,
-`rejected→reached`; Codex 429 / `usageLimitExceeded → reached`, snapshot
-`used_percent` over threshold `→ approaching`.
+Status normalization (D-005): Claude pi-ai `anthropic-ratelimit-unified-status`
+`allowed→ok`, `allowed_warning→approaching`, `rejected→reached`; Codex 429 /
+`usageLimitExceeded → reached`, snapshot `used_percent` over threshold `→ approaching`.
+The Claude status enum is unchanged from the retired SDK event; only its source moved to
+the HTTP header (53.1). <!-- D-007 -->
 
 ### Key Constraints
 
 | Constraint | Impact |
 |-----------|--------|
-| Trevor does NOT run the vendor CLIs (no PTY, no `claude -p`, no `codex exec`) | Signals come from the Agent SDK message stream and the pi-ai HTTP client, not terminal scraping. The earlier "TUI chrome" concern does not apply. |
-| Claude Code reset is verified present; Codex reset is unverified on the pi-ai path | Codex reset-time capture is a **spike** with a detect-only fallback (D-002). |
+| Trevor does NOT run the vendor CLIs (no PTY, no `claude -p`, no `codex exec`) | After 53.1 both providers stream via the pi-ai HTTP client; signals come from its response headers, not terminal scraping. The earlier "TUI chrome" concern does not apply. |
+| After 53.1, Claude AND Codex reset are both unverified on the pi-ai path | Both reset-time captures are **spikes** with detect-only fallbacks (D-002 / D-007). The prior "Claude reset verified via the SDK" no longer holds — the SDK route is gone. |
 | `retry-after` HTTP-date form is deliberately ignored today (`failure-evidence.ts:144-146`) | The absolute-reset path for Codex must be added, not assumed present. |
 | `retryAfterMs` is extracted internally but dropped before the wire (`errors.ts:32,115`; not in `protocol.ts:73-86`) | The new event is the first thing to actually surface reset data to a consumer. |
 
 ### Boundaries
 
-- **Provider mappers own translation.** `claudeCodeEvents`
-  (`claude-code.ts:141-178`) and the Codex failure/stream path
-  (`pi-ai.ts:208-365`, `failure-taxonomy.ts`, `failure-evidence.ts`) each map
-  their native shape → the single `ProviderEvent{type:"limit"}`. No consumer
-  ever sees a provider-native rate-limit shape.
+- **The pi-ai boundary owns translation for both providers.** After 53.1 Claude and
+  Codex both stream through pi-ai (`pi-ai.ts:208-365`, `failure-taxonomy.ts`,
+  `failure-evidence.ts`), so one mapping point reads the `anthropic-ratelimit-unified-*`
+  headers (Claude) and the 429 / rate-limit shape (Codex) → the single
+  `ProviderEvent{type:"limit"}`. No consumer ever sees a provider-native rate-limit
+  shape. <!-- D-007 -->
 - **The agent loop and `turn.ts` are pass-through.** They forward the event;
   they do not interpret or act on it.
 - **Non-goal boundary (D-004):** nothing in this plan changes routing, retry,
@@ -137,22 +148,25 @@ before either provider is wired.
 **Goal:** Both providers emit `assistant.limit`; Claude Code fully, Codex with a
 verified reset path or a documented detect-only fallback.
 
-#### M2: Claude Code capture (verified path)
+#### M2: Claude capture via the pi-ai unified rate-limit headers (spike)
 
-- **Dependencies:** M1
-- **Effort:** S
+- **Dependencies:** M1, plan 53.1 (Claude now streams via pi-ai `anthropic-messages`)
+- **Effort:** M
 - **Tasks:**
-  1. RED: Feed a synthetic `SDKRateLimitEvent`
-     (`{type:'rate_limit_event', rate_limit_info:{status:'rejected', resetsAt,
-     rateLimitType:'five_hour'}}`) through `claudeCodeEvents`; assert a `limit`
-     ProviderEvent `{status:"reached", scope:"five_hour", resetsAt}`.
-  2. GREEN: Add the `message.type === "rate_limit_event"` branch in
-     `claudeCodeEvents` (`claude-code.ts:150-177`) mapping status enum, scope
-     (`rateLimitType`), `resetsAt`, and `utilization`. <!-- D-002 -->
-  3. RED: Add a failing test for `status:'allowed_warning' → "approaching"`.
+  1. RED (SPIKE): Add a characterization test over a real pi-ai `anthropic-messages`
+     response asserting which `anthropic-ratelimit-unified-*` headers pi-ai's HTTP client
+     surfaces — `-status` (`allowed|allowed_warning|rejected`), `-reset` (absolute), and
+     the 5h/7d scope headers. Resolves whether an absolute Claude `resetsAt` + `scope` are
+     reachable on the pi-ai path (R-2). <!-- D-007 -->
+  2. GREEN: At the pi-ai boundary map the unified headers → a `limit` ProviderEvent:
+     `-status` → status enum, the 5h/7d window → `scope`, `-reset` → `resetsAt`,
+     `utilization` from the remaining/limit pair when present. When a header is absent,
+     emit detect-only and log the inspected keys (no silent gap). <!-- D-002 --> <!-- D-007 -->
+  3. RED: Add a failing test for `allowed_warning → "approaching"` from the header.
   4. GREEN: Complete the status mapping (`allowed→ok`, `allowed_warning→
      approaching`, `rejected→reached`). <!-- D-003 --> <!-- D-005 -->
-  5. REFACTOR: Table-drive the status/scope mapping; add a boundary log line.
+  5. REFACTOR: Share the unified-header read with the Codex reset path (M3) in
+     `failure-evidence.ts`; table-drive the status/scope mapping; add a boundary log line.
 
 #### M3: Codex capture + reset-time spike
 
@@ -179,7 +193,7 @@ verified reset path or a documented detect-only fallback.
 
 ### Gate 2→3
 
-- [ ] Claude Code emits `approaching` and `reached` with `scope` + `resetsAt`.
+- [ ] Claude emits `approaching` + `reached`; reset/scope resolved (present via unified headers, or documented gap).
 - [ ] Codex emits `reached`; reset path resolved (present, or documented gap).
 
 ### Phase 3: Consumer surfaces
@@ -223,8 +237,9 @@ transcript.
   produces, not an out-of-band account query.
 - **A usage dashboard / rich UI.** A transcript marker is the surface; a
   dedicated usage panel is out of scope.
-- **Guaranteeing Codex `resetsAt`.** If the pi-ai path does not expose it,
-  Codex ships detect-only (reached, no reset) with a logged, documented gap.
+- **Guaranteeing `resetsAt` on the pi-ai path.** If pi-ai does not expose the reset
+  header for Claude (unified) or Codex, that provider ships detect-only (reached, no
+  reset) with a logged, documented gap. <!-- D-007 -->
 
 ---
 
@@ -233,7 +248,7 @@ transcript.
 | Risk | Severity | Likelihood | Mitigation | Owner |
 |------|----------|------------|------------|-------|
 | R-1: pi-ai does not surface a Codex reset timestamp | medium | medium | M3 spike resolves it empirically before wiring; detect-only fallback keeps the plan shippable (D-002) | impl |
-| R-2: SDK `rate_limit_event` field names drift across SDK versions | low | medium | Map at one boundary (`claudeCodeEvents`) behind the normalizer; a version bump touches one table | impl |
+| R-2: pi-ai does not surface the `anthropic-ratelimit-unified-*` headers on the OAuth/subscription path | medium | medium | M2 spike resolves it empirically before wiring; detect-only fallback (reached, no reset/scope) keeps the plan shippable, mirroring the Codex path (D-007) | impl |
 | R-3: Provider spam of `approaching` events floods the transcript | low | medium | Emit on status *transition* / dedupe per (scope,status) within a turn; covered by an M2/M3 test | impl |
 | R-4: Codex `approaching` never available (no snapshot on pi-ai path) | low | medium | Scoped as best-effort / non-goal per M3.3; Claude Code `approaching` still ships | impl |
 
@@ -270,7 +285,7 @@ pnpm test --filter @trevor/session --filter @trevor/agent-host \
 ## Decisions
 
 Canonical decisions live in `.plans/44.4-usage-limit-events/plan.db`
-(D-001…D-006). Query:
+(D-001…D-007). Query:
 
 ```bash
 mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts \
