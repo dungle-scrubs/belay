@@ -45,6 +45,7 @@ import { PanelHost } from "@/components/panel/panel-host";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
 import { sessionScopedKey } from "@/model-selection";
+import { isNewSessionCommand, NEW_SESSION_COMMAND } from "@/new-session/new-session-command";
 import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
@@ -127,6 +128,7 @@ const DEFAULT_SESSION = DEFAULT_SESSION_ID;
 const BUILT_IN_COMMANDS = [
   { name: "/clear", summary: "Start a fresh session" },
   { name: "/cd", summary: "Switch directories in a fresh session", usage: "/cd <directory>" },
+  NEW_SESSION_COMMAND,
   { name: "/resume", summary: "Open a prior session (no implicit resume)" },
   { name: "/worktree", summary: "Switch a Trevor-managed worktree" },
 ] as const;
@@ -406,6 +408,9 @@ export function App() {
   // /resume, /worktree, the left session sidebar, and the right details panel.
   const worktrees = useMemo(() => worktreesFrom(announcement), [announcement]);
   const modal = useModalState({ worktrees, host, target, sessionId, busy });
+  // The single open-picker entry (plan 44.2, D-001): both the sidebar `＋ New session` and the `/new`
+  // command call this, so the two entry points can never drift.
+  const openNewSession = useCallback(() => modal.setNewOpen(true), [modal.setNewOpen]);
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
   const archived = useMemo(() => isSessionArchived(events), [events]);
@@ -745,6 +750,15 @@ export function App() {
       history.resetNavigation();
       setDraft("");
       modal.setResumeOpen(true);
+      return;
+    }
+    // `/new` is a browser-side UI command (plan 44.2, D-001): it opens the New-session picker, sharing
+    // one open-picker entry with the sidebar `＋`. Like `/resume` it is intercepted before the host
+    // command lane, so it never becomes a model turn or a host round-trip.
+    if (isNewSessionCommand(text)) {
+      history.resetNavigation();
+      setDraft("");
+      openNewSession();
       return;
     }
     // `/worktree` is a browser-side UI command (D-091): it opens the worktree switcher; the actual
@@ -1472,6 +1486,7 @@ export function App() {
           onRename: (id, title) => void renameSession(id, title),
           onArchive: (id) => void archiveSession(id),
           onDelete: (id) => void deleteSession(id),
+          onNewSession: openNewSession,
           liveActivity: modal.sidebarLiveActivity,
           nowMs: now,
         }}

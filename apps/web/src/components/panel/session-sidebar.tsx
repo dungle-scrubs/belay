@@ -1,6 +1,6 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
 import { useKeyPress } from "ahooks";
-import { Archive, GitBranch, Pencil, Trash2 } from "lucide-react";
+import { Archive, GitBranch, Pencil, Plus, Trash2 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { RowContextMenu, type RowMenuItem } from "@/components/ui/row-context-menu";
@@ -54,6 +54,10 @@ export interface SessionSidebarProps {
   /** When provided, the header's dashboard icon becomes a collapse button (the open↔closed toggle the
    *  app owns). Omitted in Storybook/standalone use, where the sidebar is always visible. */
   readonly onToggle?: () => void;
+  /** Open the New-session picker (plan 44.2, D-001): renders the pinned `＋ New session` header
+   *  affordance, sharing one open-picker entry with the `/new` command. Omitted in Storybook/standalone
+   *  use, where the sidebar stays presentational with no header action. */
+  readonly onNewSession?: () => void;
   readonly nowMs?: number;
   readonly className?: string;
 }
@@ -338,6 +342,7 @@ export function SessionSidebar({
   onDelete,
   liveActivity,
   onToggle,
+  onNewSession,
   nowMs = Date.now(),
   className,
 }: SessionSidebarProps) {
@@ -392,6 +397,18 @@ export function SessionSidebar({
         the inner (right) edge. Only the live app passes onToggle; Storybook stays a static header. */}
       <header className="flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-label tracking-wider text-muted-foreground">
         <span className="mr-auto">Sessions</span>
+        {/* The pinned New-session entry point (plan 44.2, D-001): opens the picker, shared with the
+          `/new` command. Only the live app passes onNewSession; Storybook stays a static header. */}
+        {onNewSession ? (
+          <button
+            type="button"
+            onClick={onNewSession}
+            className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-muted-foreground hover:bg-card hover:text-foreground"
+          >
+            <Plus className="size-3" />
+            <span>New session</span>
+          </button>
+        ) : null}
         {onToggle ? (
           <DrawerToggle side="left" onClick={onToggle} label="Collapse sessions sidebar" />
         ) : null}

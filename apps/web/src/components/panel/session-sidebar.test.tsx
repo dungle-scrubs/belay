@@ -447,6 +447,36 @@ test("the collapse toggle renders only when the app wires onToggle, and fires it
   assert.equal(collapsed, 1, "the header toggle collapses the sidebar");
 });
 
+// --- plan 44.2 M1: the pinned `＋ New session` header entry point ---
+
+test("the header renders `New session` only when onNewSession is wired, and activating it fires it", () => {
+  let opened = 0;
+  const { getByText, rerender, queryByText } = render(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "cur" })]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={noop}
+      onNewSession={() => (opened += 1)}
+      nowMs={NOW}
+    />,
+  );
+  fireEvent.click(getByText("New session"));
+  assert.equal(opened, 1, "the header New-session affordance opens the picker");
+
+  // Without the callback (Storybook/standalone) the affordance is absent - the header stays static.
+  rerender(
+    <SessionSidebar
+      sessions={[summary({ sessionId: "cur" })]}
+      currentSessionId="cur"
+      currentProject="trevorV2"
+      onSelect={noop}
+      nowMs={NOW}
+    />,
+  );
+  assert.equal(queryByText("New session"), null, "no New-session affordance without onNewSession");
+});
+
 test("the sidebar stays a static header in standalone/Storybook use (no toggle without onToggle)", () => {
   const { queryByLabelText } = render(
     <SessionSidebar

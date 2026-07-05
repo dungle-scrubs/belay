@@ -146,6 +146,7 @@ function PanelHostHarness(props: {
         onArchive: vi.fn(),
         onClose: vi.fn(),
         onDelete: vi.fn(),
+        onNewSession: vi.fn(),
         onOpen: vi.fn(),
         onRename: vi.fn(),
         onSelect: vi.fn(),

@@ -215,6 +215,9 @@ export interface SidebarBinding {
   readonly onArchive: (sessionId: string) => void;
   /** Soft-delete a session row (right-click → Delete, confirmed): hides it from every view. */
   readonly onDelete: (sessionId: string) => void;
+  /** Open the New-session picker (plan 44.2, D-001): renders the pinned `＋ New session` header
+   *  affordance, sharing one open-picker entry with the `/new` command. */
+  readonly onNewSession: () => void;
   readonly liveActivity: ReadonlyMap<string, SessionActivity>;
   readonly nowMs: number;
 }
@@ -347,6 +350,7 @@ export function PanelHost(props: {
           onRename={sidebar.onRename}
           onArchive={sidebar.onArchive}
           onDelete={sidebar.onDelete}
+          onNewSession={sidebar.onNewSession}
           liveActivity={sidebar.liveActivity}
           onToggle={sidebar.onClose}
           nowMs={sidebar.nowMs}

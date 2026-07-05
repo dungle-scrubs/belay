@@ -16,6 +16,9 @@ export function useModalState(opts: {
   // The explicit resume chooser (D-090): a UI affordance / `/resume` opens it; currentProject below
   // orders + groups its sessions first.
   const [resumeOpen, setResumeOpen] = useState(false);
+  // The New-session picker (plan 44.2, D-001): the sidebar `＋` / `/new` opens it; it drives a
+  // folder-bound launch over the 44.1 supervisor contract.
+  const [newOpen, setNewOpen] = useState(false);
   // The managed-worktree switcher (D-091): a UI affordance / `/worktree` opens it; the host
   // announces the worktrees on host.online, and switching routes the host-owned switch action.
   const [worktreeOpen, setWorktreeOpen] = useState(false);
@@ -64,6 +67,8 @@ export function useModalState(opts: {
   return {
     resumeOpen,
     setResumeOpen,
+    newOpen,
+    setNewOpen,
     worktreeOpen,
     setWorktreeOpen,
     archiveOpen,

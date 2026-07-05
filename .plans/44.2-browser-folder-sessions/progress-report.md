@@ -23,11 +23,11 @@
 
 ### Phase 1 - M1: New-session entry point
 
-- [ ] RED: Story/test that the sidebar header renders `＋ New session` and activating it calls `onNewSession`.
-- [ ] GREEN: Add the pinned `＋` affordance over an injected `onNewSession`.
-- [ ] RED: Story/test that `/new` appears in the command menu and opens the picker.
-- [ ] GREEN: Register the `/new` command wired to open the picker.
-- [ ] REFACTOR: Share one open-picker entry between `＋` and `/new`.
+- [x] RED: Story/test that the sidebar header renders `＋ New session` and activating it calls `onNewSession`.
+- [x] GREEN: Add the pinned `＋` affordance over an injected `onNewSession`.
+- [x] RED: Story/test that `/new` appears in the command menu and opens the picker.
+- [x] GREEN: Register the `/new` command wired to open the picker.
+- [x] REFACTOR: Share one open-picker entry between `＋` and `/new`.
 
 ### Gate 1->2
 

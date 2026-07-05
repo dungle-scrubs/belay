@@ -120,6 +120,28 @@ export const RowActions: Story = {
   ),
 };
 
+/**
+ * Plan 44.2 M1: the pinned `＋ New session` header entry point. Wiring `onNewSession` reveals the
+ * affordance next to the "Sessions" label; it opens the New-session picker (the same open-picker entry
+ * the `/new` command uses). The header keeps its fixed height whether or not the affordance is present.
+ */
+export const WithNewSession: Story = {
+  render: () => (
+    <Frame>
+      <SessionSidebar
+        sessions={MANY}
+        currentSessionId="cur"
+        currentProject="trevorV2"
+        onSelect={noop}
+        onNewSession={noop}
+        onToggle={noop}
+        nowMs={NOW}
+        className="h-full"
+      />
+    </Frame>
+  ),
+};
+
 export const CurrentOnly: Story = {
   render: () => (
     <Frame>
