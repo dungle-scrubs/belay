@@ -120,3 +120,30 @@ so there was **no browser-reachable launcher** - hence a supervisor.
 | **Browser-created folder session** | Starting a new folder-bound session from the web UI: sidebar `＋` / `/new` -> picker (recents + host-validated path + native folder icon) -> supervisor launch -> navigate on `host.online`. | `.plans/44.2`. The browser analog of the CLI `trevor` launch and the plan-48 desktop session open. Folder selection is **host-driven** (the browser cannot read the host filesystem; the File System Access API yields no host path). |
 | **Native folder pick** | The supervisor shelling out to the OS folder dialog (`osascript choose folder` on macOS) and returning a real POSIX path to fill the picker's path field. | `.plans/44.1` + `.plans/44.2`. **Local-only and best-effort** - the dialog opens on the supervisor's display, so it degrades to paste-a-path when the supervisor is non-local/headless. |
 | **Launch state machine** | `idle -> starting -> online \| failed -> (retry) starting`, with stale-host replacement folding into `starting` as a "restarting host…" label. | Introduced happy-path in `.plans/44.2`; extended with `failed`/`retry`/`stale` by `.plans/44.3`. **One** machine shared by the picker and the no-host session-view start, so they can't drift. |
+
+## Command argument substitution vocabulary (`.plans/44.5-command-arg-substitution`)
+
+User-defined custom commands loaded from `.trevor/commands/*.md` whose body templates carry `$`
+placeholders that are expanded on invocation with shell-style tokenization. Parity target: the current
+Claude Code skills-doc substitution behavior. **Distinct from plan-40 "interpolation"** - orthogonal
+token spaces (`$` vs `!`), see the reconciliation note below.
+
+| Term | Meaning | Notes |
+|---|---|---|
+| **Argument substitution** | Replacing `$`-placeholders in a command file's body with the invocation's arguments at dispatch. The `$`-space feature. | The shared engine is `packages/session/src/command-args.ts` (`tokenizeArgs` + `expandArgs`), dual-consumed by the host (authoritative) and web (keystroke preview), per the `command-family.ts:10` hoist doctrine. |
+| **Positional `$N`** | 0-based positional argument: `$0` = first token, `$1` = second, … | Diverges from V1 Trevor (1-based) and shell; chosen for Claude-Code parity (D-001). A reference beyond the provided count substitutes empty string (D-004). |
+| **`$ARGUMENTS`** | Expands to the **raw** argument string exactly as typed - quotes and interior whitespace preserved. | Not the tokenized re-join (V1's behavior); positional `$N` use tokenized values, `$ARGUMENTS` stays raw (D-002). |
+| **Shell-style tokenizer** | Whitespace splits tokens; single **and** double quotes group + strip; backslash escapes the next char; `\$1` stays literal while `$1` expands. | Richer than `loop-parser.ts` `tokenize()` (double-quote-only regex, no escapes), so a new char-scanning module, not a reuse (D-003). |
+| **Custom command file** | A `.trevor/commands/*.md` (project root) or config-home (user root) file; command name = `/<basename>`. Loaded into the plan-40 `CommandFile` primitive (`rootKind` project/user). | Project overrides same-named user file (D-006). Loader mirrors `skills/skills.ts` ordered roots. `.claude/commands/` import is a non-goal (D-009). |
+
+### Reconciliation with "interpolation" (plan 40)
+
+- **Argument substitution (`$`) is NOT interpolation (`!`).** Plan-40 **interpolation** splices the
+  *output* of an allow-listed `!command` into a trusted command-file body (gated by
+  `TREVOR_ENABLE_INTERPOLATION`, disabled by default). Plan-44.5 **argument substitution** replaces
+  `$`-placeholders with the user's invocation arguments. Different trigger tokens, different sources
+  (command output vs user args), different modules (`interpolation-engine.ts` vs `command-args.ts`).
+- **Ordering is fixed: interpolate, then substitute (D-007).** A command file's trusted body is
+  interpolated first (author-controlled `!command` sites), then user arguments are substituted into the
+  result - so a user-supplied `$0` value containing `!cmd` lands as inert literal text and can never
+  introduce an interpolation site.
