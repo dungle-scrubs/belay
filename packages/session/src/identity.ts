@@ -16,6 +16,15 @@ import type { SessionIdentity } from "./transport";
 export const DEFAULT_SESSION_ID = "trevor-local";
 
 /**
+ * The reserved CONTROL session the supervisor daemon subscribes to and the browser publishes
+ * launch / folder-pick / projects-list requests on (plan 44.1). It is NOT a conversation - purely a
+ * request/response side-channel - so it never carries a host turn; a launched host announces
+ * `host.online` on its OWN session, which the browser then navigates to. One constant so the browser
+ * and the supervisor can never subscribe to different control sessions and silently stop pairing.
+ */
+export const SUPERVISOR_SESSION_ID = "trevor-supervisor";
+
+/**
  * The `runtimeKind` each participant declares on its stream identity. The store
  * counts only a host-kind connection toward presence (a web viewer never does), so
  * the host's declared kind and the store's check are the SAME string or presence

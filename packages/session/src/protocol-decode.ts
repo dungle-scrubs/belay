@@ -1,6 +1,6 @@
 import { HEX64 } from "./blob";
 import { BREAKDOWN_CATEGORIES, emptyBreakdown, type UsageBreakdown } from "./breakdown";
-import { asAnyNumber, asMaybeString, asString, asStringArray, oneOf } from "./coerce";
+import { asAnyNumber, asMaybeString, asOptRecord, asString, asStringArray, oneOf } from "./coerce";
 import { type CommandMenuPayload, decodeCommandMenu } from "./command-menu";
 import { coerceInternetSnapshot, type InternetSnapshot } from "./connectivity";
 import type { SessionEvent } from "./event";
@@ -44,7 +44,9 @@ import type {
   ProviderDiagnostic,
   ProviderIncidentReason,
   ProviderModel,
+  SessionLaunchStatus,
   SupersedeReason,
+  SupervisorProject,
   TaskSnapshot,
   TaskStatus,
   TurnStop,
@@ -52,6 +54,7 @@ import type {
   Usage,
   WorktreeSummary,
 } from "./protocol";
+import { SESSION_LAUNCH_STATUSES } from "./protocol";
 import {
   decodeProviderQuestionAnswer,
   decodeProviderQuestionContract,
@@ -69,6 +72,32 @@ const str = asString;
 const optStr = asMaybeString;
 const num = asAnyNumber;
 const strList = asStringArray;
+
+/**
+ * Decodes the `projects.list.result` project list defensively (plan 44.1): keep only object entries
+ * that carry a non-empty `root` AND `sessionId` (the two identity fields), dropping malformed or
+ * partial rows, and pass `updatedAt` through as a string. Preserves the sender's order (the supervisor
+ * sorts by recency before publishing), and a non-array reads as empty.
+ */
+function decodeSupervisorProjects(value: unknown): SupervisorProject[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: SupervisorProject[] = [];
+  for (const item of value) {
+    const rec = asOptRecord(item);
+    if (!rec) {
+      continue;
+    }
+    const root = asString(rec.root);
+    const sessionId = asString(rec.sessionId);
+    if (!root || !sessionId) {
+      continue;
+    }
+    out.push({ root, sessionId, updatedAt: asString(rec.updatedAt) });
+  }
+  return out;
+}
 
 function coerceUsage(value: unknown): Usage | undefined {
   if (!value || typeof value !== "object") {
@@ -658,6 +687,27 @@ export type DecodedEvent =
       readonly files: readonly FileMatch[];
       readonly truncated: boolean;
     }
+  | { readonly type: "session.launch.requested"; readonly requestId: string; readonly root: string }
+  | {
+      readonly type: "session.launch.result";
+      readonly requestId: string;
+      readonly sessionId: string;
+      readonly status: SessionLaunchStatus;
+      readonly error?: string;
+    }
+  | { readonly type: "folder.pick.requested"; readonly requestId: string }
+  | {
+      readonly type: "folder.pick.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly cancelled: boolean;
+    }
+  | { readonly type: "projects.list.requested"; readonly requestId: string }
+  | {
+      readonly type: "projects.list.result";
+      readonly requestId: string;
+      readonly projects: readonly SupervisorProject[];
+    }
   | {
       readonly type: "tasks.current";
       readonly tasks: readonly TaskSnapshot[];
@@ -1085,6 +1135,43 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         truncated: overCap || p.truncated === true,
       };
     }
+    // Supervisor side-channel (plan 44.1). A missing requestId falls back to the event's own id so a
+    // forward-compat request still correlates; `status` is decoded tolerantly to the failed-safe default.
+    case "session.launch.requested":
+      return {
+        type: "session.launch.requested",
+        requestId: str(p.requestId, event.eventId),
+        root: str(p.root),
+      };
+    case "session.launch.result": {
+      const error = optStr(p.error);
+      return {
+        type: "session.launch.result",
+        requestId: str(p.requestId, event.eventId),
+        sessionId: str(p.sessionId),
+        status: oneOf(SESSION_LAUNCH_STATUSES, p.status, "failed"),
+        ...(error ? { error } : {}),
+      };
+    }
+    case "folder.pick.requested":
+      return { type: "folder.pick.requested", requestId: str(p.requestId, event.eventId) };
+    case "folder.pick.result": {
+      const path = optStr(p.path);
+      return {
+        type: "folder.pick.result",
+        requestId: str(p.requestId, event.eventId),
+        cancelled: p.cancelled === true,
+        ...(path ? { path } : {}),
+      };
+    }
+    case "projects.list.requested":
+      return { type: "projects.list.requested", requestId: str(p.requestId, event.eventId) };
+    case "projects.list.result":
+      return {
+        type: "projects.list.result",
+        requestId: str(p.requestId, event.eventId),
+        projects: decodeSupervisorProjects(p.projects),
+      };
     case "tasks.current":
       return { type: "tasks.current", tasks: coerceTasks(p.tasks), rev: num(p.rev) };
     case "tool.started":

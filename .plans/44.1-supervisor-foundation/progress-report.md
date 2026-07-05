@@ -33,17 +33,17 @@
 
 ### Phase 2 - M2: Supervisor protocol events
 
-- [ ] RED: Schema + round-trip tests for the three request/result pairs incl. `requestId`.
-- [ ] GREEN: Define the six events + reserved control-session id constant in `packages/session`.
-- [ ] RED: Test that a malformed supervisor request is rejected at the schema boundary.
-- [ ] GREEN: Validate requests at the boundary before dispatch.
-- [ ] REFACTOR: Reuse the `file.index` correlation helper rather than a parallel one.
+- [x] RED: Schema + round-trip tests for the three request/result pairs incl. `requestId`.
+- [x] GREEN: Define the six events + reserved control-session id constant in `packages/session`.
+- [x] RED: Test that a malformed supervisor request is rejected at the schema boundary.
+- [x] GREEN: Validate requests at the boundary before dispatch.
+- [x] REFACTOR: Reuse the `file.index` correlation shape (same `requestId` fallback + tolerant decode) rather than a parallel one.
 
 ### Gate 2->3
 
-- [ ] All six events validate and round-trip.
-- [ ] `requestId` correlates a result to its request.
-- [ ] Malformed requests are rejected, not partially handled.
+- [x] All six events validate and round-trip.
+- [x] `requestId` correlates a result to its request.
+- [x] Malformed requests are rejected, not partially handled.
 
 ### Phase 3 - M3: Launch dispatch
 

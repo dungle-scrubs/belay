@@ -404,6 +404,23 @@ export interface ModelSwitchEndpoint {
   readonly reasoning?: string;
 }
 
+/**
+ * The outcome the supervisor reports for a `session.launch.requested` (plan 44.1): a host was freshly
+ * spawned (`launched`), an already-live host was reused (`reused`), or the launch could not be
+ * satisfied (`failed`, carrying an error message). One source for the literal set so the emit
+ * constructor, the tolerant decode, and the browser handler cannot drift.
+ */
+export const SESSION_LAUNCH_STATUSES = ["launched", "reused", "failed"] as const;
+export type SessionLaunchStatus = (typeof SESSION_LAUNCH_STATUSES)[number];
+
+/** One recent project the supervisor reports in `projects.list.result` (plan 44.1): the canonical
+ *  root, its derived session id, and when the launcher last touched the mapping. */
+export interface SupervisorProject {
+  readonly root: string;
+  readonly sessionId: string;
+  readonly updatedAt: string;
+}
+
 // --- emit side: typed constructors (single source of names + payload shapes) ---
 
 /**
@@ -984,6 +1001,79 @@ export const events = {
       requestId: p.requestId,
       files: p.files.map((f) => f.path),
       truncated: p.truncated,
+    },
+  }),
+  /**
+   * The supervisor side-channel (plan 44.1). The browser publishes these on the reserved
+   * SUPERVISOR_SESSION_ID control session; the supervisor daemon answers with the paired result.
+   * Modeled on file.index.* - `requestId` pairs a result to its request, and they are purely a
+   * request/response side-channel (they never reach the model, transcript, or memory projection).
+   *
+   * `session.launch.requested`: spawn-or-reuse a host for `root`. The `result` carries the derived
+   * `sessionId` the browser navigates to; the freshly spawned host announces `host.online` on its OWN
+   * session, so the control session stays a side-channel and the presence path is unchanged.
+   */
+  sessionLaunchRequested: (p: { requestId: string; root: string }): TrevorEventInput => ({
+    type: "session.launch.requested",
+    payload: { requestId: p.requestId, root: p.root },
+  }),
+  sessionLaunchResult: (p: {
+    requestId: string;
+    sessionId: string;
+    status: SessionLaunchStatus;
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "session.launch.result",
+    payload: {
+      requestId: p.requestId,
+      sessionId: p.sessionId,
+      status: p.status,
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
+  /**
+   * `folder.pick.requested`: the browser asks the (local) supervisor to pop the native OS folder
+   * picker; the `result` returns the chosen POSIX `path` or `cancelled: true`. Best-effort and
+   * local-only - a non-local / headless supervisor answers `cancelled` so the browser falls back to
+   * paste-a-path (44.2).
+   */
+  folderPickRequested: (p: { requestId: string }): TrevorEventInput => ({
+    type: "folder.pick.requested",
+    payload: { requestId: p.requestId },
+  }),
+  folderPickResult: (p: {
+    requestId: string;
+    path?: string;
+    cancelled: boolean;
+  }): TrevorEventInput => ({
+    type: "folder.pick.result",
+    payload: {
+      requestId: p.requestId,
+      cancelled: p.cancelled,
+      ...(p.path ? { path: p.path } : {}),
+    },
+  }),
+  /**
+   * `projects.list.requested`: the browser asks the supervisor for the recent project roots from the
+   * launcher's `projects.json`; the `result` returns them recency-sorted (newest `updatedAt` first),
+   * empty when the registry is absent.
+   */
+  projectsListRequested: (p: { requestId: string }): TrevorEventInput => ({
+    type: "projects.list.requested",
+    payload: { requestId: p.requestId },
+  }),
+  projectsListResult: (p: {
+    requestId: string;
+    projects: readonly SupervisorProject[];
+  }): TrevorEventInput => ({
+    type: "projects.list.result",
+    payload: {
+      requestId: p.requestId,
+      projects: p.projects.map((proj) => ({
+        root: proj.root,
+        sessionId: proj.sessionId,
+        updatedAt: proj.updatedAt,
+      })),
     },
   }),
   /**
