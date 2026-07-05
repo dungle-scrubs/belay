@@ -37,30 +37,35 @@ const fakeLoginOk: OAuthLogin = async ({ onDeviceCode }) => {
   return { access: SECRET, refresh: "refresh-tok", expires: 123, accountId: "acct-1" };
 };
 
-test("signInTargetFor maps OpenAI to its auth entry; the Claude subscription and api-key sources have none", () => {
+test("signInTargetFor maps OpenAI and the Claude subscription to their OAuth entries; api-key sources have none", () => {
   assert.equal(signInTargetFor("openai")?.oauthName, "openai-codex");
-  // 53 D-001/D-002: the Claude subscription authorizes via `claude setup-token` (a CLI token store),
-  // not an in-app OAuth, and the Anthropic Direct API is a static key - neither has a sign-in target.
-  assert.equal(signInTargetFor("claude-code"), null, "the Claude subscription has no in-app OAuth");
-  assert.equal(signInTargetFor("anthropic"), null, "the Anthropic Direct API is a static key");
+  // 53.1 D-001: the ONE Claude subscription (`anthropic`) has a real in-app OAuth (loginAnthropic PKCE);
+  // the Anthropic *Direct API* (`anthropic-api`) is a static key, so it carries no sign-in target.
+  assert.equal(
+    signInTargetFor("anthropic")?.oauthName,
+    "anthropic",
+    "the Claude subscription signs in",
+  );
+  assert.equal(signInTargetFor("anthropic-api"), null, "the Anthropic Direct API is a static key");
   assert.equal(signInTargetFor("deepseek"), null, "api-key sources have no sign-in flow");
   assert.equal(signInTargetFor("nope"), null);
 });
 
-test("a browser+paste sign-in emits the URL with acceptsCode, then completes on the pasted code", async () => {
+test("the Claude subscription browser+paste sign-in emits the URL with acceptsCode, then completes on the pasted code", async () => {
   const states: SourceSignInState[] = [];
-  // A browser+paste login (runSourceSignIn's generic onAuthUrl path): shows a URL, awaits the pasted
-  // code, then returns credentials. No registered target is required - the login is injected, so this
-  // pins the generic browser+paste capability the protocol keeps for any future source that needs it.
-  const fakePasteLogin: OAuthLogin = async ({ onAuthUrl, requestCode }) => {
-    onAuthUrl({ url: "https://provider.example/oauth/authorize?x=1" });
+  // The Claude subscription's `loginAnthropic` shape (53.1 D-001): it fires `onAuth` (the host's
+  // onAuthUrl) with the provider URL, awaits the pasted redirect code (onPrompt -> requestCode), then
+  // resolves the OAuth credential. This drives runSourceSignIn's generic browser+paste path for the
+  // real Claude source, so a busy localhost callback port still completes via paste (53.1 R-2).
+  const fakeAnthropicLogin: OAuthLogin = async ({ onAuthUrl, requestCode }) => {
+    onAuthUrl({ url: "https://claude.ai/oauth/authorize?client_id=trevor&x=1" });
     const code = await requestCode();
-    return { access: "paste-token", refresh: "r", expires: 1, via: code };
+    return { access: "anthropic-oauth-token", refresh: "r", expires: 1, via: code };
   };
   await runSourceSignIn({
-    sourceId: "paste-source",
-    oauthName: "paste-source",
-    login: fakePasteLogin,
+    sourceId: "anthropic",
+    oauthName: "anthropic",
+    login: fakeAnthropicLogin,
     authPath,
     signal: new AbortController().signal,
     emit: (s) => states.push(s),
@@ -68,15 +73,19 @@ test("a browser+paste sign-in emits the URL with acceptsCode, then completes on 
   });
   assert.deepEqual(states, [
     {
-      sourceId: "paste-source",
+      sourceId: "anthropic",
       phase: "device-code",
-      verificationUri: "https://provider.example/oauth/authorize?x=1",
+      verificationUri: "https://claude.ai/oauth/authorize?client_id=trevor&x=1",
       acceptsCode: true,
     },
-    { sourceId: "paste-source", phase: "complete" },
+    { sourceId: "anthropic", phase: "complete" },
   ]);
   const stored = JSON.parse(await readFile(authPath, "utf8")) as Record<string, { type?: string }>;
-  assert.equal(stored["paste-source"]?.type, "oauth", "the browser+paste credential is persisted");
+  assert.equal(
+    stored.anthropic?.type,
+    "oauth",
+    "the Claude subscription OAuth credential is persisted",
+  );
 });
 
 test("a successful sign-in emits device-code then complete, and persists the credential", async () => {

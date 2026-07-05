@@ -23,15 +23,15 @@ deferred or superseded debt at authoring time. The 44.4 re-thread is tracked in 
 
 ### M1: Restore the pi-ai Anthropic OAuth provider + sign-in target
 
-- [ ] RED: `signInTargetFor("anthropic")` test — returns a target with `oauthName:"anthropic"`
+- [x] RED: `signInTargetFor("anthropic")` test — returns a target with `oauthName:"anthropic"`
       driving `loginAnthropic` (seam injected); today returns `null`.
-- [ ] GREEN: Restore `anthropicLogin` (adapt `loginAnthropic` `onAuth`/`onManualCodeInput`
+- [x] GREEN: Restore `anthropicLogin` (adapt `loginAnthropic` `onAuth`/`onManualCodeInput`
       → host `onAuthUrl`/`requestCode`) + re-add the `anthropic` `SIGN_IN_TARGETS` entry.
-- [ ] RED: `anthropicProvider` test — builds a pi-ai provider on the `anthropic` registry
+- [x] RED: `anthropicProvider` test — builds a pi-ai provider on the `anthropic` registry
       with the `oauthCredentialResolver({ oauthName:"anthropic" })` strategy.
-- [ ] GREEN: Restore `anthropic.ts` from `3eadde0^` (loginAnthropic → `~/.pi/auth.json` →
+- [x] GREEN: Restore `anthropic.ts` from `3eadde0^` (loginAnthropic → `~/.pi/auth.json` →
       `getOAuthApiKey` → pi-ai `anthropic-messages`).
-- [ ] REFACTOR: Update `anthropic.ts` + `provider-auth.ts` module doc-comments (ONE Claude
+- [x] REFACTOR: Update `anthropic.ts` + `provider-auth.ts` module doc-comments (ONE Claude
       OAuth subscription; both sign-in targets).
 
 ### M2: Make `anthropic` the single subscription source; delete the Agent-SDK route
