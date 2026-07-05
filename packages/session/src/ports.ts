@@ -10,7 +10,12 @@
  * Vite config and the dependency-free blob-store can import the constant without pulling in the rest
  * of the protocol package (and its `effect` dependency).
  */
-export const RESERVED_PORTS = { web: 17420, blob: 17423, store: 17424 } as const;
+export const RESERVED_PORTS = {
+  web: 17420,
+  blob: 17423,
+  store: 17424,
+  supervisor: 17425,
+} as const;
 
 /** A reserved shared-service name (`web` | `blob` | `store`). */
 export type ServiceName = keyof typeof RESERVED_PORTS;

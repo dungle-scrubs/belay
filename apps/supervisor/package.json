@@ -1,0 +1,21 @@
+{
+  "name": "@trevor/supervisor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsgo --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@trevor/launcher": "workspace:*",
+    "@trevor/server-kit": "workspace:*",
+    "@trevor/session": "workspace:*"
+  },
+  "devDependencies": {
+    "@trevor/test-kit": "workspace:*",
+    "@types/node": "^26.0.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

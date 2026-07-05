@@ -47,11 +47,11 @@
 
 ### Phase 3 - M3: Launch dispatch
 
-- [ ] RED: Integration test - `session.launch.requested { root }` drives the launcher core (fake platform) and publishes `session.launch.result` with the session id + launched/reused status.
-- [ ] GREEN: Implement `trevor supervisor` - subscribe to the control session, dispatch launch requests, publish results.
-- [ ] RED: Test the supervisor is ensured-running as a shared local service (started once, reused if up).
-- [ ] GREEN: Register the supervisor as a fourth ensured shared local service.
-- [ ] REFACTOR: One handler per request type; enforce Richter-only.
+- [x] RED: Integration test - `session.launch.requested { root }` drives the launcher core (fake platform) and publishes `session.launch.result` with the session id + launched/reused status.
+- [x] GREEN: Implement the supervisor daemon (`apps/supervisor`) - subscribe to the control session, dispatch launch requests, publish results.
+- [x] RED: Test the supervisor is ensured-running as a shared local service (started once, reused if up).
+- [x] GREEN: Register the supervisor as a fourth ensured shared local service.
+- [x] REFACTOR: One handler per request type; enforce Richter-only (self-echo gate + injected collaborators).
 
 ### Phase 3 - M4: Native folder pick + recents
 

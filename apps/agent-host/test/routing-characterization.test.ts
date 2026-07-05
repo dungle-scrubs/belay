@@ -88,6 +88,15 @@ const UNROUTED: readonly string[] = [
   "model.switched",
   "provider.question.requested",
   "provider.question.resolved",
+  // The supervisor side-channel (plan 44.1): launch / folder-pick / projects-list requests + results
+  // ride the reserved control session, which the agent-host never subscribes to - the supervisor daemon
+  // (apps/supervisor) handles them, not handleEvent.
+  "folder.pick.requested",
+  "folder.pick.result",
+  "projects.list.requested",
+  "projects.list.result",
+  "session.launch.requested",
+  "session.launch.result",
   "session.archived",
   "session.deleted",
   "session.switch",

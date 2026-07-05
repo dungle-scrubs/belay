@@ -153,8 +153,9 @@ test("a fresh launch starts missing services, spawns the host, and opens the ses
 
   assert.equal(outcome.root, "/work/app");
   assert.equal(outcome.hostAction, "spawn");
-  // Only the down services were started; the healthy web was left alone.
-  assert.deepEqual(spy.started.sort(), ["blob", "store"]);
+  // Only the down services were started; the healthy web was left alone. blob + store + supervisor
+  // (plan 44.1) all probed down here, so all three start.
+  assert.deepEqual(spy.started.sort(), ["blob", "store", "supervisor"]);
   // The host was spawned with the resolved session + project root (cwd resolved up to the git root).
   assert.deepEqual(spy.spawned, [{ sessionId: outcome.sessionId, root: "/work/app" }]);
   // The browser opened the reserved web port with the session query.
@@ -188,6 +189,9 @@ test("a healthy recorded host is reused, not re-spawned", async () => {
       web: { reachable: true, ours: true },
       blob: { reachable: true, ours: true },
       store: { reachable: true, ours: true },
+      // The supervisor (plan 44.1) is already up too: an ensured service that is healthy is reused,
+      // not restarted.
+      supervisor: { reachable: true, ours: true },
     },
     processAlive: (pid) => pid === 5555, // the recorded host is alive
     hostPresent: true,
@@ -196,6 +200,7 @@ test("a healthy recorded host is reused, not re-spawned", async () => {
   assert.equal(outcome.hostAction, "reuse");
   assert.equal(outcome.hostPid, 5555);
   assert.deepEqual(spy.spawned, []); // nothing re-spawned
+  assert.deepEqual(spy.started, []); // every shared service (supervisor included) was already up
   assert.deepEqual(spy.opened, [sessionUrl(sessionId)]);
 });
 

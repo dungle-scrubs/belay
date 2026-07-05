@@ -39,7 +39,15 @@ export type RuntimeKind = (typeof RUNTIME_KIND)[keyof typeof RUNTIME_KIND];
  * and history projection keys self-vs-other off it - so the namespace lives here once.
  * The `trevor` CLI stamps `cli` on the lifecycle events it publishes (e.g. session.archived).
  */
-export const PRODUCER_IDS = { host: "trevor-host", web: "trevor-web", cli: "trevor-cli" } as const;
+export const PRODUCER_IDS = {
+  host: "trevor-host",
+  web: "trevor-web",
+  cli: "trevor-cli",
+  // The supervisor daemon stamps this on the launch/folder-pick/projects-list RESULTS it publishes on
+  // the control session, so it can suppress its own echo (`isAnswerableProducer`) and only act on
+  // browser-published requests (plan 44.1).
+  supervisor: "trevor-supervisor",
+} as const;
 export type ProducerId = (typeof PRODUCER_IDS)[keyof typeof PRODUCER_IDS];
 
 export const PRODUCER_CHANNELS = {

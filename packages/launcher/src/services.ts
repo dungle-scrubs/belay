@@ -19,6 +19,7 @@ export const SERVICE_FILTERS: Record<ServiceName, string> = {
   web: "@trevor/web",
   blob: "@trevor/blob-store",
   store: "@trevor/session-store",
+  supervisor: "@trevor/supervisor",
 };
 
 /**
@@ -31,6 +32,10 @@ export const SERVICE_SCRIPTS: Record<ServiceName, string> = {
   web: "dev",
   blob: "start",
   store: "start",
+  // The supervisor is host-critical control plane (it spawns hosts on browser request), so it runs
+  // NON-watch (`start`) like the stores - editing launcher/protocol source must not restart it out
+  // from under an in-flight launch.
+  supervisor: "start",
 };
 
 /** The result of probing one reserved port: is something listening, and is it OUR service. */
