@@ -3,7 +3,14 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { InventoryRow, PublishInput, SessionEvent, StreamEnvelope } from "@trevor/session";
 import { frames, INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@trevor/session";
-import { NOOP_SINK, SPAN_NAMES, type TelemetrySink, withSpanSync } from "@trevor/session/telemetry";
+import {
+  NOOP_SINK,
+  SPAN_NAMES,
+  safeAttributes,
+  safeEmitSpan,
+  type TelemetrySink,
+  withSpanSync,
+} from "@trevor/session/telemetry";
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
@@ -45,6 +52,14 @@ interface AggregateRow {
  *  replay/type-lookup reads and the query-plan diagnostic all speak the exact same projection. */
 const EVENT_COLUMNS = "sessionId, seq, eventId, type, producerId, payload, createdAt";
 
+/**
+ * The slow-query threshold (plan 45.1 M3, D-004): a single synchronous store query taking longer than
+ * this blocks the event loop for that long (node:sqlite is synchronous on the one thread), so crossing
+ * it emits a `store.slow_query` span. 100ms is well above a healthy indexed lookup yet far below the
+ * ~1.67s scan 45.1 removed, so the signal marks a real regression, not routine work.
+ */
+const SLOW_QUERY_MS = 100;
+
 /** Maps a private SQLite row (payload as a JSON string) into the shared SessionEvent shape. */
 function rowToEvent(r: EventRow): SessionEvent {
   return {
@@ -61,11 +76,16 @@ function rowToEvent(r: EventRow): SessionEvent {
 export class SessionLog {
   private readonly db: DatabaseSync;
 
+  /** Monotonically increasing count of SQLite statements executed - see {@link queries}. */
+  private queryCount = 0;
+
   /** Opens (creating if absent) the SQLite log at `path`, or `:memory:` for tests. Telemetry is off by
-   *  default (NOOP_SINK); the append span carries only the event type, never the session id or payload. */
+   *  default (NOOP_SINK); the append span carries only the event type, never the session id or payload.
+   *  `now` is injectable so the slow-query timing (M3) is deterministic in tests. */
   constructor(
     path: string,
     private readonly sink: TelemetrySink = NOOP_SINK,
+    private readonly now: () => number = Date.now,
   ) {
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
@@ -101,11 +121,45 @@ export class SessionLog {
     );
   }
 
+  /**
+   * How many SQLite statements this log has executed (plan 45.1 M3): the guardrail counter. `GET /sessions`
+   * is served from the in-memory projection, so a test snapshots this before/after an inventory poll and
+   * asserts it stays flat - proving no request path quietly reintroduced a per-poll scan of the log.
+   */
+  get queries(): number {
+    return this.queryCount;
+  }
+
+  /**
+   * The single instrumentation seam every SQLite read/write in this class runs through (D-004): it bumps
+   * {@link queries} and times the call, emitting a `store.slow_query` span (query name + durationMs) when
+   * one synchronous query crosses {@link SLOW_QUERY_MS}. Centralizing it here is the transport-isolation
+   * guardrail - the event loop can't be monopolized by an unmeasured store query, and a regression shows
+   * up as a slow-query span rather than a silent stall. `name` is a fixed, low-cardinality query label.
+   */
+  private query<T>(name: string, run: () => T): T {
+    this.queryCount += 1;
+    const startedAt = this.now();
+    const result = run();
+    const durationMs = this.now() - startedAt;
+    if (durationMs > SLOW_QUERY_MS) {
+      safeEmitSpan(this.sink, {
+        name: SPAN_NAMES.storeSlowQuery,
+        attributes: safeAttributes({ query: name, threshold_ms: SLOW_QUERY_MS }),
+        status: "ok",
+        durationMs,
+      });
+    }
+    return result;
+  }
+
   /** Creates the session if absent (idempotent); returns its id either way. */
   ensureSession(sessionId: string, nowIso: string): string {
-    this.db
-      .prepare("INSERT OR IGNORE INTO sessions (sessionId, createdAt) VALUES (?, ?)")
-      .run(sessionId, nowIso);
+    this.query("ensureSession", () =>
+      this.db
+        .prepare("INSERT OR IGNORE INTO sessions (sessionId, createdAt) VALUES (?, ?)")
+        .run(sessionId, nowIso),
+    );
     return sessionId;
   }
 
@@ -117,17 +171,23 @@ export class SessionLog {
       { event_type: input.type, producer: input.producerId },
       () => {
         this.ensureSession(sessionId, nowIso);
-        const row = this.db
-          .prepare("SELECT COALESCE(MAX(seq), 0) AS maxSeq FROM events WHERE sessionId = ?")
-          .get(sessionId) as { maxSeq: number };
+        const row = this.query(
+          "append.maxSeq",
+          () =>
+            this.db
+              .prepare("SELECT COALESCE(MAX(seq), 0) AS maxSeq FROM events WHERE sessionId = ?")
+              .get(sessionId) as { maxSeq: number },
+        );
         const seq = Number(row.maxSeq) + 1;
         const payload = JSON.stringify(input.payload ?? {});
-        this.db
-          .prepare(
-            `INSERT INTO events (sessionId, seq, eventId, type, producerId, payload, createdAt)
+        this.query("append.insert", () =>
+          this.db
+            .prepare(
+              `INSERT INTO events (sessionId, seq, eventId, type, producerId, payload, createdAt)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .run(sessionId, seq, eventId, input.type, input.producerId, payload, nowIso);
+            )
+            .run(sessionId, seq, eventId, input.type, input.producerId, payload, nowIso),
+        );
         return {
           sessionId,
           seq,
@@ -154,17 +214,21 @@ export class SessionLog {
    * the projection owns the live read model. Calling this per request is exactly the scan 45.1 removed.
    */
   inventory(): Omit<InventoryRow, "hostPresent">[] {
-    const sessions = this.db
-      .prepare(
-        `SELECT s.sessionId AS sessionId,
+    const sessions = this.query(
+      "inventory.aggregate",
+      () =>
+        this.db
+          .prepare(
+            `SELECT s.sessionId AS sessionId,
                 s.createdAt  AS createdAt,
                 COUNT(e.seq) AS eventCount,
                 COALESCE(MAX(e.createdAt), s.createdAt) AS updatedAt
            FROM sessions s
            LEFT JOIN events e ON e.sessionId = s.sessionId
           GROUP BY s.sessionId, s.createdAt`,
-      )
-      .all() as unknown as AggregateRow[];
+          )
+          .all() as unknown as AggregateRow[],
+    );
     return sessions.map((s) => this.projectRow(s));
   }
 
@@ -174,9 +238,12 @@ export class SessionLog {
    * session. Same projection, scoped by `sessionId` (bounded queries, no full-log/whole-table pass).
    */
   summaryRow(sessionId: string): Omit<InventoryRow, "hostPresent"> | null {
-    const s = this.db
-      .prepare(
-        `SELECT s.sessionId AS sessionId,
+    const s = this.query(
+      "summaryRow.aggregate",
+      () =>
+        this.db
+          .prepare(
+            `SELECT s.sessionId AS sessionId,
                 s.createdAt  AS createdAt,
                 COUNT(e.seq) AS eventCount,
                 COALESCE(MAX(e.createdAt), s.createdAt) AS updatedAt
@@ -184,8 +251,9 @@ export class SessionLog {
            LEFT JOIN events e ON e.sessionId = s.sessionId
           WHERE s.sessionId = ?
           GROUP BY s.sessionId, s.createdAt`,
-      )
-      .get(sessionId) as AggregateRow | undefined;
+          )
+          .get(sessionId) as AggregateRow | undefined,
+    );
     return s ? this.projectRow(s) : null;
   }
 
@@ -216,41 +284,59 @@ export class SessionLog {
    * rows are gone from the SQLite file, so the session never reappears after reload/reconnect.
    */
   deleteSession(sessionId: string): boolean {
-    this.db.prepare("DELETE FROM events WHERE sessionId = ?").run(sessionId);
-    return this.db.prepare("DELETE FROM sessions WHERE sessionId = ?").run(sessionId).changes > 0;
+    this.query("deleteSession.events", () =>
+      this.db.prepare("DELETE FROM events WHERE sessionId = ?").run(sessionId),
+    );
+    return (
+      this.query("deleteSession.session", () =>
+        this.db.prepare("DELETE FROM sessions WHERE sessionId = ?").run(sessionId),
+      ).changes > 0
+    );
   }
 
   /** The most recent event of a type in a session, or null. */
   private latestOfType(sessionId: string, type: string): SessionEvent | null {
-    const row = this.db
-      .prepare(
-        `SELECT ${EVENT_COLUMNS}
+    const row = this.query(
+      "latestOfType",
+      () =>
+        this.db
+          .prepare(
+            `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND type = ? ORDER BY seq DESC LIMIT 1`,
-      )
-      .get(sessionId, type) as EventRow | undefined;
+          )
+          .get(sessionId, type) as EventRow | undefined,
+    );
     return row ? rowToEvent(row) : null;
   }
 
   /** The earliest event of a type in a session, or null. */
   private firstOfType(sessionId: string, type: string): SessionEvent | null {
-    const row = this.db
-      .prepare(
-        `SELECT ${EVENT_COLUMNS}
+    const row = this.query(
+      "firstOfType",
+      () =>
+        this.db
+          .prepare(
+            `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND type = ? ORDER BY seq ASC LIMIT 1`,
-      )
-      .get(sessionId, type) as EventRow | undefined;
+          )
+          .get(sessionId, type) as EventRow | undefined,
+    );
     return row ? rowToEvent(row) : null;
   }
 
   /** All events of the given types in a session, in seq order. */
   private eventsOfTypes(sessionId: string, types: readonly string[]): SessionEvent[] {
     const placeholders = types.map(() => "?").join(", ");
-    const rows = this.db
-      .prepare(
-        `SELECT ${EVENT_COLUMNS}
+    const rows = this.query(
+      "eventsOfTypes",
+      () =>
+        this.db
+          .prepare(
+            `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND type IN (${placeholders}) ORDER BY seq ASC`,
-      )
-      .all(sessionId, ...types) as unknown as EventRow[];
+          )
+          .all(sessionId, ...types) as unknown as EventRow[],
+    );
     return rows.map(rowToEvent);
   }
 
@@ -272,12 +358,16 @@ export class SessionLog {
 
   /** Every event for a session with seq > afterSeq, in seq order (the replay). */
   readAfter(sessionId: string, afterSeq: number): SessionEvent[] {
-    const rows = this.db
-      .prepare(
-        `SELECT ${EVENT_COLUMNS}
+    const rows = this.query(
+      "readAfter",
+      () =>
+        this.db
+          .prepare(
+            `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND seq > ? ORDER BY seq ASC`,
-      )
-      .all(sessionId, afterSeq) as unknown as EventRow[];
+          )
+          .all(sessionId, afterSeq) as unknown as EventRow[],
+    );
     return rows.map(rowToEvent);
   }
 

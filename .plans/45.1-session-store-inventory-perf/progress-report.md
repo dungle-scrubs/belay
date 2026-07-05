@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 10
-- **Completed current work:** 12
+- **Current cutoff blockers:** 0
+- **Completed current work:** 22
 - **Accepted/deferred follow-up:** 3
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M3 - Guardrail: no unbounded synchronous query on a request path
+- **Current focus:** Phase 1 complete - full verification gate + simplify pass
 
 ## Completed Current State / Hard Dependencies
 
@@ -52,21 +52,21 @@
   derived-projection boundary in module comments.
 
 **M3 - Guardrail: no unbounded synchronous query on a request path**
-- [ ] RED: after warm-up, a `GET /sessions` request issues **zero** SQLite queries (query counter on
+- [x] RED: after warm-up, a `GET /sessions` request issues **zero** SQLite queries (query counter on
   `SessionLog`) - fails against the pre-M2 handler.
-- [ ] GREEN: served path reads only the projection (counter flat across polls).
-- [ ] RED: a synchronous query over the slow threshold emits a structured `store.slow_query` event
+- [x] GREEN: served path reads only the projection (counter flat across polls).
+- [x] RED: a synchronous query over the slow threshold emits a structured `store.slow_query` event
   (name + `durationMs`); a fast query emits nothing.
-- [ ] GREEN: per-query duration hook + threshold + structured emit in `SessionLog`.
-- [ ] REFACTOR: consolidate counter + timing into one query-instrumentation seam; expose
+- [x] GREEN: per-query duration hook + threshold + structured emit in `SessionLog`.
+- [x] REFACTOR: consolidate counter + timing into one query-instrumentation seam; expose
   `InventoryProjection` size/lookup for diagnostics.
 
 ### Gate 1 (done)
-- [ ] `GET /sessions` issues zero SQLite queries once warm; endpoint is O(sessions) in memory.
-- [ ] `EXPLAIN QUERY PLAN` for the type lookups uses `events_session_type_seq` (seek, no filesort).
-- [ ] Projection parity: warmed rows and per-event updates match `log.inventory()`/`projectRow`.
-- [ ] A slow synchronous query emits a `store.slow_query` structured event.
-- [ ] `pnpm --filter @trevor/session-store test` + typecheck pass; `/sessions` REST + stream contract
+- [x] `GET /sessions` issues zero SQLite queries once warm; endpoint is O(sessions) in memory.
+- [x] `EXPLAIN QUERY PLAN` for the type lookups uses `events_session_type_seq` (seek, no filesort).
+- [x] Projection parity: warmed rows and per-event updates match `log.inventory()`/`projectRow`.
+- [x] A slow synchronous query emits a `store.slow_query` structured event.
+- [x] `pnpm --filter @trevor/session-store test` + typecheck pass; `/sessions` REST + stream contract
   unchanged.
 
 ## Accepted / Deferred Follow-up

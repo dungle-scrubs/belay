@@ -144,6 +144,7 @@ export const SPAN_NAMES = {
   tool: "trevor.tool",
   toolScript: "trevor.tool_script",
   storeAppend: "trevor.store.append",
+  storeSlowQuery: "trevor.store.slow_query",
   blobIo: "trevor.blob.io",
   cliLaunch: "trevor.cli.launch",
   webRender: "trevor.web.render",

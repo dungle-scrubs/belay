@@ -58,3 +58,22 @@ test("GET /sessions reflects a just-created session and a just-appended event ne
   assert.equal((await inventoryById(store.url)).get("s1")?.host, "live");
   host.close();
 });
+
+test("GET /sessions issues zero SQLite queries once warm (the transport-isolation guardrail)", async () => {
+  const transport = streamTransport(store.url);
+  await transport.ensureSession("a");
+  await transport.publishEvent("a", {
+    type: "user.message",
+    producerId: "web",
+    payload: { text: "hi" },
+  });
+  await transport.ensureSession("b");
+
+  // Snapshot the durable query counter AFTER seeding, then poll the inventory several times (the real
+  // sidebar/resume 4s poll). The projection-served path must not touch SQLite at all - the counter is flat.
+  const before = store.log.queries;
+  await inventoryById(store.url);
+  await inventoryById(store.url);
+  await inventoryById(store.url);
+  assert.equal(store.log.queries, before, "inventory polls touch SQLite zero times once warm");
+});

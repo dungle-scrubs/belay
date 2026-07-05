@@ -201,3 +201,42 @@ test("the type index is created idempotently on an existing (pre-index) DB", () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("the query counter counts every executed statement", () => {
+  const log = new SessionLog(":memory:");
+  assert.equal(log.queries, 0);
+  log.ensureSession("s1", at); // one INSERT OR IGNORE
+  assert.equal(log.queries, 1);
+  // append = ensureSession + MAX(seq) select + insert = 3 more.
+  log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at);
+  assert.equal(log.queries, 4);
+});
+
+test("a synchronous query over the slow threshold emits a store.slow_query span (name + durationMs)", () => {
+  const recorder = recordingTelemetrySink();
+  // A clock that advances 200ms on every read, so each instrumented query is timed at 200ms > 100ms.
+  let clock = 0;
+  const slowClock = () => {
+    const t = clock;
+    clock += 200;
+    return t;
+  };
+  const log = new SessionLog(":memory:", recorder.sink, slowClock);
+  log.ensureSession("s1", at);
+
+  const spans = recorder.named(SPAN_NAMES.storeSlowQuery);
+  assert.ok(spans.length >= 1, "a slow query emits a store.slow_query span");
+  const [span] = spans;
+  assert.equal(typeof span?.attributes.query, "string", "the span names the query");
+  assert.equal(span?.attributes.threshold_ms, 100);
+  assert.ok((span?.durationMs ?? 0) >= 100, "the span carries the measured duration");
+});
+
+test("a fast synchronous query emits no store.slow_query span", () => {
+  const recorder = recordingTelemetrySink();
+  const log = new SessionLog(":memory:", recorder.sink, () => 0); // no time elapses per query
+  log.ensureSession("s1", at);
+  log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at);
+  log.inventory();
+  assert.equal(recorder.named(SPAN_NAMES.storeSlowQuery).length, 0);
+});
