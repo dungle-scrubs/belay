@@ -6,7 +6,7 @@ import type { PermanentDeleteResult } from "./session-delete";
 /**
  * The session transport seam: the contract a participant uses to join a session,
  * receive its replay-then-tail event stream, and publish new events - independent
- * of where the durable log lives. The local session-store and a Richter service are
+ * of where the durable log lives. The local session-store and a Tether service are
  * both reached through the one `streamTransport` implementation of this interface
  * (they speak the identical wire); selecting one is just the URL a deployment points
  * it at. The event shape (./event) and the trevor protocol (./protocol) are shared by
@@ -180,7 +180,7 @@ export function awaitSessionEvent(
 /**
  * A session backend: ensure a session exists, publish events to its durable log,
  * and open a replay-then-tail stream. One implementation per durable log (a local
- * store, the Richter service); participants depend on this interface, never on a
+ * store, the Tether service); participants depend on this interface, never on a
  * concrete backend.
  */
 export interface SessionTransport {

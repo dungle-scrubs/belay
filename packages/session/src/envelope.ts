@@ -18,7 +18,7 @@ export type HostPresence = Schema.Schema.Type<typeof HostPresence>;
 /**
  * The session stream envelope (op-tagged): how a session backend frames messages
  * on the replay-then-tail WebSocket. This is the shared wire every backend speaks
- * - the local session-store and the Richter service both emit these frames, so a
+ * - the local session-store and the Tether service both emit these frames, so a
  * single client (./stream-transport) decodes either. Unknown ops fail decode and
  * are ignored by clients, preserving forward-compatibility as backends add frames.
  */
@@ -51,7 +51,7 @@ export const decodeStreamEnvelope = Schema.decodeUnknownEither(StreamEnvelope);
 /**
  * Constructors for every frame a session backend emits, one per `op` in the
  * StreamEnvelope union. The `op` string vocabulary lives ONLY here, so a backend
- * (the local session-store, the Richter service) never hand-spells a frame - this
+ * (the local session-store, the Tether service) never hand-spells a frame - this
  * mirrors the emit-side `events.*` constructors in ./protocol that own the event
  * vocabulary. Each returns a typed StreamEnvelope the shared client decodes.
  */

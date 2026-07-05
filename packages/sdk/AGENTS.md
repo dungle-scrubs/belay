@@ -8,16 +8,16 @@ lifecycle.
 
 ## Boundaries (do not cross)
 
-- **The SDK does not run the CLI.** It talks to the session-store / Richter / blob-store through the
+- **The SDK does not run the CLI.** It talks to the session-store / Tether / blob-store through the
   `@trevor/session` protocol only, never by shelling out (D-002). No import of `@trevor/cli`.
 - **The SDK is not a second protocol package.** It imports `@trevor/session` primitives
   (`SessionTransport`, `events`, decoders, `streamTransport`, blob client) rather than re-deriving event
   or session types (D-001). If you need a wire type, import it from `@trevor/session`.
 - **The SDK does not recreate the web UI.** It exposes data and operations (transcript projection,
   workflows), not visual surfaces like the artifact panel or model chooser (they stay web-owned).
-- **Backend selection is URL-based.** A local session-store and a Richter service speak the identical
+- **Backend selection is URL-based.** A local session-store and a Tether service speak the identical
   `/sessions` wire, so the choice is just the URL passed to `createTrevorClient`. There is no
-  `@trevor/richter` adapter package (D-004).
+  `@trevor/tether` adapter package (D-004).
 - **Local process orchestration is NOT here.** Starting services, spawning/reusing hosts, opening the
   browser, and OS signals (stop/kill) live in `apps/trevor-cli`, not in this browser-safe core (D-003).
   The SDK owns protocol-safe operations only: `cancel` (a `user.cancel` control event) is here;

@@ -208,7 +208,7 @@ export function freshSessionId(options: FreshSessionIdOptions = {}): string {
  * store's parser share this one codec so a renamed/added identity field can't silently
  * desync them - the store would otherwise read an empty string and drop the host from
  * presence. It lives here, beside the identity vocabulary it serializes, so the names
- * have a single owner. NOTE: these names are also the wire contract the external Richter
+ * have a single owner. NOTE: these names are also the wire contract the external Tether
  * service implements, so a participant reaches either backend unchanged; centralizing
  * removes client<->local-store drift but does NOT make the names free to rename
  * unilaterally.

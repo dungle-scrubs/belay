@@ -12,7 +12,7 @@ const execAsync = promisify(exec);
 /**
  * Host-side artifact resolution (D-028): a user.message carries content-addressed
  * ArtifactRefs, not bytes. At turn time, for a vision-capable provider, we fetch the
- * image bytes from the blob store beside Richter and inline them as base64 onto the
+ * image bytes from the blob store beside Tether and inline them as base64 onto the
  * message (`images`) so the model can actually see them. Non-image artifacts are left
  * as refs - the provider surfaces them as a short text note.
  *

@@ -26,13 +26,13 @@ export { decodeStreamParams, encodeStreamParams } from "./identity";
 /**
  * The default session transport: a `SessionTransport` over HTTP + WebSocket,
  * speaking the `/sessions` REST + `/sessions/{id}/stream` contract that both the
- * local session-store and the Richter service implement. It builds the stream URL,
+ * local session-store and the Tether service implement. It builds the stream URL,
  * runs the replay-then-tail decode loop (unknown envelopes are ignored for
  * forward-compatibility), and posts events/sessions over REST.
  *
  * Isomorphic: `fetch`, `WebSocket`, and `URL` are globals in both the browser and
  * Node >= 22, so the same client serves the Vite app, the host, and tests. Point
- * it at a local store for local sessions, or at a Richter service for the durable
+ * it at a local store for local sessions, or at a Tether service for the durable
  * substrate - the wire is identical, so the choice is just the URL.
  *
  * Single-connection: it does not reconnect. Callers layer their own reconnect
@@ -158,7 +158,7 @@ async function permanentlyDeleteStreamSession(
 }
 
 /**
- * Builds a `SessionTransport` bound to one service URL (a local store or Richter).
+ * Builds a `SessionTransport` bound to one service URL (a local store or Tether).
  * The host and web depend on the `SessionTransport` contract; this is the concrete
  * client that carries it over the wire.
  */

@@ -8,7 +8,7 @@ import type { PublishInput } from "./transport";
  * The FORK PREFIX contract (plan 15, M1). Forking a session means starting a FRESH linear session seeded
  * with a copy of the parent's conversation up to a chosen point ("branch from here"). This module is the
  * pure core: it selects the forkable prefix, tags each copied event with where it came from, and hands back
- * the {@link PublishInput}s a caller appends to a new session through the NORMAL append API - so Richter/the
+ * the {@link PublishInput}s a caller appends to a new session through the NORMAL append API - so Tether/the
  * session store stays a generic append-only substrate with no fork-specific columns (D-002).
  *
  * A copied event keeps its type/producer/payload and gains one reserved payload key, {@link FORK_ORIGIN_KEY}

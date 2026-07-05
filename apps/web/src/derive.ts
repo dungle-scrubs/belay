@@ -47,7 +47,7 @@ function latest<T>(
 }
 
 /**
- * Pure view-model derivations over the Richter event log, kept out of app.tsx so
+ * Pure view-model derivations over the Tether event log, kept out of app.tsx so
  * the component is just rendering. Each folds `readonly SessionEvent[]` into a
  * typed shape via `decodeTrevorEvent`, so none of them hand-guard raw payloads.
  */
@@ -202,7 +202,7 @@ const HOST_RECENT_MS = 15000;
  * The leader/cwd/workspace still come from the host.* events, but the leader counts only
  * if it is among the live sockets; the other live hosts are standbys.
  *
- * `presence === null` means the backend never reports presence (e.g. Richter): fall back
+ * `presence === null` means the backend never reports presence (e.g. Tether): fall back
  * to the event-log view, where `present` latches on the first host.online (a lone leader
  * goes silent, so it can't be timed out) and standbys count only if seen within
  * HOST_RECENT_MS. This path cannot detect a silently-dead leader - the reason the live

@@ -25,7 +25,7 @@ import { SessionHub } from "./session-hub";
  * Builds the local session-store HTTP + WebSocket server over a SQLite log,
  * without listening - so `main.ts` can bind the configured port and tests can bind
  * an ephemeral one against a throwaway database. The server speaks the SAME
- * `/sessions` REST + `/sessions/{id}/stream` contract Richter does, so the shared
+ * `/sessions` REST + `/sessions/{id}/stream` contract Tether does, so the shared
  * client (@trevor/session streamTransport) reaches either with only a URL change.
  *
  *   POST  /sessions                      { sessionId }                 -> { session: { sessionId } }
@@ -112,7 +112,7 @@ export function createSessionStore(dbPath: string): Server {
               new Date().toISOString(),
             );
             // The event "returns over the stream": fan out to every subscriber, including the
-            // publisher's own socket (matching the Richter round-trip). The log owns the wire
+            // publisher's own socket (matching the Tether round-trip). The log owns the wire
             // framing (D-023); the server just fans out the frame.
             for (const frame of log.readFrames(sessionId, stored.seq - 1)) {
               hub.publish(sessionId, frame);

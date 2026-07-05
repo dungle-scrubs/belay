@@ -1,6 +1,6 @@
 # apps/agent-host - Agent Instructions
 
-The host: a Node + **Effect** Richter participant that runs the agent loop
+The host: a Node + **Effect** Tether participant that runs the agent loop
 (model <-> tools) for each turn. Layers on [`apps/AGENTS.md`](../AGENTS.md) and the
 repo-root [`AGENTS.md`](../../AGENTS.md).
 
@@ -67,7 +67,7 @@ file. Concretely, follow the patterns already in the tree:
   the typed failure to one model-facing `error: …` line (`src/tools/index.ts`). A new tool
   fails in the `E` channel; it does not carry its own `try/catch`.
 - **Run at the boundary only.** `Effect.runFork` / `runPromise` belong at the imperative
-  edges (the Richter callbacks in `main.ts`, `/doctor` in `commands.ts`) - not sprinkled
+  edges (the Tether callbacks in `main.ts`, `/doctor` in `commands.ts`) - not sprinkled
   inside Effect code.
 
 ## Deliberately imperative - leave these plain
@@ -75,7 +75,7 @@ file. Concretely, follow the patterns already in the tree:
 These are the host's edges; converting them to Effect is ceremony with no benefit and
 fights their design. Do not "fix" them into Effect:
 
-- The **Richter WebSocket connection + replay dispatch** in `src/main.ts` - the transport
+- The **Tether WebSocket connection + replay dispatch** in `src/main.ts` - the transport
   edge; the Effect program runs to it via `runFork`/`runPromise`.
 - The **pure, time-injected lease state machine** (`src/session/lease.ts`) - driven by
   `tick()`/`observe()` with an injected clock, kept synchronous and unit-testable.

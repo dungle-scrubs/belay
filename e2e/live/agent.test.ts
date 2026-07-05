@@ -8,10 +8,10 @@ import { test } from "vitest";
  * the bash tool and report the output - passing only if a tool call was emitted AND the final
  * answer contains the command's output (so the loop fed the tool result back). Ported from
  * scripts/verify-agent.mjs. Skips with a stated reason unless the live host env is configured;
- * it never fails the run on a machine without a model. Run: TREVOR_LIVE=1 RICHTER_URL=... SESSION_ID=... pnpm test:e2e
+ * it never fails the run on a machine without a model. Run: TREVOR_LIVE=1 TETHER_URL=... SESSION_ID=... pnpm test:e2e
  */
 
-const base = process.env.RICHTER_URL;
+const base = process.env.TETHER_URL;
 const sid = process.env.SESSION_ID;
 const provider = process.env.PROVIDER_KEY ?? "qwen";
 const enabled = process.env.TREVOR_LIVE === "1" && Boolean(base) && Boolean(sid);

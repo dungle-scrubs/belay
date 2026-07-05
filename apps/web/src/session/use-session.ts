@@ -31,18 +31,18 @@ export type { ConnectionStatus, HostPresence };
  * two React hooks the app subscribes through. Receiving and acting are split (D-018):
  *   - `useSession` accumulates the replay-then-tail event stream into state (read side),
  *   - `useSessionActions` publishes user intents - prompt / cancel / command / editor-open (write side).
- * Backend selection is a single `streamTransport(url)` call - Richter speaks the same `/sessions`
+ * Backend selection is a single `streamTransport(url)` call - Tether speaks the same `/sessions`
  * REST + WS contract as the local store, so it is just that URL, not a separate adapter. The stream
  * URL, decode loop, and REST calls live in `@trevor/session`, so host and browser can never drift on
  * the protocol.
  */
 
 // Backend selection: by default the browser talks same-origin to the local session-store, which the
-// Vite dev proxy forwards /sessions (REST + WS) to (no CORS). Set VITE_RICHTER_URL to point the same
-// transport at a Richter durable substrate instead (a Richter that serves CORS directly).
-const RICHTER_URL = import.meta.env.VITE_RICHTER_URL;
-const transport = RICHTER_URL
-  ? streamTransport(RICHTER_URL)
+// Vite dev proxy forwards /sessions (REST + WS) to (no CORS). Set VITE_TETHER_URL to point the same
+// transport at a Tether durable substrate instead (a Tether that serves CORS directly).
+const TETHER_URL = import.meta.env.VITE_TETHER_URL;
+const transport = TETHER_URL
+  ? streamTransport(TETHER_URL)
   : streamTransport(window.location.origin);
 
 /** This tab's shared transport singleton, exported so a self-contained surface (e.g. the tangent
@@ -215,7 +215,7 @@ export interface SessionStream {
   readonly events: readonly SessionEvent[];
   /**
    * The hosts connected to the session right now, as the backend's live transport reports it - or null
-   * when the backend never reports presence (e.g. Richter), so callers can fall back to the event-log
+   * when the backend never reports presence (e.g. Tether), so callers can fall back to the event-log
    * view instead of reading null as "no host".
    */
   readonly presence: readonly HostPresence[] | null;

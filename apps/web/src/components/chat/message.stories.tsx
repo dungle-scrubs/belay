@@ -131,7 +131,7 @@ export const Tool: Story = {
         <ToolCall name="read" args="apps/web/src/app.tsx" status="done" />
         <ToolCall name="bash" args="pnpm typecheck" status="running" />
         <ToolCall name="edit" args="index.css" status="error" />
-        <ToolCall name="grep" args="useRichterSession" status="done">
+        <ToolCall name="grep" args="useTetherSession" status="done">
           3 matches in 2 files
         </ToolCall>
       </div>

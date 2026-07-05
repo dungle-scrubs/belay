@@ -7,7 +7,7 @@
  * FALLBACK_ACTION_LABEL rather than guessing; it never returns blank and never throws.
  *
  * Not for: rendering or animation (that is `components/chat/action-shimmer.tsx`), and not for
- * parsing raw Richter event payloads (the transcript fold already decodes those). This is the one
+ * parsing raw Tether event payloads (the transcript fold already decodes those). This is the one
  * home for the V2 action vocabulary, so tool renderers and the working row can't drift apart.
  */
 
