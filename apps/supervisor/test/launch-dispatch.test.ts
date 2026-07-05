@@ -80,6 +80,8 @@ test("a control-session launch request drives the launcher and returns the resol
       launched.push(input);
       return Promise.resolve("launched");
     },
+    pickFolder: () => Promise.resolve({ cancelled: true }),
+    listProjects: () => [],
   };
   await subscribe(deps);
 
@@ -116,6 +118,8 @@ test("a launcher failure becomes a failed result carrying the error, not a crash
         producerId: PRODUCER_IDS.supervisor,
       }),
     launch: () => Promise.reject(new Error("spawn denied")),
+    pickFolder: () => Promise.resolve({ cancelled: true }),
+    listProjects: () => [],
   };
   await subscribe(deps);
 

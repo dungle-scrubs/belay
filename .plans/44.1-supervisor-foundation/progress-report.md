@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 30
-- **Completed current work:** 4
+- **Current cutoff blockers:** 0
+- **Completed current work:** 34
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Extract `@trevor/launcher`
+- **Current focus:** Complete - M1-M4 landed (launcher extracted, protocol events, supervisor daemon, folder pick + recents).
 
 ## Completed Current State / Hard Dependencies
 
@@ -55,18 +55,18 @@
 
 ### Phase 3 - M4: Native folder pick + recents
 
-- [ ] RED: Test `folder.pick.requested` invokes the native picker (stubbed) and returns a POSIX path; cancel returns `{ cancelled: true }`.
-- [ ] GREEN: Implement the native picker via `osascript choose folder`, local-only; publish `folder.pick.result`.
-- [ ] RED: Test `projects.list.requested` returns `projects.json` entries recency-sorted, empty when absent.
-- [ ] GREEN: Implement the recents reader over `@trevor/session/node-paths`.
-- [ ] REFACTOR: Centralize the local-only guard + registry read; document native-picker degradation.
+- [x] RED: Test `folder.pick.requested` invokes the native picker (stubbed) and returns a POSIX path; cancel returns `{ cancelled: true }`.
+- [x] GREEN: Implement the native picker via `osascript choose folder`, local-only; publish `folder.pick.result`.
+- [x] RED: Test `projects.list.requested` returns `projects.json` entries recency-sorted, empty when absent.
+- [x] GREEN: Implement the recents reader over `@trevor/session/node-paths` (reusing the launcher's `loadProjectMap`).
+- [x] REFACTOR: Centralize the local-only guard (folder-picker.ts) + registry read (recents.ts); document native-picker degradation.
 
 ### Gate 3
 
-- [ ] A control-session launch request spawns/reuses a host and returns its session id.
-- [ ] Native folder pick returns a real path locally and reports unavailable when non-local.
-- [ ] Recents come back recency-sorted from `projects.json`.
-- [ ] Every exchange is on the session log; no private IPC.
+- [x] A control-session launch request spawns/reuses a host and returns its session id.
+- [x] Native folder pick returns a real path locally and reports unavailable when non-local.
+- [x] Recents come back recency-sorted from `projects.json`.
+- [x] Every exchange is on the session log; no private IPC.
 
 ## Accepted / Deferred Follow-Up
 

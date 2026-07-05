@@ -1,3 +1,4 @@
+import { nodeFs, TREVOR_STATE_HOME } from "@trevor/launcher";
 import { createService, startServer } from "@trevor/server-kit";
 import {
   errorMessage,
@@ -9,7 +10,9 @@ import {
 } from "@trevor/session";
 import { RESERVED_PORTS, serviceUrl } from "@trevor/session/ports";
 import { handleSupervisorEvent, type SupervisorDeps } from "./dispatch";
+import { pickProjectFolder } from "./folder-picker";
 import { nodeLaunch } from "./launch-runner";
+import { readRecents } from "./recents";
 
 /**
  * The `trevor supervisor` daemon (plan 44.1): the one persistent local actor that can spawn a host on
@@ -44,6 +47,10 @@ const emit = (event: TrevorEventInput): Promise<void> =>
 const deps: SupervisorDeps = {
   emit,
   launch: nodeLaunch,
+  pickFolder: pickProjectFolder,
+  // The registry read lives under TREVOR_STATE_HOME (the launcher's projects.json), read through the
+  // launcher's own map loader so there is one reader.
+  listProjects: () => readRecents(nodeFs, TREVOR_STATE_HOME),
   selfProducerId: PRODUCER_IDS.supervisor,
   log,
 };

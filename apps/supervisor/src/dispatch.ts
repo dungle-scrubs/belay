@@ -5,6 +5,7 @@ import {
   isAnswerableProducer,
   projectSessionId,
   type SessionEvent,
+  type SupervisorProject,
   type TrevorEventInput,
 } from "@trevor/session";
 
@@ -16,7 +17,7 @@ import {
  * transport + node launcher) and the integration tests (a fake launcher over a real store) drive the
  * exact same dispatch.
  *
- * M3 owns the `session.launch.requested` handler; `folder.pick`/`projects.list` land in M4.
+ * It owns one handler per request type: launch, folder pick, and recent projects.
  */
 
 /** The collaborators the dispatcher needs, all injected so the handler stays free of node IO. */
@@ -30,6 +31,10 @@ export interface SupervisorDeps {
     readonly sessionId: string;
     readonly root: string;
   }) => Promise<"launched" | "reused">;
+  /** Pops the native folder picker (local + best-effort); resolves the chosen path or `cancelled`. */
+  readonly pickFolder: () => Promise<{ readonly path?: string; readonly cancelled: boolean }>;
+  /** The launcher's recent project roots (`projects.json`), recency-sorted; empty when absent. */
+  readonly listProjects: () => readonly SupervisorProject[];
   /** This supervisor's producer id, so it never acts on its own echoed results (self-echo suppression). */
   readonly selfProducerId: string;
   /** Structured diagnostics sink; a no-op by default. */
@@ -54,8 +59,14 @@ export async function handleSupervisorEvent(
     case "session.launch.requested":
       await handleLaunch(decoded.requestId, decoded.root, deps);
       break;
+    case "folder.pick.requested":
+      await handleFolderPick(decoded.requestId, deps);
+      break;
+    case "projects.list.requested":
+      await handleProjectsList(decoded.requestId, deps);
+      break;
     default:
-      // Result events and other types (folder.pick / projects.list arrive in M4) are ignored.
+      // Result events and every other kind are ignored (the host owns those; we own the requests).
       break;
   }
 }
@@ -78,4 +89,20 @@ async function handleLaunch(requestId: string, root: string, deps: SupervisorDep
       events.sessionLaunchResult({ requestId, sessionId, status: "failed", error: message }),
     );
   }
+}
+
+/** Pops the native folder picker and publishes the paired `folder.pick.result` (path or cancelled). */
+async function handleFolderPick(requestId: string, deps: SupervisorDeps): Promise<void> {
+  const outcome = await deps.pickFolder();
+  deps.log?.("folder pick", { requestId, cancelled: outcome.cancelled });
+  await deps.emit(
+    events.folderPickResult({ requestId, cancelled: outcome.cancelled, path: outcome.path }),
+  );
+}
+
+/** Reads the launcher's recent projects (recency-sorted) and publishes `projects.list.result`. */
+async function handleProjectsList(requestId: string, deps: SupervisorDeps): Promise<void> {
+  const projects = deps.listProjects();
+  deps.log?.("projects list", { requestId, count: projects.length });
+  await deps.emit(events.projectsListResult({ requestId, projects }));
 }
