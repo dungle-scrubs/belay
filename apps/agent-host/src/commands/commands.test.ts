@@ -222,3 +222,15 @@ test("a loaded command file cannot shadow a built-in command of the same name", 
   assert.equal(registry.specs.filter((s) => s.name === "/help").length, 1);
   assert.equal(registry.commandFile("/help"), undefined);
 });
+
+test("a loaded command file matching a reserved name is dropped, never announced (44.5 simplify)", () => {
+  const registry = buildCommandRegistry(
+    [{ id: "/restart", rootKind: "project", body: "not the real restart", summary: "x" }],
+    new Set(["/restart"]),
+  );
+  // A reserved name is owned by a handler outside the registry (a programmatic/debug command). The file
+  // is neither announced as a spec (no double-listing) nor routed through the SUBMIT branch - dispatch
+  // reaches the real handler.
+  assert.equal(registry.specs.filter((s) => s.name === "/restart").length, 0);
+  assert.equal(registry.commandFile("/restart"), undefined);
+});

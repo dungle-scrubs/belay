@@ -255,6 +255,12 @@ function buildJobsStopCommand(): Command {
 
 export function buildCommandRegistry(
   commandFiles: readonly LoadedCommandFile[] = [],
+  /** Command names owned by handlers OUTSIDE this registry - the programmatic dispatcher (`/clear`,
+   *  `/worktree-*`, ...) and the debug specs (`/restart`, `/stop`, ...). A `.trevor/commands/<name>.md`
+   *  matching one of these is dropped from file registration: those names dispatch to their real handler,
+   *  so announcing a file spec (with a substitution preview) for them would both double-list the name and
+   *  advertise behavior the file never runs. The registry's own built-ins are excluded separately (`byName`). */
+  reservedNames: ReadonlySet<string> = new Set(),
 ): CommandRegistry {
   const commands: Command<unknown>[] = [];
   /** Registers a command, preserving its narrow input type at the declaration site. */
@@ -344,7 +350,7 @@ export function buildCommandRegistry(
   const commandFilesByName = new Map<string, LoadedCommandFile>();
   const fileSpecs: CommandSpec[] = [];
   for (const file of commandFiles) {
-    if (byName.has(file.id) || commandFilesByName.has(file.id)) {
+    if (byName.has(file.id) || reservedNames.has(file.id) || commandFilesByName.has(file.id)) {
       continue;
     }
     commandFilesByName.set(file.id, file);

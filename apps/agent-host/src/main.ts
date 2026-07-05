@@ -191,7 +191,15 @@ const commandFileLoad = loadCommandFiles();
 for (const diagnostic of commandFileLoad.diagnostics) {
   warn("host", "command file skipped", { path: diagnostic.path, code: diagnostic.code });
 }
-const commands = buildCommandRegistry(commandFileLoad.files);
+// Reserve the debug command names (`/restart`, `/stop`, ...) so a same-named `.trevor/commands/*.md`
+// can't double-list itself beside its debug spec and shadow the real handler at dispatch (plan 44.5).
+// The programmatic dispatcher's own names (`/worktree-*`, ...) are built further down and can't reach
+// here (the registry is consumed by makePresence above) - a file so named still dispatches to the real
+// handler; only its menu preview would mislead. That narrower gap is left as follow-up.
+const commands = buildCommandRegistry(
+  commandFileLoad.files,
+  new Set(debugCommandSpecs(true).map((spec) => spec.name)),
+);
 // The `/loop` runtime (plan 17): the command surface drives a durable-loop store. Process loops run through
 // the real command boundary; current-session + background prompt loops inject a control prompt into the
 // session (a first cut - a dedicated background-agent spawn + a full turn-completion await are later

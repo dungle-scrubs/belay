@@ -91,6 +91,32 @@ test("an empty-bodied file is skipped with a structured diagnostic, and siblings
   assert.match(diagnostics[0]?.path ?? "", /blank\.md$/);
 });
 
+test("blank frontmatter fields fall through: empty description -> generic summary, empty hint -> no usage", () => {
+  const r = roots();
+  writeCommand(r.project, "hollow", "---\ndescription: '   '\nargument-hint: ''\n---\nDo it $0\n");
+  const { files } = loadCommandFilesFrom([r.project, r.user]);
+  // A blank `description`/`argument-hint` must not surface as an empty summary or a trailing-space usage;
+  // it falls through to the generic default / absent hint.
+  assert.equal(files[0]?.summary, "Custom command /hollow");
+  assert.equal(files[0]?.argumentHint, undefined);
+});
+
+test("a root path that is a file, not a directory, is skipped fail-soft, never a crash", () => {
+  const r = roots();
+  const filePath = join(r.base, "not-a-directory");
+  writeFileSync(filePath, "i am a file, not a commands dir");
+  const badRoot: CommandFileRoot = { kind: "project", dir: filePath };
+  writeCommand(r.user, "ok", "user cmd $0");
+  // readdirSync on a non-directory throws ENOTDIR; the walker must swallow it so one bad root can't
+  // crash command registration at host boot (the user root still loads).
+  const { files, diagnostics } = loadCommandFilesFrom([badRoot, r.user]);
+  assert.deepEqual(
+    files.map((f) => f.id),
+    ["/ok"],
+  );
+  assert.equal(diagnostics.length, 0);
+});
+
 test("an unreadable file is skipped with a diagnostic, never a crash", (ctx) => {
   if (process.getuid?.() === 0) {
     ctx.skip(); // root bypasses chmod, so the unreadable path can't be simulated

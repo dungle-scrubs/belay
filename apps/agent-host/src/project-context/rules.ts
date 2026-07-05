@@ -2,8 +2,9 @@
  * Responsible for: .trevor/rules collection - frontmatter + folder metadata, globs, inclusion.
  * Not for: AGENTS.md ingestion or per-session lazy state - agents-md.ts / registry.ts own those.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { collectMarkdownFiles } from "@host/boot/manifest-discovery";
 import { parse as parseYaml } from "yaml";
 import { type ContextRuleSource, type ContextScope, expandContextImports } from "./agents-md";
 import { CONTEXT_SOURCE_KINDS, type ContextSource, type ContextSourceDiagnostic } from "./sources";
@@ -240,24 +241,6 @@ function parseFolderMetadataBody(path: string, body: string): Readonly<Record<st
       _diagnostic: error instanceof Error ? error.message : `Could not parse ${path}`,
     };
   }
-}
-
-function collectMarkdownFiles(dir: string): string[] {
-  if (!existsSync(dir)) {
-    return [];
-  }
-  const files: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...collectMarkdownFiles(path));
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith(".md")) {
-      files.push(path);
-    }
-  }
-  return files.sort();
 }
 
 function nearestFolderMetadata(

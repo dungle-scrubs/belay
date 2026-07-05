@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
-import { parseFrontmatter, trimStr } from "@host/boot/manifest-discovery";
+import { readFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
+import { collectMarkdownFiles, parseFrontmatter, trimStr } from "@host/boot/manifest-discovery";
 import { TREVOR_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { msg } from "@host/transport/messages";
 import type { CommandFile, CommandFileRootKind } from "./command-file";
@@ -13,10 +13,11 @@ import type { CommandFile, CommandFileRootKind } from "./command-file";
  * empty-bodied file is skipped with a structured diagnostic, never a crash, so one bad file cannot break
  * command registration.
  *
- * The scan mirrors `project-context/rules.ts` (recursive `.md` collection, sorted) and
- * `boot/manifest-discovery.ts` (frontmatter strip) rather than inventing a bespoke walker. The loaded
- * bodies are handed to the plan-40 `expandCommandFile` (interpolation) and then the `@trevor/session`
- * `expandArgs` (substitution) at dispatch - this module does neither; it only reads disk + assigns trust.
+ * The scan reuses `boot/manifest-discovery.ts` for both the recursive `.md` walk
+ * (`collectMarkdownFiles`, shared with `project-context/rules.ts`) and the frontmatter strip, rather
+ * than inventing a bespoke walker. The loaded bodies are handed to the plan-40 `expandCommandFile`
+ * (interpolation) and then the `@trevor/session` `expandArgs` (substitution) at dispatch - this module
+ * does neither; it only reads disk + assigns trust.
  *
  * Responsible for: discovering + reading command files across the project/user roots, id + trust-root
  * assignment, project-over-user precedence, and fail-soft diagnostics.
@@ -61,7 +62,7 @@ export interface CommandFileLoad {
 export const PROJECT_COMMANDS_DIR = resolve(WORKSPACE_ROOT, ".trevor", "commands");
 
 /** The user-global command root: `<TREVOR_HOME>/commands`, beside the other config-home files. */
-export const USER_COMMANDS_DIR = join(TREVOR_HOME, "commands");
+export const USER_COMMANDS_DIR = resolve(TREVOR_HOME, "commands");
 
 /**
  * The ordered command-file roots, highest precedence FIRST: the project-local `.trevor/commands`, then
@@ -75,24 +76,9 @@ export function commandFileRoots(): CommandFileRoot[] {
   return roots;
 }
 
-/** Recursively collects `.md` files under `dir` (subdirs included), sorted by path; missing dir -> []. */
-function collectMarkdownFiles(dir: string): string[] {
-  if (!existsSync(dir)) {
-    return [];
-  }
-  const files: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...collectMarkdownFiles(path));
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith(".md")) {
-      files.push(path);
-    }
-  }
-  return files.sort();
-}
+/** Frontmatter string fields treated as absent when blank: a `description:` with an empty/whitespace
+ *  value must fall through to the next source (or the generic default), not surface as a blank summary. */
+const nonEmpty = (value: unknown): string | undefined => trimStr(value) || undefined;
 
 /**
  * Loads every command file across the ordered roots, project-local first. Each file's id is
@@ -143,12 +129,12 @@ export function loadCommandFilesFrom(roots: readonly CommandFileRoot[]): Command
       }
 
       claimed.add(id);
-      const argumentHint = trimStr(data["argument-hint"]) ?? trimStr(data.argumentHint);
+      const argumentHint = nonEmpty(data["argument-hint"]) ?? nonEmpty(data.argumentHint);
       files.push({
         id,
         rootKind: root.kind,
         body: trimmed,
-        summary: trimStr(data.description) ?? trimStr(data.summary) ?? `Custom command ${id}`,
+        summary: nonEmpty(data.description) ?? nonEmpty(data.summary) ?? `Custom command ${id}`,
         ...(argumentHint !== undefined ? { argumentHint } : {}),
       });
     }
