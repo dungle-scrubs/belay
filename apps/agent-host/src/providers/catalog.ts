@@ -322,6 +322,14 @@ export function buildCatalogSnapshot(
   const sources: SourceSummary[] = [];
   for (const source of SOURCES) {
     const configured = resolvedAuth.get(source.sourceId)?.configured ?? false;
+    // An unconfigured source is advertised ONLY when it has an in-app sign-in (oauth): the user can
+    // authenticate from the chooser. A key-based source (api-key / gateway) is configured OUT of band by
+    // adding its `{ key }` to ~/.pi/auth.json - with no key there is nothing to do in-app and no model to
+    // select, so it is omitted rather than shown with a misleading "needs auth" prompt (it is not an OAuth
+    // connection). Local runtimes are always configured, so this never drops them.
+    if (!configured && source.type !== "oauth") {
+      continue;
+    }
     // Stale only applies to a configured source whose live /models query failed (an unconfigured
     // source has no catalog to be stale).
     const freshness: CatalogFreshness = {

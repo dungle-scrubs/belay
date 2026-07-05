@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { buildCatalogSnapshot, buildSourceProvider } from "./catalog";
+import { signInTargetFor } from "./provider-auth";
 
 /**
  * D-065 turn resolution: buildSourceProvider builds a Provider for an arbitrary `{sourceId, modelId}`
@@ -45,11 +46,10 @@ test("buildCatalogSnapshot projects configured-state, summaries, and the per-sou
     ["deepseek-v4-pro", "deepseek-v4-flash"],
   );
 
-  // MiniMax has no key -> needs-auth, no models, a configure action; LM Studio (local) is always ready.
-  assert.equal(by.minimax?.status, "needs-auth");
-  assert.equal(by.minimax?.auth, "none");
-  assert.equal(by.minimax?.modelCount, 0);
-  assert.deepEqual(by.minimax?.actions, ["configure"]);
+  // MiniMax has no key -> it is OMITTED entirely (a key-based source is advertised only when its key is
+  // present; with none there is nothing to do in-app and no model to select). LM Studio (local) is
+  // always ready.
+  assert.equal(by.minimax, undefined, "an unconfigured api-key source is not advertised");
   assert.equal(by.lmstudio?.status, "ready");
 });
 
@@ -185,11 +185,11 @@ test("a configured source whose live /models fetch failed is flagged catalog-sta
   const ds = snap.sources.find((s) => s.sourceId === "deepseek");
   assert.equal(ds?.freshness.stale, false);
 
-  // an UNCONFIGURED source is never "stale" (it has no catalog to be stale), even if named.
+  // an UNCONFIGURED key-based source is omitted entirely, so it never appears (stale or otherwise).
   const minimax = buildCatalogSnapshot(auth, {}, new Set(["minimax"])).sources.find(
     (s) => s.sourceId === "minimax",
   );
-  assert.equal(minimax?.freshness.stale, false);
+  assert.equal(minimax, undefined, "an unconfigured api-key source is not advertised");
 });
 
 test("REDACTION: the API key never appears in any announced source or catalog entry", () => {
@@ -294,27 +294,59 @@ test("exactly ONE oauth Claude source exists: `anthropic`, 'Claude subscription'
   );
 });
 
-test("the Anthropic Direct API is an api-key source on the distinct `anthropic-api` id (53.1 D-001)", () => {
+test("the Anthropic Direct API is an api-key source, advertised only when its key is present (53.1 D-001)", () => {
   // Peer to DeepSeek / Z.ai / MiniMax: its source id + configured signal are the DISTINCT `anthropic-api`
-  // entry (freed so the Claude subscription OAuth owns `anthropic`), and it offers no device-code sign-in.
+  // entry (freed so the Claude subscription OAuth owns `anthropic`), and it is NOT an OAuth connection.
+  // With no `~/.pi/auth.json` `anthropic-api` key it is OMITTED - a Direct API source has no in-app
+  // sign-in and no selectable model without its key, so it is never shown with a needs-auth prompt.
   const cold = buildCatalogSnapshot(auth, {}).sources.find((s) => s.sourceId === "anthropic-api");
-  assert.equal(cold?.type, "api-key");
-  assert.equal(cold?.label, "Anthropic Direct API");
-  assert.equal(cold?.status, "needs-auth");
-  assert.deepEqual(cold?.actions, ["configure"], "a manual configure action, never authenticate");
+  assert.equal(
+    cold,
+    undefined,
+    "an unconfigured Direct API source is omitted, not shown as needs-auth",
+  );
 
+  // With the key present it appears like any other configured api-key source: ready, its models, refresh.
   const ANTHROPIC_KEY = "sk-ant-direct-DO-NOT-LEAK-0987654321";
   const withKey = buildCatalogSnapshot(
     { ...auth, "anthropic-api": { key: ANTHROPIC_KEY } },
     { "anthropic-api": ["claude-opus-4-8", "claude-sonnet-4-6"] },
   );
   const hot = withKey.sources.find((s) => s.sourceId === "anthropic-api");
+  assert.equal(hot?.type, "api-key");
+  assert.equal(hot?.label, "Anthropic Direct API");
   assert.equal(hot?.status, "ready");
   assert.equal(hot?.auth, "authenticated");
   assert.equal(hot?.modelCount, 2);
   assert.deepEqual(hot?.actions, ["refresh"]);
   // REDACTION: the direct key value never reaches the announced snapshot.
   assert.ok(!JSON.stringify(withKey).includes(ANTHROPIC_KEY));
+});
+
+test("the OAuth sign-in belongs to the Claude subscription (`anthropic`), never the Direct API (`anthropic-api`)", () => {
+  // Regression for the mixed-up chooser (old host): the OAuth authorization flow was appearing on the
+  // Anthropic Direct API row. It cannot: the device-code flow is stamped with the sourceId the sign-in
+  // was STARTED for, and only `anthropic` (the Claude subscription) has a sign-in target.
+  const snap = buildCatalogSnapshot({}, {}); // no Claude OAuth entry, no anthropic-api key
+  // The Direct API (api-key) is not advertised without its key, so it can never render an auth prompt.
+  assert.equal(
+    snap.sources.find((s) => s.sourceId === "anthropic-api"),
+    undefined,
+    "the Direct API is not advertised (and shows no OAuth) without a key",
+  );
+  // The Claude Code subscription (oauth) IS advertised, with the in-app sign-in action ("Sign in").
+  const sub = snap.sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(sub?.type, "oauth");
+  assert.equal(sub?.label, "Claude subscription");
+  assert.deepEqual(
+    sub?.actions,
+    ["authenticate"],
+    "the Claude subscription signs in, never configure",
+  );
+  // Only the oauth source has a sign-in target; the Direct API has none, so a device-code flow (stamped
+  // with the started sourceId) can never attach to `anthropic-api`.
+  assert.ok(signInTargetFor("anthropic"), "the Claude subscription can start an OAuth sign-in");
+  assert.equal(signInTargetFor("anthropic-api"), null, "the Direct API has no OAuth flow");
 });
 
 test("the Claude subscription source is oauth + tool-capable, and needs-auth without its OAuth entry", () => {
@@ -360,23 +392,32 @@ test("D-004 drift guard: the catalog's Claude subscription Tools chip agrees wit
   );
 });
 
-test("OpenRouter is announced as a gateway source", () => {
-  // openrouter has no key in this auth, so it reads needs-auth with a configure action.
-  const snap = buildCatalogSnapshot(auth, {});
+test("OpenRouter is a gateway source, advertised only when its key is present", () => {
+  // openrouter has no key in this auth -> omitted (a key-based gateway is advertised only when configured).
+  assert.equal(
+    buildCatalogSnapshot(auth, {}).sources.find((s) => s.sourceId === "openrouter"),
+    undefined,
+    "an unconfigured gateway is not advertised",
+  );
+  // With a key it is announced as a gateway.
+  const snap = buildCatalogSnapshot(
+    { ...auth, openrouter: { key: "sk-or-abc" } },
+    { openrouter: ["anthropic/claude-opus-4"] },
+  );
   const or = snap.sources.find((s) => s.sourceId === "openrouter");
   assert.equal(or?.type, "gateway");
   assert.equal(or?.label, "OpenRouter");
-  assert.equal(or?.status, "needs-auth");
-  assert.deepEqual(or?.actions, ["configure"]);
+  assert.equal(or?.status, "ready");
+  assert.deepEqual(or?.actions, ["refresh"]);
 });
 
-test("Ollama Cloud is a gateway source: needs-auth without a key, ready with its live models", () => {
+test("Ollama Cloud is a gateway source: omitted without a key, ready with its live models", () => {
   const without = buildCatalogSnapshot(auth, {});
-  const needsAuth = without.sources.find((s) => s.sourceId === "ollama");
-  assert.equal(needsAuth?.type, "gateway");
-  assert.equal(needsAuth?.label, "Ollama Cloud");
-  assert.equal(needsAuth?.status, "needs-auth");
-  assert.deepEqual(needsAuth?.actions, ["configure"]);
+  assert.equal(
+    without.sources.find((s) => s.sourceId === "ollama"),
+    undefined,
+    "an unconfigured gateway is not advertised",
+  );
 
   // With an ollama key present, its live model ids form the catalog (no pi-ai registry to enrich from,
   // so entries carry the raw id as the display name).
