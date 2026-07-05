@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 import { frames } from "@trevor/session";
 import { SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import { recordingTelemetrySink, tempDir } from "@trevor/test-kit";
 import { test } from "vitest";
 import { SessionLog } from "./log";
 
@@ -169,4 +171,33 @@ test("append emits a store.append span carrying the event type + producer, never
   const serialized = JSON.stringify(spans);
   assert.ok(!serialized.includes("secret-session-id"), "the session id never enters a span");
   assert.ok(!serialized.includes("private prompt body"), "the payload never enters a span");
+});
+
+test("type lookups seek the (sessionId, type) index with no filesort", () => {
+  const log = new SessionLog(":memory:");
+  log.append("s1", { type: "host.online", producerId: "host", payload: {} }, "e1", at);
+
+  // The per-session type lookup must resolve via the (sessionId, type, seq) index - a direct seek that
+  // also yields seq order for free - not a whole-session scan followed by a sort. Fails before the index
+  // exists (the PK (sessionId, seq) can only seek sessionId, then scans + filters type).
+  const plan = log.explainTypeLookup();
+  assert.ok(plan.includes("events_session_type_seq"), `expected an index seek, got: ${plan}`);
+  assert.ok(!plan.includes("TEMP B-TREE"), `expected no filesort, got: ${plan}`);
+});
+
+test("the type index is created idempotently on an existing (pre-index) DB", () => {
+  const dir = tempDir("trevor-index-");
+  const path = join(dir, "sessions.db");
+  try {
+    // First open builds the schema + index and lands real data; reopening the same file must not error
+    // (CREATE INDEX IF NOT EXISTS is a no-op) and the index must still be present + used.
+    const first = new SessionLog(path);
+    first.append("s1", { type: "host.online", producerId: "host", payload: {} }, "e1", at);
+
+    const reopened = new SessionLog(path);
+    assert.ok(reopened.explainTypeLookup().includes("events_session_type_seq"));
+    assert.equal(reopened.readAfter("s1", 0).length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

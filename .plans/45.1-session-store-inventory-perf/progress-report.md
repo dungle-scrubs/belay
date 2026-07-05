@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 22
-- **Completed current work:** 0
+- **Current cutoff blockers:** 17
+- **Completed current work:** 5
 - **Accepted/deferred follow-up:** 3
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M1 - Type index (RED: query-plan characterization)
+- **Current focus:** M2 - Incremental in-memory inventory read model
 
 ## Completed Current State / Hard Dependencies
 
@@ -27,13 +27,13 @@
 ### Phase 1: Cheap, guarded inventory
 
 **M1 - Type index**
-- [ ] RED: query-plan characterization - `latestOfType`/`firstOfType` use an `(sessionId, type)` index
+- [x] RED: query-plan characterization - `latestOfType`/`firstOfType` use an `(sessionId, type)` index
   path, not a full-session scan (fails today: only the PK autoindex exists).
-- [ ] GREEN: add `CREATE INDEX IF NOT EXISTS events_session_type_seq ON events(sessionId, type, seq)` to
+- [x] GREEN: add `CREATE INDEX IF NOT EXISTS events_session_type_seq ON events(sessionId, type, seq)` to
   the schema init; plan flips to `(sessionId=? AND type=?)` seek.
-- [ ] RED: index creation is idempotent on an existing pre-index DB (open twice, no error, index present).
-- [ ] GREEN: confirm idempotent `IF NOT EXISTS` creation on open.
-- [ ] REFACTOR: co-locate index DDL with table DDL + schema comment on why `(sessionId, type, seq)` order.
+- [x] RED: index creation is idempotent on an existing pre-index DB (open twice, no error, index present).
+- [x] GREEN: confirm idempotent `IF NOT EXISTS` creation on open.
+- [x] REFACTOR: co-locate index DDL with table DDL + schema comment on why `(sessionId, type, seq)` order.
 
 **M2 - Incremental in-memory inventory read model**
 - [ ] RED: `InventoryProjection` warmed from a seeded log returns the same rows as `log.inventory()`

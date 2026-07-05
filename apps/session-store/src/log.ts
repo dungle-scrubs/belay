@@ -41,6 +41,10 @@ interface AggregateRow {
   readonly updatedAt: string;
 }
 
+/** The full event column list every row-returning read selects, in `EventRow` order. Shared so the
+ *  replay/type-lookup reads and the query-plan diagnostic all speak the exact same projection. */
+const EVENT_COLUMNS = "sessionId, seq, eventId, type, producerId, payload, createdAt";
+
 /** Maps a private SQLite row (payload as a JSON string) into the shared SessionEvent shape. */
 function rowToEvent(r: EventRow): SessionEvent {
   return {
@@ -85,6 +89,15 @@ export class SessionLog {
          createdAt  TEXT    NOT NULL,
          PRIMARY KEY (sessionId, seq)
        );`,
+    );
+    // The inventory read model projects a handful of per-session, per-type events (latest host.online,
+    // first user.message, the lifecycle slice, the archive/title/delete/lineage markers). Column order
+    // matters: (sessionId, type) are the equality predicates, so an index leading with them turns each
+    // lookup into a direct seek; trailing `seq` then hands back seq order for free, so ORDER BY seq needs
+    // no filesort. The PK (sessionId, seq) alone can only seek sessionId, then scans + filters by type.
+    // `IF NOT EXISTS` so reopening the (large, already-populated) live DB is a no-op, never a rebuild.
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS events_session_type_seq ON events(sessionId, type, seq);",
     );
   }
 
@@ -206,7 +219,7 @@ export class SessionLog {
   private latestOfType(sessionId: string, type: string): SessionEvent | null {
     const row = this.db
       .prepare(
-        `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt
+        `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND type = ? ORDER BY seq DESC LIMIT 1`,
       )
       .get(sessionId, type) as EventRow | undefined;
@@ -217,7 +230,7 @@ export class SessionLog {
   private firstOfType(sessionId: string, type: string): SessionEvent | null {
     const row = this.db
       .prepare(
-        `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt
+        `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND type = ? ORDER BY seq ASC LIMIT 1`,
       )
       .get(sessionId, type) as EventRow | undefined;
@@ -229,18 +242,34 @@ export class SessionLog {
     const placeholders = types.map(() => "?").join(", ");
     const rows = this.db
       .prepare(
-        `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt
+        `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND type IN (${placeholders}) ORDER BY seq ASC`,
       )
       .all(sessionId, ...types) as unknown as EventRow[];
     return rows.map(rowToEvent);
   }
 
+  /**
+   * Diagnostic (M1): the query plan SQLite chooses for the per-session type lookup (`latestOfType`),
+   * joined into one line. A test asserts it SEEKs `events_session_type_seq` with no `TEMP B-TREE`
+   * sort - i.e. a direct `(sessionId, type)` index seek with seq order free from the index, rather
+   * than scanning the whole session's history and sorting. Off the hot path (tests/ops only).
+   */
+  explainTypeLookup(): string {
+    const rows = this.db
+      .prepare(
+        `EXPLAIN QUERY PLAN SELECT ${EVENT_COLUMNS}
+           FROM events WHERE sessionId = ? AND type = ? ORDER BY seq DESC LIMIT 1`,
+      )
+      .all("s", "t") as unknown as { detail: string }[];
+    return rows.map((r) => r.detail).join("; ");
+  }
+
   /** Every event for a session with seq > afterSeq, in seq order (the replay). */
   readAfter(sessionId: string, afterSeq: number): SessionEvent[] {
     const rows = this.db
       .prepare(
-        `SELECT sessionId, seq, eventId, type, producerId, payload, createdAt
+        `SELECT ${EVENT_COLUMNS}
            FROM events WHERE sessionId = ? AND seq > ? ORDER BY seq ASC`,
       )
       .all(sessionId, afterSeq) as unknown as EventRow[];
