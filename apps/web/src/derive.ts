@@ -14,8 +14,10 @@ import {
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
   type SessionEvent,
+  type SessionSummary,
   type SourceSignInState,
   type SourceSummary,
+  type SupervisorProject,
   type TaskSnapshot,
   taskSnapshotReplaces,
   type WorktreeSummary,
@@ -155,6 +157,29 @@ export type HostStatus = {
   standbyCount: number;
   workspace: string | null;
 };
+
+/**
+ * The known workspace root for a session, derived ONCE from every place it might be recorded, so the
+ * 44.2 picker and the 44.3 session-view "start host" agree on where to launch (plan 44.3 M1.5). A dead
+ * or stale host still latches its `workspace`/`cwd` in the viewed session's log, so that is preferred;
+ * a never-loaded log falls back to the inventory summary, then to the supervisor's `projects.json`
+ * mapping (`SupervisorProject.sessionId -> .root`). Null when no source knows the root - the session
+ * view then keeps the plain no-host hint rather than offering a "start host" that has nowhere to launch.
+ */
+export function resolveKnownRoot(sources: {
+  readonly host: Pick<HostStatus, "workspace" | "cwd">;
+  readonly summary?: Pick<SessionSummary, "workspace" | "cwd"> | undefined;
+  readonly project?: Pick<SupervisorProject, "root"> | undefined;
+}): string | null {
+  return (
+    sources.host.workspace ??
+    sources.host.cwd ??
+    sources.summary?.workspace ??
+    sources.summary?.cwd ??
+    sources.project?.root ??
+    null
+  );
+}
 
 export type HostAnnouncement = Extract<DecodedEvent, { readonly type: "host.online" }>;
 

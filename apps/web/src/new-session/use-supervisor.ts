@@ -1,27 +1,27 @@
 import {
   decodeTrevorEvent,
   PRODUCER_IDS,
-  type SessionEvent,
   type SessionTransport,
   SUPERVISOR_SESSION_ID,
   type SupervisorProject,
   events as sessionEvents,
   type TrevorEventInput,
-  viewerIdentity,
 } from "@trevor/session";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { sessionTransport, useSessionWithTransport } from "@/session/use-session";
 import { type PathValidation, validatePath } from "./path-validation";
+import { type LaunchController, type LaunchPhase, useLaunch } from "./use-launch";
 
-/** The launch trajectory the picker renders. 44.3 extends this union (e.g. `"failed"`); the model is
- *  owned here (the launch state machine) so recovery states layer on without a second state model. */
-export type LaunchPhase = "idle" | "starting";
+/** Re-exported so existing consumers (the picker) keep importing the launch union from here; the model
+ *  itself lives in `use-launch.ts`, the single owner shared with the session-view "start host". */
+export type { LaunchPhase } from "./use-launch";
 
 /**
  * The New-session picker's live wiring over the 44.1 supervisor contract (plan 44.2 M3/M4). This hook
- * is the single seam that owns the browser<->supervisor request/response handling on the reserved
- * control session and the launch state machine, so `app.tsx` stays thin and 44.3 extends ONE state
- * model (idle -> starting -> online) rather than forking a second one.
+ * owns the picker-only concerns - recents (`projects.list`), the native folder pick, path validation,
+ * and the `active` (open) gate + reset - and delegates the launch itself to {@link useLaunch}, the ONE
+ * launch state machine also driven by the 44.3 session-view "start host". So `app.tsx` stays thin and
+ * the two launch surfaces cannot drift into two models.
  *
  * It reads the SUPERVISOR_SESSION_ID control session and publishes typed requests stamped with
  * `PRODUCER_IDS.web` (the same publish model as `requestFileIndex`), correlating each result to its
@@ -29,17 +29,10 @@ export type LaunchPhase = "idle" | "starting";
  *   - opening the picker publishes `projects.list.requested` and renders the returned recents;
  *   - the folder icon publishes `folder.pick.requested` and fills the path from `folder.pick.result`
  *     (a no-op on cancel), gated on a local supervisor being present;
- *   - `Create` (or picking a recent) publishes `session.launch.requested { root }`, enters
- *     "starting host…", and - for a freshly `launched` host - awaits that session's `host.online`
- *     before navigating; a `reused` host navigates immediately; a `failed` launch surfaces a plain
- *     inline error (44.3 formalizes recovery).
+ *   - `Create` (or picking a recent) delegates to `useLaunch.launch`, which publishes
+ *     `session.launch.requested { root }`, enters "starting host…", and navigates on the outcome; a
+ *     `failed` launch surfaces the error with an explicit `Retry` (`useLaunch.retry`).
  */
-
-/** How long to wait for a freshly launched host's `host.online` before giving up the auto-navigate. */
-const HOST_ONLINE_TIMEOUT_MS = 30_000;
-
-const isHostOnline = (event: SessionEvent): boolean =>
-  decodeTrevorEvent(event)?.type === "host.online";
 
 export interface UseSupervisorOptions {
   /** Whether the picker is open. Gates the control-session subscription and drives the projects fetch
@@ -66,41 +59,39 @@ export interface SupervisorController {
   readonly onPickFolder: () => void;
   readonly onPickRecent: (root: string) => void;
   readonly onCreate: (root: string) => void;
+  /** Re-launch the last attempted root after a `failed` launch (delegates to {@link useLaunch}). */
+  readonly onRetry: () => void;
 }
 
 export function useSupervisor(options: UseSupervisorOptions): SupervisorController {
   const { active, localPickerAvailable, onNavigate } = options;
   const transport = options.transport ?? sessionTransport;
-  const hostOnlineTimeoutMs = options.hostOnlineTimeoutMs ?? HOST_ONLINE_TIMEOUT_MS;
 
   // The control session is subscribed only while the picker is open (like the inventory fetch), so a
   // closed picker holds no stream. Publishing goes to the SAME reserved session id.
   const control = useSessionWithTransport(transport, active ? SUPERVISOR_SESSION_ID : null);
   const controlEvents = control.events;
 
+  // The shared launch machine: the picker owns the control subscription (gated on `active`) and hands
+  // its events to useLaunch, so the picker's launch runs on the exact same model the session view does.
+  const launcher: LaunchController = useLaunch({
+    controlEvents,
+    onNavigate,
+    transport,
+    ...(options.hostOnlineTimeoutMs !== undefined
+      ? { hostOnlineTimeoutMs: options.hostOnlineTimeoutMs }
+      : {}),
+  });
+
   const [recents, setRecents] = useState<readonly SupervisorProject[]>([]);
   const [path, setPath] = useState("");
-  const [launchState, setLaunchState] = useState<LaunchPhase>("idle");
-  const [error, setError] = useState<string | null>(null);
 
   // Pending request ids live in refs (correlation, not render state); a cursor tracks which control
-  // events have been folded so each result is handled once. A launch token invalidates a pending
-  // host.online wait when the picker resets, so a cancelled launch never navigates late.
+  // events THIS hook has folded (projects + folder) so each is handled once. The launch result is folded
+  // by useLaunch on its own cursor over the same event array.
   const projectsReqRef = useRef<string | null>(null);
   const folderReqRef = useRef<string | null>(null);
-  const launchReqRef = useRef<string | null>(null);
-  const launchTokenRef = useRef(0);
   const cursorRef = useRef(0);
-  // The latest navigate callback, read from the async host.online continuation without making it an
-  // effect dependency (the app may pass a fresh closure each render).
-  const navigateRef = useRef(onNavigate);
-  navigateRef.current = onNavigate;
-
-  // A stable viewer identity for the host.online watch (the same shape the launcher uses).
-  const watchIdentity = useMemo(() => {
-    const id = `web-supervisor-${crypto.randomUUID()}`;
-    return viewerIdentity({ displayName: "trevor-web", instanceId: id, participantId: id });
-  }, []);
 
   const publish = useCallback(
     (built: TrevorEventInput): Promise<void> =>
@@ -108,17 +99,15 @@ export function useSupervisor(options: UseSupervisorOptions): SupervisorControll
     [transport],
   );
 
+  const resetLaunch = launcher.reset;
   const resetState = useCallback(() => {
     setRecents([]);
     setPath("");
-    setLaunchState("idle");
-    setError(null);
     projectsReqRef.current = null;
     folderReqRef.current = null;
-    launchReqRef.current = null;
-    launchTokenRef.current += 1; // invalidate any pending host.online navigation
     cursorRef.current = 0;
-  }, []);
+    resetLaunch();
+  }, [resetLaunch]);
 
   // On open, ask the supervisor for the recent project roots; on close, reset every request + state.
   useEffect(() => {
@@ -131,20 +120,8 @@ export function useSupervisor(options: UseSupervisorOptions): SupervisorControll
     void publish(sessionEvents.projectsListRequested({ requestId }));
   }, [active, publish, resetState]);
 
-  const launch = useCallback(
-    (root: string) => {
-      const requestId = crypto.randomUUID();
-      launchReqRef.current = requestId;
-      setError(null);
-      setLaunchState("starting");
-      void publish(sessionEvents.sessionLaunchRequested({ requestId, root }));
-    },
-    [publish],
-  );
-
-  // Fold each new control-session event once, dispatching the result to its pending request. A freshly
-  // launched host is awaited on its OWN session (host.online) before navigating; a reused host
-  // navigates at once; a failed launch drops back to idle with a plain inline error.
+  // Fold each new control-session event once for the PICKER's concerns (recents + folder pick). The
+  // launch result is handled by useLaunch's own fold, so this loop no longer touches it.
   useEffect(() => {
     for (let i = cursorRef.current; i < controlEvents.length; i += 1) {
       const event = controlEvents[i];
@@ -162,43 +139,10 @@ export function useSupervisor(options: UseSupervisorOptions): SupervisorControll
         if (!decoded.cancelled && decoded.path) {
           setPath(decoded.path);
         }
-      } else if (
-        decoded.type === "session.launch.result" &&
-        decoded.requestId === launchReqRef.current
-      ) {
-        launchReqRef.current = null;
-        if (decoded.status === "failed") {
-          setError(decoded.error ?? "The session could not be started.");
-          setLaunchState("idle");
-        } else if (decoded.status === "reused") {
-          navigateRef.current(decoded.sessionId);
-        } else {
-          launchTokenRef.current += 1;
-          const token = launchTokenRef.current;
-          const targetSessionId = decoded.sessionId;
-          void transport
-            .awaitEvent(targetSessionId, watchIdentity, isHostOnline, {
-              timeoutMs: hostOnlineTimeoutMs,
-            })
-            .then((online) => {
-              if (launchTokenRef.current !== token) {
-                return; // the picker was reset (closed) - this launch is superseded
-              }
-              if (online) {
-                navigateRef.current(targetSessionId);
-              } else {
-                // host.online never arrived within the window (a host that failed to come online, a
-                // dropped stream). Give up the auto-navigate instead of landing on a host-less session;
-                // 44.3 formalizes the failed/retry recovery on this same idle+error drop.
-                setLaunchState("idle");
-                setError("The host did not come online in time. Try again.");
-              }
-            });
-        }
       }
     }
     cursorRef.current = controlEvents.length;
-  }, [controlEvents, transport, watchIdentity, hostOnlineTimeoutMs]);
+  }, [controlEvents]);
 
   const onPickFolder = useCallback(() => {
     if (!localPickerAvailable) {
@@ -213,11 +157,12 @@ export function useSupervisor(options: UseSupervisorOptions): SupervisorControll
     recents,
     path,
     validation: validatePath(path),
-    launchState,
-    error,
+    launchState: launcher.launchState,
+    error: launcher.error,
     onPathChange: setPath,
     onPickFolder,
-    onPickRecent: launch,
-    onCreate: launch,
+    onPickRecent: launcher.launch,
+    onCreate: launcher.launch,
+    onRetry: launcher.retry,
   };
 }

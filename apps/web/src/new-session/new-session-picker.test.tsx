@@ -159,3 +159,20 @@ test("a launch error surfaces inline", () => {
   renderPicker({ error: "no local supervisor available" });
   assert.ok(screen.getByText("no local supervisor available"));
 });
+
+test("a failed launch swaps Create for a Retry that re-launches, error beside it", () => {
+  const onRetry = vi.fn();
+  renderPicker({
+    path: "~/dev/new-thing",
+    validation: "valid",
+    launchState: "failed",
+    error: "no local supervisor available",
+    onRetry,
+  });
+  assert.ok(screen.getByText("no local supervisor available"), "the named error surfaces");
+  assert.equal(screen.queryByRole("button", { name: "Create" }), null, "Create is swapped out");
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  assert.equal((onRetry as ReturnType<typeof vi.fn>).mock.calls.length, 1, "Retry re-launches");
+  // Recovery locks the controls: Retry is the one way out (a fresh Create would double-launch).
+  assert.equal((screen.getByLabelText("Folder") as HTMLInputElement).disabled, true);
+});

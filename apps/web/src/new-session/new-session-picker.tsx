@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { workspaceBasename } from "@/derive";
 import { cn } from "@/lib/utils";
 import type { PathValidation } from "./path-validation";
-import type { LaunchPhase } from "./use-supervisor";
+import type { LaunchPhase } from "./use-launch";
 
 /**
  * The New-session picker (plan 44.2): the browser affordance to start a folder-bound session, driven
@@ -34,9 +34,9 @@ export interface NewSessionPickerProps {
   /** Whether the native folder icon is offered - true only when a local supervisor is present; a
    *  remote/headless backend hides it and degrades to recents + paste-a-path. */
   readonly localPickerAvailable: boolean;
-  /** Idle, or a launch in flight ("starting host…" with the controls locked). */
+  /** Idle, a launch in flight ("starting host…", controls locked), or `failed` (error + Retry). */
   readonly launchState: LaunchPhase;
-  /** A plain inline launch error (44.3 formalizes failed/retry); null/undefined when none. */
+  /** The launch error text, shown inline; on `failed` it sits beside an explicit Retry. */
   readonly error?: string | null;
   /** Launch a recent root directly (a recent is a known-valid project root, so it needs no Create). */
   readonly onPickRecent: (root: string) => void;
@@ -45,6 +45,8 @@ export interface NewSessionPickerProps {
   readonly onPathChange: (path: string) => void;
   /** Launch the typed/pasted (valid) path. */
   readonly onCreate: (root: string) => void;
+  /** Re-launch the last attempted root after a `failed` launch (returns to "starting host…"). */
+  readonly onRetry?: () => void;
   readonly nowMs?: number;
 }
 
@@ -107,10 +109,15 @@ export function NewSessionPicker({
   onPickFolder,
   onPathChange,
   onCreate,
+  onRetry,
   nowMs = Date.now(),
 }: NewSessionPickerProps) {
   const starting = launchState === "starting";
-  const canCreate = validation === "valid" && !starting;
+  const failed = launchState === "failed";
+  // Both `starting` and `failed` lock the folder controls: a launch is either in flight or awaiting an
+  // explicit Retry (a fresh Create would fire a second, competing launch).
+  const locked = starting || failed;
+  const canCreate = validation === "valid" && !locked;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -138,7 +145,7 @@ export function NewSessionPicker({
               <Input
                 id="new-session-path"
                 value={path}
-                disabled={starting}
+                disabled={locked}
                 onChange={(e) => onPathChange(e.target.value)}
                 aria-invalid={validation === "invalid"}
                 aria-describedby={validation === "invalid" ? "new-session-path-hint" : undefined}
@@ -151,7 +158,7 @@ export function NewSessionPicker({
                   type="button"
                   variant="outline"
                   size="icon"
-                  disabled={starting}
+                  disabled={locked}
                   onClick={onPickFolder}
                   aria-label="Browse for a folder"
                   title="Browse for a folder"
@@ -179,7 +186,7 @@ export function NewSessionPicker({
             <ul
               className={cn(
                 "mt-1 h-56 overflow-y-auto",
-                starting ? "pointer-events-none opacity-60" : "",
+                locked ? "pointer-events-none opacity-60" : "",
               )}
             >
               {recents.length === 0 ? (
@@ -191,7 +198,7 @@ export function NewSessionPicker({
                   <RecentRow
                     key={project.root}
                     project={project}
-                    disabled={starting}
+                    disabled={locked}
                     onPick={onPickRecent}
                     nowMs={nowMs}
                   />
@@ -200,13 +207,19 @@ export function NewSessionPicker({
             </ul>
           </div>
 
-          {/* Footer: a fixed-height row whose action slot swaps Create <-> "Starting host…" in place. */}
+          {/* Footer: a fixed-height row whose action slot swaps Create <-> "Starting host…" <-> Retry
+            in place (all three occupy the same slot + height, so no state reflows the modal). A failed
+            launch shows the named error beside an explicit Retry - the one deterministic way out. */}
           <div className="flex h-14 items-center justify-between gap-3 border-t border-border px-4">
             <span className="min-w-0 flex-1 truncate text-smui-red text-xs" role="alert">
               {error ?? ""}
             </span>
             {starting ? (
               <StartingHost />
+            ) : failed ? (
+              <Button type="button" variant="outline" onClick={() => onRetry?.()}>
+                Retry
+              </Button>
             ) : (
               <Button type="button" disabled={!canCreate} onClick={() => onCreate(path)}>
                 Create

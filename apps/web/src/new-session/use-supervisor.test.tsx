@@ -216,7 +216,7 @@ test("a launched host that never comes online gives up: idle + error, no navigat
   assert.ok(result.current.error, "a give-up surfaces an inline error");
 });
 
-test("a failed launch drops back to idle with a plain inline error and does not navigate", async () => {
+test("a failed launch surfaces a named error in the failed state and does not navigate", async () => {
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});
 
@@ -235,7 +235,8 @@ test("a failed launch drops back to idle with a plain inline error and does not 
       1,
     );
   });
-  assert.equal(result.current.launchState, "idle", "a failed launch returns to idle");
+  // 44.3: a failed launch is a first-class recovery state (error + Retry), not a silent drop to idle.
+  assert.equal(result.current.launchState, "failed", "a failed launch enters the failed state");
   assert.equal(result.current.error, "no local supervisor", "the error surfaces inline");
   assert.equal(onNavigate.mock.calls.length, 0, "a failed launch never navigates");
 });

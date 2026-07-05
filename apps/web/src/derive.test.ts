@@ -27,6 +27,7 @@ import {
   pendingHandoffFrom,
   pendingQuestionFrom,
   providerModelsFrom,
+  resolveKnownRoot,
   summarizeProviderQuestion,
   tasksFrom,
   tasksStale,
@@ -929,4 +930,35 @@ test("stays FALSE while the browser is disconnected or replaying", () => {
     }),
     false,
   );
+});
+
+// resolveKnownRoot (plan 44.3 M1.5): the one place the picker and the session-view "start host" agree on
+// where a session launches, folding the log, the inventory, and projects.json in priority order.
+
+test("resolveKnownRoot prefers the viewed host's workspace, then its cwd", () => {
+  assert.equal(resolveKnownRoot({ host: { workspace: "/ws", cwd: "/cwd" } }), "/ws");
+  assert.equal(resolveKnownRoot({ host: { workspace: null, cwd: "/cwd" } }), "/cwd");
+});
+
+test("resolveKnownRoot falls back to the inventory summary, then the projects mapping", () => {
+  const noHost = { workspace: null, cwd: null };
+  assert.equal(
+    resolveKnownRoot({ host: noHost, summary: { workspace: "/sum-ws", cwd: null } }),
+    "/sum-ws",
+    "a stale/never-loaded log falls back to the inventory summary workspace",
+  );
+  assert.equal(
+    resolveKnownRoot({ host: noHost, summary: { workspace: null, cwd: "/sum-cwd" } }),
+    "/sum-cwd",
+    "then the summary cwd",
+  );
+  assert.equal(
+    resolveKnownRoot({ host: noHost, project: { root: "/proj-root" } }),
+    "/proj-root",
+    "then the projects.json root",
+  );
+});
+
+test("resolveKnownRoot is null when no source knows the root (keeps the plain no-host hint)", () => {
+  assert.equal(resolveKnownRoot({ host: { workspace: null, cwd: null } }), null);
 });

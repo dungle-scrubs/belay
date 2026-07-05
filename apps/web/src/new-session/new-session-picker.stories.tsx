@@ -86,7 +86,18 @@ export const StartingHost: Story = {
   args: { path: "~/dev/new-thing", validation: "valid", launchState: "starting" },
 };
 
-/** A plain inline launch error (44.3 formalizes failed/retry). */
+/** An inline launch error at idle - the timeout-back-to-idle case, where Create is still offered. */
 export const LaunchError: Story = {
   args: { path: "~/dev/new-thing", validation: "valid", error: "no local supervisor available" },
+};
+
+/** A failed launch (plan 44.3): the controls lock and the footer swaps Create for an explicit Retry
+ *  beside the named error - the one deterministic way out, IN PLACE (no reflow). */
+export const FailedWithRetry: Story = {
+  args: {
+    path: "~/dev/new-thing",
+    validation: "valid",
+    launchState: "failed",
+    error: "no local supervisor available",
+  },
 };
