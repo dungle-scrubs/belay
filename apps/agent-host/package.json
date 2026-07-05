@@ -21,7 +21,7 @@
     "@trevor/session": "workspace:*",
     "@vscode/ripgrep": "1.18.0",
     "effect": "^3.21.4",
-    "web-search": "github:dungle-scrubs/web-search#3d9d0db4d28ad6801250adb3b294c19f89b819d5",
+    "web-search": "github:dungle-scrubs/web-search#e2c05fb47f5edb4c181c56b2f4e407bce9942b73",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
