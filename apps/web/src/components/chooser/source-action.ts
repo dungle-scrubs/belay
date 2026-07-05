@@ -8,17 +8,17 @@ import type { SourceAction } from "@trevor/session";
  *
  * The mapping is exhaustive over the whole `SourceAction` union (a compile-time `assertNever` guard), so
  * adding a future action forces a decision here instead of being dropped. `authenticate` and
- * `reauthenticate` share the sign-in effect; `configure` surfaces the host auth-store setup guidance
- * (the source's `SourceAuthPanel` copy) - never a key-paste form.
+ * `reauthenticate` share the sign-in effect (every oauth source - the Claude subscription, OpenAI -
+ * signs in through the provider's browser flow); `configure` surfaces the host auth-store setup
+ * guidance (the source's `SourceAuthPanel` copy) - never a key-paste form.
  */
 export type SourceActionCommand =
   /** Re-query each configured source's live `/models` (the shared catalog refresh). */
   | { readonly kind: "refresh-catalog" }
   /** Run the host-owned OAuth device-code / browser+paste sign-in for this source. */
   | { readonly kind: "sign-in" }
-  /** Surface the host auth-store setup guidance for this source (no host round-trip, no key field):
-   *  the Claude subscription shows the `claude setup-token` copy, the Anthropic Direct API and the
-   *  other api-key sources show the `~/.pi/auth.json` key copy. */
+  /** Surface the host auth-store setup guidance for this source (no host round-trip, no key field): the
+   *  Anthropic Direct API and the other api-key / gateway sources show the `~/.pi/auth.json` key copy. */
   | { readonly kind: "show-setup-guidance" }
   /** Disable/hide the source. No source offers this today; kept so the mapping stays exhaustive. */
   | { readonly kind: "disable" };

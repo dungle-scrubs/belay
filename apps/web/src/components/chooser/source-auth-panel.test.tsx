@@ -86,35 +86,76 @@ test("OAuth expired shows a Re-authenticate action and expired copy", () => {
   assert.ok(getByRole("button", { name: "Re-authenticate" }));
 });
 
-test("the Claude subscription (oauth + configure) shows setup-token guidance, not a provider sign-in", () => {
-  // 53 D-003: the merged Claude subscription authorizes via `claude setup-token` (a CLI token), so the
-  // host offers it `configure`, not `authenticate` - the panel must show the token-setup copy instead
-  // of the "sign in through the provider" flow it does not have.
+test("the Claude subscription (oauth + authenticate) shows an in-app Sign in, not setup-token guidance", () => {
+  // 53.1 D-001: the ONE Claude subscription is an oauth source with a real in-app OAuth (loginAnthropic
+  // PKCE), so the host offers it `authenticate` - the panel must show the "Sign in to Claude
+  // subscription" copy + a Sign in button, NOT the old `claude setup-token` configure guidance.
   const subscription = source({
-    sourceId: "claude-code",
+    sourceId: "anthropic",
     type: "oauth",
     status: "needs-auth",
     auth: "none",
-    actions: ["configure"],
-    label: "Claude Code subscription",
+    actions: ["authenticate"],
+    label: "Claude subscription",
   });
   const copy = authCopy(subscription);
-  assert.match(copy.title, /set up/i);
-  assert.match(copy.body, /claude setup-token/i);
-  assert.doesNotMatch(copy.body, /sign in through the provider/i);
+  assert.match(copy.title, /sign in to claude subscription/i);
+  assert.doesNotMatch(copy.body, /setup-token/i);
+  const actions: SourceAction[] = [];
   const { getByRole, container } = render(
-    <SourceAuthPanel source={subscription} onAction={noop} />,
+    <SourceAuthPanel source={subscription} onAction={(a) => actions.push(a)} />,
   );
-  assert.ok(
-    getByRole("button", { name: "Configure" }),
-    "a Configure action, not a device-code sign-in",
-  );
+  const btn = getByRole("button", { name: "Sign in" });
+  fireEvent.click(btn);
+  assert.deepEqual(actions, ["authenticate"], "a real sign-in action, not configure");
   assertNoKeyInput(container);
 });
 
-test("a direct API-key source with no key points to the host auth store and renders NO key field", () => {
+test("a device-code sign-in for the Claude subscription renders the loginAnthropic link + paste field", () => {
+  // 53.1 R-2: when loginAnthropic's localhost callback port is busy, the host emits a `device-code`
+  // SourceSignInState with the verification URL + acceptsCode, and the panel renders the
+  // DeviceCodeFlow (the long-URL fixture keeps the 53 D-004 wrap honest).
+  const longUrl = `https://claude.ai/oauth/authorize?client_id=trevor&scope=all&state=${"y".repeat(240)}`;
+  const codes: string[] = [];
+  const { getByText, getByLabelText, getByRole, container } = render(
+    <SourceAuthPanel
+      source={source({
+        sourceId: "anthropic",
+        type: "oauth",
+        status: "needs-auth",
+        auth: "none",
+        actions: ["authenticate"],
+        label: "Claude subscription",
+      })}
+      deviceCode={{ verificationUrl: longUrl, acceptsCode: true }}
+      onAction={noop}
+      onSubmitCode={(c) => codes.push(c)}
+    />,
+  );
+  const urlText = getByText(longUrl);
+  assert.equal(
+    urlText.closest("a")?.getAttribute("href"),
+    longUrl,
+    "the verification URL is a link",
+  );
+  assert.ok(
+    urlText.className.includes("break-all"),
+    "the long URL breaks between characters (D-004)",
+  );
+  const codeInput = getByLabelText("Provider code");
+  fireEvent.change(codeInput, { target: { value: "pasted-oauth-code" } });
+  fireEvent.click(getByRole("button", { name: "Continue" }));
+  assert.deepEqual(codes, ["pasted-oauth-code"], "the pasted redirect code is submitted");
+  assertNoKeyInput(container);
+});
+
+test("the Anthropic Direct API (api-key, `anthropic-api`) points to ~/.pi/auth.json with a Configure, not Sign in", () => {
+  // 53.1 D-001: the Direct API is a static-key peer on the DISTINCT `anthropic-api` id (the OAuth
+  // subscription owns `anthropic`). Its copy points at the host auth store and it offers `configure` -
+  // never a provider sign-in, and never an in-browser key field.
   const missing = source({
-    sourceId: "anthropic",
+    sourceId: "anthropic-api",
+    label: "Anthropic Direct API",
     type: "api-key",
     status: "ready",
     auth: "none",
@@ -123,10 +164,11 @@ test("a direct API-key source with no key points to the host auth store and rend
   const copy = authCopy(missing);
   assert.match(copy.title, /no api key/i);
   assert.match(copy.body, /~\/\.pi\/auth\.json/);
-  const { getByRole, container, getByText } = render(
+  const { getByRole, queryByRole, container, getByText } = render(
     <SourceAuthPanel source={missing} onAction={noop} />,
   );
   assert.ok(getByRole("button", { name: "Configure" }), "a Configure action (not a paste form)");
+  assert.equal(queryByRole("button", { name: "Sign in" }), null, "never a provider sign-in button");
   assert.ok(getByText(/keys stay in the host auth store/i), "the no-secret boundary is explicit");
   assertNoKeyInput(container);
 });

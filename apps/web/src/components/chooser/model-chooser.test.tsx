@@ -51,7 +51,7 @@ const SOURCES: SourceSummary[] = [
     auth: "expired",
     status: "needs-auth",
   }),
-  source({ sourceId: "anthropic", label: "Anthropic API", type: "api-key", modelCount: 4 }),
+  source({ sourceId: "anthropic-api", label: "Anthropic API", type: "api-key", modelCount: 4 }),
   source({
     sourceId: "openrouter",
     label: "OpenRouter",
@@ -249,7 +249,7 @@ test("the Configure button on a source needing setup forwards onSourceAction(id,
   // Configure action. The chooser forwards it; the App wires it to a defined effect (no dead button).
   const actions: [string, string][] = [];
   const anthropicDirect = source({
-    sourceId: "anthropic",
+    sourceId: "anthropic-api",
     label: "Anthropic Direct API",
     type: "api-key",
     status: "needs-auth",
@@ -267,7 +267,7 @@ test("the Configure button on a source needing setup forwards onSourceAction(id,
   );
   fireEvent.click(getByLabelText("Open Anthropic Direct API"));
   fireEvent.click(getByRole("button", { name: "Configure" }));
-  assert.deepEqual(actions, [["anthropic", "configure"]]);
+  assert.deepEqual(actions, [["anthropic-api", "configure"]]);
 });
 
 test("the Configured only toggle hides needs-setup sources", () => {
@@ -315,7 +315,7 @@ test("a host device-code sign-in shows only on its own source's detail (D-065 M5
       catalogBySource={CATALOG}
       onSelectModel={noop}
       deviceCode={deviceCode}
-      deviceCodeSourceId="anthropic"
+      deviceCodeSourceId="anthropic-api"
     />,
   );
   assert.equal(queryByText("WXYZ-9999"), null, "the device code is gated to its own source");

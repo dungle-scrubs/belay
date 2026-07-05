@@ -1210,10 +1210,10 @@ export function App() {
               void signInSource(id);
               return;
             case "show-setup-guidance":
-              // configure has no host round-trip: the key/token lives in the host store and the
-              // source's SourceAuthPanel already renders the setup guidance (the Claude subscription
-              // shows `claude setup-token`, the Direct API shows the ~/.pi/auth.json key copy). Keep
-              // that guidance surface open - never a paste form.
+              // configure has no host round-trip: the key lives in the host store and the source's
+              // SourceAuthPanel already renders the setup guidance (the Anthropic Direct API and the
+              // other api-key sources show the ~/.pi/auth.json key copy). Keep that guidance surface
+              // open - never a paste form. (The Claude subscription is oauth now, so it signs in.)
               setChooserOpen(true);
               return;
             case "disable":

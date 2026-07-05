@@ -90,16 +90,10 @@ export function authCopy(source: SourceSummary): { title: string; body: string }
     };
   }
   if (source.type === "oauth") {
-    // A subscription with NO in-app OAuth flow authorizes via a long-lived CLI setup token in the host
-    // env (e.g. `claude setup-token` for the Claude subscription), so the host offers it `configure`,
-    // not the device-code `authenticate`. Show the token-setup guidance rather than a "sign in through
-    // the provider" flow it does not have (53 D-003). Real OAuth sources (Codex) keep the sign-in copy.
-    if (source.actions.includes("configure")) {
-      return {
-        title: `Set up ${source.label}`,
-        body: "Authorize this subscription with its CLI setup token (for Claude Code, run `claude setup-token`) and set it in the host environment. Trevor reads it from the host; no password or key is entered in this chooser.",
-      };
-    }
+    // Every oauth source (the Claude subscription, OpenAI/Codex) has an in-app sign-in: its action
+    // projects to `authenticate`, so the panel shows the "Sign in to {label}" copy and a real Sign in
+    // button that runs the host-owned browser OAuth flow (53.1 D-001). No oauth source carries the old
+    // setup-token `configure` special-case anymore. `configure` now means api-key/gateway/local only.
     return source.auth === "expired"
       ? {
           title: "Your sign-in expired",
