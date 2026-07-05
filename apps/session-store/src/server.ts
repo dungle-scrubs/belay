@@ -18,6 +18,7 @@ import {
 } from "@trevor/session";
 import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { WebSocketServer } from "ws";
+import { InventoryProjection } from "./inventory";
 import { SessionLog } from "./log";
 import { SessionHub } from "./session-hub";
 
@@ -48,11 +49,33 @@ const HOST_RUNTIME = RUNTIME_KIND.host;
 // The browser (trevor-web :17420) reads/writes cross-origin; the store serves GET/POST.
 const CORS_METHODS = "GET, POST, OPTIONS";
 
+/**
+ * The session-store's assembled parts: the HTTP+WS `server` plus the `log` (durable substrate) and the
+ * `projection` (in-memory read model) it serves `GET /sessions` from. Exposed by {@link buildSessionStore}
+ * so tests/diagnostics can inspect the durable query counter and the read model directly; the port-binding
+ * entrypoint and most callers use {@link createSessionStore}, which returns only the server.
+ */
+export interface SessionStore {
+  readonly server: Server;
+  readonly log: SessionLog;
+  readonly projection: InventoryProjection;
+}
+
 /** Creates the session-store server backed by the SQLite log at `dbPath` (not listening). */
 export function createSessionStore(dbPath: string): Server {
+  return buildSessionStore(dbPath).server;
+}
+
+/** Builds the session-store and returns its parts (server + log + read model), for wiring and for tests
+ *  that assert on the durable query counter / projection state. `createSessionStore` is the server-only view. */
+export function buildSessionStore(dbPath: string): SessionStore {
   // Telemetry is off (NOOP) unless TREVOR_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
   const log = new SessionLog(dbPath, createTelemetrySink("session-store"));
   const hub = new SessionHub();
+
+  // The in-memory inventory read model (plan 45.1, D-002): warmed once here by a single durable scan,
+  // then kept current on every write below, so GET /sessions is O(sessions) in memory with zero SQLite.
+  const projection = new InventoryProjection(log);
 
   // Projects one inventory row into a SessionSummary, folding in live host presence from the socket map
   // (the durable log can't know a host crashed). Shared by GET /sessions (every row) and the delete gate
@@ -68,9 +91,10 @@ export function createSessionStore(dbPath: string): Server {
       match: SESSIONS_PATH,
       // The session inventory read model (D-090): each session's distilled summary, with live host
       // presence folded in from the in-memory socket map (the durable log can't know a host crashed).
-      // Assembly is the pure summarizeSession; the store just supplies the rows + presence.
+      // Served from the in-memory projection (plan 45.1) - zero SQLite per poll; assembly is the pure
+      // summarizeSession, the store just supplies the rows + presence.
       handler: ({ res }) => {
-        json(res, 200, { sessions: log.inventory().map(summarize) });
+        json(res, 200, { sessions: projection.rows().map(summarize) });
       },
     },
     {
@@ -84,7 +108,11 @@ export function createSessionStore(dbPath: string): Server {
               json(res, 400, { error: "sessionId required" });
               return;
             }
-            log.ensureSession(sessionId, new Date().toISOString());
+            // One creation time feeds both the durable row and the projection so they can't disagree on
+            // createdAt (both are INSERT-OR-IGNORE idempotent, so a re-ensure keeps the original time).
+            const createdAt = new Date().toISOString();
+            log.ensureSession(sessionId, createdAt);
+            projection.ensure(sessionId, createdAt);
             json(res, 200, { session: { sessionId } });
           })
           .catch(() => json(res, 400, { error: "invalid JSON body" })),
@@ -111,6 +139,9 @@ export function createSessionStore(dbPath: string): Server {
               randomUUID(),
               new Date().toISOString(),
             );
+            // Fold the append into the in-memory read model (plan 45.1) so the next GET /sessions
+            // reflects it without a scan; the stored event carries the seq/createdAt the projection needs.
+            projection.recordAppend(stored);
             // The event "returns over the stream": fan out to every subscriber, including the
             // publisher's own socket (matching the Tether round-trip). The log owns the wire
             // framing (D-023); the server just fans out the frame.
@@ -142,6 +173,7 @@ export function createSessionStore(dbPath: string): Server {
           return;
         }
         log.deleteSession(sessionId);
+        projection.remove(sessionId); // drop the purged session from the read model too
         json(res, 200, { ok: true, sessionId } satisfies PermanentDeleteResult);
       },
     },
@@ -186,5 +218,5 @@ export function createSessionStore(dbPath: string): Server {
     });
   });
 
-  return server;
+  return { server, log, projection };
 }

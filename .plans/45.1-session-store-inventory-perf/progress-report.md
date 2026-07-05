@@ -2,11 +2,11 @@
 
 ## Summary
 
-- **Current cutoff blockers:** 17
-- **Completed current work:** 5
+- **Current cutoff blockers:** 10
+- **Completed current work:** 12
 - **Accepted/deferred follow-up:** 3
 - **Superseded/obsolete checklist debt:** 0
-- **Current focus:** M2 - Incremental in-memory inventory read model
+- **Current focus:** M3 - Guardrail: no unbounded synchronous query on a request path
 
 ## Completed Current State / Hard Dependencies
 
@@ -36,19 +36,19 @@
 - [x] REFACTOR: co-locate index DDL with table DDL + schema comment on why `(sessionId, type, seq)` order.
 
 **M2 - Incremental in-memory inventory read model**
-- [ ] RED: `InventoryProjection` warmed from a seeded log returns the same rows as `log.inventory()`
+- [x] RED: `InventoryProjection` warmed from a seeded log returns the same rows as `log.inventory()`
   (parity) - fails (module absent).
-- [ ] GREEN: `InventoryProjection` with warm-from-`log.inventory()` constructor + `rows()`.
-- [ ] RED: appending an event updates only the affected session's row - `eventCount`, `updatedAt`, and
+- [x] GREEN: `InventoryProjection` with warm-from-`log.inventory()` constructor + `rows()`.
+- [x] RED: appending an event updates only the affected session's row - `eventCount`, `updatedAt`, and
   the projected slots (`hostOnline` latest, `firstUser` set-once, `lifecycle` appended,
   `archived`/`rename`/`deleted`/`forkedFrom`/`tangentOf` latest) - matching a fresh `projectRow`.
-- [ ] GREEN: `recordAppend(event)` covering every projected field; `ensure(sessionId, createdAt)`;
+- [x] GREEN: `recordAppend(event)` covering every projected field; `ensure(sessionId, createdAt)`;
   `remove(sessionId)`.
-- [ ] RED: `GET /sessions` reflects a just-appended event / just-created / just-deleted session next
+- [x] RED: `GET /sessions` reflects a just-appended event / just-created / just-deleted session next
   request, with live host presence folded in (end-to-end server test).
-- [ ] GREEN: wire the projection into `createSessionStore` - warm at construction; feed on
+- [x] GREEN: wire the projection into `createSessionStore` - warm at construction; feed on
   ensure/append/delete; serve `GET /sessions` from `projection.rows().map(summarize)`.
-- [ ] REFACTOR: `log.inventory()` becomes startup-warm/parity only; document the durable-log vs.
+- [x] REFACTOR: `log.inventory()` becomes startup-warm/parity only; document the durable-log vs.
   derived-projection boundary in module comments.
 
 **M3 - Guardrail: no unbounded synchronous query on a request path**

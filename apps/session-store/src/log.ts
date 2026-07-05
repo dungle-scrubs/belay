@@ -146,7 +146,12 @@ export class SessionLog {
    * few events the read model projects from - the latest host.online (cwd/workspace/git),
    * the first user.message (title), and the lifecycle slice (activity). `hostPresent` is
    * left false here; the server folds in its live-socket map. Bounded per session (a handful
-   * of targeted queries), never a full-log scan.
+   * of targeted, now-indexed queries), never a full-log scan.
+   *
+   * Boundary (plan 45.1): this is the STARTUP-WARM/parity path, not the hot path. `GET /sessions`
+   * is served from the derived {@link InventoryProjection} (in `inventory.ts`), which this method
+   * warms once at process start and which the parity test pins against; the durable log owns storage,
+   * the projection owns the live read model. Calling this per request is exactly the scan 45.1 removed.
    */
   inventory(): Omit<InventoryRow, "hostPresent">[] {
     const sessions = this.db

@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { type SessionIdentity, type SessionSummary, streamTransport } from "@trevor/session";
-import { createSessionStore } from "../src/server";
+import { buildSessionStore } from "../src/server";
 
 /**
  * Shared harness for the session-store smoke tests: boot a store on an ephemeral port over a throwaway
@@ -9,13 +9,17 @@ import { createSessionStore } from "../src/server";
  * boot entry warns about.
  */
 
-/** A store bound to an ephemeral port over a throwaway db (`:memory:` by default). Caller `close()`s it. */
+/** A store bound to an ephemeral port over a throwaway db (`:memory:` by default). Caller `close()`s it.
+ *  Exposes the `log` + `projection` (via `buildSessionStore`) so guardrail tests can read the durable
+ *  query counter and the in-memory read model directly. */
 export async function startStore(dbPath = ":memory:") {
-  const server = createSessionStore(dbPath);
+  const { server, log, projection } = buildSessionStore(dbPath);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   return {
     url: `http://127.0.0.1:${port}`,
+    log,
+    projection,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
