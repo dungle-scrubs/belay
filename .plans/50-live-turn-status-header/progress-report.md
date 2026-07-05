@@ -22,24 +22,25 @@ debt at authoring time.
 
 ### M1: `TurnStatusHeader` component + `↓` token cell
 
-- [ ] RED: `TurnStatusHeader` stories with a frozen `startedAt` -
+- [x] RED: `TurnStatusHeader` stories with a frozen `startedAt` -
       task-active (`Adding schemas and tests… (2m 37s · ↓ 2.6k tokens · thinking)`),
       no-task (`thinking (2m 37s · ↓ 2.6k tokens)`), tool-running
-      (`reading src/foo.ts (0m 12s · ↓ 340 tokens)`), no-tokens-yet (cell hidden)
+      (`reading src/foo.ts (12s · ↓ 340 tokens)`), no-tokens-yet (cell hidden)
       (`apps/web/src/components/chat/turn-status-header.stories.tsx`).
-- [ ] GREEN: Implement `TurnStatusHeader` (`{headline, startedAt, outputTokens?,
+- [x] GREEN: Implement `TurnStatusHeader` (`{headline, startedAt, outputTokens?,
       state?}`): `·`-joined line, `↓` glyph, elapsed via `useElapsedLabel`, token
       cell hidden when `outputTokens` is undefined.
-- [ ] RED: Unit test the redundancy rule (state cell omitted when `state` equals
+- [x] RED: Unit test the redundancy rule (state cell omitted when `state` equals
       the headline) and `↓`/`fmtTokens` formatting.
-- [ ] GREEN: Implement the redundancy + formatting rules.
-- [ ] REFACTOR: Extract `formatOutputTokenCell`; carry over `ActionShimmer`
-      `aria-hidden`/`motion-reduce` a11y; module comment.
+- [x] GREEN: Implement the redundancy + formatting rules.
+- [x] REFACTOR: Extract `formatOutputTokenCell`; carry over `ActionShimmer`
+      `aria-hidden`/`motion-reduce` a11y (lifted `useElapsedLabel` into the shared
+      `hooks/use-elapsed-label.ts`, reused `ShimmerText`); module comment.
 
 **Gate 1→2**
 
-- [ ] Storybook renders all four variants; token cell hidden when absent.
-- [ ] Redundancy rule and `↓` formatting unit-covered.
+- [x] Storybook renders all four variants; token cell hidden when absent.
+- [x] Redundancy rule and `↓` formatting unit-covered.
 
 ---
 

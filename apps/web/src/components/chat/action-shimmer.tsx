@@ -9,9 +9,7 @@
  * handed. It never interprets events, never animates settled rows, and never invents a label.
  */
 
-import { useInterval } from "ahooks";
-import { useState } from "react";
-import { formatElapsed } from "@/derive";
+import { useElapsedLabel } from "@/hooks/use-elapsed-label";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,14 +31,6 @@ export function ShimmerText({ children }: { children: string }) {
       </span>
     </span>
   );
-}
-
-/** Live elapsed since `startedAt` (ms epoch), re-rendered each second; null when no start time. */
-function useElapsedLabel(startedAt?: number): string | null {
-  const [, tick] = useState(0);
-  // An undefined delay pauses the interval, so the ticker only runs while a start time is set.
-  useInterval(() => tick((n) => n + 1), startedAt === undefined ? undefined : 1000);
-  return startedAt === undefined ? null : formatElapsed(Date.now() - startedAt, { hours: true });
 }
 
 /**
