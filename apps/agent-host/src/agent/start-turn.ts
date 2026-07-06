@@ -180,6 +180,9 @@ export function makeStartTurn(deps: StartTurnDeps) {
       : buildDelegateCapability(delegationCtx, {
           provider,
           parentRunId: runId,
+          // Inline children inherit THIS turn's reasoning level so it runs at (and the row displays,
+          // 09.4 M2) the same thinking level the parent chose; undefined = provider default, no cell.
+          reasoningLevel: turnModel.reasoning,
           agents: discoverAgents(),
           mintRunId: () => crypto.randomUUID(),
           background,

@@ -583,6 +583,9 @@ export type DecodedEvent =
       readonly mode: string;
       readonly status: string;
       readonly result?: string;
+      readonly model?: string;
+      readonly reasoningLevel?: string;
+      readonly tokens?: number;
     }
   | {
       readonly type: "assistant.progress";
@@ -996,6 +999,9 @@ export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
         mode: str(p.mode, "inline"),
         status: str(p.status, "running"),
         result: optStr(p.result),
+        model: optStr(p.model),
+        reasoningLevel: optStr(p.reasoningLevel),
+        tokens: typeof p.tokens === "number" ? p.tokens : undefined,
       };
     case "assistant.progress":
       return {

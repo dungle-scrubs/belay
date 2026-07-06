@@ -26,6 +26,8 @@ import { publishTurn } from "./turn";
  *     done/failed with the result - the frozen distilled message),
  *   - run the child's turn with the agent's resolved tool allow-list, publishing its lifecycle to
  *     the CHILD session, and capture its final message as the result.
+ * Inline children also mirror live model/reasoning/token metadata onto the PARENT link so the row
+ * renders without subscribing to the child session.
  * The tool SURFACE that triggers this (delegate_inline / delegate_background) and the depth/cap
  * policy are layered on top (M3); this module is agnostic to who calls it.
  *
@@ -52,6 +54,8 @@ export interface DelegationRequest {
   readonly agent: AgentDefinition;
   readonly task: string;
   readonly provider: Provider;
+  /** The explicit reasoning level the child turn will run with. Absent means provider default. */
+  readonly reasoningLevel?: string;
   /** The parent turn's run id (the delegated.to link correlates to it). */
   readonly parentRunId: string;
   /** The child turn's run id (its lifecycle in the child session). */
@@ -88,6 +92,54 @@ export function publishTo(
   });
 }
 
+function inlineDelegationMetadata(
+  req: DelegationRequest,
+  tokens?: number,
+): { readonly model?: string; readonly reasoningLevel?: string; readonly tokens?: number } {
+  return req.mode === "inline"
+    ? {
+        model: req.provider.model,
+        ...(req.reasoningLevel !== undefined ? { reasoningLevel: req.reasoningLevel } : {}),
+        ...(tokens !== undefined ? { tokens } : {}),
+      }
+    : {};
+}
+
+function outputTokensOf(event: TrevorEventInput): number | undefined {
+  const usage = (event.payload as { readonly usage?: { readonly output?: unknown } }).usage;
+  return typeof usage?.output === "number" ? usage.output : undefined;
+}
+
+function mirrorInlineOutputTokens(
+  ctx: DelegationContext,
+  req: DelegationRequest,
+  childSessionId: string,
+  outputTokens: number | undefined,
+  lastMirroredTokens: number | undefined,
+): number | undefined {
+  if (
+    req.mode !== "inline" ||
+    outputTokens === undefined ||
+    outputTokens <= (lastMirroredTokens ?? -1)
+  ) {
+    return lastMirroredTokens;
+  }
+  void publishTo(
+    ctx,
+    ctx.parentSessionId,
+    events.delegatedTo({
+      runId: req.parentRunId,
+      childSessionId,
+      agent: req.agent.id,
+      task: req.task,
+      mode: req.mode,
+      status: "running",
+      ...inlineDelegationMetadata(req, outputTokens),
+    }),
+  ).catch(() => {});
+  return outputTokens;
+}
+
 /**
  * The shared child-session SEED (plan 21 M2): mint-agnostic. Ensures the child session, seeds it with
  * ONLY the parent task as its first user message (the entire slice it sees - no parent transcript), and
@@ -115,6 +167,7 @@ export async function seedChildSession(
       task: req.task,
       mode: req.mode,
       status: "running",
+      ...inlineDelegationMetadata(req),
     }),
   );
 }
@@ -127,6 +180,7 @@ export async function foldBackLink(
   childSessionId: string,
   result: string,
   failed: boolean,
+  tokens?: number,
 ): Promise<void> {
   await publishTo(
     ctx,
@@ -139,6 +193,7 @@ export async function foldBackLink(
       mode: req.mode,
       status: failed ? "failed" : "done",
       result,
+      ...inlineDelegationMetadata(req, tokens),
     }),
   ).catch(() => {});
 }
@@ -219,6 +274,8 @@ export async function runDelegatedChild(
   // completion (e.g. ensureSession) still produces a terminal failed link instead of a stuck child.
   let result = "";
   let failed = false;
+  let finalOutputTokens: number | undefined;
+  let lastMirroredTokens: number | undefined;
   try {
     // Ensure + seed the child (parent task only) + link running - the shared isolation/seed (M2).
     await seedChildSession(ctx, req, childSessionId);
@@ -226,10 +283,21 @@ export async function runDelegatedChild(
     const childEmit = Layer.succeed(Emit, {
       publish: (event: TrevorEventInput) =>
         Effect.promise(async () => {
+          if (event.type === "assistant.progress") {
+            finalOutputTokens = outputTokensOf(event) ?? finalOutputTokens;
+            lastMirroredTokens = mirrorInlineOutputTokens(
+              ctx,
+              req,
+              childSessionId,
+              finalOutputTokens,
+              lastMirroredTokens,
+            );
+          }
           if (event.type === "assistant.completed") {
             const p = event.payload as { text?: unknown; error?: unknown };
             result = typeof p.text === "string" ? p.text : "";
             failed = typeof p.error === "string" && p.error.length > 0;
+            finalOutputTokens = outputTokensOf(event) ?? finalOutputTokens;
           }
           await publishTo(ctx, childSessionId, event);
         }),
@@ -237,6 +305,7 @@ export async function runDelegatedChild(
     await Effect.runPromise(
       publishTurn(req.provider, childHistory(req.agent, req.task), {
         runId: req.childRunId,
+        ...(req.reasoningLevel !== undefined ? { reasoning: req.reasoningLevel } : {}),
         toolNames: resolveChildTools(req),
         // A subagent's local-model work queues behind foreground user turns sharing the runtime (D-004).
         priority: "background",
@@ -265,7 +334,7 @@ export async function runDelegatedChild(
   }
 
   // Fold-back link (done/failed) carrying the frozen result the parent reuses.
-  await foldBackLink(ctx, req, childSessionId, result, failed);
+  await foldBackLink(ctx, req, childSessionId, result, failed, finalOutputTokens);
 
   return { childSessionId, result, failed };
 }
@@ -512,6 +581,7 @@ export function buildDelegateCapability(
   params: {
     readonly provider: Provider;
     readonly parentRunId: string;
+    readonly reasoningLevel?: string;
     readonly agents: readonly AgentDefinition[];
     /** Mints the child turn's run id (injected so tests are deterministic). */
     readonly mintRunId: () => string;
@@ -542,6 +612,7 @@ export function buildDelegateCapability(
         agent: resolved.agent,
         task: args.task,
         provider: params.provider,
+        ...(params.reasoningLevel !== undefined ? { reasoningLevel: params.reasoningLevel } : {}),
         parentRunId: params.parentRunId,
         childRunId: params.mintRunId(),
         childSessionId: ctx.mintChildSessionId(),

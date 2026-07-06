@@ -14,6 +14,7 @@ import {
   type DelegationRequest,
   orphanedSubagentReaps,
   runDelegatedChild,
+  seedChildSession,
 } from "./delegate";
 import { type AgentEvent, type DelegateCapability, runAgent } from "./loop";
 
@@ -147,14 +148,128 @@ test("the parent session gets a running then a done delegated.to link with the r
   });
 
   const parentLog = t.publishedBy("parent-session").filter((e) => e.type === "delegated.to");
-  assert.equal(parentLog.length, 2, "a running link then a terminal link");
+  assert.ok(parentLog.length >= 2, "a running link then a terminal link");
   const running = parentLog[0]?.payload as Record<string, unknown>;
-  const done = parentLog[1]?.payload as Record<string, unknown>;
+  const done = parentLog.at(-1)?.payload as Record<string, unknown>;
   assert.equal(running.status, "running");
   assert.equal(running.childSessionId, "child-0");
   assert.equal(running.agent, "explorer");
   assert.equal(done.status, "done");
   assert.equal(done.result, "the result", "the terminal link carries the frozen distilled result");
+});
+
+test("inline seed link stamps model and actual reasoning while background seed links stay unchanged", async () => {
+  const inline = recordingTransport();
+  const provider = { ...answeringProvider("done"), model: "qwen3.6-27b-mlx" };
+  await seedChildSession(
+    context(inline.transport),
+    {
+      agent: EXPLORER,
+      task: "look",
+      provider,
+      parentRunId: "run-parent",
+      childRunId: "run-child",
+      mode: "inline",
+      reasoningLevel: "high",
+    },
+    "child-inline",
+  );
+
+  const inlineLink = inline.publishedBy("parent-session")[0]?.payload as Record<string, unknown>;
+  assert.equal(inlineLink.status, "running");
+  assert.equal(inlineLink.model, "qwen3.6-27b-mlx");
+  assert.equal(inlineLink.reasoningLevel, "high");
+
+  const background = recordingTransport();
+  await seedChildSession(
+    context(background.transport),
+    {
+      agent: EXPLORER,
+      task: "look",
+      provider,
+      parentRunId: "run-parent",
+      childRunId: "run-child",
+      mode: "background",
+      reasoningLevel: "high",
+    },
+    "child-background",
+  );
+
+  const backgroundLink = background.publishedBy("parent-session")[0]?.payload as Record<
+    string,
+    unknown
+  >;
+  assert.equal(backgroundLink.status, "running");
+  assert.ok(!("model" in backgroundLink), "background link keeps its old payload shape");
+  assert.ok(
+    !("reasoningLevel" in backgroundLink),
+    "background link does not expose live inline metadata",
+  );
+});
+
+test("inline child output tokens mirror to parent links while background links stay unchanged", async () => {
+  const inline = recordingTransport();
+  const baseProvider = answeringProvider("done");
+  let childReasoning: string | undefined;
+  const provider: Provider = {
+    ...baseProvider,
+    model: "qwen3.6-27b-mlx",
+    stream: (messages, tools, reasoning) => {
+      childReasoning = reasoning;
+      return baseProvider.stream(messages, tools, reasoning);
+    },
+  };
+  await runDelegatedChild(context(inline.transport), {
+    agent: EXPLORER,
+    task: "look",
+    provider,
+    parentRunId: "run-parent",
+    childRunId: "run-child",
+    mode: "inline",
+    reasoningLevel: "high",
+  });
+  assert.equal(childReasoning, "high", "the stamped reasoning is what the child turn ran with");
+
+  const inlineLinks = inline
+    .publishedBy("parent-session")
+    .filter((e) => e.type === "delegated.to")
+    .map((e) => e.payload as Record<string, unknown>);
+  assert.equal(inlineLinks.length, 3, "seed link, running token mirror, terminal fold-back");
+  assert.equal(inlineLinks[0]?.status, "running");
+  assert.ok(!("tokens" in (inlineLinks[0] ?? {})), "the seed link has no token count yet");
+  assert.equal(inlineLinks[1]?.status, "running");
+  assert.equal(inlineLinks[1]?.tokens, 5);
+  assert.equal(inlineLinks[1]?.model, "qwen3.6-27b-mlx");
+  assert.equal(inlineLinks[1]?.reasoningLevel, "high");
+  assert.equal(inlineLinks[2]?.status, "done");
+  assert.equal(inlineLinks[2]?.tokens, 5);
+
+  const background = recordingTransport();
+  await runDelegatedChild(context(background.transport), {
+    agent: EXPLORER,
+    task: "look",
+    provider,
+    parentRunId: "run-parent",
+    childRunId: "run-child",
+    childSessionId: "child-background",
+    mode: "background",
+    reasoningLevel: "high",
+  });
+
+  const backgroundLinks = background
+    .publishedBy("parent-session")
+    .filter((e) => e.type === "delegated.to")
+    .map((e) => e.payload as Record<string, unknown>);
+  assert.equal(backgroundLinks.length, 2, "background keeps only running + terminal links");
+  assert.deepEqual(
+    backgroundLinks.map((link) => link.status),
+    ["running", "done"],
+  );
+  for (const link of backgroundLinks) {
+    assert.ok(!("model" in link), "background link carries no inline model metadata");
+    assert.ok(!("reasoningLevel" in link), "background link carries no inline reasoning metadata");
+    assert.ok(!("tokens" in link), "background link carries no token mirror");
+  }
 });
 
 test("a child turn that errors folds back as a failed link, never throwing into the parent", async () => {

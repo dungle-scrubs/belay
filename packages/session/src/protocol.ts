@@ -603,11 +603,14 @@ export const events = {
     agent: string;
     task: string;
     mode: "inline" | "background";
+    model?: string;
     // `interrupted` (plan 52 / D-002): a child closed by orphan recovery - a leader died or reaped it
     // mid-delegation - kept distinct from `failed` (a genuine task error) so the UI renders a muted
     // "interrupted" note, not an error. Terminal like done/failed (see isTerminalDelegationStatus).
     status: "running" | "done" | "failed" | "interrupted";
     result?: string;
+    reasoningLevel?: string;
+    tokens?: number;
   }): TrevorEventInput => ({
     type: "delegated.to",
     payload: {
@@ -618,6 +621,9 @@ export const events = {
       mode: p.mode,
       status: p.status,
       ...(p.result !== undefined ? { result: p.result } : {}),
+      ...(p.model !== undefined ? { model: p.model } : {}),
+      ...(p.reasoningLevel !== undefined ? { reasoningLevel: p.reasoningLevel } : {}),
+      ...(p.tokens !== undefined ? { tokens: p.tokens } : {}),
     },
   }),
   /**

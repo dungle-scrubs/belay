@@ -1572,6 +1572,51 @@ test("events.delegatedTo round-trips a status:interrupted link (plan 52 / D-002)
   );
 });
 
+test("events.delegatedTo round-trips optional inline metadata while old links omit it", () => {
+  const withMetadata = decodeTrevorEvent(
+    stored(
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "s::sub::abc",
+        agent: "explorer",
+        task: "scan the repo",
+        mode: "inline",
+        status: "running",
+        model: "qwen3.6-27b-mlx",
+        reasoningLevel: "high",
+        tokens: 123,
+      }),
+    ),
+  );
+  assert.equal(withMetadata?.type, "delegated.to");
+  assert.equal(
+    withMetadata?.type === "delegated.to" ? withMetadata.model : null,
+    "qwen3.6-27b-mlx",
+  );
+  assert.equal(withMetadata?.type === "delegated.to" ? withMetadata.reasoningLevel : null, "high");
+  assert.equal(withMetadata?.type === "delegated.to" ? withMetadata.tokens : null, 123);
+
+  const withoutMetadata = decodeTrevorEvent(
+    stored(
+      events.delegatedTo({
+        runId: "r2",
+        childSessionId: "s::sub::def",
+        agent: "explorer",
+        task: "scan the repo",
+        mode: "background",
+        status: "running",
+      }),
+    ),
+  );
+  assert.equal(withoutMetadata?.type, "delegated.to");
+  assert.equal(withoutMetadata?.type === "delegated.to" ? withoutMetadata.model : null, undefined);
+  assert.equal(
+    withoutMetadata?.type === "delegated.to" ? withoutMetadata.reasoningLevel : null,
+    undefined,
+  );
+  assert.equal(withoutMetadata?.type === "delegated.to" ? withoutMetadata.tokens : null, undefined);
+});
+
 test("isTerminalDelegationStatus: done/failed/interrupted are terminal, running is not (D-002)", () => {
   assert.equal(isTerminalDelegationStatus("running"), false);
   assert.equal(isTerminalDelegationStatus("done"), true);
