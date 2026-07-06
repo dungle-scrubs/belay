@@ -249,19 +249,15 @@ function compactFromDescriptor(
 function compactToolSummary(name: string, args: string): string | null {
   const parsed = parseToolArgs(args);
   if (name === "multi_edit") {
-    // The file(s) label reuses the ONE salient registry (`salientToolArg` -> `multiEditPaths`),
-    // which derives the file from `edits[].path` and adds the multi-file indicator - so the compact
-    // row can't name a different file than the tool row or the detail FILE chip. The edit count is
-    // appended on top (multi_edit's own compact detail).
+    // Append the edit count onto the shared file label (the docstring above covers why the label
+    // routes through the one salient registry): the compact row reads "<file(s)> · N edits".
     const label = salientToolArg(name, parsed);
     const edits = Array.isArray(parsed.edits) ? parsed.edits.length : 0;
     const parts = [
       typeof label === "string" && label ? label : null,
       edits > 0 ? `${edits} edit${edits === 1 ? "" : "s"}` : null,
     ].filter(Boolean);
-    if (parts.length > 0) {
-      return parts.join(" · ");
-    }
+    return parts.length > 0 ? parts.join(" · ") : null;
   }
   const salient = salientToolArg(name, parsed);
   return typeof salient === "string" && salient ? truncate(salient, 80) : null;

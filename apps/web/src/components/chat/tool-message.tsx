@@ -6,7 +6,7 @@ import {
   type ToolName,
 } from "@trevor/session";
 import type { ReactElement } from "react";
-import { parseToolArgs, toolSummary } from "@/tool-args";
+import { multiEditDetailArgs, parseToolArgs, toolSummary } from "@/tool-args";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { ArchiveResult, parseArchiveResult } from "./archive";
 import { DocsResult, parseDocsResult } from "./docs";
@@ -81,18 +81,9 @@ type RenderArm = (ctx: RenderContext) => ReactElement | null;
 // multi_edit: one atomic operation, grouped by file as collapsible diffs (deferring to the
 // generic row until at least one edit with a path has streamed in).
 const renderMultiEdit: RenderArm = ({ message, status, onOpenPath, className }) => {
-  const a = parseToolArgs(message.args);
-  const raw = Array.isArray(a.edits) ? a.edits : [];
-  const edits = raw
-    .map((item) => {
-      const e = (item ?? {}) as Record<string, unknown>;
-      return {
-        path: typeof e.path === "string" ? e.path : "",
-        old: typeof e.old === "string" ? e.old : "",
-        new: typeof e.new === "string" ? e.new : "",
-      };
-    })
-    .filter((e) => e.path);
+  // Reuse the shared `multiEditDetailArgs` (the one registry that parses `edits[].path`) instead of
+  // a second hand-rolled parse; drop the still-streaming edits whose path hasn't arrived yet.
+  const edits = multiEditDetailArgs(message.args).edits.filter((e) => e.path);
 
   if (edits.length === 0) {
     return null;

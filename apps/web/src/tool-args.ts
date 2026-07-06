@@ -28,14 +28,9 @@ export function multiEditPaths(edits: unknown): string[] {
   if (!Array.isArray(edits)) {
     return [];
   }
-  const seen: string[] = [];
-  for (const item of edits) {
-    const path = str((item as Record<string, unknown> | null)?.path);
-    if (path && !seen.includes(path)) {
-      seen.push(path);
-    }
-  }
-  return seen;
+  const paths = edits.map((item) => str((item as Record<string, unknown> | null)?.path));
+  // `new Set` dedups while preserving first-seen insertion order.
+  return [...new Set(paths.filter(Boolean))];
 }
 
 function num(value: unknown): number | undefined {
