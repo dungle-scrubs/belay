@@ -455,6 +455,10 @@ test("an EXPIRED oauth source projects needs-auth/expired with the reauthenticat
   assert.equal(claude?.status, "needs-auth", "a dead credential is not ready");
   assert.equal(claude?.auth, "expired", "expired, not authenticated - drives the web auth panel");
   assert.deepEqual(claude?.actions, ["reauthenticate"], "the sign-in pathway is offered");
+  // No browsable catalog for a source that cannot run anything: the chooser shows the re-auth
+  // panel with the sign-in empty-state instead of a list of dead entries.
+  assert.equal(claude?.modelCount, 0, "an expired source advertises no models");
+  assert.deepEqual(snap.catalogBySource.anthropic, [], "and carries no catalog entries");
   // The other oauth source (openai, probe passed) keeps its healthy projection.
   const openai = snap.sources.find((s) => s.sourceId === "openai");
   assert.equal(openai?.status, "ready");

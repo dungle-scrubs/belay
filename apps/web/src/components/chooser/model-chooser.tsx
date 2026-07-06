@@ -127,6 +127,8 @@ export interface ModelChooserProps {
   readonly onSourceAction?: (sourceId: string, action: SourceAction) => void;
   /** An in-progress device/provider-code flow (host-started), shown in its source's detail. */
   readonly deviceCode?: DeviceCodeFlow | null;
+  /** True while a sign-in flow is starting (the host acked /source-signin but has no URL yet). */
+  readonly signInStarting?: boolean;
   /** The source the device-code flow belongs to, so it shows only on that source's detail. */
   readonly deviceCodeSourceId?: string;
   /** Submit a non-key provider code for the open source's device-code flow. */
@@ -174,6 +176,7 @@ export function ModelChooser({
   onSourceAction,
   deviceCode,
   deviceCodeSourceId,
+  signInStarting,
   onSubmitCode,
   initialSourceId,
   recentKeys,
@@ -234,6 +237,7 @@ export function ModelChooser({
           onSelectModel={onSelectModel}
           onSourceAction={onSourceAction}
           deviceCode={deviceCodeSourceId === openSource.sourceId ? deviceCode : null}
+          signInStarting={deviceCodeSourceId === openSource.sourceId && (signInStarting ?? false)}
           onSubmitCode={onSubmitCode}
         />
       ) : (
@@ -424,6 +428,7 @@ function SourceDetail({
   onSelectModel,
   onSourceAction,
   deviceCode,
+  signInStarting,
   onSubmitCode,
 }: {
   source: SourceSummary;
@@ -442,11 +447,12 @@ function SourceDetail({
   onSelectModel: (ref: ModelRef) => void;
   onSourceAction?: (sourceId: string, action: SourceAction) => void;
   deviceCode?: DeviceCodeFlow | null;
+  signInStarting?: boolean;
   onSubmitCode?: (code: string) => void;
 }) {
   const state = projectSourceState(source);
   const action = primaryAction(source);
-  const showAuth = needsAuthPanel(source, deviceCode);
+  const showAuth = needsAuthPanel(source, deviceCode) || (signInStarting ?? false);
   // Preference chips appear only when the chooser was given that data (recent set / a pin handler).
   const prefChips: PreferenceFilter[] = [
     ...(recentKeys ? (["recent"] as const) : []),
@@ -531,6 +537,7 @@ function SourceDetail({
         <SourceAuthPanel
           source={source}
           deviceCode={deviceCode}
+          starting={signInStarting}
           onAction={(a) => onSourceAction?.(source.sourceId, a)}
           onSubmitCode={onSubmitCode}
           className="m-3 mb-0 shrink-0"

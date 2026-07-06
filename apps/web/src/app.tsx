@@ -394,8 +394,11 @@ export function App() {
   const hostModelPrefs = useMemo(() => modelPrefsFrom(announcement), [announcement]);
   // The in-flight source sign-in (D-065 M5): show the verification URL while the flow is active. A
   // device-code flow (Codex) carries a userCode; a browser+paste flow (Anthropic) carries acceptsCode
-  // and the user pastes the returned code back.
+  // and the user pastes the returned code back. The `starting` phase (emitted the moment the host
+  // receives /source-signin) renders as immediate progress - the login can take seconds to produce
+  // its URL, and a silent gap reads as a dead button.
   const signIn = useMemo(() => sourceSignInFrom(events), [events]);
+  const signInStarting = signIn?.phase === "starting";
   const signInDeviceCode =
     signIn?.phase === "device-code" && signIn.verificationUri
       ? {
@@ -1201,6 +1204,7 @@ export function App() {
         onSetDefault={setModelDefault}
         deviceCode={signInDeviceCode}
         deviceCodeSourceId={signIn?.sourceId}
+        signInStarting={signInStarting}
         onSubmitCode={(code) => void submitSignInCode(code)}
         onSelectModel={onSelectModel}
         onSourceAction={(id, action) => {

@@ -279,3 +279,24 @@ test("an auth failure is scoped to the panel - it renders only this source's sta
   assert.ok(section, "the panel is one self-contained section");
   assertNoKeyInput(container);
 });
+
+test("the starting phase shows immediate progress (the click is never a silent no-op)", () => {
+  // The host emits `starting` the moment /source-signin lands; before this state existed, the
+  // seconds-long gap while the login minted its URL read as a dead Re-authenticate button (and
+  // invited re-clicks that each restarted the flow).
+  const expired = source({
+    sourceId: "anthropic",
+    type: "oauth",
+    status: "needs-auth",
+    auth: "expired",
+    actions: ["reauthenticate"],
+  });
+  const started = render(<SourceAuthPanel source={expired} starting onAction={noop} />);
+  started.getByText(/contacting the provider/i);
+  assertNoKeyInput(started.container);
+  started.unmount();
+
+  // Without the flag there is no progress line (the copy + button render as before).
+  const idle = render(<SourceAuthPanel source={expired} onAction={noop} />);
+  assert.equal(idle.queryByText(/contacting the provider/i), null);
+});

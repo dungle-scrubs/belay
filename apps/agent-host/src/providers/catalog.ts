@@ -346,7 +346,10 @@ export function buildCatalogSnapshot(
     };
     const raw = (modelsBySource[source.sourceId] ?? []).map(asLiveModel);
     const models = source.type === "local" ? raw.filter((m) => !NON_CHAT_LOCAL.test(m.id)) : raw;
-    const entries = configured ? models.map((m) => entryFor(source, m, freshness)) : [];
+    // An EXPIRED source carries no catalog, like an unconfigured one: its models are registry rows it
+    // cannot actually run (every selection would fail auth), so the chooser shows the re-auth panel
+    // with the sign-in empty-state instead of a browsable list of dead entries.
+    const entries = configured && !expired ? models.map((m) => entryFor(source, m, freshness)) : [];
     catalogBySource[source.sourceId] = entries;
     sources.push({
       sourceId: source.sourceId,

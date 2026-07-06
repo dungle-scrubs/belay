@@ -2,6 +2,7 @@ import type { SourceAction, SourceSummary } from "@trevor/session";
 import {
   ExternalLink,
   KeyRound,
+  Loader2,
   LogIn,
   RefreshCw,
   ShieldAlert,
@@ -46,6 +47,10 @@ export interface SourceAuthPanelProps {
   readonly source: SourceSummary;
   /** A device/provider-code flow to display, when the host has started one for this source. */
   readonly deviceCode?: DeviceCodeFlow | null;
+  /** True while the host is starting a sign-in for this source (acked, no URL yet). Renders as
+   *  immediate progress: the login can take seconds to mint its URL, and a silent gap after the
+   *  click reads as a dead button (which invites re-clicks that each restart the flow). */
+  readonly starting?: boolean;
   /** Trigger a host-owned auth/setup/refresh action (sign-in, re-auth, configure, refresh). */
   readonly onAction: (action: SourceAction) => void;
   /** Submit a non-key provider code (device/provider-code flows only). */
@@ -120,6 +125,7 @@ export function authCopy(source: SourceSummary): { title: string; body: string }
 export function SourceAuthPanel({
   source,
   deviceCode,
+  starting,
   onAction,
   onSubmitCode,
   className,
@@ -146,6 +152,13 @@ export function SourceAuthPanel({
           <p className="text-xs text-muted-foreground">{copy.body}</p>
         </div>
       </div>
+
+      {starting && !deviceCode ? (
+        <p aria-live="polite" className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          Contacting the provider - the sign-in link will appear here…
+        </p>
+      ) : null}
 
       {deviceCode ? (
         <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">

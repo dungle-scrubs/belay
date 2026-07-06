@@ -183,8 +183,16 @@ export function decodeCatalogEntry(v: unknown): CatalogEntry {
 }
 
 /** The phases of a host-driven source sign-in flow (D-065 M5). The host emits these as it runs an
- *  OAuth/device-code login; `device-code` carries the URL + short user code to authorize. */
-export const SOURCE_SIGNIN_PHASES = ["device-code", "complete", "error", "cancelled"] as const;
+ *  OAuth/device-code login: `starting` immediately on the request (the login can take seconds to
+ *  produce its URL, and a silent gap reads as a dead button); `device-code` carries the URL + short
+ *  user code to authorize. */
+export const SOURCE_SIGNIN_PHASES = [
+  "starting",
+  "device-code",
+  "complete",
+  "error",
+  "cancelled",
+] as const;
 export type SourceSignInPhase = (typeof SOURCE_SIGNIN_PHASES)[number];
 
 /** A snapshot of a source's in-flight sign-in flow (D-065 M5). Carries NO API key - only the
