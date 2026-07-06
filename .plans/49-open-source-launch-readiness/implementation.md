@@ -23,6 +23,11 @@ prerequisite whether the project ships fully-open or open-core, so no licensing 
   <!-- D-007 -->
 - [ ] **`.plans/41-doctor-health-surface` (hard dependency, WS3).** The config-validation surface is a
   new `/doctor` area; it builds on 41's health-surface + storage/config checks. <!-- D-007 -->
+- [ ] **`.plans/50-cli-headless-agent-surface` (coordination, WS3).** Plan 50-M4 specifies the *same*
+  `${TREVOR_HOME}/config.jsonc` loader WS3 M1 builds, for its `--model`/`--reasoning` defaults. One
+  loader, not two: whichever of WS3-M1 / 50-M4 lands first builds the `flag>env>file>default` resolver,
+  the other extends it (WS3 to the full `TREVOR_*` scatter + `trevor init`; 50-M4 to `model`/`reasoning`).
+  <!-- D-011 -->
 - [ ] **`.plans/21-workflows-runtime` (coordination, WS1).** 21's M9 extracts a shared `sandbox-runner`
   from plan 16. WS1 adds a second OS backend to that same layer - whichever lands first, the other
   accommodates. Prefer building WS1's backend on 21's extracted runner if it lands first. <!-- D-007 -->
@@ -40,8 +45,10 @@ prerequisite whether the project ships fully-open or open-core, so no licensing 
 - [x] Shipped naming surfaces WS4 touches: `TREVOR_*` env prefix, `@trevor/*` package scope,
   `apps/trevor-cli`, `.trevor/` paths - all kept; only the public *identity* changes. <!-- D-005 -->
 
-**Downstream plans:** none. Plan 49 is a capstone with only upstream dependencies; the former rename
-dependency is complete and no longer counts as current cutoff work. <!-- D-006 --> <!-- D-009 -->
+**Downstream plans:** one coordination — `.plans/50-cli-headless-agent-surface` shares WS3's single
+`config.jsonc` loader (whichever of WS3-M1 / 50-M4 lands first builds it, the other extends it). Plan 49
+is otherwise a capstone with only upstream dependencies; the former rename dependency is complete and no
+longer counts as current cutoff work. <!-- D-006 --> <!-- D-009 --> <!-- D-011 -->
 
 **Non-goals (out of scope, deferred):** the licensing choice (fully-open vs open-core) and any
 business-model / hosted-substrate work. A LICENSE file + headers are separate governance work to add once
@@ -189,6 +196,9 @@ scaffold and validate it.
   1. RED: Test the loader reads `${TREVOR_HOME}/config.jsonc`, applies defaults, and lets a matching env
      var override a file value.
   2. GREEN: Implement the loader in `packages/session` over the reserved path; typed schema + validation.
+     <!-- D-011 -->This is the **single** shared loader: if `.plans/50` M4 already shipped it for the
+     `model`/`reasoning` keys, extend that loader here (add the full `TREVOR_*` scatter) rather than
+     building a second one.
   3. REFACTOR: Migrate the scattered `TREVOR_*` / provider-key reads to consume the resolved config.
 
 #### M2: `trevor init` scaffolds the config

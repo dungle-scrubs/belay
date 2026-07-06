@@ -10,6 +10,7 @@
 - [ ] Spawnable host artifact - the Node + Effect host must ship as a sidecar artifact for Tauri, either as a standalone binary or bundled Node runtime.
 - [ ] Desktop packaging decision - choose the app packaging/signing/update path for macOS first, with room for Windows/Linux later.
 - [ ] `.plans/56-rename-to-trevor` (coordination; sequenced first) - plan 56 renames the project to `trevor` and lands before 48. Build the Tauri app identity (bundle id, product name, window title) against the final `trevor` name and read all paths from `node-paths` (already `~/.trevor`); do not introduce `trevor` literals. <!-- D-006 -->
+- [ ] `.plans/50-cli-headless-agent-surface` (coordination; sequenced first) - plan 50 adds the `launch({ noBrowser })` option to `@trevor/launcher` for its headless one-shot. M7 **consumes that option** for the desktop supervisor's spawn-or-reuse rather than re-implementing a browser-less spawn; one shared seam, not two. <!-- D-007 -->
 
 ## 1. Architecture
 
@@ -163,7 +164,7 @@ The host is a Node + Effect app. The umbrella plan already marks a spawnable hos
 - **Effort:** L
 - **Tasks:**
   1. RED: Add tests for one host per session/cwd, host reuse, stale host replacement, and concurrent open locking.
-  2. GREEN: Spawn/reuse the packaged host sidecar with `SESSION_ID`, `TREVOR_WORKSPACE`, backend URLs, cwd, and safe env.
+  2. GREEN: Spawn/reuse the packaged host sidecar with `SESSION_ID`, `TREVOR_WORKSPACE`, backend URLs, cwd, and safe env. <!-- D-007 --> Use the `launch({ noBrowser })` seam from `.plans/50` (50 D-003) for the browser-less spawn-or-reuse; do not fork a second headless-spawn path.
   3. RED: Add tests for host restart/teardown and lease handoff behavior.
   4. GREEN: Store host ownership records under the established Trevor home/state roots.
   5. REFACTOR: Keep host supervision lifecycle out of web React state.
