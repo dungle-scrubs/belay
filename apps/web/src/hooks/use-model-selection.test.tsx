@@ -9,8 +9,8 @@ import { useModelSelection } from "./use-model-selection";
  * D-065 M3/M6 + plan 51 M4: the model-selection state hook. Pins the active fallback (legacy provider
  * selection until an explicit pick), per-session persisted selection with reasoning clamped to the chosen
  * model's surface, the recents feeding the quick picker, the roster-projected sources/catalog, and - plan
- * 51 - default/favorites sourced from the injected host `modelPrefs` with `setDefault`/`togglePin` routing
- * to the host command sender (not a localStorage write).
+ * 51 - default/favorites sourced from the injected host `modelPrefs` (read-only here; the set-default /
+ * toggle-favorite host commands are sent by the caller, not proxied through this hook).
  */
 
 const roster: Record<string, ProviderModel> = {
@@ -31,7 +31,6 @@ const roster: Record<string, ProviderModel> = {
 };
 
 const EMPTY_PREFS: ModelPrefsView = { default: null, pinned: [] };
-const noop = (_ref: ModelRef) => {};
 
 /** The host/command inputs every test shares; a test overrides only what it exercises. */
 function base(over: {
@@ -41,8 +40,6 @@ function base(over: {
   hostSources?: Parameters<typeof useModelSelection>[0]["hostSources"];
   hostCatalog?: Parameters<typeof useModelSelection>[0]["hostCatalog"];
   hostModelPrefs?: ModelPrefsView;
-  setDefaultCommand?: (ref: ModelRef) => void;
-  toggleFavoriteCommand?: (ref: ModelRef) => void;
 }) {
   return {
     roster,
@@ -52,8 +49,6 @@ function base(over: {
     legacyProvider: over.legacyProvider,
     legacyReasoning: over.legacyReasoning,
     sessionId: over.sessionId,
-    setDefaultCommand: over.setDefaultCommand ?? noop,
-    toggleFavoriteCommand: over.toggleFavoriteCommand ?? noop,
   };
 }
 
@@ -222,27 +217,15 @@ test("plan 51: default + favorites come from the host modelPrefs, not localStora
   );
 });
 
-test("plan 51: setDefault + togglePin route to the host command sender, not a local write", () => {
-  const defaults: ModelRef[] = [];
-  const favorites: ModelRef[] = [];
+test("plan 51: select records recents locally but never a default/pinned (host-owned)", () => {
   const { result } = renderHook(() =>
-    useModelSelection(
-      base({
-        legacyProvider: "qwen",
-        legacyReasoning: null,
-        sessionId: "s1",
-        setDefaultCommand: (ref) => defaults.push(ref),
-        toggleFavoriteCommand: (ref) => favorites.push(ref),
-      }),
-    ),
+    useModelSelection(base({ legacyProvider: "qwen", legacyReasoning: null, sessionId: "s1" })),
   );
   const ref: ModelRef = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: null };
-  act(() => result.current.setDefault(ref));
-  act(() => result.current.togglePin(ref));
-  assert.deepEqual(defaults, [ref], "setDefault invoked the host command with the ref");
-  assert.deepEqual(favorites, [ref], "togglePin invoked the host command with the ref");
+  act(() => result.current.select(ref));
   // No local default/pinned was written - the global blob (if present at all) carries only recents; the
-  // host announcement is authoritative for default/favorites.
+  // host announcement is authoritative for default/favorites (set-default/toggle-favorite are host
+  // commands sent directly by the caller, no longer routed through this hook).
   const globalBlob = localStorage.getItem("trevor.modelPreferences.global");
   if (globalBlob) {
     const parsed = JSON.parse(globalBlob) as Record<string, unknown>;

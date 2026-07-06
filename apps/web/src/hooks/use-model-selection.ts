@@ -20,9 +20,9 @@ import {
  * The model-selection state hook (D-065 M3/M6; plan 51): owns the BROWSER-LOCAL preferences (active /
  * recent / per-model reasoning) and the read models the split control + full chooser render. The DEFAULT
  * model + FAVORITES (pinned) are host-owned (plan 51): they arrive on `host.online` (injected as
- * `hostModelPrefs`) and are mutated through the host command (`setDefault` / `togglePin` route to the
- * command sender, not a localStorage write). The pure projection + selection transitions live in
- * `@/model-selection` and `@trevor/session`; this is the React glue.
+ * `hostModelPrefs`) and are mutated by the caller sending the host command directly - this hook does not
+ * proxy those writes. The pure projection + selection transitions live in `@/model-selection` and
+ * `@trevor/session`; this is the React glue.
  *
  * The ACTIVE model is the persisted `active` ref, falling back to the legacy provider+reasoning
  * selection until the user makes an explicit pick - so the chooser is the source of truth once used,
@@ -44,10 +44,6 @@ type SessionPrefs = Pick<ModelPreferences, "active" | "reasoningByModel">;
 export interface ModelSelection extends ModelSelectionProjection {
   /** Select a model: clamps its reasoning to the model's surface, records active + recent, persists. */
   readonly select: (ref: ModelRef) => void;
-  /** Set the durable DEFAULT model (plan 51): routes through the host command, not a local write. */
-  readonly setDefault: (ref: ModelRef) => void;
-  /** Toggle a FAVORITE (plan 51): routes through the host command; the host decides add-vs-remove. */
-  readonly togglePin: (ref: ModelRef) => void;
 }
 
 export function useModelSelection({
@@ -58,8 +54,6 @@ export function useModelSelection({
   legacyProvider,
   legacyReasoning,
   sessionId,
-  setDefaultCommand,
-  toggleFavoriteCommand,
 }: {
   /** The host-announced provider roster (host.online `models`), the pre-catalog fallback. */
   readonly roster: Readonly<Record<string, ProviderModel>>;
@@ -76,10 +70,6 @@ export function useModelSelection({
   /** The open session id; the persisted preferences are scoped to it so they don't leak across
    *  sessions (02.16 D-002). Null (pre-resolve) uses a throwaway key. */
   readonly sessionId: string | null;
-  /** Sends the host set-default command with the given ref (plan 51). */
-  readonly setDefaultCommand: (ref: ModelRef) => void;
-  /** Sends the host toggle-favorite command with the given ref (plan 51). */
-  readonly toggleFavoriteCommand: (ref: ModelRef) => void;
 }): ModelSelection {
   // Recents are a GLOBAL user library (per browser); active + per-model reasoning are per-session. The
   // default + favorites are host-owned (plan 51), injected via `hostModelPrefs`.
@@ -130,16 +120,8 @@ export function useModelSelection({
     [preferences, selection, setRawSession, setRawGlobal],
   );
 
-  const setDefault = useCallback((ref: ModelRef) => setDefaultCommand(ref), [setDefaultCommand]);
-  const togglePin = useCallback(
-    (ref: ModelRef) => toggleFavoriteCommand(ref),
-    [toggleFavoriteCommand],
-  );
-
   return {
     ...selection,
     select,
-    setDefault,
-    togglePin,
   };
 }

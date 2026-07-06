@@ -768,8 +768,6 @@ export function App() {
     sessionId,
     activeRunId: active,
     switchModel,
-    setModelDefault,
-    toggleModelFavorite,
   });
   const [chooserOpen, setChooserOpen] = useState(false);
   // Tangents (plan 37): a tangent is an isolated side conversation branched from a selected snapshot,
@@ -1199,8 +1197,8 @@ export function App() {
         recentKeys={selection.recentKeys}
         pinnedKeys={selection.pinnedKeys}
         defaultKey={selection.defaultKey}
-        onTogglePin={selection.togglePin}
-        onSetDefault={selection.setDefault}
+        onTogglePin={toggleModelFavorite}
+        onSetDefault={setModelDefault}
         deviceCode={signInDeviceCode}
         deviceCodeSourceId={signIn?.sourceId}
         onSubmitCode={(code) => void submitSignInCode(code)}

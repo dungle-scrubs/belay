@@ -25,7 +25,7 @@
 - [x] C-07: `apps/agent-host/src/agent/loop.ts` + `turn.ts` - bundle switch/rebuildProvider/initialModel into one `SwitchSurface`.
 - [x] C-08: `packages/sdk/src/prompt.ts` + `capabilities.ts` - shared `awaitStreamResult` stream settle/teardown primitive.
 - [x] C-09: `apps/blob-store/src` + `apps/session-store/src` - one colocated store-identity descriptor per app.
-- [ ] C-10: `apps/web/src/hooks/use-model-selection.ts` ↔ `use-active-model.ts` - collapse into one `useModel` hook.
+- [x] C-10: `apps/web/src/hooks/use-model-selection.ts` ↔ `use-active-model.ts` - focused fix: dropped the thin `setDefault`/`togglePin` pass-through wrappers + their command round-trip (callers send the host command directly); kept `useModelSelection` as its own unit-tested state hook rather than merging the two.
 - [x] C-18: `apps/web/src/components/chat/compact-display.ts` - delete `TOOL_SUMMARY_ARG`, route through `tool-args.ts` `salientToolArg`/`toolSummary` (fixes compact-vs-full drift).
 - [ ] C-19: `apps/web/src/composer/*-token-overlay.tsx` + `loop/command-input.tsx` - a shared `MirrorField` primitive + `segmentBySpans` helper.
 - [x] C-23: slug rule - route `branchSlug` + docs `slug()` through `packages/session/src/identity.ts` `idSlug`.
@@ -45,9 +45,9 @@
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 20
-- Open candidates: 6
-- Current cutoff blockers: 6
+- Redesigned (done): 21
+- Open candidates: 5
+- Current cutoff blockers: 5
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 

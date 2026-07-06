@@ -31,7 +31,6 @@ const hostModels: Record<string, ProviderModel> = {
 };
 
 const noop = () => {};
-const noopRef = (_ref: ModelRef) => {};
 
 function harness(over: { sessionId: string; hostModelPrefs: ModelPrefsView }) {
   return renderHook(() =>
@@ -50,8 +49,6 @@ function harness(over: { sessionId: string; hostModelPrefs: ModelPrefsView }) {
       sessionId: over.sessionId,
       activeRunId: null,
       switchModel: noop,
-      setModelDefault: noopRef,
-      toggleModelFavorite: noopRef,
     }),
   );
 }

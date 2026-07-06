@@ -31,8 +31,6 @@ export function useActiveModel({
   sessionId,
   activeRunId,
   switchModel,
-  setModelDefault,
-  toggleModelFavorite,
 }: {
   readonly hostModels: Readonly<Record<string, ProviderModel>>;
   readonly hostSources: readonly SourceSummary[];
@@ -48,10 +46,6 @@ export function useActiveModel({
   readonly sessionId: string | null;
   readonly activeRunId: string | null;
   readonly switchModel: (runId: string, model: ModelRef) => void | Promise<void>;
-  /** Send the host set-default command (plan 51). */
-  readonly setModelDefault: (ref: ModelRef) => void;
-  /** Send the host toggle-favorite command (plan 51). */
-  readonly toggleModelFavorite: (ref: ModelRef) => void;
 }) {
   const firstAnnouncedProvider = Object.keys(hostModels)[0];
   const activeProvider =
@@ -84,8 +78,6 @@ export function useActiveModel({
     legacyProvider: activeProvider,
     legacyReasoning: reasoning || null,
     sessionId,
-    setDefaultCommand: setModelDefault,
-    toggleFavoriteCommand: toggleModelFavorite,
   });
 
   // The initial-model pick (plan 51 D-005, the "reset to qwen" fix): an explicit per-session `active`
