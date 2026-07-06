@@ -34,7 +34,7 @@
 ### Phase 3: Low
 
 - [x] C-11: `apps/agent-host/src/agent/turn.ts` `publishTurn` ↔ `RunAgentOptions` - REJECTED on read. The audit's premise (`toolNames`/`delegate`/`loop`/`seedUsage` are pass-throughs) is false: each is inspected locally in `publishTurn` (`toolNames`/`delegate` -> `offeredToolDefs` at :162, `loop` -> `turnLoopConfig(loop).streamStallMs` at :282, `seedUsage` -> `seedWindow` at :169). No pure pass-through remains after C-07 pulled the one always-together triple (`SwitchSurface`). The proposed `{ loop, seedUsage }` bundle groups a test-only seam (`loop`, never set in production) with a production per-turn carry-forward that don't co-occur, and would force the one production reader to reach through a nested bag - degrading a hot path. Each option maps to a distinct, documented concern; the bag is wide but not shallow.
-- [ ] C-12: `apps/agent-host/src/doctor/build.ts` - subsystems contribute own doctor fragments instead of 20-field facts threading.
+- [x] C-12: `apps/agent-host/src/doctor/build.ts` - REJECTED on read. The doctor pipeline is already a clean 3-module split by responsibility (`host-facts.ts` reads live singletons -> `build.ts` assembles -> `snapshot.ts` folds the ordered area grid), and subsystems ALREADY own their rollup shaping in their own modules (`mcpPeripheralState`/`lspPeripheralState`/`hooksPeripheralState`/`admissionDoctorSummary`/`residency.summary()`/`telemetryDoctorFacts()`). `DoctorRuntimeFacts` is an honest DTO between those two stages, not a shallow interface. The proposed fragment-merge fails the code: `buildDoctorSnapshot` takes a fixed flat `DoctorProbeInput` with ~10 REQUIRED keys, so merging `Partial<DoctorProbeInput>` fragments loses the compile-time exhaustiveness that today catches a dropped required area (forcing a cast in a health-reporting path). And the payoff is illusory: adding a subsystem still requires editing `probe-input.ts`'s type AND `snapshot.ts`'s explicitly-ordered `areas` array. Most fields in `buildLiveDoctorSnapshot` are genuine transforms (opaque host record -> typed session, catalog -> redacted `catalogSources`, env -> web/build, `?? unconfigured` peripheral fallbacks), not pass-throughs; only ~5 (`admission`/`residency`/`telemetry`/`lspDiagnostics`/`hooksFindings`) spread verbatim, and those are the clearest lines.
 - [x] C-13: `packages/session/src/capability-manifest-compact.ts` - import `CHARS_PER_TOKEN` from `breakdown.ts`.
 - [x] C-14: `apps/web/src/components/panel/panel-host.tsx` → `virtual-transcript.tsx` - pass transcript handlers as one bundle.
 - [x] C-15: `apps/web/src/components/command-menu/use-command-menu.ts` - route keys through the shared `useAutocompleteMenuKeys`.
@@ -46,9 +46,9 @@
 ## Summary
 - Total candidates: 26
 - Redesigned (done): 21
-- Open candidates: 4
-- Current cutoff blockers: 4
-- Rejected on read (premise didn't survive code review): 1 (C-11)
+- Open candidates: 3
+- Current cutoff blockers: 3
+- Rejected on read (premise didn't survive code review): 2 (C-11, C-12)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
