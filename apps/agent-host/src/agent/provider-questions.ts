@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
+  decodeTrevorEvent,
   events,
   PROVIDER_QUESTION_ADAPTERS,
   type ProviderQuestionAdapter,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
+  type SessionEvent,
   type TrevorEventInput,
   validateAnswer,
   validateContract,
@@ -82,6 +84,13 @@ export class ProviderQuestionRuntime {
   /** Number of questions currently awaiting an answer (inspectable state for diagnostics/tests). */
   get pendingCount(): number {
     return this.pending.size;
+  }
+
+  /** The ids of the questions THIS host is actively blocking on - the waiters it can still resolve.
+   *  The orphan reap ({@link orphanedQuestionReaps}) excludes these, the way the turn reap excludes
+   *  the live run: a question with a live waiter is not an orphan. */
+  pendingIds(): ReadonlySet<string> {
+    return new Set(this.pending.keys());
   }
 
   private emit(event: TrevorEventInput): void {
@@ -224,6 +233,56 @@ export class ProviderQuestionRuntime {
 
 /** The host-wide singleton, configured in main.ts and called from the tool + inbound lane. */
 export const providerQuestionRuntime = new ProviderQuestionRuntime();
+
+/**
+ * Resolutions for questions a previous leader left dangling: a `provider.question.requested` in the
+ * replayed log with no `provider.question.resolved`, whose waiter died with the host that asked it.
+ * The question analogue of `orphanedSubagentReaps` (delegate.ts): the waiter is in-memory only, so a
+ * host restart mid-question leaves the browser showing a permanently un-submittable panel - every
+ * Submit is an AQ001 no-op, and the composer stays unmounted behind it. Emitting the `cancelled`
+ * resolution closes the panel and restores the composer, so the user can re-send their answer as a
+ * normal message.
+ *
+ * `liveQuestionIds` (the runtime's {@link ProviderQuestionRuntime.pendingIds}) excludes questions this
+ * host is itself blocking on, exactly as the turn reap excludes the live run - so a reconnect while a
+ * real question is up never cancels it out from under its waiter. Idempotent by key: each emitted
+ * resolution echoes back into the log, so the next fold sees the question as resolved.
+ */
+export function orphanedQuestionReaps(
+  sessionEvents: readonly SessionEvent[],
+  liveQuestionIds: ReadonlySet<string>,
+): TrevorEventInput[] {
+  const requested = new Map<string, { readonly runId: string; readonly toolCallId: string }>();
+  const resolved = new Set<string>();
+  for (const event of sessionEvents) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "provider.question.requested") {
+      requested.set(decoded.questionId, {
+        runId: decoded.runId,
+        toolCallId: decoded.toolCallId,
+      });
+    } else if (decoded?.type === "provider.question.resolved") {
+      resolved.add(decoded.questionId);
+    }
+  }
+  const out: TrevorEventInput[] = [];
+  for (const [questionId, question] of requested) {
+    if (resolved.has(questionId) || liveQuestionIds.has(questionId)) {
+      continue;
+    }
+    out.push(
+      events.providerQuestionResolved({
+        questionId,
+        runId: question.runId,
+        toolCallId: question.toolCallId,
+        outcome: "cancelled",
+        summary:
+          "Cancelled - the host that asked this went away before it was answered. Re-send your answer as a message.",
+      }),
+    );
+  }
+  return out;
+}
 
 /** The model-facing tool result: a readable per-question recap of what the user chose. */
 export function formatToolResult(answer: ProviderQuestionAnswer): string {

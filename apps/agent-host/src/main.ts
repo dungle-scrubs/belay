@@ -523,7 +523,7 @@ const scheduler = new TurnScheduler({
 // The run close/abort/reap lifecycle (plan 22.3, agent/run-lifecycle): wired over the live turn
 // machine + scheduler and the active-run/manual-compact markers, so handleEvent's user.cancel arm,
 // the lifecycle commands, and the leadership reconciles share one teardown.
-const { abortRuns, reapOrphans, reapOrphanSubagents } = makeRunLifecycle({
+const { abortRuns, reapOrphans, reapOrphanSubagents, reapOrphanQuestions } = makeRunLifecycle({
   turnMachine,
   scheduler,
   emit,
@@ -538,6 +538,9 @@ const { abortRuns, reapOrphans, reapOrphanSubagents } = makeRunLifecycle({
         .map((child) => child.childSessionId)
         .filter((id) => id.length > 0),
     ),
+  // The ask_user questions this host is itself blocking on, excluded from the question reap the same
+  // way (a live waiter is never an orphan).
+  pendingQuestionIds: () => providerQuestionRuntime.pendingIds(),
 });
 
 // The turn fork (plan 22.3, agent/start-turn): resolves the prompt's provider/model, assembles the
@@ -612,6 +615,7 @@ const { goLive, onBecomeLeader } = makeLeadership({
   announceOnline,
   reapOrphans,
   reapOrphanSubagents,
+  reapOrphanQuestions,
   maybeAutoResume,
 });
 

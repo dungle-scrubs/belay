@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
-import type {
-  ProviderQuestionAnswer,
-  ProviderQuestionContract,
-  TrevorEventInput,
+import {
+  events,
+  type ProviderQuestionAnswer,
+  type ProviderQuestionContract,
+  type SessionEvent,
+  type TrevorEventInput,
 } from "@trevor/session";
+import { storedEvent } from "@trevor/test-kit";
 import { Effect, Exit, Fiber } from "effect";
 import { test } from "vitest";
-import { formatToolResult, ProviderQuestionRuntime } from "./provider-questions";
+import {
+  formatToolResult,
+  orphanedQuestionReaps,
+  ProviderQuestionRuntime,
+} from "./provider-questions";
 
 /**
  * The generic pending-question runtime: emit a request, block the tool call, resolve on a matching
@@ -154,4 +161,103 @@ test("formatToolResult renders defer, notes, and reason per question", () => {
   const text = formatToolResult(answer);
   assert.match(text, /a: Postgres \(note: managed; reason: reuse failover\)/);
   assert.match(text, /b: \(deferred/);
+});
+
+// --- the orphaned-question reap (host restarted mid-question, the in-memory waiter died) ---
+
+const questionRequested = (questionId: string, runId = "r1"): SessionEvent =>
+  storedEvent(
+    events.providerQuestionRequested({
+      questionId,
+      runId,
+      toolCallId: `tc-${questionId}`,
+      toolName: "ask_user",
+      adapter: "ask_user",
+      contract: SINGLE,
+    }),
+  );
+
+const questionResolved = (questionId: string, runId = "r1"): SessionEvent =>
+  storedEvent(
+    events.providerQuestionResolved({
+      questionId,
+      runId,
+      toolCallId: `tc-${questionId}`,
+      outcome: "answered",
+      summary: "Answered 1 question",
+    }),
+  );
+
+test("reap cancels a requested question with no resolution (the waiter died with its host)", () => {
+  const reaps = orphanedQuestionReaps([questionRequested("q1")], new Set());
+  assert.equal(reaps.length, 1);
+  assert.equal(reaps[0]?.type, "provider.question.resolved");
+  assert.equal(reaps[0]?.payload.questionId, "q1");
+  assert.equal(reaps[0]?.payload.runId, "r1", "carries the original run for the transcript row");
+  assert.equal(reaps[0]?.payload.toolCallId, "tc-q1");
+  assert.equal(reaps[0]?.payload.outcome, "cancelled", "recovered, never a fake answer");
+});
+
+test("reap skips a question that was already resolved", () => {
+  const log = [questionRequested("q1"), questionResolved("q1")];
+  assert.deepEqual(orphanedQuestionReaps(log, new Set()), []);
+});
+
+test("reap skips a question THIS host is actively blocking on (live-waiter exclusion)", () => {
+  // The question analogue of reapExcept excluding the live run: a live waiter is not an orphan, so
+  // a reconnect-as-existing-leader never cancels a real question out from under its blocked tool call.
+  assert.deepEqual(orphanedQuestionReaps([questionRequested("q-live")], new Set(["q-live"])), []);
+});
+
+test("reap closes every orphan when several questions dangle (queued asks from a dead host)", () => {
+  const log = [
+    questionRequested("q1", "r1"),
+    questionRequested("q2", "r2"),
+    questionRequested("q3", "r3"),
+    questionResolved("q2", "r2"),
+  ];
+  const reaps = orphanedQuestionReaps(log, new Set());
+  assert.deepEqual(
+    reaps.map((e) => e.payload.questionId),
+    ["q1", "q3"],
+    "only the unresolved questions are reaped",
+  );
+});
+
+test("reap is idempotent: a second takeover after the cancelled resolution is in the log emits nothing", () => {
+  const first = orphanedQuestionReaps([questionRequested("q1")], new Set());
+  const afterFirstReap = [questionRequested("q1"), ...first.map((e) => storedEvent(e))];
+  assert.deepEqual(orphanedQuestionReaps(afterFirstReap, new Set()), []);
+});
+
+test("reap ignores a dangling answer event without a resolution (the AQ001 no-op submits)", () => {
+  // The wedged-session shape this fix exists for: the browser published provider.question.answer
+  // events that no host could resolve. Those answers do NOT close the question - only a resolution
+  // does - so the reap still cancels it.
+  const log: SessionEvent[] = [
+    questionRequested("q1"),
+    storedEvent({
+      type: "provider.question.answer",
+      payload: { questionId: "q1", answer: { action: "accept", answer: "x", questions: [] } },
+    }),
+  ];
+  const reaps = orphanedQuestionReaps(log, new Set());
+  assert.equal(reaps.length, 1);
+  assert.equal(reaps[0]?.payload.questionId, "q1");
+});
+
+test("pendingIds exposes exactly the live waiters (the reap's exclusion set)", async () => {
+  const { rt, emitted } = harness();
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const fiber = yield* Effect.fork(rt.ask(SINGLE, "r1", "tc1"));
+      yield* Effect.yieldNow();
+      const qid = requestedId(emitted);
+      assert.deepEqual([...rt.pendingIds()], [qid]);
+      // A pending live question is invisible to the reap even though its log pair is open.
+      assert.deepEqual(orphanedQuestionReaps([questionRequested(qid)], rt.pendingIds()), []);
+      yield* Fiber.interrupt(fiber);
+    }),
+  );
+  assert.deepEqual([...rt.pendingIds()], []);
 });

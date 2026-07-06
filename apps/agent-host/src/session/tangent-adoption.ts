@@ -197,6 +197,9 @@ export function makeTangentAdoption(deps: TangentAdoptionDeps): TangentAdoption 
       manualCompactFiber: () => null,
       parentLog: () => conversationLog.events(),
       activeChildSessionIds: () => new Set<string>(),
+      // Only abortRuns is used here; the question reap (like the subagent reap) is a main-session
+      // leadership concern, so the tangent supplies the empty exclusion set.
+      pendingQuestionIds: () => new Set<string>(),
     });
 
     /**

@@ -87,6 +87,11 @@ export interface LeadershipDeps {
   /** Close background subagents a previous leader left dangling (plan 52, agent/run-lifecycle). Shares
    *  the same two takeover triggers as reapOrphans - the turn and subagent reaps fire together. */
   reapOrphanSubagents(): void;
+  /** Close ask_user questions a previous leader left dangling (agent/run-lifecycle): the in-memory
+   *  waiter died with the asking host, so the browser's question panel is otherwise permanently
+   *  un-submittable (AQ001 no-ops) with the composer unmounted behind it. Fires at the same two
+   *  takeover triggers as reapOrphanSubagents. */
+  reapOrphanQuestions(): void;
   /** Auto-resume an un-continued trailing interrupt (agent/control-prompts, wired through main.ts). */
   maybeAutoResume(): void;
 }
@@ -114,6 +119,7 @@ export function makeLeadership(deps: LeadershipDeps) {
     announceOnline,
     reapOrphans,
     reapOrphanSubagents,
+    reapOrphanQuestions,
     maybeAutoResume,
   } = deps;
 
@@ -133,6 +139,11 @@ export function makeLeadership(deps: LeadershipDeps) {
     // child OUTLIVES its spawning turn, so its orphan can exist with NO in-flight run - hence this fires
     // outside the hasInFlight branch below, keyed by the child's log link rather than the turn set.
     reapOrphanSubagents();
+    // Close ask_user questions a previous leader left dangling. Like the subagent reap this fires
+    // outside the hasInFlight branch: a question can outlive its run's reap (an earlier takeover closed
+    // the run as interrupted but pre-fix left the question pending), so it is keyed by the question's
+    // own requested/resolved log pair, not the turn set.
+    reapOrphanQuestions();
     if (turnMachine.hasInFlight) {
       // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
       // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
@@ -231,6 +242,9 @@ export function makeLeadership(deps: LeadershipDeps) {
       // Same reconnect reconcile for background subagents a dead leader left dangling (plan 52): the two
       // reaps share this one takeover trigger, so a failover closes both stuck turns and stuck children.
       reapOrphanSubagents();
+      // And for dangling ask_user questions: a restart mid-question dropped the in-memory waiter, so
+      // resolve the question as cancelled here or the browser's panel stays un-submittable forever.
+      reapOrphanQuestions();
       // After reaping, auto-resume an un-continued trailing interrupt that is already settled in the log
       // (the browser recovered the orphan while no host was up - tonight's nimoy/lucid case). A run this
       // reap just closed is still mid-echo, so it is picked up by the completion handler, not here.

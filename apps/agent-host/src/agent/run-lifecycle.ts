@@ -4,6 +4,7 @@ import type { SessionEvent } from "@trevor/session";
 import { interruptFiber } from "../effect/fiber-exit";
 import type { CompactionCommandsApi } from "./compaction-commands";
 import { orphanedSubagentReaps } from "./delegate";
+import { orphanedQuestionReaps } from "./provider-questions";
 import type { TurnMachine } from "./turn-machine";
 import type { TurnScheduler } from "./turn-scheduler";
 
@@ -36,6 +37,9 @@ export interface RunLifecycleDeps {
   /** The child sessions THIS host is actively running in the background, excluded from the reap the
    *  way `runningRunId` excludes the live turn (main.ts's backgroundChildren registry). */
   activeChildSessionIds(): ReadonlySet<string>;
+  /** The question ids THIS host is actively blocking on (the provider-question runtime's live
+   *  waiters), excluded from the question reap the way `runningRunId` excludes the live turn. */
+  pendingQuestionIds(): ReadonlySet<string>;
 }
 
 /** Builds the run-lifecycle teardown over the host's live turn state; main.ts wires it once. */
@@ -48,6 +52,7 @@ export function makeRunLifecycle(deps: RunLifecycleDeps) {
     manualCompactFiber,
     parentLog,
     activeChildSessionIds,
+    pendingQuestionIds,
   } = deps;
 
   /**
@@ -119,5 +124,25 @@ export function makeRunLifecycle(deps: RunLifecycleDeps) {
     }
   }
 
-  return { abortRuns, reapOrphans, reapOrphanSubagents };
+  /**
+   * Closes ask_user QUESTIONS a previous leader left dangling: a `provider.question.requested` on the
+   * log with no `provider.question.resolved`, whose in-memory waiter died with the host that asked it.
+   * Without this, the browser shows a permanently un-submittable question panel (every Submit is an
+   * AQ001 no-op) with the composer unmounted behind it - the session is wedged until someone hand-writes
+   * the resolution. Runs at the same takeover triggers as {@link reapOrphanSubagents}; NOT gated on
+   * `hasInFlight`, because the question outlives its run's reap (an earlier takeover may have closed the
+   * run as interrupted while leaving the question pending). Questions THIS host is actively blocking on
+   * (`pendingQuestionIds`) are excluded, so a live question is never cancelled out from under its waiter.
+   * Idempotent: each emitted resolution echoes back into the log. Best-effort - it never throws.
+   */
+  function reapOrphanQuestions(): void {
+    for (const event of orphanedQuestionReaps(parentLog(), pendingQuestionIds())) {
+      const questionId =
+        typeof event.payload.questionId === "string" ? event.payload.questionId : "";
+      log("host", "reaping orphaned question", { question: questionId.slice(0, 8) });
+      emit(event).catch(() => {});
+    }
+  }
+
+  return { abortRuns, reapOrphans, reapOrphanSubagents, reapOrphanQuestions };
 }
