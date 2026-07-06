@@ -480,10 +480,11 @@ test("panelModel: the ctx meter previews the post-fold size once a fold lands (n
   assert.deepEqual(panel.breakdown, breakdown, "no faked per-category split");
 });
 
-test("D-046: a delegation reduces its running + done links to one block with the result", () => {
+test("09.4 M3: an inline delegation reduces its running + mirror + done links to one inlineAgent entry", () => {
   const log = [
     ev(1, events.userMessage({ text: "find the bug", provider: "qwen" })),
     ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    // Seed (running, model/reasoning stamped) -> a running token-mirror -> terminal fold-back (M2).
     ev(
       3,
       events.delegatedTo({
@@ -493,6 +494,8 @@ test("D-046: a delegation reduces its running + done links to one block with the
         task: "search for the failing assertion",
         mode: "inline",
         status: "running",
+        model: "qwen3-coder",
+        reasoningLevel: "high",
       }),
     ),
     ev(
@@ -503,23 +506,160 @@ test("D-046: a delegation reduces its running + done links to one block with the
         agent: "explorer",
         task: "search for the failing assertion",
         mode: "inline",
-        status: "done",
-        result: "the bug is in src/auth.ts:42",
+        status: "running",
+        model: "qwen3-coder",
+        reasoningLevel: "high",
+        tokens: 120,
       }),
     ),
-    ev(5, events.assistantCompleted({ runId: "r1", text: "Fixed it." })),
+    ev(
+      5,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::abc",
+        agent: "explorer",
+        task: "search for the failing assertion",
+        mode: "inline",
+        status: "done",
+        model: "qwen3-coder",
+        reasoningLevel: "high",
+        tokens: 340,
+      }),
+    ),
+    ev(6, events.assistantCompleted({ runId: "r1", text: "Fixed it." })),
   ];
   const messages = toTranscript(log);
   const blocks = messages.filter(
-    (m): m is Extract<Message, { kind: "delegation" }> => m.kind === "delegation",
+    (m): m is Extract<Message, { kind: "inlineAgent" }> => m.kind === "inlineAgent",
   );
-  assert.equal(blocks.length, 1, "the running + done links collapse to one linked block");
-  assert.equal(blocks[0]?.status, "done", "the block advances to the terminal status in place");
-  assert.equal(blocks[0]?.agent, "explorer");
   assert.equal(
-    blocks[0]?.result,
-    "the bug is in src/auth.ts:42",
-    "it carries the distilled result",
+    blocks.length,
+    1,
+    "the running + mirror + done links collapse to one inlineAgent block",
+  );
+  assert.equal(blocks[0]?.agents.length, 1, "one child entry");
+  const agent = blocks[0]?.agents[0];
+  assert.equal(agent?.status, "done", "advances to the terminal status in place");
+  assert.equal(agent?.agent, "explorer");
+  assert.equal(agent?.model, "qwen3-coder", "model stamped from the running link (M2)");
+  assert.equal(agent?.reasoningLevel, "high", "reasoning stamped from the running link (M2)");
+  assert.equal(agent?.tokens, 340, "the latest (terminal) token count wins");
+  assert.equal(
+    agent?.startedAt,
+    Date.parse("2026-06-24T00:00:00.000Z"),
+    "startedAt is the running link's own timestamp (no extra wire data)",
+  );
+  // No background delegation block for an inline child.
+  assert.equal(messages.filter((m) => m.kind === "delegation").length, 0);
+});
+
+test("09.4 M3: parallel inline children from one parent turn group into one inlineAgent block", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "audit", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::a",
+        agent: "explorer",
+        task: "t1",
+        mode: "inline",
+        status: "running",
+      }),
+    ),
+    ev(
+      4,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::b",
+        agent: "planner",
+        task: "t2",
+        mode: "inline",
+        status: "running",
+      }),
+    ),
+    ev(
+      5,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "sess::sub::a",
+        agent: "explorer",
+        task: "t1",
+        mode: "inline",
+        status: "done",
+      }),
+    ),
+    // A second, LATER turn's inline child must NOT join the first turn's group (different parentRunId).
+    ev(6, events.assistantStarted({ runId: "r2", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      7,
+      events.delegatedTo({
+        runId: "r2",
+        childSessionId: "sess::sub::c",
+        agent: "reviewer",
+        task: "t3",
+        mode: "inline",
+        status: "running",
+      }),
+    ),
+  ];
+  const blocks = toTranscript(log).filter(
+    (m): m is Extract<Message, { kind: "inlineAgent" }> => m.kind === "inlineAgent",
+  );
+  assert.equal(blocks.length, 2, "one block per parent turn (grouped by parentRunId)");
+  assert.equal(blocks[0]?.parentRunId, "r1");
+  assert.deepEqual(
+    blocks[0]?.agents.map((a) => a.agent),
+    ["explorer", "planner"],
+    "both r1 children in one block, in spawn order",
+  );
+  assert.equal(
+    blocks[0]?.agents.find((a) => a.childSessionId === "sess::sub::a")?.status,
+    "done",
+    "one child advances in place while its sibling stays running",
+  );
+  assert.equal(
+    blocks[0]?.agents.find((a) => a.childSessionId === "sess::sub::b")?.status,
+    "running",
+  );
+  assert.equal(blocks[1]?.parentRunId, "r2");
+  assert.deepEqual(
+    blocks[1]?.agents.map((a) => a.agent),
+    ["reviewer"],
+  );
+});
+
+test("09.4 M3: delegate_inline / delegate_background tool calls are suppressed (no tool card)", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.toolStarted({ runId: "r1", callId: "c1", name: "delegate_inline", arguments: "{}" }),
+    ),
+    ev(
+      4,
+      events.toolStarted({
+        runId: "r1",
+        callId: "c2",
+        name: "delegate_background",
+        arguments: "{}",
+      }),
+    ),
+    ev(
+      5,
+      events.toolStarted({ runId: "r1", callId: "c3", name: "bash", arguments: '{"cmd":"ls"}' }),
+    ),
+    ev(6, events.toolCompleted({ runId: "r1", callId: "c3", name: "bash", result: "ok" })),
+  ];
+  const tools = toTranscript(log).filter(
+    (m): m is Extract<Message, { kind: "tool" }> => m.kind === "tool",
+  );
+  assert.deepEqual(
+    tools.map((t) => t.name),
+    ["bash"],
+    "the delegation tool rows are suppressed; other tools still render",
   );
 });
 

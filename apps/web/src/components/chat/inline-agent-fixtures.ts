@@ -1,4 +1,4 @@
-import type { InlineAgent } from "./inline-agent-row";
+import type { InlineAgent } from "@/transcript";
 
 /**
  * The shared inline-agent row fixture: a running `explorer` child by default, overridable per field.

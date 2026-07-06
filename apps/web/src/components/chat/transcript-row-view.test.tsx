@@ -793,3 +793,48 @@ test("plan 34: a prompt mixing documents and images shows docs as file rows and 
     "only the one image is in the carousel set",
   );
 });
+
+test("09.4 M3: an inlineAgent message routes to the inline-agent group, not a delegation card", () => {
+  const row: TranscriptRow = {
+    kind: "message",
+    id: "message:ia1",
+    compactAbove: false,
+    message: {
+      kind: "inlineAgent",
+      id: "ia1",
+      parentRunId: "r1",
+      agents: [
+        { childSessionId: "s::sub::a", agent: "explorer", status: "running", model: "qwen3" },
+        { childSessionId: "s::sub::b", agent: "planner", status: "done", tokens: 300 },
+      ],
+    },
+  };
+  renderRow(row);
+  // "explorer" is running, so its name shimmers (base + aria-hidden overlay = 2 nodes); "planner"
+  // is terminal (a single node). Both prove the group rendered its agents.
+  assert.ok(screen.getAllByText("explorer").length >= 1);
+  assert.ok(screen.getByText("planner"));
+  assert.ok(screen.getByText(/2 agents/), "the parallel group header");
+  // NOT the purple ToneAlert delegation block (that carries role="alert").
+  assert.equal(screen.queryByRole("alert"), null);
+});
+
+test("09.4 M3: a background delegation still renders the linked block", () => {
+  const row: TranscriptRow = {
+    kind: "message",
+    id: "message:d1",
+    compactAbove: false,
+    message: {
+      kind: "delegation",
+      id: "d1",
+      childSessionId: "s::sub::bg",
+      agent: "explorer",
+      task: "scan the repo",
+      mode: "background",
+      status: "running",
+    },
+  };
+  renderRow(row);
+  assert.ok(screen.getByText(/running in background/), "the async delegation verb");
+  assert.ok(screen.getByText("scan the repo"));
+});

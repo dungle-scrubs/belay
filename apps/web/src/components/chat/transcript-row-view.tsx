@@ -7,6 +7,7 @@ import { CompactRow } from "@/components/chat/compact-row";
 import { CompactingBar } from "@/components/chat/compacting-bar";
 import { type ConcurrentTool, ConcurrentTools } from "@/components/chat/concurrent-tools";
 import { DoctorResult } from "@/components/chat/doctor/doctor-result";
+import { InlineAgentGroup } from "@/components/chat/inline-agent-row";
 import { LucidArtifactCard } from "@/components/chat/lucid-artifact-card";
 import { MarkdownBody } from "@/components/chat/markdown-body";
 import { CommandResult, MessageMeta, ShellBlock, UserMessage } from "@/components/chat/message";
@@ -343,18 +344,23 @@ export function TranscriptRowView({
     return <CompactingBar tokens={message.tokens} budget={message.budget} />;
   }
 
+  if (message.kind === "inlineAgent") {
+    // An inline delegation (plan 09.4): the compact inline-agent row(s), grouped when a turn spawned
+    // several. The onOpen drill-in to the child's live transcript is wired in M6.
+    return (
+      <div className="pl-3.5">
+        <InlineAgentGroup agents={message.agents} />
+      </div>
+    );
+  }
+
   if (message.kind === "delegation") {
+    // Background delegation only now (inline reduces to `inlineAgent` above, plan 09.4): the purple
+    // linked block with the async verb.
     const running = message.status === "running";
     const failed = message.status === "failed";
-    const isBackground = message.mode === "background";
     const tone = failed ? "text-smui-red" : running ? "text-smui-purple" : "text-smui-green";
-    const verb = running
-      ? isBackground
-        ? "running in background…"
-        : "delegating…"
-      : failed
-        ? "delegation failed"
-        : "delegated";
+    const verb = running ? "running in background…" : failed ? "delegation failed" : "delegated";
     return (
       <div className="pl-3.5">
         <ToneAlert

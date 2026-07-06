@@ -155,6 +155,41 @@ export type DelegationMessage = {
   status: string;
   result?: string;
 };
+// A blocking INLINE delegation (`delegate_inline`, plan 09.4), rendered as a compact inline-agent row
+// rather than the purple background block above. One assistant message can spawn several inline
+// children (the host runs tool calls at `toolConcurrency`), so the `delegated.to{mode:"inline"}` links
+// are grouped by `parentRunId` (the parent turn's runId) into ONE block; within it each child is an
+// entry keyed by `childSessionId`, advanced running -> terminal in place. `model`/`reasoningLevel`/
+// `tokens` are the live metadata the host stamps + mirrors onto the parent link (M2), and `startedAt`
+// is the running link's own timestamp - so the row renders from the parent log with NO child-session
+// subscription. Background delegation keeps the `delegation` block above.
+export type InlineAgentStatus = "running" | "done" | "failed" | "interrupted";
+export type InlineAgent = {
+  childSessionId: string;
+  agent: string;
+  model?: string;
+  reasoningLevel?: string;
+  /** Ms epoch of the running link - drives the row's live elapsed cell while running. */
+  startedAt?: number;
+  tokens?: number;
+  status: InlineAgentStatus;
+};
+export type InlineAgentMessage = {
+  kind: "inlineAgent";
+  id: string;
+  parentRunId: string;
+  agents: InlineAgent[];
+};
+/** Narrows a decoded (permissive-string) delegation status to the inline-agent union; an unknown or
+ *  absent status is treated as still-running, since only the three terminals close a link. */
+function asInlineAgentStatus(status: string): InlineAgentStatus {
+  return status === "done" || status === "failed" || status === "interrupted" ? status : "running";
+}
+// Tools whose transcript presence is a PURPOSE-BUILT message, not a tool card, so their raw
+// tool.started/completed/guardrail rows are suppressed: `ask_user` renders as the live QuestionSurface
+// (D-001); `delegate_inline`/`delegate_background` render as their `delegated.to` link - an inline-
+// agent row or the background block (plan 09.4) - so the delegation is never shown twice.
+const SUPPRESSED_TOOL_ROWS = new Set(["ask_user", "delegate_inline", "delegate_background"]);
 // A prompt-shell-lane run (D-082): a leading `!` published a `user.shell`, and the leader's
 // `shell.result` carries the output. The web reduces the pair (keyed by `requestId`) to one terminal
 // block - pending while only the request is in, then the output once the result lands. `ok` is false
@@ -313,6 +348,7 @@ export type Message =
   | GuardrailMessage
   | CompactingMessage
   | DelegationMessage
+  | InlineAgentMessage
   | ShellMessage
   | QuestionMessage
   | HookDecisionMessage
@@ -493,6 +529,11 @@ export function toTranscript(
   // One linked block per delegated child, keyed by childSessionId; the running + terminal
   // `delegated.to` links advance the same block in place (status + result), never two cards.
   const delegationByChild = new Map<string, DelegationMessage>();
+  // Inline delegations (plan 09.4): one `inlineAgent` block per PARENT turn (keyed by parentRunId)
+  // groups that turn's parallel inline children; each child is an entry keyed by childSessionId,
+  // advanced running -> terminal in place (the grouped analogue of the delegation block above).
+  const inlineAgentByParent = new Map<string, InlineAgentMessage>();
+  const inlineAgentEntryByChild = new Map<string, InlineAgent>();
   // One terminal block per shell-lane run (D-082), keyed by requestId: the `user.shell` spawns a
   // pending block, the `shell.result` fills it in place (so it shows `$ command` then the output,
   // never two rows). A `shell.result` with no prior request (the request was compacted out of the
@@ -589,6 +630,8 @@ export function toTranscript(
           progressByRun.clear();
           doneFolds.clear();
           delegationByChild.clear();
+          inlineAgentByParent.clear();
+          inlineAgentEntryByChild.clear();
           shellByRequest.clear();
           questionContractById.clear();
           questionAnswerById.clear();
@@ -806,8 +849,56 @@ export function toTranscript(
         break;
       }
       case "delegated.to": {
-        // First link for a child spawns the block; later links (done/failed, with the result)
-        // advance the same block in place, so the UI shows one linked card per delegation.
+        // An INLINE delegation (plan 09.4) reduces to a compact inline-agent row grouped by the parent
+        // turn (parentRunId); a BACKGROUND one keeps the linked block below. Both collapse a child's
+        // running + terminal links into ONE entry keyed by childSessionId (never two cards).
+        if (decoded.mode === "inline") {
+          const entry = inlineAgentEntryByChild.get(decoded.childSessionId);
+          if (entry) {
+            entry.status = asInlineAgentStatus(decoded.status);
+            if (decoded.model !== undefined) {
+              entry.model = decoded.model;
+            }
+            if (decoded.reasoningLevel !== undefined) {
+              entry.reasoningLevel = decoded.reasoningLevel;
+            }
+            if (decoded.tokens !== undefined) {
+              entry.tokens = decoded.tokens;
+            }
+          } else {
+            // First link for a child: `startedAt` is THIS (running) link's timestamp - the free live
+            // clock the row's elapsed cell ticks from, no extra data on the wire (D-002).
+            const startedAt = Date.parse(event.createdAt);
+            const fresh: InlineAgent = {
+              childSessionId: decoded.childSessionId,
+              agent: decoded.agent,
+              status: asInlineAgentStatus(decoded.status),
+              ...(decoded.model !== undefined ? { model: decoded.model } : {}),
+              ...(decoded.reasoningLevel !== undefined
+                ? { reasoningLevel: decoded.reasoningLevel }
+                : {}),
+              ...(decoded.tokens !== undefined ? { tokens: decoded.tokens } : {}),
+              ...(Number.isNaN(startedAt) ? {} : { startedAt }),
+            };
+            inlineAgentEntryByChild.set(decoded.childSessionId, fresh);
+            const group = inlineAgentByParent.get(decoded.runId);
+            if (group) {
+              group.agents.push(fresh);
+            } else {
+              const block: InlineAgentMessage = {
+                kind: "inlineAgent",
+                id: event.eventId,
+                parentRunId: decoded.runId,
+                agents: [fresh],
+              };
+              inlineAgentByParent.set(decoded.runId, block);
+              messages.push(block);
+            }
+          }
+          break;
+        }
+        // Background: first link for a child spawns the block; later links (done/failed, with the
+        // result) advance the same block in place, so the UI shows one linked card per delegation.
         const existing = delegationByChild.get(decoded.childSessionId);
         if (existing) {
           existing.status = decoded.status;
@@ -877,9 +968,10 @@ export function toTranscript(
           open.done = true;
           openByRun.delete(decoded.runId);
         }
-        // ask_user renders as the live QuestionSurface (M5), not a transcript tool row: suppress its
-        // tool.started/tool.completed so the pending question + its answer never show as a tool block.
-        if (decoded.name === "ask_user") {
+        // ask_user (QuestionSurface) and the delegation tools (their delegated.to link) render as
+        // purpose-built messages, not tool rows: suppress their tool.started/completed so they never
+        // show as a tool block on top of their real surface.
+        if (SUPPRESSED_TOOL_ROWS.has(decoded.name)) {
           break;
         }
         // A start that arrives AFTER its run already terminated (the cancel race) is aborted on
@@ -917,8 +1009,9 @@ export function toTranscript(
       }
       case "tool.guardrail": {
         // A redacted guardrail marker for the call that just ran (07): render it inline right after
-        // its tool card. ask_user has no transcript row, so suppress its (never-emitted) marker too.
-        if (decoded.name === "ask_user") {
+        // its tool card. A suppressed tool (ask_user, delegate_*) has no transcript row, so suppress
+        // its (never-emitted) marker too.
+        if (SUPPRESSED_TOOL_ROWS.has(decoded.name)) {
           break;
         }
         messages.push({

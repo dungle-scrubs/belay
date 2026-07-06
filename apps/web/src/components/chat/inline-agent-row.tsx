@@ -2,6 +2,7 @@ import { TreeBranch } from "@/components/tree-branch";
 import { fmtTokens } from "@/derive";
 import { useElapsedLabel } from "@/hooks/use-elapsed-label";
 import { cn } from "@/lib/utils";
+import type { InlineAgent, InlineAgentStatus } from "@/transcript";
 import { ShimmerText } from "./action-shimmer";
 
 /**
@@ -18,26 +19,9 @@ import { ShimmerText } from "./action-shimmer";
  * opens the child's live transcript takeover).
  */
 
-/** The lifecycle of an inline delegation link, mirrored from `delegated.to{status}` (the `running`
- *  non-terminal plus the three terminals `isTerminalDelegationStatus` classifies). */
-export type InlineAgentStatus = "running" | "done" | "failed" | "interrupted";
-
-/** One inline-agent row's render-ready facts, projected from the parent log's `delegated.to` link. */
-export interface InlineAgent {
-  /** The child session the row drills into (the details takeover key, M6). */
-  readonly childSessionId: string;
-  readonly agent: string;
-  /** The child's model, stamped on the running link at spawn (D-002); absent on old logs. */
-  readonly model?: string;
-  /** The child's reasoning/thinking level, stamped alongside `model`; absent when the model has none. */
-  readonly reasoningLevel?: string;
-  /** Turn start (ms epoch) - drives the live elapsed cell while running; frozen/omitted when terminal. */
-  readonly startedAt?: number;
-  /** Output tokens: live-mirrored while running, final on fold-back (D-002); hidden until first count. */
-  readonly tokens?: number;
-  readonly status: InlineAgentStatus;
-}
-
+// `InlineAgent` / `InlineAgentStatus` are the read-model shapes owned by `@/transcript` (the
+// component-free transcript projection); this row just renders them. `InlineAgentVariant` is
+// presentational-only, so it lives here.
 export type InlineAgentVariant = "full" | "compact";
 
 // The delegation status vocabulary is its own four-state palette (no existing tool/alert map covers

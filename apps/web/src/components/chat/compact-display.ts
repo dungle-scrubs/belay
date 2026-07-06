@@ -146,6 +146,9 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         secondary: `${message.tokens}/${message.budget} tokens`,
         hasDetail: false,
       };
+    // An inline-agent row/group (plan 09.4) is already a compact one-liner; keep it fully rendered.
+    case "inlineAgent":
+      return null;
     case "delegation": {
       const status =
         message.status === "running" ? "running" : message.status === "failed" ? "error" : "done";
