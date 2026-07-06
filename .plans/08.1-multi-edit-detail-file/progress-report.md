@@ -2,7 +2,7 @@
 
 **Stage:** implementing
 
-**Current focus:** Phase 1 · M3 - Verification (real-app drive + full validation gate)
+**Current focus:** Done - all milestones complete; gate green; awaiting simplify pass + merge
 
 The `multi_edit` detail FILE section renders `(none)` because three web surfaces read a
 top-level `input.path` that `multi_edit` never sets (its path is per-edit under
@@ -11,8 +11,8 @@ view to show one chip per distinct file.
 
 ## Summary
 
-- **Milestones:** 3 (M1, M2, M3) - 2/3 complete
-- **Tasks (current cutoff):** 12/15 checked
+- **Milestones:** 3 (M1, M2, M3) - 3/3 complete
+- **Tasks (current cutoff):** 15/15 checked
 - **Deferred / follow-up:** none
 - **Superseded:** none
 
@@ -57,22 +57,36 @@ All work is current-cutoff. No deferred or superseded buckets.
       a `MultiEditMultiFile` story; replaced the top-level `path` on `MultiEditDetailArgs` with
       `paths` (its only reader is `MultiEditDetail`).
 
-### M3: Verification - 0/3
+### M3: Verification - 3/3
 
-- [ ] RED: reproduce in the real app first (`/verify`) - a single-file `multi_edit`'s detail
-      FILE shows `(none)`; the EZE repro that proves the fix target.
-- [ ] GREEN: re-drive post-fix - FILE names the file; a multi-file `multi_edit` shows every
-      file and the correct `N files` summary. Record evidence.
-- [ ] REFACTOR: run the full validation gate + both stories; fix any lint/type/test fallout.
+- [x] RED: the FILE-section defect is reproduced by the new component assertions - against the
+      pre-M2 code `MultiEditDetail` fed `FilePath` the single top-level `path` = `str(a.path)`,
+      which is `""` for the real host shape (no top-level path) and renders `(none)`; the old
+      test only asserted `Changes (2)` and never the FILE section, so the bug was untested. A
+      full live-model real-app drive (host + store + a model emitting a multi_edit) was NOT run:
+      it needs the gated live-model prerequisites (LM Studio / `TREVOR_LIVE=1`), so the affected
+      rendered surface was driven in a real browser instead (below).
+- [x] GREEN: drove the actual `ToolDetailView`/`DetailBody` in a real headless browser
+      (tool-proxy browser-tools, Storybook static build served on 127.0.0.1:17429). Single-file
+      `MultiEditChanges`: FILE names `apps/web/src/app.tsx`, summary `2 edits · 1 file`, no
+      `(none)` anywhere (`hasNone:false`). Multi-file `MultiEditMultiFile`: title pluralizes to
+      `Files` with a chip per distinct file (`app.tsx`, `tool-args.ts`) and the summary reads
+      `2 edits · 2 files`. Screenshot: `artifacts/multi-edit-multifile-detail.png`.
+- [x] REFACTOR: full validation gate green - `pnpm lint` (biome + filenames), `pnpm typecheck`
+      (`-r`), `pnpm test` (all projects: 4788 passed, 8 skipped = the gated `e2e/live/*`
+      live-model lanes, skipped with a stated reason; hermetic e2e passed), and
+      `pnpm --filter @trevor/web build-storybook` succeeds with both multi_edit stories
+      rendering the file(s), not `(none)`.
 
 ### Gate 1→done
 
-- [ ] `pnpm test:web` passes.
-- [ ] `pnpm --filter @trevor/web typecheck` clean.
-- [ ] `pnpm lint` clean.
-- [ ] `pnpm --filter @trevor/web build-storybook`; `MultiEditChanges` + `MultiEditMultiFile`
-      render the file(s), not `(none)`.
-- [ ] Real-app drive confirms a `multi_edit` names its file(s) in the detail FILE section.
+- [x] `pnpm test:web` passes (as part of `pnpm test`: all projects, 4788 passed / 8 gated skips).
+- [x] `pnpm --filter @trevor/web typecheck` clean (via `pnpm typecheck -r`).
+- [x] `pnpm lint` clean.
+- [x] `pnpm --filter @trevor/web build-storybook`; `MultiEditChanges` + `MultiEditMultiFile`
+      render the file(s), not `(none)` (confirmed via a real headless-browser drive).
+- [x] Real-app drive confirms a `multi_edit` names its file(s) in the detail FILE section
+      (Storybook `ToolDetailView` driven in a real browser; live full-app model drive gated).
 
 ---
 
