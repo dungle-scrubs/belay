@@ -1,18 +1,21 @@
-import { type ArtifactRef, parseImageTokens, imageTokenText as tokenText } from "@trevor/session";
-import { spaceAfter, spaceBefore } from "./token-spacing";
+import {
+  type ArtifactRef,
+  type ImageTokenSpan,
+  parseImageTokens,
+  imageTokenText as tokenText,
+} from "@trevor/session";
+import { positionalTokenDraft } from "./positional-tokens";
 
 /**
  * The image-token draft model (D-092): the composer keeps inline `[Image #N]` tokens IN the draft
- * text, paired with the uploaded `ArtifactRef`s in reading order. The k-th token in reading order
- * stands for the k-th ref; the displayed number N is purely positional, so removing a token
- * renumbers the rest. This module is pure - no DOM, no React - so insertion, deletion, auto-spacing,
- * and renumbering are unit-testable, and the composer hook is a thin wiring layer over it.
+ * text, paired with the uploaded `ArtifactRef`s in reading order. The k-th token stands for the k-th
+ * ref; the displayed number N is purely positional, so removing a token renumbers the rest.
  *
  * The `[Image #N]` token FORMAT (parser, `tokenText`) is the cross-surface contract owned by
- * `@trevor/session` (the host strips the same tokens when projecting to the provider); only the
- * editing model below is web-side. Edits that change the token set (a selection delete, a paste)
- * are reconciled by reading the SURVIVING tokens' old numbers - so dropping any token drops the
- * right ref - then renumbering to 1..K reading order.
+ * `@trevor/session` (the host strips the same tokens when projecting to the provider). The editing
+ * INVARIANTS (insert/auto-space/atomic-remove/renumber/reconcile) live once in the shared
+ * {@link positionalTokenDraft} engine; this module is the image codec (which token FORMAT to edit)
+ * plus the thin `ImageDraft`-shaped surface the composer + overlay import.
  */
 
 export type { ImageTokenSpan as TokenSpan } from "@trevor/session";
@@ -29,36 +32,27 @@ export interface ImageDraft {
 /** The empty draft. */
 export const EMPTY_DRAFT: ImageDraft = { text: "", refs: [] };
 
+// An `[Image #N]` token carries only its positional number, so `render` ignores the span and a fresh
+// token needs nothing from the ref (renumber overwrites the placeholder 0).
+const engine = positionalTokenDraft<ArtifactRef, ImageTokenSpan>({
+  parse: parseImageTokens,
+  render: (num) => tokenText(num),
+  renderNew: () => tokenText(0),
+});
+
+const view = (draft: ImageDraft) => ({ text: draft.text, payloads: draft.refs });
+const asImageDraft = (d: { text: string; payloads: readonly ArtifactRef[] }): ImageDraft => ({
+  text: d.text,
+  refs: d.payloads,
+});
+
 /** Rewrites every token's number to its reading-order position (1..K), leaving other text intact. */
-export function renumber(text: string): string {
-  let out = "";
-  let last = 0;
-  let n = 0;
-  for (const span of parseImageTokens(text)) {
-    out += text.slice(last, span.start) + tokenText(++n);
-    last = span.end;
-  }
-  return out + text.slice(last);
-}
-
-/** The refs for the tokens inside a text slice, mapped from a source draft by their old numbers. */
-function refsIn(slice: string, source: ImageDraft): ArtifactRef[] {
-  return parseImageTokens(slice)
-    .map((span) => source.refs[span.num - 1])
-    .filter((ref): ref is ArtifactRef => ref !== undefined);
-}
-
-/** The char index just after the reading-order `index`-th token in `text` (end of string if absent). */
-function endOfToken(text: string, index: number): number {
-  const span = parseImageTokens(text)[index];
-  return span ? span.end : text.length;
-}
+export const renumber = engine.renumber;
 
 /**
  * Inserts image tokens at the selection `[selStart, selEnd)` (replacing it), auto-spacing so the
  * tokens never abut adjacent words, and splicing their refs into reading order at the insertion
- * point. Returns the new draft and the cursor position just after the last inserted token. Multiple
- * refs insert as ordered tokens separated by single spaces.
+ * point. Returns the new draft and the cursor just after the last inserted token.
  */
 export function insertImages(
   draft: ImageDraft,
@@ -66,82 +60,24 @@ export function insertImages(
   selEnd: number,
   refs: readonly ArtifactRef[],
 ): { draft: ImageDraft; cursor: number } {
-  if (refs.length === 0) {
-    return { draft, cursor: selStart };
-  }
-
-  const before = draft.text.slice(0, selStart);
-  const after = draft.text.slice(selEnd);
-  const refsBefore = refsIn(before, draft);
-  const refsAfter = refsIn(after, draft);
-  const newRefs = [...refsBefore, ...refs, ...refsAfter];
-
-  // Placeholder numbers are irrelevant - renumber rewrites every token positionally.
-  const placeholders = refs.map(() => tokenText(0)).join(" ");
-  const rawText = `${before}${spaceBefore(before)}${placeholders}${spaceAfter(after)}${after}`;
-  const text = renumber(rawText);
-
-  const lastInsertedIndex = refsBefore.length + refs.length - 1;
-  const tokenEnd = endOfToken(text, lastInsertedIndex);
-  const cursor = tokenEnd + (spaceAfter(after) ? 1 : 0);
-  return { draft: { text, refs: newRefs }, cursor };
+  const { draft: next, cursor } = engine.insert(view(draft), selStart, selEnd, refs);
+  return { draft: asImageDraft(next), cursor };
 }
 
 /**
- * Backspace (`dir = -1`) or Delete (`dir = 1`) next to a whole token removes the token AND its ref
- * in one step, collapsing a now-redundant double space. Returns the new draft + cursor, or `null`
- * when no token is immediately adjacent (so the textarea handles the keystroke normally).
+ * Backspace (`dir = -1`) or Delete (`dir = 1`) next to a whole token removes the token AND its ref in
+ * one step. Returns the new draft + cursor, or `null` when no token is immediately adjacent.
  */
 export function removeAdjacentToken(
   draft: ImageDraft,
   cursor: number,
   dir: -1 | 1,
 ): { draft: ImageDraft; cursor: number } | null {
-  const spans = parseImageTokens(draft.text);
-  const index = spans.findIndex((span) =>
-    dir === -1 ? span.end === cursor : span.start === cursor,
-  );
-  if (index === -1) {
-    return null;
-  }
-
-  const span = spans[index];
-  if (!span) {
-    return null;
-  }
-
-  const { start } = span;
-  let { end } = span;
-  // Collapse "word [Image #1] word" -> "word word" rather than leaving a double space.
-  if (draft.text[start - 1] === " " && draft.text[end] === " ") {
-    end += 1;
-  }
-
-  const rawText = draft.text.slice(0, start) + draft.text.slice(end);
-  const refs = draft.refs.filter((_, i) => i !== index);
-  return { draft: { text: renumber(rawText), refs }, cursor: start };
+  const result = engine.removeAdjacent(view(draft), cursor, dir);
+  return result ? { draft: asImageDraft(result.draft), cursor: result.cursor } : null;
 }
 
-/**
- * Reconciles a draft after an arbitrary raw text edit (a selection delete/replace, a paste): the
- * surviving tokens keep their OLD numbers in the raw text, so each is mapped back to the ref it had,
- * and the result is renumbered to reading order. A token whose number no longer maps to a ref (e.g.
- * literal text the user typed) is dropped, keeping `refs.length` equal to the token count.
- */
+/** Reconciles a draft after an arbitrary raw text edit (a selection delete/replace, a paste). */
 export function syncDraft(prev: ImageDraft, rawText: string): ImageDraft {
-  let out = "";
-  let last = 0;
-  let n = 0;
-  const refs: ArtifactRef[] = [];
-  for (const span of parseImageTokens(rawText)) {
-    const ref = prev.refs[span.num - 1];
-    out += rawText.slice(last, span.start);
-    if (ref) {
-      out += tokenText(++n);
-      refs.push(ref);
-    }
-    // A token with no mapped ref is dropped (we never author literal image tokens).
-    last = span.end;
-  }
-  return { text: out + rawText.slice(last), refs };
+  return asImageDraft(engine.sync(prev.refs, rawText));
 }

@@ -13,7 +13,7 @@
 - [x] C-01: `packages/session/src/inventory-display.ts` - promote project-scoped selection + recency comparator into `@trevor/session`; fixes the sidebar tangent-leak bug.
 - [x] C-02: `packages/sdk/src` - `sessionOp`/`blobOp` error-context helpers + operation-labeled `publishEvent`.
 - [x] C-03: `apps/web/src/session/use-session.ts` (+ new-session hooks) - single `publishWebEvent` owning the `PRODUCER_IDS.web` stamp.
-- [ ] C-17: `apps/web/src/composer/image-tokens.ts` + `paste-tokens.ts` (+ `draft.ts`) - one generic `PositionalTokenDraft<Payload>` engine over a `TokenCodec`.
+- [x] C-17: `apps/web/src/composer/image-tokens.ts` + `paste-tokens.ts` - new `positional-tokens.ts` holds one generic `positionalTokenDraft(codec)` engine (renumber/insert/removeAt/removeAdjacent/sync); the two token modules collapse to a `TokenCodec` instance + thin field-adapter wrappers that keep their exact public API (`ImageDraft.refs` / `PasteDraft.pastes`, same fn names), so `draft.ts` + both unit suites stay unchanged and keep pinning correctness. The two ~150-line twins went 309 -> 176 lines; the invariant logic now lives once.
 - [ ] C-20: `apps/agent-host/src` programmatic-command lane - a `CommandReplier` collapsing 51 hand-spelled `events.commandResult` sites.
 - [x] C-22: `packages/session/src/fork.ts` - export `FORK_ORIGIN_KEY` + `hasForkOrigin` so `tangent-isolation.ts` stops re-declaring the contract.
 
@@ -45,9 +45,9 @@
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 21
-- Open candidates: 3
-- Current cutoff blockers: 3
+- Redesigned (done): 22
+- Open candidates: 2
+- Current cutoff blockers: 2
 - Rejected on read (premise didn't survive code review): 2 (C-11, C-12)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
