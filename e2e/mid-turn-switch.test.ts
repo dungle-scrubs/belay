@@ -105,9 +105,15 @@ test("one turn walks reasoning -> same-provider model -> cross-provider, recordi
     publishTurn(providerA, history, {
       runId: "r1",
       reasoning: "low",
-      switch: cell,
-      rebuildProvider: (model) =>
-        model.modelId === "model-a2" ? providerA2 : model.modelId === "model-b" ? providerB : null,
+      switchSurface: {
+        cell,
+        rebuildProvider: (model) =>
+          model.modelId === "model-a2"
+            ? providerA2
+            : model.modelId === "model-b"
+              ? providerB
+              : null,
+      },
     }).pipe(Effect.provide(layer)),
   );
 
@@ -177,10 +183,12 @@ test("a larger->smaller switch that does not fit is blocked, the turn finishes o
     publishTurn(big, history, {
       runId: "r2",
       reasoning: "high",
-      switch: cell,
-      rebuildProvider: () => {
-        rebuilt += 1;
-        return null;
+      switchSurface: {
+        cell,
+        rebuildProvider: () => {
+          rebuilt += 1;
+          return null;
+        },
       },
     }).pipe(Effect.provide(layer)),
   );

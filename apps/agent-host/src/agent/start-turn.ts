@@ -217,18 +217,21 @@ export function makeStartTurn(deps: StartTurnDeps) {
         },
         ...(restricted ? { toolNames: CLIPBOARD_TOOL_NAMES } : {}),
         ...(seedUsage ? { seedUsage } : {}),
-        ...(switchCell ? { switch: switchCell } : {}),
-        // Resolve a mid-turn model switch to a fresh provider (09.1 M4): same source builder used to build
-        // the turn's initial provider, so any catalog model can be swapped to mid-flight.
+        // The mid-turn model-switch surface (09.1), built as one unit for a switchable turn:
+        //  - rebuildProvider uses the same source builder as the turn's initial provider, so any catalog
+        //    model can be swapped to mid-flight;
+        //  - initialModel (when the turn carried a ref) seeds the same-model check, so a reasoning-only
+        //    re-send of the unchanged model does not pointlessly rebuild the provider.
         ...(switchCell
           ? {
-              rebuildProvider: (model: ModelRef) =>
-                buildSourceProvider(model.sourceId, model.modelId),
+              switchSurface: {
+                cell: switchCell,
+                rebuildProvider: (model: ModelRef) =>
+                  buildSourceProvider(model.sourceId, model.modelId),
+                ...(decoded.model ? { initialModel: decoded.model } : {}),
+              },
             }
           : {}),
-        // The turn's starting ref (when it carried one) seeds the same-model check, so a reasoning-only
-        // re-send of the unchanged model does not pointlessly rebuild the provider.
-        ...(switchCell && decoded.model ? { initialModel: decoded.model } : {}),
       }).pipe(Effect.provide(EmitLive)),
     );
     fiber.addObserver((exit) => {

@@ -213,6 +213,22 @@ export interface TurnHooks {
   readonly observers?: TurnHookObservers;
 }
 
+/**
+ * The mid-turn model-switch surface (plan 09.1): the per-turn switch cell an external initiator writes a
+ * request into, the provider rebuild for a model change (`Provider.model` is readonly, so a model switch
+ * builds a fresh provider), and the turn's starting `ModelRef` a switch compares against to tell a real
+ * model change from a reasoning-only re-send. These are ALWAYS set together on a switchable turn and
+ * ABSENT together on one that can't switch (a restricted `/clip` turn, a subagent), so they travel as one
+ * value rather than three parallel optionals threaded through every turn frame.
+ */
+export interface SwitchSurface {
+  readonly cell: SwitchCell;
+  /** Rebuilds the provider for a model change; absent means model changes aren't honored (reasoning-only). */
+  readonly rebuildProvider?: (model: ModelRef) => Provider | null;
+  /** The turn's starting ref, when it carried one; absent means the first switch always rebuilds. */
+  readonly initialModel?: ModelRef;
+}
+
 /** Options for a turn: a subagent's tool allow-list, and (for a parent) the delegation capability. */
 export interface RunAgentOptions {
   readonly toolNames?: ReadonlySet<string>;
@@ -234,21 +250,9 @@ export interface RunAgentOptions {
    *  can drive the guardrail with deterministic, hermetic tool results without touching the real
    *  executor. Absent in production - the real `executeTool` path (with the stall watchdog) runs. */
   readonly runTool?: (name: string, args: string, callId: string) => Effect.Effect<string>;
-  /** The per-turn mid-turn-switch cell (plan 09.1): an external initiator (the UI selector now, the
-   *  auto-router later) requests a model/reasoning change, which the loop applies at the next step
-   *  boundary. Absent on a turn that cannot be switched (a subagent) - the loop behaves exactly as
-   *  before. */
-  readonly switch?: SwitchCell;
-  /** Rebuilds the active provider for a mid-turn MODEL change (09.1 M4): resolves a target `ModelRef` to
-   *  a fresh `Provider` (the host wires `buildSourceProvider`), since `Provider.model` is readonly.
-   *  Returns null when the target is unresolvable, in which case the switch leaves the provider unchanged.
-   *  Absent means model changes are not honored (reasoning-only), as in Phase 1. */
-  readonly rebuildProvider?: (model: ModelRef) => Provider | null;
-  /** The turn's starting `ModelRef` (09.1 M4): the identity (`sourceId`+`modelId`) a mid-turn switch
-   *  compares against to decide whether the model actually changed - `Provider` only carries a model id,
-   *  not its source, so two sources serving the same id would otherwise be indistinguishable. Absent on a
-   *  turn with no resolved ref (the first switch then always rebuilds). */
-  readonly initialModel?: ModelRef;
+  /** The mid-turn model-switch surface (plan 09.1): the switch cell + provider rebuild + starting ref,
+   *  present as a unit on a switchable turn and absent on one that can't switch. See {@link SwitchSurface}. */
+  readonly switchSurface?: SwitchSurface;
   /** The telemetry sink for per-tool spans (plan 13 M3); NOOP (disabled) unless the host wires an
    *  exporter. Tool spans carry the tool name + ok/error/interrupted status, never args or output. */
   readonly telemetry?: TelemetrySink;
@@ -358,7 +362,7 @@ export function runAgent(
   // The active model's identity (source+id), tracked so a mid-turn switch can tell a real model change
   // from the UI re-sending the unchanged model on a reasoning-only switch (M4). Undefined until the turn
   // carries a resolved ref; the first switch then rebuilds unconditionally.
-  let currentRef = opts.initialModel;
+  let currentRef = opts.switchSurface?.initialModel;
   // How many mid-turn switches this turn has applied or blocked (09.1 M8), surfaced in the switch trace.
   let switchCount = 0;
 
@@ -585,7 +589,7 @@ export function runAgent(
     if (currentRef && sameModel(currentRef, model)) {
       return;
     }
-    const rebuilt = opts.rebuildProvider?.(model);
+    const rebuilt = opts.switchSurface?.rebuildProvider?.(model);
     if (!rebuilt) {
       return;
     }
@@ -629,7 +633,7 @@ export function runAgent(
   // the step (applied or blocked), or undefined when none was queued. This is the seam the future
   // auto-router attaches to (D-004).
   const applyPendingSwitch = (): Extract<AgentEvent, { type: "model_switched" }> | undefined => {
-    const req = opts.switch?.take();
+    const req = opts.switchSurface?.cell.take();
     if (!req) {
       return undefined;
     }

@@ -58,9 +58,11 @@ const history: ChatMessage[] = [{ role: "user", content: "go" }];
 async function runWith(provider: Provider, cell = createSwitchCell()): Promise<TrevorEventInput[]> {
   const { layer, events } = collectingEmit();
   await Effect.runPromise(
-    publishTurn(provider, history, { runId: "r1", reasoning: "off", switch: cell }).pipe(
-      Effect.provide(layer),
-    ),
+    publishTurn(provider, history, {
+      runId: "r1",
+      reasoning: "off",
+      switchSurface: { cell, rebuildProvider: () => null },
+    }).pipe(Effect.provide(layer)),
   );
   return events;
 }
@@ -139,8 +141,10 @@ test("M5: a same-source model swap records the from/to MODEL delta on model.swit
     publishTurn(providerA, history, {
       runId: "r1",
       reasoning: "low",
-      switch: cell,
-      rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+      switchSurface: {
+        cell,
+        rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+      },
     }).pipe(Effect.provide(layer)),
   );
   const switched = events.find((e) => e.type === "model.switched");

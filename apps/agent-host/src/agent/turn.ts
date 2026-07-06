@@ -22,7 +22,6 @@ import { warn } from "@host/transport/log";
 import { Emit } from "@host/transport/services";
 import {
   events,
-  type ModelRef,
   type ProviderDiagnostic,
   type TrevorEventInput,
   type TurnStop,
@@ -40,7 +39,13 @@ import { Cause, Effect, Exit, Fiber, FiberRef, Option, Stream } from "effect";
 import { interpretFiberExit } from "../effect/fiber-exit";
 import { withHookDecisionEvents } from "./hook-events";
 import type { HistoryImageResolver } from "./image-resolution";
-import { type AgentEvent, type DelegateCapability, runAgent, type TurnHooks } from "./loop";
+import {
+  type AgentEvent,
+  type DelegateCapability,
+  runAgent,
+  type SwitchSurface,
+  type TurnHooks,
+} from "./loop";
 import { type TurnLoopConfig, turnLoopConfig } from "./loop-config";
 import { recordProviderIncident, recordTerminalProviderFailure } from "./loop-failures";
 import { withStallTimeout } from "./loop-stalls";
@@ -51,7 +56,6 @@ import {
   stopTerminalReason,
   withContinuationExhausted,
 } from "./stop-hook";
-import type { SwitchCell } from "./switch-cell";
 import { prepareTurn } from "./turn-preflight";
 import { recordTurnStop } from "./turn-stop-metrics";
 
@@ -87,16 +91,9 @@ export function publishTurn(
     /** Carry-forward of the prior turn's measured usage (03.1 D-002), so the context-pressure gate
      *  can fire at step 0 when the turn inherits >= the fraction. Absent on a session's first turn. */
     readonly seedUsage?: { readonly input: number; readonly contextWindow: number };
-    /** The per-turn mid-turn-switch cell (09.1): the host writes a switch request into it when a
-     *  `model.switch.requested` control event lands; the loop reads it at the next step boundary. Absent
-     *  on a subagent turn (not switchable). */
-    readonly switch?: SwitchCell;
-    /** Rebuilds the provider for a mid-turn MODEL change (09.1 M4): the host wires `buildSourceProvider`
-     *  so the loop can swap to a target model. Absent on a turn that only supports reasoning switches. */
-    readonly rebuildProvider?: (model: ModelRef) => Provider | null;
-    /** The turn's starting model ref (09.1 M4): the identity a mid-turn switch compares against to tell a
-     *  real model change from a reasoning-only re-send. Absent when the turn carried no resolved ref. */
-    readonly initialModel?: ModelRef;
+    /** The mid-turn model-switch surface (09.1): the switch cell + provider rebuild + starting ref for a
+     *  switchable turn, threaded straight through to the loop. Absent on a turn that can't switch. */
+    readonly switchSurface?: SwitchSurface;
     /** The local-admission priority class for this turn (plan 11): foreground for a user turn (default),
      *  background for a subagent so it queues behind foreground local-model work. */
     readonly priority?: AdmissionPriority;
@@ -117,9 +114,7 @@ export function publishTurn(
   const turnHooks = options.hooks
     ? withHookDecisionEvents(options.hooks, options.runId, (event) => pendingHookEvents.push(event))
     : undefined;
-  const switchCell = options.switch;
-  const rebuildProvider = options.rebuildProvider;
-  const initialModel = options.initialModel;
+  const switchSurface = options.switchSurface;
   const sink = options.telemetry ?? NOOP_SINK;
   const traceWriter = options.providerTrace;
 
@@ -599,9 +594,7 @@ export function publishTurn(
         ...(turnHooks ? { hooks: turnHooks } : {}),
         ...(loop ? { loop } : {}),
         ...(seedUsage ? { seedUsage } : {}),
-        ...(switchCell ? { switch: switchCell } : {}),
-        ...(rebuildProvider ? { rebuildProvider } : {}),
-        ...(initialModel ? { initialModel } : {}),
+        ...(switchSurface ? { switchSurface } : {}),
         // Vision turns only (39 M7): resolve video_inspect frame artifacts to inline images so the
         // post-video pass shows the model the frames. Non-vision turns leave frames as text.
         ...(caps.images

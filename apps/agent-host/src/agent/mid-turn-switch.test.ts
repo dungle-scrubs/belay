@@ -55,7 +55,7 @@ const drive = (provider: Provider, cell = createSwitchCell()) =>
   Effect.runPromise(
     Stream.runForEach(
       runAgent(provider, [{ role: "user", content: "go" }], "off", "r1", true, {
-        switch: cell,
+        switchSurface: { cell },
         runTool: () => Effect.succeed("ok"),
       }),
       () => Effect.void,
@@ -138,9 +138,11 @@ test("M4: a model change rebuilds the provider; the next step runs the new model
   await Effect.runPromise(
     Stream.runForEach(
       runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
-        switch: cell,
+        switchSurface: {
+          cell,
+          rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+        },
         runTool: () => Effect.succeed("ok"),
-        rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
       }),
       () => Effect.void,
     ),
@@ -177,13 +179,15 @@ test("M4: a same-model reasoning re-send does not rebuild, but a cross-source sa
   await Effect.runPromise(
     Stream.runForEach(
       runAgent(sameModelProvider, [{ role: "user", content: "go" }], "low", "r1", true, {
-        switch: cellA,
-        runTool: () => Effect.succeed("ok"),
-        initialModel: { sourceId: "s", modelId: "model-a", reasoning: "low" },
-        rebuildProvider: () => {
-          rebuilds += 1;
-          return null;
+        switchSurface: {
+          cell: cellA,
+          initialModel: { sourceId: "s", modelId: "model-a", reasoning: "low" },
+          rebuildProvider: () => {
+            rebuilds += 1;
+            return null;
+          },
         },
+        runTool: () => Effect.succeed("ok"),
       }),
       () => Effect.void,
     ),
@@ -217,10 +221,12 @@ test("M4: a same-model reasoning re-send does not rebuild, but a cross-source sa
   await Effect.runPromise(
     Stream.runForEach(
       runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
-        switch: cellB,
+        switchSurface: {
+          cell: cellB,
+          initialModel: { sourceId: "source-a", modelId: "dup", reasoning: "low" },
+          rebuildProvider: (model) => (model.sourceId === "source-b" ? providerB : null),
+        },
         runTool: () => Effect.succeed("ok"),
-        initialModel: { sourceId: "source-a", modelId: "dup", reasoning: "low" },
-        rebuildProvider: (model) => (model.sourceId === "source-b" ? providerB : null),
       }),
       () => Effect.void,
     ),
@@ -279,9 +285,11 @@ test("M6: a cross-provider swap normalizes the carried conversation the new prov
   await Effect.runPromise(
     Stream.runForEach(
       runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
-        switch: cell,
+        switchSurface: {
+          cell,
+          rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+        },
         runTool: () => Effect.succeed("ok"),
-        rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
       }),
       () => Effect.void,
     ),
@@ -324,12 +332,14 @@ test("M7: a larger->smaller switch that doesn't fit is blocked, leaving the prov
   await Effect.runPromise(
     Stream.runForEach(
       runAgent(providerA, [{ role: "user", content: "go" }], "low", "r1", true, {
-        switch: cell,
-        runTool: () => Effect.succeed("ok"),
-        rebuildProvider: () => {
-          rebuildCalls += 1;
-          return null;
+        switchSurface: {
+          cell,
+          rebuildProvider: () => {
+            rebuildCalls += 1;
+            return null;
+          },
         },
+        runTool: () => Effect.succeed("ok"),
       }),
       (e) => Effect.sync(() => void events.push(e)),
     ),
@@ -374,7 +384,7 @@ test("M1: an in-flight model stream is never interrupted by a switch", async () 
   await Effect.runPromise(
     Stream.runForEach(
       runAgent(provider, [{ role: "user", content: "go" }], "off", "r1", true, {
-        switch: cell,
+        switchSurface: { cell },
         runTool: () => Effect.succeed("ok"),
       }),
       (e: AgentEvent) =>

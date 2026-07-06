@@ -102,8 +102,10 @@ test("M4: a mid-turn switch to a smaller-window model re-tiers the next step's p
   await Effect.runPromise(
     publishTurn(providerA, HISTORY, {
       runId: "r1",
-      switch: cell,
-      rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+      switchSurface: {
+        cell,
+        rebuildProvider: (model) => (model.modelId === "model-b" ? providerB : null),
+      },
     }).pipe(Effect.provide(layer)),
   );
 
