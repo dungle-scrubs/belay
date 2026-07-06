@@ -1038,7 +1038,7 @@ test("turnStatusHeaderFrom: a running inline delegation reads 'delegating to {ag
   assert.doesNotMatch(header?.state ?? "", /delegate_inline/);
 });
 
-test("turnStatusHeaderFrom: background-delegation start gets the same friendly headline (09.4 M5)", () => {
+test("turnStatusHeaderFrom: a background delegation does NOT hijack the headline - it is detached (09.4 M5)", () => {
   const header = turnStatusHeaderFrom(
     [
       userMessage(),
@@ -1060,7 +1060,31 @@ test("turnStatusHeaderFrom: background-delegation start gets the same friendly h
     ],
     { awaitingResponse: false },
   );
-  assert.equal(header?.state, "delegating to auditor…");
+  // A detached background child must not pin the header (that would mask the parent turn's own tool
+  // work); the header shows the engine state instead, never the raw delegate_background tool verb.
+  assert.notEqual(header?.state, "delegating to auditor…");
+  assert.doesNotMatch(header?.state ?? "", /delegate_background/);
+});
+
+test("turnStatusHeaderFrom: a workflow leaf (mode:inline) does NOT drive the delegating headline", () => {
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      evt("delegated.to", {
+        runId: "r1",
+        childSessionId: "s::leaf::a",
+        agent: "workflow-leaf",
+        task: "t",
+        mode: "inline",
+        status: "running",
+      }),
+    ],
+    { awaitingResponse: false },
+  );
+  // A workflow leaf shares mode:"inline" but has its own rendering - it must not be mistaken for an
+  // inline agent on the turn-status line.
+  assert.doesNotMatch(header?.state ?? "", /delegating to/);
 });
 
 test("turnStatusHeaderFrom: the delegating headline clears once the only child folds back (09.4 M5)", () => {

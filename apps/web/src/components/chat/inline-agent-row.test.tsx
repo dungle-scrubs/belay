@@ -117,3 +117,15 @@ test("a clickable row fires onOpen with the child session id", () => {
   fireEvent.click(getByRole("button"));
   assert.equal(opened, "s::sub::zzz");
 });
+
+test("a large parallel group auto-compacts, dropping the thinking cell (09.4)", () => {
+  // The fixture carries reasoningLevel "thinking"; a group of >=4 agents switches to the compact
+  // variant (drops that cell) so a wide group stays scannable, while a small group keeps it.
+  const many = ["a", "b", "c", "d"].map((id) =>
+    inlineAgent({ childSessionId: `s::sub::${id}`, agent: `agent-${id}`, status: "running" }),
+  );
+  const big = render(<InlineAgentGroup agents={many} />);
+  assert.doesNotMatch(big.container.textContent ?? "", /thinking/, "4 agents -> compact");
+  const small = render(<InlineAgentGroup agents={many.slice(0, 2)} />);
+  assert.match(small.container.textContent ?? "", /thinking/, "2 agents -> full");
+});

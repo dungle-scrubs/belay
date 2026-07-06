@@ -803,6 +803,13 @@ export function App() {
     }
     return undefined;
   }, [transcript, agentDetailChild]);
+  // If the backing inline-agent row leaves the parent transcript (e.g. /clear resets the log), close
+  // the takeover - matching how the tool-detail takeover self-closes when its source row is gone.
+  useEffect(() => {
+    if (agentDetailChild !== null && agentDetailName === undefined) {
+      setAgentDetailChild(null);
+    }
+  }, [agentDetailChild, agentDetailName]);
   // A promoted background job's detail takeover (plan 09 M8): hold the job id and re-derive its detail
   // model from the live job snapshots, so the takeover updates as the host re-announces (run -> exit).
   const [jobDetailId, setJobDetailId] = useState<string | null>(null);
@@ -1358,6 +1365,7 @@ export function App() {
     modal.setArchiveOpen(false);
     setDetailId(null);
     setJobDetailId(null);
+    setAgentDetailChild(null);
   };
   const openTangent = (selection: TangentSelection) => {
     closeOtherTakeovers();

@@ -149,29 +149,20 @@ test("runningSubagents keeps only non-terminal BACKGROUND rows; inline is exclud
       mode: "background",
       status: "done",
     },
-    // An inline delegation renders as an inline-agent row, never in the BACKGROUND group (09.4 M4):
-    // it is a different message kind entirely, and even a stray delegation with mode "inline" is filtered.
+    // A blocking `delegate_inline` agent renders as an inlineAgent MESSAGE (a different kind), so the
+    // transcript reducer already split it out and it never reaches this panel (09.4 M3/M4).
     {
       kind: "inlineAgent",
       id: "ia1",
       parentRunId: "r1",
       agents: [{ childSessionId: "c3", agent: "planner", status: "running" }],
     },
-    {
-      kind: "delegation",
-      id: "d3",
-      childSessionId: "c4",
-      agent: "clip",
-      task: "blocking",
-      mode: "inline",
-      status: "running",
-    },
     { kind: "user", id: "u1", text: "hi", artifacts: [], pastes: [] },
   ];
   assert.deepEqual(
     runningSubagents(messages).map((s) => s.agent),
     ["explorer"],
-    "only the running background child; the done one, the inline-agent row, and the inline-mode link are all excluded",
+    "only the running background child; the done one and the inline-agent message are excluded",
   );
 });
 

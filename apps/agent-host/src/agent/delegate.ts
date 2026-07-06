@@ -6,6 +6,7 @@ import {
   type DecodedEvent,
   decodeTrevorEvent,
   events,
+  isInlineAgentDelegation,
   isTerminalDelegationStatus,
   type SessionEvent,
   type SessionTransport,
@@ -92,11 +93,15 @@ export function publishTo(
   });
 }
 
+// The live model/reasoning/token metadata is stamped ONLY on a genuine inline-AGENT delegation (a
+// `delegate_inline` tool call), never on a background child OR a workflow leaf - both reuse the shared
+// seed/fold-back but must keep their old payload (their own surfaces render them). `isInlineAgentDelegation`
+// is the shared discriminator, so the host and the web reducer agree on which links carry this metadata.
 function inlineDelegationMetadata(
   req: DelegationRequest,
   tokens?: number,
 ): { readonly model?: string; readonly reasoningLevel?: string; readonly tokens?: number } {
-  return req.mode === "inline"
+  return isInlineAgentDelegation(req.mode, req.agent.id)
     ? {
         model: req.provider.model,
         ...(req.reasoningLevel !== undefined ? { reasoningLevel: req.reasoningLevel } : {}),
@@ -118,7 +123,7 @@ function mirrorInlineOutputTokens(
   lastMirroredTokens: number | undefined,
 ): number | undefined {
   if (
-    req.mode !== "inline" ||
+    !isInlineAgentDelegation(req.mode, req.agent.id) ||
     outputTokens === undefined ||
     outputTokens <= (lastMirroredTokens ?? -1)
   ) {
@@ -305,7 +310,12 @@ export async function runDelegatedChild(
     await Effect.runPromise(
       publishTurn(req.provider, childHistory(req.agent, req.task), {
         runId: req.childRunId,
-        ...(req.reasoningLevel !== undefined ? { reasoning: req.reasoningLevel } : {}),
+        // Only an inline-AGENT child runs at the parent turn's reasoning level (09.4 M2); a background
+        // child stays on the provider default (it is detached - the parent's thinking level must not
+        // silently raise its cost/latency). Gated here too, not just at the delegate-tool call site.
+        ...(req.reasoningLevel !== undefined && isInlineAgentDelegation(req.mode, req.agent.id)
+          ? { reasoning: req.reasoningLevel }
+          : {}),
         toolNames: resolveChildTools(req),
         // A subagent's local-model work queues behind foreground user turns sharing the runtime (D-004).
         priority: "background",
@@ -608,15 +618,21 @@ export function buildDelegateCapability(
       if ("error" in resolved) {
         return resolved.error;
       }
+      const mode = name === "delegate_background" ? "background" : "inline";
       const req: DelegationRequest = {
         agent: resolved.agent,
         task: args.task,
         provider: params.provider,
-        ...(params.reasoningLevel !== undefined ? { reasoningLevel: params.reasoningLevel } : {}),
+        // Only an INLINE child inherits + runs at the parent turn's reasoning level (09.4 M2); a
+        // background child stays on the provider default it always used - it is detached, so the parent
+        // turn's thinking level must not silently raise its token spend + latency.
+        ...(mode === "inline" && params.reasoningLevel !== undefined
+          ? { reasoningLevel: params.reasoningLevel }
+          : {}),
         parentRunId: params.parentRunId,
         childRunId: params.mintRunId(),
         childSessionId: ctx.mintChildSessionId(),
-        mode: name === "delegate_background" ? "background" : "inline",
+        mode,
       };
       if (req.mode === "background") {
         const bg = params.background;

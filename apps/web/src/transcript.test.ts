@@ -663,6 +663,89 @@ test("09.4 M3: delegate_inline / delegate_background tool calls are suppressed (
   );
 });
 
+test("09.4: a workflow-leaf inline delegation stays a delegation block, NOT an inlineAgent row", () => {
+  // Workflow leaves reuse mode:"inline" but have their own rendering, so isInlineAgentDelegation
+  // excludes them: they must keep the delegation block, not become an inline-agent row.
+  const log = [
+    ev(1, events.userMessage({ text: "run the workflow", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "s::leaf::a",
+        agent: "workflow-leaf",
+        task: "leaf work",
+        mode: "inline",
+        status: "running",
+      }),
+    ),
+  ];
+  const messages = toTranscript(log);
+  assert.equal(
+    messages.filter((m) => m.kind === "inlineAgent").length,
+    0,
+    "a workflow leaf is NOT projected as an inline-agent row",
+  );
+  const blocks = messages.filter(
+    (m): m is Extract<Message, { kind: "delegation" }> => m.kind === "delegation",
+  );
+  assert.equal(blocks.length, 1, "it keeps its delegation block");
+  assert.equal(blocks[0]?.agent, "workflow-leaf");
+});
+
+test("09.4 M2/M3: a late running token-mirror after the terminal fold-back does not regress the row", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "s::sub::a",
+        agent: "explorer",
+        task: "t",
+        mode: "inline",
+        status: "running",
+      }),
+    ),
+    // The terminal fold-back lands (done)...
+    ev(
+      4,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "s::sub::a",
+        agent: "explorer",
+        task: "t",
+        mode: "inline",
+        status: "done",
+        tokens: 500,
+      }),
+    ),
+    // ...then a straggler fire-and-forget running mirror arrives out of order (higher seq).
+    ev(
+      5,
+      events.delegatedTo({
+        runId: "r1",
+        childSessionId: "s::sub::a",
+        agent: "explorer",
+        task: "t",
+        mode: "inline",
+        status: "running",
+        tokens: 400,
+      }),
+    ),
+  ];
+  const block = toTranscript(log).find(
+    (m): m is Extract<Message, { kind: "inlineAgent" }> => m.kind === "inlineAgent",
+  );
+  assert.equal(
+    block?.agents[0]?.status,
+    "done",
+    "a late running mirror never regresses a terminal entry",
+  );
+});
+
 test("D-048: a background delegation's late result lands by id AFTER the parent turn completes", () => {
   const log = [
     ev(1, events.userMessage({ text: "audit the repo", provider: "qwen" })),

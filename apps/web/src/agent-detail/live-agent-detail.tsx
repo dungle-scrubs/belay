@@ -48,6 +48,9 @@ export function LiveAgentDetail({
       onBack={onBack}
       onOpenPath={onOpenPath}
       replayed={stream.replayed}
+      // The child's event count advances on every streamed delta (progress/text), so the shell
+      // re-pins to the bottom as a long answer grows, not only when a whole new row appears.
+      revision={stream.events.length}
       className="h-full"
     />
   );

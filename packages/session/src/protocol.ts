@@ -342,6 +342,23 @@ export function isTerminalDelegationStatus(status: string): boolean {
   return status === "done" || status === "failed" || status === "interrupted";
 }
 
+/** The agent id the workflow engine's leaves delegate under (plan 21). Workflow leaves reuse the same
+ *  `delegated.to{mode:"inline"}` link + shared seed/fold-back as a `delegate_inline` tool call, so this
+ *  is the one discriminator that tells the two apart. Exported so the host and web agree on it. */
+export const WORKFLOW_LEAF_AGENT_ID = "workflow-leaf";
+
+/**
+ * Whether a `delegated.to` link is a blocking INLINE-AGENT delegation (plan 09.4) - the surface that
+ * renders as a compact inline-agent row, stamps live model/reasoning/token metadata, and drives the
+ * "delegating to X…" turn-status headline. TRUE only for `mode:"inline"` links that are NOT a workflow
+ * leaf (which shares `mode:"inline"` but has its own workflow rendering and must stay unchanged). The
+ * single classifier the host metadata seam, the transcript reducer, and the turn-status projection
+ * share, so a workflow leaf can never be mistaken for an inline agent on any surface.
+ */
+export function isInlineAgentDelegation(mode: string, agent: string): boolean {
+  return mode === "inline" && agent !== WORKFLOW_LEAF_AGENT_ID;
+}
+
 /**
  * The per-fold DELTA manifest carried on a `context.compacted` event: what THIS fold
  * folded away, not a cumulative picture. `turnRange` is the seq span it covers; `files`,

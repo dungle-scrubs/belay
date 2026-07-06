@@ -4,6 +4,8 @@ import {
   type CommandMenuPayload,
   decodeTrevorEvent,
   inputEstimateTokens,
+  isInlineAgentDelegation,
+  isTerminalDelegationStatus,
   type LimitStatus,
   lucidArtifactRef,
   type ModelSwitchEndpoint,
@@ -849,12 +851,21 @@ export function toTranscript(
         break;
       }
       case "delegated.to": {
-        // An INLINE delegation (plan 09.4) reduces to a compact inline-agent row grouped by the parent
-        // turn (parentRunId); a BACKGROUND one keeps the linked block below. Both collapse a child's
-        // running + terminal links into ONE entry keyed by childSessionId (never two cards).
-        if (decoded.mode === "inline") {
+        // An INLINE-AGENT delegation (plan 09.4, a `delegate_inline` tool call) reduces to a compact
+        // inline-agent row grouped by the parent turn (parentRunId); a BACKGROUND child OR a workflow
+        // leaf (which shares mode:"inline" but has its own rendering) keeps the linked block below.
+        // Both collapse a child's running + terminal links into ONE entry keyed by childSessionId.
+        if (isInlineAgentDelegation(decoded.mode, decoded.agent)) {
           const entry = inlineAgentEntryByChild.get(decoded.childSessionId);
           if (entry) {
+            // A late fire-and-forget token mirror (status:"running") can arrive AFTER the awaited
+            // terminal fold-back; never let it regress an already-terminal entry back to running.
+            if (
+              isTerminalDelegationStatus(entry.status) &&
+              !isTerminalDelegationStatus(decoded.status)
+            ) {
+              break;
+            }
             entry.status = asInlineAgentStatus(decoded.status);
             if (decoded.model !== undefined) {
               entry.model = decoded.model;

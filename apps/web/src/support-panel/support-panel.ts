@@ -136,20 +136,17 @@ export function jobToDetailModel(job: PanelJob): ToolDetailModel {
   };
 }
 
-/** The live BACKGROUND subagents (plan 09 M7, scoped in 09.4): the non-terminal background `delegation`
- *  rows from the transcript - a finished/failed/interrupted child is no longer "background work" and
- *  stays in the transcript instead. `interrupted` (a child reaped by orphan recovery, D-002) is terminal
- *  like done/failed. INLINE delegations (plan 09.4) are BLOCKING, not background work: they render as
- *  inline-agent rows (`inlineAgent` messages, not `delegation`) and are excluded here, so this group is
- *  async-only and never leaks a blocking child under a header literally labeled BACKGROUND. */
+/** The live BACKGROUND subagents (plan 09 M7): the non-terminal `delegation` rows from the transcript -
+ *  a finished/failed/interrupted child is no longer "background work" and stays in the transcript
+ *  instead. `interrupted` (a child reaped by orphan recovery, D-002) is terminal like done/failed.
+ *  A blocking `delegate_inline` agent (plan 09.4) is NOT background work, so it is excluded here - but
+ *  the exclusion is structural, not a mode filter: the transcript reducer already routes inline-AGENT
+ *  delegations to a separate `inlineAgent` message (not `delegation`), so they never reach this loop,
+ *  while background children AND workflow leaves (which keep the `delegation` kind) still surface here. */
 export function runningSubagents(messages: readonly Message[]): SupportSubagent[] {
   const out: SupportSubagent[] = [];
   for (const m of messages) {
-    if (
-      m.kind === "delegation" &&
-      m.mode === "background" &&
-      !isTerminalDelegationStatus(m.status)
-    ) {
+    if (m.kind === "delegation" && !isTerminalDelegationStatus(m.status)) {
       out.push({ id: m.childSessionId, agent: m.agent, task: m.task, status: m.status });
     }
   }

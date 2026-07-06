@@ -207,6 +207,33 @@ test("inline seed link stamps model and actual reasoning while background seed l
   );
 });
 
+test("a workflow-leaf inline delegation gets NO inline-agent metadata (it has its own rendering)", async () => {
+  // Workflow leaves reuse mode:"inline" + the shared seed, but must keep their old payload - only a
+  // genuine `delegate_inline` agent gets the model/reasoning stamp (isInlineAgentDelegation).
+  const rec = recordingTransport();
+  const provider = { ...answeringProvider("done"), model: "qwen3.6-27b-mlx" };
+  await seedChildSession(
+    context(rec.transport),
+    {
+      agent: { ...EXPLORER, id: "workflow-leaf" },
+      task: "leaf work",
+      provider,
+      parentRunId: "run-parent",
+      childRunId: "run-child",
+      mode: "inline",
+      reasoningLevel: "high",
+    },
+    "child-leaf",
+  );
+  const link = rec.publishedBy("parent-session")[0]?.payload as Record<string, unknown>;
+  assert.equal(link.status, "running");
+  assert.ok(!("model" in link), "a workflow leaf carries no inline-agent model metadata");
+  assert.ok(
+    !("reasoningLevel" in link),
+    "a workflow leaf carries no inline-agent reasoning metadata",
+  );
+});
+
 test("inline child output tokens mirror to parent links while background links stay unchanged", async () => {
   const inline = recordingTransport();
   const baseProvider = answeringProvider("done");
@@ -255,6 +282,11 @@ test("inline child output tokens mirror to parent links while background links s
     mode: "background",
     reasoningLevel: "high",
   });
+  assert.equal(
+    childReasoning,
+    undefined,
+    "a background child does NOT inherit the parent's reasoning level - it stays on the provider default",
+  );
 
   const backgroundLinks = background
     .publishedBy("parent-session")

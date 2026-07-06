@@ -1,9 +1,9 @@
 import { TreeBranch } from "@/components/tree-branch";
-import { fmtTokens } from "@/derive";
 import { useElapsedLabel } from "@/hooks/use-elapsed-label";
 import { cn } from "@/lib/utils";
 import type { InlineAgent, InlineAgentStatus } from "@/transcript";
 import { ShimmerText } from "./action-shimmer";
+import { formatOutputTokenCell } from "./turn-status-header";
 
 /**
  * Responsible for: the compact one-line inline-agent transcript row (plan 09.4 M1). A blocking
@@ -34,11 +34,6 @@ const INLINE_AGENT_TONE: Record<InlineAgentStatus, string> = {
   interrupted: "text-smui-yellow",
 };
 
-/** The `↓ <count> tokens` output cell, shared with the turn-status line (`↓` = tokens streamed down). */
-function tokenCell(tokens: number): string {
-  return `↓ ${fmtTokens(tokens)} tokens`;
-}
-
 /** Where the row sits in a group: `first` carries the `└` branch, `rest` aligns beneath it, absent
  *  (a lone row) has no branch cell at all. */
 type Branch = "first" | "rest";
@@ -67,7 +62,7 @@ export function InlineAgentRow({
   const paren = [
     running ? elapsed : null,
     agent.status === "failed" || agent.status === "interrupted" ? agent.status : null,
-    agent.tokens !== undefined ? tokenCell(agent.tokens) : null,
+    agent.tokens !== undefined ? formatOutputTokenCell(agent.tokens) : null,
   ].filter((cell): cell is string => Boolean(cell));
 
   const tone = INLINE_AGENT_TONE[agent.status];
@@ -115,17 +110,21 @@ export function InlineAgentRow({
  */
 export function InlineAgentGroup({
   agents,
-  variant = "full",
+  variant,
   onOpen,
 }: {
   readonly agents: readonly InlineAgent[];
+  /** Forces a variant; by default a large parallel group auto-compacts (drops the thinking cell). */
   readonly variant?: InlineAgentVariant;
   readonly onOpen?: (childSessionId: string) => void;
 }) {
+  // Many parallel agents drop the thinking cell so a wide group stays scannable (D-001: "abbreviate …
+  // when many agents run"); a caller may still force a variant. This is the real width-pressure caller.
+  const rowVariant: InlineAgentVariant = variant ?? (agents.length >= 4 ? "compact" : "full");
   // A lone child (or none) skips the header + branch entirely: the common case is one quiet row.
   if (agents.length <= 1) {
     const [only] = agents;
-    return only ? <InlineAgentRow agent={only} variant={variant} onOpen={onOpen} /> : null;
+    return only ? <InlineAgentRow agent={only} variant={rowVariant} onOpen={onOpen} /> : null;
   }
   return (
     <div className="flex flex-col gap-0.5">
@@ -136,7 +135,7 @@ export function InlineAgentGroup({
         <InlineAgentRow
           key={agent.childSessionId}
           agent={agent}
-          variant={variant}
+          variant={rowVariant}
           branch={index === 0 ? "first" : "rest"}
           onOpen={onOpen}
         />

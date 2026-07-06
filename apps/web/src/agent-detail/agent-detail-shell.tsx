@@ -23,6 +23,7 @@ export function AgentDetailShell({
   onBack,
   onOpenPath,
   replayed = true,
+  revision,
   className,
 }: {
   /** The child agent's name, for the header; absent while it is still being resolved. */
@@ -33,6 +34,10 @@ export function AgentDetailShell({
   readonly onOpenPath: (path: string) => void;
   /** False while the child session's log is still replaying, so the empty state isn't shown prematurely. */
   readonly replayed?: boolean;
+  /** A monotonic signal (the live wrapper passes the child's event count) that also advances on a
+   *  STREAMING delta within the last row, so auto-scroll re-pins as an answer grows, not only on new
+   *  rows; falls back to the row count in stories/tests. */
+  readonly revision?: number;
   readonly className?: string;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -49,14 +54,16 @@ export function AgentDetailShell({
     }
   };
 
-  // Keep the newest child output in view: a subagent streams to the bottom, so pin there on each update.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-pin whenever the row count grows.
+  // Keep the newest child output in view: a subagent streams to the bottom, so pin there on each
+  // update - a new row OR a streaming delta within the last row (tracked by `revision`).
+  const pinSignal = revision ?? rows.length;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-pin whenever the stream advances.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [rows.length]);
+  }, [pinSignal]);
 
   return (
     <section

@@ -9,6 +9,7 @@ import {
   type GitStatus,
   HOST_ROLE,
   type HostPresence,
+  isInlineAgentDelegation,
   isTerminalDelegationStatus,
   type ModelRef,
   type ProviderModel,
@@ -913,10 +914,13 @@ function runningToolLabel(
 }
 
 /**
- * The agent of the newest still-running delegation on this run - a `delegated.to` link (inline or
- * background) whose child has no terminal link yet - or undefined. Drives the friendly "delegating to
- * {agent}…" turn-status headline (plan 09.4 M5) instead of the raw delegation tool verb, for both the
- * inline block and the brief window a background child is still spawning under the active turn.
+ * The agent of the newest still-running INLINE-AGENT delegation on this run - a `delegate_inline` link
+ * whose child has no terminal link yet - or undefined. Drives the friendly "delegating to {agent}…"
+ * turn-status headline (plan 09.4 M5) instead of the raw delegation tool verb. Scoped to inline-agent
+ * delegations only: a BACKGROUND child is detached (the parent turn keeps doing its own tool work, so
+ * pinning the header on it would MASK that real activity), and a workflow leaf has its own rendering -
+ * `isInlineAgentDelegation` excludes both, so only a blocking inline child, which the parent is truly
+ * waiting on, takes over the headline.
  */
 function activeDelegatingAgent(
   events: readonly SessionEvent[],
@@ -929,6 +933,9 @@ function activeDelegatingAgent(
   for (const event of events) {
     const decoded = decodeTrevorEvent(event);
     if (decoded?.type !== "delegated.to" || decoded.runId !== runId) {
+      continue;
+    }
+    if (!isInlineAgentDelegation(decoded.mode, decoded.agent)) {
       continue;
     }
     if (isTerminalDelegationStatus(decoded.status)) {
