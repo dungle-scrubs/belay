@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { ElementType } from "react";
 import { truncate } from "../../derive";
-import { parseToolArgs, toolSummary } from "../../tool-args";
+import { parseToolArgs, salientToolArg } from "../../tool-args";
 import type { AssistantMessage, Message } from "../../transcript";
 import { messageKindDescriptor } from "./message-kind-descriptor";
 import {
@@ -240,35 +240,14 @@ function compactFromDescriptor(
 }
 
 /**
- * The per-tool compact summary registry (plan 05): the arg whose value is the one-line summary for a tool
- * whose primary arg `toolSummary` doesn't pick up. `toolSummary` keys on command (bash) / pattern
- * (grep, glob) / path (read, write, edit, ...); the search + fetch tools instead key on query/url, so
- * without this they fall back to raw args JSON.
- */
-const TOOL_SUMMARY_ARG: Record<string, string> = {
-  web_search: "query",
-  session_recall: "query",
-  docs: "query",
-  web_fetch: "url",
-  archive_read: "path",
-  archive_unpack: "path",
-  ast_grep: "pattern",
-};
-
-/**
- * A tool's compact one-line summary: the search/fetch query or url, multi_edit's file + edit count,
- * else the shared `toolSummary` (bash command / grep pattern / path). Null when there's nothing useful
- * (a no-arg tool). Lives here (the compact display module), not scattered through `TranscriptRowView`.
+ * A tool's compact one-line summary: `multi_edit`'s file + edit count, else the tool's salient arg via
+ * the shared `salientToolArg` (bash command / grep pattern / search query / fetch url / path, ...). Null
+ * when there's nothing useful (a no-arg tool). Keys off the ONE `tool-args` salient registry rather than
+ * a second per-tool map, so a tool's one-line summary can't read differently in a compact row than in a
+ * full tool row.
  */
 function compactToolSummary(name: string, args: string): string | null {
   const parsed = parseToolArgs(args);
-  const key = TOOL_SUMMARY_ARG[name];
-  if (key) {
-    const value = parsed[key] ?? (name === "archive_read" ? parsed.url : undefined);
-    if (typeof value === "string" && value) {
-      return truncate(value, 80);
-    }
-  }
   if (name === "multi_edit") {
     const path = str(parsed.path) ?? str(parsed.file_path);
     const edits = Array.isArray(parsed.edits) ? parsed.edits.length : 0;
@@ -277,7 +256,8 @@ function compactToolSummary(name: string, args: string): string | null {
       return parts.join(" · ");
     }
   }
-  return toolSummary(name, args) || null;
+  const salient = salientToolArg(name, parsed);
+  return typeof salient === "string" && salient ? truncate(salient, 80) : null;
 }
 
 /** The running spinner while in flight, else the row's settled icon - so a running row always reads as

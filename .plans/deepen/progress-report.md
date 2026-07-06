@@ -26,7 +26,7 @@
 - [ ] C-08: `packages/sdk/src/prompt.ts` + `capabilities.ts` - shared `awaitStreamResult` stream settle/teardown primitive.
 - [ ] C-09: `apps/blob-store/src` + `apps/session-store/src` - one colocated store-identity descriptor per app.
 - [ ] C-10: `apps/web/src/hooks/use-model-selection.ts` ↔ `use-active-model.ts` - collapse into one `useModel` hook.
-- [ ] C-18: `apps/web/src/components/chat/compact-display.ts` - delete `TOOL_SUMMARY_ARG`, route through `tool-args.ts` `salientToolArg`/`toolSummary` (fixes compact-vs-full drift).
+- [x] C-18: `apps/web/src/components/chat/compact-display.ts` - delete `TOOL_SUMMARY_ARG`, route through `tool-args.ts` `salientToolArg`/`toolSummary` (fixes compact-vs-full drift).
 - [ ] C-19: `apps/web/src/composer/*-token-overlay.tsx` + `loop/command-input.tsx` - a shared `MirrorField` primitive + `segmentBySpans` helper.
 - [x] C-23: slug rule - route `branchSlug` + docs `slug()` through `packages/session/src/identity.ts` `idSlug`.
 - [x] C-24: `apps/agent-host/src/tools/source-recall` - move `MAX_SNIPPET_CHARS` into the shared `contract.ts`.
@@ -45,9 +45,9 @@
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 9
-- Open candidates: 17
-- Current cutoff blockers: 17
+- Redesigned (done): 10
+- Open candidates: 16
+- Current cutoff blockers: 16
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 

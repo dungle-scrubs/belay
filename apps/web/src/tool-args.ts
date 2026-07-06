@@ -47,6 +47,12 @@ export function salientToolArg(name: string, args: Record<string, unknown>): unk
       (value) => typeof value === "string" && value.length > 0,
     );
   }
+  if (name === "ast_grep") {
+    return args.pattern;
+  }
+  if (name === "archive_read") {
+    return args.path ?? args.url;
+  }
   return args.path;
 }
 
