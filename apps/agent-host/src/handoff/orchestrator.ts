@@ -5,7 +5,7 @@ import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events, freshSessionId, type SessionTransport } from "@trevor/session";
+import { events, freshSessionId, type SessionTransport, toPublishInput } from "@trevor/session";
 import { Effect, Fiber } from "effect";
 import { interpretFiberExit, interruptFiber } from "../effect/fiber-exit";
 import { parseHandoff } from "./handoff";
@@ -104,9 +104,9 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
       newSessionId: () => freshSessionId(),
       targetModel: controlModel,
       publish: (sessionId, event) =>
-        transport.publishEvent(sessionId, { ...event, producerId: PRODUCER_ID }),
+        transport.publishEvent(sessionId, toPublishInput(event, PRODUCER_ID)),
       publishPrompt: (sessionId, event) =>
-        transport.publishEvent(sessionId, { ...event, producerId: CONTROL_PRODUCER_ID }),
+        transport.publishEvent(sessionId, toPublishInput(event, CONTROL_PRODUCER_ID)),
       ensureSession: async (sessionId) => {
         await transport.ensureSession(sessionId);
       },

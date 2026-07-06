@@ -22,6 +22,7 @@ import {
   type SessionEvent,
   type SessionTransport,
   type TrevorEventInput,
+  toPublishInput,
 } from "@trevor/session";
 import type { TelemetrySink } from "@trevor/session/telemetry";
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
@@ -145,7 +146,7 @@ export function makeTangentAdoption(deps: TangentAdoptionDeps): TangentAdoption 
 
     /** Publishes one event to the TANGENT's durable log, attaching this host's producerId. */
     const emit = (event: TrevorEventInput): Promise<void> =>
-      transport.publishEvent(tangentId, { ...event, producerId });
+      transport.publishEvent(tangentId, toPublishInput(event, producerId));
 
     // The live Emit layer for this tangent's turns: the same shared dedup discipline main.ts uses,
     // publishing to the tangent id.

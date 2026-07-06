@@ -46,6 +46,7 @@ import {
   streamTransport,
   type TrevorEventInput,
   tangentsOf,
+  toPublishInput,
   viewerIdentity,
 } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
@@ -307,7 +308,7 @@ const conversationLog = new ConversationLog({ selfProducerId: PRODUCER_ID });
 
 /** Publishes one event to the durable log, attaching this host's producerId. */
 function emit(event: TrevorEventInput): Promise<void> {
-  return transport.publishEvent(SESSION_ID, { ...event, producerId: PRODUCER_ID });
+  return transport.publishEvent(SESSION_ID, toPublishInput(event, PRODUCER_ID));
 }
 
 // The ask_user pending-question runtime publishes its request/resolved events through this host's emit

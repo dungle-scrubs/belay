@@ -4,6 +4,7 @@ import {
   decodeDoctorSnapshot,
   decodeTrevorEvent,
   events,
+  toPublishInput,
 } from "@trevor/session";
 import type { TrevorClient } from "./client";
 import { SdkError, urlClass, withSdkError } from "./errors";
@@ -73,11 +74,10 @@ export function runCommand(
             replayed = true;
             // Publish only after replay so the tail delivers the host's new result for this command.
             void client.transport
-              .publishEvent(sessionId, {
-                type: "user.command",
-                producerId: client.producerId,
-                payload: events.userCommand({ command, args }).payload,
-              })
+              .publishEvent(
+                sessionId,
+                toPublishInput(events.userCommand({ command, args }), client.producerId),
+              )
               .catch((error: unknown) => {
                 if (!settled) {
                   settled = true;

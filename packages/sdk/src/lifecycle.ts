@@ -1,4 +1,4 @@
-import { events, type SessionSummary, sessionsForProject } from "@trevor/session";
+import { events, type SessionSummary, sessionsForProject, toPublishInput } from "@trevor/session";
 import type { TrevorClient } from "./client";
 import { urlClass, withSdkError } from "./errors";
 
@@ -66,11 +66,10 @@ function publishArchived(
       backendUrlClass: urlClass(client.sessionUrl),
     },
     () =>
-      client.transport.publishEvent(sessionId, {
-        type: "session.archived",
-        producerId: client.producerId,
-        payload: events.sessionArchived({ archived }).payload,
-      }),
+      client.transport.publishEvent(
+        sessionId,
+        toPublishInput(events.sessionArchived({ archived }), client.producerId),
+      ),
   );
 }
 

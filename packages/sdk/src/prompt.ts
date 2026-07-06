@@ -8,6 +8,7 @@ import {
   type ModelSwitchOutcome,
   type SessionConnection,
   type SessionEvent,
+  toPublishInput,
 } from "@trevor/session";
 import type { TrevorClient } from "./client";
 import { SdkError, urlClass, withSdkError } from "./errors";
@@ -47,11 +48,10 @@ export function submitPrompt(
       backendUrlClass: urlClass(client.sessionUrl),
     },
     () =>
-      client.transport.publishEvent(sessionId, {
-        type: "user.message",
-        producerId: client.producerId,
-        payload: events.userMessage(input).payload,
-      }),
+      client.transport.publishEvent(
+        sessionId,
+        toPublishInput(events.userMessage(input), client.producerId),
+      ),
   );
 }
 
@@ -65,11 +65,10 @@ export function cancelRun(client: TrevorClient, sessionId: string, runId: string
       backendUrlClass: urlClass(client.sessionUrl),
     },
     () =>
-      client.transport.publishEvent(sessionId, {
-        type: "user.cancel",
-        producerId: client.producerId,
-        payload: events.userCancel({ runId }).payload,
-      }),
+      client.transport.publishEvent(
+        sessionId,
+        toPublishInput(events.userCancel({ runId }), client.producerId),
+      ),
   );
 }
 
@@ -99,15 +98,17 @@ export function switchModel(
       backendUrlClass: urlClass(client.sessionUrl),
     },
     () =>
-      client.transport.publishEvent(sessionId, {
-        type: "model.switch.requested",
-        producerId: client.producerId,
-        payload: events.modelSwitchRequested({
-          runId: input.runId,
-          model: input.model,
-          initiator: input.initiator ?? "auto",
-        }).payload,
-      }),
+      client.transport.publishEvent(
+        sessionId,
+        toPublishInput(
+          events.modelSwitchRequested({
+            runId: input.runId,
+            model: input.model,
+            initiator: input.initiator ?? "auto",
+          }),
+          client.producerId,
+        ),
+      ),
   );
 }
 

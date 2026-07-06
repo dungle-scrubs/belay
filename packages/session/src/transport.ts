@@ -1,6 +1,7 @@
 import type { HostPresence } from "./envelope";
 import type { SessionEvent } from "./event";
 import type { SessionSummary } from "./inventory";
+import type { TrevorEventInput } from "./protocol";
 import type { PermanentDeleteResult } from "./session-delete";
 
 /**
@@ -29,6 +30,17 @@ export interface PublishInput {
   readonly type: string;
   readonly producerId: string;
   readonly payload: Record<string, unknown>;
+}
+
+/**
+ * Attaches a `producerId` to an event ENVELOPE (`{ type, payload }`, e.g. one of the `events.*`
+ * constructors) to form a {@link PublishInput}. The one place the producer is spliced on at publish
+ * time (the `events.*` builders deliberately omit it, D-002), so publishers stop hand-writing
+ * `{ ...envelope, producerId }` - and, at their worst, re-typing the event-type literal beside the
+ * constructor that already owns it.
+ */
+export function toPublishInput(envelope: TrevorEventInput, producerId: string): PublishInput {
+  return { type: envelope.type, producerId, payload: envelope.payload };
 }
 
 /** Options to open a replay-then-tail stream as a given participant identity. */

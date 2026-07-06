@@ -1,6 +1,6 @@
 import { PRODUCER_IDS } from "./identity";
 import { events } from "./protocol";
-import type { PublishInput } from "./transport";
+import { type PublishInput, toPublishInput } from "./transport";
 
 /**
  * The TANGENT SEED contract (plan 37, M1/M2). A tangent is a side-conversation branched from a SELECTED
@@ -59,13 +59,7 @@ export function planTangent(args: {
     tangentSessionId: args.tangentSessionId,
     parentSessionId: args.anchor.parentSessionId,
     sourceMessageId: args.anchor.sourceMessageId,
-    events: [
-      {
-        type: marker.type,
-        producerId: PRODUCER_IDS.web,
-        payload: marker.payload,
-      },
-    ],
+    events: [toPublishInput(marker, PRODUCER_IDS.web)],
   };
 }
 
