@@ -7,6 +7,7 @@ import type { BackgroundChildInfo } from "@host/agent/delegate";
 import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { commandReplier } from "@host/commands/command-replier";
 import { supervisor } from "@host/processes/processes";
 import { contextRegistry } from "@host/project-context/registry";
 import { log, warn } from "@host/transport/log";
@@ -68,6 +69,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     backgroundChildren,
     debugMode,
   } = deps;
+  const replyFor = commandReplier(emit);
 
   function spawnReplacementHost(opts: WorkspaceTarget): { readonly pid: number } {
     // Fail loud, not silent: if this host's own launch paths were removed out from under it (a managed
@@ -157,6 +159,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
   }
 
   async function clearToFreshSession(): Promise<void> {
+    const reply = replyFor("/clear");
     const nextSessionId = freshSessionId();
     try {
       await transport.ensureSession(nextSessionId);
@@ -165,13 +168,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
         sessionId: nextSessionId,
         workspace: WORKSPACE_ROOT,
       });
-      await emit(
-        events.commandResult({
-          command: "/clear",
-          text: `✓ started fresh session ${nextSessionId}`,
-          ok: true,
-        }),
-      );
+      await reply.ok(`✓ started fresh session ${nextSessionId}`);
       await announceSwitchAndRetire(nextSessionId, "clear");
       log("host", "clear: switched session", {
         from: SESSION_ID,
@@ -180,13 +177,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
       });
     } catch (error) {
       warn("host", "clear: failed to switch session", { error: msg(error) });
-      await emit(
-        events.commandResult({
-          command: "/clear",
-          text: `Failed to start a fresh session: ${msg(error)}`,
-          ok: false,
-        }),
-      );
+      await reply.failed(error, "start a fresh session");
     }
   }
 
@@ -222,33 +213,26 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     if (!blocker) {
       return false;
     }
-    await emit(
-      events.commandResult({ command, text: `Cannot ${verb} while ${blocker}.`, ok: false }),
-    );
+    await replyFor(command).fail(`Cannot ${verb} while ${blocker}.`);
     return true;
   }
 
   async function cdToFreshSession(args: string): Promise<void> {
+    const reply = replyFor("/cd");
     if (await blockedFromWorkspaceSwitch("/cd", "switch directories")) {
       return;
     }
 
     const target = resolveCdTarget(args, { cwd: process.cwd() });
     if (!target.ok) {
-      await emit(events.commandResult({ command: "/cd", text: target.error, ok: false }));
+      await reply.fail(target.error);
       return;
     }
 
     try {
       await transport.ensureSession(target.value.sessionId);
       const spawned = spawnReplacementHost(target.value);
-      await emit(
-        events.commandResult({
-          command: "/cd",
-          text: `✓ switched to ${target.value.cwd}`,
-          ok: true,
-        }),
-      );
+      await reply.ok(`✓ switched to ${target.value.cwd}`);
       await announceSwitchAndRetire(target.value.sessionId, "cd");
       log("host", "cd: switched session", {
         cwd: target.value.cwd,
@@ -259,13 +243,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
       });
     } catch (error) {
       warn("host", "cd: failed to switch session", { error: msg(error) });
-      await emit(
-        events.commandResult({
-          command: "/cd",
-          text: `Failed to switch directories: ${msg(error)}`,
-          ok: false,
-        }),
-      );
+      await reply.failed(error, "switch directories");
     }
   }
 

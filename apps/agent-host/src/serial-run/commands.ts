@@ -1,11 +1,11 @@
 import { TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { commandReplier } from "@host/commands/command-replier";
 import { type DirectHandoffDeps, runDirectHandoff } from "@host/handoff/handoff-flow";
 import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
 import type { WorktreeManager } from "@host/worktrees/manager";
-import { events } from "@trevor/session";
 import { disposeCurrentPlan, serialNext } from "./driver";
 import { startSerialRun } from "./entry";
 import { nodeLoadSerialRun, nodeSerialControllerCaps, nodeSerialRunStartDeps } from "./node";
@@ -38,6 +38,7 @@ export interface SerialRunCommandsDeps {
 /** Builds the serial-run command handlers over the host's live seams; main.ts wires it once. */
 export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
   const { emit, blockedFromWorkspaceSwitch, handoffDeps, worktrees } = deps;
+  const replyFor = commandReplier(emit);
 
   /**
    * `/serial-implement <plans>` (plan 02): parse an ordered plan queue, record a durable, re-openable
@@ -46,6 +47,7 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
    * session is freed by the handoff; the create/implement/merge/delete lifecycle runs in the spawned run.
    */
   async function runSerialImplement(args: string): Promise<void> {
+    const reply = replyFor("/serial-implement");
     if (await blockedFromWorkspaceSwitch("/serial-implement", "start a serial run")) {
       return;
     }
@@ -64,21 +66,13 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
             })),
         }),
       );
-      await emit(
-        events.commandResult({ command: "/serial-implement", text: result.text, ok: result.ok }),
-      );
+      await reply.result(result.text, result.ok);
       if (result.ok) {
         log("host", "serial run started", { runId: result.runId, to: result.targetSessionId });
       }
     } catch (error) {
       warn("host", "serial-implement failed", { error: msg(error) });
-      await emit(
-        events.commandResult({
-          command: "/serial-implement",
-          text: `Failed to start serial run: ${msg(error)}`,
-          ok: false,
-        }),
-      );
+      await reply.failed(error, "start serial run");
     }
   }
 
@@ -98,16 +92,11 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
    * agent which plan to implement. The agent implements in the tree and calls `/serial-dispose` to merge it.
    */
   async function runSerialNext(runId: string): Promise<void> {
+    const reply = replyFor("/serial-next");
     const id = runId.trim();
     const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
     if (!run) {
-      await emit(
-        events.commandResult({
-          command: "/serial-next",
-          text: `unknown serial run: ${id}`,
-          ok: false,
-        }),
-      );
+      await reply.fail(`unknown serial run: ${id}`);
       return;
     }
     const { plan } = await serialNext(run, serialControllerCaps());
@@ -116,7 +105,7 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
       : plan.phase === "merged"
         ? "all plans merged"
         : `next: implement ${plan.planId} in its worktree, then run /serial-dispose ${id}`;
-    await emit(events.commandResult({ command: "/serial-next", text, ok: true }));
+    await reply.ok(text);
   }
 
   /**
@@ -125,26 +114,15 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
    * report, or halt the run on `fail <reason>` - advancing the durable journal either way.
    */
   async function runSerialDispose(args: string): Promise<void> {
+    const reply = replyFor("/serial-dispose");
     const [id, verb, ...rest] = args.trim().split(/\s+/);
     if (!id) {
-      await emit(
-        events.commandResult({
-          command: "/serial-dispose",
-          text: "usage: /serial-dispose <runId> [fail <reason>]",
-          ok: false,
-        }),
-      );
+      await reply.fail("usage: /serial-dispose <runId> [fail <reason>]");
       return;
     }
     const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
     if (!run) {
-      await emit(
-        events.commandResult({
-          command: "/serial-dispose",
-          text: `unknown serial run: ${id}`,
-          ok: false,
-        }),
-      );
+      await reply.fail(`unknown serial run: ${id}`);
       return;
     }
     const outcome =
@@ -159,9 +137,7 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
         : updated.status === "complete"
           ? "✓ all plans merged"
           : `✓ merged; run /serial-next ${id} for the next plan`;
-    await emit(
-      events.commandResult({ command: "/serial-dispose", text, ok: updated.status !== "halted" }),
-    );
+    await reply.result(text, updated.status !== "halted");
   }
 
   return { runSerialImplement, runSerialNext, runSerialDispose };

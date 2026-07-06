@@ -1,6 +1,7 @@
 import type { CompactionController } from "@host/agent/compaction-controller";
 import type { ConversationLog } from "@host/agent/conversation-log";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
+import { commandReplier } from "@host/commands/command-replier";
 import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
@@ -73,6 +74,7 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
     spawnReplacementHost,
     announceSwitchAndRetire,
   } = deps;
+  const reply = commandReplier(emit)("/handoff");
 
   /**
    * Drafts pending generated handoffs by `handoffId`: the generated target prompt awaiting the user's
@@ -139,19 +141,13 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
 
     try {
       const result = await runDirectHandoff(prompt, handoffDeps());
-      await emit(events.commandResult({ command: "/handoff", text: result.text, ok: result.ok }));
+      await reply.result(result.text, result.ok);
       if (result.ok) {
         log("host", "handoff: switched session", { from: SESSION_ID, to: result.targetSessionId });
       }
     } catch (error) {
       warn("host", "handoff failed", { error: msg(error) });
-      await emit(
-        events.commandResult({
-          command: "/handoff",
-          text: `Failed to hand off: ${msg(error)}`,
-          ok: false,
-        }),
-      );
+      await reply.failed(error, "hand off");
     }
   }
 
@@ -167,7 +163,7 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
     const handoffId = crypto.randomUUID();
     const fail = async (code: string, detail: string, resultText: string) => {
       await emit(events.handoffFailed({ handoffId, code, detail }));
-      await emit(events.commandResult({ command: "/handoff", text: resultText, ok: false }));
+      await reply.fail(resultText);
     };
 
     if (!hasGenerableContext(conversationLog.history())) {
@@ -274,18 +270,12 @@ export function makeHandoffOrchestrator(deps: HandoffOrchestratorDeps) {
     }
     try {
       const result = await executeFinalizedHandoff({ handoffId, prompt }, handoffDeps());
-      await emit(events.commandResult({ command: "/handoff", text: result.text, ok: result.ok }));
+      await reply.result(result.text, result.ok);
       log("host", "handoff: approved + switched", { from: SESSION_ID, to: result.targetSessionId });
     } catch (error) {
       warn("host", "handoff approve failed", { error: msg(error) });
       await emit(events.handoffFailed({ handoffId, code: "execute_failed", detail: msg(error) }));
-      await emit(
-        events.commandResult({
-          command: "/handoff",
-          text: `Failed to hand off: ${msg(error)}`,
-          ok: false,
-        }),
-      );
+      await reply.failed(error, "hand off");
     } finally {
       pendingHandoffs.delete(handoffId);
     }

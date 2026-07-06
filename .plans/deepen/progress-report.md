@@ -14,7 +14,7 @@
 - [x] C-02: `packages/sdk/src` - `sessionOp`/`blobOp` error-context helpers + operation-labeled `publishEvent`.
 - [x] C-03: `apps/web/src/session/use-session.ts` (+ new-session hooks) - single `publishWebEvent` owning the `PRODUCER_IDS.web` stamp.
 - [x] C-17: `apps/web/src/composer/image-tokens.ts` + `paste-tokens.ts` - new `positional-tokens.ts` holds one generic `positionalTokenDraft(codec)` engine (renumber/insert/removeAt/removeAdjacent/sync); the two token modules collapse to a `TokenCodec` instance + thin field-adapter wrappers that keep their exact public API (`ImageDraft.refs` / `PasteDraft.pastes`, same fn names), so `draft.ts` + both unit suites stay unchanged and keep pinning correctness. The two ~150-line twins went 309 -> 176 lines; the invariant logic now lives once.
-- [ ] C-20: `apps/agent-host/src` programmatic-command lane - a `CommandReplier` collapsing 51 hand-spelled `events.commandResult` sites.
+- [x] C-20: `apps/agent-host/src` programmatic-command lane - new `commands/command-replier.ts` `commandReplier(emit)` -> `replyFor(command)` -> `{ ok, fail, result, failed }`, built locally in each command factory from the already-injected `emit` (no deps-signature change). Converted the 4 high-density files (worktrees 13, handoff 5/7, serial-run 7, session-switch 6 = 31 sites): the command name + `command.result` shape + "Failed to <verb>" phrasing now each have one owner. Intentionally NOT converted: `lifecycle.ts` (7 of 10 strings carry pre-existing em-dashes, left byte-for-byte), `main.ts` (its `emitResult`/`runCommand` are already the central relay + carry the menu variant the replier omits), `model-prefs-command.ts` (its `emit` is the wider `() => Promise<void> | void`), and the two 1-site files (`leadership.ts`, `control-prompts.ts`, `handoff` x2 em-dash) where a replier saves nothing.
 - [x] C-22: `packages/session/src/fork.ts` - export `FORK_ORIGIN_KEY` + `hasForkOrigin` so `tangent-isolation.ts` stops re-declaring the contract.
 
 ### Phase 2: Medium
@@ -45,9 +45,9 @@
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 22
-- Open candidates: 2
-- Current cutoff blockers: 2
+- Redesigned (done): 23
+- Open candidates: 1
+- Current cutoff blockers: 1
 - Rejected on read (premise didn't survive code review): 2 (C-11, C-12)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0

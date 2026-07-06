@@ -1,10 +1,10 @@
 import { abbrevHome } from "@host/boot/paths";
+import { commandReplier } from "@host/commands/command-replier";
 import { type CwdLockCaps, cwdSwitchConflict } from "@host/session/cwd-lock";
 import type { SessionSwitchApi } from "@host/session/session-switch";
 import { warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events } from "@trevor/session";
 import type { WorktreeManager } from "./manager";
 
 /**
@@ -43,44 +43,32 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
     switchToWorkspace,
     announceOnline,
   } = deps;
+  const replyFor = commandReplier(emit);
 
   /** Switches to a managed worktree (or the baseline checkout) by row id, gated like `/cd`. */
   async function worktreeSwitch(id: string): Promise<void> {
+    const reply = replyFor("/worktree");
     if (await blockedFromWorkspaceSwitch("/worktree", "switch worktrees")) {
       return;
     }
     const target = worktrees.resolveSwitch(id, process.cwd());
     if (!target.ok) {
-      await emit(events.commandResult({ command: "/worktree", text: target.error, ok: false }));
+      await reply.fail(target.error);
       return;
     }
     if (target.path === process.cwd()) {
-      await emit(
-        events.commandResult({ command: "/worktree", text: "Already on this worktree.", ok: true }),
-      );
+      await reply.ok("Already on this worktree.");
       return;
     }
     // Block the switch before spawning a host if a DIFFERENT live session already owns the target
     // directory (plan 01) - it would otherwise become a second mutating owner of the same path.
     const lockConflict = cwdSwitchConflict(target.path, target.sessionId, cwdLockCaps);
     if (lockConflict) {
-      await emit(
-        events.commandResult({
-          command: "/worktree",
-          text: `Cannot switch - ${lockConflict.message}`,
-          ok: false,
-        }),
-      );
+      await reply.fail(`Cannot switch - ${lockConflict.message}`);
       return;
     }
     try {
-      await emit(
-        events.commandResult({
-          command: "/worktree",
-          text: `✓ switched to ${abbrevHome(target.path)}`,
-          ok: true,
-        }),
-      );
+      await reply.ok(`✓ switched to ${abbrevHome(target.path)}`);
       await switchToWorkspace({
         cwd: target.path,
         sessionId: target.sessionId,
@@ -89,30 +77,19 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
       });
     } catch (error) {
       warn("host", "worktree: switch failed", { error: msg(error) });
-      await emit(
-        events.commandResult({
-          command: "/worktree",
-          text: `Failed to switch worktree: ${msg(error)}`,
-          ok: false,
-        }),
-      );
+      await reply.failed(error, "switch worktree");
     }
   }
 
   /** Creates a managed worktree on a new branch from HEAD, records it, and switches into it. */
   async function worktreeNew(branch: string): Promise<void> {
+    const reply = replyFor("/worktree-new");
     if (await blockedFromWorkspaceSwitch("/worktree-new", "create a worktree")) {
       return;
     }
     const name = branch.trim();
     if (!name) {
-      await emit(
-        events.commandResult({
-          command: "/worktree-new",
-          text: "usage: /worktree-new <branch>",
-          ok: false,
-        }),
-      );
+      await reply.fail("usage: /worktree-new <branch>");
       return;
     }
     const result = worktrees.createFromCwd({
@@ -121,17 +98,11 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
       baseRef: "HEAD",
     });
     if (!result.ok) {
-      await emit(events.commandResult({ command: "/worktree-new", text: result.error, ok: false }));
+      await reply.fail(result.error);
       return;
     }
     try {
-      await emit(
-        events.commandResult({
-          command: "/worktree-new",
-          text: `✓ created ${name} and switched in`,
-          ok: true,
-        }),
-      );
+      await reply.ok(`✓ created ${name} and switched in`);
       await switchToWorkspace({
         cwd: result.record.worktreePath,
         sessionId: result.record.sessionId,
@@ -140,28 +111,20 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
       });
     } catch (error) {
       warn("host", "worktree: create-switch failed", { error: msg(error) });
-      await emit(
-        events.commandResult({
-          command: "/worktree-new",
-          text: `Failed to open worktree: ${msg(error)}`,
-          ok: false,
-        }),
-      );
+      await reply.failed(error, "open worktree");
     }
   }
 
   /** Merges a worktree's branch back into the baseline checkout (M5), gated like a switch. */
   async function worktreeMerge(id: string): Promise<void> {
+    const reply = replyFor("/worktree-merge");
     if (await blockedFromWorkspaceSwitch("/worktree-merge", "merge")) {
       return;
     }
     const result = worktrees.mergeBack(id.trim(), process.cwd());
-    await emit(
-      events.commandResult({
-        command: "/worktree-merge",
-        text: result.ok ? "✓ merged worktree branch into baseline" : result.error,
-        ok: result.ok,
-      }),
+    await reply.result(
+      result.ok ? "✓ merged worktree branch into baseline" : result.error,
+      result.ok,
     );
     if (result.ok) {
       announceOnline();
@@ -170,26 +133,15 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
 
   /** Deletes a managed worktree (M5). `<id> [force]`; without force a dirty/unpushed tree is refused. */
   async function worktreeDelete(args: string): Promise<void> {
+    const reply = replyFor("/worktree-delete");
     const [id, ...rest] = args.trim().split(/\s+/);
     const force = rest.includes("force");
     if (!id) {
-      await emit(
-        events.commandResult({
-          command: "/worktree-delete",
-          text: "usage: /worktree-delete <id> [force]",
-          ok: false,
-        }),
-      );
+      await reply.fail("usage: /worktree-delete <id> [force]");
       return;
     }
     const result = worktrees.remove(id, process.cwd(), force);
-    await emit(
-      events.commandResult({
-        command: "/worktree-delete",
-        text: result.ok ? "✓ deleted worktree" : result.error,
-        ok: result.ok,
-      }),
-    );
+    await reply.result(result.ok ? "✓ deleted worktree" : result.error, result.ok);
     if (result.ok) {
       announceOnline();
     }
@@ -197,16 +149,10 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
 
   /** Reconciles the registry against the filesystem, dropping worktrees whose path is gone (M5). */
   async function worktreeReconcile(): Promise<void> {
+    const reply = replyFor("/worktree-reconcile");
     const gone = worktrees.reconcile(process.cwd());
-    await emit(
-      events.commandResult({
-        command: "/worktree-reconcile",
-        text:
-          gone.length > 0
-            ? `✓ reconciled ${gone.length} stale worktree(s)`
-            : "nothing to reconcile",
-        ok: true,
-      }),
+    await reply.ok(
+      gone.length > 0 ? `✓ reconciled ${gone.length} stale worktree(s)` : "nothing to reconcile",
     );
     if (gone.length > 0) {
       announceOnline();
