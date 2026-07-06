@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -32,7 +32,10 @@ import {
 const STORE_URL = serviceUrl("store");
 const WEB_URL = `${serviceUrl("web")}/`;
 const PROBE_TIMEOUT_MS = 800;
-const STORE_READY_TIMEOUT_MS = 15_000;
+/** How long a booting store gets before `waitForStore` gives up. Exported so the supervisor's
+ *  watchdog (plan 45.2 M2) reuses the SAME window as its post-kill recovery grace - "how long a
+ *  store legitimately takes to come up" has one owner. */
+export const STORE_READY_TIMEOUT_MS = 15_000;
 // Vite cold-starts can take several seconds (deps optimize), so the web gets a more generous window.
 const WEB_READY_TIMEOUT_MS = 30_000;
 const HOST_ONLINE_TIMEOUT_MS = 20_000;
@@ -60,8 +63,10 @@ function repoRoot(): string {
 }
 
 /** A timed GET that degrades any failure (network error or timeout-abort) to null, so a probe reads
- *  as "not listening" rather than throwing. The abort+timer protocol lives in `raceTimeout`. */
-function fetchWithTimeout(url: string, ms: number): Promise<Response | null> {
+ *  as "not listening" rather than throwing. The abort+timer protocol lives in `raceTimeout`. Exported
+ *  as the shared health-probe primitive (`waitForStore`, `probeService`, and the supervisor's store
+ *  watchdog all poll through it). */
+export function fetchWithTimeout(url: string, ms: number): Promise<Response | null> {
   return raceTimeout((signal) => fetch(url, { signal }), ms).catch(() => null);
 }
 
@@ -256,6 +261,44 @@ async function openBrowser(url: string): Promise<void> {
   } catch {
     // Opening is best-effort; the URL is always printed in the status line.
   }
+}
+
+/** Produces the raw newline-separated PID list for a port's TCP LISTEN holders (the `lsof -t` shape).
+ *  Injectable so {@link findListenerPids} is testable without a real socket. */
+export type ListenerPidScanner = (port: number) => Promise<string>;
+
+/** The real scanner: `lsof -t -iTCP:<port> -sTCP:LISTEN` (macOS + Linux). lsof exits 1 when nothing
+ *  listens, which is an empty result here, not a failure. */
+const lsofListenerScan: ListenerPidScanner = (port) =>
+  new Promise((resolve) => {
+    execFile("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], (error, stdout) =>
+      resolve(error && !stdout ? "" : stdout),
+    );
+  });
+
+/** Parses `lsof -t` output into unique positive PIDs (one per line, and the same process can appear
+ *  once per listening fd - e.g. its IPv4 and IPv6 sockets). */
+export function parseListenerPids(output: string): readonly number[] {
+  const pids = output
+    .split("\n")
+    .map((line) => Number.parseInt(line.trim(), 10))
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+  return [...new Set(pids)];
+}
+
+/**
+ * Finds the PID(s) holding a local TCP port in LISTEN state - the "find the store PID" owner (plan
+ * 45.2 M2): a wedged store is still alive and still holds `:17424`, so the port listener IS the
+ * process to terminate. Best-effort by construction: a scan failure (no lsof, spawn error) reads as
+ * "no listener found", never a throw, because callers treat the result as a kill target list.
+ */
+export function findListenerPids(
+  port: number,
+  scan: ListenerPidScanner = lsofListenerScan,
+): Promise<readonly number[]> {
+  return scan(port)
+    .then(parseListenerPids)
+    .catch(() => []);
 }
 
 /** Liveness probe for a host pid: signal 0 sends nothing but throws if the process is gone. The

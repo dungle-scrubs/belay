@@ -146,6 +146,9 @@ export const SPAN_NAMES = {
   storeAppend: "trevor.store.append",
   storeDiag: "trevor.store.diag",
   storeSlowQuery: "trevor.store.slow_query",
+  supervisorStoreWedgeDetected: "trevor.supervisor.store_wedge_detected",
+  supervisorStoreRestarted: "trevor.supervisor.store_restarted",
+  supervisorStoreRecoveryExhausted: "trevor.supervisor.store_recovery_exhausted",
   blobIo: "trevor.blob.io",
   cliLaunch: "trevor.cli.launch",
   webRender: "trevor.web.render",
@@ -309,7 +312,13 @@ function emitSpan(
 }
 
 /** One of Trevor's telemetry-emitting services (the OTel `service.name` + Sentry project scope). */
-export type TelemetryService = "agent-host" | "session-store" | "blob-store" | "trevor-cli" | "web";
+export type TelemetryService =
+  | "agent-host"
+  | "session-store"
+  | "blob-store"
+  | "supervisor"
+  | "trevor-cli"
+  | "web";
 
 /**
  * The OTel resource attributes for a service: bounded, low-cardinality identity only (service name +

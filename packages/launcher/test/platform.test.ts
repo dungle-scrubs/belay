@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { buildHostSpawnCommand } from "../src/platform";
+import { buildHostSpawnCommand, findListenerPids, parseListenerPids } from "../src/platform";
 
 test("host spawn command uses opchain when the Trevor env file exists", () => {
   const command = buildHostSpawnCommand({
@@ -44,4 +44,28 @@ test("host spawn command falls back to direct node when the Trevor env file is a
     "/repo/apps/agent-host/src/main.ts",
   ]);
   assert.equal(command.command, "tsx agent-host");
+});
+
+test("parseListenerPids reads lsof -t output into unique positive pids", () => {
+  // One pid per line, possibly repeated across fds (IPv4 + IPv6 sockets of the same process).
+  assert.deepEqual(parseListenerPids("123\n456\n123\n"), [123, 456]);
+  assert.deepEqual(parseListenerPids(" 789 \n"), [789]);
+  assert.deepEqual(parseListenerPids(""), []);
+  assert.deepEqual(parseListenerPids("garbage\n-5\n0\n"), []);
+});
+
+test("findListenerPids scans the given port and degrades to empty on a scanner failure", async () => {
+  const scanned: number[] = [];
+  const pids = await findListenerPids(17424, (port) => {
+    scanned.push(port);
+    return Promise.resolve("17\n17\n99\n");
+  });
+  assert.deepEqual(pids, [17, 99]);
+  assert.deepEqual(scanned, [17424]);
+
+  // A missing lsof binary (or any scan failure) reads as "no listener", never a throw.
+  assert.deepEqual(
+    await findListenerPids(17424, () => Promise.reject(new Error("lsof missing"))),
+    [],
+  );
 });

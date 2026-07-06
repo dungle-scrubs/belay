@@ -8,11 +8,13 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { RESERVED_PORTS, serviceUrl } from "@trevor/session/ports";
+import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import type { SupervisorDeps } from "./dispatch";
 import { pickProjectFolder } from "./folder-picker";
 import { nodeLaunch } from "./launch-runner";
 import { readRecents } from "./recents";
 import { subscribeControlSession } from "./subscribe";
+import { startStoreWatchdog } from "./watchdog";
 
 /**
  * The `trevor supervisor` daemon (plan 44.1): the one persistent local actor that can spawn a host on
@@ -85,6 +87,9 @@ async function ensureSessionReady(attempts = 30): Promise<void> {
 
 async function main(): Promise<void> {
   await startHealthServer();
+  // The watchdog starts BEFORE the store handshake: it must already be polling while
+  // `ensureSessionReady` waits on a store that may be the very wedge it exists to break.
+  startStoreWatchdog({ storeUrl: STORE_URL, telemetry: createTelemetrySink("supervisor"), log });
   await ensureSessionReady();
   subscribeControlSession(transport, deps, { instanceId: INSTANCE_ID, log });
   log("started", { session: SUPERVISOR_SESSION_ID, store: STORE_URL });
