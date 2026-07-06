@@ -16,6 +16,30 @@ import { type KeyboardEvent as ReactKeyboardEvent, type SetStateAction, useCallb
  * Not for: filtering, the active index STATE (only its setter), or what a menu family's rows/matches
  * even are - those stay fully owned by each caller's own hook.
  */
+/**
+ * The next highlighted index for a vertical list on an Arrow key: down/up move by one, either WRAPPING
+ * around the ends or CLAMPING at them; any non-arrow key (or an empty list) returns null. The one owner
+ * of the cycle-vs-clamp arithmetic, shared by the composer autocomplete menus (wrap) and the nested
+ * command menu (clamp) so "how an arrow moves a menu index" is written once, not re-derived per menu.
+ */
+export function arrowNavIndex(
+  key: string,
+  index: number,
+  count: number,
+  opts: { readonly wrap: boolean },
+): number | null {
+  if (count <= 0) {
+    return null;
+  }
+  if (key === "ArrowDown") {
+    return opts.wrap ? (index + 1) % count : Math.min(index + 1, count - 1);
+  }
+  if (key === "ArrowUp") {
+    return opts.wrap ? (index - 1 + count) % count : Math.max(index - 1, 0);
+  }
+  return null;
+}
+
 export interface AutocompleteMenuKeysOptions<T> {
   readonly open: boolean;
   readonly matches: readonly T[];
@@ -55,14 +79,11 @@ export function useAutocompleteMenuKeys<T>({
         // An open-but-empty menu owns nothing else: Backspace/typing edit the query, Enter submits.
         return false;
       }
-      if (event.key === "ArrowDown") {
+      const arrowMove = (i: number) => arrowNavIndex(event.key, i, matches.length, { wrap: true });
+      if (arrowMove(activeIndex) !== null) {
         event.preventDefault();
-        setActiveIndex((i) => (i + 1) % matches.length);
-        return true;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActiveIndex((i) => (i - 1 + matches.length) % matches.length);
+        // Functional updater so two arrow presses batched before a re-render each see the latest index.
+        setActiveIndex((i) => arrowMove(i) ?? i);
         return true;
       }
       if (event.key === "Tab") {

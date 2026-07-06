@@ -5,6 +5,7 @@ import {
   isSubmenu,
 } from "@trevor/session";
 import { useMemo, useState } from "react";
+import { arrowNavIndex } from "@/hooks/use-autocomplete-menu-keys";
 
 /**
  * The navigation, search, and keyboard state for the generic nested command menu (plan 03, M2). Pure
@@ -90,15 +91,15 @@ export function useCommandMenu(
   };
 
   const onKeyDown = (event: { readonly key: string; preventDefault(): void }): boolean => {
+    // Arrow up/down share the cycle-vs-clamp arithmetic with the composer autocomplete menus; this menu
+    // CLAMPS (a nested menu has a back affordance, so wrapping past the top would fight ArrowLeft/Escape).
+    const arrowMove = (i: number) => arrowNavIndex(event.key, i, rows.length, { wrap: false });
+    if (arrowMove(highlighted) !== null) {
+      event.preventDefault();
+      setHighlighted((i) => arrowMove(i) ?? i);
+      return true;
+    }
     switch (event.key) {
-      case "ArrowDown":
-        event.preventDefault();
-        setHighlighted((i) => Math.min(i + 1, Math.max(rows.length - 1, 0)));
-        return true;
-      case "ArrowUp":
-        event.preventDefault();
-        setHighlighted((i) => Math.max(i - 1, 0));
-        return true;
       case "Enter": {
         const row = rows[highlighted];
         if (row) {
