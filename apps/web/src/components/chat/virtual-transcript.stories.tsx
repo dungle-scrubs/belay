@@ -117,10 +117,7 @@ function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boo
         scrollRef={scrollRef}
         controller={controllerRef.current}
         scrollToBottomRequest={0}
-        showThinking
-        compact={compact}
-        onOpenPath={() => {}}
-        onDoctorRefresh={() => {}}
+        rowConfig={{ showThinking: true, compact, onOpenPath: () => {}, onDoctorRefresh: () => {} }}
       />
     </div>
   );

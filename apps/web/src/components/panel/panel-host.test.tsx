@@ -164,12 +164,14 @@ function PanelHostHarness(props: {
       stream={stream}
       tasks={tasks ?? []}
       transcript={{
-        compact: false,
-        onDoctorRefresh: vi.fn(),
-        onOpenPath: vi.fn(),
+        rowConfig: {
+          compact: false,
+          onDoctorRefresh: vi.fn(),
+          onOpenPath: vi.fn(),
+          showThinking: true,
+        },
         onUnqueue: vi.fn(),
         queue: [],
-        showThinking: true,
         toolBatches: readOnlyToolBatches([]),
         transcript: [],
         ...(turnStatusHeader ? { turnStatusHeader } : {}),

@@ -17,14 +17,13 @@ import type { ScrollFollowController, ScrollWriter } from "@/scroll-follow";
 import type { Message } from "../../transcript";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
 
-export interface VirtualTranscriptProps {
-  readonly rows: readonly TranscriptRow[];
-  readonly scrollRef: RefObject<HTMLDivElement | null>;
-  /** The single follow authority (plan 12.2). Every programmatic scroll write asks it, and it decides
-   *  synchronously - so a follow can never win a race against a user gesture the way lagging state did.
-   *  Pin state is derived from it here too (no separately drilled prop that could disagree). */
-  readonly controller: ScrollFollowController;
-  readonly scrollToBottomRequest: number;
+/**
+ * The per-row rendering config a transcript row needs: which row-level takeovers/commands its buttons
+ * fire, and the two display flags (thinking visibility, compact layout). Grouped as one value so it
+ * travels PanelHost -> VirtualTranscript as a single prop instead of seven mirrored ones, and its shape
+ * is declared once (the panel's TranscriptView embeds the same bundle).
+ */
+export interface TranscriptRowConfig {
   readonly showThinking: boolean;
   readonly onOpenPath: (path: string) => void;
   readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
@@ -34,6 +33,17 @@ export interface VirtualTranscriptProps {
   readonly onOpenDetail?: (message: Message) => void;
   /** Compact transcript mode (plan 05): non-primary rows collapse to one line. Off by default. */
   readonly compact?: boolean;
+}
+
+export interface VirtualTranscriptProps {
+  readonly rows: readonly TranscriptRow[];
+  readonly scrollRef: RefObject<HTMLDivElement | null>;
+  /** The single follow authority (plan 12.2). Every programmatic scroll write asks it, and it decides
+   *  synchronously - so a follow can never win a race against a user gesture the way lagging state did.
+   *  Pin state is derived from it here too (no separately drilled prop that could disagree). */
+  readonly controller: ScrollFollowController;
+  readonly scrollToBottomRequest: number;
+  readonly rowConfig: TranscriptRowConfig;
   readonly testInitialRect?: Rect;
 }
 
@@ -85,15 +95,18 @@ export function VirtualTranscript({
   scrollRef,
   controller,
   scrollToBottomRequest,
-  showThinking,
-  onOpenPath,
-  onOpenArtifact,
-  onDoctorRefresh,
-  onMenuAction,
-  onOpenDetail,
-  compact = false,
+  rowConfig,
   testInitialRect,
 }: VirtualTranscriptProps) {
+  const {
+    showThinking,
+    onOpenPath,
+    onOpenArtifact,
+    onDoctorRefresh,
+    onMenuAction,
+    onOpenDetail,
+    compact = false,
+  } = rowConfig;
   const lastRowIdRef = useRef<string | null>(null);
   const [readyToReveal, setReadyToReveal] = useState(false);
   const [settleTick, setSettleTick] = useState(0);

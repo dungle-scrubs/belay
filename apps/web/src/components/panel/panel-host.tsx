@@ -37,7 +37,7 @@ import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
 import { TurnStatusHeader } from "@/components/chat/turn-status-header";
-import { VirtualTranscript } from "@/components/chat/virtual-transcript";
+import { type TranscriptRowConfig, VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { RowChooserModal } from "@/components/command-modal";
 import { HandoffApprovalSurface } from "@/components/handoff/handoff-approval-surface";
 import { SessionSidebar } from "@/components/panel/session-sidebar";
@@ -59,7 +59,7 @@ import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../r
 import type { QueuedPrompt } from "../../send-queue";
 import type { SupportSubagent } from "../../support-panel/support-panel";
 import { SupportPanel } from "../../support-panel/support-panel-view";
-import type { Message, PanelModel, readOnlyToolBatches, toTranscript } from "../../transcript";
+import type { PanelModel, readOnlyToolBatches, toTranscript } from "../../transcript";
 import { buildTranscriptRows } from "../../transcript-rows";
 import { WORKTREE_CHOOSER } from "../../worktrees";
 import type { WorktreeRowsContext } from "../../worktrees/worktree-rows";
@@ -74,18 +74,9 @@ type ToolBatches = ReturnType<typeof readOnlyToolBatches>;
 export interface TranscriptView {
   readonly transcript: Transcript;
   readonly toolBatches: ToolBatches;
-  readonly onOpenPath: (path: string) => void;
-  readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
-  /** Re-runs `/doctor` on the host (a no-model-turn immediate command), wired to the dashboard's
-   *  refresh control. App owns it because it depends on the session command action. */
-  readonly onDoctorRefresh: () => void;
-  /** Dispatch a nested command-menu row selection as a host command (plan 03), e.g. `/style concise`. */
-  readonly onMenuAction?: (command: string, args: string) => void;
-  /** Open the tool detail takeover for a detail-eligible transcript row (plan 08). */
-  readonly onOpenDetail?: (message: Message) => void;
-  readonly showThinking: boolean;
-  /** Compact transcript layout (plan 05): collapse non-primary rows to one line. */
-  readonly compact: boolean;
+  /** The per-row rendering config (row takeovers/commands + thinking/compact flags), forwarded as one
+   *  bundle to VirtualTranscript rather than re-threaded field by field. */
+  readonly rowConfig: TranscriptRowConfig;
   /** The pinned live turn-status header (plan 50): the one in-flight status line above the checklist,
    *  or undefined when no turn is active. Replaces the retired scrolling "Working" row. */
   readonly turnStatusHeader?: TurnStatusHeaderData;
@@ -315,19 +306,7 @@ export function PanelHost(props: {
   const { sidebar, sessionName, chooser, archived, onUnarchive, question, handoff, onTangent } =
     props;
   const { replayed } = stream;
-  const {
-    transcript,
-    toolBatches,
-    onOpenPath,
-    onOpenArtifact,
-    onDoctorRefresh,
-    onMenuAction,
-    onOpenDetail,
-    showThinking,
-    compact,
-    queue,
-    onUnqueue,
-  } = tv;
+  const { transcript, toolBatches, rowConfig, queue, onUnqueue } = tv;
   const { turnStatusHeader } = tv;
   const rows = useMemo(
     () => buildTranscriptRows({ toolBatches, transcript }),
@@ -432,13 +411,7 @@ export function PanelHost(props: {
                 scrollRef={scroll.transcriptRef}
                 controller={scroll.controller}
                 scrollToBottomRequest={scroll.bottomRequestId}
-                showThinking={showThinking}
-                compact={compact}
-                onOpenPath={onOpenPath}
-                onOpenArtifact={onOpenArtifact}
-                onOpenDetail={onOpenDetail}
-                onDoctorRefresh={onDoctorRefresh}
-                onMenuAction={onMenuAction}
+                rowConfig={rowConfig}
               />
             )}
           </div>

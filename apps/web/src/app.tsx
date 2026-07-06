@@ -1494,21 +1494,23 @@ export function App() {
         transcript={{
           transcript,
           toolBatches,
-          onOpenPath: (path) => void openInEditor(path),
-          onOpenArtifact: (artifact) => {
-            setChooserOpen(false);
-            modal.setArchiveOpen(false);
-            setDetailId(null);
-            setJobDetailId(null);
-            setArtifactPanel((state) =>
-              openArtifactPanel(state ?? createArtifactPanelState(), { artifact }),
-            );
+          rowConfig: {
+            onOpenPath: (path) => void openInEditor(path),
+            onOpenArtifact: (artifact) => {
+              setChooserOpen(false);
+              modal.setArchiveOpen(false);
+              setDetailId(null);
+              setJobDetailId(null);
+              setArtifactPanel((state) =>
+                openArtifactPanel(state ?? createArtifactPanelState(), { artifact }),
+              );
+            },
+            onDoctorRefresh: () => void command("/doctor", "refresh"),
+            onMenuAction: (cmd: string, args: string) => void command(cmd, args),
+            onOpenDetail,
+            showThinking: showThinkingOn,
+            compact,
           },
-          onDoctorRefresh: () => void command("/doctor", "refresh"),
-          onMenuAction: (cmd: string, args: string) => void command(cmd, args),
-          onOpenDetail,
-          showThinking: showThinkingOn,
-          compact,
           // The pinned live turn-status header (plan 50) replaces the scrolling "Working" row. It is
           // already suppressed for a host-stranded prompt (turnStatusHeaderFrom is gated on
           // `awaitingResponse && !hostlessPending`), so the no-host status line still carries that

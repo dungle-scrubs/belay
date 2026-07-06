@@ -126,10 +126,7 @@ function Harness({
         scrollRef={scrollRef as RefObject<HTMLDivElement | null>}
         controller={controller}
         scrollToBottomRequest={scrollToBottomRequest}
-        showThinking
-        compact={compact}
-        onOpenPath={noop}
-        onDoctorRefresh={noop}
+        rowConfig={{ showThinking: true, compact, onOpenPath: noop, onDoctorRefresh: noop }}
         testInitialRect={{ width: 900, height: 600 }}
       />
     </div>

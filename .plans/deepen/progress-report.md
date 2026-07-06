@@ -36,7 +36,7 @@
 - [ ] C-11: `apps/agent-host/src/agent/turn.ts` `publishTurn` ↔ `RunAgentOptions` - group always-together knobs into named bundles.
 - [ ] C-12: `apps/agent-host/src/doctor/build.ts` - subsystems contribute own doctor fragments instead of 20-field facts threading.
 - [x] C-13: `packages/session/src/capability-manifest-compact.ts` - import `CHARS_PER_TOKEN` from `breakdown.ts`.
-- [ ] C-14: `apps/web/src/components/panel/panel-host.tsx` → `virtual-transcript.tsx` - pass transcript handlers as one bundle.
+- [x] C-14: `apps/web/src/components/panel/panel-host.tsx` → `virtual-transcript.tsx` - pass transcript handlers as one bundle.
 - [ ] C-15: `apps/web/src/components/command-menu/use-command-menu.ts` - route keys through the shared `useAutocompleteMenuKeys`.
 - [x] C-16: node-side `resolveServiceUrl(name)` - own the `<SVC>_URL` override, close the CLI override gap.
 - [x] C-21: `apps/agent-host/src/tools/shared.ts` - lift `clipLine`/`boundedText` host-wide; route ~8 re-implementations through it.
@@ -45,9 +45,9 @@
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 18
-- Open candidates: 8
-- Current cutoff blockers: 8
+- Redesigned (done): 19
+- Open candidates: 7
+- Current cutoff blockers: 7
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
