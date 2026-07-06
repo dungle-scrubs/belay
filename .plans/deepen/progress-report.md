@@ -12,7 +12,7 @@
 
 - [x] C-01: `packages/session/src/inventory-display.ts` - promote project-scoped selection + recency comparator into `@trevor/session`; fixes the sidebar tangent-leak bug.
 - [ ] C-02: `packages/sdk/src` - `sessionOp`/`blobOp` error-context helpers + operation-labeled `publishEvent`.
-- [ ] C-03: `apps/web/src/session/use-session.ts` (+ new-session hooks) - single `publishWebEvent` owning the `PRODUCER_IDS.web` stamp.
+- [x] C-03: `apps/web/src/session/use-session.ts` (+ new-session hooks) - single `publishWebEvent` owning the `PRODUCER_IDS.web` stamp.
 - [ ] C-17: `apps/web/src/composer/image-tokens.ts` + `paste-tokens.ts` (+ `draft.ts`) - one generic `PositionalTokenDraft<Payload>` engine over a `TokenCodec`.
 - [ ] C-20: `apps/agent-host/src` programmatic-command lane - a `CommandReplier` collapsing 51 hand-spelled `events.commandResult` sites.
 - [x] C-22: `packages/session/src/fork.ts` - export `FORK_ORIGIN_KEY` + `hasForkOrigin` so `tangent-isolation.ts` stops re-declaring the contract.
@@ -45,9 +45,9 @@
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 8
-- Open candidates: 18
-- Current cutoff blockers: 18
+- Redesigned (done): 9
+- Open candidates: 17
+- Current cutoff blockers: 17
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 

@@ -1,6 +1,5 @@
 import {
   decodeTrevorEvent,
-  PRODUCER_IDS,
   type SessionTransport,
   SUPERVISOR_SESSION_ID,
   type SupervisorProject,
@@ -8,7 +7,7 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sessionTransport, useSessionWithTransport } from "@/session/use-session";
+import { publishWebEvent, sessionTransport, useSessionWithTransport } from "@/session/use-session";
 import { type PathValidation, validatePath } from "./path-validation";
 import { type LaunchController, type LaunchPhase, useLaunch } from "./use-launch";
 
@@ -95,7 +94,7 @@ export function useSupervisor(options: UseSupervisorOptions): SupervisorControll
 
   const publish = useCallback(
     (built: TrevorEventInput): Promise<void> =>
-      transport.publishEvent(SUPERVISOR_SESSION_ID, { producerId: PRODUCER_IDS.web, ...built }),
+      publishWebEvent(transport, SUPERVISOR_SESSION_ID, built),
     [transport],
   );
 

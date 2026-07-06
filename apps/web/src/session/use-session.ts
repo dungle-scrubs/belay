@@ -19,6 +19,7 @@ import {
   type TangentAnchorSeed,
   type TangentFoldMode,
   type TrevorEventInput,
+  toPublishInput,
   viewerIdentity,
 } from "@trevor/session";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -115,7 +116,7 @@ function connect(sessionTransport: SessionTransport, options: ConnectOptions): S
   });
 }
 
-/** Publishes one event to the durable log via REST; it returns over the stream. */
+/** Publishes one already-stamped event to the durable log via REST; it returns over the stream. */
 function publishEvent(
   sessionTransport: SessionTransport,
   sessionId: string,
@@ -125,34 +126,39 @@ function publishEvent(
 }
 
 /**
+ * Publishes a BROWSER event: stamps the shared web producer id (`PRODUCER_IDS.web`, owned in
+ * `@trevor/session`) onto the envelope and publishes it. The one owner of "web events are producer
+ * `web`", so no browser publish path - the session free functions here, `publishVia`, or the
+ * new-session hooks - re-spreads the stamp or can forget it.
+ */
+export function publishWebEvent(
+  sessionTransport: SessionTransport,
+  sessionId: string,
+  built: TrevorEventInput,
+): Promise<void> {
+  return sessionTransport.publishEvent(sessionId, toPublishInput(built, PRODUCER_IDS.web));
+}
+
+/**
  * Durably renames ANY session (editable session titles), independent of the current selection - the
  * sidebar renames the row you point at, not just the active session. Publishes a `session.title` to
  * that session's log; the latest wins, and a blank title reverts to the first-prompt-derived one.
  */
 export function renameSession(sessionId: string, title: string): Promise<void> {
-  return publishEvent(transport, sessionId, {
-    producerId: PRODUCER_IDS.web,
-    ...sessionEvents.sessionTitle({ title }),
-  });
+  return publishWebEvent(transport, sessionId, sessionEvents.sessionTitle({ title }));
 }
 
 /** Archives (or unarchives) ANY session from the sidebar - a durable `session.archived` flag that
  *  hides it from the default sidebar/resume/inventory views (the log is retained). */
 export function archiveSession(sessionId: string, archived = true): Promise<void> {
-  return publishEvent(transport, sessionId, {
-    producerId: PRODUCER_IDS.web,
-    ...sessionEvents.sessionArchived({ archived }),
-  });
+  return publishWebEvent(transport, sessionId, sessionEvents.sessionArchived({ archived }));
 }
 
 /** Soft-deletes (or restores) ANY session from the sidebar - a durable `session.deleted` flag that
  *  hides it from EVERY view. The durable log is RETAINED; this only hides. The destructive purge is
  *  the separate {@link permanentlyDeleteSession} (plan 04), reachable only from the archive browser. */
 export function deleteSession(sessionId: string, deleted = true): Promise<void> {
-  return publishEvent(transport, sessionId, {
-    producerId: PRODUCER_IDS.web,
-    ...sessionEvents.sessionDeleted({ deleted }),
-  });
+  return publishWebEvent(transport, sessionId, sessionEvents.sessionDeleted({ deleted }));
 }
 
 /** Permanently purges an archived session's durable storage (plan 04) - the hard delete distinct from
@@ -203,10 +209,11 @@ export function recordTangentFoldBack(
   tangentSessionId: string,
   p: { parentSessionId: string; mode: TangentFoldMode; preview: string },
 ): Promise<void> {
-  return publishEvent(transport, tangentSessionId, {
-    producerId: PRODUCER_IDS.web,
-    ...sessionEvents.tangentFoldedBack({ tangentSessionId, ...p }),
-  });
+  return publishWebEvent(
+    transport,
+    tangentSessionId,
+    sessionEvents.tangentFoldedBack({ tangentSessionId, ...p }),
+  );
 }
 
 // --- read side: the live event stream ---
@@ -501,10 +508,7 @@ export function useSessionActionsWithTransport(
       if (!sessionId) {
         return;
       }
-      await publishEvent(sessionTransportArg, sessionId, {
-        producerId: PRODUCER_IDS.web,
-        ...built,
-      });
+      await publishWebEvent(sessionTransportArg, sessionId, built);
     },
     [sessionTransportArg, sessionId],
   );

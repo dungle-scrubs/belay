@@ -1,6 +1,5 @@
 import {
   decodeTrevorEvent,
-  PRODUCER_IDS,
   type SessionEvent,
   type SessionTransport,
   SUPERVISOR_SESSION_ID,
@@ -8,7 +7,7 @@ import {
   viewerIdentity,
 } from "@trevor/session";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { sessionTransport } from "@/session/use-session";
+import { publishWebEvent, sessionTransport } from "@/session/use-session";
 
 /**
  * The launch trajectory both launch surfaces render (plan 44.2 happy path + plan 44.3 recovery):
@@ -101,10 +100,11 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
       launchTokenRef.current += 1; // a fresh launch invalidates any prior pending host.online continuation
       setError(null);
       setLaunchState("starting");
-      void transport.publishEvent(SUPERVISOR_SESSION_ID, {
-        producerId: PRODUCER_IDS.web,
-        ...sessionEvents.sessionLaunchRequested({ requestId, root }),
-      });
+      void publishWebEvent(
+        transport,
+        SUPERVISOR_SESSION_ID,
+        sessionEvents.sessionLaunchRequested({ requestId, root }),
+      );
     },
     [transport],
   );
