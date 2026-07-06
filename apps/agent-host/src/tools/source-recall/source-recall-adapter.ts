@@ -17,13 +17,14 @@ import type {
   SourceRecallReadiness,
 } from "@trevor/session";
 import { Effect } from "effect";
-import type {
-  SourceRecallDiscovery,
-  SourceRecallProvider,
-  SourceRecallQueryAnswer,
-  SourceRecallQueryInput,
-  SourceRecallRefreshAnswer,
-  SourceRecallStatusSnapshot,
+import {
+  MAX_SNIPPET_CHARS,
+  type SourceRecallDiscovery,
+  type SourceRecallProvider,
+  type SourceRecallQueryAnswer,
+  type SourceRecallQueryInput,
+  type SourceRecallRefreshAnswer,
+  type SourceRecallStatusSnapshot,
 } from "./contract";
 import {
   SourceRecallProtocolError,
@@ -46,9 +47,6 @@ import {
   type SrStatusBody,
   toResultItem,
 } from "./source-recall-mapping";
-
-/** Per-item snippet cap: retrieval candidates are cited, not whole files (D-003 / risk register). */
-const MAX_SNIPPET_CHARS = 1200;
 
 export interface SourceRecallAdapterDeps {
   readonly id: string;

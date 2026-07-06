@@ -20,6 +20,11 @@ import type {
 import type { Effect } from "effect";
 import type { SourceRecallProviderError } from "./errors";
 
+/** Per-item snippet cap: retrieval candidates are CITED, not dumped whole (D-003 / risk register). Owned
+ *  here at the provider boundary so every adapter shares one authority - a new backend can't silently pick
+ *  a different cap. */
+export const MAX_SNIPPET_CHARS = 1200;
+
 /** What a provider reports after discovery: whether it is reachable/ready and which capabilities it offers. */
 export interface SourceRecallDiscovery {
   readonly reachable: boolean;

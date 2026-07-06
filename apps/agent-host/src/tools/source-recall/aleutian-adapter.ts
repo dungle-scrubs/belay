@@ -24,13 +24,14 @@ import {
   normalizeCapabilities,
   symbolToResultItem,
 } from "./aleutian-mapping";
-import type {
-  SourceRecallDiscovery,
-  SourceRecallProvider,
-  SourceRecallQueryAnswer,
-  SourceRecallQueryInput,
-  SourceRecallRefreshAnswer,
-  SourceRecallStatusSnapshot,
+import {
+  MAX_SNIPPET_CHARS,
+  type SourceRecallDiscovery,
+  type SourceRecallProvider,
+  type SourceRecallQueryAnswer,
+  type SourceRecallQueryInput,
+  type SourceRecallRefreshAnswer,
+  type SourceRecallStatusSnapshot,
 } from "./contract";
 import {
   SourceRecallCapabilityMissingError,
@@ -40,7 +41,6 @@ import {
 } from "./errors";
 import { getJson, parseJson, request, type SourceRecallHttp } from "./http";
 
-const MAX_SNIPPET_CHARS = 1200;
 /** Trace's `/context` token budget; a query never floods context - candidates are cited (D-003). */
 const DEFAULT_TOKEN_BUDGET = 8000;
 
