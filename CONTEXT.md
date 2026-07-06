@@ -121,6 +121,24 @@ so there was **no browser-reachable launcher** - hence a supervisor.
 | **Native folder pick** | The supervisor shelling out to the OS folder dialog (`osascript choose folder` on macOS) and returning a real POSIX path to fill the picker's path field. | `.plans/44.1` + `.plans/44.2`. **Local-only and best-effort** - the dialog opens on the supervisor's display, so it degrades to paste-a-path when the supervisor is non-local/headless. |
 | **Launch state machine** | `idle -> starting -> online \| failed -> (retry) starting`, with stale-host replacement folding into `starting` as a "restarting host…" label. | Introduced happy-path in `.plans/44.2`; extended with `failed`/`retry`/`stale` by `.plans/44.3`. **One** machine shared by the picker and the no-host session-view start, so they can't drift. |
 
+## CLI headless agent surface vocabulary (`.plans/50-cli-headless-agent-surface`)
+
+Making the `trevor` CLI a first-class headless agent surface (like `claude -p` / `codex exec`), not
+only a browser-launcher plus a session-addressed `trevor prompt`. The premise: Trevor v2 is purely
+client/server - the agent loop lives in the agent-host and is driven over the session log via
+`@trevor/sdk`, so a headless one-shot **drives a host**, it does not run the loop in-process (unlike
+trevor legacy's in-process `cli/prompt.ts`). Selection plumbing (`ModelRef`, `reasoningLevels`,
+`PromptInput.model`) already exists end to end; this plan wires it to CLI flags + defaults.
+
+| Term | Meaning | Notes |
+|---|---|---|
+| **Headless one-shot (`trevor -p`)** | `trevor -p "…"` resolves the project session, ensures a host online without a browser, runs one turn to completion, and prints the answer (deltas to stderr, final to stdout; `--json` for the turn record). | `.plans/50`. Drives a host via the existing `runPrompt` (`client.prompt` + `streamTurn`), not an in-process agent (D-001). Distinct from the pre-existing session-addressed `trevor prompt <session> <text>`, which needs an already-running host. |
+| **Browser-less spawn (`launch({ noBrowser })`)** | A launcher-core option that runs the spawn-or-reuse-host path but skips the two unconditional `openBrowser` calls in `launchInner`, exposing "ensure a host online" as a reusable primitive. | `.plans/50` D-003. The **single seam** shared with the `.plans/48` desktop supervisor (which spawns hosts headlessly too); they must not fork it. `spawnHost` was already fully headless. |
+| **Ephemeral session (`--ephemeral`)** | `trevor -p --ephemeral` mints a throwaway session, spawns a host, runs the turn, then tears down - but **only a host this invocation spawned**, never a reused/pre-existing one. | `.plans/50` D-002. Default `-p` instead reuses the project session and leaves the host running (mirrors no-arg `trevor`). Spawn ownership is tracked so teardown can't kill a host a browser tab / supervisor owns. |
+| **Catalog read (`client.listCatalog`)** | An SDK read of the host-announced `sources` + `catalogBySource` (per-model `reasoningLevels` / `defaultReasoning`) from presence / `host.online`; `trevor models [--json]` prints it and `--model`/`--reasoning` validation resolves against it. | `.plans/50` D-006. The catalog data (from `~/.pi/auth.json` at host startup) was already on the wire but had no SDK accessor. Needs a live host, so it reuses the browser-less ensure-host-online primitive. |
+| **Per-request `--model` / `--reasoning`** | CLI flags on `prompt` / `-p` that build a `ModelRef {sourceId, modelId, reasoning}` in the CLI layer and ride the already-wired `PromptInput.model` path. `--model` is `<sourceId>/<modelId>` (bare modelId only when unambiguous); `--reasoning` is validated against that model's `reasoningLevels`. | `.plans/50` D-004/D-005/D-009. Unknown model / unsupported level **fails fast** with a catalog-derived error pointing at `trevor models` (trevor legacy silently dropped effort to `undefined`). |
+| **Config resolver (`config.jsonc`)** | The `${TREVOR_HOME}/config.jsonc` loader + precedence `--flag > TREVOR_MODEL`/`TREVOR_REASONING` env `> config.jsonc file > host-side default` (plan 51 `active ?? default ?? legacy`). | `.plans/50` D-007/D-008/D-011. **Exactly one** loader, shared with `.plans/49`/WS3 (which owns it and is numbered first): whichever of 49-WS3 / 50-M4 lands first builds it, the other extends it (49-WS3 to the full `TREVOR_*` scatter + `trevor init`; 50-M4 to `model`/`reasoning`). Env-wins-over-file matches WS3. |
+
 ## Command argument substitution vocabulary (`.plans/44.5-command-arg-substitution`)
 
 User-defined custom commands loaded from `.trevor/commands/*.md` whose body templates carry `$`
