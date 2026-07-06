@@ -1,4 +1,4 @@
-import { activeSessions, archivedSessions, events, type SessionSummary } from "@trevor/session";
+import { events, type SessionSummary, sessionsForProject } from "@trevor/session";
 import type { TrevorClient } from "./client";
 import { urlClass, withSdkError } from "./errors";
 
@@ -22,18 +22,16 @@ export interface ListSessionsOptions {
 }
 
 /**
- * Current-project sessions, newest first: active by default, or archived only with `archived: true`. The
- * project match is the workspace basename (the inventory's `project`); a null/absent project lists all.
- * Pure over the given inventory so it is unit-tested without a store.
+ * Current-project sessions, newest first: active by default, or archived only with `archived: true`. A
+ * thin CLI-facing alias over `@trevor/session`'s {@link sessionsForProject} (the one owner of the scope +
+ * recency rule), so the headless `list` can't drift from the web sidebar.
  */
 export function selectSessions(
   summaries: readonly SessionSummary[],
   project: string | null | undefined,
   opts: { readonly archived: boolean },
 ): SessionSummary[] {
-  const scope = opts.archived ? archivedSessions(summaries) : activeSessions(summaries);
-  const inProject = project != null ? scope.filter((s) => s.project === project) : scope;
-  return [...inProject].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return sessionsForProject(summaries, project, opts);
 }
 
 /** Fetches the inventory and returns the project-scoped, active-or-archived selection. */

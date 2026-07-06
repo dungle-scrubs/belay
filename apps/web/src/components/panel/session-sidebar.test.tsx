@@ -61,6 +61,27 @@ test("cross-project sessions never appear even when more recent", () => {
   );
 });
 
+test("visibleSessions excludes tangents (they surface only from their parent)", () => {
+  const list = [
+    summary({ sessionId: "root" }),
+    summary({
+      sessionId: "side",
+      tangentOf: {
+        parentSessionId: "root",
+        sourceMessageId: "m1",
+        quote: "q",
+        label: null,
+        createdAt: ago(1000 * 60 * 10),
+      },
+    }),
+  ];
+  assert.deepEqual(
+    visibleSessions(list, "trevor").map((s) => s.sessionId),
+    ["root"],
+    "a tangent never appears in top-level sidebar navigation",
+  );
+});
+
 test("renders rows with title + branch and marks the current session selected", () => {
   const { container, getByText } = render(
     <SessionSidebar

@@ -1,4 +1,9 @@
-import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
+import {
+  relativeTime,
+  type SessionActivity,
+  type SessionSummary,
+  sessionsForProject,
+} from "@trevor/session";
 import { useKeyPress } from "ahooks";
 import { Archive, GitBranch, Pencil, Plus, Trash2 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
@@ -19,17 +24,16 @@ import { DrawerToggle, SideDrawer } from "./side-drawer";
  */
 
 /**
- * The sessions shown in the sidebar: the current project's NON-archived sessions, newest activity
- * first. Pure, so the scope + recency rules are unit-tested. A null project (e.g. the default shared
- * session, no resolvable cwd) shows all non-archived sessions rather than nothing.
+ * The sessions shown in the sidebar: the current project's active sessions, newest activity first -
+ * the shared {@link sessionsForProject} selection (archived, deleted, AND tangents excluded; tangents
+ * surface only from their parent). A null project (e.g. the default shared session, no resolvable cwd)
+ * shows all active sessions rather than nothing. Kept as a named export so its scope is unit-tested.
  */
 export function visibleSessions(
   sessions: readonly SessionSummary[],
   project: string | null,
 ): SessionSummary[] {
-  const active = sessions.filter((s) => !s.archived && !s.deleted);
-  const scoped = project != null ? active.filter((s) => s.project === project) : active;
-  return [...scoped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return sessionsForProject(sessions, project);
 }
 
 export interface SessionSidebarProps {

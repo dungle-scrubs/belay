@@ -1,10 +1,11 @@
 import { warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import type {
-  SessionEvent,
-  SessionIdentity,
-  SessionSummary,
-  SessionTransport,
+import {
+  byRecency,
+  type SessionEvent,
+  type SessionIdentity,
+  type SessionSummary,
+  type SessionTransport,
 } from "@trevor/session";
 import { engineDiagnostic, type SiblingRead, type SiblingSession } from "./engine";
 import type { RecallDiagnostic, RecallSessionRef } from "./types";
@@ -96,7 +97,7 @@ export function createSiblingReader(opts: SiblingReaderOptions): () => Promise<S
     const candidates = inventory
       .filter((summary) => summary.sessionId !== opts.currentSessionId)
       .filter((summary) => sameProject(summary, opts))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      .sort(byRecency);
 
     const diagnostics: RecallDiagnostic[] = [];
     const chosen = candidates.slice(0, MAX_SIBLINGS);

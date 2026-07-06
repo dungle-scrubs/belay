@@ -1,6 +1,15 @@
 import type { SessionSummary } from "./inventory";
 
 /**
+ * The canonical most-recent-activity-first comparator (updatedAt descending). The one recency ordering
+ * the sidebar, resume chooser, tangent list, and recall siblings all sort by, so "newest first" can't
+ * drift between them. Pure; ISO timestamps sort lexicographically.
+ */
+export function byRecency(a: SessionSummary, b: SessionSummary): number {
+  return b.updatedAt.localeCompare(a.updatedAt);
+}
+
+/**
  * The non-archived sessions (D-094): the default view for the sidebar, resume chooser, and
  * current-project navigation. Archived sessions remain in the durable store but are filtered out
  * here unless a caller explicitly wants them (e.g. an archive browser or `trevor list --archived`).
@@ -9,6 +18,24 @@ import type { SessionSummary } from "./inventory";
  */
 export function activeSessions(summaries: readonly SessionSummary[]): SessionSummary[] {
   return summaries.filter((s) => !s.archived && !s.deleted && !s.tangentOf);
+}
+
+/**
+ * The project-scoped session selection (C-01): the active (or, with `archived`, the archived) sessions
+ * for `project`, newest activity first. The ONE owner of "what shows in a project's navigation" - both
+ * the web sidebar and the SDK's `selectSessions` delegate here, so the scope rule lives once. Because
+ * the active view runs through {@link activeSessions}, tangents are excluded by construction (they
+ * surface only from their parent), closing the leak a hand-rolled `!archived && !deleted` filter opens.
+ * A null/absent `project` lists across every project. Pure; never mutates the input.
+ */
+export function sessionsForProject(
+  summaries: readonly SessionSummary[],
+  project: string | null | undefined,
+  opts: { readonly archived?: boolean } = {},
+): SessionSummary[] {
+  const scope = opts.archived ? archivedSessions(summaries) : activeSessions(summaries);
+  const inProject = project != null ? scope.filter((s) => s.project === project) : scope;
+  return [...inProject].sort(byRecency);
 }
 
 /**
@@ -23,7 +50,7 @@ export function tangentsOf(
 ): SessionSummary[] {
   return summaries
     .filter((s) => !s.deleted && s.tangentOf?.parentSessionId === parentSessionId)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort(byRecency);
 }
 
 /** The archived (not deleted) sessions only (for an explicit archive filter / `trevor list --archived`). */
@@ -41,8 +68,6 @@ export function sortInventory(
   summaries: readonly SessionSummary[],
   currentProject: string | null,
 ): SessionSummary[] {
-  const byRecency = (a: SessionSummary, b: SessionSummary) =>
-    b.updatedAt.localeCompare(a.updatedAt);
   const current = summaries.filter((s) => currentProject != null && s.project === currentProject);
   const others = summaries.filter((s) => currentProject == null || s.project !== currentProject);
   return [...current.sort(byRecency), ...others.sort(byRecency)];
