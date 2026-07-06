@@ -1,4 +1,5 @@
 import type { CommandToken } from "@trevor/session";
+import { segmentBySpans } from "@/lib/segment-by-spans";
 
 export const COMMAND_TOKEN_KIND_CLASS: Record<CommandToken["kind"], string> = {
   command: "text-muted-foreground",
@@ -22,22 +23,15 @@ export function commandTokenSegments(
   tokens: readonly CommandToken[],
 ): CommandTokenSegment[] {
   const sorted = [...tokens].sort((a, b) => a.start - b.start);
-  const segments: CommandTokenSegment[] = [];
-  let cursor = 0;
-  for (const token of sorted) {
-    if (token.start > cursor) {
-      segments.push({ key: cursor, text: value.slice(cursor, token.start) });
-    }
-    segments.push({
+  return segmentBySpans(
+    value,
+    sorted,
+    (token) => ({
       className: COMMAND_TOKEN_KIND_CLASS[token.kind],
       key: token.start,
       kind: token.kind,
       text: value.slice(token.start, token.end),
-    });
-    cursor = token.end;
-  }
-  if (cursor < value.length) {
-    segments.push({ key: cursor, text: value.slice(cursor) });
-  }
-  return segments;
+    }),
+    (text, at) => ({ key: at, text }),
+  );
 }

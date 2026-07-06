@@ -1,29 +1,20 @@
 import type { ArtifactRef } from "@trevor/session";
-import {
-  type ChangeEvent,
-  type KeyboardEvent,
-  type ReactNode,
-  type RefObject,
-  useState,
-} from "react";
+import { type KeyboardEvent, type ReactNode, type RefObject, useState } from "react";
 import { artifactSrc } from "@/blob";
+import { segmentBySpans } from "@/lib/segment-by-spans";
 import { cn } from "@/lib/utils";
 import { parseImageTokens } from "./image-tokens";
+import { MirrorField } from "./mirror-field";
 
 /**
- * The image-token composer overlay (D-092 M1): a plain textarea with `[Image #N]` tokens highlighted
- * by a mirror layer drawn on top. The textarea keeps the real caret + editing (its text is
- * transparent, its caret visible); the mirror renders the same text with token chips, so we get
- * attachment-token syntax highlighting WITHOUT replacing the textarea with a rich editor. Token chips
- * are the only pointer targets in the mirror, so hover/focus shows the image preview while clicks +
- * typing fall through to the textarea beneath.
- *
- * The overlay and textarea MUST share identical typography, padding, and wrapping (the `FIELD`
- * classes) so the highlighted spans sit exactly under the textarea's glyphs.
+ * The image-token composer overlay (D-092 M1): a {@link MirrorField} whose mirror highlights each
+ * `[Image #N]` token as a chip. The textarea keeps the real caret + editing (its text is transparent,
+ * its caret visible); the mirror renders the same text with token chips, so we get attachment-token
+ * syntax highlighting WITHOUT replacing the textarea with a rich editor. Token chips are the only
+ * pointer targets in the mirror, so hover/focus shows the image preview while clicks + typing fall
+ * through to the textarea beneath. The field/mirror alignment invariant lives in MirrorField; this
+ * module supplies only the frost selection color + the image-chip mirror content.
  */
-
-/** Typography + box the textarea and its mirror share so the highlight tracks the text exactly. */
-const FIELD = "w-full whitespace-pre-wrap break-words px-3 py-2 text-sm leading-6 font-sans";
 
 /** Preview dimensions: the plan caps the hover/focus preview at 300x300 with preserved aspect. */
 const PREVIEW = "max-w-[300px] max-h-[300px]";
@@ -96,27 +87,14 @@ function renderMirror(
   refs: readonly ArtifactRef[],
   srcOf: (hash: string) => string,
 ): ReactNode[] {
-  const spans = parseImageTokens(value);
-  const out: ReactNode[] = [];
-  let last = 0;
-  spans.forEach((span, i) => {
-    if (span.start > last) {
-      // The mirror is the VISIBLE layer (the textarea's own glyphs are transparent), so plain runs
-      // render in the foreground color; only token text is swapped for a chip.
-      out.push(<span key={`t${last}`}>{value.slice(last, span.start)}</span>);
-    }
-    out.push(<TokenChip key={`k${span.start}`} num={span.num} ref={refs[i]} srcOf={srcOf} />);
-    last = span.end;
-  });
-  out.push(
-    <span key="tail">
-      {value.slice(last)}
-      {/* An empty value or trailing newline needs a placeholder char so the mirror keeps a full last
-          line height (the mirror sizes the box, so a collapsed line would shrink the field). */}
-      {value === "" || value.endsWith("\n") ? "​" : ""}
-    </span>,
+  return segmentBySpans(
+    value,
+    parseImageTokens(value),
+    (span, i) => <TokenChip key={`k${span.start}`} num={span.num} ref={refs[i]} srcOf={srcOf} />,
+    // The mirror is the VISIBLE layer (the textarea's own glyphs are transparent), so plain runs
+    // render in the foreground color; only token text is swapped for a chip.
+    (text, at) => <span key={`t${at}`}>{text}</span>,
   );
-  return out;
 }
 
 export function ImageTokenOverlay({
@@ -132,39 +110,24 @@ export function ImageTokenOverlay({
   className,
 }: ImageTokenOverlayProps) {
   return (
-    <div className={cn("relative", className)}>
-      {/* The textarea is the BOTTOM layer (absolute, filling the box the mirror sizes): transparent
-          glyphs but a visible caret + selection, and it owns typing. It is painted under the mirror
-          so the mirror's chips can be hover/focus targets - the caret shows through the mirror's
-          transparent gaps. */}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        disabled={disabled}
-        spellCheck={false}
-        className={cn(
-          FIELD,
-          "absolute inset-0 h-full resize-none overflow-hidden bg-transparent text-transparent caret-foreground outline-none placeholder:text-muted-foreground",
-          "selection:bg-smui-frost-3/30 selection:text-transparent",
-        )}
-      />
-
-      {/* The mirror is the VISIBLE, in-flow layer: it sizes the box to the wrapped content (so the
-          textarea beneath always matches - no scroll, no height drift) and draws the prose + chips on
-          top. pointer-events-none lets clicks/typing fall through to the textarea; only chips opt back
-          in (pointer-events-auto) to catch hover/focus for the image preview. */}
-      <div aria-hidden className={cn(FIELD, "pointer-events-none relative text-foreground")}>
-        {renderMirror(value, refs, srcOf)}
-      </div>
-
-      {uploading > 0 ? (
-        <span className="pointer-events-none absolute right-2 top-2 text-label tracking-wider text-muted-foreground">
-          uploading {uploading}…
-        </span>
-      ) : null}
-    </div>
+    <MirrorField
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      textareaRef={textareaRef}
+      placeholder={placeholder}
+      disabled={disabled}
+      selectionClassName="selection:bg-smui-frost-3/30 selection:text-transparent"
+      className={className}
+      overlay={
+        uploading > 0 ? (
+          <span className="pointer-events-none absolute right-2 top-2 text-label tracking-wider text-muted-foreground">
+            uploading {uploading}…
+          </span>
+        ) : undefined
+      }
+    >
+      {renderMirror(value, refs, srcOf)}
+    </MirrorField>
   );
 }

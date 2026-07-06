@@ -5,24 +5,23 @@ import {
   pasteLineCount,
 } from "@trevor/session";
 import { Copy, X } from "lucide-react";
-import type { ChangeEvent, KeyboardEvent, ReactNode, RefObject } from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
+import { segmentBySpans } from "@/lib/segment-by-spans";
 import { cn } from "@/lib/utils";
+import { MirrorField } from "./mirror-field";
 
 /**
- * The pasted-text-token composer overlay (10-large-paste-placeholders M4): a plain textarea with
- * `[Pasted text #N +M lines]` tokens highlighted by a mirror layer drawn on top, mirroring
- * `image-token-overlay.tsx`. The textarea keeps the real caret + editing (its text is transparent,
- * its caret visible); the mirror renders the same text with token chips, so the large paste collapses
- * to a compact, inspectable chip WITHOUT replacing the textarea with a rich editor.
+ * The pasted-text-token composer overlay (10-large-paste-placeholders M4): a {@link MirrorField} whose
+ * mirror highlights each `[Pasted text #N +M lines]` token as a chip, mirroring `image-token-overlay.tsx`.
+ * The textarea keeps the real caret + editing (its text is transparent, its caret visible); the mirror
+ * renders the same text with token chips, so the large paste collapses to a compact, inspectable chip
+ * WITHOUT replacing the textarea with a rich editor.
  *
  * Paste-token chips are PURPLE - visually distinct from the FROST image-token chips (which render
  * here too, marked but non-interactive, so a mixed composer reads clearly). Hovering / focusing a
  * paste chip opens an inspection popover: line + character counts, a height/width-capped payload
  * preview, and copy + remove actions (D-007). Image previews stay the image overlay's concern.
  */
-
-/** Typography + box the textarea and its mirror share so the highlight tracks the text exactly. */
-const FIELD = "w-full whitespace-pre-wrap break-words px-3 py-2 text-sm leading-6 font-sans";
 
 /** The payload preview is capped so a huge paste can never blow out the composer (D-007). */
 const PREVIEW = "max-h-[200px] max-w-[360px] overflow-auto";
@@ -158,40 +157,30 @@ function renderMirror(
     ),
   ].sort((a, b) => a.start - b.start);
 
-  const out: ReactNode[] = [];
-  let last = 0;
+  // Only paste marks index into `pastes` (in reading order), so count them as they pass.
   let pasteIndex = 0;
-  for (const mark of marks) {
-    if (mark.start > last) {
-      // The mirror is the VISIBLE layer (the textarea's own glyphs are transparent), so plain runs
-      // render in the foreground color; only token text is swapped for a chip.
-      out.push(<span key={`t${last}`}>{value.slice(last, mark.start)}</span>);
-    }
-    if (mark.kind === "paste") {
-      const index = pasteIndex++;
-      out.push(
-        <PasteTokenChip
-          key={`p${mark.start}`}
-          num={mark.num}
-          lines={mark.lines}
-          payload={pastes[index]}
-          onRemove={onRemove ? () => onRemove(index) : undefined}
-        />,
-      );
-    } else {
-      out.push(<ImageTokenChip key={`i${mark.start}`} num={mark.num} />);
-    }
-    last = mark.end;
-  }
-  out.push(
-    <span key="tail">
-      {value.slice(last)}
-      {/* An empty value or trailing newline needs a placeholder char so the mirror keeps a full last
-          line height (the mirror sizes the box, so a collapsed line would shrink the field). */}
-      {value === "" || value.endsWith("\n") ? "​" : ""}
-    </span>,
+  return segmentBySpans(
+    value,
+    marks,
+    (mark) => {
+      if (mark.kind === "paste") {
+        const index = pasteIndex++;
+        return (
+          <PasteTokenChip
+            key={`p${mark.start}`}
+            num={mark.num}
+            lines={mark.lines}
+            payload={pastes[index]}
+            onRemove={onRemove ? () => onRemove(index) : undefined}
+          />
+        );
+      }
+      return <ImageTokenChip key={`i${mark.start}`} num={mark.num} />;
+    },
+    // The mirror is the VISIBLE layer (the textarea's own glyphs are transparent), so plain runs
+    // render in the foreground color; only token text is swapped for a chip.
+    (text, at) => <span key={`t${at}`}>{text}</span>,
   );
-  return out;
 }
 
 export function PasteTokenOverlay({
@@ -206,33 +195,17 @@ export function PasteTokenOverlay({
   className,
 }: PasteTokenOverlayProps) {
   return (
-    <div className={cn("relative", className)}>
-      {/* The textarea is the BOTTOM layer (absolute, filling the box the mirror sizes): transparent
-          glyphs but a visible caret + selection, and it owns typing. It is painted under the mirror
-          so the mirror's chips can be hover/focus targets - the caret shows through the mirror's
-          transparent gaps. */}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        disabled={disabled}
-        spellCheck={false}
-        className={cn(
-          FIELD,
-          "absolute inset-0 h-full resize-none overflow-hidden bg-transparent text-transparent caret-foreground outline-none placeholder:text-muted-foreground",
-          "selection:bg-smui-purple/30 selection:text-transparent",
-        )}
-      />
-
-      {/* The mirror is the VISIBLE, in-flow layer: it sizes the box to the wrapped content (so the
-          textarea beneath always matches - no scroll, no height drift) and draws the prose + chips on
-          top. pointer-events-none lets clicks/typing fall through to the textarea; only chips opt back
-          in (pointer-events-auto) to catch hover/focus for the inspection popover. */}
-      <div aria-hidden className={cn(FIELD, "pointer-events-none relative text-foreground")}>
-        {renderMirror(value, pastes, onRemove)}
-      </div>
-    </div>
+    <MirrorField
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      textareaRef={textareaRef}
+      placeholder={placeholder}
+      disabled={disabled}
+      selectionClassName="selection:bg-smui-purple/30 selection:text-transparent"
+      className={className}
+    >
+      {renderMirror(value, pastes, onRemove)}
+    </MirrorField>
   );
 }
