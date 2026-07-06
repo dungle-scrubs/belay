@@ -28,7 +28,7 @@
 - [ ] C-10: `apps/web/src/hooks/use-model-selection.ts` ↔ `use-active-model.ts` - collapse into one `useModel` hook.
 - [ ] C-18: `apps/web/src/components/chat/compact-display.ts` - delete `TOOL_SUMMARY_ARG`, route through `tool-args.ts` `salientToolArg`/`toolSummary` (fixes compact-vs-full drift).
 - [ ] C-19: `apps/web/src/composer/*-token-overlay.tsx` + `loop/command-input.tsx` - a shared `MirrorField` primitive + `segmentBySpans` helper.
-- [ ] C-23: slug rule - route `branchSlug` + docs `slug()` through `packages/session/src/identity.ts` `idSlug`.
+- [x] C-23: slug rule - route `branchSlug` + docs `slug()` through `packages/session/src/identity.ts` `idSlug`.
 - [x] C-24: `apps/agent-host/src/tools/source-recall` - move `MAX_SNIPPET_CHARS` into the shared `contract.ts`.
 
 ### Phase 3: Low
@@ -38,16 +38,16 @@
 - [x] C-13: `packages/session/src/capability-manifest-compact.ts` - import `CHARS_PER_TOKEN` from `breakdown.ts`.
 - [ ] C-14: `apps/web/src/components/panel/panel-host.tsx` → `virtual-transcript.tsx` - pass transcript handlers as one bundle.
 - [ ] C-15: `apps/web/src/components/command-menu/use-command-menu.ts` - route keys through the shared `useAutocompleteMenuKeys`.
-- [ ] C-16: node-side `resolveServiceUrl(name)` - own the `<SVC>_URL` override, close the CLI override gap.
+- [x] C-16: node-side `resolveServiceUrl(name)` - own the `<SVC>_URL` override, close the CLI override gap.
 - [ ] C-21: `apps/agent-host/src/tools/shared.ts` - lift `clipLine`/`boundedText` host-wide; route ~8 re-implementations through it.
 - [ ] C-25: `apps/web` cap+ellipsis - collapse `derive.ts` `truncate` / `tool-args.ts` `truncateText` / `foldback.ts` inline copy to one.
 - [ ] C-26: `apps/agent-host/src/tools/video-inspect/errors.ts` - narrow the 7-class `Data.TaggedError` hierarchy to `VideoCancelledError` + `VideoDegraded`; delete the dead union.
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 4
-- Open candidates: 22
-- Current cutoff blockers: 22
+- Redesigned (done): 6
+- Open candidates: 20
+- Current cutoff blockers: 20
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
