@@ -1,3 +1,4 @@
+import { CHARS_PER_TOKEN } from "./breakdown";
 import type { CapabilityManifest, ManifestScope, ManifestSection } from "./capability-manifest";
 
 /**
@@ -17,12 +18,11 @@ import type { CapabilityManifest, ManifestScope, ManifestSection } from "./capab
 const ITEM_PREVIEW = 5;
 /** Default compact budget (tokens) - small enough to ride along in a subagent/expert context. */
 const DEFAULT_MAX_TOKENS = 600;
-/** Cheap token proxy: ~4 chars/token. The budget is a guardrail, not exact provider accounting. */
-const CHARS_PER_TOKEN = 4;
 /** Token headroom reserved for the trailing "… N more section(s) omitted …" note (~65 chars = ~17 tokens). */
 const OMITTED_NOTE_RESERVE = 18;
 
-/** Rough token estimate for a rendered manifest block (~4 chars/token). */
+/** Rough token estimate for a rendered manifest block, using the shared {@link CHARS_PER_TOKEN} proxy.
+ *  Rounds UP (unlike the metrics `estimateTokens`): this budget is a guardrail, so it errs conservative. */
 export function estimateManifestTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
