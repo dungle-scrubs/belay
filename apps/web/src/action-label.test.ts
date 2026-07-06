@@ -79,9 +79,26 @@ test("tool: write / edit / multi_edit target the path", () => {
     "writing index.css",
   );
   assert.equal(toolActionLabel("edit", JSON.stringify({ path: "index.css" })), "editing index.css");
+  // multi_edit has no top-level `path` - the file is derived from edits[].path (plan 08.1).
   assert.equal(
-    toolActionLabel("multi_edit", JSON.stringify({ path: "index.css" })),
+    toolActionLabel(
+      "multi_edit",
+      JSON.stringify({ edits: [{ path: "index.css", old: "a", new: "b" }] }),
+    ),
     "editing index.css",
+  );
+  // A multi-file multi_edit leads with the first file plus a bounded N-files indicator.
+  assert.equal(
+    toolActionLabel(
+      "multi_edit",
+      JSON.stringify({
+        edits: [
+          { path: "index.css", old: "a", new: "b" },
+          { path: "app.tsx", old: "c", new: "d" },
+        ],
+      }),
+    ),
+    "editing index.css (2 files)",
   );
 });
 

@@ -16,6 +16,28 @@ function str(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * The distinct file paths a `multi_edit` touches, in first-seen order. Unlike `edit`/`write`,
+ * `multi_edit` has no top-level `path`; each edit carries its own `edits[].path`. This is the ONE
+ * place that derivation lives (deepen C-18): the salient label, the compact summary, and the detail
+ * FILE chip all read it, so a multi_edit's file(s) can't read one way in one surface and another in
+ * the next. Tolerates a partial / still-streaming `edits` value (a non-array, a null item, an edit
+ * whose `path` hasn't arrived) by skipping it - it never throws and never yields a non-path.
+ */
+export function multiEditPaths(edits: unknown): string[] {
+  if (!Array.isArray(edits)) {
+    return [];
+  }
+  const seen: string[] = [];
+  for (const item of edits) {
+    const path = str((item as Record<string, unknown> | null)?.path);
+    if (path && !seen.includes(path)) {
+      seen.push(path);
+    }
+  }
+  return seen;
+}
+
 function num(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
@@ -54,6 +76,17 @@ export function salientToolArg(name: string, args: Record<string, unknown>): unk
   }
   if (name === "archive_read") {
     return args.path ?? args.url;
+  }
+  if (name === "multi_edit") {
+    // multi_edit has no top-level `path`; the single-string surfaces (action label, compact row)
+    // lead with the first file it touches plus a bounded "(N files)" indicator when it spans more
+    // than one (D-005). action-label.ts stays generic - it composes from this via toolSummary - so
+    // the multi-file indicator has to ride along in the salient value itself, never a raw-args leak.
+    const paths = multiEditPaths(args.edits);
+    if (paths.length === 0) {
+      return undefined;
+    }
+    return paths.length === 1 ? paths[0] : `${paths[0]} (${paths.length} files)`;
   }
   return args.path;
 }

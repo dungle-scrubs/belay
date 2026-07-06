@@ -249,9 +249,16 @@ function compactFromDescriptor(
 function compactToolSummary(name: string, args: string): string | null {
   const parsed = parseToolArgs(args);
   if (name === "multi_edit") {
-    const path = str(parsed.path) ?? str(parsed.file_path);
+    // The file(s) label reuses the ONE salient registry (`salientToolArg` -> `multiEditPaths`),
+    // which derives the file from `edits[].path` and adds the multi-file indicator - so the compact
+    // row can't name a different file than the tool row or the detail FILE chip. The edit count is
+    // appended on top (multi_edit's own compact detail).
+    const label = salientToolArg(name, parsed);
     const edits = Array.isArray(parsed.edits) ? parsed.edits.length : 0;
-    const parts = [path, edits > 0 ? `${edits} edits` : null].filter(Boolean);
+    const parts = [
+      typeof label === "string" && label ? label : null,
+      edits > 0 ? `${edits} edit${edits === 1 ? "" : "s"}` : null,
+    ].filter(Boolean);
     if (parts.length > 0) {
       return parts.join(" · ");
     }
@@ -264,11 +271,6 @@ function compactToolSummary(name: string, args: string): string | null {
  *  the spinner regardless of kind. */
 function runningIcon(status: CompactStatus, settled: ElementType): ElementType {
   return status === "running" ? LoaderIcon : settled;
-}
-
-/** A value as a non-empty string, or null. */
-function str(value: unknown): string | null {
-  return typeof value === "string" && value ? value : null;
 }
 
 /** The first non-empty line of a blob, truncated for a one-line summary; null when empty. */

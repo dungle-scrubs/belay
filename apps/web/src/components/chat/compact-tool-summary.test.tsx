@@ -56,18 +56,31 @@ test("search and fetch tools summarize on query / url (not raw JSON)", () => {
   assert.equal(summary("archive_unpack", { path: "/tmp/evidence.zip" }), "/tmp/evidence.zip");
 });
 
-test("multi_edit summarizes the file and the edit count", () => {
+test("multi_edit summarizes the file (from edits[].path) and the edit count", () => {
   const s = summary("multi_edit", {
-    path: "src/app.ts",
+    // Real host shape: no top-level path; each edit carries its own (plan 08.1).
     edits: [
-      { old: "a", new: "b" },
-      { old: "c", new: "d" },
-      { old: "e", new: "f" },
+      { path: "src/app.ts", old: "a", new: "b" },
+      { path: "src/app.ts", old: "c", new: "d" },
+      { path: "src/app.ts", old: "e", new: "f" },
     ],
   });
   assert.ok(s);
   assert.match(s, /src\/app\.ts/);
   assert.match(s, /3 edits/);
+});
+
+test("multi_edit spanning files names the first file plus a bounded file count", () => {
+  const s = summary("multi_edit", {
+    edits: [
+      { path: "a.ts", old: "a", new: "b" },
+      { path: "b.ts", old: "c", new: "d" },
+    ],
+  });
+  assert.ok(s);
+  assert.match(s, /a\.ts/);
+  assert.match(s, /2 files/);
+  assert.match(s, /2 edits/);
 });
 
 test("MCP and unknown tools fall back to a generic summary, never crash", () => {

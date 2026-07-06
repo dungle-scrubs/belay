@@ -1,8 +1,8 @@
 # 08.1 multi-edit-detail-file - Progress Report
 
-**Stage:** ready
+**Stage:** implementing
 
-**Current focus:** Phase 1 · M1 - Shared salient-path derivation (first RED: `salientToolArg("multi_edit", ...)` test)
+**Current focus:** Phase 1 · M2 - Detail FILE chip + multi-file diff correctness
 
 The `multi_edit` detail FILE section renders `(none)` because three web surfaces read a
 top-level `input.path` that `multi_edit` never sets (its path is per-edit under
@@ -11,8 +11,8 @@ view to show one chip per distinct file.
 
 ## Summary
 
-- **Milestones:** 3 (M1, M2, M3) - 0/3 complete
-- **Tasks (current cutoff):** 0/15 checked
+- **Milestones:** 3 (M1, M2, M3) - 1/3 complete
+- **Tasks (current cutoff):** 7/15 checked
 - **Deferred / follow-up:** none
 - **Superseded:** none
 
@@ -22,24 +22,25 @@ All work is current-cutoff. No deferred or superseded buckets.
 
 ## Phase 1: Resolve multi_edit's file path from edits[]
 
-### M1: Shared salient-path derivation (registry + single-string surfaces) - 0/7
+### M1: Shared salient-path derivation (registry + single-string surfaces) - 7/7
 
-- [ ] RED: failing `salientToolArg("multi_edit", {edits:[{path:"a.ts",…}]})` test in
+- [x] RED: failing `salientToolArg("multi_edit", {edits:[{path:"a.ts",…}]})` test in
       `apps/web/src/tool-args.test.ts` - expects `"a.ts"` (today `undefined`); multi-file
       case expects the first path.
-- [ ] GREEN: add `multiEditPaths(edits)` (distinct, first-seen) + a `multi_edit` branch in
+- [x] GREEN: add `multiEditPaths(edits)` (distinct, first-seen) + a `multi_edit` branch in
       `salientToolArg` returning the first distinct edit path.
-- [ ] RED: failing `toolActionLabel("multi_edit", '{"edits":[{"path":"a.ts",…}]}')` test -
+- [x] RED: failing `toolActionLabel("multi_edit", '{"edits":[{"path":"a.ts",…}]}')` test -
       expects `"editing a.ts"` (today `"editing"`); multi-file expects the bounded `N files`
-      indicator.
-- [ ] GREEN: confirm the label resolves through the fixed `salientToolArg`/`toolSummary`;
-      add the `+N`/`N files` indicator for the multi-file single-string case (D-005).
-- [ ] RED: failing `compactToolSummary("multi_edit", realArgs)` test - expects the path
-      present (today only the edit count).
-- [ ] GREEN: point `compactToolSummary`'s `multi_edit` branch at `multiEditPaths`; drop the
-      top-level `parsed.path` read and the dead `?? str(parsed.file_path)`.
-- [ ] REFACTOR: `salientToolArg`, `compactToolSummary`, and `multiEditDetailArgs` all read
-      the one `multiEditPaths` helper (C-18 single registry); no second path map.
+      indicator (updated the pre-existing fictitious-top-level-`path` case in `action-label.test.ts`).
+- [x] GREEN: confirm the label resolves through the fixed `salientToolArg`/`toolSummary`;
+      add the `(N files)` indicator for the multi-file single-string case (D-005).
+- [x] RED: failing `compactToolSummary("multi_edit", realArgs)` test - migrated the compact
+      fixture to the real host schema; added a multi-file case asserting `2 files`.
+- [x] GREEN: point `compactToolSummary`'s `multi_edit` branch at the shared `salientToolArg`
+      (which reads `multiEditPaths`); dropped the top-level `parsed.path` read, the dead
+      `?? str(parsed.file_path)`, and the now-unused local `str` helper.
+- [x] REFACTOR: `salientToolArg` and `compactToolSummary` read the one `multiEditPaths` helper
+      (C-18 single registry, compact via `salientToolArg`); `multiEditDetailArgs` joins in M2.
 
 ### M2: Detail FILE chip + multi-file diff correctness - 0/5
 
