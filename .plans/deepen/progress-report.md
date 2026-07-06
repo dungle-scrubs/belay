@@ -19,7 +19,7 @@
 
 ### Phase 2: Medium
 
-- [ ] C-04: `packages/session/src/transport.ts` - make `readSessionLog`/`awaitSessionEvent` private, unify into internal `collectUntil`.
+- [x] C-04: `packages/session/src/transport.ts` - make `readSessionLog`/`awaitSessionEvent` private, unify into internal `collectUntil`.
 - [ ] C-05: emit-side `PublishInput` splice - `toPublishInput(envelope, producerId)` package helper (foundational for C-03).
 - [ ] C-06: `apps/agent-host/src/mcp/transport.ts` - relocate protocol-neutral JSON-RPC primitives to `json-rpc/` so LSP no longer depends on MCP.
 - [ ] C-07: `apps/agent-host/src/agent/loop.ts` + `turn.ts` - bundle switch/rebuildProvider/initialModel into one `SwitchSurface`.
@@ -45,9 +45,9 @@
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 6
-- Open candidates: 20
-- Current cutoff blockers: 20
+- Redesigned (done): 7
+- Open candidates: 19
+- Current cutoff blockers: 19
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
