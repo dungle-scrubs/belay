@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { createScrollFollowController } from "@/scroll-follow";
 import type { Message } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
+import { toolMessage } from "./compact-catalog-fixtures";
 import { VirtualTranscript } from "./virtual-transcript";
 
 /**
@@ -28,17 +29,6 @@ const row = (message: Message): TranscriptRow => ({
   compactAbove: message.kind === "tool",
 });
 
-function tool(id: string, name: string, args: object, result?: string): Message {
-  return {
-    kind: "tool",
-    id,
-    name,
-    args: JSON.stringify(args),
-    done: result !== undefined,
-    ...(result !== undefined ? { result } : {}),
-  };
-}
-
 const ROWS: readonly TranscriptRow[] = [
   row({
     kind: "user",
@@ -58,16 +48,16 @@ const ROWS: readonly TranscriptRow[] = [
     model: "glm",
   }),
   row(
-    tool(
+    toolMessage(
       "t1",
       "read",
       { path: "apps/agent-host/src/turn-loop.ts" },
       "export function runTurn() {…}",
     ),
   ),
-  row(tool("t2", "grep", { pattern: "runTurn", path: "apps/agent-host/src" }, "12 matches")),
-  row(tool("t3", "edit", { path: "apps/agent-host/src/turn-loop.ts" }, "applied 1 edit")),
-  row(tool("t4", "bash", { command: "pnpm test" }, "error: 2 tests failed")),
+  row(toolMessage("t2", "grep", { pattern: "runTurn", path: "apps/agent-host/src" }, "12 matches")),
+  row(toolMessage("t3", "edit", { path: "apps/agent-host/src/turn-loop.ts" }, "applied 1 edit")),
+  row(toolMessage("t4", "bash", { command: "pnpm test" }, "error: 2 tests failed")),
   row({
     kind: "shell",
     id: "s1",
@@ -98,7 +88,7 @@ const ROWS: readonly TranscriptRow[] = [
 
 const RUNNING_ROWS: readonly TranscriptRow[] = [
   ...ROWS.slice(0, 4),
-  row(tool("t5", "bash", { command: "pnpm build" })), // no result -> still running
+  row(toolMessage("t5", "bash", { command: "pnpm build" })), // no result -> still running
   // The live-turn indicator is the pinned TurnStatusHeader (plan 50), not a transcript row.
 ];
 
