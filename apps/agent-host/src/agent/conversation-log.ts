@@ -1,5 +1,6 @@
 import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
 import type { ChatMessage } from "../providers";
+import { clipLine } from "../tools/shared";
 import { buildHistory } from "./history-projection";
 
 /**
@@ -65,8 +66,7 @@ export class ConversationLog {
     for (const event of this.durableEvents) {
       const decoded = decodeTrevorEvent(event);
       if (decoded?.type === "user.message" && decoded.text.trim()) {
-        const text = decoded.text.trim().replace(/\s+/g, " ");
-        return text.length > 60 ? `${text.slice(0, 60)}\u2026` : text;
+        return clipLine(decoded.text, 60);
       }
     }
     return fallback;

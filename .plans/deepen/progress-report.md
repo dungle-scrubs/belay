@@ -39,15 +39,15 @@
 - [ ] C-14: `apps/web/src/components/panel/panel-host.tsx` → `virtual-transcript.tsx` - pass transcript handlers as one bundle.
 - [ ] C-15: `apps/web/src/components/command-menu/use-command-menu.ts` - route keys through the shared `useAutocompleteMenuKeys`.
 - [x] C-16: node-side `resolveServiceUrl(name)` - own the `<SVC>_URL` override, close the CLI override gap.
-- [ ] C-21: `apps/agent-host/src/tools/shared.ts` - lift `clipLine`/`boundedText` host-wide; route ~8 re-implementations through it.
+- [x] C-21: `apps/agent-host/src/tools/shared.ts` - lift `clipLine`/`boundedText` host-wide; route ~8 re-implementations through it.
 - [x] C-25: `apps/web` cap+ellipsis - collapse `derive.ts` `truncate` / `tool-args.ts` `truncateText` / `foldback.ts` inline copy to one.
 - [x] C-26: `apps/agent-host/src/tools/video-inspect/errors.ts` - narrow the 7-class `Data.TaggedError` hierarchy to `VideoCancelledError` + `VideoDegraded`; delete the dead union.
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 13
-- Open candidates: 13
-- Current cutoff blockers: 13
+- Redesigned (done): 14
+- Open candidates: 12
+- Current cutoff blockers: 12
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 

@@ -1,5 +1,6 @@
 import type { LoopSpec } from "@trevor/session";
 import { runCommand } from "../tools/run-shell";
+import { clipLine } from "../tools/shared";
 
 /**
  * The `/loop` iteration RUNNER (plan 17, M5): runs ONE iteration of a loop's body through the path its
@@ -53,8 +54,7 @@ const SUMMARY_PREVIEW = 200;
 
 /** Collapse whitespace and cap length so a status/transcript line can never carry a wall of raw output. */
 function redact(output: string): string {
-  const line = output.replace(/\s+/g, " ").trim();
-  return line.length > SUMMARY_PREVIEW ? `${line.slice(0, SUMMARY_PREVIEW)}…` : line;
+  return clipLine(output, SUMMARY_PREVIEW);
 }
 
 /** The real process seam: the shared {@link runCommand} (safety floor, 30s timeout, 1 MiB output cap). */
