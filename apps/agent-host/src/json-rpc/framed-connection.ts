@@ -1,15 +1,15 @@
 import type { HardenedChild } from "@host/processes/child-spawn";
 import { msg } from "@host/transport/messages";
-import { createFrameParser, encodeFrame } from "../mcp/framing";
+import { createFrameParser, encodeFrame } from "./framing";
 import {
   armRequestTimeout,
   decodeRpcError,
-  type McpServerRequestOutcome,
   notificationEnvelope,
   type RpcErrorProps,
   requestEnvelope,
   responseEnvelope,
-} from "../mcp/transport";
+  type ServerRequestOutcome,
+} from "./rpc";
 
 /**
  * Protocol-neutral JSON-RPC over Content-Length-framed child stdio. Owns the generic mechanics:
@@ -35,7 +35,7 @@ export interface FramedJsonRpcConnectionOptions<E extends Error> {
   readonly recordError: <T extends E>(error: T) => T;
   readonly onFatal: (error: E) => void;
   readonly onNotification?: (method: string, params: unknown) => void;
-  readonly onServerRequest?: (method: string, params: unknown) => Promise<McpServerRequestOutcome>;
+  readonly onServerRequest?: (method: string, params: unknown) => Promise<ServerRequestOutcome>;
 }
 
 interface PendingRequest<E extends Error> {

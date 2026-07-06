@@ -80,14 +80,14 @@ describe("createFrameParser", () => {
   test("a header block without a Content-Length is a typed framing error", () => {
     const parser = createFrameParser();
     expect(() => parser.push(Buffer.from("Content-Type: text/plain\r\n\r\nbody"))).toThrowError(
-      expect.objectContaining({ _tag: "McpFramingError" }),
+      expect.objectContaining({ _tag: "FramingError" }),
     );
   });
 
   test("a non-numeric Content-Length is a typed framing error", () => {
     const parser = createFrameParser();
     expect(() => parser.push(Buffer.from("Content-Length: lots\r\n\r\nbody"))).toThrowError(
-      expect.objectContaining({ _tag: "McpFramingError" }),
+      expect.objectContaining({ _tag: "FramingError" }),
     );
   });
 
@@ -95,7 +95,7 @@ describe("createFrameParser", () => {
     const parser = createFrameParser();
     expect(() =>
       parser.push(Buffer.from(`Content-Length: ${MAX_FRAME_BODY_BYTES + 1}\r\n\r\n`)),
-    ).toThrowError(expect.objectContaining({ _tag: "McpFramingError" }));
+    ).toThrowError(expect.objectContaining({ _tag: "FramingError" }));
   });
 
   test("an unframed garbage stream errors at the header cap instead of buffering forever", () => {
@@ -105,7 +105,7 @@ describe("createFrameParser", () => {
       for (let pushed = 0; pushed <= MAX_FRAME_HEADER_BYTES + junk.length; pushed += junk.length) {
         parser.push(junk);
       }
-    }).toThrowError(expect.objectContaining({ _tag: "McpFramingError" }));
+    }).toThrowError(expect.objectContaining({ _tag: "FramingError" }));
     expect(parser.buffered()).toBeLessThanOrEqual(MAX_FRAME_HEADER_BYTES + junk.length);
   });
 

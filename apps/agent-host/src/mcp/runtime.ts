@@ -2,6 +2,7 @@ import { type ToolError, ToolExecutionError, ToolInputError } from "@host/tools/
 import { cap } from "@host/tools/shared";
 import { msg } from "@host/transport/messages";
 import { Effect } from "effect";
+import type { ServerRequestHandler } from "../json-rpc/rpc";
 import type { McpPromptRecord, McpResourceRecord, McpServerCapabilities } from "./capabilities";
 import type { McpCapabilityCounts } from "./capability-cache";
 import { createMcpCapabilityCache, type McpCapabilityCache } from "./capability-cache";
@@ -24,12 +25,7 @@ import {
 } from "./mediation";
 import { createMcpRegistry } from "./registry";
 import { spawnStdioTransport } from "./stdio-transport";
-import type {
-  McpServerRequestHandler,
-  McpTransport,
-  McpTransportState,
-  McpTransportStatus,
-} from "./transport";
+import type { McpTransport, McpTransportState, McpTransportStatus } from "./transport";
 
 /**
  * The host-lifetime MCP runtime (plan 23 M5): the ONE seam wiring the named-server registry to
@@ -183,7 +179,7 @@ export function createMcpRuntime(
   const samplingBudget = createSamplingBudget(options.samplingBudget);
 
   /** The per-server mediation handler answering elicitation/sampling requests (M6). */
-  const mediatorFor = (config: McpServerConfig): McpServerRequestHandler =>
+  const mediatorFor = (config: McpServerConfig): ServerRequestHandler =>
     createMcpServerMediator({
       server: config.name,
       requestTimeoutMs: config.requestTimeoutMs,

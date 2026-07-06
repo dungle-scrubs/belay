@@ -1,5 +1,5 @@
 import { asRecord } from "@host/boot/decode";
-import type { McpServerRequestHandler, McpServerRequestOutcome } from "./transport";
+import type { ServerRequestHandler, ServerRequestOutcome } from "../json-rpc/rpc";
 
 /**
  * Host-owned mediation of server-originated MCP requests (plan 23 M6): elicitation
@@ -113,7 +113,7 @@ export interface McpMediatorOptions {
 }
 
 /** Builds the onServerRequest handler for one server's transport. */
-export function createMcpServerMediator(options: McpMediatorOptions): McpServerRequestHandler {
+export function createMcpServerMediator(options: McpMediatorOptions): ServerRequestHandler {
   return async (method, params) => {
     if (method === "elicitation/create") {
       return mediateElicitation(options, params);
@@ -128,7 +128,7 @@ export function createMcpServerMediator(options: McpMediatorOptions): McpServerR
 async function mediateElicitation(
   options: McpMediatorOptions,
   params: unknown,
-): Promise<McpServerRequestOutcome> {
+): Promise<ServerRequestOutcome> {
   const handler = options.elicitation?.handler;
   if (!handler) {
     // No question surface is available (headless host / no UI): decline, per the spec's
@@ -166,7 +166,7 @@ async function mediateElicitation(
 async function mediateSampling(
   options: McpMediatorOptions,
   params: unknown,
-): Promise<McpServerRequestOutcome> {
+): Promise<ServerRequestOutcome> {
   const handler = options.sampling.handler;
   if (!handler) {
     // Checked FIRST: without a host-side handler no config flag can help, so the denial must

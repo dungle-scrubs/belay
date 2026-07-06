@@ -1,18 +1,29 @@
-import { McpFramingError } from "./errors";
+import { Data } from "effect";
 
 /**
- * LSP-style Content-Length framing for MCP stdio (plan 23 M2): a pure incremental parser plus
- * the matching encoder. Frames are `Content-Length: <n>\r\n[other-headers\r\n]\r\n<n body
- * bytes>`; the header name is case-insensitive and the length counts BYTES, so multibyte
- * UTF-8 bodies and chunk boundaries that split a character are handled by buffering raw bytes
- * and decoding only complete bodies. Body bytes accumulate as a chunk list (no per-push
- * copying) and are assembled once per frame; the remainder after a frame is COPIED out so a
- * small tail never pins a large frame buffer; and an un-terminated header region is capped so
- * an unframed garbage stream errors instead of buffering forever.
+ * Content-Length framing for JSON-RPC over stdio (plan 23 M2): a pure incremental parser plus
+ * the matching encoder, shared by MCP stdio and LSP (both use the identical LSP-style framing).
+ * Frames are `Content-Length: <n>\r\n[other-headers\r\n]\r\n<n body bytes>`; the header name is
+ * case-insensitive and the length counts BYTES, so multibyte UTF-8 bodies and chunk boundaries that
+ * split a character are handled by buffering raw bytes and decoding only complete bodies. Body bytes
+ * accumulate as a chunk list (no per-push copying) and are assembled once per frame; the remainder
+ * after a frame is COPIED out so a small tail never pins a large frame buffer; and an un-terminated
+ * header region is capped so an unframed garbage stream errors instead of buffering forever.
  *
- * Responsible for: byte-exact Content-Length frame encoding and incremental decoding.
- * Not for: JSON-RPC semantics (ids, results, errors) - ./stdio-transport owns those.
+ * Responsible for: byte-exact Content-Length frame encoding and incremental decoding, protocol-neutral.
+ * Not for: JSON-RPC semantics (ids, results, errors) - the transports own those.
  */
+
+/** A byte stream that does not parse as Content-Length frames (a header block without a valid
+ *  Content-Length, or a declared body beyond the safety cap). Protocol-neutral: it is caught and
+ *  re-wrapped into each transport's own malformed-response error, so it never escapes this layer. */
+export class FramingError extends Data.TaggedError("FramingError")<{
+  readonly detail: string;
+}> {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 /** Safety cap on a declared body size, so a corrupt header cannot make the host buffer GBs. */
 export const MAX_FRAME_BODY_BYTES = 32 * 1024 * 1024;
@@ -32,7 +43,7 @@ export function encodeFrame(body: string): Buffer {
 
 export interface FrameParser {
   /** Feeds bytes in; returns every now-complete frame body, decoded as UTF-8, in order.
-   *  Throws {@link McpFramingError} on a header block without a usable Content-Length, or on
+   *  Throws {@link FramingError} on a header block without a usable Content-Length, or on
    *  a header region growing past {@link MAX_FRAME_HEADER_BYTES} without its terminator. */
   readonly push: (chunk: Buffer | string) => string[];
   /** Bytes currently buffered awaiting a complete frame (diagnostic). */
@@ -64,7 +75,7 @@ export function createFrameParser(): FrameParser {
           const headerEnd = header.indexOf(HEADER_TERMINATOR, scanFrom);
           if (headerEnd === -1) {
             if (header.length > MAX_FRAME_HEADER_BYTES) {
-              throw new McpFramingError({
+              throw new FramingError({
                 detail: `stream has no frame header terminator within ${MAX_FRAME_HEADER_BYTES} bytes - not a Content-Length-framed stream`,
               });
             }
@@ -105,13 +116,13 @@ export function createFrameParser(): FrameParser {
 function contentLength(header: string): number {
   const match = /^content-length:\s*(\d+)\s*$/im.exec(header);
   if (!match?.[1]) {
-    throw new McpFramingError({
+    throw new FramingError({
       detail: `header block lacks a numeric Content-Length: ${JSON.stringify(header.slice(0, 120))}`,
     });
   }
   const length = Number(match[1]);
   if (!Number.isSafeInteger(length) || length > MAX_FRAME_BODY_BYTES) {
-    throw new McpFramingError({
+    throw new FramingError({
       detail: `declared frame body of ${match[1]} bytes exceeds the ${MAX_FRAME_BODY_BYTES}-byte cap`,
     });
   }

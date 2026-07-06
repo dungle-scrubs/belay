@@ -7,20 +7,12 @@ import { Data } from "effect";
  * are plain async at the I/O edge (like main.ts's transport edge), so these ride promise
  * rejections today and slot into the Effect `E` channel when the runtime layers above arrive.
  *
- * Responsible for: the typed MCP failure vocabulary - framing, handshake, timeout, crash,
- * closed, JSON-RPC, malformed-response, auth-required - and the McpTransportError union.
+ * Responsible for: the typed MCP failure vocabulary - handshake, timeout, crash, closed, JSON-RPC,
+ * malformed-response, auth-required - and the McpTransportError union. (Byte-framing failures are the
+ * protocol-neutral `FramingError` in json-rpc/framing.ts; the transports catch and re-wrap it into
+ * McpMalformedResponseError, so it never surfaces as an McpTransportError.)
  * Not for: config validation findings - those are McpConfigIssue DATA in ./config, not throws.
  */
-
-/** A byte stream that does not parse as Content-Length frames (header block without a valid
- *  Content-Length, or a declared body beyond the safety cap). */
-export class McpFramingError extends Data.TaggedError("McpFramingError")<{
-  readonly detail: string;
-}> {
-  override get message(): string {
-    return this.detail;
-  }
-}
 
 /** The initialize handshake failed: a malformed initialize result or an unsupported
  *  protocolVersion. The transport disconnects per the MCP spec. */
@@ -102,7 +94,6 @@ export class McpAuthRequiredError extends Data.TaggedError("McpAuthRequiredError
 }
 
 export type McpTransportError =
-  | McpFramingError
   | McpHandshakeError
   | McpTimeoutError
   | McpServerCrashError
@@ -117,7 +108,6 @@ export type McpTransportError =
 export type McpTransportErrorTag = McpTransportError["_tag"];
 
 const TRANSPORT_ERROR_TAGS: ReadonlySet<string> = new Set([
-  "McpFramingError",
   "McpHandshakeError",
   "McpTimeoutError",
   "McpServerCrashError",

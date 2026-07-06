@@ -1,6 +1,7 @@
 import { MINIMAL_CHILD_ENV_ALLOWLIST, minimalChildEnv } from "@host/processes/child-env";
 import { reap, reapAfterGrace, spawnHardenedChild } from "@host/processes/child-spawn";
 import { createFramedJsonRpcConnection } from "../json-rpc/framed-connection";
+import { type ServerRequestHandler, serverRequestOutcome } from "../json-rpc/rpc";
 import type { McpStdioServerConfig } from "./config";
 import {
   isMcpTransportError,
@@ -14,11 +15,9 @@ import {
 } from "./errors";
 import {
   type McpInitializeResult,
-  type McpServerRequestHandler,
   type McpTransport,
   type McpTransportState,
   performHandshake,
-  serverRequestOutcome,
 } from "./transport";
 
 /**
@@ -61,7 +60,7 @@ export interface StdioTransportOptions {
   /** How long close() waits for a voluntary exit before SIGKILL. */
   readonly closeGraceMs?: number;
   /** Answers server-originated requests (M6 mediation); absent means method-not-found. */
-  readonly onServerRequest?: McpServerRequestHandler;
+  readonly onServerRequest?: ServerRequestHandler;
 }
 
 /** Spawns the server's child process and returns the transport over it. */

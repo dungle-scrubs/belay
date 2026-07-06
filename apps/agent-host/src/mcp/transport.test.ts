@@ -1,11 +1,5 @@
-import { describe, expect, test, vi } from "vitest";
-import { McpRpcError, McpTimeoutError } from "./errors";
-import {
-  armRequestTimeout,
-  decodeInitializeResult,
-  decodeRpcError,
-  MCP_PROTOCOL_VERSION,
-} from "./transport";
+import { describe, expect, test } from "vitest";
+import { decodeInitializeResult, MCP_PROTOCOL_VERSION } from "./transport";
 
 describe("decodeInitializeResult (shared handshake decoding)", () => {
   test("accepts a supported protocol version and carries capabilities + serverInfo", () => {
@@ -56,62 +50,5 @@ describe("decodeInitializeResult (shared handshake decoding)", () => {
     expect(decodeInitializeResult("srv", "nope")).toMatchObject({
       failure: { _tag: "McpHandshakeError" },
     });
-  });
-});
-
-describe("armRequestTimeout (shared per-request deadline)", () => {
-  test("fires the injected timeout-error class once the deadline passes", () => {
-    vi.useFakeTimers();
-    try {
-      const seen: unknown[] = [];
-      armRequestTimeout("srv", "tools/list", 250, McpTimeoutError, (error) => seen.push(error));
-      vi.advanceTimersByTime(249);
-      expect(seen).toEqual([]);
-      vi.advanceTimersByTime(1);
-      expect(seen).toMatchObject([
-        { _tag: "McpTimeoutError", server: "srv", method: "tools/list", timeoutMs: 250 },
-      ]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  test("the disposer cancels the deadline", () => {
-    vi.useFakeTimers();
-    try {
-      const seen: unknown[] = [];
-      const disarm = armRequestTimeout("srv", "tools/list", 250, McpTimeoutError, (error) =>
-        seen.push(error),
-      );
-      disarm();
-      vi.advanceTimersByTime(1_000);
-      expect(seen).toEqual([]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
-describe("decodeRpcError (shared tolerant rpc-error decoding)", () => {
-  test("decodes code + message through the injected error class", () => {
-    const error = decodeRpcError(
-      "srv",
-      "tools/call",
-      { code: -32601, message: "nope" },
-      McpRpcError,
-    );
-    expect(error).toMatchObject({
-      _tag: "McpRpcError",
-      server: "srv",
-      method: "tools/call",
-      code: -32601,
-      detail: "nope",
-    });
-  });
-
-  test("garbage error members fall back to the given detail, never a throw", () => {
-    const error = decodeRpcError("srv", "tools/call", "not-an-object", McpRpcError, "HTTP 500");
-    expect(error).toMatchObject({ _tag: "McpRpcError", detail: "HTTP 500" });
-    expect(error.code).toBeUndefined();
   });
 });

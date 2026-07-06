@@ -1,4 +1,14 @@
 import { asRecord } from "@host/boot/decode";
+import { MAX_FRAME_BODY_BYTES } from "../json-rpc/framing";
+import {
+  armRequestTimeout,
+  decodeRpcError,
+  notificationEnvelope,
+  requestEnvelope,
+  responseEnvelope,
+  type ServerRequestHandler,
+  serverRequestOutcome,
+} from "../json-rpc/rpc";
 import { type McpHttpServerConfig, redactMcpEndpoint } from "./config";
 import {
   isMcpTransportError,
@@ -10,20 +20,12 @@ import {
   type McpTransportError,
   type McpTransportErrorTag,
 } from "./errors";
-import { MAX_FRAME_BODY_BYTES } from "./framing";
 import { createSseParser } from "./sse";
 import {
-  armRequestTimeout,
-  decodeRpcError,
   type McpInitializeResult,
-  type McpServerRequestHandler,
   type McpTransport,
   type McpTransportState,
-  notificationEnvelope,
   performHandshake,
-  requestEnvelope,
-  responseEnvelope,
-  serverRequestOutcome,
 } from "./transport";
 
 /**
@@ -48,7 +50,7 @@ export interface HttpTransportOptions {
   readonly clientInfo?: { readonly name: string; readonly version: string };
   /** Answers server-originated requests riding a response stream (M6 mediation); absent
    *  means method-not-found. The answer is POSTed back per the Streamable HTTP spec. */
-  readonly onServerRequest?: McpServerRequestHandler;
+  readonly onServerRequest?: ServerRequestHandler;
   /** Reply-size cap in bytes (default the shared 32MiB frame bound); injectable for tests. */
   readonly maxResponseBytes?: number;
 }
