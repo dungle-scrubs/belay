@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SPAN_NAMES } from "@trevor/session/telemetry";
 import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, test } from "vitest";
 import type { ProviderRegistry } from "../providers";
+import { storageArea } from "./areas-platform";
 import { collectDoctorProbeResults } from "./build";
+import type { DoctorProbeInput } from "./probe-input";
 
 /**
  * Plan 41 M4: `/doctor` provider probing is BOUNDED and NON-MUTATING. These drive the real command
@@ -186,5 +190,89 @@ test("collectDoctorProbeResults degrades a hung session-store /diag probe to unk
     assert.ok(elapsed < 1000, "the bounded store diag probe returns quickly");
   } finally {
     await diagServer.close();
+  }
+});
+
+test("a stalled /diag BODY also degrades to unknown within the budget (the abort covers the body read)", async () => {
+  const diagServer = await startDiagServer((_req, res) => {
+    // Headers + a partial body, then the stream stalls forever: the timeout must bound the WHOLE
+    // exchange, not just the header phase, or the doctor's Promise.all never returns.
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write('{"indexHealthy":true,');
+  });
+  try {
+    const start = Date.now();
+    const results = await collectDoctorProbeResults({} as ProviderRegistry, {
+      hostSha: "host-sha",
+      probeTimeoutMs: 20,
+      storeDiagTimeoutMs: 30,
+      storeDiagUrl: diagServer.url,
+    });
+    const elapsed = Date.now() - start;
+
+    assert.equal(results.storeDiag.kind, "unknown");
+    assert.ok(elapsed < 1000, "a stalled body is aborted by the same budget as stalled headers");
+  } finally {
+    await diagServer.close();
+  }
+});
+
+test("a host cwd outside the trevor repo never yields a spurious store code-drift finding", async () => {
+  // The trevor checkout's HEAD - the sha the host CODE actually runs from (this test file lives in it).
+  const trevorHead = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: dirname(fileURLToPath(import.meta.url)),
+    encoding: "utf8",
+  }).trim();
+
+  // A different git repo with its own distinct HEAD, standing in for the USER'S PROJECT root the
+  // launcher spawns the host into (cwd = project root, not the trevor checkout).
+  const projectDir = mkdtempSync(join(tmpdir(), "trevor-project-"));
+  const savedCwd = process.cwd();
+  const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" };
+  const git = (args: readonly string[]) =>
+    execFileSync("git", [...args], { cwd: projectDir, encoding: "utf8", env: gitEnv }).trim();
+  const diagServer = await startDiagServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        indexHealthy: true,
+        queries: 1,
+        schemaVersion: 1,
+        slowQueries: 0,
+        // The store reports the SAME trevor HEAD: healthy, zero drift.
+        startupSha: trevorHead,
+      }),
+    );
+  });
+  try {
+    git(["init", "-q", "-b", "main"]);
+    git(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "x"]);
+    const projectHead = git(["rev-parse", "HEAD"]);
+    assert.notEqual(projectHead, trevorHead, "the project repo genuinely has a different HEAD");
+    process.chdir(projectDir);
+
+    // No injected hostSha: the REAL resolution path runs, from a cwd that is not the trevor repo.
+    const results = await collectDoctorProbeResults({} as ProviderRegistry, {
+      storeDiagTimeoutMs: 1000,
+      storeDiagUrl: diagServer.url,
+    });
+    assert.equal(results.storeDiag.kind, "ok");
+    assert.equal(
+      results.storeDiag.hostSha,
+      trevorHead,
+      "the host sha comes from the trevor checkout the code runs from, never process.cwd()",
+    );
+
+    const area = storageArea({
+      storage: { roots: [], store: results.storeDiag },
+    } as unknown as DoctorProbeInput);
+    assert.ok(
+      !(area.findings ?? []).some((f) => f.id === "storage.store.sha"),
+      "no bogus session-store code-drift finding for a session opened outside the trevor repo",
+    );
+  } finally {
+    process.chdir(savedCwd);
+    await diagServer.close();
+    rmSync(projectDir, { recursive: true, force: true });
   }
 });

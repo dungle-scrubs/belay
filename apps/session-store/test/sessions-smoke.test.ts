@@ -295,3 +295,33 @@ test("an open circuit degrades to typed 503s and a 1013 stream close; /health, /
   assert.equal(healed.status, 200);
   await transport.publishEvent("cb", { type: "user.message", producerId: "web", payload: {} });
 });
+
+test("a slow startup warm scan never boots the store into a 503 window: the first write is admitted", async () => {
+  await store.close(); // swap in a store whose CONSTRUCTION-time warm scan runs over budget
+  let time = 0;
+  let step = QUERY_BUDGET_MS + 100; // every boot-time statement (incl. the warm scan) is over budget
+  const now = () => {
+    const value = time;
+    time += step;
+    return value;
+  };
+  store = await startStore(":memory:", { now });
+  step = 0;
+
+  // The regression this pins (plan 45.2 review fix): pre-fix, the warm scan tripped the breaker at
+  // construction, so every write 503'd (and WS replays 1013'd) for the first cooldown after each
+  // restart. The warm scan is breaker-exempt, so the very first post-boot write must be admitted.
+  const create = await fetch(`${store.url}/sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "boot" }),
+  });
+  assert.equal(create.status, 200, "the first post-boot write succeeds immediately, never 503");
+
+  const publish = await fetch(`${store.url}/sessions/boot/events`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: "user.message", producerId: "web", payload: {} }),
+  });
+  assert.equal(publish.status, 201, "the first event append also lands");
+});

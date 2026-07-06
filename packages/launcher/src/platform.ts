@@ -31,7 +31,10 @@ import {
 
 const STORE_URL = serviceUrl("store");
 const WEB_URL = `${serviceUrl("web")}/`;
-const PROBE_TIMEOUT_MS = 800;
+/** Per-probe HTTP budget for one local `/health` GET (a healthy local service answers in single-digit
+ *  ms). Exported so the supervisor's store watchdog (plan 45.2 M2) defaults to the SAME budget -
+ *  "how long a local /health may take" has one owner, like STORE_READY_TIMEOUT_MS below. */
+export const PROBE_TIMEOUT_MS = 800;
 /** How long a booting store gets before `waitForStore` gives up. Exported so the supervisor's
  *  watchdog (plan 45.2 M2) reuses the SAME window as its post-kill recovery grace - "how long a
  *  store legitimately takes to come up" has one owner. */

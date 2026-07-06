@@ -3,6 +3,7 @@ import type { Server, ServerResponse } from "node:http";
 import { createService, json, type Route, readJson } from "@trevor/server-kit";
 import {
   DELETE_PATTERN,
+  DIAG_PATH,
   decodeStreamParams,
   EVENTS_PATTERN,
   frames,
@@ -49,7 +50,6 @@ const HOST_RUNTIME = RUNTIME_KIND.host;
 
 // The browser (trevor-web :17420) reads/writes cross-origin; the store serves GET/POST.
 const CORS_METHODS = "GET, POST, OPTIONS";
-const DIAG_PATH = "/diag";
 
 // WebSocket close code 1013 "Try Again Later" - the stream-side twin of the HTTP 503 below.
 const WS_TRY_AGAIN_LATER = 1013;

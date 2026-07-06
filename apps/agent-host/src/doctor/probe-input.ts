@@ -1,5 +1,5 @@
 import type { CwdLockDoctorFact } from "@host/session/cwd-lock";
-import type { DoctorFinding, InternetSnapshot } from "@trevor/session";
+import type { DoctorFinding, InternetSnapshot, StoreDiagPayload } from "@trevor/session";
 import type { RootCategoryId } from "@trevor/session/node-paths";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
@@ -53,14 +53,8 @@ export interface DoctorRootProbe {
   readonly migrationAvailable: boolean; // legacy only: importable ~/.trevor data present
 }
 
-export interface StoreDiagPayload {
-  readonly indexHealthy: boolean;
-  readonly queries: number;
-  readonly schemaVersion: number;
-  readonly slowQueries: number;
-  readonly startupSha: string | null;
-}
-
+/** The store's `/diag` probe outcome: the decoded SHARED wire payload (@trevor/session's
+ *  session-routes owns the shape) plus the host-side sha, or a bounded `unknown` with its reason. */
 export type StoreDiagProbe =
   | {
       readonly kind: "ok";

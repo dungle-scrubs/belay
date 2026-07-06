@@ -1,17 +1,23 @@
 import { existsSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { abbrevHome } from "@host/boot/paths";
 import { type CwdLockDoctorFact, cwdLockSummary } from "@host/session/cwd-lock";
 import { fmtFields } from "@host/transport/log";
 import {
+  DIAG_PATH,
   type DoctorFinding,
   type DoctorSnapshot,
+  errorMessage,
   formatDoctorReport,
   type InternetSnapshot,
   RUNTIME_KIND,
   type SourceSummary,
+  type StoreDiagPayload,
   UNKNOWN_INTERNET,
 } from "@trevor/session";
+import { raceTimeout } from "@trevor/session/async";
 import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
 import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
 import { serviceUrl } from "@trevor/session/ports";
@@ -39,7 +45,6 @@ import type {
   DoctorProviderProbe,
   DoctorRootProbe,
   PeripheralState,
-  StoreDiagPayload,
   StoreDiagProbe,
   TelemetryDoctorSummary,
 } from "./probe-input";
@@ -314,12 +319,8 @@ export interface DoctorProbeOptions {
   readonly telemetry?: TelemetrySink;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function storeDiagEndpoint(baseUrl: string): string {
-  return new URL("/diag", baseUrl).toString();
+  return new URL(DIAG_PATH, baseUrl).toString();
 }
 
 function decodeStoreDiag(value: unknown): StoreDiagPayload | null {
@@ -345,19 +346,18 @@ function decodeStoreDiag(value: unknown): StoreDiagPayload | null {
   };
 }
 
-async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<unknown> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  timeout.unref?.();
-  try {
-    const res = await fetch(url, { signal: controller.signal });
+/** A timed JSON GET whose abort budget covers the WHOLE exchange - the body read happens inside the
+ *  raced scope, so a stalled body aborts the same as stalled headers and a wedged store can never
+ *  hang the doctor's Promise.all. The AbortController+timer protocol lives in `raceTimeout`, exactly
+ *  as the launcher's `fetchWithTimeout` uses it. */
+function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<unknown> {
+  return raceTimeout(async (signal) => {
+    const res = await fetch(url, { signal });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
-    return res.json();
-  } finally {
-    clearTimeout(timeout);
-  }
+    return (await res.json()) as unknown;
+  }, timeoutMs);
 }
 
 function emitStoreDiagSpan(
@@ -376,12 +376,37 @@ function emitStoreDiagSpan(
   });
 }
 
+/**
+ * The trevor checkout this host's CODE runs from: the nearest ancestor of THIS MODULE holding
+ * pnpm-workspace.yaml, or null when none is found (an installed/bundled build outside a checkout).
+ * Deliberately NOT `process.cwd()`: the launcher spawns the host with cwd = the USER'S PROJECT root,
+ * so a cwd-derived sha would be the project's HEAD - and every session opened outside the trevor
+ * repo would report a bogus store-code-drift mismatch against the store's trevor-checkout sha.
+ */
+function trevorRepoRoot(): string | null {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return null;
+    }
+    dir = parent;
+  }
+}
+
+/** The host-side HEAD for the store drift comparison - only meaningful when read from the SAME
+ *  (trevor) repo the store's `startupSha` comes from. With no derivable trevor root the sha is
+ *  null (unknown), and the mismatch finding is never emitted on a guess. */
 function readHostSha(opts: DoctorProbeOptions): string | null {
   if (opts.hostSha !== undefined) {
     return opts.hostSha;
   }
   try {
-    return headCommit(nodeGitRunner(process.cwd()));
+    const root = trevorRepoRoot();
+    return root === null ? null : headCommit(nodeGitRunner(root));
   } catch {
     return null;
   }

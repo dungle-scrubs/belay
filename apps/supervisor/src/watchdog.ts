@@ -1,7 +1,11 @@
-import { fetchWithTimeout, findListenerPids, STORE_READY_TIMEOUT_MS } from "@trevor/launcher";
+import {
+  fetchWithTimeout,
+  findListenerPids,
+  PROBE_TIMEOUT_MS,
+  STORE_READY_TIMEOUT_MS,
+} from "@trevor/launcher";
 import { HEALTH_PATH } from "@trevor/server-kit";
 import { errorMessage } from "@trevor/session";
-import { RESERVED_PORTS } from "@trevor/session/ports";
 import {
   SPAN_NAMES,
   type SpanName,
@@ -30,7 +34,9 @@ import {
  *  - after a kill, a recovery grace (the same window `waitForStore` gives a booting store) must
  *    elapse before the attempt counts as failed;
  *  - failed attempts back off exponentially and are CAPPED - at the cap the watchdog raises one
- *    `store_recovery_exhausted` alarm span and drops to observe-only until health returns.
+ *    `store_recovery_exhausted` alarm span and drops to observe-only until health returns;
+ *  - the kill target is only ever the probe URL's EXPLICIT port - a portless store URL disables the
+ *    kill path entirely (observe-only), never a guessed default ({@link storeKillPort}).
  *
  * The state machine is pure over injected collaborators (prober, terminator, telemetry, clock), so
  * tests drive `tick()` deterministically; `startStoreWatchdog` wires the real node IO + interval.
@@ -55,10 +61,11 @@ export interface StoreWatchdogConfig {
   readonly maxRecoveryAttempts: number;
 }
 
-/** Detection ≈ threshold × interval ≈ 10s; recovery grace reuses the launcher's store-boot window. */
+/** Detection ≈ threshold × interval ≈ 10s; the probe budget and the recovery grace reuse the
+ *  launcher's `/health` probe budget and store-boot window (one owner each, no drift). */
 export const DEFAULT_STORE_WATCHDOG_CONFIG: StoreWatchdogConfig = {
   pollIntervalMs: 2_000,
-  probeTimeoutMs: 800,
+  probeTimeoutMs: PROBE_TIMEOUT_MS,
   failureThreshold: 5,
   failureWindowMs: 10_000,
   startupGraceMs: 30_000,
@@ -282,13 +289,19 @@ export interface StartStoreWatchdogOptions {
   readonly config?: Partial<StoreWatchdogConfig>;
 }
 
-/** The port whose LISTEN holder is the kill target, from the same URL the probe hits. */
-function storePort(storeUrl: string): number {
+/**
+ * The kill target: the EXPLICIT port carried by the same URL the probe hits, or null when the URL
+ * has no parseable explicit port (a portless `http://…`/`https://…` or an unparseable string).
+ * FAIL CLOSED - never guess a default: probing one endpoint while SIGKILLing whatever holds the
+ * reserved store port could terminate a healthy, unrelated process. Probe target and kill target
+ * must be the same port, or the kill path is off ({@link storeTerminator}).
+ */
+export function storeKillPort(storeUrl: string): number | null {
   try {
     const port = Number.parseInt(new URL(storeUrl).port, 10);
-    return Number.isInteger(port) && port > 0 ? port : RESERVED_PORTS.store;
+    return Number.isInteger(port) && port > 0 ? port : null;
   } catch {
-    return RESERVED_PORTS.store;
+    return null;
   }
 }
 
@@ -314,12 +327,35 @@ async function terminateStoreListeners(
   return pids;
 }
 
+/**
+ * The watchdog's terminate action for `storeUrl`. With an explicit port it SIGKILLs that port's
+ * LISTEN holders ({@link terminateStoreListeners}); with NO parseable explicit port it FAILS CLOSED
+ * to an observe-only no-op - the watchdog keeps probing and logging a wedge, but can never kill,
+ * because the probe endpoint and a guessed default port could be two different processes. The
+ * disabled kill path is logged once, up front, with the URL that caused it.
+ */
+export function storeTerminator(
+  storeUrl: string,
+  log: (message: string, fields?: Record<string, unknown>) => void,
+): () => Promise<readonly number[]> {
+  const port = storeKillPort(storeUrl);
+  if (port === null) {
+    log("store watchdog observe-only: store URL has no explicit port, kill path disabled", {
+      storeUrl,
+    });
+    return () => {
+      log("store terminate skipped: kill path disabled (no explicit port)", { storeUrl });
+      return Promise.resolve([]);
+    };
+  }
+  return () => terminateStoreListeners(port, log);
+}
+
 /** Wires the real prober (`fetchWithTimeout` on `/health`) + terminator and starts the poll loop.
  *  Returns a stop function (tests and a future graceful shutdown; the daemon never calls it). */
 export function startStoreWatchdog(opts: StartStoreWatchdogOptions): () => void {
   const cfg: StoreWatchdogConfig = { ...DEFAULT_STORE_WATCHDOG_CONFIG, ...opts.config };
   const log = opts.log ?? (() => {});
-  const port = storePort(opts.storeUrl);
   const healthUrl = `${opts.storeUrl}${HEALTH_PATH}`;
   const watchdog = createStoreWatchdog(
     {
@@ -327,13 +363,16 @@ export function startStoreWatchdog(opts: StartStoreWatchdogOptions): () => void 
         const res = await fetchWithTimeout(healthUrl, cfg.probeTimeoutMs);
         return res?.ok ?? false;
       },
-      terminateStore: () => terminateStoreListeners(port, log),
+      terminateStore: storeTerminator(opts.storeUrl, log),
       telemetry: opts.telemetry,
       log: opts.log,
     },
     cfg,
   );
   const timer = setInterval(() => void watchdog.tick(), cfg.pollIntervalMs);
-  log("store watchdog started", { port, pollIntervalMs: cfg.pollIntervalMs });
+  log("store watchdog started", {
+    port: storeKillPort(opts.storeUrl) ?? "observe-only",
+    pollIntervalMs: cfg.pollIntervalMs,
+  });
   return () => clearInterval(timer);
 }

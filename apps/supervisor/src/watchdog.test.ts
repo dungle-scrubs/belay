@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { SPAN_NAMES } from "@trevor/session/telemetry";
 import { recordingTelemetrySink } from "@trevor/test-kit";
-import { test } from "vitest";
-import { createStoreWatchdog, type StoreWatchdogConfig } from "./watchdog";
+import { test, vi } from "vitest";
+import {
+  createStoreWatchdog,
+  type StoreWatchdogConfig,
+  storeKillPort,
+  storeTerminator,
+} from "./watchdog";
 
 /**
  * The supervisor's store watchdog state machine (plan 45.2 M2), driven deterministically: the
@@ -230,6 +235,56 @@ test("a healthy probe during the backoff also counts as recovery", async () => {
   const restarts = recorder.named(SPAN_NAMES.supervisorStoreRestarted);
   assert.equal(restarts.length, 1);
   assert.equal(restarts[0]?.attributes.attempts, 1);
+});
+
+test("storeKillPort: only an explicit port is a kill target - portless URLs fail closed to null", () => {
+  assert.equal(storeKillPort("http://127.0.0.1:17424"), 17424);
+  assert.equal(storeKillPort("https://127.0.0.1:8443/base"), 8443);
+  // Default ports (80/443) are implicit, not explicit: never a kill target.
+  assert.equal(storeKillPort("http://127.0.0.1"), null);
+  assert.equal(storeKillPort("https://store.internal"), null);
+  assert.equal(storeKillPort("not a url"), null);
+});
+
+test("a portless store URL yields an observe-only watchdog: a full wedge episode never SIGKILLs anything", async () => {
+  const killSpy = vi.spyOn(process, "kill");
+  try {
+    const lines: string[] = [];
+    const terminate = storeTerminator("http://127.0.0.1", (message) => lines.push(message));
+    assert.ok(
+      lines.some((line) => line.includes("observe-only")),
+      "the disabled kill path is logged with a clear one-line reason",
+    );
+    assert.deepEqual(await terminate(), [], "the terminator signals no PIDs");
+
+    // Drive a full wedge episode (trip + failed recovery) through the state machine wired with this
+    // terminator: the watchdog keeps probing and observing, but nothing is ever terminated.
+    const recorder = recordingTelemetrySink();
+    const clock = { now: 0 };
+    const watchdog = createStoreWatchdog(
+      {
+        probeHealth: () => Promise.resolve(false),
+        terminateStore: terminate,
+        telemetry: recorder.sink,
+        now: () => clock.now,
+      },
+      CFG,
+    );
+    for (let at = 31_000; at <= 51_000; at += 2_000) {
+      clock.now = at; // past the startup grace, so the trip + recovery path genuinely runs
+      await watchdog.tick();
+    }
+    assert.ok(
+      recorder.named(SPAN_NAMES.supervisorStoreWedgeDetected).length >= 1,
+      "the wedge is still detected and observed",
+    );
+    assert.ok(
+      killSpy.mock.calls.every((call) => call[1] !== "SIGKILL"),
+      "no SIGKILL was ever sent",
+    );
+  } finally {
+    killSpy.mockRestore();
+  }
 });
 
 test("overlapping ticks are coalesced: a slow probe never stacks poll cycles", async () => {

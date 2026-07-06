@@ -448,6 +448,38 @@ test("an over-budget half-open probe re-opens the circuit for a fresh cooldown",
   assert.throws(() => log.readAfter("s1", 0), StoreCircuitOpenError);
 });
 
+test("the startup warm scan is breaker-exempt: an over-budget cold inventory() never opens the circuit", () => {
+  const recorder = recordingTelemetrySink();
+  const clock = testClock();
+  const log = new SessionLog(":memory:", recorder.sink, clock.now, null);
+  log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at);
+
+  // The cold warm scan (what InventoryProjection's constructor runs at boot): every statement far
+  // over budget - the wedge-class DB whose scans ran ~1.67s. Observed, never acted on.
+  clock.setStep(QUERY_BUDGET_MS + 700);
+  const rows = log.inventory();
+  clock.setStep(0);
+  assert.equal(rows.length, 1, "the warm scan still returns its rows");
+  assert.ok(
+    recorder.named(SPAN_NAMES.storeSlowQuery).length >= 1,
+    "the slow warm scan is still observed as store.slow_query",
+  );
+  assert.equal(
+    recorder.named(SPAN_NAMES.storeCircuitOpen).length,
+    0,
+    "the warm scan never emits circuit_open",
+  );
+
+  // The regression this pins: the first real write after boot is admitted, not 503'd for a cooldown.
+  const stored = log.append(
+    "s1",
+    { type: "user.message", producerId: "web", payload: {} },
+    "e2",
+    at,
+  );
+  assert.equal(stored.seq, 2, "the first post-boot write succeeds immediately");
+});
+
 test("a tripped breaker rejects a write BEFORE any mutation - nothing durable, no seq consumed, dense after recovery", () => {
   const dir = tempDir("trevor-breaker-write-");
   const path = join(dir, "sessions.db");

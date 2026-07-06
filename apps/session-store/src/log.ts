@@ -2,7 +2,13 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { InventoryRow, PublishInput, SessionEvent, StreamEnvelope } from "@trevor/session";
+import type {
+  InventoryRow,
+  PublishInput,
+  SessionEvent,
+  StoreDiagPayload,
+  StreamEnvelope,
+} from "@trevor/session";
 import { frames, INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@trevor/session";
 import {
   NOOP_SINK,
@@ -57,18 +63,10 @@ interface AggregateRow {
   readonly updatedAt: string;
 }
 
-export interface SessionLogDiag {
-  readonly indexHealthy: boolean;
-  readonly queries: number;
-  readonly schemaVersion: number;
-  readonly slowQueries: number;
-  readonly startupSha: string | null;
-}
-
-type GitRunner = (args: readonly string[]) => {
-  readonly status: number | null;
-  readonly stdout: string;
-};
+/** The store's `/diag` self-check payload - an alias of the SHARED wire shape (@trevor/session's
+ *  session-routes), so the log's producer, the server route, and the host doctor's decoder can
+ *  never drift field-by-field. */
+export type SessionLogDiag = StoreDiagPayload;
 
 /** The full event column list every row-returning read selects, in `EventRow` order. Shared so the
  *  replay/type-lookup reads and the query-plan diagnostic all speak the exact same projection. */
@@ -93,10 +91,11 @@ const SLOW_QUERY_MS = 100;
 /**
  * The circuit-breaker budget (plan 45.2 M3, D-002): a query completing PAST this opens the breaker and
  * subsequent operations fast-fail for {@link BREAKER_COOLDOWN_MS}. 10x the slow-query OBSERVATION
- * threshold - observation and action are deliberately split so a legit slow-but-necessary query (a cold
- * startup warm scan, a big replay) is spanned but never tripped on, while the wedge-class scans this
- * exists for (~1.67s each on 2026-07-06) always trip. Tuning is observable: every crossing of the lower
- * threshold already emits `store.slow_query`, so the gap between the two is measured, not guessed.
+ * threshold - observation and action are deliberately split: the startup warm scan (`inventory()`)
+ * runs breaker-EXEMPT, so a legitimately slow cold pass over a large DB is spanned as slow but can
+ * never boot the store into an open circuit, while the wedge-class request-path scans this exists for
+ * (~1.67s each on 2026-07-06) always trip. Tuning is observable: every crossing of the lower threshold
+ * already emits `store.slow_query`, so the gap between the two is measured, not guessed.
  */
 export const QUERY_BUDGET_MS = 1_000;
 
@@ -143,22 +142,16 @@ type BreakerState =
       readonly sinceQuery: string;
     };
 
-/** A node-backed git runner scoped to `cwd`, using argv arrays with no shell parsing. */
-function nodeGitRunner(cwd: string): GitRunner {
-  return (args) => {
-    const out = spawnSync("git", [...args], {
-      cwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return { status: out.status, stdout: typeof out.stdout === "string" ? out.stdout : "" };
-  };
-}
-
-/** The git HEAD at store startup, or null when the process is not in a git checkout. */
-function readStartupSha(cwd = process.cwd()): string | null {
-  const out = nodeGitRunner(cwd)(["rev-parse", "HEAD"]);
-  const sha = out.status === 0 ? out.stdout.trim() : "";
+/** The git HEAD at store startup (the launcher spawns the store with cwd = the trevor checkout, so
+ *  this is the running code's sha), or null when the process is not in a git checkout. Argv-based,
+ *  no shell parsing; tests inject the constructor's `startupSha` instead of stubbing this. */
+function readStartupSha(): string | null {
+  const out = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  const sha = out.status === 0 && typeof out.stdout === "string" ? out.stdout.trim() : "";
   return sha || null;
 }
 
@@ -195,6 +188,10 @@ export class SessionLog {
 
   /** The circuit breaker over the bounded-query policy - see {@link admit} and {@link query}. */
   private breaker: BreakerState = { kind: "closed" };
+
+  /** While true, measured queries are observed (counted + `store.slow_query`) but never settle the
+   *  breaker - the acting half is off. Only {@link breakerExemptScope} flips it. */
+  private breakerExempt = false;
 
   /** Opens (creating if absent) the SQLite log at `path`, or `:memory:` for tests. Telemetry is off by
    *  default (NOOP_SINK); the append span carries only the event type, never the session id or payload.
@@ -283,8 +280,28 @@ export class SessionLog {
         durationMs,
       });
     }
-    this.settleBreaker(name, durationMs, endedAt);
+    if (!this.breakerExempt) {
+      this.settleBreaker(name, durationMs, endedAt);
+    }
     return result;
+  }
+
+  /**
+   * Runs `body` with the breaker's ACTING half off: every statement is still counted and observed
+   * (`store.slow_query` spans fire as usual), but none can open the circuit. The startup warm scan
+   * ({@link inventory}) runs under this - a cold full pass over a large DB is legitimately slow ONCE,
+   * and letting it trip the breaker would boot every store restart into a 503/1013 window (the exact
+   * wedge-class DB the breaker exists for has ~1.67s scans). Observation-only exemption, never for
+   * request-path work: hot-path queries stay budgeted.
+   */
+  private breakerExemptScope<T>(body: () => T): T {
+    const previous = this.breakerExempt;
+    this.breakerExempt = true;
+    try {
+      return body();
+    } finally {
+      this.breakerExempt = previous;
+    }
   }
 
   /**
@@ -300,7 +317,8 @@ export class SessionLog {
    * half-applied state this seam exists to prevent.
    *
    * `diag()` and `explainTypeLookup()` are deliberately NOT admitted: the drift/health surface keeps
-   * answering while the circuit is open.
+   * answering while the circuit is open. `inventory()` is not admitted either - it is the startup
+   * warm scan, which runs before any request and breaker-exempt ({@link breakerExemptScope}).
    */
   private admit(operation: string): void {
     if (this.breaker.kind !== "open") {
@@ -415,25 +433,30 @@ export class SessionLog {
    * is served from the derived {@link InventoryProjection} (in `inventory.ts`), which this method
    * warms once at process start and which the parity test pins against; the durable log owns storage,
    * the projection owns the live read model. Calling this per request is exactly the scan 45.1 removed.
+   *
+   * Breaker-EXEMPT (plan 45.2 M3 review fix): the whole scan runs inside {@link breakerExemptScope} -
+   * still measured and spanned (`store.slow_query`), but a legitimately slow cold pass over a large DB
+   * cannot open the circuit and 503 every write for the first cooldown after each restart.
    */
   inventory(): Omit<InventoryRow, "hostPresent">[] {
-    this.admit("inventory");
-    const sessions = this.query(
-      "inventory.aggregate",
-      () =>
-        this.db
-          .prepare(
-            `SELECT s.sessionId AS sessionId,
+    return this.breakerExemptScope(() => {
+      const sessions = this.query(
+        "inventory.aggregate",
+        () =>
+          this.db
+            .prepare(
+              `SELECT s.sessionId AS sessionId,
                 s.createdAt  AS createdAt,
                 COUNT(e.seq) AS eventCount,
                 COALESCE(MAX(e.createdAt), s.createdAt) AS updatedAt
            FROM sessions s
            LEFT JOIN events e ON e.sessionId = s.sessionId
           GROUP BY s.sessionId, s.createdAt`,
-          )
-          .all() as unknown as AggregateRow[],
-    );
-    return sessions.map((s) => this.projectRow(s));
+            )
+            .all() as unknown as AggregateRow[],
+      );
+      return sessions.map((s) => this.projectRow(s));
+    });
   }
 
   /**
@@ -571,10 +594,8 @@ export class SessionLog {
    *  drop/create is seen even when the connection's cached EXPLAIN plan is stale). */
   private hasTypeIndex(): boolean {
     const row = this.db
-      .prepare(
-        "SELECT 1 AS present FROM sqlite_master WHERE type = 'index' AND name = 'events_session_type_seq'",
-      )
-      .get() as { readonly present?: number } | undefined;
+      .prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'index' AND name = ?")
+      .get(TYPE_LOOKUP_INDEX) as { readonly present?: number } | undefined;
     return row?.present === 1;
   }
 
