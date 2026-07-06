@@ -1,4 +1,5 @@
 import type { TaskSnapshot } from "@trevor/session";
+import { TreeBranch } from "@/components/tree-branch";
 import { cn } from "@/lib/utils";
 import {
   buildTaskDisplay,
@@ -42,18 +43,11 @@ const GROUP_GLYPH_STATUS: Record<GroupTone, string> = {
   terminal: "completed",
 };
 
-/** The leading file-tree branch: the first row carries `└`, the rest align beneath it. */
-function Branch({ first }: { first: boolean }) {
-  return (
-    <span className="select-none whitespace-pre text-muted-foreground/40">{first ? "└" : " "}</span>
-  );
-}
-
 function TaskRow({ task, first }: { task: TaskSnapshot; first: boolean }) {
   const style = rowStyle(task.status);
   return (
     <div className="flex items-baseline gap-1.5">
-      <Branch first={first} />
+      <TreeBranch first={first} />
       <span className={cn("select-none", style.glyph)}>{TASK_GLYPH[task.status] ?? "□"}</span>
       <span className={style.text}>
         {taskRowLabel(task)}
@@ -78,7 +72,7 @@ function GroupRow({
   const glyphStatus = GROUP_GLYPH_STATUS[row.tone];
   return (
     <div className="flex items-baseline gap-1.5">
-      <Branch first={first} />
+      <TreeBranch first={first} />
       <span className={cn("select-none", rowStyle(glyphStatus).glyph)}>
         {TASK_GLYPH[glyphStatus] ?? "□"}
       </span>
@@ -150,7 +144,7 @@ export function TasksPanel({
         )}
         {hiddenCount > 0 ? (
           <div className="flex items-baseline gap-1.5">
-            <Branch first={rows.length === 0} />
+            <TreeBranch first={rows.length === 0} />
             <span className="select-none whitespace-pre"> </span>
             <span className="text-muted-foreground/60">...{hiddenCount} more</span>
           </div>
