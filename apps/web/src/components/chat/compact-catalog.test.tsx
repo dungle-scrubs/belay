@@ -148,6 +148,25 @@ test("the catalog's read-only run batches while same-name and distinct tools gro
   assert.equal(compactTypeKey(secondEdit), "tool:edit");
 });
 
+test("every catalog item renders in full (non-compact) mode without crashing", () => {
+  for (const message of catalogTranscript()) {
+    const { container, unmount } = render(
+      <TranscriptRowView
+        row={rowFor(message)}
+        showThinking
+        onOpenPath={noop}
+        onDoctorRefresh={noop}
+        onOpenArtifact={noop}
+        onMenuAction={noop}
+        onOpenDetail={noop}
+        onOpenAgent={noop}
+      />,
+    );
+    assert.ok(container.firstChild, `${message.kind} should render a full row`);
+    unmount();
+  }
+});
+
 /** Wraps a message as a plain (non-batched) message row for a type-key lookup. */
 function rowFor(message: ReturnType<typeof catalogTranscript>[number]) {
   return { kind: "message", id: `message:${message.id}`, message, compactAbove: false } as const;
