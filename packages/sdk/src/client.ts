@@ -12,6 +12,7 @@ import {
   type SessionTransport,
   streamTransport,
   type TrevorEventInput,
+  toPublishInput,
 } from "@trevor/session";
 import { type ArtifactSource, downloadArtifact, headArtifact, uploadArtifact } from "./artifacts";
 import {
@@ -21,7 +22,7 @@ import {
   type ManifestExport,
   runCommand,
 } from "./capabilities";
-import { SdkError, urlClass, withSdkError } from "./errors";
+import { SdkError, type SdkOperation, urlClass, withSdkError } from "./errors";
 import { DEFAULT_SDK_PRODUCER_ID, sdkIdentity } from "./identity";
 import {
   archiveSession,
@@ -98,55 +99,78 @@ export class TrevorClient {
     return this.blobUrl;
   }
 
+  /**
+   * Runs `run` under this client's SESSION error context: fills in the `backend` + redacted session
+   * origin so a workflow (here or a free function taking the client) names only its operation and body
+   * instead of re-spelling `{ backend: "session", sessionId, backendUrlClass }` at every call.
+   */
+  sessionOp<T>(
+    operation: SdkOperation,
+    sessionId: string | undefined,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    return withSdkError(
+      {
+        operation,
+        backend: "session",
+        ...(sessionId !== undefined ? { sessionId } : {}),
+        backendUrlClass: this.urlClass(),
+      },
+      run,
+    );
+  }
+
+  /** Runs `run` under this client's BLOB error context (the blob backend + redacted origin, or `<unset>`). */
+  blobOp<T>(operation: SdkOperation, run: () => Promise<T>): Promise<T> {
+    return withSdkError(
+      {
+        operation,
+        backend: "blob",
+        backendUrlClass: this.blobUrl ? urlClass(this.blobUrl) : "<unset>",
+      },
+      run,
+    );
+  }
+
   /** Ensures a session exists (idempotent); returns its id. Backend failures surface as `SdkError`. */
   ensureSession(sessionId: string): Promise<string> {
-    return withSdkError(
-      {
-        operation: "ensureSession",
-        backend: "session",
-        sessionId,
-        backendUrlClass: this.urlClass(),
-      },
-      () => this.transport.ensureSession(sessionId),
+    return this.sessionOp("ensureSession", sessionId, () =>
+      this.transport.ensureSession(sessionId),
     );
   }
 
-  /** Publishes one already-formed transport event (`{ type, producerId, payload }`) to the durable log. */
-  publish(sessionId: string, input: PublishInput): Promise<void> {
-    return withSdkError(
-      {
-        operation: "publishEvent",
-        backend: "session",
-        sessionId,
-        backendUrlClass: this.urlClass(),
-      },
-      () => this.transport.publishEvent(sessionId, input),
+  /** Publishes one already-formed transport event (`{ type, producerId, payload }`) to the durable log,
+   *  attributing a backend failure to `operation` (defaults to `publishEvent`). */
+  publish(
+    sessionId: string,
+    input: PublishInput,
+    operation: SdkOperation = "publishEvent",
+  ): Promise<void> {
+    return this.sessionOp(operation, sessionId, () =>
+      this.transport.publishEvent(sessionId, input),
     );
   }
 
-  /** Publishes an `events.*` protocol input, stamping this client's producer id. */
-  publishEvent(sessionId: string, input: TrevorEventInput): Promise<void> {
-    return this.publish(sessionId, {
-      type: input.type,
-      producerId: this.producerId,
-      payload: input.payload,
-    });
+  /** Publishes an `events.*` protocol input, stamping this client's producer id. A workflow passes its
+   *  own `operation` label so the failure reads as e.g. `prompt`/`cancel`, not a generic `publishEvent`. */
+  publishEvent(
+    sessionId: string,
+    input: TrevorEventInput,
+    operation: SdkOperation = "publishEvent",
+  ): Promise<void> {
+    return this.publish(sessionId, toPublishInput(input, this.producerId), operation);
   }
 
   /** Reads (replays) the durable log for a session as raw ordered events. */
   readLog(sessionId: string, options?: ReadLogOptions): Promise<readonly SessionEvent[]> {
-    return withSdkError(
-      { operation: "readLog", backend: "session", sessionId, backendUrlClass: this.urlClass() },
-      () => this.transport.readLog(sessionId, this.identity, options),
+    return this.sessionOp("readLog", sessionId, () =>
+      this.transport.readLog(sessionId, this.identity, options),
     );
   }
 
   /** The session inventory read model (every durable session's summary). */
   fetchInventory(signal?: AbortSignal): Promise<readonly SessionSummary[]> {
-    return withSdkError(
-      { operation: "fetchInventory", backend: "session", backendUrlClass: this.urlClass() },
-      () => this.transport.fetchInventory(signal),
-    );
+    return this.sessionOp("fetchInventory", undefined, () => this.transport.fetchInventory(signal));
   }
 
   /**
@@ -172,14 +196,8 @@ export class TrevorClient {
 
   /** Permanently deletes an archived session's storage (typed precondition result, not a throw). */
   permanentlyDeleteSession(sessionId: string): Promise<PermanentDeleteResult> {
-    return withSdkError(
-      {
-        operation: "permanentlyDeleteSession",
-        backend: "session",
-        sessionId,
-        backendUrlClass: this.urlClass(),
-      },
-      () => this.transport.permanentlyDeleteSession(sessionId),
+    return this.sessionOp("permanentlyDeleteSession", sessionId, () =>
+      this.transport.permanentlyDeleteSession(sessionId),
     );
   }
 

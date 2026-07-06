@@ -8,7 +8,6 @@ import {
   putBlob,
 } from "@trevor/session";
 import type { TrevorClient } from "./client";
-import { urlClass, withSdkError } from "./errors";
 
 /**
  * The SDK artifact workflow (plan 28 M3): upload/download/probe over the content-addressed blob store's
@@ -24,11 +23,6 @@ import { urlClass, withSdkError } from "./errors";
 /** The bytes accepted for an upload: a `Blob` (e.g. a picked file) or a raw `Uint8Array`. */
 export type ArtifactSource = Blob | Uint8Array;
 
-/** The URL class used in the artifact error context; a missing blob URL redacts to `<unset>`. */
-function blobUrlClass(client: TrevorClient): string {
-  return client.blobUrl ? urlClass(client.blobUrl) : "<unset>";
-}
-
 /** Uploads bytes to the blob store and returns a structured `ArtifactRef` (content-addressed). */
 export function uploadArtifact(
   client: TrevorClient,
@@ -36,14 +30,11 @@ export function uploadArtifact(
   mimeType: string,
   options?: { readonly kind?: ArtifactRef["kind"]; readonly name?: string },
 ): Promise<ArtifactRef> {
-  return withSdkError(
-    { operation: "uploadArtifact", backend: "blob", backendUrlClass: blobUrlClass(client) },
-    async () => {
-      const blobUrl = client.requireBlobUrl("uploadArtifact");
-      const result = await putBlob(blobUrl, source, mimeType);
-      return artifactRef(result, options?.kind ?? "file", options?.name);
-    },
-  );
+  return client.blobOp("uploadArtifact", async () => {
+    const blobUrl = client.requireBlobUrl("uploadArtifact");
+    const result = await putBlob(blobUrl, source, mimeType);
+    return artifactRef(result, options?.kind ?? "file", options?.name);
+  });
 }
 
 /** Downloads an artifact's raw bytes by hash or ref. Rejects a malformed hash before any request. */
@@ -52,22 +43,18 @@ export function downloadArtifact(
   ref: string | ArtifactRef,
 ): Promise<Uint8Array> {
   const hash = typeof ref === "string" ? ref : ref.hash;
-  return withSdkError(
-    { operation: "downloadArtifact", backend: "blob", backendUrlClass: blobUrlClass(client) },
-    async () => {
-      const blobUrl = client.requireBlobUrl("downloadArtifact");
-      if (!HEX64.test(hash)) {
-        throw new Error(`not a valid blob hash: ${hash}`);
-      }
-      return fetchBlobBytes(blobUrl, hash);
-    },
-  );
+  return client.blobOp("downloadArtifact", async () => {
+    const blobUrl = client.requireBlobUrl("downloadArtifact");
+    if (!HEX64.test(hash)) {
+      throw new Error(`not a valid blob hash: ${hash}`);
+    }
+    return fetchBlobBytes(blobUrl, hash);
+  });
 }
 
 /** Probes an artifact's size + content type by hash (HEAD), or null when the blob is absent. */
 export function headArtifact(client: TrevorClient, hash: string): Promise<BlobMetaProbe | null> {
-  return withSdkError(
-    { operation: "headArtifact", backend: "blob", backendUrlClass: blobUrlClass(client) },
-    async () => headBlob(client.requireBlobUrl("headArtifact"), hash),
+  return client.blobOp("headArtifact", async () =>
+    headBlob(client.requireBlobUrl("headArtifact"), hash),
   );
 }

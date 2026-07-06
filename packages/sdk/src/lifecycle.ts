@@ -1,6 +1,5 @@
-import { events, type SessionSummary, sessionsForProject, toPublishInput } from "@trevor/session";
+import { events, type SessionSummary, sessionsForProject } from "@trevor/session";
 import type { TrevorClient } from "./client";
-import { urlClass, withSdkError } from "./errors";
 
 /**
  * The SDK session-lifecycle workflow (plan 28 M6). The PURE selection/resolution logic - which sessions
@@ -39,17 +38,10 @@ export function listSessions(
   client: TrevorClient,
   options: ListSessionsOptions = {},
 ): Promise<readonly SessionSummary[]> {
-  return withSdkError(
-    {
-      operation: "fetchInventory",
-      backend: "session",
-      backendUrlClass: urlClass(client.sessionUrl),
-    },
-    async () => {
-      const all = await client.transport.fetchInventory(options.signal);
-      return selectSessions(all, options.project ?? null, { archived: options.archived ?? false });
-    },
-  );
+  return client.sessionOp("fetchInventory", undefined, async () => {
+    const all = await client.transport.fetchInventory(options.signal);
+    return selectSessions(all, options.project ?? null, { archived: options.archived ?? false });
+  });
 }
 
 /** Publishes the durable `session.archived` marker (true = archive, false = unarchive). */
@@ -58,18 +50,10 @@ function publishArchived(
   sessionId: string,
   archived: boolean,
 ): Promise<void> {
-  return withSdkError(
-    {
-      operation: archived ? "archive" : "unarchive",
-      backend: "session",
-      sessionId,
-      backendUrlClass: urlClass(client.sessionUrl),
-    },
-    () =>
-      client.transport.publishEvent(
-        sessionId,
-        toPublishInput(events.sessionArchived({ archived }), client.producerId),
-      ),
+  return client.publishEvent(
+    sessionId,
+    events.sessionArchived({ archived }),
+    archived ? "archive" : "unarchive",
   );
 }
 

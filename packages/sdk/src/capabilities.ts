@@ -8,7 +8,7 @@ import {
 } from "@trevor/session";
 import { awaitStreamResult } from "./await-stream";
 import type { TrevorClient } from "./client";
-import { SdkError, urlClass, withSdkError } from "./errors";
+import { SdkError, urlClass } from "./errors";
 
 /**
  * The SDK capability/doctor reads (plan 28 M4). Trevor's capability manifest and `/doctor` snapshot are
@@ -42,60 +42,50 @@ export function runCommand(
   args = "",
   options?: { readonly timeoutMs?: number },
 ): Promise<CommandResult> {
-  return withSdkError(
-    {
-      operation: "runCommand",
-      backend: "session",
-      sessionId,
-      backendUrlClass: urlClass(client.sessionUrl),
-    },
-    () => {
-      const timeoutMs = options?.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
-      let replayed = false;
-      return awaitStreamResult<CommandResult>(
-        client,
-        { sessionId },
-        timeoutMs,
-        ({ settle, resolve, reject }) => ({
-          onEvent: (event) => {
-            // Ignore results seen during replay: a stale prior `/command` result must not be mistaken
-            // for the fresh one. Only the tail result (after replay + our publish) resolves.
-            if (!replayed) {
-              return;
-            }
-            const decoded = decodeTrevorEvent(event);
-            if (decoded?.type === "command.result" && decoded.command === command) {
-              settle(() =>
-                resolve({ command: decoded.command, text: decoded.text, ok: decoded.ok }),
-              );
-            }
-          },
-          onReplayComplete: () => {
-            replayed = true;
-            // Publish only after replay so the tail delivers the host's new result for this command.
-            void client.transport
-              .publishEvent(
-                sessionId,
-                toPublishInput(events.userCommand({ command, args }), client.producerId),
-              )
-              .catch((error: unknown) => settle(() => reject(error)));
-          },
-        }),
-        ({ settle, reject }) =>
-          settle(() =>
-            reject(
-              new SdkError({
-                operation: "runCommand",
-                backend: "session",
-                sessionId,
-                backendUrlClass: urlClass(client.sessionUrl),
-                detail: `no command.result for ${command} within ${timeoutMs}ms (is a host running?)`,
-              }),
-            ),
+  return client.sessionOp("runCommand", sessionId, () => {
+    const timeoutMs = options?.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+    let replayed = false;
+    return awaitStreamResult<CommandResult>(
+      client,
+      { sessionId },
+      timeoutMs,
+      ({ settle, resolve, reject }) => ({
+        onEvent: (event) => {
+          // Ignore results seen during replay: a stale prior `/command` result must not be mistaken
+          // for the fresh one. Only the tail result (after replay + our publish) resolves.
+          if (!replayed) {
+            return;
+          }
+          const decoded = decodeTrevorEvent(event);
+          if (decoded?.type === "command.result" && decoded.command === command) {
+            settle(() => resolve({ command: decoded.command, text: decoded.text, ok: decoded.ok }));
+          }
+        },
+        onReplayComplete: () => {
+          replayed = true;
+          // Publish only after replay so the tail delivers the host's new result for this command.
+          void client.transport
+            .publishEvent(
+              sessionId,
+              toPublishInput(events.userCommand({ command, args }), client.producerId),
+            )
+            .catch((error: unknown) => settle(() => reject(error)));
+        },
+      }),
+      ({ settle, reject }) =>
+        settle(() =>
+          reject(
+            new SdkError({
+              operation: "runCommand",
+              backend: "session",
+              sessionId,
+              backendUrlClass: urlClass(client.sessionUrl),
+              detail: `no command.result for ${command} within ${timeoutMs}ms (is a host running?)`,
+            }),
           ),
-      );
-    },
-  );
+        ),
+    );
+  });
 }
 
 /** A capability manifest export: the structured manifest for `json`, or the human/compact text block. */
@@ -125,36 +115,28 @@ export function exportCapabilities(
   ]
     .filter((part): part is string => part !== null)
     .join(" ");
-  return withSdkError(
-    {
-      operation: "exportCapabilities",
-      backend: "session",
-      sessionId,
-      backendUrlClass: urlClass(client.sessionUrl),
-    },
-    async () => {
-      const result = await runCommand(client, sessionId, "/trevor-export", args, {
-        timeoutMs: request?.timeoutMs,
+  return client.sessionOp("exportCapabilities", sessionId, async () => {
+    const result = await runCommand(client, sessionId, "/trevor-export", args, {
+      timeoutMs: request?.timeoutMs,
+    });
+    if (format === "text") {
+      return { format: "text", text: result.text };
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(result.text);
+    } catch {
+      throw new SdkError({
+        operation: "exportCapabilities",
+        backend: "session",
+        sessionId,
+        backendUrlClass: urlClass(client.sessionUrl),
+        detail:
+          "trevor-export did not return JSON (is the host on a version that supports --json?)",
       });
-      if (format === "text") {
-        return { format: "text", text: result.text };
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(result.text);
-      } catch {
-        throw new SdkError({
-          operation: "exportCapabilities",
-          backend: "session",
-          sessionId,
-          backendUrlClass: urlClass(client.sessionUrl),
-          detail:
-            "trevor-export did not return JSON (is the host on a version that supports --json?)",
-        });
-      }
-      return { format: "json", manifest: parsed as CapabilityManifest };
-    },
-  );
+    }
+    return { format: "json", manifest: parsed as CapabilityManifest };
+  });
 }
 
 /**
@@ -166,16 +148,8 @@ export function doctorSnapshot(
   sessionId: string,
   options?: { readonly timeoutMs?: number },
 ): Promise<DoctorSnapshot | null> {
-  return withSdkError(
-    {
-      operation: "doctor",
-      backend: "session",
-      sessionId,
-      backendUrlClass: urlClass(client.sessionUrl),
-    },
-    async () => {
-      const result = await runCommand(client, sessionId, "/doctor", "", options);
-      return decodeDoctorSnapshot(result.text);
-    },
-  );
+  return client.sessionOp("doctor", sessionId, async () => {
+    const result = await runCommand(client, sessionId, "/doctor", "", options);
+    return decodeDoctorSnapshot(result.text);
+  });
 }
