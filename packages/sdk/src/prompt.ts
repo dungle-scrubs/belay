@@ -6,10 +6,10 @@ import {
   type ModelSwitchEndpoint,
   type ModelSwitchInitiator,
   type ModelSwitchOutcome,
-  type SessionConnection,
   type SessionEvent,
   toPublishInput,
 } from "@trevor/session";
+import { awaitStreamResult } from "./await-stream";
 import type { TrevorClient } from "./client";
 import { SdkError, urlClass, withSdkError } from "./errors";
 
@@ -189,64 +189,45 @@ export function streamTurn(
       sessionId,
       backendUrlClass: urlClass(client.sessionUrl),
     },
-    () =>
-      new Promise<TurnResult>((resolve, reject) => {
-        const timeoutMs = options.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
-        const collected: SessionEvent[] = [];
-        let runId: string | null = options.runId ?? null;
-        let connection: SessionConnection | null = null;
-        let settled = false;
-
-        const finish = (result: Omit<TurnResult, "events">): void => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timer);
-          connection?.close();
-          resolve({ ...result, events: collected });
-        };
-
-        const timer = setTimeout(
-          () => finish({ runId, text: "", cancelled: false, timedOut: true }),
-          timeoutMs,
-        );
-
-        const belongs = (decodedRunId: string | undefined): boolean =>
-          runId === null || decodedRunId === runId;
-
-        try {
-          connection = client.transport.connectSession({
-            sessionId,
-            identity: client.identity,
-            afterSeq: options.afterSeq ?? 0,
-            onEvent: (event) => {
-              options.onEvent?.(event);
-              const decoded = decodeTrevorEvent(event);
-              if (!decoded) {
-                return;
-              }
-              if (decoded.type === "assistant.started" && runId === null) {
-                runId = decoded.runId;
-              }
-              const eventRunId =
-                "runId" in decoded && typeof decoded.runId === "string" ? decoded.runId : undefined;
-              if (eventRunId !== undefined && belongs(eventRunId)) {
-                collected.push(event);
-              }
-              if (decoded.type === "assistant.completed" && belongs(decoded.runId)) {
-                finish({
+    () => {
+      const collected: SessionEvent[] = [];
+      let runId: string | null = options.runId ?? null;
+      const belongs = (decodedRunId: string | undefined): boolean =>
+        runId === null || decodedRunId === runId;
+      return awaitStreamResult<TurnResult>(
+        client,
+        { sessionId, afterSeq: options.afterSeq ?? 0 },
+        options.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
+        ({ settle, resolve, reject }) => ({
+          onEvent: (event) => {
+            options.onEvent?.(event);
+            const decoded = decodeTrevorEvent(event);
+            if (!decoded) {
+              return;
+            }
+            if (decoded.type === "assistant.started" && runId === null) {
+              runId = decoded.runId;
+            }
+            const eventRunId =
+              "runId" in decoded && typeof decoded.runId === "string" ? decoded.runId : undefined;
+            if (eventRunId !== undefined && belongs(eventRunId)) {
+              collected.push(event);
+            }
+            if (decoded.type === "assistant.completed" && belongs(decoded.runId)) {
+              settle(() =>
+                resolve({
                   runId: decoded.runId,
                   text: decoded.text,
                   cancelled: decoded.cancelled,
                   timedOut: false,
-                });
-              }
-            },
-            onStatus: (status) => {
-              if (status === "closed" && !settled) {
-                settled = true;
-                clearTimeout(timer);
+                  events: collected,
+                }),
+              );
+            }
+          },
+          onStatus: (status) => {
+            if (status === "closed") {
+              settle(() =>
                 reject(
                   new SdkError({
                     operation: "streamTurn",
@@ -255,15 +236,16 @@ export function streamTurn(
                     backendUrlClass: urlClass(client.sessionUrl),
                     detail: "stream closed before the turn completed",
                   }),
-                );
-              }
-            },
-          });
-        } catch (error) {
-          settled = true;
-          clearTimeout(timer);
-          reject(error);
-        }
-      }),
+                ),
+              );
+            }
+          },
+        }),
+        ({ settle, resolve }) =>
+          settle(() =>
+            resolve({ runId, text: "", cancelled: false, timedOut: true, events: collected }),
+          ),
+      );
+    },
   );
 }

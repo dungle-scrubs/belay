@@ -6,6 +6,7 @@ import {
   events,
   toPublishInput,
 } from "@trevor/session";
+import { awaitStreamResult } from "./await-stream";
 import type { TrevorClient } from "./client";
 import { SdkError, urlClass, withSdkError } from "./errors";
 
@@ -48,26 +49,25 @@ export function runCommand(
       sessionId,
       backendUrlClass: urlClass(client.sessionUrl),
     },
-    () =>
-      new Promise<CommandResult>((resolve, reject) => {
-        const timeoutMs = options?.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
-        let settled = false;
-        let replayed = false;
-        const connection = client.transport.connectSession({
-          sessionId,
-          identity: client.identity,
+    () => {
+      const timeoutMs = options?.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+      let replayed = false;
+      return awaitStreamResult<CommandResult>(
+        client,
+        { sessionId },
+        timeoutMs,
+        ({ settle, resolve, reject }) => ({
           onEvent: (event) => {
             // Ignore results seen during replay: a stale prior `/command` result must not be mistaken
             // for the fresh one. Only the tail result (after replay + our publish) resolves.
-            if (!replayed || settled) {
+            if (!replayed) {
               return;
             }
             const decoded = decodeTrevorEvent(event);
             if (decoded?.type === "command.result" && decoded.command === command) {
-              settled = true;
-              clearTimeout(timer);
-              connection.close();
-              resolve({ command: decoded.command, text: decoded.text, ok: decoded.ok });
+              settle(() =>
+                resolve({ command: decoded.command, text: decoded.text, ok: decoded.ok }),
+              );
             }
           },
           onReplayComplete: () => {
@@ -78,20 +78,11 @@ export function runCommand(
                 sessionId,
                 toPublishInput(events.userCommand({ command, args }), client.producerId),
               )
-              .catch((error: unknown) => {
-                if (!settled) {
-                  settled = true;
-                  clearTimeout(timer);
-                  connection.close();
-                  reject(error);
-                }
-              });
+              .catch((error: unknown) => settle(() => reject(error)));
           },
-        });
-        const timer = setTimeout(() => {
-          if (!settled) {
-            settled = true;
-            connection.close();
+        }),
+        ({ settle, reject }) =>
+          settle(() =>
             reject(
               new SdkError({
                 operation: "runCommand",
@@ -100,10 +91,10 @@ export function runCommand(
                 backendUrlClass: urlClass(client.sessionUrl),
                 detail: `no command.result for ${command} within ${timeoutMs}ms (is a host running?)`,
               }),
-            );
-          }
-        }, timeoutMs);
-      }),
+            ),
+          ),
+      );
+    },
   );
 }
 
