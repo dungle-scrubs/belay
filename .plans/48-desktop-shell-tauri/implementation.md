@@ -11,6 +11,7 @@
 - [ ] Desktop packaging decision - choose the app packaging/signing/update path for macOS first, with room for Windows/Linux later.
 - [ ] `.plans/56-rename-to-trevor` (coordination; sequenced first) - plan 56 renames the project to `trevor` and lands before 48. Build the Tauri app identity (bundle id, product name, window title) against the final `trevor` name and read all paths from `node-paths` (already `~/.trevor`); do not introduce `trevor` literals. <!-- D-006 -->
 - [ ] `.plans/50-cli-headless-agent-surface` (coordination; sequenced first) - plan 50 adds the `launch({ noBrowser })` option to `@trevor/launcher` for its headless one-shot. M7 **consumes that option** for the desktop supervisor's spawn-or-reuse rather than re-implementing a browser-less spawn; one shared seam, not two. <!-- D-007 -->
+- [ ] `.plans/45.2-session-store-resilience` (sequenced first) - 45.2 adds a store `/health` watchdog to the supervisor (detect wedge, kill the store PID, launchdawg respawns) and a store-health signal (`indexHealthy` / `user_version` / startup SHA via a store `GET /diag`) folded into the doctor `storage` area. M6 **reuses** both rather than adding a parallel store liveness probe or restart loop. <!-- D-008 -->
 
 ## 1. Architecture
 
@@ -157,6 +158,7 @@ The host is a Node + Effect app. The umbrella plan already marks a spawnable hos
   3. RED: Add tests proving services remain singletons across multiple projects/sessions.
   4. GREEN: Surface service startup and failure states in desktop startup UI/Doctor.
   5. REFACTOR: Keep service lifecycle separate from session host lifecycle.
+- **Note:** <!-- D-008 --> Store liveness detection, wedge recovery (kill + respawn), and the store-health Doctor signal are owned by 45.2 (supervisor watchdog + store `/diag` in the doctor `storage` area), which lands first. M6 **consumes** those - it surfaces the store's `unhealthy`/restart state from 45.2's watchdog and reuses the `/diag` signal - rather than adding a second store probe or restart loop (avoids a double-kill / duplicate `:17424` bind).
 
 #### M7: Per-Session Host Supervision
 
