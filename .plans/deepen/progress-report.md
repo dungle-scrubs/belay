@@ -33,7 +33,7 @@
 
 ### Phase 3: Low
 
-- [ ] C-11: `apps/agent-host/src/agent/turn.ts` `publishTurn` ↔ `RunAgentOptions` - group always-together knobs into named bundles.
+- [x] C-11: `apps/agent-host/src/agent/turn.ts` `publishTurn` ↔ `RunAgentOptions` - REJECTED on read. The audit's premise (`toolNames`/`delegate`/`loop`/`seedUsage` are pass-throughs) is false: each is inspected locally in `publishTurn` (`toolNames`/`delegate` -> `offeredToolDefs` at :162, `loop` -> `turnLoopConfig(loop).streamStallMs` at :282, `seedUsage` -> `seedWindow` at :169). No pure pass-through remains after C-07 pulled the one always-together triple (`SwitchSurface`). The proposed `{ loop, seedUsage }` bundle groups a test-only seam (`loop`, never set in production) with a production per-turn carry-forward that don't co-occur, and would force the one production reader to reach through a nested bag - degrading a hot path. Each option maps to a distinct, documented concern; the bag is wide but not shallow.
 - [ ] C-12: `apps/agent-host/src/doctor/build.ts` - subsystems contribute own doctor fragments instead of 20-field facts threading.
 - [x] C-13: `packages/session/src/capability-manifest-compact.ts` - import `CHARS_PER_TOKEN` from `breakdown.ts`.
 - [x] C-14: `apps/web/src/components/panel/panel-host.tsx` → `virtual-transcript.tsx` - pass transcript handlers as one bundle.
@@ -46,8 +46,9 @@
 ## Summary
 - Total candidates: 26
 - Redesigned (done): 21
-- Open candidates: 5
-- Current cutoff blockers: 5
+- Open candidates: 4
+- Current cutoff blockers: 4
+- Rejected on read (premise didn't survive code review): 1 (C-11)
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
