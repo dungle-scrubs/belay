@@ -1,6 +1,6 @@
 import { startStore } from "@trevor/server-kit";
 import { RESERVED_PORTS } from "@trevor/session/ports";
-import { sessionStoreDbPath } from "./config";
+import { SESSION_STORE, sessionStoreDbPath } from "./config";
 import { createSessionStore } from "./server";
 
 /**
@@ -14,13 +14,13 @@ import { createSessionStore } from "./server";
 const DB_PATH = sessionStoreDbPath();
 
 startStore({
-  name: "session-store",
-  envPrefix: "SESSION_STORE",
+  name: SESSION_STORE.name,
+  envPrefix: SESSION_STORE.envPrefix,
   reservedPort: RESERVED_PORTS.store,
-  dataLabel: "db",
+  dataLabel: SESSION_STORE.dataLabel,
   dataPath: DB_PATH,
-  legacyArtifact: "sessions-db",
-  legacyLabel: "session",
-  legacyOverrideEnv: "SESSION_STORE_DB",
+  legacyArtifact: SESSION_STORE.storageArtifact,
+  legacyLabel: SESSION_STORE.legacyLabel,
+  legacyOverrideEnv: SESSION_STORE.overrideEnv,
   build: () => createSessionStore(DB_PATH),
 });

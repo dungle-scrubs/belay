@@ -1,6 +1,6 @@
 import { startStore } from "@trevor/server-kit";
 import { RESERVED_PORTS } from "@trevor/session/ports";
-import { blobStoreRoot } from "./config";
+import { BLOB_STORE, blobStoreRoot } from "./config";
 import { createBlobServer } from "./server";
 
 /**
@@ -15,13 +15,13 @@ const ROOT = blobStoreRoot();
 const MAX_BYTES = Number(process.env.BLOB_STORE_MAX_BYTES ?? 25 * 1024 * 1024);
 
 startStore({
-  name: "blob-store",
-  envPrefix: "BLOB_STORE",
+  name: BLOB_STORE.name,
+  envPrefix: BLOB_STORE.envPrefix,
   reservedPort: RESERVED_PORTS.blob,
-  dataLabel: "root",
+  dataLabel: BLOB_STORE.dataLabel,
   dataPath: ROOT,
-  legacyArtifact: "blobs",
-  legacyLabel: "blob",
-  legacyOverrideEnv: "BLOB_STORE_DIR",
+  legacyArtifact: BLOB_STORE.storageArtifact,
+  legacyLabel: BLOB_STORE.legacyLabel,
+  legacyOverrideEnv: BLOB_STORE.overrideEnv,
   build: () => createBlobServer(ROOT, MAX_BYTES),
 });
