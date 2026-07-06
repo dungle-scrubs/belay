@@ -47,13 +47,18 @@ test("write/edit/multi_edit extract paths + content/diff fields", () => {
     old: "x",
     new: "y",
   });
+  // Real host shape (plan 08.1): no top-level path; each edit carries its own. `paths` is the
+  // distinct set (first-seen); `edits` keep their per-edit path for correct per-file grouping.
   assert.deepEqual(
-    multiEditDetailArgs('{"path":"a.ts","edits":[{"old":"x","new":"y"},{"old":"a","new":"b"}]}'),
+    multiEditDetailArgs(
+      '{"edits":[{"path":"a.ts","old":"x","new":"y"},{"path":"b.ts","old":"a","new":"b"},{"path":"a.ts","old":"c","new":"d"}]}',
+    ),
     {
-      path: "a.ts",
+      paths: ["a.ts", "b.ts"],
       edits: [
-        { old: "x", new: "y" },
-        { old: "a", new: "b" },
+        { path: "a.ts", old: "x", new: "y" },
+        { path: "b.ts", old: "a", new: "b" },
+        { path: "a.ts", old: "c", new: "d" },
       ],
     },
   );
@@ -62,7 +67,12 @@ test("write/edit/multi_edit extract paths + content/diff fields", () => {
 test("a malformed / partial arg degrades to empty, never throws", () => {
   assert.deepEqual(bashDetailArgs("{ not json"), { command: "" });
   assert.deepEqual(readDetailArgs("{}"), { path: "", offset: undefined, limit: undefined });
-  assert.deepEqual(multiEditDetailArgs('{"path":"a.ts"}'), { path: "a.ts", edits: [] });
+  assert.deepEqual(multiEditDetailArgs("{}"), { paths: [], edits: [] });
+  // A still-streaming edit (its path not yet arrived) keeps the edit but contributes no chip path.
+  assert.deepEqual(multiEditDetailArgs('{"edits":[{"old":"x","new":"y"}]}'), {
+    paths: [],
+    edits: [{ path: "", old: "x", new: "y" }],
+  });
 });
 
 test("truncationLabel reports the hidden-line count only past the cap", () => {

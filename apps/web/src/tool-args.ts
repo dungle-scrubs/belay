@@ -145,8 +145,11 @@ export function editDetailArgs(args: string): EditDetailArgs {
 }
 
 export interface MultiEditDetailArgs {
-  readonly path: string;
-  readonly edits: readonly { readonly old: string; readonly new: string; readonly path?: string }[];
+  /** The distinct files this multi_edit touches, first-seen order - one FILE chip each (D-002). */
+  readonly paths: readonly string[];
+  /** Every edit carrying its own file path, so the detail can feed MultiEditDiff edits that group
+   *  by their real `path` (D-004) instead of collapsing onto one. Empty `path` while streaming. */
+  readonly edits: readonly { readonly path: string; readonly old: string; readonly new: string }[];
 }
 
 export function multiEditDetailArgs(args: string): MultiEditDetailArgs {
@@ -154,10 +157,9 @@ export function multiEditDetailArgs(args: string): MultiEditDetailArgs {
   const raw = Array.isArray(a.edits) ? a.edits : [];
   const edits = raw.map((item) => {
     const e = (item ?? {}) as Record<string, unknown>;
-    const path = str(e.path);
-    return { old: str(e.old), new: str(e.new), ...(path ? { path } : {}) };
+    return { path: str(e.path), old: str(e.old), new: str(e.new) };
   });
-  return { path: str(a.path), edits };
+  return { paths: multiEditPaths(a.edits), edits };
 }
 
 export interface SearchDetailArgs {

@@ -2,7 +2,7 @@
 
 **Stage:** implementing
 
-**Current focus:** Phase 1 · M2 - Detail FILE chip + multi-file diff correctness
+**Current focus:** Phase 1 · M3 - Verification (real-app drive + full validation gate)
 
 The `multi_edit` detail FILE section renders `(none)` because three web surfaces read a
 top-level `input.path` that `multi_edit` never sets (its path is per-edit under
@@ -11,8 +11,8 @@ view to show one chip per distinct file.
 
 ## Summary
 
-- **Milestones:** 3 (M1, M2, M3) - 1/3 complete
-- **Tasks (current cutoff):** 7/15 checked
+- **Milestones:** 3 (M1, M2, M3) - 2/3 complete
+- **Tasks (current cutoff):** 12/15 checked
 - **Deferred / follow-up:** none
 - **Superseded:** none
 
@@ -42,19 +42,20 @@ All work is current-cutoff. No deferred or superseded buckets.
 - [x] REFACTOR: `salientToolArg` and `compactToolSummary` read the one `multiEditPaths` helper
       (C-18 single registry, compact via `salientToolArg`); `multiEditDetailArgs` joins in M2.
 
-### M2: Detail FILE chip + multi-file diff correctness - 0/5
+### M2: Detail FILE chip + multi-file diff correctness - 5/5
 
-- [ ] RED: rewrite the `multi_edit` detail test (`detail-body.test.tsx:74-84`) to the real
-      host shape and assert the FILE section shows `a.ts`, not `(none)`. Fails today.
-- [ ] GREEN: `multiEditDetailArgs` exposes `paths: readonly string[]`; `MultiEditDetail`
+- [x] RED: rewrite the `multi_edit` detail test to the real host shape and assert the FILE
+      section shows `a.ts`, not `(none)`.
+- [x] GREEN: `multiEditDetailArgs` exposes `paths: readonly string[]`; `MultiEditDetail`
       renders one `FilePath` chip per distinct path with title `File`/`Files` (D-002).
-- [ ] RED: multi-file detail test (`edits` across `a.ts` and `b.ts`) - asserts both chips
-      render AND the CHANGES summary reads `2 files` (today collapses to `1`). Fails today.
-- [ ] GREEN: fix `detail-body.tsx:306` to feed `MultiEditDiff` each edit's own `e.path`
-      instead of the single top-level `path` (D-004).
-- [ ] REFACTOR: replace the fictitious top-level-`path` fixtures in `detail-body.test.tsx`
-      and `tool-detail-view.stories.tsx` with the real host schema; add a `MultiEditMultiFile`
-      story; drop the unused top-level `path` from `MultiEditDetailArgs` if nothing reads it.
+- [x] RED: multi-file detail test (`edits` across `a.ts` and `b.ts`) - asserts both chips
+      render AND the CHANGES summary reads `2 files` (today collapses to `1`).
+- [x] GREEN: feed `MultiEditDiff` each edit's own `e.path` instead of the single top-level
+      `path` (D-004).
+- [x] REFACTOR: migrated the fictitious top-level-`path` fixtures in `detail-body.test.tsx`,
+      `detail-args.test.tsx`, and `tool-detail-view.stories.tsx` to the real host schema; added
+      a `MultiEditMultiFile` story; replaced the top-level `path` on `MultiEditDetailArgs` with
+      `paths` (its only reader is `MultiEditDetail`).
 
 ### M3: Verification - 0/3
 

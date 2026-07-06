@@ -71,16 +71,37 @@ test("edit shows the file and the change", () => {
   assert.ok(screen.getAllByText("a.ts").length >= 1);
 });
 
-test("multi_edit shows the file and a per-edit change count", () => {
+test("multi_edit shows the file (from edits[].path) and a per-edit change count", () => {
   render(
     <DetailBody
       model={model({
+        // Real host shape (plan 08.1): no top-level path; each edit carries its own.
         toolName: "multi_edit",
-        args: '{"path":"a.ts","edits":[{"old":"x","new":"y"},{"old":"a","new":"b"}]}',
+        args: '{"edits":[{"path":"a.ts","old":"x","new":"y"},{"path":"a.ts","old":"a","new":"b"}]}',
       })}
     />,
   );
   assert.ok(screen.getByText("Changes (2)"));
+  // The FILE section names the file (a.ts) rather than rendering "(none)".
+  assert.ok(screen.getAllByText("a.ts").length >= 1, "the FILE section shows the file");
+  assert.equal(screen.queryByText("(none)"), null, "the FILE section is not empty");
+});
+
+test("a multi-file multi_edit shows every file and a per-file diff summary", () => {
+  render(
+    <DetailBody
+      model={model({
+        toolName: "multi_edit",
+        args: '{"edits":[{"path":"a.ts","old":"x","new":"y"},{"path":"b.ts","old":"a","new":"b"}]}',
+      })}
+    />,
+  );
+  // Two distinct files -> the section title pluralizes to "Files" and both get a chip.
+  assert.ok(screen.getByText("Files"));
+  assert.ok(screen.getAllByText("a.ts").length >= 1);
+  assert.ok(screen.getAllByText("b.ts").length >= 1);
+  // The diff summary counts 2 files, not the collapsed "1 file" the old top-level path produced.
+  assert.ok(screen.getByText(/2 files/), "the CHANGES summary reports 2 files");
 });
 
 test("grep shows the pattern, scope, and match count", () => {

@@ -95,9 +95,29 @@ export const MultiEditChanges: Story = {
     <Panel>
       <ToolDetailView
         model={model({
+          // Real host shape: no top-level path; each edit carries its own edits[].path (plan 08.1).
           toolName: "multi_edit",
-          args: '{"path":"apps/web/src/app.tsx","edits":[{"old":"const a = 1","new":"const a = 2"},{"old":"return a","new":"return a + 1"}]}',
+          args: '{"edits":[{"path":"apps/web/src/app.tsx","old":"const a = 1","new":"const a = 2"},{"path":"apps/web/src/app.tsx","old":"return a","new":"return a + 1"}]}',
           output: "applied 2 edits",
+        })}
+        onBack={noop}
+        onOpenPath={noop}
+        className="h-full"
+      />
+    </Panel>
+  ),
+};
+
+/** A multi_edit spanning two files: the FILE section pluralizes to "Files" with a chip each, and
+ *  the CHANGES summary reads "2 files" - the case the old single top-level path collapsed to 1. */
+export const MultiEditMultiFile: Story = {
+  render: () => (
+    <Panel>
+      <ToolDetailView
+        model={model({
+          toolName: "multi_edit",
+          args: '{"edits":[{"path":"apps/web/src/app.tsx","old":"const a = 1","new":"const a = 2"},{"path":"apps/web/src/tool-args.ts","old":"return a","new":"return a + 1"}]}',
+          output: "applied 2 edits across 2 files",
         })}
         onBack={noop}
         onOpenPath={noop}

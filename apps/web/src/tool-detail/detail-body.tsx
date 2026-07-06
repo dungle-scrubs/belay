@@ -294,16 +294,26 @@ function MultiEditDetail({
   readonly model: ToolDetailModel;
   readonly onOpenPath?: (path: string) => void;
 }) {
-  const { path, edits } = multiEditDetailArgs(model.args);
+  const { paths, edits } = multiEditDetailArgs(model.args);
   return (
     <>
-      <DetailSection title="File">
-        <FilePath path={path} onOpenPath={onOpenPath} />
+      <DetailSection title={paths.length > 1 ? "Files" : "File"}>
+        {paths.length > 0 ? (
+          <div className="flex flex-col gap-1.5">
+            {paths.map((p) => (
+              <FilePath key={p} path={p} onOpenPath={onOpenPath} />
+            ))}
+          </div>
+        ) : (
+          <FilePath path="" onOpenPath={onOpenPath} />
+        )}
       </DetailSection>
       <DetailSection title={`Changes (${edits.length})`}>
         {edits.length > 0 ? (
+          // Feed each edit its OWN path (D-004) so MultiEditDiff groups by file correctly and its
+          // "N files" summary is right - the old single top-level path collapsed every edit to one.
           <MultiEditDiff
-            edits={edits.map((e) => ({ path, old: e.old, new: e.new }))}
+            edits={edits}
             status={model.status}
             border={false}
             onOpenPath={onOpenPath}
