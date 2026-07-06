@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
+import { debug } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import type {
   CatalogEntry,
   CatalogFreshness,
@@ -15,7 +17,7 @@ import { reloadModelOverrides, resolveContextWindow } from "./model-metadata-ove
 import { openAICompatProvider } from "./openai-compat";
 import { PI_KEY_PROVIDERS, piKeyAuthName, piKeyProviderFromConfig } from "./pi-key";
 import { lookupPiModel } from "./pi-model";
-import { AUTH_PATH, oauthPresent, staticKeyEntry } from "./provider-auth";
+import { AUTH_PATH, oauthCredentialResolver, oauthPresent, staticKeyEntry } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
 import { asLiveModel, fetchSourceModels, type LiveModel } from "./source-models";
 import type { Provider } from "./types";
@@ -316,12 +318,18 @@ export function buildCatalogSnapshot(
   modelsBySource: Readonly<Record<string, readonly (string | LiveModel)[]>>,
   staleSources: ReadonlySet<string> = new Set(),
   sourceAuth?: ReadonlyMap<string, SourceAuth>,
+  expiredSources: ReadonlySet<string> = new Set(),
 ): CatalogSnapshot {
   const resolvedAuth = sourceAuth ?? projectSourceAuth(auth);
   const catalogBySource: Record<string, CatalogEntry[]> = {};
   const sources: SourceSummary[] = [];
   for (const source of SOURCES) {
     const configured = resolvedAuth.get(source.sourceId)?.configured ?? false;
+    // An oauth entry that is PRESENT but can no longer mint a usable key (the loadCatalog probe's
+    // refresh failed - token expired + refresh rejected). Present-but-dead must not read as
+    // authenticated: that is how the chooser ends up showing a healthy source with no re-auth
+    // pathway while every turn fails with an auth error.
+    const expired = configured && expiredSources.has(source.sourceId);
     // An unconfigured source is advertised ONLY when it has an in-app sign-in (oauth): the user can
     // authenticate from the chooser. A key-based source (api-key / gateway) is configured OUT of band by
     // adding its `{ key }` to ~/.pi/auth.json - with no key there is nothing to do in-app and no model to
@@ -344,18 +352,21 @@ export function buildCatalogSnapshot(
       sourceId: source.sourceId,
       type: source.type,
       label: source.label,
-      status: statusFor(configured),
+      status: expired ? "needs-auth" : statusFor(configured),
       modelCount: entries.length,
-      auth: configured ? "authenticated" : "none",
+      auth: expired ? "expired" : configured ? "authenticated" : "none",
       freshness,
       // An oauth source (the Claude subscription, OpenAI) offers the in-app device-code / browser
-      // "authenticate" sign-in; an api-key / gateway / local source offers the manual "configure" hint
+      // "authenticate" sign-in ("reauthenticate" when its stored credential went dead - same flow,
+      // honest label); an api-key / gateway / local source offers the manual "configure" hint
       // (add a key to the host store / start the runtime).
-      actions: configured
-        ? ["refresh"]
-        : source.type === "oauth"
-          ? ["authenticate"]
-          : ["configure"],
+      actions: expired
+        ? ["reauthenticate"]
+        : configured
+          ? ["refresh"]
+          : source.type === "oauth"
+            ? ["authenticate"]
+            : ["configure"],
     });
   }
   return { sources, catalogBySource };
@@ -452,17 +463,42 @@ export async function loadCatalog(): Promise<CatalogSnapshot> {
   // summary.
   const modelsBySource: Record<string, readonly LiveModel[]> = {};
   const staleSources = new Set<string>();
-  await Promise.all(
-    SOURCES.filter((source) => sourceAuth.get(source.sourceId)?.configured).map(async (source) => {
-      const { models, stale } = await fetchSourceModels(
-        source,
-        sourceAuth.get(source.sourceId)?.staticKey ?? null,
-      );
-      modelsBySource[source.sourceId] = models;
-      if (stale) {
-        staleSources.add(source.sourceId);
+  // Probe each configured OAUTH source's credential (an oauth source's model list comes from the
+  // static registry, so the models fetch never exercises the token - without this probe a dead
+  // credential still projects as a healthy, authenticated source with no re-auth pathway). Cheap on
+  // the happy path: the resolver only performs a network refresh when the access token is actually
+  // past expiry, and a successful refresh persists the rotated credential, healing the store.
+  const expiredSources = new Set<string>();
+  await Promise.all([
+    ...SOURCES.filter((source) => sourceAuth.get(source.sourceId)?.configured).map(
+      async (source) => {
+        const { models, stale } = await fetchSourceModels(
+          source,
+          sourceAuth.get(source.sourceId)?.staticKey ?? null,
+        );
+        modelsBySource[source.sourceId] = models;
+        if (stale) {
+          staleSources.add(source.sourceId);
+        }
+      },
+    ),
+    ...SOURCES.filter(
+      (source) =>
+        source.type === "oauth" &&
+        source.oauthName !== undefined &&
+        sourceAuth.get(source.sourceId)?.configured,
+    ).map(async (source) => {
+      try {
+        await oauthCredentialResolver({
+          providerId: source.sourceId,
+          // The filter above guarantees oauthName; the fallback only satisfies the type.
+          oauthName: source.oauthName ?? source.sourceId,
+        }).resolveApiKey();
+      } catch (error) {
+        debug("catalog", "oauth probe failed", { source: source.sourceId, error: msg(error) });
+        expiredSources.add(source.sourceId);
       }
     }),
-  );
-  return buildCatalogSnapshot(auth, modelsBySource, staleSources, sourceAuth);
+  ]);
+  return buildCatalogSnapshot(auth, modelsBySource, staleSources, sourceAuth, expiredSources);
 }

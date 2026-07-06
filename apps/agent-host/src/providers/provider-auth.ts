@@ -48,6 +48,25 @@ async function readAuth(
   }
 }
 
+/**
+ * Persists a refreshed OAuth credential back into the auth store, preserving every other entry.
+ * pi-ai's `getOAuthApiKey` returns the post-refresh credentials FOR THE CALLER TO PERSIST (the
+ * refresh can rotate the refresh token; dropping the rotated one strands the store on a token the
+ * provider may treat as reused/revoked, and freezes `expires` in the past). Re-reads the file fresh
+ * so a concurrent host's update to ANOTHER entry isn't clobbered by this write. Best-effort by
+ * design: a persist failure must never fail the turn that just resolved a working key - the caller
+ * swallows it and the next resolve refreshes again.
+ */
+export async function persistRefreshedOAuth(
+  authPath: string,
+  oauthName: string,
+  credentials: unknown,
+): Promise<void> {
+  const auth = JSON.parse(await readFile(authPath, "utf8")) as Record<string, unknown>;
+  auth[oauthName] = credentials;
+  await writeFile(authPath, `${JSON.stringify(auth, null, "\t")}\n`, "utf8");
+}
+
 export function oauthCredentialResolver(params: {
   readonly providerId: string;
   readonly oauthName: string;
@@ -65,14 +84,25 @@ export function oauthCredentialResolver(params: {
         });
       }
       const { getOAuthApiKey } = await import("@earendil-works/pi-ai/oauth");
-      // biome-ignore lint/suspicious/noExplicitAny: pi-ai's OAuth name + credential shapes are internal.
-      const oauth = getOAuthApiKey as (name: any, creds: any) => Promise<{ apiKey: string } | null>;
+      // pi-ai's OAuth name + credential shapes are internal; cast to the call shape we rely on.
+      const oauth = getOAuthApiKey as unknown as (
+        name: string,
+        creds: Record<string, unknown>,
+      ) => Promise<{ apiKey: string; newCredentials: unknown } | null>;
       const resolved = await oauth(params.oauthName, { [params.oauthName]: credentials });
       if (!resolved) {
         throw new ProviderAuthError({
           provider: params.providerId,
           detail: "OAuth refresh failed (re-login with the pi CLI)",
         });
+      }
+      // A refresh happened when pi-ai handed back a DIFFERENT credentials object (it returns the
+      // stored one untouched while the access token is still valid). Persist the rotated credential
+      // best-effort - see persistRefreshedOAuth for why dropping it corrupts the store over time.
+      if (resolved.newCredentials !== credentials) {
+        await persistRefreshedOAuth(authPath, params.oauthName, resolved.newCredentials).catch(
+          () => {},
+        );
       }
       return resolved.apiKey;
     },

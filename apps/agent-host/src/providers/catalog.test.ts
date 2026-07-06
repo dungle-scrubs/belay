@@ -437,3 +437,37 @@ test("Ollama Cloud is a gateway source: omitted without a key, ready with its li
   // REDACTION: the ollama key value never reaches the announced snapshot.
   assert.ok(!JSON.stringify(configured).includes(OLLAMA_SECRET));
 });
+
+test("an EXPIRED oauth source projects needs-auth/expired with the reauthenticate pathway", () => {
+  // The wedged shape this pins: the ~/.pi/auth.json `anthropic` entry EXISTS (so the source is
+  // configured) but its credential can no longer mint a key (loadCatalog's probe failed - token
+  // expired + refresh rejected). Present-but-dead must NOT read as authenticated/ready with only a
+  // refresh action: that shows a healthy source with no re-auth pathway while every turn fails.
+  const withClaude = { ...auth, anthropic: { type: "oauth", refresh: "r", expires: 1 } };
+  const snap = buildCatalogSnapshot(
+    withClaude,
+    { anthropic: ["claude-opus-4-0"] },
+    new Set(),
+    undefined,
+    new Set(["anthropic"]),
+  );
+  const claude = snap.sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(claude?.status, "needs-auth", "a dead credential is not ready");
+  assert.equal(claude?.auth, "expired", "expired, not authenticated - drives the web auth panel");
+  assert.deepEqual(claude?.actions, ["reauthenticate"], "the sign-in pathway is offered");
+  // The other oauth source (openai, probe passed) keeps its healthy projection.
+  const openai = snap.sources.find((s) => s.sourceId === "openai");
+  assert.equal(openai?.status, "ready");
+  assert.deepEqual(openai?.actions, ["refresh"]);
+});
+
+test("expiredSources only demotes a CONFIGURED source (an absent entry stays plain needs-auth/none)", () => {
+  // No anthropic entry at all: even if a stale probe result names it, the projection stays the
+  // unconfigured shape (auth "none" + "authenticate"), never a misleading "expired" for a source
+  // that was never signed in.
+  const snap = buildCatalogSnapshot(auth, {}, new Set(), undefined, new Set(["anthropic"]));
+  const claude = snap.sources.find((s) => s.sourceId === "anthropic");
+  assert.equal(claude?.status, "needs-auth");
+  assert.equal(claude?.auth, "none");
+  assert.deepEqual(claude?.actions, ["authenticate"]);
+});
