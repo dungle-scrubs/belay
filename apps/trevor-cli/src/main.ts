@@ -27,8 +27,10 @@ import {
 import { type HostControlIo, type LifecycleIo, runArchive, runList, runStop } from "./lifecycle";
 import { createSpinner } from "./spinner";
 
-const STORE_URL = serviceUrl("store");
-const BLOB_URL = serviceUrl("blob");
+// Honor the same node-side URL overrides the host and supervisor do, so `trevor` can be pointed at a
+// remote store/blob (e.g. in a container or a shared dev box), not only the local loopback default.
+const STORE_URL = process.env.SESSION_STORE_URL ?? serviceUrl("store");
+const BLOB_URL = process.env.BLOB_STORE_URL ?? serviceUrl("blob");
 
 // One SDK client per process, bound to the local session-store + blob-store. Every headless verb and the
 // lifecycle IO route through it, stamping the CLI producer id on the events they publish (plan 28 M7).
